@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::fmt::Write;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use anyhow::Result;
 use clap::ValueEnum;
@@ -78,7 +79,7 @@ impl Repo {
         Ok(Self::Local { hooks })
     }
 
-    pub fn meta() -> Self {
+    pub fn meta() -> Result<Self, Error> {
         todo!()
     }
 
@@ -106,6 +107,8 @@ impl Display for Repo {
 pub struct Project {
     root: PathBuf,
     config: ConfigWire,
+
+    repos: Vec<Rc<Repo>>,
 }
 
 impl Project {
@@ -117,7 +120,11 @@ impl Project {
             config_path.display()
         );
         let config = read_config(&config_path)?;
-        Ok(Self { root, config })
+        Ok(Self {
+            root,
+            config,
+            repos: Vec::new(),
+        })
     }
 
     /// Load project configuration from the current directory.
@@ -130,7 +137,11 @@ impl Project {
     }
 
     /// Load and prepare hooks for the project.
-    pub async fn prepare_hooks(&self, store: &Store, printer: Printer) -> Result<Vec<Hook>, Error> {
+    pub async fn prepare_hooks(
+        &mut self,
+        store: &Store,
+        printer: Printer,
+    ) -> Result<Vec<Hook>, Error> {
         let mut hooks = Vec::new();
 
         // TODO: progress bar
@@ -153,11 +164,12 @@ impl Project {
             let repo_path = repo_path.map_err(Box::new)?;
 
             // Read the repo manifest.
-            let repo = Repo::remote(
+            let repo = Rc::new(Repo::remote(
                 repo_config.repo.as_str(),
                 &repo_config.rev,
                 &repo_path.to_string_lossy(),
-            )?;
+            )?);
+            self.repos.push(Rc::clone(&repo));
 
             // Prepare remote hooks.
             for hook_config in &repo_config.hooks {
@@ -170,7 +182,7 @@ impl Project {
                     .into());
                 };
 
-                let mut builder = HookBuilder::new(repo.to_string(), manifest_hook.clone());
+                let mut builder = HookBuilder::new(repo, manifest_hook.clone());
                 builder.update(hook_config);
                 builder.combine(&self.config);
                 let hook = builder.build();
@@ -198,20 +210,24 @@ impl Project {
         }
 
         // Prepare local hooks.
-        let local_hooks = self
+        let local_repos = self
             .config
             .repos
             .iter()
             .filter_map(|repo| {
-                if let ConfigRepo::Local(local_repo @ ConfigLocalRepo { .. }) = repo {
-                    Some(local_repo.hooks.clone())
+                if let ConfigRepo::Local(conf) = repo {
+                    Some(conf)
                 } else {
                     None
                 }
-            })
-            .flatten();
-        for hook_config in local_hooks {
-            let hook = hook_config.clone();
+            });
+        for repo_config in local_repos {
+            let repo = Rc::new(Repo::local(repo_config.hooks.clone())?);
+            self.repos.push(Rc::clone(&repo));
+
+            let mut builder = HookBuilder::new(Rc::clone(&repo), repo_config.clone());
+            builder.combine(&self.config);
+            let hook = builder.build();
 
             // If the hook doesn't need an environment, don't do any preparation.
             if hook.language.environment_dir().is_some() {
@@ -219,9 +235,9 @@ impl Project {
                     .prepare_local_repo(&hook, hook.additional_dependencies.clone(), printer)
                     .await
                     .map_err(Box::new)?;
-                hooks.push(Hook::new_local(hook, Some(path)));
+                hooks.push(hook.with_path(path));
             } else {
-                hooks.push(Hook::new_local(hook, None));
+                hooks.push(hook);
             }
         }
 
@@ -246,13 +262,13 @@ impl Project {
 }
 
 struct HookBuilder {
-    src: String,
+    repo: Rc<Repo>,
     config: ManifestHook,
 }
 
 impl HookBuilder {
-    fn new(src: String, config: ManifestHook) -> Self {
-        Self { src, config }
+    fn new(repo: Rc<Repo>, config: ManifestHook) -> Self {
+        Self { repo, config }
     }
 
     /// Update the hook from the project level hook configuration.
@@ -368,7 +384,7 @@ impl HookBuilder {
         self.fill_in_defaults();
 
         Hook {
-            src: self.src,
+            repo: self.repo,
             path: None,
             id: self.config.id,
             name: self.config.name,
@@ -404,7 +420,7 @@ impl HookBuilder {
 
 #[derive(Debug, Clone)]
 pub struct Hook {
-    src: String,
+    repo: Rc<Repo>,
     path: Option<PathBuf>,
 
     pub id: String,
@@ -439,11 +455,11 @@ impl Display for Hook {
                     f,
                     "{} ({} at {})",
                     self.id,
-                    self.src,
+                    self.repo,
                     path.to_string_lossy()
                 )
             } else {
-                write!(f, "{} ({})", self.id, self.src)
+                write!(f, "{} ({})", self.id, self.repo)
             }
         } else {
             write!(f, "{}", self.id)
@@ -453,20 +469,13 @@ impl Display for Hook {
 
 impl Hook {
     /// Create a local hook.
-    pub fn new_local(config: ManifestHook, path: Option<PathBuf>) -> Self {
-        let builder = HookBuilder::new("local".to_string(), config);
-        let mut hook = builder.build();
-        hook.path = path;
-        hook
-    }
-
     pub fn with_path(mut self, path: PathBuf) -> Self {
         self.path = Some(path);
         self
     }
 
-    pub fn source(&self) -> &str {
-        &self.src
+    pub fn repo(&self) -> &Repo {
+        &self.repo
     }
 
     /// Get the working directory for the hook.
@@ -551,7 +560,7 @@ async fn install_hook(hook: &Hook, env_dir: PathBuf, printer: Printer) -> Result
     writeln!(
         printer.stdout(),
         "Installing environment for {}",
-        hook.source()
+        hook.repo()
     )?;
 
     if env_dir.try_exists()? {
