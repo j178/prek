@@ -8,16 +8,15 @@ use anyhow::Result;
 use clap::ValueEnum;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-use itertools::Itertools;
+use itertools::{zip_eq, Itertools};
 use regex::Regex;
 use thiserror::Error;
 use tracing::{debug, error, trace};
 use url::Url;
 
 use crate::config::{
-    self, read_config, read_manifest, ConfigLocalHook, ConfigLocalRepo, ConfigRemoteHook,
-    ConfigRemoteRepo, ConfigRepo, ConfigWire, Language, ManifestHook, Stage, CONFIG_FILE,
-    MANIFEST_FILE,
+    self, read_config, read_manifest, ConfigLocalHook, ConfigRemoteHook, ConfigRepo, ConfigWire,
+    Language, ManifestHook, Stage, CONFIG_FILE, MANIFEST_FILE,
 };
 use crate::fs::CWD;
 use crate::languages::DEFAULT_VERSION;
@@ -107,7 +106,6 @@ impl Display for Repo {
 pub struct Project {
     root: PathBuf,
     config: ConfigWire,
-
     repos: Vec<Rc<Repo>>,
 }
 
@@ -120,10 +118,11 @@ impl Project {
             config_path.display()
         );
         let config = read_config(&config_path)?;
+        let size = config.repos.len();
         Ok(Self {
             root,
             config,
-            repos: Vec::new(),
+            repos: Vec::with_capacity(size),
         })
     }
 
@@ -136,126 +135,117 @@ impl Project {
         &self.config
     }
 
+    async fn init_repos(&mut self, store: &Store, printer: Printer) -> Result<(), Error> {
+        let mut repos = Vec::with_capacity(self.config.repos.len());
+
+        // TODO: progress bar
+        let mut tasks = FuturesUnordered::new();
+        for (idx, repo) in self.config.repos.iter().enumerate() {
+            match repo {
+                ConfigRepo::Remote(repo) => {
+                    let path = store.prepare_remote_repo(repo, &[], printer).await;
+                    tasks.push(async move { (idx, path) });
+                }
+                ConfigRepo::Local(repo) => {
+                    let repo = Repo::local(repo.hooks.clone())?;
+                    repos.push((idx, Rc::new(repo)));
+                }
+                ConfigRepo::Meta(_) => {
+                    todo!()
+                }
+            }
+        }
+
+        while let Some((idx, repo_path)) = tasks.next().await {
+            let repo_path = repo_path.map_err(Box::new)?;
+            let ConfigRepo::Remote(repo_config) = &self.config.repos[idx] else {
+                unreachable!();
+            };
+            let repo = Repo::remote(
+                repo_config.repo.as_str(),
+                &repo_config.rev,
+                &repo_path.to_string_lossy(),
+            )?;
+            repos.push((idx, Rc::new(repo)));
+        }
+
+        repos.sort_unstable_by_key(|(idx, _)| *idx);
+        self.repos = repos.into_iter().map(|(_, repo)| repo).collect();
+
+        Ok(())
+    }
+
     /// Load and prepare hooks for the project.
-    pub async fn prepare_hooks(
+    pub async fn init_hooks(
         &mut self,
         store: &Store,
         printer: Printer,
     ) -> Result<Vec<Hook>, Error> {
+        self.init_repos(store, printer).await?;
+
         let mut hooks = Vec::new();
 
         // TODO: progress bar
-        // Prepare remote repos.
-        let mut tasks = FuturesUnordered::new();
-        let mut hook_tasks = FuturesUnordered::new();
+        for (repo_config, repo) in zip_eq(self.config.repos.iter(), self.repos.iter()) {
+            match repo_config {
+                ConfigRepo::Remote(repo_config) => {
+                    for hook_config in &repo_config.hooks {
+                        // Check hook id is valid.
+                        let Some(hook) = repo.get_hook(&hook_config.id) else {
+                            return Err(Error::HookNotFound {
+                                hook: hook_config.id.clone(),
+                                repo: repo.to_string(),
+                            }
+                            .into());
+                        };
 
-        for repo_config in &self.config.repos {
-            if let ConfigRepo::Remote(remote_repo @ ConfigRemoteRepo { .. }) = repo_config {
-                tasks.push(async {
-                    (
-                        remote_repo.clone(),
-                        store.prepare_remote_repo(remote_repo, None, printer).await,
-                    )
-                });
-            }
-        }
+                        let repo = Rc::clone(repo);
+                        let mut builder = HookBuilder::new(repo, hook.clone());
+                        builder.update(hook_config);
+                        builder.combine(&self.config);
+                        let mut hook = builder.build();
 
-        while let Some((repo_config, repo_path)) = tasks.next().await {
-            let repo_path = repo_path.map_err(Box::new)?;
+                        // Prepare hooks with `additional_dependencies` (they need separate repos).
+                        if !hook.additional_dependencies.is_empty() {
+                            let path = store
+                                .prepare_remote_repo(
+                                    &repo_config,
+                                    &hook.additional_dependencies,
+                                    printer,
+                                )
+                                .await
+                                .map_err(Box::new)?;
 
-            // Read the repo manifest.
-            let repo = Rc::new(Repo::remote(
-                repo_config.repo.as_str(),
-                &repo_config.rev,
-                &repo_path.to_string_lossy(),
-            )?);
-            self.repos.push(Rc::clone(&repo));
+                            hook = hook.with_path(path)
+                        };
 
-            // Prepare remote hooks.
-            for hook_config in &repo_config.hooks {
-                // Check hook id is valid.
-                let Some(manifest_hook) = repo.get_hook(&hook_config.id) else {
-                    return Err(Error::HookNotFound {
-                        hook: hook_config.id.clone(),
-                        repo: repo.to_string(),
+                        hooks.push(hook);
                     }
-                    .into());
-                };
+                }
+                ConfigRepo::Local(repo_config) => {
+                    for hook_config in &repo_config.hooks {
+                        let repo = Rc::clone(repo);
+                        let mut builder = HookBuilder::new(repo, hook_config.clone());
+                        builder.combine(&self.config);
+                        let mut hook = builder.build();
 
-                let mut builder = HookBuilder::new(repo, manifest_hook.clone());
-                builder.update(hook_config);
-                builder.combine(&self.config);
-                let hook = builder.build();
+                        // If the hook doesn't need an environment, don't do any preparation.
+                        if hook.language.environment_dir().is_some() {
+                            let path = store
+                                .prepare_local_repo(&hook, &hook.additional_dependencies, printer)
+                                .await
+                                .map_err(Box::new)?;
 
-                // Prepare hooks with `additional_dependencies` (they need separate repos).
-                if !hook.additional_dependencies.is_empty() {
-                    let repo_config = repo_config.clone();
-                    let deps = hook.additional_dependencies.clone();
-
-                    hook_tasks.push(async move {
-                        let path = store
-                            .prepare_remote_repo(&repo_config, Some(deps), printer)
-                            .await?;
-                        Ok::<Hook, crate::store::Error>(hook.with_path(path))
-                    });
-                } else {
-                    hooks.push(hook.with_path(repo_path.clone()));
+                            hook = hook.with_path(path);
+                        }
+                        hooks.push(hook);
+                    }
+                }
+                ConfigRepo::Meta(_) => {
+                    todo!()
                 }
             }
         }
-
-        while let Some(result) = hook_tasks.next().await {
-            let hook = result.map_err(Box::new)?;
-            hooks.push(hook);
-        }
-
-        // Prepare local hooks.
-        let local_repos = self
-            .config
-            .repos
-            .iter()
-            .filter_map(|repo| {
-                if let ConfigRepo::Local(conf) = repo {
-                    Some(conf)
-                } else {
-                    None
-                }
-            });
-        for repo_config in local_repos {
-            let repo = Rc::new(Repo::local(repo_config.hooks.clone())?);
-            self.repos.push(Rc::clone(&repo));
-
-            let mut builder = HookBuilder::new(Rc::clone(&repo), repo_config.clone());
-            builder.combine(&self.config);
-            let hook = builder.build();
-
-            // If the hook doesn't need an environment, don't do any preparation.
-            if hook.language.environment_dir().is_some() {
-                let path = store
-                    .prepare_local_repo(&hook, hook.additional_dependencies.clone(), printer)
-                    .await
-                    .map_err(Box::new)?;
-                hooks.push(hook.with_path(path));
-            } else {
-                hooks.push(hook);
-            }
-        }
-
-        // Sort hooks by its appearance order in the config.
-        // TODO: can hook id be duplicated?
-        hooks.sort_by_key(|hook| {
-            self.config
-                .repos
-                .iter()
-                .enumerate()
-                .find_map(|(i, repo)| {
-                    repo.hook_ids()
-                        .iter()
-                        .position(|id| id == &hook.id)
-                        .map(|j| (i, j))
-                })
-                .expect("Hook not found in the config")
-        });
 
         Ok(hooks)
     }
@@ -468,7 +458,6 @@ impl Display for Hook {
 }
 
 impl Hook {
-    /// Create a local hook.
     pub fn with_path(mut self, path: PathBuf) -> Self {
         self.path = Some(path);
         self
@@ -498,7 +487,7 @@ impl Hook {
     pub fn install_key(&self) -> String {
         format!(
             "{}-{}-{}-{}",
-            self.src,
+            self.repo,
             self.language.to_string(),
             self.language_version,
             self.additional_dependencies.join(",")

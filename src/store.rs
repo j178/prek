@@ -6,10 +6,10 @@ use rusqlite::Connection;
 use thiserror::Error;
 use tracing::trace;
 
-use crate::config::{ConfigLocalHook, ConfigRemoteRepo};
+use crate::config::ConfigRemoteRepo;
 use crate::fs::{copy_dir_all, LockedFile};
 use crate::git::clone_repo;
-use crate::hook::Repo;
+use crate::hook::{Hook, Repo};
 use crate::printer::Printer;
 
 #[derive(Debug, Error)]
@@ -136,9 +136,9 @@ impl Store {
     }
 
     // Append dependencies to the repo name as the key.
-    fn repo_name(repo: &str, deps: Option<&Vec<String>>) -> String {
+    fn repo_name(repo: &str, deps: &[String]) -> String {
         let mut name = repo.to_string();
-        if let Some(deps) = deps {
+        if !deps.is_empty() {
             name.push_str(":");
             name.push_str(&deps.join(","));
         }
@@ -149,7 +149,7 @@ impl Store {
         &self,
         repo: &str,
         rev: &str,
-        deps: Option<&Vec<String>>,
+        deps: &[String],
     ) -> Result<Option<(String, String, String)>, Error> {
         let repo_name = Self::repo_name(repo, deps);
 
@@ -163,14 +163,8 @@ impl Store {
         Ok(Some((row.get(0)?, row.get(1)?, row.get(2)?)))
     }
 
-    fn insert_repo(
-        &self,
-        repo: &str,
-        rev: &str,
-        path: &str,
-        deps: Option<Vec<String>>,
-    ) -> Result<(), Error> {
-        let repo_name = Self::repo_name(repo, deps.as_ref());
+    fn insert_repo(&self, repo: &str, rev: &str, path: &str, deps: &[String]) -> Result<(), Error> {
+        let repo_name = Self::repo_name(repo, &deps);
 
         let mut stmt = self
             .conn()
@@ -184,8 +178,8 @@ impl Store {
     /// are stored in the same directory (even they use different language).
     pub async fn prepare_local_repo(
         &self,
-        hook: &ConfigLocalHook,
-        deps: Option<Vec<String>>,
+        hook: &Hook,
+        deps: &[String],
         printer: Printer,
     ) -> Result<PathBuf, Error> {
         const LOCAL_NAME: &str = "local";
@@ -195,7 +189,7 @@ impl Store {
             return Err(Error::LocalHookNoNeedEnv(hook.id.clone()).into());
         }
 
-        let path = match self.get_repo(LOCAL_NAME, LOCAL_REV, deps.as_ref())? {
+        let path = match self.get_repo(LOCAL_NAME, LOCAL_REV, &deps)? {
             Some((_, _, path)) => path,
             None => {
                 let temp = tempfile::Builder::new()
@@ -223,7 +217,7 @@ impl Store {
     pub async fn prepare_remote_repo(
         &self,
         repo_config: &ConfigRemoteRepo,
-        deps: Option<Vec<String>>,
+        deps: &[String],
         printer: Printer,
     ) -> Result<PathBuf, Error> {
         if let Some((_, _, path)) = self.get_repo(
@@ -241,12 +235,12 @@ impl Store {
             .tempdir_in(&self.path)?;
         let path = temp.path().to_string_lossy().to_string();
 
-        if let Some(ref deps) = deps {
+        if deps.is_empty() {
             // TODO: use hardlink?
             // Optimization: This is an optimization from the Python pre-commit implementation.
             // Copy already cloned base remote repo.
             let (_, _, base_repo_path) = self
-                .get_repo(repo_config.repo.as_str(), repo_config.rev.as_str(), None)?
+                .get_repo(repo_config.repo.as_str(), repo_config.rev.as_str(), &[])?
                 .expect("base repo should be cloned before");
             writeln!(
                 printer.stdout(),

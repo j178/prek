@@ -31,7 +31,7 @@ pub(crate) async fn run(
     // TODO: impl staged_files_only
 
     let lock = store.lock_async().await?;
-    let hooks = project.prepare_hooks(&store, printer).await?;
+    let hooks = project.init_hooks(&store, printer).await?;
 
     let hooks: Vec<_> = hooks
         .into_iter()
