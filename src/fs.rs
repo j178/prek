@@ -193,7 +193,7 @@ pub(crate) fn normalize_path(path: String) -> String {
 /// Normalizes a path to use `/` as a separator everywhere, even on platforms
 /// that recognize other characters as separators.
 #[cfg(not(unix))]
-pub(crate) fn normalize_path(mut path: String) -> String {
+pub(crate) fn normalize_path(path: String) -> String {
     use std::path::is_separator;
 
     let mut bytes = path.into_bytes();
