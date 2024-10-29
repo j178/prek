@@ -166,4 +166,6 @@ jobs:
       - name: "Cargo test"
         working-directory: ${{ env.PRE_COMMIT_WORKSPACE }}
         run: |
-          cargo nextest run --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+          # use only 1 job for now
+          # uv concurrently writes to cache, which causes `Access is denied` errors
+          cargo nextest run --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 1 --final-status-level slow
