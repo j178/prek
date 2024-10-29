@@ -196,9 +196,9 @@ pub(crate) fn normalize_path(path: String) -> String {
 pub(crate) fn normalize_path(mut path: String) -> String {
     use std::path::is_separator;
 
-    let mut bytes = unsafe { path.as_bytes_mut() };
+    let mut bytes = std::mem::take(&mut path).into_bytes();
     for c in &mut bytes {
-        if c == b'/' || !is_separator(char::from(c)) {
+        if *c == b'/' || !is_separator(char::from(*c)) {
             continue;
         }
         *c = b'/';
