@@ -31,7 +31,6 @@ impl LanguageImpl for Python {
         // Create venv
         Command::new("uv")
             .arg("venv")
-            .arg("-vv")
             .arg(&venv)
             .arg("--python")
             .arg(&hook.language_version)
@@ -42,15 +41,10 @@ impl LanguageImpl for Python {
 
         patch_cfg_version_info(&venv).await?;
 
-        let path = Path::new("E:/uv-cache/interpreter-v2/ab355bfa328f47c8.msgpack");
-        dbg!(path.is_file());
-        dbg!(fs_err::read_to_string(path)?);
-
         // Install dependencies
         Command::new("uv")
             .arg("pip")
             .arg("install")
-            .arg("-vv")
             .arg(".")
             .args(&hook.additional_dependencies)
             .current_dir(hook.path())
