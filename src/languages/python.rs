@@ -42,9 +42,9 @@ impl LanguageImpl for Python {
 
         patch_cfg_version_info(&venv).await?;
 
-        let path = Path::new("E:/uv-cache/interpreter-v2");
-        dbg!(path.is_dir());
-        dbg!(path.exists());
+        let path = Path::new("E:/uv-cache/interpreter-v2/ab355bfa328f47c8.msgpack");
+        dbg!(path.is_file());
+        dbg!(fs_err::read_to_string(path)?);
 
         // Install dependencies
         Command::new("uv")
