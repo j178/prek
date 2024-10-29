@@ -203,7 +203,7 @@ pub(crate) fn normalize_path(mut path: String) -> String {
         }
         *c = b'/';
     }
-    path
+    String::from_utf8(bytes).expect("Path is valid UTF-8")
 }
 
 /// Compute a path describing `path` relative to `base`.

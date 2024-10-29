@@ -102,6 +102,8 @@ pub(crate) async fn run(
         .map(normalize_path)
         .collect::<Vec<_>>();
 
+    dbg!(&filenames);
+
     let filenames = filter_filenames(
         filenames.par_iter(),
         project.config().files.as_deref(),
