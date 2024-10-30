@@ -422,7 +422,7 @@ async fn run_hook(
             writeln!(
                 printer.stdout(),
                 "{}",
-                format!("- duration: {:?}s", duration.as_secs()).dimmed()
+                format!("- duration: {:.2?}s", duration.as_secs_f64()).dimmed()
             )?;
         }
         if !output.status.success() {

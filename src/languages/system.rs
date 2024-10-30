@@ -1,4 +1,5 @@
 use std::process::Output;
+use tokio::process::Command;
 
 use crate::config;
 use crate::hook::Hook;
@@ -21,18 +22,22 @@ impl LanguageImpl for System {
     }
 
     async fn install(&self, _hook: &Hook) -> anyhow::Result<()> {
-        todo!()
+        Ok(())
     }
 
     async fn check_health(&self) -> anyhow::Result<()> {
-        todo!()
+        Ok(())
     }
 
-    async fn run(&self, _hook: &Hook, _filenames: &[&String]) -> anyhow::Result<Output> {
-        Ok(Output {
-            status: std::process::ExitStatus::default(),
-            stdout: Vec::new(),
-            stderr: Vec::new(),
-        })
+    async fn run(&self, hook: &Hook, filenames: &[&String]) -> anyhow::Result<Output> {
+        let cmds = shlex::split(&hook.entry).ok_or(anyhow::anyhow!("Failed to parse entry"))?;
+        let output = Command::new(&cmds[0])
+            .args(&cmds[1..])
+            .args(&hook.args)
+            .args(filenames)
+            .stderr(std::process::Stdio::inherit())
+            .output()
+            .await?;
+        Ok(output)
     }
 }
