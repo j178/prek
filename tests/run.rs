@@ -522,11 +522,7 @@ fn log_file() -> Result<()> {
     "#);
 
     let log = context.read("log.txt");
-    assert_snapshot!(log, @r#"
-    --- stdout ---
-    Fixing file.txt
-    --- stderr ---
-    "#);
+    assert_snapshot!(log, @"Fixing file.txt");
 
     Ok(())
 }

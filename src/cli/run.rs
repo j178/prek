@@ -439,33 +439,21 @@ async fn run_hook(
                 "- files were modified by this hook".dimmed()
             )?;
         }
-        // TODO: trim
-        if !(output.stdout.is_empty() && output.stderr.is_empty()) {
+
+        // To be consistent with pre-commit, merge stderr into stdout.
+        let stdout = output.stdout.trim_ascii();
+        if !stdout.is_empty() {
             if let Some(file) = hook.log_file.as_deref() {
                 fs_err::OpenOptions::new()
                     .create(true)
                     .append(true)
                     .open(file)
                     .and_then(|mut f| {
-                        f.write_all(b"--- stdout ---\n")?;
-                        f.write_all(&output.stdout)?;
-                        f.write_all(b"--- stderr ---\n")?;
-                        f.write_all(&output.stderr)?;
+                        f.write_all(stdout)?;
                         Ok(())
                     })?;
             } else {
-                writeln!(printer.stdout(), "--- stdout ---")?;
-                writeln!(
-                    printer.stdout(),
-                    "{}",
-                    String::from_utf8_lossy(&output.stdout)
-                )?;
-                writeln!(printer.stdout(), "--- stderr ---")?;
-                writeln!(
-                    printer.stdout(),
-                    "{}",
-                    String::from_utf8_lossy(&output.stderr)
-                )?;
+                writeln!(printer.stdout(), "{}", String::from_utf8_lossy(stdout))?;
             };
         }
     }

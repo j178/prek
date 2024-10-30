@@ -85,6 +85,7 @@ impl LanguageImpl for Python {
             .env("VIRTUAL_ENV", &env)
             .env("PATH", new_path)
             .env_remove("PYTHONHOME")
+            .stderr(std::process::Stdio::inherit())
             .output()
             .await?;
 
