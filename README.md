@@ -6,7 +6,7 @@
 A reimplementation of the [pre-commit](https://pre-commit.com/) tool in Rust, providing a faster and dependency-free alternative.
 It aims to be a drop-in replacement for the original tool while also providing some more advanced features.
 
-> [!WARNING] 
+> [!WARNING]
 > This project is still in very early development, only a few of the original pre-commit features are implemented.
 
 ## Features
@@ -39,8 +39,8 @@ Please refer to the [official documentation](https://pre-commit.com/) for more i
 
 ## Acknowledgements
 
-This project is heavily inspired by the original [pre-commit](https://pre-commit.com/) tool, and it wouldn't be possible without the hard work 
+This project is heavily inspired by the original [pre-commit](https://pre-commit.com/) tool, and it wouldn't be possible without the hard work
 of the maintainers and contributors of that project.
 
-And a special thanks to the [Astral](https://github.com/astral-sh) team for their remarkable projects, particularly [uv](https://github.com/astral-sh/uv), 
+And a special thanks to the [Astral](https://github.com/astral-sh) team for their remarkable projects, particularly [uv](https://github.com/astral-sh/uv),
 from which I've learned a lot on how to write efficient and idiomatic Rust code.

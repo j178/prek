@@ -244,3 +244,46 @@ pub fn relative_to(
 
     Ok(up.join(stripped))
 }
+
+pub trait Simplified {
+    /// Simplify a [`Path`].
+    ///
+    /// On Windows, this will strip the `\\?\` prefix from paths. On other platforms, it's a no-op.
+    fn simplified(&self) -> &Path;
+
+    /// Render a [`Path`] for display.
+    ///
+    /// On Windows, this will strip the `\\?\` prefix from paths. On other platforms, it's
+    /// equivalent to [`std::path::Display`].
+    fn simplified_display(&self) -> impl Display;
+
+    /// Render a [`Path`] for user-facing display.
+    ///
+    /// Like [`simplified_display`], but relativizes the path against the current working directory.
+    fn user_display(&self) -> impl Display;
+}
+
+impl<T: AsRef<Path>> Simplified for T {
+    fn simplified(&self) -> &Path {
+        dunce::simplified(self.as_ref())
+    }
+
+    fn simplified_display(&self) -> impl Display {
+        dunce::simplified(self.as_ref()).display()
+    }
+
+    fn user_display(&self) -> impl Display {
+        let path = dunce::simplified(self.as_ref());
+
+        // If current working directory is root, display the path as-is.
+        if CWD.ancestors().nth(1).is_none() {
+            return path.display();
+        }
+
+        // Attempt to strip the current working directory, then the canonicalized current working
+        // directory, in case they differ.
+        let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
+
+        path.display()
+    }
+}

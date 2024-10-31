@@ -107,6 +107,7 @@ impl Display for Repo {
 
 pub struct Project {
     root: PathBuf,
+    config_path: PathBuf,
     config: ConfigWire,
     repos: Vec<Rc<Repo>>,
 }
@@ -124,6 +125,7 @@ impl Project {
         Ok(Self {
             root,
             config,
+            config_path,
             repos: Vec::with_capacity(size),
         })
     }
@@ -135,6 +137,10 @@ impl Project {
 
     pub fn config(&self) -> &ConfigWire {
         &self.config
+    }
+
+    pub fn config_path(&self) -> &Path {
+        &self.config_path
     }
 
     async fn init_repos(&mut self, store: &Store, printer: Printer) -> Result<(), Error> {

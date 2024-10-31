@@ -14,7 +14,7 @@ pub enum Error {
     GitNotFound(#[from] which::Error),
 }
 
-static GIT: LazyLock<Result<PathBuf, which::Error>> = LazyLock::new(|| which::which("git"));
+pub static GIT: LazyLock<Result<PathBuf, which::Error>> = LazyLock::new(|| which::which("git"));
 
 static GIT_ENV: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
     let keep = &[
