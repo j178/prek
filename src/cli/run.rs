@@ -37,17 +37,17 @@ pub(crate) async fn run(
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let mut project = Project::current(config)?;
-
-    if config_not_staged(project.config_path()).await? {
+    let config_file = Project::find_config_file(config)?;
+    if config_not_staged(&config_file).await? {
         writeln!(
             printer.stderr(),
             "Your pre-commit configuration is unstaged.\n`git add {}` to fix this.",
-            project.config_path().user_display()
+            &config_file.user_display()
         )?;
         return Ok(ExitStatus::Failure);
     }
 
+    let mut project = Project::new(config_file)?;
     let store = Store::from_settings()?.init()?;
 
     // TODO: check .pre-commit-config.yaml status and git status

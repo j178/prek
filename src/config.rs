@@ -7,6 +7,8 @@ use anyhow::Result;
 use serde::{Deserialize, Deserializer, Serialize};
 use url::Url;
 
+use crate::fs::Simplified;
+
 pub const CONFIG_FILE: &str = ".pre-commit-config.yaml";
 pub const MANIFEST_FILE: &str = ".pre-commit-hooks.yaml";
 
@@ -505,6 +507,9 @@ pub struct ManifestWire {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("Config file not found: {0}")]
+    NotFound(String),
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -517,9 +522,15 @@ pub enum Error {
 
 /// Read the configuration file from the given path.
 pub fn read_config(path: &Path) -> Result<ConfigWire, Error> {
-    let content = fs_err::read_to_string(path)?;
-    let config =
-        serde_yaml::from_str(&content).map_err(|e| Error::Yaml(path.display().to_string(), e))?;
+    let content = match fs_err::read_to_string(path) {
+        Ok(content) => content,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::NotFound(path.user_display().to_string()));
+        }
+        Err(e) => return Err(e.into()),
+    };
+    let config = serde_yaml::from_str(&content)
+        .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
     Ok(config)
 }
 
@@ -527,8 +538,8 @@ pub fn read_config(path: &Path) -> Result<ConfigWire, Error> {
 /// Read the manifest file from the given path.
 pub fn read_manifest(path: &Path) -> Result<ManifestWire, Error> {
     let content = fs_err::read_to_string(path)?;
-    let manifest =
-        serde_yaml::from_str(&content).map_err(|e| Error::Yaml(path.display().to_string(), e))?;
+    let manifest = serde_yaml::from_str(&content)
+        .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
     Ok(manifest)
 }
 

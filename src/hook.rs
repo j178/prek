@@ -15,7 +15,7 @@ use crate::config::{
     self, read_config, read_manifest, ConfigLocalHook, ConfigRemoteHook, ConfigRepo, ConfigWire,
     ManifestHook, Stage, CONFIG_FILE, MANIFEST_FILE,
 };
-use crate::fs::CWD;
+use crate::fs::{Simplified, CWD};
 use crate::languages::{Language, DEFAULT_VERSION};
 use crate::printer::Printer;
 use crate::store::Store;
@@ -26,7 +26,7 @@ pub enum Error {
     #[error("Failed to parse URL: {0}")]
     InvalidUrl(#[from] url::ParseError),
     #[error(transparent)]
-    ReadConfig(#[from] config::Error),
+    Config(#[from] config::Error),
     #[error("Hook {hook} in not present in repository {repo}")]
     HookNotFound { hook: String, repo: String },
     #[error(transparent)]
@@ -106,16 +106,23 @@ impl Display for Repo {
 }
 
 pub struct Project {
-    root: PathBuf,
     config_path: PathBuf,
     config: ConfigWire,
     repos: Vec<Rc<Repo>>,
 }
 
 impl Project {
+    pub fn find_config_file(config: Option<PathBuf>) -> Result<PathBuf, Error> {
+        let file = config.unwrap_or_else(|| CWD.join(CONFIG_FILE));
+        if file.try_exists()? {
+            return Ok(file);
+        }
+        let file = file.user_display().to_string();
+        Err(Error::Config(config::Error::NotFound(file)))
+    }
+
     /// Load a project configuration from a directory.
-    pub fn from_directory(root: PathBuf, config: Option<PathBuf>) -> Result<Self, Error> {
-        let config_path = config.unwrap_or_else(|| root.join(CONFIG_FILE));
+    pub fn new(config_path: PathBuf) -> Result<Self, Error> {
         debug!(
             "Loading project configuration from {}",
             config_path.display()
@@ -123,24 +130,14 @@ impl Project {
         let config = read_config(&config_path)?;
         let size = config.repos.len();
         Ok(Self {
-            root,
             config,
             config_path,
             repos: Vec::with_capacity(size),
         })
     }
 
-    /// Load project configuration from the current directory.
-    pub fn current(config: Option<PathBuf>) -> Result<Self, Error> {
-        Self::from_directory(CWD.clone(), config)
-    }
-
     pub fn config(&self) -> &ConfigWire {
         &self.config
-    }
-
-    pub fn config_path(&self) -> &Path {
-        &self.config_path
     }
 
     async fn init_repos(&mut self, store: &Store, printer: Printer) -> Result<(), Error> {
