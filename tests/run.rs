@@ -417,8 +417,8 @@ fn fail_fast() -> Result<()> {
     - hook id: trailing-whitespace
     - exit code: 1
     - files were modified by this hook
-    Fixing main.py
     Fixing file.txt
+    Fixing main.py
 
     ----- stderr -----
     "#);

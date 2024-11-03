@@ -359,8 +359,8 @@ async fn run_hooks(
 /// Shuffle the files so that they more evenly fill out the xargs
 /// partitions, but do it deterministically in case a hook cares about ordering.
 fn shuffle(filenames: &mut Vec<&String>) {
-    const SEED: [u8; 32] = [0; 32];
-    let mut rng = StdRng::from_seed(SEED);
+    const SEED: u64 = 1_542_676_187;
+    let mut rng = StdRng::seed_from_u64(SEED);
     filenames.shuffle(&mut rng);
 }
 
