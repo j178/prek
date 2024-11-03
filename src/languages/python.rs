@@ -68,12 +68,14 @@ impl LanguageImpl for Python {
     }
 
     async fn run(&self, hook: &Hook, filenames: &[&String]) -> anyhow::Result<Output> {
-        // Construct the `PATH` environment variable.
+        // Get environment directory and parse command
         let env = hook
             .environment_dir()
             .expect("No environment dir for Python");
-        let cmds = shlex::split(&hook.entry).ok_or(anyhow::anyhow!("Failed to parse entry"))?;
+        let cmds = shlex::split(&hook.entry)
+            .ok_or_else(|| anyhow::anyhow!("Failed to parse entry command"))?;
 
+        // Construct PATH with venv bin directory first
         let new_path = std::env::join_paths(
             std::iter::once(bin_dir(env.as_path())).chain(
                 std::env::var_os("PATH")
@@ -83,59 +85,58 @@ impl LanguageImpl for Python {
             ),
         )?;
 
-        let concurrency = if hook.require_serial {
-            1
-        } else {
-            // read from config, and the count of cpus
-            12
-        };
+        // Determine concurrency based on hook settings
+        let concurrency = target_concurrency(hook.require_serial);
+
+        // Split files into batches
         let partitions = partitions(hook, filenames, concurrency);
         let semaphore = Arc::new(tokio::sync::Semaphore::new(
             concurrency.min(partitions.len()),
         ));
 
+        // Spawn tasks for each batch
         let mut tasks = JoinSet::new();
-        for batch in partitions {
-            let semaphore = semaphore.clone();
+        let cmds = Arc::new(cmds);
+        let hook_args = Arc::new(hook.args.clone());
+        let new_path = Arc::new(new_path);
 
-            let cmds = cmds.clone();
-            let hook_args = hook.args.clone();
-            let new_path = new_path.clone();
+        for batch in partitions {
+            let semaphore = Arc::clone(&semaphore);
+            let cmds = Arc::clone(&cmds);
+            let hook_args = Arc::clone(&hook_args);
+            let new_path = Arc::clone(&new_path);
             let env = env.clone();
-            let batch = batch
-                .into_iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>();
+
+            let batch: Vec<_> = batch.into_iter().map(ToString::to_string).collect();
 
             tasks.spawn(async move {
                 let _permit = semaphore
                     .acquire()
                     .await
-                    .map_err(|_| anyhow::anyhow!("Semaphore error"))?;
+                    .map_err(|_| anyhow::anyhow!("Failed to acquire semaphore"))?;
 
-                // TODO: handle signals
-                // TODO: better error display
                 Command::new(&cmds[0])
                     .args(&cmds[1..])
-                    .args(&hook_args)
+                    .args(hook_args.as_slice())
                     .args(batch)
                     .env("VIRTUAL_ENV", &env)
-                    .env("PATH", new_path)
+                    .env("PATH", new_path.as_ref())
                     .env_remove("PYTHONHOME")
                     .stderr(std::process::Stdio::inherit())
                     .output()
                     .await
-                    .map_err(|e| anyhow::anyhow!("Error running command: {:?}", e))
+                    .map_err(|e| anyhow::anyhow!("Failed to execute command: {}", e))
             });
         }
 
+        // Collect results
         let mut combined_status = 0;
         let mut combined_stdout = Vec::new();
 
         while let Some(result) = tasks.join_next().await {
             let output = result??;
             combined_status |= output.status.code().unwrap_or(1);
-            combined_stdout = output.stdout;
+            combined_stdout.extend(output.stdout);
         }
 
         Ok(Output {
@@ -143,6 +144,16 @@ impl LanguageImpl for Python {
             stdout: combined_stdout,
             stderr: vec![],
         })
+    }
+}
+
+fn target_concurrency(serial: bool) -> usize {
+    if serial || std::env::var_os("PRE_COMMIT_NO_CONCURRENCY").is_some() {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1)
     }
 }
 
