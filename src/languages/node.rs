@@ -1,5 +1,3 @@
-use std::process::{ExitStatus, Output};
-
 use crate::config;
 use crate::hook::Hook;
 use crate::languages::{LanguageImpl, DEFAULT_VERSION};
@@ -31,11 +29,7 @@ impl LanguageImpl for Node {
         todo!()
     }
 
-    async fn run(&self, _hook: &Hook, _filenames: &[&String]) -> anyhow::Result<Output> {
-        Ok(Output {
-            status: ExitStatus::default(),
-            stdout: Vec::new(),
-            stderr: Vec::new(),
-        })
+    async fn run(&self, _hook: &Hook, _filenames: &[&String]) -> anyhow::Result<(i32, Vec<u8>)> {
+        Ok((0, Vec::new()))
     }
 }

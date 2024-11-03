@@ -1,7 +1,5 @@
 use std::cmp::max;
-use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
-use std::process::{ExitStatus, Output};
 use std::sync::Arc;
 
 use anyhow::Ok;
@@ -67,7 +65,7 @@ impl LanguageImpl for Python {
         todo!()
     }
 
-    async fn run(&self, hook: &Hook, filenames: &[&String]) -> anyhow::Result<Output> {
+    async fn run(&self, hook: &Hook, filenames: &[&String]) -> anyhow::Result<(i32, Vec<u8>)> {
         // Get environment directory and parse command
         let env = hook
             .environment_dir()
@@ -139,11 +137,7 @@ impl LanguageImpl for Python {
             combined_stdout.extend(output.stdout);
         }
 
-        Ok(Output {
-            status: ExitStatus::from_raw(combined_status),
-            stdout: combined_stdout,
-            stderr: vec![],
-        })
+        Ok((combined_status, combined_stdout))
     }
 }
 

@@ -1,5 +1,4 @@
 use std::fmt::{Debug, Display};
-use std::process::Output;
 
 use anyhow::Result;
 
@@ -18,7 +17,7 @@ trait LanguageImpl {
     fn environment_dir(&self) -> Option<&str>;
     async fn install(&self, hook: &Hook) -> Result<()>;
     async fn check_health(&self) -> Result<()>;
-    async fn run(&self, hook: &Hook, filenames: &[&String]) -> Result<Output>;
+    async fn run(&self, hook: &Hook, filenames: &[&String]) -> Result<(i32, Vec<u8>)>;
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -107,7 +106,7 @@ impl Language {
         }
     }
 
-    pub async fn run(&self, hook: &Hook, filenames: &[&String]) -> Result<Output> {
+    pub async fn run(&self, hook: &Hook, filenames: &[&String]) -> Result<(i32, Vec<u8>)> {
         match self {
             Self::Python(python) => python.run(hook, filenames).await,
             Self::Node(node) => node.run(hook, filenames).await,

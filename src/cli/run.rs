@@ -434,7 +434,7 @@ async fn run_hook(
     )?;
     let start = std::time::Instant::now();
 
-    let output = if hook.pass_filenames {
+    let (status, output) = if hook.pass_filenames {
         shuffle(&mut filenames);
         hook.language.run(hook, &filenames).await?
     } else {
@@ -445,7 +445,7 @@ async fn run_hook(
 
     let new_diff = get_diff().await?;
     let file_modified = diff != new_diff;
-    let success = output.status.success() && !file_modified;
+    let success = status == 0 && !file_modified;
 
     if success {
         writeln!(printer.stdout(), "{}", "Passed".on_green())?;
@@ -466,11 +466,11 @@ async fn run_hook(
                 format!("- duration: {:.2?}s", duration.as_secs_f64()).dimmed()
             )?;
         }
-        if !output.status.success() {
+        if status != 0 {
             writeln!(
                 printer.stdout(),
                 "{}",
-                format!("- exit code: {}", output.status.code().unwrap_or_default()).dimmed()
+                format!("- exit code: {status}").dimmed()
             )?;
         }
         if file_modified {
@@ -482,7 +482,7 @@ async fn run_hook(
         }
 
         // To be consistent with pre-commit, merge stderr into stdout.
-        let stdout = output.stdout.trim_ascii();
+        let stdout = output.trim_ascii();
         if !stdout.is_empty() {
             if let Some(file) = hook.log_file.as_deref() {
                 fs_err::OpenOptions::new()

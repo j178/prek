@@ -54,9 +54,9 @@ fn run_basic() -> Result<()> {
     - hook id: end-of-file-fixer
     - exit code: 1
     - files were modified by this hook
+    Fixing invalid.json
     Fixing valid.json
     Fixing main.py
-    Fixing invalid.json
     check json...............................................................Passed
 
     ----- stderr -----

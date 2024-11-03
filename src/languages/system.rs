@@ -1,4 +1,3 @@
-use std::process::Output;
 use tokio::process::Command;
 
 use crate::config;
@@ -29,7 +28,7 @@ impl LanguageImpl for System {
         Ok(())
     }
 
-    async fn run(&self, hook: &Hook, filenames: &[&String]) -> anyhow::Result<Output> {
+    async fn run(&self, hook: &Hook, filenames: &[&String]) -> anyhow::Result<(i32, Vec<u8>)> {
         let cmds = shlex::split(&hook.entry).ok_or(anyhow::anyhow!("Failed to parse entry"))?;
         let output = Command::new(&cmds[0])
             .args(&cmds[1..])
@@ -38,6 +37,6 @@ impl LanguageImpl for System {
             .stderr(std::process::Stdio::inherit())
             .output()
             .await?;
-        Ok(output)
+        Ok((output.status.code().unwrap_or(1), output.stdout))
     }
 }
