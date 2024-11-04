@@ -237,6 +237,8 @@ async fn run_hook(
         &hook.name,
         ".".repeat(columns - hook.name.width_cjk() - 6 - 1)
     )?;
+    std::io::stdout().flush()?;
+
     let start = std::time::Instant::now();
 
     let (status, output) = if hook.pass_filenames {
