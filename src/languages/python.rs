@@ -1,15 +1,13 @@
-use std::cmp::max;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::Ok;
 use assert_cmd::output::{OutputError, OutputOkExt};
 use tokio::process::Command;
-use tokio::task::JoinSet;
 
 use crate::config;
 use crate::hook::Hook;
 use crate::languages::LanguageImpl;
+use crate::run::run_by_batch;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Python;
@@ -70,6 +68,7 @@ impl LanguageImpl for Python {
         let env = hook
             .environment_dir()
             .expect("No environment dir for Python");
+
         let cmds = shlex::split(&hook.entry)
             .ok_or_else(|| anyhow::anyhow!("Failed to parse entry command"))?;
 
@@ -83,104 +82,49 @@ impl LanguageImpl for Python {
             ),
         )?;
 
-        // Determine concurrency based on hook settings
-        let concurrency = target_concurrency(hook.require_serial);
-
-        // Split files into batches
-        let partitions = partitions(hook, filenames, concurrency);
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(
-            concurrency.min(partitions.len()),
-        ));
-
-        // Spawn tasks for each batch
-        let mut tasks = JoinSet::new();
         let cmds = Arc::new(cmds);
         let hook_args = Arc::new(hook.args.clone());
+        let env = Arc::new(env.clone());
         let new_path = Arc::new(new_path);
 
-        for batch in partitions {
-            let semaphore = Arc::clone(&semaphore);
-            let cmds = Arc::clone(&cmds);
-            let hook_args = Arc::clone(&hook_args);
-            let new_path = Arc::clone(&new_path);
+        let run = move |batch: Vec<String>| {
+            // This closure should be Fn, as it is called for each batch. We need to clone the variables,
+            // otherwise it will be moved into the async block and can't be used again.
+            let cmds = cmds.clone();
+            let hook_args = hook_args.clone();
             let env = env.clone();
+            let new_path = new_path.clone();
 
-            let batch: Vec<_> = batch.into_iter().map(ToString::to_string).collect();
-
-            tasks.spawn(async move {
-                let _permit = semaphore
-                    .acquire()
-                    .await
-                    .map_err(|_| anyhow::anyhow!("Failed to acquire semaphore"))?;
-
-                Command::new(&cmds[0])
+            async move {
+                let output = Command::new(&cmds[0])
                     .args(&cmds[1..])
-                    .args(hook_args.as_slice())
-                    .args(batch)
-                    .env("VIRTUAL_ENV", &env)
+                    .env("VIRTUAL_ENV", env.as_ref())
                     .env("PATH", new_path.as_ref())
                     .env_remove("PYTHONHOME")
                     .stderr(std::process::Stdio::inherit())
+                    .args(hook_args.as_slice())
+                    .args(batch)
                     .output()
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Failed to execute command: {}", e))
-            });
-        }
+                    .await?;
+
+                let code = output.status.code().unwrap_or(1);
+                anyhow::Ok((code, output.stdout))
+            }
+        };
+
+        let results = run_by_batch(hook, filenames, run).await?;
 
         // Collect results
         let mut combined_status = 0;
-        let mut combined_stdout = Vec::new();
+        let mut combined_output = Vec::new();
 
-        while let Some(result) = tasks.join_next().await {
-            let output = result??;
-            combined_status |= output.status.code().unwrap_or(1);
-            combined_stdout.extend(output.stdout);
+        for (code, output) in results {
+            combined_status |= code;
+            combined_output.extend(output);
         }
 
-        Ok((combined_status, combined_stdout))
+        Ok((combined_status, combined_output))
     }
-}
-
-fn target_concurrency(serial: bool) -> usize {
-    if serial || std::env::var_os("PRE_COMMIT_NO_CONCURRENCY").is_some() {
-        1
-    } else {
-        std::thread::available_parallelism()
-            .map(std::num::NonZero::get)
-            .unwrap_or(1)
-    }
-}
-
-fn partitions<'a>(
-    hook: &'a Hook,
-    filenames: &'a [&String],
-    concurrency: usize,
-) -> Vec<Vec<&'a String>> {
-    let max_per_batch = max(4, filenames.len() / concurrency);
-    let max_cli_length = 1 << 12;
-    let command_length = hook.entry.len() + hook.args.iter().map(String::len).sum::<usize>();
-    // TODO: env size
-
-    let mut partitions = Vec::new();
-    let mut current = Vec::new();
-    let mut current_length = command_length + 1;
-
-    for &filename in filenames {
-        let length = filename.len();
-        if current_length + length > max_cli_length || current.len() >= max_per_batch {
-            partitions.push(current);
-            current = Vec::new();
-            current_length = 0;
-        }
-        current.push(filename);
-        current_length += length;
-    }
-
-    if !current.is_empty() {
-        partitions.push(current);
-    }
-
-    partitions
 }
 
 fn bin_dir(venv: &Path) -> PathBuf {

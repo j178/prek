@@ -23,6 +23,7 @@ mod hook;
 mod identify;
 mod languages;
 mod printer;
+mod run;
 mod store;
 mod warnings;
 
