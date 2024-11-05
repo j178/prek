@@ -12,9 +12,11 @@ use tracing_subscriber::filter::Directive;
 use tracing_subscriber::EnvFilter;
 
 use crate::cli::{Cli, Command, ExitStatus, SelfCommand, SelfNamespace, SelfUpdateArgs};
+use crate::cleanup::cleanup;
 use crate::git::get_root;
 use crate::printer::Printer;
 
+mod cleanup;
 mod cli;
 mod config;
 mod fs;
@@ -248,6 +250,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
 fn main() -> ExitCode {
     ctrlc::set_handler(move || {
+        cleanup();
+
         #[allow(clippy::exit, clippy::cast_possible_wrap)]
         std::process::exit(if cfg!(windows) {
             0xC000_013A_u32 as i32

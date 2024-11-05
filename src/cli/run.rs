@@ -11,6 +11,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tracing::{debug, trace};
 
 use crate::cli::{ExitStatus, RunExtraArgs};
+use crate::cleanup::add_cleanup;
 use crate::config::Stage;
 use crate::fs::{normalize_path, Simplified};
 use crate::git::{get_all_files, get_changed_files, get_staged_files, has_unmerged_paths, GIT};
@@ -34,6 +35,13 @@ pub(crate) async fn run(
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    // Prevent recursive post-checkout hooks.
+    if matches!(hook_stage, Some(Stage::PostCheckout))
+        && std::env::var_os("_PRE_COMMIT_SKIP_POST_CHECKOUT").is_some()
+    {
+        return Ok(ExitStatus::Success);
+    }
+
     let should_stash = !all_files && files.is_empty();
 
     // Check if we have unresolved merge conflict files and fail fast.
@@ -55,20 +63,17 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Failure);
     }
 
-    // Prevent recursive post-checkout hooks.
-    if matches!(hook_stage, Some(Stage::PostCheckout))
-        && std::env::var_os("_PRE_COMMIT_SKIP_POST_CHECKOUT").is_some()
-    {
-        return Ok(ExitStatus::Success);
+    // Clear any unstaged changes from the git working directory.
+    // TODO: impl staged_files_only
+    if should_stash {
+        staged_files_only()?;
     }
 
+    // Set env vars for hooks.
     let env_vars = fill_envs(from_ref.as_ref(), to_ref.as_ref(), &extra_args);
 
     let mut project = Project::new(config_file)?;
     let store = Store::from_settings()?.init()?;
-
-    // TODO: fill env vars
-    // TODO: impl staged_files_only
 
     let lock = store.lock_async().await?;
     let hooks = project.init_hooks(&store, printer).await?;
@@ -304,7 +309,7 @@ async fn install_hook(hook: &Hook, env_dir: PathBuf, printer: Printer) -> Result
         "Installing environment for {}",
         hook.repo(),
     )?;
-    debug!("Install environment for {} to {}", hook, env_dir.display());
+    debug!(%hook, target = %env_dir.display(), "Install environment");
 
     if env_dir.try_exists()? {
         debug!(
@@ -338,4 +343,22 @@ pub async fn install_hooks(hooks: &[Hook], printer: Printer) -> Result<()> {
     }
 
     Ok(())
+}
+
+struct RestoreHandle {}
+
+impl Drop for RestoreHandle {
+    fn drop(&mut self) {
+        restore_working_directory()
+    }
+}
+
+fn restore_working_directory() {
+
+}
+
+fn staged_files_only() -> Result<RestoreHandle> {
+    add_cleanup(restore_working_directory);
+
+    Ok(RestoreHandle {})
 }
