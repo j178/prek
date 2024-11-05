@@ -64,9 +64,9 @@ pub(crate) async fn run(
     }
 
     // Clear any unstaged changes from the git working directory.
-    // TODO: impl staged_files_only
+    let _guard;
     if should_stash {
-        staged_files_only()?;
+        _guard = staged_files_only()?;
     }
 
     // Set env vars for hooks.
@@ -345,20 +345,18 @@ pub async fn install_hooks(hooks: &[Hook], printer: Printer) -> Result<()> {
     Ok(())
 }
 
-struct RestoreHandle {}
+struct RestoreGuard;
 
-impl Drop for RestoreHandle {
+impl Drop for RestoreGuard {
     fn drop(&mut self) {
         restore_working_directory()
     }
 }
 
-fn restore_working_directory() {
+fn restore_working_directory() {}
 
-}
-
-fn staged_files_only() -> Result<RestoreHandle> {
+fn staged_files_only() -> Result<RestoreGuard> {
     add_cleanup(restore_working_directory);
 
-    Ok(RestoreHandle {})
+    Ok(RestoreGuard)
 }
