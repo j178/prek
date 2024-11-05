@@ -169,6 +169,10 @@ pub(crate) enum Command {
     /// The implementation of the `pre-commit` hook.
     #[command(hide = true)]
     HookImpl(HookImplArgs),
+
+    /// Generate shell completion scripts.
+    #[command(hide = true)]
+    GenerateShellCompletion(GenerateShellCompletionArgs),
 }
 
 #[derive(Debug, Args)]
@@ -283,4 +287,11 @@ pub(crate) struct HookImplArgs {
     pub(crate) skip_on_missing_config: bool,
     #[arg(last = true)]
     pub(crate) args: Vec<OsString>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct GenerateShellCompletionArgs {
+    /// The shell to generate the completion script for
+    #[arg(value_enum)]
+    pub shell: clap_complete::Shell,
 }

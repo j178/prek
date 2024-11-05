@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use anstream::{eprintln, ColorChoice};
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
 use tracing::debug;
 use tracing_subscriber::filter::Directive;
@@ -184,6 +184,17 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 printer,
             )
             .await
+        }
+        Command::GenerateShellCompletion(args) => {
+            show_settings!(args);
+
+            let mut command = Cli::command();
+            let bin_name = command
+                .get_bin_name()
+                .unwrap_or_else(|| command.get_name())
+                .to_owned();
+            clap_complete::generate(args.shell, &mut command, bin_name, &mut std::io::stdout());
+            Ok(ExitStatus::Success)
         }
         _ => {
             writeln!(printer.stderr(), "Command not implemented yet")?;
