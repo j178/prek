@@ -45,6 +45,7 @@ assert_fs = "1.1.2"
 etcetera = "0.8.0"
 insta = { version = "1.40.0", features = ["filters"] }
 insta-cmd = "0.6.0"
+predicates = "3.1.2"
 regex = "1.11.0"
 
 [lints.rust]
