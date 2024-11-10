@@ -14,7 +14,7 @@ mod validate;
 pub(crate) use clean::clean;
 pub(crate) use install::install;
 pub(crate) use run::run;
-pub(crate) use validate::validate_configs;
+pub(crate) use validate::{validate_configs, validate_manifest};
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {
@@ -154,7 +154,7 @@ pub(crate) enum Command {
     /// Validate `.pre-commit-config.yaml` files.
     ValidateConfig(ValidateConfigArgs),
     /// Validate `.pre-commit-hooks.yaml` files.
-    ValidateManifest,
+    ValidateManifest(ValidateManifestArgs),
     /// Produce a sample `.pre-commit-config.yaml` file.
     SampleConfig,
     /// Auto-update pre-commit config to the latest repos' versions.
@@ -274,6 +274,13 @@ pub(crate) struct ValidateConfigArgs {
     /// The path to the configuration file.
     #[arg(value_name = "CONFIG")]
     pub(crate) configs: Vec<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct ValidateManifestArgs {
+    /// The path to the manifest file.
+    #[arg(value_name = "MANIFEST")]
+    pub(crate) manifests: Vec<PathBuf>,
 }
 
 #[derive(Debug, Args)]
