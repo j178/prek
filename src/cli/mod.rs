@@ -9,10 +9,12 @@ use crate::config::Stage;
 mod clean;
 mod install;
 mod run;
+mod validate;
 
 pub(crate) use clean::clean;
 pub(crate) use install::install;
 pub(crate) use run::run;
+pub(crate) use validate::validate_configs;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {
@@ -150,7 +152,7 @@ pub(crate) enum Command {
     /// Uninstall the pre-commit script.
     Uninstall,
     /// Validate `.pre-commit-config.yaml` files.
-    ValidateConfig,
+    ValidateConfig(ValidateConfigArgs),
     /// Validate `.pre-commit-hooks.yaml` files.
     ValidateManifest,
     /// Produce a sample `.pre-commit-config.yaml` file.
@@ -265,6 +267,13 @@ pub(crate) struct RunArgs {
 
     #[command(flatten)]
     pub(crate) extra: RunExtraArgs,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct ValidateConfigArgs {
+    /// The path to the configuration file.
+    #[arg(value_name = "CONFIG")]
+    pub(crate) configs: Vec<PathBuf>,
 }
 
 #[derive(Debug, Args)]

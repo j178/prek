@@ -123,6 +123,12 @@ impl TestContext {
         command
     }
 
+    pub fn validate_config(&self) -> Command {
+        let mut command = self.command();
+        command.arg("validate-config");
+        command
+    }
+
     /// Standard snapshot filters _plus_ those for this test context.
     pub fn filters(&self) -> Vec<(&str, &str)> {
         // Put test context snapshots before the default filters
