@@ -7,7 +7,7 @@ use anstream::{eprintln, ColorChoice};
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, error};
 use tracing_subscriber::filter::Directive;
 use tracing_subscriber::EnvFilter;
 
@@ -70,18 +70,12 @@ fn setup_logging(level: Level) -> Result<()> {
 }
 
 /// Adjusts relative paths in the CLI arguments to be relative to the new working directory.
-fn adjust_relative_paths(mut cli: Cli, new_cwd: &Path) -> Result<Cli> {
-    cli.globals.config = cli
-        .globals
-        .config
-        .map(|path| {
-            if path.exists() {
-                std::path::absolute(path)
-            } else {
-                Ok(path)
-            }
-        })
-        .transpose()?;
+fn adjust_relative_paths(cli: &mut Cli, new_cwd: &Path) -> Result<()> {
+    if let Some(path) = &mut cli.globals.config {
+        if path.exists() {
+            *path = std::path::absolute(&*path)?;
+        }
+    }
 
     if let Some(Command::Run(ref mut args) | Command::TryRepo(ref mut args)) = cli.command {
         args.files = args
@@ -97,7 +91,7 @@ fn adjust_relative_paths(mut cli: Cli, new_cwd: &Path) -> Result<Cli> {
             .transpose()?;
     }
 
-    Ok(cli)
+    Ok(())
 }
 
 async fn run(mut cli: Cli) -> Result<ExitStatus> {
@@ -129,16 +123,23 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         cli.command = Some(Command::Run(Box::new(cli.run_args.clone())));
     }
 
-    let root = get_root().await?;
+    debug!("pre-commit: {}", env!("CARGO_PKG_VERSION"));
 
-    // Adjust relative paths before changing the working directory.
-    let cli = adjust_relative_paths(cli, &root)?;
+    match get_root().await {
+        Ok(root) => {
+            debug!("Git root: {}", root.display());
 
-    std::env::set_current_dir(&root)?;
+            // Adjust relative paths before changing the working directory.
+            adjust_relative_paths(&mut cli, &root)?;
+
+            std::env::set_current_dir(&root)?;
+        }
+        Err(err) => {
+            error!("Failed to find git root: {}", err);
+        }
+    }
 
     // TODO: read git commit info
-    debug!("pre-commit: {}", env!("CARGO_PKG_VERSION"));
-    debug!("Git root: {}", root.display());
 
     macro_rules! show_settings {
         ($arg:expr) => {
@@ -185,6 +186,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
+        Command::Clean => cli::clean(printer),
         Command::GenerateShellCompletion(args) => {
             show_settings!(args);
 

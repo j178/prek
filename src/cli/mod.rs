@@ -6,9 +6,11 @@ use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 
 use crate::config::Stage;
 
+mod clean;
 mod install;
 mod run;
 
+pub(crate) use clean::clean;
 pub(crate) use install::install;
 pub(crate) use run::run;
 
