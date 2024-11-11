@@ -55,7 +55,7 @@ pub(crate) async fn install(
     let hooks_path = git::get_git_common_dir().await?.join("hooks");
     fs_err::create_dir_all(&hooks_path)?;
 
-    let config_file = project.as_ref().ok().map(|project| project.config_file());
+    let config_file = project.as_ref().ok().map(Project::config_file);
     for hook_type in hook_types {
         install_hook_script(
             config_file,
