@@ -200,6 +200,7 @@ pub(crate) async fn uninstall(
     for hook_type in get_hook_types(config, hook_types) {
         let hooks_path = git::get_git_common_dir().await?.join("hooks");
         let hook_path = hooks_path.join(hook_type.as_str());
+        let legacy_path = hooks_path.join(format!("{}.legacy", hook_type.as_str()));
 
         if !hook_path.try_exists()? {
             writeln!(
@@ -220,6 +221,15 @@ pub(crate) async fn uninstall(
                 "uninstalled {}",
                 hook_type.as_str().cyan()
             )?;
+
+            if legacy_path.try_exists()? {
+                fs_err::rename(&legacy_path, &hook_path)?;
+                writeln!(
+                    printer.stdout(),
+                    "Restored previous hook to {}",
+                    hook_path.user_display().cyan()
+                )?;
+            }
         }
     }
 

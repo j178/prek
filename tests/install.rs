@@ -1,6 +1,10 @@
-use crate::common::{cmd_snapshot, TestContext};
+use assert_cmd::assert::OutputAssertExt;
+use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use insta::assert_snapshot;
+use predicates::prelude::predicate;
+
+use crate::common::{cmd_snapshot, TestContext};
 
 mod common;
 
@@ -152,6 +156,66 @@ fn install() -> anyhow::Result<()> {
             "##);
         }
     );
+
+    Ok(())
+}
+
+#[test]
+fn uninstall() -> anyhow::Result<()> {
+    let context = TestContext::new();
+
+    context.init_project();
+
+    // Hook does not exist.
+    cmd_snapshot!(context.filters(), context.uninstall(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    .git/hooks/pre-commit does not exist, skipping.
+    "#);
+
+    // Uninstall `pre-commit` hook.
+    context.install().assert().success();
+    cmd_snapshot!(context.filters(), context.uninstall(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    uninstalled pre-commit
+
+    ----- stderr -----
+    "#);
+    context
+        .workdir()
+        .child(".git/hooks/pre-commit")
+        .assert(predicate::path::missing());
+
+    // Hook is not managed by `pre-commit`.
+    context
+        .workdir()
+        .child(".git/hooks/pre-commit")
+        .write_str("#!/bin/sh\necho 'pre-commit'\n")?;
+    cmd_snapshot!(context.filters(), context.uninstall(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    .git/hooks/pre-commit is not managed by pre-commit, skipping.
+    "#);
+
+    // Restore previous hook.
+    context.install().assert().success();
+    cmd_snapshot!(context.filters(), context.uninstall(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    uninstalled pre-commit
+    Restored previous hook to .git/hooks/pre-commit
+
+    ----- stderr -----
+    "#);
 
     Ok(())
 }
