@@ -99,6 +99,23 @@ pub async fn get_git_dir() -> Result<PathBuf, Error> {
     ))
 }
 
+pub async fn get_git_common_dir() -> Result<PathBuf, Error> {
+    let output = git_cmd()?
+        .arg("rev-parse")
+        .arg("--git-common-dir")
+        .output()
+        .await
+        .map_err(OutputError::with_cause)?
+        .ok()?;
+    if output.stdout.trim_ascii().is_empty() {
+        Ok(get_git_dir().await?)
+    } else {
+        Ok(PathBuf::from(
+            String::from_utf8_lossy(&output.stdout).trim(),
+        ))
+    }
+}
+
 pub async fn get_staged_files() -> Result<Vec<String>, Error> {
     let output = git_cmd()?
         .arg("diff")
@@ -297,5 +314,19 @@ pub async fn clone_repo(url: &str, rev: &str, path: &Path) -> Result<(), Error> 
         full_clone(rev, path).await
     } else {
         Ok(())
+    }
+}
+
+pub async fn has_hooks_path_set() -> Result<bool> {
+    let output = git_cmd()?
+        .arg("config")
+        .arg("--get")
+        .arg("core.hooksPath")
+        .output()
+        .await?;
+    if output.status.success() {
+        Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
+    } else {
+        Ok(false)
     }
 }

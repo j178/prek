@@ -112,6 +112,7 @@ pub struct Project {
 }
 
 impl Project {
+    /// Find the configuration file in the given path or the current working directory.
     pub fn find_config_file(config: Option<PathBuf>) -> Result<PathBuf, Error> {
         let file = config.unwrap_or_else(|| CWD.join(CONFIG_FILE));
         if file.try_exists()? {
@@ -121,7 +122,13 @@ impl Project {
         Err(Error::Config(config::Error::NotFound(file)))
     }
 
-    /// Load a project configuration from a directory.
+    /// Initialize a new project from the configuration file or the file in the current working directory.
+    pub fn from_config_file(config: Option<PathBuf>) -> Result<Self, Error> {
+        let config_path = Self::find_config_file(config)?;
+        Self::new(config_path)
+    }
+
+    /// Initialize a new project from the configuration file.
     pub fn new(config_path: PathBuf) -> Result<Self, Error> {
         debug!(
             path = %config_path.display(),
@@ -138,6 +145,10 @@ impl Project {
 
     pub fn config(&self) -> &ConfigWire {
         &self.config
+    }
+
+    pub fn config_file(&self) -> &Path {
+        &self.config_path
     }
 
     async fn init_repos(&mut self, store: &Store, printer: Printer) -> Result<(), Error> {

@@ -321,7 +321,7 @@ async fn install_hook(hook: &Hook, env_dir: PathBuf, printer: Printer) -> Result
 }
 
 // TODO: progress bar
-async fn install_hooks(hooks: &[Hook], printer: Printer) -> Result<()> {
+pub async fn install_hooks(hooks: &[Hook], printer: Printer) -> Result<()> {
     let to_install = hooks
         .iter()
         .filter(|&hook| !hook.installed())

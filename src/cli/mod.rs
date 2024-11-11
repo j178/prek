@@ -2,9 +2,9 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
+use clap::{ArgAction, Args, Parser, Subcommand};
 
-use crate::config::Stage;
+use crate::config::{HookType, Stage};
 
 mod clean;
 mod install;
@@ -190,25 +190,11 @@ pub(crate) struct InstallArgs {
     pub(crate) install_hooks: bool,
 
     #[arg(short = 't', long, value_enum, value_delimiter = ' ')]
-    pub(crate) hook_type: Vec<HookType>,
+    pub(crate) hook_types: Vec<HookType>,
 
     /// Allow a missing `pre-commit` configuration file.
     #[arg(long)]
     pub(crate) allow_missing_config: bool,
-}
-
-#[derive(Debug, Clone, Copy, ValueEnum)]
-pub(crate) enum HookType {
-    CommitMsg,
-    PostCheckout,
-    PostCommit,
-    PostMerge,
-    PostRewrite,
-    PreCommit,
-    PreMergeCommit,
-    PrePush,
-    PreRebase,
-    PrepareCommitMsg,
 }
 
 #[derive(Debug, Clone, Args)]

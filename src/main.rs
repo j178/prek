@@ -162,8 +162,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             cli::install(
                 cli.globals.config,
-                args.hook_type,
+                args.hook_types,
                 args.install_hooks,
+                args.overwrite,
+                args.allow_missing_config,
                 printer,
             )
             .await
