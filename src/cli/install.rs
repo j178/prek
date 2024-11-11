@@ -33,24 +33,32 @@ pub(crate) async fn install(
         return Ok(ExitStatus::Failure);
     }
 
-    let mut project = Project::from_config_file(config)?;
+    let project = Project::from_config_file(config);
 
-    let hooks_types = if hook_types.is_empty() {
-        project
-            .config()
-            .default_install_hook_types
-            .clone()
-            .unwrap_or_else(|| vec![HookType::PreCommit])
+    let mut hook_types = if hook_types.is_empty() {
+        if let Ok(ref project) = project {
+            project
+                .config()
+                .default_install_hook_types
+                .clone()
+                .unwrap_or_default()
+        } else {
+            vec![]
+        }
     } else {
         hook_types
     };
+    if hook_types.is_empty() {
+        hook_types = vec![HookType::PreCommit];
+    }
 
     let hooks_path = git::get_git_common_dir().await?.join("hooks");
     fs_err::create_dir_all(&hooks_path)?;
 
-    for hook_type in hooks_types {
+    let config_file = project.as_ref().ok().map(|project| project.config_file());
+    for hook_type in hook_types {
         install_hook_script(
-            project.config_file(),
+            config_file,
             hook_type,
             &hooks_path,
             overwrite,
@@ -60,6 +68,7 @@ pub(crate) async fn install(
     }
 
     if install_hooks {
+        let mut project = project?;
         let store = Store::from_settings()?.init()?;
         let _lock = store.lock_async().await?;
 
@@ -71,7 +80,7 @@ pub(crate) async fn install(
 }
 
 fn install_hook_script(
-    config_file: &Path,
+    config_file: Option<&Path>,
     hook_type: HookType,
     hooks_path: &Path,
     overwrite: bool,
@@ -103,7 +112,10 @@ fn install_hook_script(
 
     let mut args = vec![
         "hook-impl".to_string(),
-        format!("--config={}", config_file.user_display()),
+        format!(
+            "--config={}",
+            config_file.map_or_else(String::new, |p| p.user_display().to_string())
+        ),
         format!("--hook-type={}", hook_type.as_str()),
     ];
     if skip_on_missing_config {

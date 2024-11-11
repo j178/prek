@@ -46,6 +46,13 @@ impl TestContext {
                 .map(|pattern| (pattern, "[HOME]/".to_string())),
         );
 
+        let current_exe = assert_cmd::cargo::cargo_bin("pre-commit");
+        filters.extend(
+            Self::path_patterns(&current_exe)
+                .into_iter()
+                .map(|pattern| (pattern, "[CURRENT_EXE]/".to_string())),
+        );
+
         Self {
             temp_dir,
             home_dir,
@@ -132,6 +139,18 @@ impl TestContext {
     pub fn validate_manifest(&self) -> Command {
         let mut command = self.command();
         command.arg("validate-manifest");
+        command
+    }
+
+    pub fn install(&self) -> Command {
+        let mut command = self.command();
+        command.arg("install");
+        command
+    }
+
+    pub fn uninstall(&self) -> Command {
+        let mut command = self.command();
+        command.arg("uninstall");
         command
     }
 
