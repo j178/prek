@@ -204,6 +204,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             Ok(cli::validate_manifest(args.manifests))
         }
+        Command::SampleConfig => Ok(cli::sample_config()),
         Command::GenerateShellCompletion(args) => {
             show_settings!(args);
 

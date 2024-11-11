@@ -9,11 +9,13 @@ use crate::config::{HookType, Stage};
 mod clean;
 mod install;
 mod run;
+mod sample_config;
 mod validate;
 
 pub(crate) use clean::clean;
 pub(crate) use install::{install, uninstall};
 pub(crate) use run::run;
+pub(crate) use sample_config::sample_config;
 pub(crate) use validate::{validate_configs, validate_manifest};
 
 #[derive(Copy, Clone)]
