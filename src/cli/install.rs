@@ -33,28 +33,12 @@ pub(crate) async fn install(
         return Ok(ExitStatus::Failure);
     }
 
-    let project = Project::from_config_file(config);
-
-    let mut hook_types = if hook_types.is_empty() {
-        if let Ok(ref project) = project {
-            project
-                .config()
-                .default_install_hook_types
-                .clone()
-                .unwrap_or_default()
-        } else {
-            vec![]
-        }
-    } else {
-        hook_types
-    };
-    if hook_types.is_empty() {
-        hook_types = vec![HookType::PreCommit];
-    }
+    let hook_types = get_hook_types(config.clone(), hook_types);
 
     let hooks_path = git::get_git_common_dir().await?.join("hooks");
     fs_err::create_dir_all(&hooks_path)?;
 
+    let project = Project::from_config_file(config);
     let config_file = project.as_ref().ok().map(Project::config_file);
     for hook_type in hook_types {
         install_hook_script(
@@ -77,6 +61,29 @@ pub(crate) async fn install(
     }
 
     Ok(ExitStatus::Success)
+}
+
+fn get_hook_types(config_file: Option<PathBuf>, hook_types: Vec<HookType>) -> Vec<HookType> {
+    let project = Project::from_config_file(config_file);
+
+    let mut hook_types = if hook_types.is_empty() {
+        if let Ok(ref project) = project {
+            project
+                .config()
+                .default_install_hook_types
+                .clone()
+                .unwrap_or_default()
+        } else {
+            vec![]
+        }
+    } else {
+        hook_types
+    };
+    if hook_types.is_empty() {
+        hook_types = vec![HookType::PreCommit];
+    }
+
+    hook_types
 }
 
 fn install_hook_script(
@@ -183,4 +190,38 @@ fn is_our_script(hook_path: &Path) -> Result<bool> {
     Ok(std::iter::once(CURRENT_HASH)
         .chain(PRIOR_HASHES.iter().copied())
         .any(|hash| content.contains(hash)))
+}
+
+pub(crate) async fn uninstall(
+    config: Option<PathBuf>,
+    hook_types: Vec<HookType>,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    for hook_type in get_hook_types(config, hook_types) {
+        let hooks_path = git::get_git_common_dir().await?.join("hooks");
+        let hook_path = hooks_path.join(hook_type.as_str());
+
+        if !hook_path.try_exists()? {
+            writeln!(
+                printer.stderr(),
+                "{} does not exist, skipping.",
+                hook_path.user_display().cyan()
+            )?;
+        } else if !is_our_script(&hook_path)? {
+            writeln!(
+                printer.stderr(),
+                "{} is not managed by pre-commit, skipping.",
+                hook_path.user_display().cyan()
+            )?;
+        } else {
+            fs_err::remove_file(&hook_path)?;
+            writeln!(
+                printer.stdout(),
+                "uninstalled {}",
+                hook_type.as_str().cyan()
+            )?;
+        }
+    }
+
+    Ok(ExitStatus::Success)
 }

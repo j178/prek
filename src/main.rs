@@ -170,6 +170,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
+        Command::Uninstall(args) => {
+            show_settings!(args);
+
+            cli::uninstall(cli.globals.config, args.hook_types, printer).await
+        }
         Command::Run(args) => {
             show_settings!(args);
 

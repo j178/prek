@@ -12,7 +12,7 @@ mod run;
 mod validate;
 
 pub(crate) use clean::clean;
-pub(crate) use install::install;
+pub(crate) use install::{install, uninstall};
 pub(crate) use run::run;
 pub(crate) use validate::{validate_configs, validate_manifest};
 
@@ -150,7 +150,7 @@ pub(crate) enum Command {
     /// Run hooks.
     Run(Box<RunArgs>),
     /// Uninstall the pre-commit script.
-    Uninstall,
+    Uninstall(UninstallArgs),
     /// Validate `.pre-commit-config.yaml` files.
     ValidateConfig(ValidateConfigArgs),
     /// Validate `.pre-commit-hooks.yaml` files.
@@ -195,6 +195,12 @@ pub(crate) struct InstallArgs {
     /// Allow a missing `pre-commit` configuration file.
     #[arg(long)]
     pub(crate) allow_missing_config: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct UninstallArgs {
+    #[arg(short = 't', long, value_enum, value_delimiter = ' ')]
+    pub(crate) hook_types: Vec<HookType>,
 }
 
 #[derive(Debug, Clone, Args)]
