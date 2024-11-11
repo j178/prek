@@ -50,7 +50,7 @@ impl TestContext {
         filters.extend(
             Self::path_patterns(&current_exe)
                 .into_iter()
-                .map(|pattern| (pattern, "[CURRENT_EXE]/".to_string())),
+                .map(|pattern| (pattern, "[CURRENT_EXE]".to_string())),
         );
 
         Self {
@@ -213,7 +213,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d]|\.\.)", "/$1"),
-    (r"pre-commit-rs.exe", "pre-commit-rs"),
+    (r"pre-commit.exe", "pre-commit"),
     // The exact message is host language dependent
     (
         r"Caused by: .* \(os error 2\)",
