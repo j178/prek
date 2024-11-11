@@ -20,8 +20,6 @@ fn install() -> anyhow::Result<()> {
     ----- stderr -----
     "#);
 
-    println!("{}", context.read(".git/hooks/pre-commit"));
-
     insta::with_settings!(
         { filters => context.filters() },
         {
@@ -34,7 +32,7 @@ fn install() -> anyhow::Result<()> {
 
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
-            PRE_COMMIT=[CURRENT_EXE]
+            PRE_COMMIT="[CURRENT_EXE]"
 
             exec "$PRE_COMMIT" "${ARGS[@]}"
 
@@ -70,7 +68,7 @@ fn install() -> anyhow::Result<()> {
 
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
-            PRE_COMMIT=[CURRENT_EXE]
+            PRE_COMMIT="[CURRENT_EXE]"
 
             exec "$PRE_COMMIT" "${ARGS[@]}"
 
@@ -95,7 +93,7 @@ fn install() -> anyhow::Result<()> {
 
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
-            PRE_COMMIT=[CURRENT_EXE]
+            PRE_COMMIT="[CURRENT_EXE]"
 
             exec "$PRE_COMMIT" "${ARGS[@]}"
 
@@ -128,7 +126,7 @@ fn install() -> anyhow::Result<()> {
 
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
-            PRE_COMMIT=[CURRENT_EXE]
+            PRE_COMMIT="[CURRENT_EXE]"
 
             exec "$PRE_COMMIT" "${ARGS[@]}"
 
@@ -147,7 +145,7 @@ fn install() -> anyhow::Result<()> {
 
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
-            PRE_COMMIT=[CURRENT_EXE]
+            PRE_COMMIT="[CURRENT_EXE]"
 
             exec "$PRE_COMMIT" "${ARGS[@]}"
 

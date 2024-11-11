@@ -129,7 +129,7 @@ fn install_hook_script(
         .replace("ARGS=(hook-impl)", &format!("ARGS=({args})"))
         .replace(
             r#"PRE_COMMIT="pre-commit""#,
-            &format!(r#"PRE_COMMIT={}"#, shlex::try_quote(&pre_commit)?),
+            &format!(r#"PRE_COMMIT="{pre_commit}""#),
         );
     fs_err::OpenOptions::new()
         .write(true)
