@@ -7,6 +7,7 @@ use anyhow::Result;
 use crate::config;
 use crate::hook::Hook;
 
+mod fail;
 mod node;
 mod python;
 mod system;
@@ -32,6 +33,7 @@ pub enum Language {
     Python(python::Python),
     Node(node::Node),
     System(system::System),
+    Fail(fail::Fail),
 }
 
 impl From<config::Language> for Language {
@@ -43,7 +45,7 @@ impl From<config::Language> for Language {
             // config::Language::Docker => Language::Docker,
             // config::Language::DockerImage => Language::DockerImage,
             // config::Language::Dotnet => Language::Dotnet,
-            // config::Language::Fail => Language::Fail,
+            config::Language::Fail => Language::Fail(fail::Fail),
             // config::Language::Golang => Language::Golang,
             // config::Language::Haskell => Language::Haskell,
             // config::Language::Lua => Language::Lua,
@@ -68,6 +70,7 @@ impl Display for Language {
             Self::Python(python) => python.fmt(f),
             Self::Node(node) => node.fmt(f),
             Self::System(system) => system.fmt(f),
+            Self::Fail(fail) => fail.fmt(f),
         }
     }
 }
@@ -78,6 +81,7 @@ impl Language {
             Self::Python(python) => python.name(),
             Self::Node(node) => node.name(),
             Self::System(system) => system.name(),
+            Self::Fail(fail) => fail.name(),
         }
     }
 
@@ -86,6 +90,7 @@ impl Language {
             Self::Python(python) => python.default_version(),
             Self::Node(node) => node.default_version(),
             Self::System(system) => system.default_version(),
+            Self::Fail(fail) => fail.default_version(),
         }
     }
 
@@ -94,6 +99,7 @@ impl Language {
             Self::Python(python) => python.environment_dir(),
             Self::Node(node) => node.environment_dir(),
             Self::System(system) => system.environment_dir(),
+            Self::Fail(fail) => fail.environment_dir(),
         }
     }
 
@@ -102,6 +108,7 @@ impl Language {
             Self::Python(python) => python.install(hook).await,
             Self::Node(node) => node.install(hook).await,
             Self::System(system) => system.install(hook).await,
+            Self::Fail(fail) => fail.install(hook).await,
         }
     }
 
@@ -110,6 +117,7 @@ impl Language {
             Self::Python(python) => python.check_health().await,
             Self::Node(node) => node.check_health().await,
             Self::System(system) => system.check_health().await,
+            Self::Fail(fail) => fail.check_health().await,
         }
     }
 
@@ -123,6 +131,7 @@ impl Language {
             Self::Python(python) => python.run(hook, filenames, env_vars).await,
             Self::Node(node) => node.run(hook, filenames, env_vars).await,
             Self::System(system) => system.run(hook, filenames, env_vars).await,
+            Self::Fail(fail) => fail.run(hook, filenames, env_vars).await,
         }
     }
 }
