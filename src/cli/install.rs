@@ -119,21 +119,19 @@ fn install_hook_script(
 
     let mut args = vec![
         "hook-impl".to_string(),
-        format!(
-            "--config={}",
-            config_file.map_or_else(String::new, |p| p.user_display().to_string())
-        ),
         format!("--hook-type={}", hook_type.as_str()),
     ];
+    if let Some(config_file) = config_file {
+        args.push(format!(r#"--config="{}""#, config_file.user_display().to_string()));
+    }
     if skip_on_missing_config {
         args.push("--skip-on-missing-config".to_string());
     }
 
-    let args = shlex::try_join(args.iter().map(String::as_str))?;
     let pre_commit = std::env::current_exe()?;
     let pre_commit = pre_commit.simplified().display().to_string();
     let hook_script = HOOK_TMPL
-        .replace("ARGS=(hook-impl)", &format!("ARGS=({args})"))
+        .replace("ARGS=(hook-impl)", &format!("ARGS=({})", args.join(" ")))
         .replace(
             r#"PRE_COMMIT="pre-commit""#,
             &format!(r#"PRE_COMMIT="{pre_commit}""#),
