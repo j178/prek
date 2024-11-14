@@ -287,6 +287,10 @@ impl Store {
     pub async fn lock_async(&self) -> Result<LockedFile, std::io::Error> {
         LockedFile::acquire(self.path.join(".lock"), "store").await
     }
+
+    pub fn uv_path(&self) -> PathBuf {
+        self.path.join("tools").join("uv")
+    }
 }
 
 // TODO

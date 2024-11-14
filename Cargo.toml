@@ -12,6 +12,7 @@ publish = false
 anstream = "0.6.15"
 anyhow = "1.0.86"
 assert_cmd = { version = "2.0.16", features = ["color"] }
+axoupdater = "0.8.1"
 clap = { version = "4.5.16", features = ["derive", "env"] }
 clap_complete = "4.5.37"
 ctrlc = "3.4.5"
