@@ -16,6 +16,7 @@ clap = { version = "4.5.16", features = ["derive", "env"] }
 clap_complete = "4.5.37"
 ctrlc = "3.4.5"
 dunce = "1.0.5"
+fancy-regex = "0.14.0"
 fs-err = "2.11.0"
 fs2 = "0.4.3"
 futures = "0.3.31"
@@ -26,7 +27,6 @@ itertools = "0.13.0"
 owo-colors = "4.1.0"
 rand = "0.8.5"
 rayon = "1.10.0"
-regex = "1.11.0"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 serde = { version = "1.0.210", features = ["derive"] }
 serde_yaml = "0.9.34"

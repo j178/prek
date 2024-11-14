@@ -38,9 +38,9 @@ impl LanguageImpl for Fail {
         out.extend(b"\n\n");
         for f in filenames {
             out.extend(f.as_bytes());
-            out.extend(b"\n");
+            out.push(b'\n');
         }
-        out.extend(b"\n");
+        out.push(b'\n');
 
         Ok((1, out))
     }

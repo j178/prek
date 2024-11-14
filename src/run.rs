@@ -7,11 +7,11 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anstream::ColorChoice;
+use fancy_regex::{self as regex, Regex};
 use owo_colors::{OwoColorize, Style};
 use rand::prelude::{SliceRandom, StdRng};
 use rand::SeedableRng;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use regex::Regex;
 use tokio::process::Command;
 use tokio::task::JoinSet;
 use tracing::{error, trace};
@@ -32,7 +32,7 @@ pub struct FilenameFilter {
 }
 
 impl FilenameFilter {
-    pub fn new(include: Option<&str>, exclude: Option<&str>) -> Result<Self, regex::Error> {
+    pub fn new(include: Option<&str>, exclude: Option<&str>) -> Result<Self, Box<regex::Error>> {
         let include = include.map(Regex::new).transpose()?;
         let exclude = exclude.map(Regex::new).transpose()?;
         Ok(Self { include, exclude })
@@ -41,19 +41,19 @@ impl FilenameFilter {
     pub fn filter(&self, filename: impl AsRef<str>) -> bool {
         let filename = filename.as_ref();
         if let Some(re) = &self.include {
-            if !re.is_match(filename) {
+            if !re.is_match(filename).unwrap_or(false) {
                 return false;
             }
         }
         if let Some(re) = &self.exclude {
-            if re.is_match(filename) {
+            if re.is_match(filename).unwrap_or(false) {
                 return false;
             }
         }
         true
     }
 
-    pub fn from_hook(hook: &Hook) -> Result<Self, regex::Error> {
+    pub fn from_hook(hook: &Hook) -> Result<Self, Box<regex::Error>> {
         Self::new(hook.files.as_deref(), hook.exclude.as_deref())
     }
 }
