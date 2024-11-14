@@ -122,7 +122,7 @@ fn install_hook_script(
         format!("--hook-type={}", hook_type.as_str()),
     ];
     if let Some(config_file) = config_file {
-        args.push(format!(r#"--config="{}""#, config_file.user_display().to_string()));
+        args.push(format!(r#"--config="{}""#, config_file.user_display()));
     }
     if skip_on_missing_config {
         args.push("--skip-on-missing-config".to_string());
