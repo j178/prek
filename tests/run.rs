@@ -40,8 +40,8 @@ fn run_basic() -> Result<()> {
         .success();
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
     Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
     Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0
@@ -277,8 +277,8 @@ fn files_and_exclude() -> Result<()> {
         .success();
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
     Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
     Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0
@@ -319,8 +319,8 @@ fn files_and_exclude() -> Result<()> {
         .success();
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
     trim trailing whitespace.................................................Failed
     - hook id: trailing-whitespace
@@ -377,8 +377,8 @@ fn file_types() -> Result<()> {
         .success();
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
     Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
     Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0
@@ -444,8 +444,8 @@ fn fail_fast() -> Result<()> {
         .success();
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
     Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
     Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0
@@ -500,8 +500,8 @@ fn subdirectory() -> Result<()> {
         .success();
 
     cmd_snapshot!(context.filters(), context.run().current_dir(&child).arg("--files").arg("file.txt"), @r#"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
     Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
     Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0
@@ -549,8 +549,8 @@ fn log_file() -> Result<()> {
         .success();
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
     Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
     Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0

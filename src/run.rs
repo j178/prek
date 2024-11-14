@@ -7,6 +7,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anstream::ColorChoice;
+use anyhow::Result;
 use fancy_regex::{self as regex, Regex};
 use owo_colors::{OwoColorize, Style};
 use rand::prelude::{SliceRandom, StdRng};
@@ -17,6 +18,7 @@ use tokio::task::JoinSet;
 use tracing::{error, trace};
 use unicode_width::UnicodeWidthStr;
 
+use crate::cli::ExitStatus;
 use crate::git::get_diff;
 use crate::hook::Hook;
 use crate::identify::tags_from_path;
@@ -126,7 +128,7 @@ pub async fn run_hooks(
     show_diff_on_failure: bool,
     verbose: bool,
     printer: Printer,
-) -> anyhow::Result<()> {
+) -> Result<ExitStatus> {
     let env_vars = Arc::new(env_vars);
 
     let columns = calculate_columns(hooks);
@@ -172,7 +174,11 @@ pub async fn run_hooks(
             .await?;
     };
 
-    Ok(())
+    if success {
+        Ok(ExitStatus::Success)
+    } else {
+        Ok(ExitStatus::Failure)
+    }
 }
 
 /// Shuffle the files so that they more evenly fill out the xargs

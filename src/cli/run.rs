@@ -163,9 +163,7 @@ pub(crate) async fn run(
         verbose,
         printer,
     )
-    .await?;
-
-    Ok(ExitStatus::Success)
+    .await
 }
 
 async fn config_not_staged(config: &Path) -> Result<bool> {

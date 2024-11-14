@@ -55,9 +55,7 @@ pub(crate) async fn hook_impl(
         false,
         printer,
     )
-    .await?;
-
-    Ok(ExitStatus::Success)
+    .await
 }
 
 fn to_run_args(hook_type: HookType, args: &[OsString]) -> RunArgs {

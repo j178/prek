@@ -35,8 +35,8 @@ fn fail() -> Result<()> {
         .success();
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
     changelogs must be rst...................................................Failed
     - hook id: changelogs-rst

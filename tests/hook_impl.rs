@@ -59,9 +59,10 @@ fn hook_impl() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    thread 'main' panicked at src/languages/mod.rs:60:18:
-    not yet implemented: Not implemented yet
-    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    fail.....................................................................Failed
+    - hook id: fail
+    - exit code: 1
+    always fail
     "#);
 
     Ok(())
