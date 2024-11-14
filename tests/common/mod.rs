@@ -205,6 +205,22 @@ impl TestContext {
             .success();
 
         Command::new("git")
+            .arg("config")
+            .current_dir(&self.temp_dir)
+            .arg("user.name")
+            .arg("Test User")
+            .assert()
+            .success();
+
+        Command::new("git")
+            .arg("config")
+            .current_dir(&self.temp_dir)
+            .arg("user.email")
+            .arg("test@example.com")
+            .assert()
+            .success();
+
+        Command::new("git")
             .arg("add")
             .arg(".")
             .current_dir(&self.temp_dir)

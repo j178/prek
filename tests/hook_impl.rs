@@ -18,7 +18,7 @@ fn hook_impl() -> Result<()> {
     context
         .workdir()
         .child(".pre-commit-config.yaml")
-        .write_str(indoc! { r#"
+        .write_str(indoc! { r"
             repos:
             - repo: local
               hooks:
@@ -27,7 +27,7 @@ fn hook_impl() -> Result<()> {
                  language: fail
                  entry: always fail
                  always_run: true
-            "#
+            "
         })?;
 
     Command::new("git")
