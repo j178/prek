@@ -5,6 +5,7 @@ use anyhow::Result;
 use axoupdater::{AxoUpdater, ReleaseSource, ReleaseSourceType};
 use tracing::{debug, warn};
 
+use crate::fs::LockedFile;
 use crate::store::Store;
 
 /// Ensure that the `uv` binary is available.
@@ -16,7 +17,6 @@ pub(crate) async fn ensure_uv() -> Result<PathBuf> {
 
     // 2) Check if `uv` is installed by `pre-commit`
     let store = Store::from_settings()?;
-    let _lock = store.lock_async().await?;
 
     let uv_dir = store.uv_path();
     let uv = uv_dir.join("uv").with_extension(env::consts::EXE_EXTENSION);
@@ -25,9 +25,11 @@ pub(crate) async fn ensure_uv() -> Result<PathBuf> {
     }
 
     fs_err::create_dir_all(&uv_dir)?;
+    let _lock = LockedFile::acquire(uv_dir.join(".lock"), "uv").await?;
 
     // 3) Download and install `uv`
     let mut installer = AxoUpdater::new_for("uv");
+    installer.always_update(true);
     installer.enable_installer_output();
     installer.set_install_dir(&uv_dir.to_string_lossy());
 

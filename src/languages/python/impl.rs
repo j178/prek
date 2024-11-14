@@ -35,6 +35,7 @@ impl LanguageImpl for Python {
 
         let uv = ensure_uv().await?;
 
+        // Set uv cache dir? tools dir? python dir?
         // Create venv
         Command::new(&uv)
             .arg("venv")
