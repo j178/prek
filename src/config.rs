@@ -191,7 +191,12 @@ impl Stage {
     pub fn operate_on_files(self) -> bool {
         matches!(
             self,
-            Stage::Manual | Stage::CommitMsg | Stage::PreCommit | Stage::PreMergeCommit | Stage::PrePush | Stage::PrepareCommitMsg
+            Stage::Manual
+                | Stage::CommitMsg
+                | Stage::PreCommit
+                | Stage::PreMergeCommit
+                | Stage::PrePush
+                | Stage::PrepareCommitMsg
         )
     }
 }
