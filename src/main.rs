@@ -193,6 +193,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
+        Command::HookImpl(args) => {
+            show_settings!(args);
+
+            cli::hook_impl(
+                cli.globals.config,
+                args.hook_type,
+                args.hook_dir,
+                args.skip_on_missing_config,
+                args.args,
+                printer,
+            )
+            .await
+        }
         Command::Clean => cli::clean(printer),
         Command::ValidateConfig(args) => {
             show_settings!(args);

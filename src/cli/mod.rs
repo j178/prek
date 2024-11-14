@@ -7,12 +7,14 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 use crate::config::{HookType, Stage};
 
 mod clean;
+mod hook_impl;
 mod install;
 mod run;
 mod sample_config;
 mod validate;
 
 pub(crate) use clean::clean;
+pub(crate) use hook_impl::hook_impl;
 pub(crate) use install::{install, uninstall};
 pub(crate) use run::run;
 pub(crate) use sample_config::sample_config;
@@ -205,7 +207,7 @@ pub(crate) struct UninstallArgs {
     pub(crate) hook_types: Vec<HookType>,
 }
 
-#[derive(Debug, Clone, Args)]
+#[derive(Debug, Clone, Default, Args)]
 pub(crate) struct RunExtraArgs {
     #[arg(long, hide = true)]
     pub(crate) remote_branch: Option<String>,
@@ -233,7 +235,7 @@ pub(crate) struct RunExtraArgs {
     pub(crate) rewrite_command: Option<String>,
 }
 
-#[derive(Debug, Clone, Args)]
+#[derive(Debug, Clone, Default, Args)]
 pub(crate) struct RunArgs {
     /// The hook ID to run.
     #[arg(value_name = "HOOK")]
@@ -292,9 +294,9 @@ pub(crate) struct AutoUpdateArgs {
 #[derive(Debug, Args)]
 pub(crate) struct HookImplArgs {
     #[arg(long)]
-    pub(crate) hook_type: Option<HookType>,
+    pub(crate) hook_type: HookType,
     #[arg(long)]
-    pub(crate) hook_dir: Option<PathBuf>,
+    pub(crate) hook_dir: PathBuf,
     #[arg(long)]
     pub(crate) skip_on_missing_config: bool,
     #[arg(last = true)]

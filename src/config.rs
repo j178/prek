@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::ops::RangeInclusive;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -101,6 +102,22 @@ impl HookType {
             Self::PrepareCommitMsg => "prepare-commit-msg",
         }
     }
+
+    /// Return the number of arguments this hook type expects.
+    pub fn num_args(self) -> RangeInclusive<usize> {
+        match self {
+            Self::CommitMsg => 1..=1,
+            Self::PostCheckout => 3..=3,
+            Self::PreCommit => 0..=0,
+            Self::PostCommit => 0..=0,
+            Self::PreMergeCommit => 0..=0,
+            Self::PostMerge => 1..=1,
+            Self::PostRewrite => 1..=1,
+            Self::PrePush => 2..=2,
+            Self::PreRebase => 1..=2,
+            Self::PrepareCommitMsg => 1..=3,
+        }
+    }
 }
 
 impl Display for HookType {
@@ -127,6 +144,23 @@ pub enum Stage {
     PrePush,
     PreRebase,
     PrepareCommitMsg,
+}
+
+impl From<HookType> for Stage {
+    fn from(value: HookType) -> Self {
+        match value {
+            HookType::CommitMsg => Self::CommitMsg,
+            HookType::PostCheckout => Self::PostCheckout,
+            HookType::PostCommit => Self::PostCommit,
+            HookType::PostMerge => Self::PostMerge,
+            HookType::PostRewrite => Self::PostRewrite,
+            HookType::PreCommit => Self::PreCommit,
+            HookType::PreMergeCommit => Self::PreMergeCommit,
+            HookType::PrePush => Self::PrePush,
+            HookType::PreRebase => Self::PreRebase,
+            HookType::PrepareCommitMsg => Self::PrepareCommitMsg,
+        }
+    }
 }
 
 impl Stage {
