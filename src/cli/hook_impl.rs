@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::ffi::{OsString};
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 use crate::cli::{self, ExitStatus, RunArgs};
@@ -54,7 +54,8 @@ pub(crate) async fn hook_impl(
         run_args.extra,
         false,
         printer,
-    ).await?;
+    )
+    .await?;
 
     Ok(ExitStatus::Success)
 }
@@ -67,7 +68,6 @@ fn to_run_args(hook_type: HookType, args: &[OsString]) -> RunArgs {
             run_args.extra.remote_name = Some(args[0].to_string_lossy().into_owned());
             run_args.extra.remote_url = Some(args[1].to_string_lossy().into_owned());
             // TODO: implement pre-push
-            
         }
         HookType::CommitMsg => {
             run_args.extra.commit_msg_filename = Some(PathBuf::from(&args[0]));

@@ -1,9 +1,9 @@
-use std::process::Command;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{FileWriteFile, FileWriteStr, PathChild};
-use indoc::indoc;
+use assert_fs::fixture::{FileWriteStr, PathChild};
 use common::TestContext;
+use indoc::indoc;
+use std::process::Command;
 
 use crate::common::cmd_snapshot;
 
@@ -15,24 +15,54 @@ fn hook_impl() -> Result<()> {
 
     context.init_project();
 
-    context.workdir().child("pre-commit-config.yaml").write_str(indoc! { r#"
-        repos:
-        - repo: local
-          hooks:
-           - id: fail
-             name: fail
-             language: fail
-             entry: always fail
-    "#
-    })?;
+    context
+        .workdir()
+        .child(".pre-commit-config.yaml")
+        .write_str(indoc! { r#"
+            repos:
+            - repo: local
+              hooks:
+               - id: fail
+                 name: fail
+                 language: fail
+                 entry: always fail
+                 always_run: true
+            "#
+        })?;
 
-    Command::new("git").arg("add").arg(".").assert().success();
+    Command::new("git")
+        .arg("add")
+        .current_dir(context.workdir())
+        .arg(".")
+        .assert()
+        .success();
 
     let mut commit = Command::new("git");
-    commit.arg("commit").arg("--allow-empty").arg("-m").arg("Initial commit");
+    commit
+        .arg("commit")
+        .current_dir(context.workdir())
+        .arg("-m")
+        .arg("Initial commit");
 
-    cmd_snapshot!(context.filters(), context.install(), @"");
-    cmd_snapshot!(context.filters(), commit, @"");
+    cmd_snapshot!(context.filters(), context.install(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pre-commit installed at .git/hooks/pre-commit
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context.filters(), commit, @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    thread 'main' panicked at src/languages/mod.rs:60:18:
+    not yet implemented: Not implemented yet
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    "#);
 
     Ok(())
 }
