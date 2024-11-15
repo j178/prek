@@ -16,6 +16,7 @@ repos:
     rev: v1.26.0
     hooks:
       - id: typos
+      - id: typos-docker
 
   - repo: local
     hooks:

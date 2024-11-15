@@ -24,9 +24,11 @@ home = "0.5.9"
 indicatif = "0.17.8"
 indoc = "2.0.5"
 itertools = "0.13.0"
+md5 = "0.7.0"
 owo-colors = "4.1.0"
 rand = "0.8.5"
 rayon = "1.10.0"
+regex-lite = "0.1.6"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 serde = { version = "1.0.210", features = ["derive"] }
 serde_yaml = "0.9.34"
@@ -39,6 +41,7 @@ tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 unicode-width = "0.2.0"
 url = { version = "2.5.2", features = ["serde"] }
 which = "6.0.3"
+serde_json = "1.0.132"
 
 [dev-dependencies]
 assert_fs = "1.1.2"
