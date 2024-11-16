@@ -98,6 +98,9 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v3
+
       - name: "Cargo test"
         run: |
           cargo nextest run \
@@ -122,6 +125,9 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v3
 
       - name: "Cargo test"
         run: |
@@ -156,6 +162,11 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v3
+        with:
+          cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
 
       - name: "Cargo test"
         working-directory: ${{ env.PRE_COMMIT_WORKSPACE }}
