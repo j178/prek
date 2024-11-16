@@ -133,7 +133,7 @@ jobs:
         run: |
           cargo nextest run \
             --workspace \
-            --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow
+            --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow -E 'not test(docker)'
 
   cargo-test-windows:
     timeout-minutes: 15
@@ -173,4 +173,4 @@ jobs:
         run: |
           # use only 1 job for now
           # uv concurrently writes to cache, which causes `Access is denied` errors
-          cargo nextest run --workspace --status-level skip --failure-output immediate --no-fail-fast -j 1 --final-status-level slow
+          cargo nextest run --workspace --status-level skip --failure-output immediate --no-fail-fast -j 1 --final-status-level slow -E 'not test(docker)'
