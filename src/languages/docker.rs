@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::OsStr;
+use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -58,31 +59,29 @@ impl Docker {
         Ok(())
     }
 
+    /// see <https://stackoverflow.com/questions/23513045/how-to-check-if-a-process-is-running-inside-docker-container>
     fn is_in_docker() -> bool {
-        match fs_err::read_to_string("/proc/self/mountinfo") {
-            Ok(mounts) => mounts.contains("docker"),
-            Err(_) => false,
+        if fs::metadata("/.dockerenv").is_ok() || fs::metadata("/run/.containerenv").is_ok() {
+            return true;
         }
+        false
     }
 
-    /// It should check [`Self::is_in_docker`] first.
+    /// It should check [`Self::is_in_docker`] first, but like [Codespaces](https://github.com/features/codespaces) also run inner docker.
     ///
     /// There are no valid algorithm to get container id inner container, see
     /// <https://stackoverflow.com/questions/20995351/how-can-i-get-docker-linux-container-information-from-within-the-container-itsel>
-    fn get_container_id() -> Result<String> {
-        // https://github.com/open-telemetry/opentelemetry-java-instrumentation/pull/7167/files
-        let regex = Regex::new(r".*/docker/containers/([0-9a-f]{64})/.*")?;
-        let v2_group_path = fs_err::read_to_string("/proc/self/mountinfo")?;
+    fn get_container_id() -> Option<String> {
+        // copy from https://github.com/open-telemetry/opentelemetry-java-instrumentation/pull/7167/files
+        if let Ok(regex) = Regex::new(r".*/docker/containers/([0-9a-f]{64})/.*") {
+            if let Ok(v2_group_path) = fs_err::read_to_string("/proc/self/mountinfo") {
+                if let Ok(Some(captures)) = regex.captures(&v2_group_path) {
+                    return captures.get(1).map(|m| m.as_str().to_string());
+                }
+            }
+        }
 
-        let captures = regex.captures(&v2_group_path)?.ok_or_else(|| {
-            anyhow::anyhow!("Failed to get container id from /proc/self/mountinfo")
-        })?;
-        debug!(?v2_group_path, ?captures, "Docker get_container_id:");
-
-        let id = captures.get(1).ok_or_else(|| {
-            anyhow::anyhow!("Failed to get container id from /proc/self/mountinfo")
-        })?;
-        Ok(id.as_str().to_string())
+        None
     }
 
     async fn get_docker_path(path: &Path) -> Result<Cow<'_, str>> {
@@ -90,7 +89,10 @@ impl Docker {
             return Ok(path.to_string_lossy());
         };
 
-        let container_id = Self::get_container_id()?;
+        let Some(container_id) = Self::get_container_id() else {
+            return Ok(path.to_string_lossy());
+        };
+
         debug!(%container_id, "Docker get_docker_path:");
 
         if let Ok(output) = Command::new("docker")
