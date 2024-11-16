@@ -43,6 +43,9 @@ url = { version = "2.5.2", features = ["serde"] }
 which = "6.0.3"
 serde_json = "1.0.132"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.162"
+
 [dev-dependencies]
 assert_fs = "1.1.2"
 etcetera = "0.8.0"

@@ -9,7 +9,6 @@ use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::OsStr;
-use std::panic::catch_unwind;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::process::Command;
@@ -68,7 +67,7 @@ impl Docker {
     ///
     /// there are no valid algorithm to get container id inner container, see <https://stackoverflow.com/questions/20995351/how-can-i-get-docker-linux-container-information-from-within-the-container-itsel>
     fn get_container_id() -> String {
-        // https://github.com/open-telemetry/opentelemetry-java-instrumentation/pull/7167/files#diff-9c4c3c88c89f52b9a08884bf4e1389271c7d8c32a977438b5dac460a8edabc7b
+        // https://github.com/open-telemetry/opentelemetry-java-instrumentation/pull/7167/files
         let regex = Regex::new(r".*/docker/containers/([0-9a-f]{64})/.*").unwrap();
         let v2_group_path = fs_err::read_to_string("/proc/self/mountinfo")
             .expect("Failed to find the container ID");
@@ -93,9 +92,15 @@ impl Docker {
                 for item in array {
                     if let Value::Object(map) = item {
                         let src_path = map.get("Source").unwrap().as_str().unwrap();
-                        let to_path = map.get("Destination").unwrap().as_str().unwrap();
+                        let to_path: &Path =
+                            map.get("Destination").unwrap().as_str().unwrap().as_ref();
+
                         if path.starts_with(to_path) {
-                            return Cow::from(path.to_string_lossy().replace(to_path, src_path));
+                            if let Some(to_path) = to_path.to_str() {
+                                return Cow::from(
+                                    path.to_string_lossy().replace(to_path, src_path),
+                                );
+                            }
                         }
                     }
                 }
@@ -105,9 +110,28 @@ impl Docker {
         path.to_string_lossy()
     }
 
+    /// This aim to run as non-root user
+    ///
+    /// ## Windows:
+    ///
+    /// no way, see <https://docs.docker.com/desktop/setup/install/windows-permission-requirements/>
+    ///
+    /// ## Other Unix Platform
+    ///
     /// see <https://stackoverflow.com/questions/57951893/how-to-determine-the-effective-user-id-of-a-process-in-rust>
-    fn get_docker_user() -> Option<[String; 2]> {
-        catch_unwind(|| unsafe { ["-u".to_owned(), format!("{}:{}", geteuid(), getegid())] }).ok()
+    #[cfg(unix)]
+    fn get_docker_user() -> [String; 2] {
+        unsafe {
+            [
+                "-u".to_owned(),
+                format!("{}:{}", libc::geteuid(), libc::geteuid()),
+            ]
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn get_docker_user() -> [String; 0] {
+        []
     }
 
     fn get_docker_tty(color: bool) -> Option<String> {
@@ -124,9 +148,9 @@ impl Docker {
         if let Some(tty) = Self::get_docker_tty(color) {
             command.arg(&tty);
         }
-        if let Some(user) = Self::get_docker_user() {
-            command.args(user);
-        }
+
+        command.args(Self::get_docker_user());
+
         command.args([
             "-v",
             // https://docs.docker.com/engine/reference/commandline/run/#mount-volumes-from-container-volumes-from
@@ -137,12 +161,6 @@ impl Docker {
 
         command
     }
-}
-
-#[link(name = "c")]
-extern "C" {
-    fn geteuid() -> u32;
-    fn getegid() -> u32;
 }
 
 impl LanguageImpl for Docker {
