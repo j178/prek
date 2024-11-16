@@ -7,6 +7,7 @@ use tokio::process::Command;
 
 use crate::config;
 use crate::hook::Hook;
+use crate::languages::python::uv::ensure_uv;
 use crate::languages::LanguageImpl;
 use crate::run::run_by_batch;
 
@@ -31,8 +32,12 @@ impl LanguageImpl for Python {
     // TODO: fallback to virtualenv, pip
     async fn install(&self, hook: &Hook) -> anyhow::Result<()> {
         let venv = hook.environment_dir().expect("No environment dir found");
+
+        let uv = ensure_uv().await?;
+
+        // Set uv cache dir? tools dir? python dir?
         // Create venv
-        Command::new("uv")
+        Command::new(&uv)
             .arg("venv")
             .arg(&venv)
             .arg("--python")
@@ -45,7 +50,7 @@ impl LanguageImpl for Python {
         patch_cfg_version_info(&venv).await?;
 
         // Install dependencies
-        Command::new("uv")
+        Command::new(&uv)
             .arg("pip")
             .arg("install")
             .arg(".")

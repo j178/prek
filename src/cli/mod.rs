@@ -11,6 +11,7 @@ mod hook_impl;
 mod install;
 mod run;
 mod sample_config;
+mod self_update;
 mod validate;
 
 pub(crate) use clean::clean;
@@ -18,6 +19,7 @@ pub(crate) use hook_impl::hook_impl;
 pub(crate) use install::{install, uninstall};
 pub(crate) use run::run;
 pub(crate) use sample_config::sample_config;
+pub(crate) use self_update::self_update;
 pub(crate) use validate::{validate_configs, validate_manifest};
 
 #[derive(Copy, Clone)]
@@ -178,6 +180,10 @@ pub(crate) enum Command {
     #[command(hide = true)]
     HookImpl(HookImplArgs),
 
+    /// `pre-commit-rs` self management.
+    #[command(name = "self")]
+    Self_(SelfNamespace),
+
     /// Generate shell completion scripts.
     #[command(hide = true)]
     GenerateShellCompletion(GenerateShellCompletionArgs),
@@ -301,6 +307,30 @@ pub(crate) struct HookImplArgs {
     pub(crate) skip_on_missing_config: bool,
     #[arg(last = true)]
     pub(crate) args: Vec<OsString>,
+}
+
+#[derive(Debug, Args)]
+pub struct SelfNamespace {
+    #[command(subcommand)]
+    pub command: SelfCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SelfCommand {
+    /// Update pre-commit-rs.
+    Update(SelfUpdateArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct SelfUpdateArgs {
+    /// Update to the specified version.
+    /// If not provided, pre-commit-rs will update to the latest version.
+    pub target_version: Option<String>,
+
+    /// A GitHub token for authentication.
+    /// A token is not required but can be used to reduce the chance of encountering rate limits.
+    #[arg(long, env = "GITHUB_TOKEN")]
+    pub token: Option<String>,
 }
 
 #[derive(Debug, Args)]
