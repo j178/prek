@@ -65,51 +65,56 @@ impl Docker {
         }
     }
 
-    /// It should check [`Self::is_in_docker`] first
+    /// It should check [`Self::is_in_docker`] first.
     ///
-    /// there are no valid algorithm to get container id inner container, see <https://stackoverflow.com/questions/20995351/how-can-i-get-docker-linux-container-information-from-within-the-container-itsel>
-    fn get_container_id() -> String {
+    /// There are no valid algorithm to get container id inner container, see
+    /// <https://stackoverflow.com/questions/20995351/how-can-i-get-docker-linux-container-information-from-within-the-container-itsel>
+    fn get_container_id() -> Result<String> {
         // https://github.com/open-telemetry/opentelemetry-java-instrumentation/pull/7167/files
-        let regex = Regex::new(r".*/docker/containers/([0-9a-f]{64})/.*").unwrap();
-        let v2_group_path = fs_err::read_to_string("/proc/self/mountinfo")
-            .expect("Failed to find the container ID");
+        let regex = Regex::new(r".*/docker/containers/([0-9a-f]{64})/.*")?;
+        let v2_group_path = fs_err::read_to_string("/proc/self/mountinfo")?;
 
-        let captures = regex.captures(&v2_group_path).unwrap().unwrap();
-        let id = captures.get(1).unwrap().as_str();
-        id.to_string()
+        let captures = regex.captures(&v2_group_path)?.ok_or_else(|| {
+            anyhow::anyhow!("Failed to get container id from /proc/self/mountinfo")
+        })?;
+
+        let id = captures.get(1).ok_or_else(|| {
+            anyhow::anyhow!("Failed to get container id from /proc/self/mountinfo")
+        })?;
+        Ok(id.as_str().to_string())
     }
 
-    async fn get_docker_path(path: &Path) -> Cow<'_, str> {
+    async fn get_docker_path(path: &Path) -> Result<Cow<'_, str>> {
         if !Self::is_in_docker() {
-            return path.to_string_lossy();
+            return Ok(path.to_string_lossy());
         };
 
-        let container_id = Self::get_container_id();
+        let container_id = Self::get_container_id()?;
         if let Ok(output) = Command::new("docker")
             .args(["inspect", "--format", "'{{json .Mounts}}'", &container_id])
             .output()
             .await
         {
-            if let Ok(Value::Array(array)) = serde_json::from_slice(&output.stdout) {
-                for item in array {
-                    if let Value::Object(map) = item {
-                        let src_path = map.get("Source").unwrap().as_str().unwrap();
-                        let to_path: &Path =
-                            map.get("Destination").unwrap().as_str().unwrap().as_ref();
+            #[derive(serde::Deserialize)]
+            struct Mount {
+                #[serde(rename = "Source")]
+                source: String,
+                #[serde(rename = "Destination")]
+                destination: String,
+            }
 
-                        if path.starts_with(to_path) {
-                            if let Some(to_path) = to_path.to_str() {
-                                return Cow::from(
-                                    path.to_string_lossy().replace(to_path, src_path),
-                                );
-                            }
-                        }
-                    }
+            let mounts: Vec<Mount> = serde_json::from_slice(&output.stdout)?;
+            for mount in mounts {
+                if path.starts_with(&mount.destination) {
+                    return Ok(Cow::from(
+                        path.to_string_lossy()
+                            .replace(&mount.destination, &mount.source),
+                    ));
                 }
             }
         }
 
-        path.to_string_lossy()
+        Ok(path.to_string_lossy())
     }
 
     /// This aim to run as non-root user
@@ -144,7 +149,7 @@ impl Docker {
         }
     }
 
-    async fn docker_cmd(color: bool) -> Command {
+    async fn docker_cmd(color: bool) -> Result<Command> {
         let mut command = Command::new("docker");
         command.args(["run", "--rm"]);
         if let Some(tty) = Self::get_docker_tty(color) {
@@ -156,12 +161,12 @@ impl Docker {
         command.args([
             "-v",
             // https://docs.docker.com/engine/reference/commandline/run/#mount-volumes-from-container-volumes-from
-            &format!("{}:/src:rw,Z", Self::get_docker_path(&CWD).await),
+            &format!("{}:/src:rw,Z", Self::get_docker_path(&CWD).await?),
             "--workdir",
             "/src",
         ]);
 
-        command
+        Ok(command)
     }
 }
 
@@ -213,7 +218,7 @@ impl LanguageImpl for Docker {
 
             async move {
                 // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
-                let mut cmd = Docker::docker_cmd(true).await;
+                let mut cmd = Docker::docker_cmd(true).await?;
                 let cmd = cmd
                     .args(["--entrypoint", &cmds[0], &docker_tag])
                     .args(&cmds[1..])
