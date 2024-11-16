@@ -4,7 +4,7 @@ use crate::hook::Hook;
 use crate::languages::{LanguageImpl, DEFAULT_VERSION};
 use crate::run::run_by_batch;
 use assert_cmd::output::{OutputError, OutputOkExt};
-use regex_lite::Regex;
+use fancy_regex::Regex;
 use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -72,8 +72,8 @@ impl Docker {
         let v2_group_path = fs_err::read_to_string("/proc/self/mountinfo")
             .expect("Failed to find the container ID");
 
-        let (_, [id]) = regex.captures(&v2_group_path).unwrap().extract();
-
+        let captures = regex.captures(&v2_group_path).unwrap().unwrap();
+        let id = captures.get(1).unwrap().as_str();
         id.to_string()
     }
 

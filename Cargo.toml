@@ -28,7 +28,6 @@ md5 = "0.7.0"
 owo-colors = "4.1.0"
 rand = "0.8.5"
 rayon = "1.10.0"
-regex-lite = "0.1.6"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 serde = { version = "1.0.210", features = ["derive"] }
 serde_yaml = "0.9.34"

@@ -944,7 +944,6 @@ dependencies = [
  "rand",
  "rayon",
  "regex",
- "regex-lite",
  "rusqlite",
  "serde",
  "serde_json",
@@ -1089,12 +1088,6 @@ dependencies = [
  "memchr",
  "regex-syntax 0.8.5",
 ]
-
-[[package]]
-name = "regex-lite"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53a49587ad06b26609c52e423de037e7f57f20d53535d66e08c695f347df952a"
 
 [[package]]
 name = "regex-syntax"
