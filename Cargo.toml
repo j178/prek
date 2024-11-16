@@ -1,7 +1,7 @@
 [package]
 name = "pre-commit-rs"
-version = "0.0.1"
-authors = ["j178 <10510431+j178@users.noreply.github.com>"]
+version = "0.0.2"
+authors = ["j178 <hi@j178.dev>"]
 description = "pre-commit implemeneted in Rust"
 repository = "https://github.com/j178/pre-commit-rs"
 homepage = "https://github.com/j178/pre-commit-rs"
