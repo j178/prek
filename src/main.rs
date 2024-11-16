@@ -11,7 +11,7 @@ use tracing::{debug, error};
 use tracing_subscriber::filter::Directive;
 use tracing_subscriber::EnvFilter;
 
-use crate::cli::{Cli, Command, ExitStatus};
+use crate::cli::{Cli, Command, ExitStatus, SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::git::get_root;
 use crate::printer::Printer;
 
@@ -218,6 +218,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             Ok(cli::validate_manifest(args.manifests))
         }
         Command::SampleConfig => Ok(cli::sample_config()),
+        Command::Self_(SelfNamespace {
+            command:
+                SelfCommand::Update(SelfUpdateArgs {
+                    target_version,
+                    token,
+                }),
+        }) => cli::self_update(target_version, token, printer).await,
         Command::GenerateShellCompletion(args) => {
             show_settings!(args);
 
