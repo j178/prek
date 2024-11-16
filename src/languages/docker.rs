@@ -29,7 +29,7 @@ impl Docker {
             .map(|s| format!("pre-commit-{:x}", md5::compute(s)))
     }
 
-    async fn build_docker_image(hook: &Hook, pull: bool) -> anyhow::Result<()> {
+    async fn build_docker_image(hook: &Hook, pull: bool) -> Result<()> {
         let mut cmd = Command::new("docker");
 
         let cmd = cmd.arg("build").args([
@@ -77,6 +77,7 @@ impl Docker {
         let captures = regex.captures(&v2_group_path)?.ok_or_else(|| {
             anyhow::anyhow!("Failed to get container id from /proc/self/mountinfo")
         })?;
+        debug!(?v2_group_path, ?captures, "Docker get_container_id:");
 
         let id = captures.get(1).ok_or_else(|| {
             anyhow::anyhow!("Failed to get container id from /proc/self/mountinfo")
@@ -90,20 +91,32 @@ impl Docker {
         };
 
         let container_id = Self::get_container_id()?;
+        debug!(%container_id, "Docker get_docker_path:");
+
         if let Ok(output) = Command::new("docker")
             .args(["inspect", "--format", "'{{json .Mounts}}'", &container_id])
             .output()
             .await
         {
-            #[derive(serde::Deserialize)]
+            #[derive(serde::Deserialize, Debug)]
             struct Mount {
                 #[serde(rename = "Source")]
                 source: String,
                 #[serde(rename = "Destination")]
                 destination: String,
             }
+            debug!(?output, "Docker get_docker_path:");
 
-            let mounts: Vec<Mount> = serde_json::from_slice(&output.stdout)?;
+            // using test env Dockerfile return around `'` and end with `\n`
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stdout = stdout
+                .trim()
+                .trim_start_matches('\'')
+                .trim_end_matches('\'');
+            let mounts: Vec<Mount> = serde_json::from_str(stdout)?;
+
+            debug!(?mounts, ?path, "Docker get_docker_path:");
+
             for mount in mounts {
                 if path.starts_with(&mount.destination) {
                     return Ok(Cow::from(
@@ -156,9 +169,7 @@ impl Docker {
             command.arg(&tty);
         }
 
-        command.args(Self::get_docker_user());
-
-        command.args([
+        command.args(Self::get_docker_user()).args([
             "-v",
             // https://docs.docker.com/engine/reference/commandline/run/#mount-volumes-from-container-volumes-from
             &format!("{}:/src:rw,Z", Self::get_docker_path(&CWD).await?),
@@ -183,7 +194,7 @@ impl LanguageImpl for Docker {
         Some("docker")
     }
 
-    async fn install(&self, hook: &Hook) -> anyhow::Result<()> {
+    async fn install(&self, hook: &Hook) -> Result<()> {
         let env = hook.environment_dir().expect("No environment dir found");
         debug!(path = ?hook.path(), env=?env, "docker install:");
         Docker::build_docker_image(hook, true).await?;
@@ -191,7 +202,7 @@ impl LanguageImpl for Docker {
         Ok(())
     }
 
-    async fn check_health(&self) -> anyhow::Result<()> {
+    async fn check_health(&self) -> Result<()> {
         todo!()
     }
 
@@ -200,7 +211,7 @@ impl LanguageImpl for Docker {
         hook: &Hook,
         filenames: &[&String],
         env_vars: Arc<HashMap<&'static str, String>>,
-    ) -> anyhow::Result<(i32, Vec<u8>)> {
+    ) -> Result<(i32, Vec<u8>)> {
         Docker::build_docker_image(hook, false).await?;
 
         let docker_tag = Docker::docker_tag(hook).unwrap();
@@ -248,5 +259,86 @@ impl LanguageImpl for Docker {
         }
 
         Ok((combined_status, combined_output))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Docker;
+    use std::env;
+    use std::path::Path;
+    use std::process::{Command, Stdio};
+    use tracing::debug;
+    use tracing_test::traced_test;
+
+    #[test]
+    fn test_inner_docker() {
+        // build docker
+        assert!(Command::new("docker")
+            .args([
+                "build",
+                "--tag",
+                "cs",
+                "--file=./.github/fixture/Dockerfile",
+                ".",
+            ])
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .expect("Failed to build docker")
+            .status
+            .success());
+        // run docker bind volume
+        let current_dir = env::current_dir().unwrap();
+        let bind_path = current_dir.join("tests").join("files");
+        assert!(Command::new("docker")
+            .args([
+                "run",
+                "-v",
+                &format!("{}:/app/outside/test", bind_path.to_str().unwrap()),
+                "-v",
+                "/var/run/docker.sock:/var/run/docker.sock",
+                "--privileged",
+                "-e",
+                &format!(
+                    "OUTSIDE_PATH={}",
+                    bind_path
+                        .join("uv-pre-commit-config.yaml")
+                        .to_str()
+                        .unwrap()
+                ),
+                "--rm",
+                "cs",
+                "--nocapture",
+            ])
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .output()
+            .expect("Failed to run docker")
+            .status
+            .success());
+    }
+
+    #[test]
+    #[ignore]
+    #[traced_test]
+    fn test_get_docker_path() {
+        assert!(Docker::is_in_docker());
+        let env_path = env::var("OUTSIDE_PATH").unwrap();
+
+        debug!(%env_path, "test_get_docker_path");
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create tokio runtime");
+
+        let path = Path::new("./outside/test/uv-pre-commit-config.yaml")
+            .canonicalize()
+            .unwrap();
+
+        let result = runtime.block_on(Docker::get_docker_path(&path)).unwrap();
+
+        assert_eq!(result, env_path);
     }
 }

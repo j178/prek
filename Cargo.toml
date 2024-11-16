@@ -52,6 +52,7 @@ insta = { version = "1.40.0", features = ["filters"] }
 insta-cmd = "0.6.0"
 predicates = "3.1.2"
 regex = "1.11.0"
+tracing-test = { version = "0.2", features = ["no-env-filter"] }
 
 [lints.rust]
 dead_code = "allow"
