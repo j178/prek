@@ -1,0 +1,36 @@
+[project]
+name = "pre-commit-rs"
+version = "0.0.2"
+description = "pre-commit reimplemented in Rust"
+authors = [{ name = "j178", email = "hi@j178.dev" }]
+readme = "README.md"
+
+[project.urls]
+Repository = "https://github.com/j178/pre-commit-rs"
+Changelog = "https://github.com/j178/pre-commit-rs/blob/main/CHANGELOG.md"
+Releases = "https://github.com/j178/pre-commit-rs/releases"
+
+[tool.rooster]
+version_tag_prefix = "v"
+major_labels = []  # We do not use the major version number yet
+minor_labels = ["breaking"]
+changelog_ignore_labels = ["internal", "ci", "testing"]
+changelog_sections.breaking = "Breaking changes"
+changelog_sections.enhancement = "Enhancements"
+changelog_sections.compatibility = "Enhancements"
+changelog_sections.error_messages = "Enhancements"
+changelog_sections.cli = "Enhancements"
+changelog_sections.configuration = "Configuration"
+changelog_sections.performance = "Performance"
+changelog_sections.bug = "Bug fixes"
+changelog_sections.documentation = "Documentation"
+changelog_sections.__unknown__ = "Other changes"
+
+# We exclude contributors from the CHANGELOG file
+# Generate separately with `rooster contributors` for the GitHub release page
+changelog_contributors = false
+
+version_files = [
+  "README.md",
+  "Cargo.toml",
+]
