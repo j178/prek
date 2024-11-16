@@ -1,18 +1,20 @@
-use crate::config::Language;
-use crate::fs::CWD;
-use crate::hook::Hook;
-use crate::languages::{LanguageImpl, DEFAULT_VERSION};
-use crate::run::run_by_batch;
-use assert_cmd::output::{OutputError, OutputOkExt};
-use fancy_regex::Regex;
-use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::Arc;
+
+use anyhow::Result;
+use assert_cmd::output::{OutputError, OutputOkExt};
+use fancy_regex::Regex;
 use tokio::process::Command;
 use tracing::debug;
+
+use crate::config::Language;
+use crate::fs::CWD;
+use crate::hook::Hook;
+use crate::languages::{LanguageImpl, DEFAULT_VERSION};
+use crate::run::run_by_batch;
 
 const PRE_COMMIT_LABEL: &str = "PRE_COMMIT";
 
@@ -45,7 +47,7 @@ impl Docker {
         // see https://github.com/pre-commit/pre-commit/issues/477
         cmd.arg(".");
 
-        debug!(cmd=?cmd, "docker build_docker_image:");
+        debug!(cmd = ?cmd, "docker build_docker_image:");
 
         cmd.current_dir(hook.path())
             .output()
@@ -178,7 +180,7 @@ impl LanguageImpl for Docker {
 
     async fn install(&self, hook: &Hook) -> anyhow::Result<()> {
         let env = hook.environment_dir().expect("No environment dir found");
-        debug!(path=?hook.path(), env=?env, "docker install:");
+        debug!(path = ?hook.path(), env=?env, "docker install:");
         Docker::build_docker_image(hook, true).await?;
         fs_err::create_dir_all(env)?;
         Ok(())
@@ -220,7 +222,7 @@ impl LanguageImpl for Docker {
                     .stderr(std::process::Stdio::inherit())
                     .envs(env_vars.as_ref());
 
-                debug!(cmd=?cmd, "Docker run batch:");
+                debug!(cmd = ?cmd, "Docker run batch:");
 
                 let mut output = cmd.output().await?;
                 output.stdout.extend(output.stderr);
