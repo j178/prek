@@ -10,6 +10,13 @@ Repository = "https://github.com/j178/pre-commit-rs"
 Changelog = "https://github.com/j178/pre-commit-rs/blob/main/CHANGELOG.md"
 Releases = "https://github.com/j178/pre-commit-rs/releases"
 
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+bindings = "bin"
+
 [tool.rooster]
 version_tag_prefix = "v"
 major_labels = []  # We do not use the major version number yet
