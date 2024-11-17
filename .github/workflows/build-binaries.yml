@@ -28,7 +28,7 @@ jobs:
       matrix:
         platform:
           - runner: ubuntu-latest
-            target: x86_64
+            target: x86_64-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v4
       - name: "Build wheels"
@@ -43,17 +43,12 @@ jobs:
         with:
           name: wheels-linux-${{ matrix.platform.target }}
           path: dist
-      - name: "Upload wheels"
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-${{ matrix.target }}
-          path: dist
       - name: "Archive binary"
         shell: bash
         run: |
           set -euo pipefail
 
-          TARGET=${{ matrix.target }}
+          TARGET=${{ matrix.platform.target }}
           ARCHIVE_NAME=pre-commit-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
@@ -64,7 +59,7 @@ jobs:
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts-${{ matrix.target }}
+          name: artifacts-${{ matrix.platform.target }}
           path: |
             *.tar.gz
             *.sha256
@@ -75,7 +70,7 @@ jobs:
       matrix:
         platform:
           - runner: windows-latest
-            target: x64
+            target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v4
       - name: "Build wheels"
@@ -109,9 +104,9 @@ jobs:
       matrix:
         platform:
           - runner: macos-12
-            target: x86_64
+            target: x86_64-apple-darwin
           - runner: macos-14
-            target: aarch64
+            target: aarch64-apple-darwin
     steps:
       - uses: actions/checkout@v4
       - name: "Build wheels"
