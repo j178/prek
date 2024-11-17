@@ -23,6 +23,8 @@ mod hook;
 mod identify;
 mod languages;
 mod printer;
+#[cfg(all(unix, feature = "profiler"))]
+mod profiler;
 mod run;
 mod store;
 mod warnings;
@@ -259,12 +261,29 @@ fn main() -> ExitCode {
         Err(err) => err.exit(),
     };
 
+    // Initialize the profiler guard if the feature is enabled.
+    let mut _profiler_guard = None;
+    #[cfg(all(unix, feature = "profiler"))]
+    {
+        _profiler_guard = profiler::start_profiling();
+    }
+    #[cfg(not(all(unix, feature = "profiler")))]
+    {
+        _profiler_guard = Some(());
+    }
+
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .expect("Failed to create tokio runtime");
     let result = runtime.block_on(Box::pin(run(cli)));
     runtime.shutdown_background();
+
+    // Report the profiler if the feature is enabled
+    #[cfg(all(unix, feature = "profiler"))]
+    {
+        profiler::finish_profiling(_profiler_guard);
+    }
 
     match result {
         Ok(code) => code.into(),

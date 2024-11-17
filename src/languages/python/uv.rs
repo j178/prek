@@ -30,7 +30,7 @@ pub(crate) async fn ensure_uv() -> Result<PathBuf> {
     // 3) Download and install `uv`
     let mut installer = AxoUpdater::new_for("uv");
     installer.always_update(true);
-    installer.enable_installer_output();
+    installer.disable_installer_output();
     installer.set_install_dir(&uv_dir.to_string_lossy());
 
     env::set_var("AXOUPDATER_CONFIG_PATH", &uv_dir);

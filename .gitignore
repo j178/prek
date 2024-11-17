@@ -7,3 +7,6 @@
 
 # macOS
 **/.DS_Store
+
+# profiling flamegraphs
+*.flamegraph.svg
