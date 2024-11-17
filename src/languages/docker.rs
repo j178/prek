@@ -111,20 +111,21 @@ impl Docker {
 
             // using test env Dockerfile return around `'` and end with `\n`
             let stdout = String::from_utf8_lossy(&output.stdout);
-            let stdout = stdout
-                .trim()
-                .trim_start_matches('\'')
-                .trim_end_matches('\'');
+            let stdout = stdout.trim().trim_matches('\'');
             let mounts: Vec<Mount> = serde_json::from_str(stdout)?;
 
             debug!(?mounts, ?path, "Docker get_docker_path:");
 
             for mount in mounts {
                 if path.starts_with(&mount.destination) {
-                    return Ok(Cow::from(
-                        path.to_string_lossy()
-                            .replace(&mount.destination, &mount.source),
-                    ));
+                    let mut res = path
+                        .to_string_lossy()
+                        .replace(&mount.destination, &mount.source);
+                    if res.contains('\\') {
+                        // that means runner on the win
+                        res = res.replace('/', "\\");
+                    }
+                    return Ok(Cow::Owned(res));
                 }
             }
         }
