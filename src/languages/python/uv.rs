@@ -27,6 +27,10 @@ pub(crate) async fn ensure_uv() -> Result<PathBuf> {
     fs_err::create_dir_all(&uv_dir)?;
     let _lock = LockedFile::acquire(uv_dir.join(".lock"), "uv").await?;
 
+    if uv.is_file() {
+        return Ok(uv);
+    }
+
     // 3) Download and install `uv`
     let mut installer = AxoUpdater::new_for("uv");
     installer.always_update(true);
