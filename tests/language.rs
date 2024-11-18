@@ -99,12 +99,12 @@ fn docker() -> Result<()> {
     typos....................................................................Failed
     - hook id: typos-docker
     - exit code: 2
-    error: `Trailling` should be `Trailing`
-      --> file.txt:1:26
-      |
-    1 | public function noErrorOnTraillingSemicolonAndWhitespace(Connection $connection)
-      |                          ^^^^^^^^^
-      |
+      error: `Trailling` should be `Trailing`
+        --> file.txt:1:26
+        |
+      1 | public function noErrorOnTraillingSemicolonAndWhitespace(Connection $connection)
+        |                          ^^^^^^^^^
+        |
 
     ----- stderr -----
     ");
