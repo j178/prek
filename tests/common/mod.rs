@@ -241,6 +241,8 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         r"Caused by: .* \(os error 2\)",
         "Caused by: No such file or directory (os error 2)",
     ),
+    // Time
+    (r"(\d+[:\.]\d+)(AM|ms)", "[TIME]$2"),
 ];
 
 #[allow(unused_macros)]

@@ -165,7 +165,7 @@ impl Docker {
         }
     }
 
-    async fn docker_cmd(color: bool) -> Result<Command> {
+    pub(crate) async fn docker_cmd(color: bool) -> Result<Command> {
         let mut command = Command::new("docker");
         command.args(["run", "--rm"]);
         if let Some(tty) = Self::get_docker_tty(color) {

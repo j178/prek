@@ -8,6 +8,7 @@ use crate::config;
 use crate::hook::Hook;
 
 mod docker;
+mod docker_image;
 mod fail;
 mod node;
 mod python;
@@ -36,6 +37,7 @@ pub enum Language {
     System(system::System),
     Fail(fail::Fail),
     Docker(docker::Docker),
+    DockerImage(docker_image::DockerImage),
 }
 
 impl From<config::Language> for Language {
@@ -45,7 +47,7 @@ impl From<config::Language> for Language {
             // config::Language::Coursier => Language::Coursier,
             // config::Language::Dart => Language::Dart,
             config::Language::Docker => Language::Docker(docker::Docker),
-            // config::Language::DockerImage => Language::DockerImage,
+            config::Language::DockerImage => Language::DockerImage(docker_image::DockerImage),
             // config::Language::Dotnet => Language::Dotnet,
             config::Language::Fail => Language::Fail(fail::Fail),
             // config::Language::Golang => Language::Golang,
@@ -74,6 +76,7 @@ impl Display for Language {
             Self::System(system) => system.fmt(f),
             Self::Fail(fail) => fail.fmt(f),
             Self::Docker(docker) => docker.fmt(f),
+            Self::DockerImage(docker_image) => docker_image.fmt(f),
         }
     }
 }
@@ -86,6 +89,7 @@ impl Language {
             Self::System(system) => system.name(),
             Self::Fail(fail) => fail.name(),
             Self::Docker(docker) => docker.name(),
+            Self::DockerImage(docker_image) => docker_image.name(),
         }
     }
 
@@ -96,6 +100,7 @@ impl Language {
             Self::System(system) => system.default_version(),
             Self::Fail(fail) => fail.default_version(),
             Self::Docker(docker) => docker.default_version(),
+            Self::DockerImage(docker_image) => docker_image.default_version(),
         }
     }
 
@@ -106,6 +111,7 @@ impl Language {
             Self::System(system) => system.environment_dir(),
             Self::Fail(fail) => fail.environment_dir(),
             Self::Docker(docker) => docker.environment_dir(),
+            Self::DockerImage(docker_image) => docker_image.environment_dir(),
         }
     }
 
@@ -116,6 +122,7 @@ impl Language {
             Self::System(system) => system.install(hook).await,
             Self::Fail(fail) => fail.install(hook).await,
             Self::Docker(docker) => docker.install(hook).await,
+            Self::DockerImage(docker_image) => docker_image.install(hook).await,
         }
     }
 
@@ -126,6 +133,7 @@ impl Language {
             Self::System(system) => system.check_health().await,
             Self::Fail(fail) => fail.check_health().await,
             Self::Docker(docker) => docker.check_health().await,
+            Self::DockerImage(docker_image) => docker_image.check_health().await,
         }
     }
 
@@ -141,6 +149,7 @@ impl Language {
             Self::System(system) => system.run(hook, filenames, env_vars).await,
             Self::Fail(fail) => fail.run(hook, filenames, env_vars).await,
             Self::Docker(docker) => docker.run(hook, filenames, env_vars).await,
+            Self::DockerImage(docker_image) => docker_image.run(hook, filenames, env_vars).await,
         }
     }
 }
