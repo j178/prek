@@ -1,9 +1,21 @@
 [project]
-name = "pre-commit-rs"
+name = "pre-commit-rusty"
 version = "0.0.2"
 description = "pre-commit reimplemented in Rust"
 authors = [{ name = "j178", email = "hi@j178.dev" }]
+requires-python = ">=3.8"
+keywords = [ "pre-commit", "git", "hooks" ]
 readme = "README.md"
+license = { file = "LICENSE" }
+classfiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Rust",
+  "Topic :: Software Development :: Quality Assurance"
+]
 
 [project.urls]
 Repository = "https://github.com/j178/pre-commit-rs"
@@ -25,9 +37,6 @@ changelog_ignore_labels = ["internal", "ci", "testing"]
 changelog_sections.breaking = "Breaking changes"
 changelog_sections.enhancement = "Enhancements"
 changelog_sections.compatibility = "Enhancements"
-changelog_sections.error_messages = "Enhancements"
-changelog_sections.cli = "Enhancements"
-changelog_sections.configuration = "Configuration"
 changelog_sections.performance = "Performance"
 changelog_sections.bug = "Bug fixes"
 changelog_sections.documentation = "Documentation"

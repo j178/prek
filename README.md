@@ -33,6 +33,23 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/pre-commit-rs/rele
 powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/pre-commit-rs/releases/download/v0.0.2/pre-commit-rs-installer.ps1 | iex"
 ```
 
+### PyPI
+
+pre-commit-rs is published as Python binary wheel to PyPI under the name `pre-commit-rusty`,
+you can install it using `pip`, `uv` (recommended), or `pipx`:
+
+```console
+pip install pre-commit-rusty
+
+# or
+
+uv tool install pre-commit-rusty
+
+# or
+
+pipx install pre-commit-rusty
+```
+
 ### Homebrew
 
 ```console
