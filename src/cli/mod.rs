@@ -219,7 +219,7 @@ pub(crate) struct RunExtraArgs {
     pub(crate) remote_branch: Option<String>,
     #[arg(long, hide = true)]
     pub(crate) local_branch: Option<String>,
-    #[arg(long, hide = true)]
+    #[arg(long, hide = true, required_if_eq("hook_stage", "pre-rebase"))]
     pub(crate) pre_rebase_upstream: Option<String>,
     #[arg(long, hide = true)]
     pub(crate) pre_rebase_branch: Option<String>,

@@ -11,14 +11,13 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tracing::{debug, trace};
 
 use crate::cli::{ExitStatus, RunExtraArgs};
-use crate::cleanup::add_cleanup;
 use crate::config::Stage;
 use crate::fs::{normalize_path, Simplified};
 use crate::git::{get_all_files, get_changed_files, get_staged_files, has_unmerged_paths, GIT};
 use crate::hook::{Hook, Project};
 use crate::printer::Printer;
 use crate::process::Cmd;
-use crate::run::{run_hooks, FilenameFilter};
+use crate::run::{run_hooks, FilenameFilter, WorkingTreeCleared};
 use crate::store::Store;
 
 #[allow(clippy::too_many_arguments)]
@@ -64,9 +63,9 @@ pub(crate) async fn run(
     }
 
     // Clear any unstaged changes from the git working directory.
-    let _guard;
+    let mut _guard = None;
     if should_stash {
-        _guard = staged_files_only()?;
+        _guard = Some(WorkingTreeCleared::new()?);
     }
 
     // Set env vars for hooks.
@@ -343,20 +342,4 @@ pub async fn install_hooks(hooks: &[Hook], printer: Printer) -> Result<()> {
     }
 
     Ok(())
-}
-
-struct RestoreGuard;
-
-impl Drop for RestoreGuard {
-    fn drop(&mut self) {
-        restore_working_directory()
-    }
-}
-
-fn restore_working_directory() {}
-
-fn staged_files_only() -> Result<RestoreGuard> {
-    add_cleanup(restore_working_directory);
-
-    Ok(RestoreGuard)
 }

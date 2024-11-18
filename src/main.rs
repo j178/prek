@@ -11,8 +11,8 @@ use tracing::{debug, error};
 use tracing_subscriber::filter::Directive;
 use tracing_subscriber::EnvFilter;
 
-use crate::cli::{Cli, Command, ExitStatus, SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::cleanup::cleanup;
+use crate::cli::{Cli, Command, ExitStatus, SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::git::get_root;
 use crate::printer::Printer;
 

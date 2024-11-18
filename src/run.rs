@@ -17,6 +17,7 @@ use tokio::task::JoinSet;
 use tracing::{error, trace};
 use unicode_width::UnicodeWidthStr;
 
+use crate::cleanup::add_cleanup;
 use crate::cli::ExitStatus;
 use crate::git::{get_diff, GIT};
 use crate::hook::Hook;
@@ -437,4 +438,151 @@ where
     }
 
     Ok(results)
+}
+
+static RESTORE_WORKTREE: Mutex<Option<WorkingTreeCleared>> = Mutex::new(None);
+
+#[derive(Debug, Default)]
+pub struct WorkingTreeCleared {
+    intent_to_add: Option<Vec<PathBuf>>,
+    patch: Option<TempPath>,
+    restored: AtomicBool,
+}
+
+pub struct RestoreGuard {
+    _guard: (),
+}
+
+impl Default for RestoreGuard {
+    fn default() -> Self {
+        Self { _guard: () }
+    }
+}
+
+impl Drop for RestoreGuard {
+    fn drop(&mut self) {
+        if let Ok(Some(guard)) = &mut RESTORE_WORKTREE.lock() {
+            guard.restore();
+        }
+    }
+}
+
+impl WorkingTreeCleared {
+    /// Clear intent-to-add changes from the index and clear the non-staged changes from the working directory.
+    /// Restore them when the instance is dropped.
+    pub fn new() -> Result<RestoreGuard> {
+        let mut guard = Self::default();
+
+        guard.intent_to_add = Some(Self::clear_intent_to_add_files()?);
+        guard.patch = Some(Self::save_as_patch()?);
+
+        // Set to the global.
+        *RESTORE_WORKTREE.lock() = Ok(Some(guard));
+
+        add_cleanup(|| {
+            if let Ok(Some(guard)) = &mut RESTORE_WORKTREE.lock() {
+                guard.restore();
+            }
+        });
+
+        Ok(RestoreGuard::default())
+    }
+
+    fn clear_intent_to_add_files() -> Result<Vec<PathBuf>> {
+        let output = std::process::Command::new(GIT.as_ref()?)
+            .arg("status")
+            .arg("--porcelain")
+            .arg("--intent-to-add")
+            .output()
+            .inspect_err(|err| error!("Failed to get intent-to-add files: {}", err))?;
+
+        let files = output
+            .stdout
+            .split(|&c| c == b'\n')
+            .filter(|line| !line.is_empty());
+
+        let mut intent_to_add = Vec::new();
+        for file in files {
+            let file = String::from_utf8_lossy(file);
+            let file = file.trim_start().trim_start_matches("A  ").trim();
+            intent_to_add.push(PathBuf::from(file));
+        }
+
+        std::process::Command::new(GIT.as_ref()?)
+            .arg("reset")
+            .arg("--")
+            .args(&intent_to_add)
+            .status()
+            .inspect_err(|err| error!("Failed to clear intent-to-add files: {}", err))?;
+
+        Ok(intent_to_add)
+    }
+
+    fn save_as_patch() -> Result<TempPath> {
+        let patch = tempfile::NamedTempFile::new().expect("Failed to create a temporary file");
+        let output = std::process::Command::new(GIT.as_ref()?)
+            .arg("diff")
+            .arg("--cached")
+            .arg("--no-ext-diff")
+            .arg("--no-color")
+            .arg("--no-prefix")
+            .arg("--binary")
+            .arg("--ignore-space-at-eol")
+            .arg("--ignore-space-change")
+            .arg("--ignore-all-space")
+            .arg("--ignore-blank-lines")
+            .arg("--ignore-cr-at-eol")
+            .arg("--ignore-submodules")
+            .arg("--ignore-missing")
+            .arg("--no-renames")
+            .arg("--no-textconv")
+            .arg("--no-index")
+            .arg("--relative")
+            .arg("--unified=0")
+            .arg("--output")
+            .arg(patch.path())
+            .status()
+            .inspect_err(|err| error!("Failed to save the patch: {}", err))
+            .ok();
+
+        if let Some(status) = output {
+            if !status.success() {
+                error!("Failed to save the patch: git diff --cached failed");
+            }
+        }
+
+        Ok(patch.into_temp_path())
+    }
+
+    /// Restore the intent-to-add changes and non-staged changes.
+    fn restore(&mut self) {
+        if self
+            .restored
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return; // Already restored
+        }
+
+        // Restore the intent-to-add changes.
+        if let Some(intent_to_add) = &self.intent_to_add {
+            let _ = std::process::Command::new(GIT.as_ref().expect("git not found"))
+                .arg("add")
+                .arg("--intent-to-add")
+                .arg("--")
+                .args(intent_to_add)
+                .status()
+                .inspect_err(|err| error!("Failed to restore intent-to-add changes: {}", err));
+        }
+        // Restore the non-staged changes.
+        if let Some(patch) = &self.patch {
+            let _ = std::process::Command::new(GIT.as_ref().expect("git not found"))
+                .arg("apply")
+                .arg("--whitespace=nowarn")
+                .arg("--reverse")
+                .arg(patch)
+                .status()
+                .inspect_err(|err| error!("Failed to restore non-staged changes: {}", err));
+        }
+    }
 }
