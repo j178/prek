@@ -20,12 +20,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+use std::env;
 use std::fmt::Write;
 
 use anyhow::Result;
 use axoupdater::{AxoUpdater, AxoupdateError, UpdateRequest};
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, enabled};
 
 use crate::cli::ExitStatus;
 use crate::printer::Printer;
@@ -37,7 +38,12 @@ pub(crate) async fn self_update(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let mut updater = AxoUpdater::new_for("pre-commit-rs");
-    updater.disable_installer_output();
+    if enabled!(tracing::Level::DEBUG) {
+        env::set_var("INSTALLER_PRINT_VERBOSE", "1");
+        updater.enable_installer_output();
+    } else {
+        updater.disable_installer_output();
+    }
 
     if let Some(ref token) = token {
         updater.set_github_token(token);

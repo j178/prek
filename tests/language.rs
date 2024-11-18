@@ -41,9 +41,9 @@ fn fail() -> Result<()> {
     changelogs must be rst...................................................Failed
     - hook id: changelogs-rst
     - exit code: 1
-    changelog filenames must end in .rst
+      changelog filenames must end in .rst
 
-    changelog/changelog.md
+      changelog/changelog.md
 
     ----- stderr -----
     "#);
