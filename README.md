@@ -42,7 +42,7 @@ brew install j178/tap/pre-commit-rs
 ### Cargo
 
 ```console
-cargo install --locked --git https://github.com/j178/pre-commit-rs
+cargo install pre-commit-rs
 ```
 
 ### GitHub Releases
@@ -50,6 +50,9 @@ cargo install --locked --git https://github.com/j178/pre-commit-rs
 `pre-commit-rs` release artifacts can be downloaded directly from the [GitHub releases](https://github.com/j178/pre-commit-rs/releases).
 
 ## Usage
+
+> [!NOTE]
+> The binary executable is named `pre-commit` (or `pre-commit.exe` on Windows) - without the `-rs` suffix. It should be available in your `PATH` after installation.
 
 This tool is designed to be a drop-in replacement for the original pre-commit tool, so you can use it with your existing configurations and hooks.
 

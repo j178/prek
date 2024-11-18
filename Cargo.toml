@@ -6,7 +6,7 @@ description = "pre-commit implemeneted in Rust"
 repository = "https://github.com/j178/pre-commit-rs"
 homepage = "https://github.com/j178/pre-commit-rs"
 edition = "2021"
-publish = false
+license-file = "LICENSE"
 
 [dependencies]
 anstream = "0.6.15"
