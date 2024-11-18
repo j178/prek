@@ -41,8 +41,16 @@ brew install j178/tap/pre-commit-rs
 
 ### Cargo
 
+Build from source using Cargo:
+
 ```console
-cargo install pre-commit-rs
+cargo install --locked pre-commit-rs
+```
+
+Install from the binary directly using `cargo binstall`:
+
+```console
+cargo binstall pre-commit-rs
 ```
 
 ### GitHub Releases
