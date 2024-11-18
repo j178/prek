@@ -62,9 +62,9 @@ fn hook_impl() -> Result<()> {
     fail.....................................................................Failed
     - hook id: fail
     - exit code: 1
-    always fail
+      always fail
 
-    .pre-commit-config.yaml
+      .pre-commit-config.yaml
     "#);
 
     Ok(())

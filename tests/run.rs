@@ -49,14 +49,14 @@ fn run_basic() -> Result<()> {
     - hook id: trailing-whitespace
     - exit code: 1
     - files were modified by this hook
-    Fixing main.py
+      Fixing main.py
     fix end of files.........................................................Failed
     - hook id: end-of-file-fixer
     - exit code: 1
     - files were modified by this hook
-    Fixing invalid.json
-    Fixing valid.json
-    Fixing main.py
+      Fixing invalid.json
+      Fixing valid.json
+      Fixing main.py
     check json...............................................................Passed
 
     ----- stderr -----
@@ -286,7 +286,7 @@ fn files_and_exclude() -> Result<()> {
     - hook id: trailing-whitespace
     - exit code: 1
     - files were modified by this hook
-    Fixing file.txt
+      Fixing file.txt
     fix end of files.........................................................Passed
     check json...........................................(no files to check)Skipped
 
@@ -326,7 +326,7 @@ fn files_and_exclude() -> Result<()> {
     - hook id: trailing-whitespace
     - exit code: 1
     - files were modified by this hook
-    Fixing valid.json
+      Fixing valid.json
     fix end of files.........................................................Passed
     check json...............................................................Passed
 
@@ -386,17 +386,17 @@ fn file_types() -> Result<()> {
     - hook id: trailing-whitespace
     - exit code: 1
     - files were modified by this hook
-    Fixing json.json
+      Fixing json.json
     trim trailing whitespace.................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
     - files were modified by this hook
-    Fixing main.py
+      Fixing main.py
     trim trailing whitespace.................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
     - files were modified by this hook
-    Fixing file.txt
+      Fixing file.txt
     trim trailing whitespace.............................(no files to check)Skipped
 
     ----- stderr -----
@@ -453,13 +453,13 @@ fn fail_fast() -> Result<()> {
     - hook id: trailing-whitespace
     - exit code: 1
     - files were modified by this hook
-    Fixing json.json
+      Fixing json.json
     trim trailing whitespace.................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
     - files were modified by this hook
-    Fixing file.txt
-    Fixing main.py
+      Fixing file.txt
+      Fixing main.py
 
     ----- stderr -----
     "#);
@@ -509,7 +509,7 @@ fn subdirectory() -> Result<()> {
     - hook id: trailing-whitespace
     - exit code: 1
     - files were modified by this hook
-    Fixing foo/bar/baz/file.txt
+      Fixing foo/bar/baz/file.txt
 
     ----- stderr -----
     "#);
