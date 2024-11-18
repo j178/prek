@@ -1,8 +1,8 @@
-# Publish a release to PyPI.
+# Publish a release to PyPI and crates.io.
 #
 # Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a publish job
 # within `cargo-dist`.
-name: "Publish to PyPI"
+name: "Publish"
 
 on:
   workflow_call:
@@ -30,3 +30,19 @@ jobs:
           merge-multiple: true
       - name: Publish to PyPi
         run: uv publish -v wheels/*
+
+  crates-publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rui314/setup-mold@v1
+      - uses: Swatinem/rust-cache@v2
+      - name: "Install Rust toolchain"
+        run: rustup show
+      - name: "Publish to crates.io"
+        run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
