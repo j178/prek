@@ -21,7 +21,7 @@ profiler-flamegraph = ["pprof/flamegraph"]
 anstream = "0.6.15"
 anyhow = "1.0.86"
 assert_cmd = { version = "2.0.16", features = ["color"] }
-axoupdater = "0.8.1"
+axoupdater = { version = "0.8.1", default-features = false, features = [ "github_releases"] }
 clap = { version = "4.5.16", features = ["derive", "env"] }
 clap_complete = "4.5.37"
 ctrlc = "3.4.5"
@@ -43,6 +43,7 @@ serde = { version = "1.0.210", features = ["derive"] }
 serde_yaml = "0.9.34"
 shlex = "1.3.0"
 tempfile = "3.13.0"
+textwrap = "0.16.1"
 thiserror = "1.0.64"
 tokio = { version = "1.40.0", features = ["process", "rt", "sync"] }
 tracing = "0.1.40"

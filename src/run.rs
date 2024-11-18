@@ -198,7 +198,7 @@ async fn run_hook(
     columns: usize,
     verbose: bool,
     printer: Printer,
-) -> anyhow::Result<(bool, Vec<u8>)> {
+) -> Result<(bool, Vec<u8>)> {
     if skips.contains(&hook.id) || skips.contains(&hook.alias) {
         writeln!(
             printer.stdout(),
@@ -318,7 +318,11 @@ async fn run_hook(
                         Ok(())
                     })?;
             } else {
-                writeln!(printer.stdout(), "{}", String::from_utf8_lossy(stdout))?;
+                writeln!(
+                    printer.stdout(),
+                    "{}",
+                    textwrap::indent(&String::from_utf8_lossy(stdout), "  ").dimmed()
+                )?;
             };
         }
     }
