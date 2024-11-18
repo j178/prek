@@ -27,10 +27,10 @@ It aims to be a drop-in replacement for the original tool while also providing s
 
 ```console
 # On Linux and macOS
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/pre-commit-rs/releases/download/v0.0.2/pre-commit-rs-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/pre-commit-rs/releases/download/v0.0.3/pre-commit-rs-installer.sh | sh
 
 # On Windows
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/pre-commit-rs/releases/download/v0.0.2/pre-commit-rs-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/pre-commit-rs/releases/download/v0.0.3/pre-commit-rs-installer.ps1 | iex"
 ```
 
 ### PyPI

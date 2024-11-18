@@ -1,6 +1,6 @@
 [project]
 name = "pre-commit-rusty"
-version = "0.0.2"
+version = "0.0.3"
 description = "pre-commit reimplemented in Rust"
 authors = [{ name = "j178", email = "hi@j178.dev" }]
 requires-python = ">=3.8"

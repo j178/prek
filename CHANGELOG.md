@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.0.3
+
+### Bug fixes
+
+- Check uv installed after acquired lock ([#72](https://github.com/j178/pre-commit-rs/pull/72))
+
+### Other changes
+
+- Add copyright of the original pre-commit to LICENSE ([#74](https://github.com/j178/pre-commit-rs/pull/74))
+- Add profiler ([#71](https://github.com/j178/pre-commit-rs/pull/71))
+- Publish to PyPI ([#70](https://github.com/j178/pre-commit-rs/pull/70))
+- Publish to crates.io ([#75](https://github.com/j178/pre-commit-rs/pull/75))
+- Rename pypi package to `pre-commit-rusty` ([#76](https://github.com/j178/pre-commit-rs/pull/76))
+
 ## 0.0.2
 
 ### Enhancements
