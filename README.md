@@ -35,7 +35,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/pre-commit-rs
 
 ### PyPI
 
-pre-commit-rs is published as Python binary wheel to PyPI under the name `pre-commit-rusty`,
+`pre-commit-rs` is published as Python binary wheel to PyPI under the name `pre-commit-rusty`,
 you can install it using `pip`, `uv` (recommended), or `pipx`:
 
 ```console
