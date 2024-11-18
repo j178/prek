@@ -1,0 +1,61 @@
+name: CI docker
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - "**/docker.rs"
+  pull_request:
+    paths:
+      - "**/docker.rs"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  test-inner-docker:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Build docker image"
+        run: |
+          docker build --tag cs --file=./.github/fixture/Dockerfile .
+      - name: "Docker run"
+        run: >
+          docker run -v ${{ github.workspace }}/tests/files:/app/outside/test
+          -v /var/run/docker.sock:/var/run/docker.sock
+          --privileged
+          -e OUTSIDE_PATH=${{ github.workspace }}/tests/files/uv-pre-commit-config.yaml
+          --rm
+          cs
+          --nocapture
+
+  cargo-test-docker:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rui314/setup-mold@v1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v3
+
+      - name: "Cargo test"
+        run: |
+          cargo nextest run \
+            --workspace \
+            --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow -P docker-ci

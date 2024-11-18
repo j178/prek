@@ -1,0 +1,5 @@
+[profile.default]
+default-filter = 'not test(docker)'
+
+[profile.docker-ci]
+default-filter = 'test(docker)'

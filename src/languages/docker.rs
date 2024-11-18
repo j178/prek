@@ -194,7 +194,7 @@ impl LanguageImpl for Docker {
     }
 
     fn environment_dir(&self) -> Option<&str> {
-        Some("docker")
+        None
     }
 
     async fn install(&self, hook: &Hook) -> Result<()> {
@@ -270,58 +270,10 @@ mod tests {
     use super::Docker;
     use std::env;
     use std::path::Path;
-    use std::process::{Command, Stdio};
     use tracing::debug;
     use tracing_test::traced_test;
 
-    #[test]
-    fn test_inner_docker() {
-        // build docker
-        assert!(Command::new("docker")
-            .args([
-                "build",
-                "--tag",
-                "cs",
-                "--file=./.github/fixture/Dockerfile",
-                ".",
-            ])
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output()
-            .expect("Failed to build docker")
-            .status
-            .success());
-        // run docker bind volume
-        let current_dir = env::current_dir().unwrap();
-        let bind_path = current_dir.join("tests").join("files");
-        assert!(Command::new("docker")
-            .args([
-                "run",
-                "-v",
-                &format!("{}:/app/outside/test", bind_path.to_str().unwrap()),
-                "-v",
-                "/var/run/docker.sock:/var/run/docker.sock",
-                "--privileged",
-                "-e",
-                &format!(
-                    "OUTSIDE_PATH={}",
-                    bind_path
-                        .join("uv-pre-commit-config.yaml")
-                        .to_str()
-                        .unwrap()
-                ),
-                "--rm",
-                "cs",
-                "--nocapture",
-            ])
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .output()
-            .expect("Failed to run docker")
-            .status
-            .success());
-    }
-
+    // This test should run by docker build by [Dockerfile](../../.github/fixture/Dockerfile)
     #[test]
     #[ignore]
     #[traced_test]

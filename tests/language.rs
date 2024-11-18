@@ -96,7 +96,6 @@ fn docker() -> Result<()> {
     exit_code: 1
     ----- stdout -----
     Cloning https://github.com/crate-ci/typos@v1.26.0
-    Installing environment for https://github.com/crate-ci/typos@v1.26.0
     typos....................................................................Failed
     - hook id: typos-docker
     - exit code: 2
