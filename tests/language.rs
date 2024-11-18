@@ -181,9 +181,9 @@ aws_secret_access_key = wQwdsZDiWg4UA5ngO0OSI2TkM4kkYxF6d2S1aYWM",
       Line:        2
       Fingerprint: gitleaks_bad_01.txt:generic-api-key:2
 
-      12:29PM INF 1 commits scanned.
-      12:29PM INF scan completed in [TIME]ms
-      12:29PM WRN leaks found: 2
+      [TIME]PM INF 1 commits scanned.
+      [TIME]PM INF scan completed in [TIME]ms
+      [TIME]PM WRN leaks found: 2
 
     ----- stderr -----
     ");
