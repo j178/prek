@@ -27,10 +27,27 @@ It aims to be a drop-in replacement for the original tool while also providing s
 
 ```console
 # On Linux and macOS
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/pre-commit-rs/releases/download/v0.0.2/pre-commit-rs-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/pre-commit-rs/releases/download/v0.0.3/pre-commit-rs-installer.sh | sh
 
 # On Windows
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/pre-commit-rs/releases/download/v0.0.2/pre-commit-rs-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/pre-commit-rs/releases/download/v0.0.3/pre-commit-rs-installer.ps1 | iex"
+```
+
+### PyPI
+
+pre-commit-rs is published as Python binary wheel to PyPI under the name `pre-commit-rusty`,
+you can install it using `pip`, `uv` (recommended), or `pipx`:
+
+```console
+pip install pre-commit-rusty
+
+# or
+
+uv tool install pre-commit-rusty
+
+# or
+
+pipx install pre-commit-rusty
 ```
 
 ### Homebrew
@@ -41,8 +58,16 @@ brew install j178/tap/pre-commit-rs
 
 ### Cargo
 
+Build from source using Cargo:
+
 ```console
-cargo install --locked --git https://github.com/j178/pre-commit-rs
+cargo install --locked pre-commit-rs
+```
+
+Install from the binary directly using `cargo binstall`:
+
+```console
+cargo binstall pre-commit-rs
 ```
 
 ### GitHub Releases
@@ -50,6 +75,9 @@ cargo install --locked --git https://github.com/j178/pre-commit-rs
 `pre-commit-rs` release artifacts can be downloaded directly from the [GitHub releases](https://github.com/j178/pre-commit-rs/releases).
 
 ## Usage
+
+> [!NOTE]
+> The binary executable is named `pre-commit` (or `pre-commit.exe` on Windows) - without the `-rs` suffix. It should be available in your `PATH` after installation.
 
 This tool is designed to be a drop-in replacement for the original pre-commit tool, so you can use it with your existing configurations and hooks.
 

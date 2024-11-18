@@ -54,7 +54,7 @@ jobs:
           set -euo pipefail
 
           TARGET=${{ matrix.platform.target }}
-          ARCHIVE_NAME=pre-commit-$TARGET
+          ARCHIVE_NAME=pre-commit-rs-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
@@ -92,7 +92,7 @@ jobs:
       - name: "Archive binary"
         shell: bash
         run: |
-          ARCHIVE_FILE=pre-commit-${{ matrix.platform.target }}.zip
+          ARCHIVE_FILE=pre-commit-rs-${{ matrix.platform.target }}.zip
           7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/pre-commit.exe
           sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -128,7 +128,7 @@ jobs:
       - name: "Archive binary"
         run: |
           TARGET=${{ matrix.platform.target }}
-          ARCHIVE_NAME=pre-commit-$TARGET
+          ARCHIVE_NAME=pre-commit-rs-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME

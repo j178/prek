@@ -174,3 +174,28 @@ jobs:
           # use only 1 job for now
           # uv concurrently writes to cache, which causes `Access is denied` errors
           cargo nextest run --workspace --status-level skip --failure-output immediate --no-fail-fast -j 1 --final-status-level slow -E 'not test(docker)'
+
+  profiler:
+    name: profiler
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rui314/setup-mold@v1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v3
+
+      - name: Run profiler
+        run: cargo run --profile bench --features profiler -- --all-files
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: pre-commit-rs.${{ github.run_id }}-profiler-report
+          path: pre-commit-rs.**.flamegraph.svg

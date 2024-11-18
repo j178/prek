@@ -1,12 +1,21 @@
 [package]
 name = "pre-commit-rs"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["j178 <hi@j178.dev>"]
 description = "pre-commit implemeneted in Rust"
 repository = "https://github.com/j178/pre-commit-rs"
 homepage = "https://github.com/j178/pre-commit-rs"
 edition = "2021"
-publish = false
+license-file = "LICENSE"
+
+[[bin]]
+path = "src/main.rs"
+name = "pre-commit"
+
+[features]
+default = []
+profiler = ["dep:pprof", "profiler-flamegraph"]
+profiler-flamegraph = ["pprof/flamegraph"]
 
 [dependencies]
 anstream = "0.6.15"
@@ -46,6 +55,7 @@ which = "6.0.3"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.164"
+pprof = { version = "0.14.0", optional = true }
 
 [dev-dependencies]
 assert_fs = "1.1.2"
@@ -88,9 +98,10 @@ rc_buffer = "warn"
 rc_mutex = "warn"
 rest_pat_in_fully_bound_structs = "warn"
 
-[[bin]]
-path = "src/main.rs"
-name = "pre-commit"
+[profile.bench]
+opt-level = 3
+debug = true # used by the profiler
+strip = false # keep symbols for the profiler
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
@@ -123,11 +134,11 @@ targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-
 # Local artifacts jobs to run in CI
 local-artifacts-jobs = ["./build-binaries"]
 # Publish jobs to run in CI
-publish-jobs = ["./publish-pypi", "homebrew"]
+publish-jobs = ["./publish", "homebrew"]
 # A GitHub repo to push Homebrew formulas to
 tap = "j178/homebrew-tap"
 # Customize the Homebrew formula name
-formula = "pre-commit"
+formula = "pre-commit-rs"
 # Whether to install an updater program
 install-updater = false
 # Path that installers should place binaries in
