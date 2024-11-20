@@ -75,7 +75,7 @@ fn run_basic() -> Result<()> {
 }
 
 #[test]
-fn invalid_hook_id() -> Result<()> {
+fn invalid_hook_id() {
     let context = TestContext::new();
 
     context.init_project();
@@ -100,8 +100,6 @@ fn invalid_hook_id() -> Result<()> {
     ----- stderr -----
     No hook found for id `invalid-hook-id`
     "#);
-
-    Ok(())
 }
 
 /// `.pre-commit-config.yaml` is not staged.
@@ -139,7 +137,7 @@ fn config_not_staged() -> Result<()> {
 
 /// Test the output format for a hook with a CJK name.
 #[test]
-fn cjk_hook_name() -> Result<()> {
+fn cjk_hook_name() {
     let context = TestContext::new();
 
     context.init_project();
@@ -170,13 +168,11 @@ fn cjk_hook_name() -> Result<()> {
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }
 
 /// Skips hooks based on the `SKIP` environment variable.
 #[test]
-fn skips() -> Result<()> {
+fn skips() {
     let context = TestContext::new();
 
     context.init_project();
@@ -217,7 +213,6 @@ fn skips() -> Result<()> {
 
     ----- stderr -----
     "#);
-    Ok(())
 }
 
 /// Test global `files`, `exclude`, and hook level `files`, `exclude`.
@@ -503,7 +498,7 @@ fn log_file() -> Result<()> {
 /// Pass pre-commit environment variables to the hook.
 #[cfg(unix)]
 #[test]
-fn pass_env_vars() -> Result<()> {
+fn pass_env_vars() {
     let context = TestContext::new();
 
     context.init_project();
@@ -530,6 +525,4 @@ fn pass_env_vars() -> Result<()> {
 
     let env = context.read("env.txt");
     assert_eq!(env, "1\n");
-
-    Ok(())
 }

@@ -1,6 +1,5 @@
 use std::process::Command;
 
-use anyhow::Result;
 use common::TestContext;
 use indoc::indoc;
 
@@ -9,7 +8,7 @@ use crate::common::cmd_snapshot;
 mod common;
 
 #[test]
-fn hook_impl() -> Result<()> {
+fn hook_impl() {
     let context = TestContext::new();
 
     context.init_project();
@@ -57,6 +56,4 @@ fn hook_impl() -> Result<()> {
 
       .pre-commit-config.yaml
     "#);
-
-    Ok(())
 }
