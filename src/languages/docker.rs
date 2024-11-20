@@ -2,14 +2,14 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
-use std::path::Path;
 use std::sync::Arc;
 
+use anstream::ColorChoice;
 use anyhow::Result;
 use assert_cmd::output::{OutputError, OutputOkExt};
 use fancy_regex::Regex;
 use tokio::process::Command;
-use tracing::debug;
+use tracing::trace;
 
 use crate::config::Language;
 use crate::fs::CWD;
@@ -33,12 +33,12 @@ impl Docker {
     async fn build_docker_image(hook: &Hook, pull: bool) -> Result<()> {
         let mut cmd = Command::new("docker");
 
-        let cmd = cmd.arg("build").args([
-            "--tag",
-            &Self::docker_tag(hook).expect("Tag can't generate"),
-            "--label",
-            PRE_COMMIT_LABEL,
-        ]);
+        let cmd = cmd
+            .arg("build")
+            .arg("--tag")
+            .arg(Self::docker_tag(hook).expect("Failed to get docker tag"))
+            .arg("--label")
+            .arg(PRE_COMMIT_LABEL);
 
         if pull {
             cmd.arg("--pull");
@@ -47,8 +47,6 @@ impl Docker {
         // This must come last for old versions of docker.
         // see https://github.com/pre-commit/pre-commit/issues/477
         cmd.arg(".");
-
-        debug!(cmd = ?cmd, "docker build_docker_image:");
 
         cmd.current_dir(hook.path())
             .output()
@@ -67,36 +65,40 @@ impl Docker {
         false
     }
 
-    /// It should check [`Self::is_in_docker`] first, but like [Codespaces](https://github.com/features/codespaces) also run inner docker.
+    /// Get container id the process is running in.
     ///
-    /// There are no valid algorithm to get container id inner container, see
+    /// There are no reliable way to get the container id inside container, see
     /// <https://stackoverflow.com/questions/20995351/how-can-i-get-docker-linux-container-information-from-within-the-container-itsel>
-    fn get_container_id() -> Option<String> {
-        // copy from https://github.com/open-telemetry/opentelemetry-java-instrumentation/pull/7167/files
-        if let Ok(regex) = Regex::new(r".*/docker/containers/([0-9a-f]{64})/.*") {
-            if let Ok(v2_group_path) = fs_err::read_to_string("/proc/self/mountinfo") {
-                if let Ok(Some(captures)) = regex.captures(&v2_group_path) {
-                    return captures.get(1).map(|m| m.as_str().to_string());
-                }
-            }
-        }
-
-        None
+    fn current_container_id() -> Result<String> {
+        // Adapted from https://github.com/open-telemetry/opentelemetry-java-instrumentation/pull/7167/files
+        let regex = Regex::new(r".*/docker/containers/([0-9a-f]{64})/.*").expect("invalid regex");
+        let cgroup_path = fs::read_to_string("/proc/self/cgroup")?;
+        let Some(captures) = regex.captures(&cgroup_path)? else {
+            anyhow::bail!("Failed to get container id: no match found");
+        };
+        let Some(id) = captures.get(1).map(|m| m.as_str().to_string()) else {
+            anyhow::bail!("Failed to get container id: no capture found");
+        };
+        Ok(id)
     }
 
-    async fn get_docker_path(path: &Path) -> Result<Cow<'_, str>> {
+    /// Get the path of the current directory in the host.
+    async fn get_docker_path(path: &str) -> Result<Cow<'_, str>> {
         if !Self::is_in_docker() {
-            return Ok(path.to_string_lossy());
+            return Ok(Cow::Borrowed(path));
         };
 
-        let Some(container_id) = Self::get_container_id() else {
-            return Ok(path.to_string_lossy());
+        let Ok(container_id) = Self::current_container_id() else {
+            return Ok(Cow::Borrowed(path));
         };
 
-        debug!(%container_id, "Docker get_docker_path:");
+        trace!(?container_id, "Get container id");
 
         if let Ok(output) = Command::new("docker")
-            .args(["inspect", "--format", "'{{json .Mounts}}'", &container_id])
+            .arg("inspect")
+            .arg("--format")
+            .arg("'{{json .Mounts}}'")
+            .arg(&container_id)
             .output()
             .await
         {
@@ -107,78 +109,57 @@ impl Docker {
                 #[serde(rename = "Destination")]
                 destination: String,
             }
-            debug!(?output, "Docker get_docker_path:");
 
-            // using test env Dockerfile return around `'` and end with `\n`
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stdout = stdout.trim().trim_matches('\'');
             let mounts: Vec<Mount> = serde_json::from_str(stdout)?;
 
-            debug!(?mounts, ?path, "Docker get_docker_path:");
+            trace!(?mounts, "Get docker mounts");
 
             for mount in mounts {
                 if path.starts_with(&mount.destination) {
-                    let mut res = path
-                        .to_string_lossy()
-                        .replace(&mount.destination, &mount.source);
-                    if res.contains('\\') {
-                        // that means runner on the win
-                        res = res.replace('/', "\\");
+                    let mut path = path.replace(&mount.destination, &mount.source);
+                    if path.contains('\\') {
+                        // Replace `/` with `\` on Windows
+                        path = path.replace('/', "\\");
                     }
-                    return Ok(Cow::Owned(res));
+                    return Ok(Cow::Owned(path));
                 }
             }
         }
 
-        Ok(path.to_string_lossy())
+        Ok(Cow::Borrowed(path))
     }
 
-    /// This aim to run as non-root user
-    ///
-    /// ## Windows:
-    ///
-    /// no way, see <https://docs.docker.com/desktop/setup/install/windows-permission-requirements/>
-    ///
-    /// ## Other Unix Platform
-    ///
-    /// see <https://stackoverflow.com/questions/57951893/how-to-determine-the-effective-user-id-of-a-process-in-rust>
-    #[cfg(unix)]
-    fn get_docker_user() -> [String; 2] {
-        unsafe {
-            [
-                "-u".to_owned(),
-                format!("{}:{}", libc::geteuid(), libc::geteuid()),
-            ]
-        }
-    }
-
-    #[cfg(not(unix))]
-    fn get_docker_user() -> [String; 0] {
-        []
-    }
-
-    fn get_docker_tty(color: bool) -> Option<String> {
-        if color {
-            Some("--tty".to_owned())
-        } else {
-            None
-        }
-    }
-
-    async fn docker_cmd(color: bool) -> Result<Command> {
+    async fn docker_cmd() -> Result<Command> {
         let mut command = Command::new("docker");
-        command.args(["run", "--rm"]);
-        if let Some(tty) = Self::get_docker_tty(color) {
-            command.arg(&tty);
+        command.arg("run").arg("--rm");
+
+        match ColorChoice::global() {
+            ColorChoice::Always | ColorChoice::AlwaysAnsi => {
+                command.arg("--tty");
+            }
+            _ => {}
         }
 
-        command.args(Self::get_docker_user()).args([
-            "-v",
+        // Run as a non-root user
+        #[cfg(unix)]
+        {
+            command.arg("--user");
+            command.arg(format!("{}:{}", unsafe { libc::geteuid() }, unsafe {
+                libc::getegid()
+            }));
+        }
+
+        command
+            .arg("-v")
             // https://docs.docker.com/engine/reference/commandline/run/#mount-volumes-from-container-volumes-from
-            &format!("{}:/src:rw,Z", Self::get_docker_path(&CWD).await?),
-            "--workdir",
-            "/src",
-        ]);
+            .arg(format!(
+                "{}:/src:ro,Z",
+                Self::get_docker_path(&CWD.to_string_lossy()).await?
+            ))
+            .arg("--workdir")
+            .arg("/src");
 
         Ok(command)
     }
@@ -194,12 +175,12 @@ impl LanguageImpl for Docker {
     }
 
     fn environment_dir(&self) -> Option<&str> {
-        None
+        Some("docker")
     }
 
     async fn install(&self, hook: &Hook) -> Result<()> {
         let env = hook.environment_dir().expect("No environment dir found");
-        debug!(path = ?hook.path(), env=?env, "docker install:");
+
         Docker::build_docker_image(hook, true).await?;
         fs_err::create_dir_all(env)?;
         Ok(())
@@ -232,16 +213,16 @@ impl LanguageImpl for Docker {
 
             async move {
                 // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
-                let mut cmd = Docker::docker_cmd(true).await?;
+                let mut cmd = Docker::docker_cmd().await?;
                 let cmd = cmd
-                    .args(["--entrypoint", &cmds[0], &docker_tag])
+                    .arg("--entrypoint")
+                    .arg(&cmds[0])
+                    .arg(&docker_tag)
                     .args(&cmds[1..])
                     .args(hook_args.as_ref())
                     .args(batch)
                     .stderr(std::process::Stdio::inherit())
                     .envs(env_vars.as_ref());
-
-                debug!(cmd = ?cmd, "Docker run batch:");
 
                 let mut output = cmd.output().await?;
                 output.stdout.extend(output.stderr);
