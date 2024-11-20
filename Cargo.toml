@@ -7,6 +7,7 @@ repository = "https://github.com/j178/pre-commit-rs"
 homepage = "https://github.com/j178/pre-commit-rs"
 edition = "2021"
 license-file = "LICENSE"
+include = [ "licenses/.*"]
 
 [[bin]]
 path = "src/main.rs"

@@ -28,6 +28,9 @@ build-backend = "maturin"
 
 [tool.maturin]
 bindings = "bin"
+include = [
+  { path = "licenses/*", format = ["whell", "sdist"]}
+]
 
 [tool.rooster]
 version_tag_prefix = "v"

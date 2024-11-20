@@ -1,24 +1,19 @@
-use anyhow::Result;
-use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use std::process::Command;
+
 use common::TestContext;
 use indoc::indoc;
-use std::process::Command;
 
 use crate::common::cmd_snapshot;
 
 mod common;
 
 #[test]
-fn hook_impl() -> Result<()> {
+fn hook_impl() {
     let context = TestContext::new();
 
     context.init_project();
 
-    context
-        .workdir()
-        .child(".pre-commit-config.yaml")
-        .write_str(indoc! { r"
+    context.write_pre_commit_config(indoc! { r"
             repos:
             - repo: local
               hooks:
@@ -28,14 +23,9 @@ fn hook_impl() -> Result<()> {
                  entry: always fail
                  always_run: true
             "
-        })?;
+    });
 
-    Command::new("git")
-        .arg("add")
-        .current_dir(context.workdir())
-        .arg(".")
-        .assert()
-        .success();
+    context.git_add(".");
 
     let mut commit = Command::new("git");
     commit
@@ -66,6 +56,4 @@ fn hook_impl() -> Result<()> {
 
       .pre-commit-config.yaml
     "#);
-
-    Ok(())
 }

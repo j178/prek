@@ -1,11 +1,12 @@
 #![allow(dead_code, unreachable_pub)]
 
 use std::env;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{ChildPath, PathChild};
+use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
 use etcetera::BaseStrategy;
 
 pub struct TestContext {
@@ -226,6 +227,24 @@ impl TestContext {
             .current_dir(&self.temp_dir)
             .assert()
             .success();
+    }
+
+    /// Run `git add` in the temporary directory.
+    pub fn git_add(&self, path: impl AsRef<OsStr>) {
+        Command::new("git")
+            .arg("add")
+            .arg(path)
+            .current_dir(&self.temp_dir)
+            .assert()
+            .success();
+    }
+
+    /// Write a `.pre-commit-config.yaml` file in the temporary directory.
+    pub fn write_pre_commit_config(&self, content: &str) {
+        self.temp_dir
+            .child(".pre-commit-config.yaml")
+            .write_str(content)
+            .expect("Failed to write pre-commit config");
     }
 }
 
