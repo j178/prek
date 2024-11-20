@@ -198,7 +198,7 @@ impl LanguageImpl for Docker {
     ) -> Result<(i32, Vec<u8>)> {
         Docker::build_docker_image(hook, false).await?;
 
-        let docker_tag = Docker::docker_tag(hook).unwrap();
+        let docker_tag = Docker::docker_tag(hook).expect("Failed to get docker tag");
 
         let cmds = shlex::split(&hook.entry).ok_or(anyhow::anyhow!("Failed to parse entry"))?;
 
@@ -243,38 +243,5 @@ impl LanguageImpl for Docker {
         }
 
         Ok((combined_status, combined_output))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Docker;
-    use std::env;
-    use std::path::Path;
-    use tracing::debug;
-    use tracing_test::traced_test;
-
-    // This test should run by docker build by [Dockerfile](../../.github/fixture/Dockerfile)
-    #[test]
-    #[ignore]
-    #[traced_test]
-    fn test_get_docker_path() {
-        assert!(Docker::is_in_docker());
-        let env_path = env::var("OUTSIDE_PATH").unwrap();
-
-        debug!(%env_path, "test_get_docker_path");
-
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("Failed to create tokio runtime");
-
-        let path = Path::new("./outside/test/uv-pre-commit-config.yaml")
-            .canonicalize()
-            .unwrap();
-
-        let result = runtime.block_on(Docker::get_docker_path(&path)).unwrap();
-
-        assert_eq!(result, env_path);
     }
 }
