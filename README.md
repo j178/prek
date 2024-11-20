@@ -12,7 +12,7 @@ It aims to be a drop-in replacement for the original tool while also providing s
 
 ## Features
 
-- A single binary with no dependencies, do not require Python or any other runtime.
+- A single binary with no dependencies, does not require Python or any other runtime.
 - Improved performance in hook preparation and execution.
 - Fully compatible with the original pre-commit configurations and hooks.
 - (TODO) Built-in support for monorepos.

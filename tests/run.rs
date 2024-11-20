@@ -75,6 +75,91 @@ fn run_basic() -> Result<()> {
 }
 
 #[test]
+fn local() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.workdir();
+    cwd.child(".pre-commit-config.yaml")
+        .write_str(indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: local
+                    name: local
+                    language: system
+                    entry: echo Hello, world!
+                    always_run: true
+        "})?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local....................................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn local_need_install() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.workdir();
+    cwd.child("pyproject.toml").write_str(indoc::indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [project.scripts]
+        hello = "project:main"
+        "#})?;
+    cwd.child("src/project").create_dir_all()?;
+    cwd.child("src/project/__init__.py")
+        .write_str(indoc::indoc! { r#"
+        def main() -> None:
+            print("Hello from project!")
+    "#})?;
+
+    cwd.child(".pre-commit-config.yaml")
+        .write_str(indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: local
+                    name: local
+                    language: python
+                    entry: hello
+                    always_run: true
+        "})?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Local hook local does not need env
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn invalid_hook_id() {
     let context = TestContext::new();
 

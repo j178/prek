@@ -288,6 +288,7 @@ async fn all_filenames(
         debug!("All files in the repo: {}", files.len());
         return Ok(files);
     }
+    // TODO: implement merge conflict
     // if is_in_merge_conflict() {
     //     return get_conflicted_files();
     // }

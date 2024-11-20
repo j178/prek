@@ -175,7 +175,7 @@ impl Store {
     }
 
     /// Prepare a local repo for a local hook.
-    /// All local hooks same additional dependencies, e.g. no dependencies,
+    /// All local hooks with same additional dependencies, e.g. no dependencies,
     /// are stored in the same directory (even they use different language).
     pub fn prepare_local_repo(
         &self,
@@ -186,7 +186,7 @@ impl Store {
         const LOCAL_NAME: &str = "local";
         const LOCAL_REV: &str = "1";
 
-        if hook.language.environment_dir().is_none() {
+        if hook.language.environment_dir().is_some() {
             return Err(Error::LocalHookNoNeedEnv(hook.id.clone()));
         }
 
