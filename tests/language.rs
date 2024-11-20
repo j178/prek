@@ -45,8 +45,9 @@ fn fail() -> Result<()> {
     Ok(())
 }
 
+/// GitHub Action only has docker for linux hosted runners.
 #[test]
-#[cfg(feature = "docker")]
+#[cfg(all(feature = "docker", target_os = "linux"))]
 fn docker() {
     let context = TestContext::new();
     context.init_project();
