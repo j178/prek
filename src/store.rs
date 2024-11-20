@@ -186,7 +186,7 @@ impl Store {
         const LOCAL_NAME: &str = "local";
         const LOCAL_REV: &str = "1";
 
-        if hook.language.environment_dir().is_some() {
+        if hook.language.environment_dir().is_none() {
             return Err(Error::LocalHookNoNeedEnv(hook.id.clone()));
         }
 
@@ -294,8 +294,19 @@ impl Store {
 }
 
 // TODO
+/// For local repo, creates a dummy package for each supported language, to make
+/// the installation code like `pip install .` work.
 fn make_local_repo(_repo: &str, path: &Path) -> Result<(), Error> {
     fs_err::create_dir_all(path)?;
+    fs_err::File::create(path.join("__init__.py"))?;
+    fs_err::write(
+        path.join("setup.py"),
+        indoc::indoc! {r#"
+    from setuptools import setup
+
+    setup(name="pre-commit-placeholder-package", version="0.0.0")
+    "#},
+    )?;
 
     Ok(())
 }

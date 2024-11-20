@@ -134,26 +134,29 @@ fn local_need_install() -> Result<()> {
     "#})?;
 
     cwd.child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r"
+        .write_str(indoc::indoc! {r#"
             repos:
               - repo: local
                 hooks:
                   - id: local
                     name: local
                     language: python
-                    entry: hello
+                    entry: pyecho Hello, world!
+                    additional_dependencies: ["pyecho-cli"]
                     always_run: true
-        "})?;
+        "#})?;
 
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    Preparing local repo local
+    Installing environment for local
+    local....................................................................Passed
 
     ----- stderr -----
-    error: Local hook local does not need env
     "#);
 
     Ok(())
