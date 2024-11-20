@@ -1,18 +1,18 @@
-use crate::common::{cmd_snapshot, TestContext};
 use anyhow::Result;
-use assert_cmd::Command;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
+
+use crate::common::{cmd_snapshot, TestContext};
 
 mod common;
 
 #[test]
 fn run_basic() -> Result<()> {
     let context = TestContext::new();
+    context.init_project();
 
     let cwd = context.workdir();
-    cwd.child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r"
+    context.write_pre_commit_config(indoc::indoc! {r"
             repos:
               - repo: https://github.com/pre-commit/pre-commit-hooks
                 rev: v5.0.0
@@ -20,24 +20,15 @@ fn run_basic() -> Result<()> {
                   - id: trailing-whitespace
                   - id: end-of-file-fixer
                   - id: check-json
-        "})?;
+        "});
 
     // Create a repository with some files.
     cwd.child("file.txt").write_str("Hello, world!\n")?;
     cwd.child("valid.json").write_str("{}")?;
     cwd.child("invalid.json").write_str("{}")?;
     cwd.child("main.py").write_str(r#"print "abc"  "#)?;
-    Command::new("git")
-        .current_dir(cwd)
-        .arg("init")
-        .assert()
-        .success();
-    Command::new("git")
-        .current_dir(cwd)
-        .arg("add")
-        .arg(".")
-        .assert()
-        .success();
+
+    context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
@@ -89,17 +80,16 @@ fn invalid_hook_id() -> Result<()> {
 
     context.init_project();
 
-    context
-        .workdir()
-        .child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r"
+    context.write_pre_commit_config(indoc::indoc! {r"
             repos:
               - repo: https://github.com/pre-commit/pre-commit-hooks
                 rev: v5.0.0
                 hooks:
                   - id: trailing-whitespace
             "
-        })?;
+    });
+
+    context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run().arg("invalid-hook-id"), @r#"
     success: false
@@ -123,24 +113,16 @@ fn config_not_staged() -> Result<()> {
 
     context.workdir().child(".pre-commit-config.yaml").touch()?;
 
-    Command::new("git")
-        .arg("add")
-        .arg(".")
-        .current_dir(context.workdir())
-        .assert()
-        .success();
+    context.git_add(".");
 
-    context
-        .workdir()
-        .child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r"
+    context.write_pre_commit_config(indoc::indoc! {r"
             repos:
               - repo: https://github.com/pre-commit/pre-commit-hooks
                 rev: v5.0.0
                 hooks:
                   - id: trailing-whitespace
             "
-        })?;
+    });
 
     cmd_snapshot!(context.filters(), context.run().arg("invalid-hook-id"), @r#"
     success: false
@@ -162,10 +144,7 @@ fn cjk_hook_name() -> Result<()> {
 
     context.init_project();
 
-    context
-        .workdir()
-        .child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r"
+    context.write_pre_commit_config(indoc::indoc! {r"
             repos:
               - repo: https://github.com/pre-commit/pre-commit-hooks
                 rev: v5.0.0
@@ -175,7 +154,9 @@ fn cjk_hook_name() -> Result<()> {
                   - id: end-of-file-fixer
                   - id: check-json
             "
-        })?;
+    });
+
+    context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: true
@@ -183,8 +164,8 @@ fn cjk_hook_name() -> Result<()> {
     ----- stdout -----
     Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
     Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    去除行尾空格.........................................(no files to check)Skipped
-    fix end of files.....................................(no files to check)Skipped
+    去除行尾空格.............................................................Passed
+    fix end of files.........................................................Passed
     check json...........................................(no files to check)Skipped
 
     ----- stderr -----
@@ -200,10 +181,7 @@ fn skips() -> Result<()> {
 
     context.init_project();
 
-    context
-        .workdir()
-        .child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r"
+    context.write_pre_commit_config(indoc::indoc! {r"
             repos:
               - repo: https://github.com/pre-commit/pre-commit-hooks
                 rev: v5.0.0
@@ -212,7 +190,9 @@ fn skips() -> Result<()> {
                   - id: end-of-file-fixer
                   - id: check-json
             "
-        })?;
+    });
+
+    context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run().env("SKIP", "end-of-file-fixer"), @r#"
     success: true
@@ -220,7 +200,7 @@ fn skips() -> Result<()> {
     ----- stdout -----
     Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
     Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    trim trailing whitespace.............................(no files to check)Skipped
+    trim trailing whitespace.................................................Passed
     fix end of files........................................................Skipped
     check json...........................................(no files to check)Skipped
 
@@ -254,10 +234,7 @@ fn files_and_exclude() -> Result<()> {
     cwd.child("main.py").write_str(r#"print "abc"  "#)?;
 
     // Global files and exclude.
-    context
-        .workdir()
-        .child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r"
+    context.write_pre_commit_config(indoc::indoc! {r"
             files: file.txt
             repos:
               - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -267,14 +244,9 @@ fn files_and_exclude() -> Result<()> {
                   - id: end-of-file-fixer
                   - id: check-json
             "
-        })?;
+    });
 
-    Command::new("git")
-        .arg("add")
-        .arg(".")
-        .current_dir(cwd)
-        .assert()
-        .success();
+    context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
@@ -295,10 +267,7 @@ fn files_and_exclude() -> Result<()> {
 
     // Override hook level files and exclude.
     // Global files and exclude.
-    context
-        .workdir()
-        .child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r"
+    context.write_pre_commit_config(indoc::indoc! {r"
             repos:
               - repo: https://github.com/pre-commit/pre-commit-hooks
                 rev: v5.0.0
@@ -309,14 +278,9 @@ fn files_and_exclude() -> Result<()> {
                     exclude: (valid.json|main.py)
                   - id: check-json
             "
-        })?;
+    });
 
-    Command::new("git")
-        .arg("add")
-        .arg(".")
-        .current_dir(cwd)
-        .assert()
-        .success();
+    context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
@@ -349,10 +313,7 @@ fn file_types() -> Result<()> {
     cwd.child("main.py").write_str(r#"print "abc"  "#)?;
 
     // Global files and exclude.
-    context
-        .workdir()
-        .child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r#"
             repos:
               - repo: https://github.com/pre-commit/pre-commit-hooks
                 rev: v5.0.0
@@ -367,14 +328,9 @@ fn file_types() -> Result<()> {
                     types: [ "json" ]
                     exclude_types: [ "json" ]
             "#
-        })?;
+    });
 
-    Command::new("git")
-        .arg("add")
-        .arg(".")
-        .current_dir(cwd)
-        .assert()
-        .success();
+    context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
@@ -418,10 +374,7 @@ fn fail_fast() -> Result<()> {
     cwd.child("main.py").write_str(r#"print "abc"  "#)?;
 
     // Global files and exclude.
-    context
-        .workdir()
-        .child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r#"
             repos:
               - repo: https://github.com/pre-commit/pre-commit-hooks
                 rev: v5.0.0
@@ -434,14 +387,9 @@ fn fail_fast() -> Result<()> {
                   - id: trailing-whitespace
                   - id: trailing-whitespace
             "#
-        })?;
+    });
 
-    Command::new("git")
-        .arg("add")
-        .arg(".")
-        .current_dir(cwd)
-        .assert()
-        .success();
+    context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
@@ -480,24 +428,16 @@ fn subdirectory() -> Result<()> {
     child.child("file.txt").write_str("Hello, world!  ")?;
 
     // Global files and exclude.
-    context
-        .workdir()
-        .child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r"
+    context.write_pre_commit_config(indoc::indoc! {r"
             repos:
               - repo: https://github.com/pre-commit/pre-commit-hooks
                 rev: v5.0.0
                 hooks:
                   - id: trailing-whitespace
             "
-        })?;
+    });
 
-    Command::new("git")
-        .arg("add")
-        .arg(".")
-        .current_dir(cwd)
-        .assert()
-        .success();
+    context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run().current_dir(&child).arg("--files").arg("file.txt"), @r#"
     success: false
@@ -528,10 +468,7 @@ fn log_file() -> Result<()> {
     cwd.child("file.txt").write_str("Hello, world!  ")?;
 
     // Global files and exclude.
-    context
-        .workdir()
-        .child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r"
+    context.write_pre_commit_config(indoc::indoc! {r"
             repos:
               - repo: https://github.com/pre-commit/pre-commit-hooks
                 rev: v5.0.0
@@ -539,14 +476,9 @@ fn log_file() -> Result<()> {
                   - id: trailing-whitespace
                     log_file: log.txt
             "
-        })?;
+    });
 
-    Command::new("git")
-        .arg("add")
-        .arg(".")
-        .current_dir(cwd)
-        .assert()
-        .success();
+    context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
@@ -576,10 +508,7 @@ fn pass_env_vars() -> Result<()> {
 
     context.init_project();
 
-    context
-        .workdir()
-        .child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r#"
             repos:
               - repo: local
                 hooks:
@@ -588,7 +517,7 @@ fn pass_env_vars() -> Result<()> {
                     language: system
                     entry: sh -c "echo $PRE_COMMIT > env.txt"
                     always_run: true
-        "#})?;
+        "#});
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: true

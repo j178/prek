@@ -1,7 +1,7 @@
-use crate::common::{cmd_snapshot, TestContext};
 use anyhow::Result;
-use assert_cmd::Command;
 use assert_fs::prelude::*;
+
+use crate::common::{cmd_snapshot, TestContext};
 
 mod common;
 
@@ -15,8 +15,7 @@ fn fail() -> Result<()> {
     cwd.child("changelog").create_dir_all()?;
     cwd.child("changelog/changelog.md").touch()?;
 
-    cwd.child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r"
+    context.write_pre_commit_config(indoc::indoc! {r"
             repos:
               - repo: local
                 hooks:
@@ -25,14 +24,9 @@ fn fail() -> Result<()> {
                   entry: changelog filenames must end in .rst
                   language: fail
                   files: 'changelog/.*(?<!\.rst)$'
-        "})?;
+        "});
 
-    Command::new("git")
-        .current_dir(cwd)
-        .arg("add")
-        .arg(".")
-        .assert()
-        .success();
+    context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
