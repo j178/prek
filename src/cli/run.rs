@@ -65,7 +65,7 @@ pub(crate) async fn run(
     // Clear any unstaged changes from the git working directory.
     let mut _guard = None;
     if should_stash {
-        _guard = Some(WorkingTreeCleared::new()?);
+        _guard = Some(WorkTreeKeeper::clean().await?);
     }
 
     // Set env vars for hooks.
