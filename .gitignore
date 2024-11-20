@@ -5,9 +5,11 @@
 # Insta snapshots.
 *.pending-snap
 
+# JetBrains IDE
+.idea
+
 # macOS
 **/.DS_Store
-.idea
 
 # profiling flamegraphs
 *.flamegraph.svg
