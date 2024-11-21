@@ -1,0 +1,11 @@
+name: Docker
+description: 'Behavior test for Docker Language'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup
+      uses: ./.github/actions/setup
+    - name: Test Docker
+      run: cargo nextest run --features docker-ci -E 'test(docker)'
+      shell: bash

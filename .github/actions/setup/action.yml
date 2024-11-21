@@ -1,0 +1,12 @@
+name: Setup Rust
+description: 'Setup Rust toolchain and nextest'
+
+runs:
+  using: "composite"
+  steps:
+    - uses: Swatinem/rust-cache@v2
+
+    - name: "Install cargo nextest"
+      uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-nextest

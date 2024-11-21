@@ -1,0 +1,43 @@
+name: CI Expensive
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - "README.md"
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      changes: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            docker:
+              - 'src/languages/docker.rs'
+              - 'tests/files/Dockerfile'
+              - 'tests/languages/docker.rs'
+
+  tasks:
+    needs: plan
+    strategy:
+      matrix:
+        lang: ${{  fromJSON(needs.plan.outputs.changes) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run language test
+        uses: ./.github/actions/${{ matrix.lang }}
+
+
+
