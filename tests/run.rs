@@ -652,3 +652,51 @@ fn staged_files_only() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(unix)]
+#[test]
+fn restore_on_interrupt() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    // The hook will sleep for 3 seconds.
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'import time; time.sleep(10); print(open("file.txt", "rt").read())'
+                verbose: true
+                types: [text]
+   "#});
+
+    context
+        .workdir()
+        .child("file.txt")
+        .write_str("Hello, world!")?;
+    context.git_add(".");
+
+    // Non-staged files should be stashed and restored.
+    context
+        .workdir()
+        .child("file.txt")
+        .write_str("Hello world again!")?;
+
+    let mut child = context.run().spawn()?;
+    let child_id = child.id();
+
+    // Send an interrupt signal to the process.
+    let handle = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        unsafe { libc::kill(child_id as i32, libc::SIGTERM) };
+    });
+
+    handle.join().unwrap();
+    child.wait()?;
+
+    let content = context.read("file.txt");
+    assert_snapshot!(content, @"Hello, world!");
+
+    Ok(())
+}
