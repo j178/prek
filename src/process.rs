@@ -32,6 +32,7 @@ use std::{
 };
 
 use miette::Diagnostic;
+use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::trace;
 
@@ -289,18 +290,18 @@ impl std::fmt::Display for Cmd {
         let program = self.get_program();
         let mut args = self.get_args();
         if let Some(arg) = args.next() {
+            write!(f, "{} ", program.to_string_lossy().cyan())?;
             if arg != program {
-                write!(f, "{} ", program.to_string_lossy())?;
+                write!(f, "{}", arg.to_string_lossy().dimmed())?;
             }
-            write!(f, "{}", arg.to_string_lossy())?;
         }
 
         let mut len = 0;
         for arg in args {
-            write!(f, " {}", arg.to_string_lossy())?;
+            write!(f, " {}", arg.to_string_lossy().dimmed())?;
             len += arg.len() + 1;
             if len > 100 {
-                write!(f, " [...]")?;
+                write!(f, " {}", "[...]".dimmed())?;
                 break;
             }
         }
