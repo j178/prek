@@ -41,7 +41,7 @@ static GIT_ENV: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
 });
 
 fn git_cmd(summary: &str) -> Result<Cmd, Error> {
-    let mut cmd = Cmd::new(GIT.clone()?, summary);
+    let mut cmd = Cmd::new(GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?, summary);
     cmd.arg("-c").arg("core.useBuiltinFSMonitor=false");
     cmd.envs(GIT_ENV.iter().cloned());
 
