@@ -13,11 +13,10 @@ use tracing::{debug, trace};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::Stage;
 use crate::fs::{normalize_path, Simplified};
-use crate::git::{get_all_files, get_changed_files, get_staged_files, has_unmerged_paths, GIT};
+use crate::git;
 use crate::hook::{Hook, Project};
 use crate::printer::Printer;
-use crate::process::Cmd;
-use crate::run::{run_hooks, FilenameFilter, WorkingTreeCleared};
+use crate::run::{run_hooks, FilenameFilter, WorkTreeKeeper};
 use crate::store::Store;
 
 #[allow(clippy::too_many_arguments)]
@@ -44,7 +43,7 @@ pub(crate) async fn run(
     let should_stash = !all_files && files.is_empty();
 
     // Check if we have unresolved merge conflict files and fail fast.
-    if should_stash && has_unmerged_paths().await? {
+    if should_stash && git::has_unmerged_paths().await? {
         writeln!(
             printer.stderr(),
             "You have unmerged paths. Resolve them before running pre-commit."
@@ -60,12 +59,6 @@ pub(crate) async fn run(
             &config_file.user_display()
         )?;
         return Ok(ExitStatus::Failure);
-    }
-
-    // Clear any unstaged changes from the git working directory.
-    let mut _guard = None;
-    if should_stash {
-        _guard = Some(WorkTreeKeeper::clean().await?);
     }
 
     // Set env vars for hooks.
@@ -127,6 +120,12 @@ pub(crate) async fn run(
     install_hooks(&to_run, printer).await?;
     drop(lock);
 
+    // Clear any unstaged changes from the git working directory.
+    let mut _guard = None;
+    if should_stash {
+        _guard = Some(WorkTreeKeeper::clean(&store, printer).await?);
+    }
+
     let mut filenames = all_filenames(
         hook_stage,
         from_ref,
@@ -171,7 +170,7 @@ pub(crate) async fn run(
 }
 
 async fn config_not_staged(config: &Path) -> Result<bool> {
-    let status = Cmd::new(GIT.as_ref()?, "git diff")
+    let status = git::git_cmd("git diff")?
         .arg("diff")
         .arg("--quiet") // Implies --exit-code
         .arg("--no-ext-diff")
@@ -270,7 +269,7 @@ async fn all_filenames(
             .to_string()]);
     }
     if let (Some(from_ref), Some(to_ref)) = (from_ref, to_ref) {
-        let files = get_changed_files(&from_ref, &to_ref).await?;
+        let files = git::get_changed_files(&from_ref, &to_ref).await?;
         debug!(
             "Files changed between {} and {}: {}",
             from_ref,
@@ -289,7 +288,7 @@ async fn all_filenames(
         return Ok(files);
     }
     if all_files {
-        let files = get_all_files().await?;
+        let files = git::get_all_files().await?;
         debug!("All files in the repo: {}", files.len());
         return Ok(files);
     }
@@ -297,7 +296,7 @@ async fn all_filenames(
     // if is_in_merge_conflict() {
     //     return get_conflicted_files();
     // }
-    let files = get_staged_files().await?;
+    let files = git::get_staged_files().await?;
     debug!("Staged files: {}", files.len());
     Ok(files)
 }

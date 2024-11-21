@@ -40,7 +40,7 @@ static GIT_ENV: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
         .collect()
 });
 
-fn git_cmd(summary: &str) -> Result<Cmd, Error> {
+pub fn git_cmd(summary: &str) -> Result<Cmd, Error> {
     let mut cmd = Cmd::new(GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?, summary);
     cmd.arg("-c").arg("core.useBuiltinFSMonitor=false");
     cmd.envs(GIT_ENV.iter().cloned());
@@ -60,7 +60,20 @@ fn zsplit(s: &[u8]) -> Vec<String> {
     }
 }
 
-// TODO: improve error display
+pub async fn intent_to_add_files() -> Result<Vec<String>, Error> {
+    let output = git_cmd("get intent to add files")?
+        .arg("diff")
+        .arg("--no-ext-diff")
+        .arg("--ignore-submodules")
+        .arg("--diff-filter=A")
+        .arg("--name-only")
+        .arg("-z")
+        .check(true)
+        .output()
+        .await?;
+    Ok(zsplit(&output.stdout))
+}
+
 pub async fn get_changed_files(old: &str, new: &str) -> Result<Vec<String>, Error> {
     let output = git_cmd("get changed files")?
         .arg("diff")

@@ -1,5 +1,6 @@
 use anyhow::Result;
 use assert_fs::prelude::*;
+use insta::assert_snapshot;
 
 use crate::common::{cmd_snapshot, TestContext};
 
@@ -599,4 +600,51 @@ fn pass_env_vars() {
 
     let env = context.read("env.txt");
     assert_eq!(env, "1\n");
+}
+
+#[test]
+fn staged_files_only() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'print(open("file.txt", "rt").read())'
+                verbose: true
+                types: [text]
+   "#});
+
+    context
+        .workdir()
+        .child("file.txt")
+        .write_str("Hello, world!")?;
+    context.git_add(".");
+
+    // Non-staged files should be stashed and restored.
+    context
+        .workdir()
+        .child("file.txt")
+        .write_str("Hello world again!")?;
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Non-staged changes detected, saving to [HOME]/1732193790067-10870.patch
+    trailing-whitespace......................................................Passed
+    - hook id: trailing-whitespace
+    - duration: 0.04s
+      Hello, world!
+
+    ----- stderr -----
+    "#);
+
+    let content = context.read("file.txt");
+    assert_snapshot!(content, @"Hello world again!");
+
+    Ok(())
 }
