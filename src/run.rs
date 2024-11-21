@@ -533,8 +533,12 @@ impl WorkingTreeKeeper {
 
                 writeln!(
                     printer.stdout(),
-                    "Non-staged changes detected, saving to {}",
-                    patch_path.user_display()
+                    "{}",
+                    format!(
+                        "Non-staged changes detected, saving to `{}`",
+                        patch_path.user_display()
+                    )
+                    .yellow()
                 )?;
                 fs_err::create_dir_all(patch_dir)?;
                 fs_err::write(&patch_path, output.stdout)?;
@@ -600,6 +604,15 @@ impl WorkingTreeKeeper {
             Self::git_apply(patch)?;
         };
 
+        writeln!(
+            std::io::stderr(),
+            "{}",
+            format!(
+                "\nRestored working tree changes from `{}`",
+                patch.user_display()
+            )
+            .yellow()
+        )?;
         Ok(())
     }
 }

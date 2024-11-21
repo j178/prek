@@ -666,7 +666,7 @@ fn restore_on_interrupt() -> Result<()> {
               - id: trailing-whitespace
                 name: trailing-whitespace
                 language: system
-                entry: python3 -c 'import time; time.sleep(10); print(open("file.txt", "rt").read())'
+                entry: python3 -c 'import time; open("out.txt", "wt").write(open("file.txt", "rt").read()); time.sleep(10)'
                 verbose: true
                 types: [text]
    "#});
@@ -689,14 +689,20 @@ fn restore_on_interrupt() -> Result<()> {
     // Send an interrupt signal to the process.
     let handle = std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(1));
-        unsafe { libc::kill(child_id as i32, libc::SIGTERM) };
+        #[allow(clippy::cast_possible_wrap)]
+        unsafe {
+            libc::kill(child_id as i32, libc::SIGINT)
+        };
     });
 
     handle.join().unwrap();
     child.wait()?;
 
-    let content = context.read("file.txt");
+    let content = context.read("out.txt");
     assert_snapshot!(content, @"Hello, world!");
+
+    let content = context.read("file.txt");
+    assert_snapshot!(content, @"Hello world again!");
 
     Ok(())
 }
