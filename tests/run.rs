@@ -634,19 +634,25 @@ fn staged_files_only() -> Result<()> {
         .child("file.txt")
         .write_str("Hello world again!")?;
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(r"/\d+-\d+.patch", "/[TIME]-[PID].patch")])
+        .collect();
+
+    cmd_snapshot!(filters, context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     trailing-whitespace......................................................Passed
     - hook id: trailing-whitespace
-    - duration: 0.03s
+    - duration: [TIME]
       Hello, world!
 
     ----- stderr -----
-    Non-staged changes detected, saving to `[HOME]/1732196801370-22887.patch`
+    Non-staged changes detected, saving to `[HOME]/[TIME]-[PID].patch`
 
-    Restored working tree changes from `[HOME]/1732196801370-22887.patch`
+    Restored working tree changes from `[HOME]/[TIME]-[PID].patch`
     "#);
 
     let content = context.read("file.txt");

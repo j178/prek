@@ -179,26 +179,6 @@ impl TestContext {
 
     /// Initialize a sample project for pre-commit.
     pub fn init_project(&self) {
-        // TODO: Clone some repositories used in the tests.
-        // if !self.cache_dir.join("pre-commit-hooks") {
-        //     Command::new("git")
-        //         .arg("clone")
-        //         .arg("https://github.com/pre-commit/pre-commit-hooks")
-        //         .arg("--depth=1")
-        //         .arg("--branch=v5.0.0")
-        //         .current_dir(&self.cache_dir)
-        //         .assert()
-        //         .success();
-        // }
-        //
-        // fs_extra::dir::copy(
-        //     self.cache_dir.join("pre-commit-hooks"),
-        //     self.home_dir.join("pre-commit-hooks"),
-        //     &fs_extra::dir::CopyOptions::new(),
-        // )?;
-
-        // Write some common files.
-
         Command::new("git")
             .arg("init")
             .current_dir(&self.temp_dir)
@@ -260,6 +240,8 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         r"Caused by: .* \(os error 2\)",
         "Caused by: No such file or directory (os error 2)",
     ),
+    // Time seconds
+    (r"(\d+\.)?\d+s", "[TIME]"),
 ];
 
 #[allow(unused_macros)]
