@@ -30,9 +30,10 @@ jobs:
 
   tasks:
     needs: plan
+    if: ${{ needs.plan.outputs.changes }}
     strategy:
       matrix:
-        lang: ${{  fromJSON(needs.plan.outputs.changes) }}
+        lang: ${{ fromJSON(needs.plan.outputs.changes) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
