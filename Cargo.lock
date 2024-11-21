@@ -1290,6 +1290,8 @@ checksum = "4edc8853320c2a0dab800fbda86253c8938f6ea88510dc92c5f1ed20e794afc1"
 dependencies = [
  "cfg-if",
  "miette-derive",
+ "owo-colors",
+ "textwrap",
  "thiserror 1.0.69",
  "unicode-width 0.1.14",
 ]
@@ -1534,6 +1536,7 @@ dependencies = [
  "itertools",
  "libc",
  "md5",
+ "miette",
  "owo-colors",
  "pprof",
  "predicates",

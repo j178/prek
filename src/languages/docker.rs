@@ -6,15 +6,14 @@ use std::sync::Arc;
 
 use anstream::ColorChoice;
 use anyhow::Result;
-use assert_cmd::output::{OutputError, OutputOkExt};
 use fancy_regex::Regex;
-use tokio::process::Command;
 use tracing::trace;
 
 use crate::config::Language;
 use crate::fs::CWD;
 use crate::hook::Hook;
 use crate::languages::{LanguageImpl, DEFAULT_VERSION};
+use crate::process::Cmd;
 use crate::run::run_by_batch;
 
 const PRE_COMMIT_LABEL: &str = "PRE_COMMIT";
@@ -31,7 +30,7 @@ impl Docker {
     }
 
     async fn build_docker_image(hook: &Hook, pull: bool) -> Result<()> {
-        let mut cmd = Command::new("docker");
+        let mut cmd = Cmd::new("docker", "build docker image");
 
         let cmd = cmd
             .arg("build")
@@ -48,11 +47,7 @@ impl Docker {
         // see https://github.com/pre-commit/pre-commit/issues/477
         cmd.arg(".");
 
-        cmd.current_dir(hook.path())
-            .output()
-            .await
-            .map_err(OutputError::with_cause)?
-            .ok()?;
+        cmd.current_dir(hook.path()).check(true).output().await?;
 
         Ok(())
     }
@@ -94,11 +89,12 @@ impl Docker {
 
         trace!(?container_id, "Get container id");
 
-        if let Ok(output) = Command::new("docker")
+        if let Ok(output) = Cmd::new("docker", "inspect container")
             .arg("inspect")
             .arg("--format")
             .arg("'{{json .Mounts}}'")
             .arg(&container_id)
+            .check(true)
             .output()
             .await
         {
@@ -131,8 +127,8 @@ impl Docker {
         Ok(Cow::Borrowed(path))
     }
 
-    async fn docker_cmd() -> Result<Command> {
-        let mut command = Command::new("docker");
+    async fn docker_cmd() -> Result<Cmd> {
+        let mut command = Cmd::new("docker", "run container");
         command.arg("run").arg("--rm");
 
         match ColorChoice::global() {

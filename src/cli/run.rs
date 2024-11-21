@@ -8,7 +8,6 @@ use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use tokio::process::Command;
 use tracing::{debug, trace};
 
 use crate::cli::{ExitStatus, RunExtraArgs};
@@ -17,6 +16,7 @@ use crate::fs::{normalize_path, Simplified};
 use crate::git::{get_all_files, get_changed_files, get_staged_files, has_unmerged_paths, GIT};
 use crate::hook::{Hook, Project};
 use crate::printer::Printer;
+use crate::process::Cmd;
 use crate::run::{run_hooks, FilenameFilter};
 use crate::store::Store;
 
@@ -167,13 +167,14 @@ pub(crate) async fn run(
 }
 
 async fn config_not_staged(config: &Path) -> Result<bool> {
-    let status = Command::new(GIT.as_ref()?)
+    let status = Cmd::new(GIT.as_ref()?, "git diff")
         .arg("diff")
         .arg("--quiet") // Implies --exit-code
         .arg("--no-ext-diff")
         .arg(config)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
+        .check(false)
         .status()
         .await?;
 

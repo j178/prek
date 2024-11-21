@@ -2,14 +2,15 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use anyhow::Result;
-use assert_cmd::output::{OutputError, OutputOkExt};
-use tokio::process::Command;
 use tracing::warn;
+
+use crate::process;
+use crate::process::Cmd;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
-    Command(#[from] OutputError),
+    Command(#[from] process::Error),
     #[error("Failed to find git: {0}")]
     GitNotFound(#[from] which::Error),
 }
@@ -39,8 +40,8 @@ static GIT_ENV: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
         .collect()
 });
 
-fn git_cmd() -> Result<Command, Error> {
-    let mut cmd = Command::new(GIT.clone()?);
+fn git_cmd(summary: &str) -> Result<Cmd, Error> {
+    let mut cmd = Cmd::new(GIT.clone()?, summary);
     cmd.arg("-c").arg("core.useBuiltinFSMonitor=false");
     cmd.envs(GIT_ENV.iter().cloned());
 
@@ -61,52 +62,48 @@ fn zsplit(s: &[u8]) -> Vec<String> {
 
 // TODO: improve error display
 pub async fn get_changed_files(old: &str, new: &str) -> Result<Vec<String>, Error> {
-    let output = git_cmd()?
+    let output = git_cmd("get changed files")?
         .arg("diff")
         .arg("--name-only")
         .arg("--diff-filter=ACMRT")
         .arg("--no-ext-diff") // Disable external diff drivers
         .arg("-z") // Use NUL as line terminator
         .arg(format!("{old}...{new}"))
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
     Ok(zsplit(&output.stdout))
 }
 
 pub async fn get_all_files() -> Result<Vec<String>, Error> {
-    let output = git_cmd()?
+    let output = git_cmd("get git all files")?
         .arg("ls-files")
         .arg("-z")
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
     Ok(zsplit(&output.stdout))
 }
 
 pub async fn get_git_dir() -> Result<PathBuf, Error> {
-    let output = git_cmd()?
+    let output = git_cmd("get git dir")?
         .arg("rev-parse")
         .arg("--git-dir")
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
     Ok(PathBuf::from(
         String::from_utf8_lossy(&output.stdout).trim(),
     ))
 }
 
 pub async fn get_git_common_dir() -> Result<PathBuf, Error> {
-    let output = git_cmd()?
+    let output = git_cmd("get git common dir")?
         .arg("rev-parse")
         .arg("--git-common-dir")
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
     if output.stdout.trim_ascii().is_empty() {
         Ok(get_git_dir().await?)
     } else {
@@ -117,41 +114,38 @@ pub async fn get_git_common_dir() -> Result<PathBuf, Error> {
 }
 
 pub async fn get_staged_files() -> Result<Vec<String>, Error> {
-    let output = git_cmd()?
+    let output = git_cmd("get staged files")?
         .arg("diff")
         .arg("--staged")
         .arg("--name-only")
         .arg("--diff-filter=ACMRTUXB") // Everything except for D
         .arg("--no-ext-diff") // Disable external diff drivers
         .arg("-z") // Use NUL as line terminator
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
     Ok(zsplit(&output.stdout))
 }
 
 pub async fn has_unmerged_paths() -> Result<bool, Error> {
-    let output = git_cmd()?
+    let output = git_cmd("check has unmerged paths")?
         .arg("ls-files")
         .arg("--unmerged")
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
     Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
 }
 
 pub async fn get_diff() -> Result<Vec<u8>, Error> {
-    let output = git_cmd()?
+    let output = git_cmd("git diff")?
         .arg("diff")
         .arg("--no-ext-diff") // Disable external diff drivers
         .arg("--no-textconv")
         .arg("--ignore-submodules")
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
     Ok(output.stdout)
 }
 
@@ -160,80 +154,70 @@ pub async fn get_diff() -> Result<Vec<u8>, Error> {
 /// The name of the new tree object is printed to standard output.
 /// The index must be in a fully merged state.
 pub async fn write_tree() -> Result<String, Error> {
-    let output = git_cmd()?
+    let output = git_cmd("git write-tree")?
         .arg("write-tree")
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
 /// Get the path of the top-level directory of the working tree.
 pub async fn get_root() -> Result<PathBuf, Error> {
-    let output = git_cmd()?
+    let output = git_cmd("get git root")?
         .arg("rev-parse")
         .arg("--show-toplevel")
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
     Ok(PathBuf::from(
         String::from_utf8_lossy(&output.stdout).trim(),
     ))
 }
 
 pub async fn is_dirty(path: &Path) -> Result<bool, Error> {
-    let output = git_cmd()?
+    let mut cmd = git_cmd("check git is dirty")?;
+    let output = cmd
         .arg("diff")
         .arg("--quiet") // Implies `--exit-code`
         .arg("--no-ext-diff") // Disable external diff drivers
         .arg(path)
+        .check(false)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok();
-    match output {
-        Ok(_) => Ok(false),
-        Err(err) => {
-            if err
-                .as_output()
-                .is_some_and(|output| output.status.code() == Some(1))
-            {
-                Ok(true)
-            } else {
-                Err(err.into())
-            }
-        }
+        .await?;
+    if output.status.success() {
+        Ok(false)
+    } else if output.status.code() == Some(1) {
+        Ok(true)
+    } else {
+        Err(cmd.check_status(output.status).unwrap_err().into())
     }
 }
 
 async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
-    git_cmd()?
+    git_cmd("init git repo")?
         .arg("init")
         .arg("--template=")
         .arg(path)
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
 
-    git_cmd()?
+    git_cmd("add git remote")?
         .current_dir(path)
         .arg("remote")
         .arg("add")
         .arg("origin")
         .arg(url)
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
 
     Ok(())
 }
 
 async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
-    git_cmd()?
+    git_cmd("git shallow clone")?
         .current_dir(path)
         .arg("-c")
         .arg("protocol.version=2")
@@ -241,21 +225,19 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .arg("origin")
         .arg(rev)
         .arg("--depth=1")
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
 
-    git_cmd()?
+    git_cmd("git checkout")?
         .current_dir(path)
         .arg("checkout")
         .arg("FETCH_HEAD")
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
 
-    git_cmd()?
+    git_cmd("update git submodules")?
         .current_dir(path)
         .arg("-c")
         .arg("protocol.version=2")
@@ -264,44 +246,40 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .arg("--init")
         .arg("--recursive")
         .arg("--depth=1")
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
 
     Ok(())
 }
 
 async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
-    git_cmd()?
+    git_cmd("git full clone")?
         .current_dir(path)
         .arg("fetch")
         .arg("origin")
         .arg("--tags")
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
 
-    git_cmd()?
+    git_cmd("git checkout")?
         .current_dir(path)
         .arg("checkout")
         .arg(rev)
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
 
-    git_cmd()?
+    git_cmd("update git submodules")?
         .current_dir(path)
         .arg("submodule")
         .arg("update")
         .arg("--init")
         .arg("--recursive")
+        .check(true)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
 
     Ok(())
 }
@@ -318,10 +296,11 @@ pub async fn clone_repo(url: &str, rev: &str, path: &Path) -> Result<(), Error> 
 }
 
 pub async fn has_hooks_path_set() -> Result<bool> {
-    let output = git_cmd()?
+    let output = git_cmd("get git hooks path")?
         .arg("config")
         .arg("--get")
         .arg("core.hooksPath")
+        .check(false)
         .output()
         .await?;
     if output.status.success() {

@@ -23,6 +23,7 @@ mod hook;
 mod identify;
 mod languages;
 mod printer;
+mod process;
 #[cfg(all(unix, feature = "profiler"))]
 mod profiler;
 mod run;

@@ -13,16 +13,16 @@ use owo_colors::{OwoColorize, Style};
 use rand::prelude::{SliceRandom, StdRng};
 use rand::SeedableRng;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use tokio::process::Command;
 use tokio::task::JoinSet;
 use tracing::{error, trace};
 use unicode_width::UnicodeWidthStr;
 
 use crate::cli::ExitStatus;
-use crate::git::get_diff;
+use crate::git::{get_diff, GIT};
 use crate::hook::Hook;
 use crate::identify::tags_from_path;
 use crate::printer::Printer;
+use crate::process::Cmd;
 
 const SKIPPED: &str = "Skipped";
 const NO_FILES: &str = "(no files to check)";
@@ -164,11 +164,12 @@ pub async fn run_hooks(
             ColorChoice::Always | ColorChoice::AlwaysAnsi => "--color=always",
             ColorChoice::Never => "--color=never",
         };
-        Command::new("git")
+        Cmd::new(GIT.as_ref()?, "run git diff")
             .arg("--no-pager")
             .arg("diff")
             .arg("--no-ext-diff")
             .arg(color)
+            .check(true)
             .spawn()?
             .wait()
             .await?;

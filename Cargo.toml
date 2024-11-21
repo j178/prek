@@ -38,6 +38,7 @@ indicatif = "0.17.8"
 indoc = "2.0.5"
 itertools = "0.13.0"
 md5 = "0.7.0"
+miette = { version = "7.2.0", features = ["owo-colors", "textwrap"] }
 owo-colors = "4.1.0"
 rand = "0.8.5"
 rayon = "1.10.0"

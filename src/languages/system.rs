@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tokio::process::Command;
-
 use crate::config;
 use crate::hook::Hook;
 use crate::languages::{LanguageImpl, DEFAULT_VERSION};
+use crate::process::Cmd;
 use crate::run::run_by_batch;
 
 #[derive(Debug, Copy, Clone)]
@@ -49,12 +48,13 @@ impl LanguageImpl for System {
             let env_vars = env_vars.clone();
 
             async move {
-                let mut output = Command::new(&cmds[0])
+                let mut output = Cmd::new(&cmds[0], "run system command")
                     .args(&cmds[1..])
                     .args(hook_args.as_ref())
                     .args(batch)
                     .stderr(std::process::Stdio::inherit())
                     .envs(env_vars.as_ref())
+                    .check(false)
                     .output()
                     .await?;
 

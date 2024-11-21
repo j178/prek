@@ -2,13 +2,11 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use assert_cmd::output::{OutputError, OutputOkExt};
-use tokio::process::Command;
-
 use crate::config;
 use crate::hook::Hook;
 use crate::languages::python::uv::ensure_uv;
 use crate::languages::LanguageImpl;
+use crate::process::Cmd;
 use crate::run::run_by_batch;
 
 #[derive(Debug, Copy, Clone)]
@@ -37,30 +35,28 @@ impl LanguageImpl for Python {
 
         // Set uv cache dir? tools dir? python dir?
         // Create venv
-        Command::new(&uv)
+        Cmd::new(&uv, "create venv")
             .arg("venv")
             .arg(&venv)
             .arg("--python")
             .arg(&hook.language_version)
+            .check(true)
             .output()
-            .await
-            .map_err(OutputError::with_cause)?
-            .ok()?;
+            .await?;
 
         patch_cfg_version_info(&venv).await?;
 
         // Install dependencies
-        Command::new(&uv)
+        Cmd::new(&uv, "install dependencies")
             .arg("pip")
             .arg("install")
             .arg(".")
             .args(&hook.additional_dependencies)
             .current_dir(hook.path())
             .env("VIRTUAL_ENV", &venv)
+            .check(true)
             .output()
-            .await
-            .map_err(OutputError::with_cause)?
-            .ok()?;
+            .await?;
 
         Ok(())
     }
@@ -109,7 +105,7 @@ impl LanguageImpl for Python {
 
             // TODO: combine stdout and stderr
             async move {
-                let mut output = Command::new(&cmds[0])
+                let mut output = Cmd::new(&cmds[0], "run python command")
                     .args(&cmds[1..])
                     .env("VIRTUAL_ENV", env_dir.as_ref())
                     .env("PATH", new_path.as_ref())
@@ -117,6 +113,7 @@ impl LanguageImpl for Python {
                     .envs(env_vars.as_ref())
                     .args(hook_args.as_slice())
                     .args(batch)
+                    .check(false)
                     .output()
                     .await?;
 
@@ -151,14 +148,13 @@ fn bin_dir(venv: &Path) -> PathBuf {
 
 async fn get_full_version(path: &Path) -> anyhow::Result<String> {
     let python = bin_dir(path).join("python");
-    let output = Command::new(&python)
+    let output = Cmd::new(&python, "run python")
+        .check(true)
         .arg("-S")
         .arg("-c")
         .arg(r#"import sys; print(".".join(str(p) for p in sys.version_info))"#)
         .output()
-        .await
-        .map_err(OutputError::with_cause)?
-        .ok()?;
+        .await?;
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
