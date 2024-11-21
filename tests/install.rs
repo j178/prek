@@ -11,7 +11,6 @@ mod common;
 #[test]
 fn install() -> anyhow::Result<()> {
     let context = TestContext::new();
-
     context.init_project();
 
     // Install `pre-commit` hook.

@@ -14,16 +14,15 @@ fn hook_impl() {
     context.init_project();
 
     context.write_pre_commit_config(indoc! { r"
-            repos:
-            - repo: local
-              hooks:
-               - id: fail
-                 name: fail
-                 language: fail
-                 entry: always fail
-                 always_run: true
-            "
-    });
+        repos:
+        - repo: local
+          hooks:
+           - id: fail
+             name: fail
+             language: fail
+             entry: always fail
+             always_run: true
+    "});
 
     context.git_add(".");
 

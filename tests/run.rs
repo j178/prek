@@ -1,6 +1,5 @@
 use anyhow::Result;
 use assert_fs::prelude::*;
-use insta::assert_snapshot;
 
 use crate::common::{cmd_snapshot, TestContext};
 
@@ -13,14 +12,14 @@ fn run_basic() -> Result<()> {
 
     let cwd = context.workdir();
     context.write_pre_commit_config(indoc::indoc! {r"
-            repos:
-              - repo: https://github.com/pre-commit/pre-commit-hooks
-                rev: v5.0.0
-                hooks:
-                  - id: trailing-whitespace
-                  - id: end-of-file-fixer
-                  - id: check-json
-        "});
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: trailing-whitespace
+              - id: end-of-file-fixer
+              - id: check-json
+    "});
 
     // Create a repository with some files.
     cwd.child("file.txt").write_str("Hello, world!\n")?;
@@ -75,22 +74,20 @@ fn run_basic() -> Result<()> {
 }
 
 #[test]
-fn local() -> Result<()> {
+fn local() {
     let context = TestContext::new();
     context.init_project();
 
-    let cwd = context.workdir();
-    cwd.child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r"
-            repos:
-              - repo: local
-                hooks:
-                  - id: local
-                    name: local
-                    language: system
-                    entry: echo Hello, world!
-                    always_run: true
-        "})?;
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: system
+                entry: echo Hello, world!
+                always_run: true
+    "});
 
     context.git_add(".");
 
@@ -102,29 +99,24 @@ fn local() -> Result<()> {
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }
 
 #[test]
-fn local_need_install() -> Result<()> {
+fn local_need_install() {
     let context = TestContext::new();
     context.init_project();
 
-    context
-        .workdir()
-        .child(".pre-commit-config.yaml")
-        .write_str(indoc::indoc! {r#"
-            repos:
-              - repo: local
-                hooks:
-                  - id: local
-                    name: local
-                    language: python
-                    entry: pyecho Hello, world!
-                    additional_dependencies: ["pyecho-cli"]
-                    always_run: true
-        "#})?;
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: python
+                entry: pyecho Hello, world!
+                additional_dependencies: ["pyecho-cli"]
+                always_run: true
+    "#});
 
     context.git_add(".");
 
@@ -138,24 +130,22 @@ fn local_need_install() -> Result<()> {
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }
 
 #[test]
 fn invalid_hook_id() {
     let context = TestContext::new();
-
     context.init_project();
 
     context.write_pre_commit_config(indoc::indoc! {r"
-            repos:
-              - repo: https://github.com/pre-commit/pre-commit-hooks
-                rev: v5.0.0
-                hooks:
-                  - id: trailing-whitespace
-            "
-    });
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -V
+    "});
 
     context.git_add(".");
 
@@ -163,7 +153,6 @@ fn invalid_hook_id() {
     success: false
     exit_code: 1
     ----- stdout -----
-    Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
 
     ----- stderr -----
     No hook found for id `invalid-hook-id`
@@ -174,21 +163,20 @@ fn invalid_hook_id() {
 #[test]
 fn config_not_staged() -> Result<()> {
     let context = TestContext::new();
-
     context.init_project();
 
     context.workdir().child(".pre-commit-config.yaml").touch()?;
-
     context.git_add(".");
 
     context.write_pre_commit_config(indoc::indoc! {r"
-            repos:
-              - repo: https://github.com/pre-commit/pre-commit-hooks
-                rev: v5.0.0
-                hooks:
-                  - id: trailing-whitespace
-            "
-    });
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -V
+    "});
 
     cmd_snapshot!(context.filters(), context.run().arg("invalid-hook-id"), @r#"
     success: false
@@ -207,20 +195,21 @@ fn config_not_staged() -> Result<()> {
 #[test]
 fn cjk_hook_name() {
     let context = TestContext::new();
-
     context.init_project();
 
     context.write_pre_commit_config(indoc::indoc! {r"
-            repos:
-              - repo: https://github.com/pre-commit/pre-commit-hooks
-                rev: v5.0.0
-                hooks:
-                  - id: trailing-whitespace
-                    name: 去除行尾空格
-                  - id: end-of-file-fixer
-                  - id: check-json
-            "
-    });
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: 去除行尾空格
+                language: system
+                entry: python3 -V
+              - id: end-of-file-fixer
+                name: fix end of files
+                language: system
+                entry: python3 -V
+    "});
 
     context.git_add(".");
 
@@ -228,11 +217,8 @@ fn cjk_hook_name() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0
     去除行尾空格.............................................................Passed
     fix end of files.........................................................Passed
-    check json...........................................(no files to check)Skipped
 
     ----- stderr -----
     "#);
@@ -242,42 +228,51 @@ fn cjk_hook_name() {
 #[test]
 fn skips() {
     let context = TestContext::new();
-
     context.init_project();
 
-    context.write_pre_commit_config(indoc::indoc! {r"
-            repos:
-              - repo: https://github.com/pre-commit/pre-commit-hooks
-                rev: v5.0.0
-                hooks:
-                  - id: trailing-whitespace
-                  - id: end-of-file-fixer
-                  - id: check-json
-            "
-    });
-
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c "exit(1)"
+              - id: end-of-file-fixer
+                name: fix end of files
+                language: system
+                entry: python3 -c "exit(1)"
+              - id: check-json
+                name: check json
+                language: system
+                entry: python3 -c "exit(1)"
+    "#});
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run().env("SKIP", "end-of-file-fixer"), @r#"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
-    Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    trim trailing whitespace.................................................Passed
+    trailing-whitespace......................................................Failed
+    - hook id: trailing-whitespace
+    - exit code: 1
     fix end of files........................................................Skipped
-    check json...........................................(no files to check)Skipped
+    check json...............................................................Failed
+    - hook id: check-json
+    - exit code: 1
 
     ----- stderr -----
     "#);
 
     cmd_snapshot!(context.filters(), context.run().env("SKIP", "trailing-whitespace,end-of-file-fixer"), @r#"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
-    trim trailing whitespace................................................Skipped
+    trailing-whitespace.....................................................Skipped
     fix end of files........................................................Skipped
-    check json...........................................(no files to check)Skipped
+    check json...............................................................Failed
+    - hook id: check-json
+    - exit code: 1
 
     ----- stderr -----
     "#);
@@ -298,64 +293,81 @@ fn files_and_exclude() -> Result<()> {
 
     // Global files and exclude.
     context.write_pre_commit_config(indoc::indoc! {r"
-            files: file.txt
-            repos:
-              - repo: https://github.com/pre-commit/pre-commit-hooks
-                rev: v5.0.0
-                hooks:
-                  - id: trailing-whitespace
-                  - id: end-of-file-fixer
-                  - id: check-json
-            "
-    });
-
+        files: file.txt
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing whitespace
+                language: system
+                entry: python3 -c 'import sys; print(sys.argv[1:]); exit(1)'
+                types: [text]
+              - id: end-of-file-fixer
+                name: fix end of files
+                language: system
+                entry: python3 -c 'import sys; print(sys.argv[1:]); exit(1)'
+                types: [text]
+              - id: check-json
+                name: check json
+                language: system
+                entry: python3 -c 'import sys; print(sys.argv[1:]); exit(1)'
+                types: [json]
+    "});
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
-    Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    trim trailing whitespace.................................................Failed
+    trailing whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
-    - files were modified by this hook
-      Fixing file.txt
-    fix end of files.........................................................Passed
+      ['file.txt']
+    fix end of files.........................................................Failed
+    - hook id: end-of-file-fixer
+    - exit code: 1
+      ['file.txt']
     check json...........................................(no files to check)Skipped
 
     ----- stderr -----
     "#);
 
     // Override hook level files and exclude.
-    // Global files and exclude.
     context.write_pre_commit_config(indoc::indoc! {r"
-            repos:
-              - repo: https://github.com/pre-commit/pre-commit-hooks
-                rev: v5.0.0
-                hooks:
-                  - id: trailing-whitespace
-                    files: valid.json
-                  - id: end-of-file-fixer
-                    exclude: (valid.json|main.py)
-                  - id: check-json
-            "
-    });
-
+        files: file.txt
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing whitespace
+                language: system
+                entry: python3 -c 'import sys; print(sys.argv[1:]); exit(1)'
+                files: valid.json
+              - id: end-of-file-fixer
+                name: fix end of files
+                language: system
+                entry: python3 -c 'import sys; print(sys.argv[1:]); exit(1)'
+                exclude: (valid.json|main.py)
+              - id: check-json
+                name: check json
+                language: system
+                entry: python3 -c 'import sys; print(sys.argv[1:]); exit(1)'
+    "});
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
-    trim trailing whitespace.................................................Failed
-    - hook id: trailing-whitespace
+    trailing whitespace..................................(no files to check)Skipped
+    fix end of files.........................................................Failed
+    - hook id: end-of-file-fixer
     - exit code: 1
-    - files were modified by this hook
-      Fixing valid.json
-    fix end of files.........................................................Passed
-    check json...............................................................Passed
+      ['file.txt']
+    check json...............................................................Failed
+    - hook id: check-json
+    - exit code: 1
+      ['file.txt']
 
     ----- stderr -----
     "#);
@@ -375,48 +387,57 @@ fn file_types() -> Result<()> {
     cwd.child("json.json").write_str("{}\n  ")?;
     cwd.child("main.py").write_str(r#"print "abc"  "#)?;
 
-    // Global files and exclude.
     context.write_pre_commit_config(indoc::indoc! {r#"
-            repos:
-              - repo: https://github.com/pre-commit/pre-commit-hooks
-                rev: v5.0.0
-                hooks:
-                  - id: trailing-whitespace
-                    types: [ "json" ]
-                  - id: trailing-whitespace
-                    types_or: [ "json", "python" ]
-                  - id: trailing-whitespace
-                    exclude_types: [ "json" ]
-                  - id: trailing-whitespace
-                    types: [ "json" ]
-                    exclude_types: [ "json" ]
-            "#
-    });
-
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'import sys; print(sys.argv[1:]); exit(1)'
+                types: ["json"]
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'import sys; print(sys.argv[1:]); exit(1)'
+                types_or: ["json", "python"]
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'import sys; print(sys.argv[1:]); exit(1)'
+                exclude_types: ["json"]
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'import sys; print(sys.argv[1:]); exit(1)'
+                types: ["json" ]
+                exclude_types: ["json"]
+    "#});
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
-    Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    trim trailing whitespace.................................................Failed
+    trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
-    - files were modified by this hook
-      Fixing json.json
-    trim trailing whitespace.................................................Failed
+      ['json.json']
+    trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
-    - files were modified by this hook
-      Fixing main.py
-    trim trailing whitespace.................................................Failed
+      ['json.json', 'main.py']
+    trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
-    - files were modified by this hook
-      Fixing file.txt
-    trim trailing whitespace.............................(no files to check)Skipped
+      ['.pre-commit-config.yaml', 'file.txt', 'main.py']
+    trailing-whitespace..................................(no files to check)Skipped
 
     ----- stderr -----
     "#);
@@ -426,79 +447,76 @@ fn file_types() -> Result<()> {
 
 /// Abort the run if a hook fails.
 #[test]
-fn fail_fast() -> Result<()> {
+fn fail_fast() {
     let context = TestContext::new();
-
     context.init_project();
 
-    let cwd = context.workdir();
-    cwd.child("file.txt").write_str("Hello, world!  ")?;
-    cwd.child("json.json").write_str("{}\n  ")?;
-    cwd.child("main.py").write_str(r#"print "abc"  "#)?;
-
-    // Global files and exclude.
     context.write_pre_commit_config(indoc::indoc! {r#"
-            repos:
-              - repo: https://github.com/pre-commit/pre-commit-hooks
-                rev: v5.0.0
-                hooks:
-                  - id: trailing-whitespace
-                    fail_fast: false
-                    types: [ "json" ]
-                  - id: trailing-whitespace
-                    fail_fast: true
-                  - id: trailing-whitespace
-                  - id: trailing-whitespace
-            "#
-    });
-
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'print("Fixing files"); exit(1)'
+                always_run: true
+                fail_fast: false
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'print("Fixing files"); exit(1)'
+                always_run: true
+                fail_fast: true
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -V
+                always_run: true
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -V
+                always_run: true
+    "#});
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
-    Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    trim trailing whitespace.................................................Failed
+    trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
-    - files were modified by this hook
-      Fixing json.json
-    trim trailing whitespace.................................................Failed
+      Fixing files
+    trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
-    - files were modified by this hook
-      Fixing file.txt
-      Fixing main.py
+      Fixing files
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }
 
 /// Run from a subdirectory. File arguments should be fixed to be relative to the root.
 #[test]
 fn subdirectory() -> Result<()> {
     let context = TestContext::new();
-
     context.init_project();
 
     let cwd = context.workdir();
     let child = cwd.child("foo/bar/baz");
     child.create_dir_all()?;
-    child.child("file.txt").write_str("Hello, world!  ")?;
 
-    // Global files and exclude.
-    context.write_pre_commit_config(indoc::indoc! {r"
-            repos:
-              - repo: https://github.com/pre-commit/pre-commit-hooks
-                rev: v5.0.0
-                hooks:
-                  - id: trailing-whitespace
-            "
-    });
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'print("Hello"); exit(1)'
+                always_run: true
+    "#});
 
     context.git_add(".");
 
@@ -506,13 +524,10 @@ fn subdirectory() -> Result<()> {
     success: false
     exit_code: 1
     ----- stdout -----
-    Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    trim trailing whitespace.................................................Failed
+    trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
-    - files were modified by this hook
-      Fixing foo/bar/baz/file.txt
+      Hello
 
     ----- stderr -----
     "#);
@@ -522,45 +537,36 @@ fn subdirectory() -> Result<()> {
 
 /// Test hook `log_file` option.
 #[test]
-fn log_file() -> Result<()> {
+fn log_file() {
     let context = TestContext::new();
-
     context.init_project();
 
-    let cwd = context.workdir();
-    cwd.child("file.txt").write_str("Hello, world!  ")?;
-
-    // Global files and exclude.
-    context.write_pre_commit_config(indoc::indoc! {r"
-            repos:
-              - repo: https://github.com/pre-commit/pre-commit-hooks
-                rev: v5.0.0
-                hooks:
-                  - id: trailing-whitespace
-                    log_file: log.txt
-            "
-    });
-
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'print("Fixing files"); exit(1)'
+                always_run: true
+                log_file: log.txt
+    "#});
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
-    Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    trim trailing whitespace.................................................Failed
+    trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
-    - files were modified by this hook
 
     ----- stderr -----
     "#);
 
     let log = context.read("log.txt");
-    assert_snapshot!(log, @"Fixing file.txt");
-
-    Ok(())
+    assert_eq!(log, "Fixing files");
 }
 
 /// Pass pre-commit environment variables to the hook.
@@ -572,15 +578,15 @@ fn pass_env_vars() {
     context.init_project();
 
     context.write_pre_commit_config(indoc::indoc! {r#"
-            repos:
-              - repo: local
-                hooks:
-                  - id: env-vars
-                    name: Pass environment
-                    language: system
-                    entry: sh -c "echo $PRE_COMMIT > env.txt"
-                    always_run: true
-        "#});
+        repos:
+          - repo: local
+            hooks:
+              - id: env-vars
+                name: Pass environment
+                language: system
+                entry: sh -c "echo $PRE_COMMIT > env.txt"
+                always_run: true
+    "#});
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: true
