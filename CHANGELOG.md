@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.4
+
+### Enhancements
+
+- Improve subprocess trace and error output ([#92](https://github.com/j178/pre-commit-rs/pull/92))
+- Stash working tree before running hooks ([#96](https://github.com/j178/pre-commit-rs/pull/96))
+- Add color to command trace ([#94](https://github.com/j178/pre-commit-rs/pull/94))
+- Improve hook output display ([#79](https://github.com/j178/pre-commit-rs/pull/79))
+- Improve uv installation ([#78](https://github.com/j178/pre-commit-rs/pull/78))
+- Support docker language ([#67](https://github.com/j178/pre-commit-rs/pull/67))
+
 ## 0.0.3
 
 ### Bug fixes
