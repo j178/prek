@@ -53,6 +53,8 @@ fn run_basic() -> Result<()> {
     ----- stderr -----
     "#);
 
+    context.git_add(".");
+
     cmd_snapshot!(context.filters(), context.run().arg("trailing-whitespace"), @r#"
     success: true
     exit_code: 0
@@ -61,6 +63,8 @@ fn run_basic() -> Result<()> {
 
     ----- stderr -----
     "#);
+
+    context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run().arg("typos").arg("--hook-stage").arg("pre-push"), @r#"
     success: false

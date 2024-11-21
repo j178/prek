@@ -458,7 +458,9 @@ impl IntentToAddKeeper {
             .arg("--")
             .args(&files)
             .check(true)
-            .output()
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
             .await?;
 
         Ok(Self(files.into_iter().map(PathBuf::from).collect()))
@@ -473,7 +475,9 @@ impl IntentToAddKeeper {
                 .arg("--")
                 // TODO: xargs
                 .args(&self.0)
-                .output()?;
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()?;
         }
         Ok(())
     }
@@ -554,8 +558,9 @@ impl WorkingTreeKeeper {
             .arg(".")
             // prevent recursive post-checkout hooks
             .env("_PRE_COMMIT_SKIP_POST_CHECKOUT", "1")
-            .output()?
-            .status;
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()?;
         if status.success() {
             Ok(())
         } else {
@@ -568,7 +573,8 @@ impl WorkingTreeKeeper {
             .arg("apply")
             .arg("--whitespace=nowarn")
             .arg(patch)
-            // todo 用 output
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .status()?;
         if status.success() {
             Ok(())
