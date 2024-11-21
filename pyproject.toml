@@ -29,7 +29,7 @@ build-backend = "maturin"
 [tool.maturin]
 bindings = "bin"
 include = [
-  { path = "licenses/*", format = ["whell", "sdist"]}
+  { path = "licenses/*", format = ["wheel", "sdist"]}
 ]
 
 [tool.rooster]
