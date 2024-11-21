@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-use anstream::ColorChoice;
+use anstream::{eprintln, ColorChoice};
 use anyhow::Result;
 use fancy_regex::{self as regex, Regex};
 use owo_colors::{OwoColorize, Style};
@@ -168,7 +168,7 @@ pub async fn run_hooks(
             ColorChoice::Always | ColorChoice::AlwaysAnsi => "--color=always",
             ColorChoice::Never => "--color=never",
         };
-        git::git_cmd("git diff")?
+        git_cmd("git diff")?
             .arg("--no-pager")
             .arg("diff")
             .arg("--no-ext-diff")
@@ -486,16 +486,16 @@ impl IntentToAddKeeper {
 impl Drop for IntentToAddKeeper {
     fn drop(&mut self) {
         if let Err(err) = self.restore() {
-            let _ = writeln!(
-                std::io::stderr(),
-                "Failed to restore intent-to-add changes: {err}"
+            eprintln!(
+                "{}",
+                format!("Failed to restore intent-to-add changes: {err}").red()
             );
         }
     }
 }
 
 impl WorkingTreeKeeper {
-    async fn clean(patch_dir: &Path, printer: Printer) -> Result<Self> {
+    async fn clean(patch_dir: &Path) -> Result<Self> {
         let tree = git::write_tree().await?;
 
         let mut cmd = git_cmd("git diff-index")?;
@@ -531,15 +531,14 @@ impl WorkingTreeKeeper {
                 );
                 let patch_path = patch_dir.join(&patch_name);
 
-                writeln!(
-                    printer.stdout(),
+                eprintln!(
                     "{}",
                     format!(
                         "Non-staged changes detected, saving to `{}`",
                         patch_path.user_display()
                     )
                     .yellow()
-                )?;
+                );
                 fs_err::create_dir_all(patch_dir)?;
                 fs_err::write(&patch_path, output.stdout)?;
 
@@ -595,24 +594,24 @@ impl WorkingTreeKeeper {
         // Try to apply the patch
         if Self::git_apply(patch).is_err() {
             error!("Failed to apply the patch, rolling back changes");
-            writeln!(
-                std::io::stderr(),
-                "Failed to apply the patch, rolling back changes"
-            )?;
+            eprintln!(
+                "{}",
+                "Failed to apply the patch, rolling back changes".red()
+            );
 
             Self::checkout_working_tree()?;
             Self::git_apply(patch)?;
         };
 
-        writeln!(
-            std::io::stderr(),
+        eprintln!(
             "{}",
             format!(
                 "\nRestored working tree changes from `{}`",
                 patch.user_display()
             )
             .yellow()
-        )?;
+        );
+
         Ok(())
     }
 }
@@ -620,9 +619,9 @@ impl WorkingTreeKeeper {
 impl Drop for WorkingTreeKeeper {
     fn drop(&mut self) {
         if let Err(err) = self.restore() {
-            let _ = writeln!(
-                std::io::stderr(),
-                "Failed to restore working tree changes: {err}"
+            eprintln!(
+                "{}",
+                format!("Failed to restore working tree changes: {err}").red()
             );
         }
     }
@@ -650,10 +649,10 @@ impl Drop for RestoreGuard {
 impl WorkTreeKeeper {
     /// Clear intent-to-add changes from the index and clear the non-staged changes from the working directory.
     /// Restore them when the instance is dropped.
-    pub async fn clean(store: &Store, printer: Printer) -> Result<RestoreGuard> {
+    pub async fn clean(store: &Store) -> Result<RestoreGuard> {
         let cleaner = Self {
             intent_to_add: Some(IntentToAddKeeper::clean().await?),
-            working_tree: Some(WorkingTreeKeeper::clean(store.path(), printer).await?),
+            working_tree: Some(WorkingTreeKeeper::clean(store.path()).await?),
         };
 
         // Set to the global for the cleanup hook.

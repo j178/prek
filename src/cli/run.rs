@@ -123,7 +123,7 @@ pub(crate) async fn run(
     // Clear any unstaged changes from the git working directory.
     let mut _guard = None;
     if should_stash {
-        _guard = Some(WorkTreeKeeper::clean(&store, printer).await?);
+        _guard = Some(WorkTreeKeeper::clean(&store).await?);
     }
 
     let mut filenames = all_filenames(

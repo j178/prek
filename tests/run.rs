@@ -638,13 +638,15 @@ fn staged_files_only() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Non-staged changes detected, saving to [HOME]/1732193790067-10870.patch
     trailing-whitespace......................................................Passed
     - hook id: trailing-whitespace
-    - duration: 0.04s
+    - duration: 0.03s
       Hello, world!
 
     ----- stderr -----
+    Non-staged changes detected, saving to `[HOME]/1732196801370-22887.patch`
+
+    Restored working tree changes from `[HOME]/1732196801370-22887.patch`
     "#);
 
     let content = context.read("file.txt");
