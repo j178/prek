@@ -21,8 +21,9 @@ pub(crate) async fn install(
     overwrite: bool,
     allow_missing_config: bool,
     printer: Printer,
+    git_dir: Option<&str>,
 ) -> Result<ExitStatus> {
-    if git::has_hooks_path_set().await? {
+    if git_dir.is_none() && git::has_hooks_path_set().await? {
         writeln!(
             printer.stderr(),
             indoc::indoc! {"
@@ -35,7 +36,12 @@ pub(crate) async fn install(
 
     let hook_types = get_hook_types(config.clone(), hook_types);
 
-    let hooks_path = git::get_git_common_dir().await?.join("hooks");
+    let hooks_path = if let Some(dir) = git_dir {
+        Path::new(dir).join("hooks")
+    } else {
+        git::get_git_common_dir().await?.join("hooks")
+    };
+
     fs_err::create_dir_all(&hooks_path)?;
 
     let project = Project::from_config_file(config);

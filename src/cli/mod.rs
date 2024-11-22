@@ -172,7 +172,7 @@ pub(crate) enum Command {
     Clean,
     /// Install hook script in a directory intended for use with `git config init.templateDir`.
     #[command(name = "init-templatedir")]
-    InitTemplateDir,
+    InitTemplateDir(InitTemplateDirArgs),
     /// Try the pre-commit hooks in the current repo.
     TryRepo(Box<RunArgs>),
 
@@ -338,4 +338,18 @@ pub(crate) struct GenerateShellCompletionArgs {
     /// The shell to generate the completion script for
     #[arg(value_enum)]
     pub shell: clap_complete::Shell,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct InitTemplateDirArgs {
+    /// The directory in which to write the hook script.
+    pub(crate) directory: String,
+
+    /// Assume cloned repos should have a `pre-commit` config.
+    #[arg(long, default_value_t = false)]
+    pub(crate) no_allow_missing_config: bool,
+
+    /// Which hook type to install.
+    #[arg(long, short = 't', default_value_t = HookType::PreCommit)]
+    pub(crate) hook_type: HookType,
 }
