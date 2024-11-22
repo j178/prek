@@ -49,7 +49,7 @@ fn install() -> anyhow::Result<()> {
         .child(".git/hooks/pre-commit")
         .write_str("#!/bin/sh\necho 'pre-commit'\n")?;
 
-    cmd_snapshot!(context.filters(), context.install().arg("--hook-types").arg("pre-commit").arg("--hook-types").arg("post-commit"), @r#"
+    cmd_snapshot!(context.filters(), context.install().arg("--hook-type").arg("pre-commit").arg("--hook-type").arg("post-commit"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -105,7 +105,7 @@ fn install() -> anyhow::Result<()> {
     );
 
     // Overwrite existing hooks.
-    cmd_snapshot!(context.filters(), context.install().arg("--hook-types").arg("pre-commit post-commit").arg("--overwrite"), @r#"
+    cmd_snapshot!(context.filters(), context.install().arg("-t").arg("pre-commit").arg("--hook-type").arg("--overwrite"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
