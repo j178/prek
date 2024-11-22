@@ -14,6 +14,8 @@ pub enum Error {
     Command(#[from] process::Error),
     #[error("Failed to find git: {0}")]
     GitNotFound(#[from] which::Error),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 pub static GIT: LazyLock<Result<PathBuf, which::Error>> = LazyLock::new(|| which::which("git"));
@@ -151,7 +153,7 @@ pub async fn has_unmerged_paths() -> Result<bool, Error> {
 
 pub async fn is_in_merge_conflict() -> Result<bool, Error> {
     let git_dir = get_git_dir().await?;
-    Ok(git_dir.join("MERGE_HEAD").exists() && git_dir.join("MERGE_MSG").exists())
+    Ok(git_dir.join("MERGE_HEAD").try_exists()? && git_dir.join("MERGE_MSG").try_exists()?)
 }
 
 pub async fn get_conflicted_files() -> Result<Vec<String>, Error> {
@@ -175,20 +177,21 @@ pub async fn get_conflicted_files() -> Result<Vec<String>, Error> {
         .await?;
     Ok(zsplit(&output.stdout)
         .into_iter()
-        .chain(parse_merge_msg_for_conflicts()?)
+        .chain(parse_merge_msg_for_conflicts().await?)
         .collect::<HashSet<String>>()
         .into_iter()
         .collect())
 }
 
-fn parse_merge_msg_for_conflicts() -> Result<Vec<String>, Error> {
+async fn parse_merge_msg_for_conflicts() -> Result<Vec<String>, Error> {
     let git_dir = get_git_dir().await?;
     let merge_msg = git_dir.join("MERGE_MSG");
-    let content = std::fs::read_to_string(&merge_msg)?;
+    let content = fs_err::read_to_string(&merge_msg)?;
     let conflicts = content
         .lines()
-        .filter(|line| line.starts_with("CONFLICT"))
-        .map(|line| line.to_string())
+        // Conflicted files start with tabs
+        .filter(|line| line.starts_with('\t') || line.starts_with("#\t"))
+        .map(|line| line.trim_start_matches('#').trim().to_string())
         .collect();
     Ok(conflicts)
 }

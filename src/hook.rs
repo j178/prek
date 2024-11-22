@@ -375,7 +375,6 @@ impl HookBuilder {
     /// Check the hook configuration.
     fn check(&self) {
         let language = Language::from(self.config.language);
-        // TODO: check ENVIRONMENT_DIR with language_version and additional_dependencies
         if language.environment_dir().is_none() {
             if self.config.language_version != Some(DEFAULT_VERSION.to_string()) {
                 warn_user!(

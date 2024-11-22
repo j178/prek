@@ -276,7 +276,6 @@ impl Cmd {
     /// Log the current Command using the method specified by [`Cmd::log`][]
     /// (defaults to [`tracing::info!`][]).
     pub fn log_command(&self) {
-        // TODO: truncate args if they're too long
         trace!("Executing `{self}`");
     }
 }

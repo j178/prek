@@ -26,7 +26,6 @@ impl LanguageImpl for Python {
         Some("py_env")
     }
 
-    // TODO: install uv automatically
     // TODO: fallback to virtualenv, pip
     async fn install(&self, hook: &Hook) -> anyhow::Result<()> {
         let venv = hook.environment_dir().expect("No environment dir found");
