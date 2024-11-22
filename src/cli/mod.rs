@@ -343,13 +343,13 @@ pub(crate) struct GenerateShellCompletionArgs {
 #[derive(Debug, Args)]
 pub(crate) struct InitTemplateDirArgs {
     /// The directory in which to write the hook script.
-    pub(crate) directory: String,
+    pub(crate) directory: PathBuf,
 
     /// Assume cloned repos should have a `pre-commit` config.
-    #[arg(long, default_value_t = false)]
+    #[arg(long)]
     pub(crate) no_allow_missing_config: bool,
 
     /// Which hook type to install.
-    #[arg(long, short = 't', default_value_t = HookType::PreCommit)]
-    pub(crate) hook_type: HookType,
+    #[arg(short = 't', long = "hook-type", value_name = "HOOK_TYPE", value_enum)]
+    pub(crate) hook_types: Vec<HookType>,
 }
