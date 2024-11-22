@@ -245,14 +245,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Command::InitTemplateDir(args) => {
             show_settings!(args);
 
-            cli::install(
+            cli::init_template_dir(
+                args.directory,
                 cli.globals.config,
                 args.hook_types,
-                false,
-                true,
-                !args.no_allow_missing_config,
+                args.no_allow_missing_config,
                 printer,
-                Some(args.directory),
             )
             .await
         }

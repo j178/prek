@@ -218,3 +218,20 @@ fn uninstall() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn init_template_dir() {
+    let context = TestContext::new();
+    context.init_project();
+
+    cmd_snapshot!(context.filters(), context.command().arg("init-templatedir").arg(".git"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pre-commit installed at .git/hooks/pre-commit
+
+    ----- stderr -----
+    `init.templateDir` not set to the target directory
+    try `git config --global init.templateDir '.git'`?
+    "#);
+}

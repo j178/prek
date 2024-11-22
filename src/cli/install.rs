@@ -5,11 +5,13 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use indoc::indoc;
 use owo_colors::OwoColorize;
+use same_file::is_same_file;
 
 use crate::cli::run;
 use crate::cli::{ExitStatus, HookType};
 use crate::fs::Simplified;
 use crate::git;
+use crate::git::git_cmd;
 use crate::hook::Project;
 use crate::printer::Printer;
 use crate::store::Store;
@@ -21,7 +23,7 @@ pub(crate) async fn install(
     overwrite: bool,
     allow_missing_config: bool,
     printer: Printer,
-    git_dir: Option<PathBuf>,
+    git_dir: Option<&Path>,
 ) -> Result<ExitStatus> {
     if git_dir.is_none() && git::has_hooks_path_set().await? {
         writeln!(
@@ -235,6 +237,46 @@ pub(crate) async fn uninstall(
                 )?;
             }
         }
+    }
+
+    Ok(ExitStatus::Success)
+}
+
+pub(crate) async fn init_template_dir(
+    directory: PathBuf,
+    config: Option<PathBuf>,
+    hook_types: Vec<HookType>,
+    requires_config: bool,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    install(
+        config,
+        hook_types,
+        false,
+        true,
+        !requires_config,
+        printer,
+        Some(&directory),
+    )
+    .await?;
+
+    let output = git_cmd("git config")?
+        .arg("config")
+        .arg("init.templateDir")
+        .check(false)
+        .output()
+        .await?;
+    let template_dir = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    if template_dir.is_empty() || !is_same_file(&directory, Path::new(&template_dir))? {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            indoc::formatdoc! {"
+                `init.templateDir` not set to the target directory
+                try `git config --global init.templateDir '{directory}'`?
+            ", directory = directory.user_display().cyan() }
+        )?;
     }
 
     Ok(ExitStatus::Success)

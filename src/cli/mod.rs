@@ -16,7 +16,7 @@ mod validate;
 
 pub(crate) use clean::clean;
 pub(crate) use hook_impl::hook_impl;
-pub(crate) use install::{install, uninstall};
+pub(crate) use install::{init_template_dir, install, uninstall};
 pub(crate) use run::run;
 pub(crate) use sample_config::sample_config;
 pub(crate) use self_update::self_update;
