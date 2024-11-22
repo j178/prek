@@ -105,7 +105,7 @@ fn install() -> anyhow::Result<()> {
     );
 
     // Overwrite existing hooks.
-    cmd_snapshot!(context.filters(), context.install().arg("-t").arg("pre-commit").arg("--hook-type").arg("--overwrite"), @r#"
+    cmd_snapshot!(context.filters(), context.install().arg("-t").arg("pre-commit").arg("--hook-type").arg("post-commit").arg("--overwrite"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -181,7 +181,7 @@ fn uninstall() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    uninstalled pre-commit
+    Uninstalled pre-commit
 
     ----- stderr -----
     "#);
@@ -210,8 +210,28 @@ fn uninstall() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    uninstalled pre-commit
+    Uninstalled pre-commit
     Restored previous hook to .git/hooks/pre-commit
+
+    ----- stderr -----
+    "#);
+
+    // Uninstall multiple hooks.
+    context
+        .install()
+        .arg("-t")
+        .arg("pre-commit")
+        .arg("-t")
+        .arg("post-commit")
+        .assert()
+        .success();
+    cmd_snapshot!(context.filters(), context.uninstall().arg("-t").arg("pre-commit").arg("-t").arg("post-commit"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Uninstalled pre-commit
+    Restored previous hook to .git/hooks/pre-commit
+    Uninstalled post-commit
 
     ----- stderr -----
     "#);

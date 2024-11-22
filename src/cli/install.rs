@@ -216,7 +216,7 @@ pub(crate) async fn uninstall(
             fs_err::remove_file(&hook_path)?;
             writeln!(
                 printer.stdout(),
-                "uninstalled {}",
+                "Uninstalled {}",
                 hook_type.as_str().cyan()
             )?;
 
