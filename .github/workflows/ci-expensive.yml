@@ -1,0 +1,65 @@
+name: CI Expensive
+on:
+  push:
+    paths-ignore:
+      - "licenses/**"
+      - "scripts/**"
+      - "**.md"
+  pull_request:
+    paths-ignore:
+      - "licenses/**"
+      - "scripts/**"
+      - "**.md"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      changes: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          ref: ${{ github.ref }}
+          filters: |
+            docker:
+              - 'src/languages/docker.rs'
+              - 'tests/files/Dockerfile'
+              - 'tests/languages/docker.rs'
+      - name: Print changes
+        run: echo ${{ steps.filter.outputs.changes }}
+
+  tasks:
+    needs: plan
+    if: ${{ needs.plan.outputs.changes != '[]' && needs.plan.outputs.changes != '' }}
+    strategy:
+      matrix:
+        lang: ${{ fromJSON(needs.plan.outputs.changes) }}
+        platform:
+          - id: ubuntu
+            os: ubuntu-latest
+          - id: windows
+            os: windows-latest
+          - id: macos
+            os: macos-latest
+    runs-on: ${{ matrix.platform.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check exist
+        id: check
+        run: |
+          echo "exist=${{ hashFiles(format('./.github/actions/{0}/{1}/*', matrix.platform.id, matrix.lang)) != '' }}" >> $GITHUB_OUTPUT
+      - name: Run language test
+        if: ${{ steps.check.outputs.exist == 'true' }}
+        uses: ./.github/actions/dynamic
+        with:
+          lang: ${{ matrix.lang }}
+          id: ${{ matrix.platform.id }}

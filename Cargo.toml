@@ -15,10 +15,9 @@ path = "src/main.rs"
 name = "pre-commit"
 
 [features]
-default = ["docker"]
+default = []
 profiler = ["dep:pprof", "profiler-flamegraph"]
 profiler-flamegraph = ["pprof/flamegraph"]
-docker = []
 
 [dependencies]
 anstream = "0.6.15"

@@ -2,6 +2,7 @@ use crate::common::{cmd_snapshot, TestContext};
 
 /// GitHub Action only has docker for linux hosted runners.
 #[test]
+#[ignore]
 fn docker() {
     let context = TestContext::new();
     context.init_project();
