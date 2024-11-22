@@ -200,13 +200,6 @@ impl TestContext {
             .arg("test@example.com")
             .assert()
             .success();
-
-        Command::new("git")
-            .arg("add")
-            .arg(".")
-            .current_dir(&self.temp_dir)
-            .assert()
-            .success();
     }
 
     /// Run `git add` in the temporary directory.
@@ -214,6 +207,17 @@ impl TestContext {
         Command::new("git")
             .arg("add")
             .arg(path)
+            .current_dir(&self.temp_dir)
+            .assert()
+            .success();
+    }
+
+    /// Run `git commit` in the temporary directory.
+    pub fn git_commit(&self, message: &str) {
+        Command::new("git")
+            .arg("commit")
+            .arg("-m")
+            .arg(message)
             .current_dir(&self.temp_dir)
             .assert()
             .success();

@@ -1,4 +1,7 @@
+use std::process::Command;
+
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
@@ -711,6 +714,85 @@ fn restore_on_interrupt() -> Result<()> {
 
     let content = context.read("file.txt");
     assert_snapshot!(content, @"Hello world again!");
+
+    Ok(())
+}
+
+/// When in merge conflict, runs on files that have conflicts fixed.
+#[test]
+fn merge_conflicts() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Create a merge conflict.
+    let cwd = context.workdir();
+    cwd.child("file.txt").write_str("Hello, world!")?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    Command::new("git")
+        .arg("checkout")
+        .arg("-b")
+        .arg("feature")
+        .current_dir(cwd)
+        .assert()
+        .success();
+    cwd.child("file.txt").write_str("Hello, world again!")?;
+    context.git_add(".");
+    context.git_commit("Feature commit");
+
+    Command::new("git")
+        .arg("checkout")
+        .arg("master")
+        .current_dir(cwd)
+        .assert()
+        .success();
+    cwd.child("file.txt")
+        .write_str("Hello, world from master!")?;
+    context.git_add(".");
+    context.git_commit("Master commit");
+
+    Command::new("git")
+        .arg("merge")
+        .arg("feature")
+        .current_dir(cwd)
+        .assert()
+        .code(1);
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'import sys; print(sorted(sys.argv[1:]))'
+                verbose: true
+    "});
+
+    // Abort on merge conflicts.
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    You have unmerged paths. Resolve them before running pre-commit.
+    "#);
+
+    // Fix the conflict and run again.
+    context.git_add(".");
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    trailing-whitespace......................................................Passed
+    - hook id: trailing-whitespace
+    - duration: [TIME]
+      ['.pre-commit-config.yaml', 'file.txt']
+
+    ----- stderr -----
+    "#);
 
     Ok(())
 }

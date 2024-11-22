@@ -175,6 +175,7 @@ pub async fn get_conflicted_files() -> Result<Vec<String>, Error> {
         .check(true)
         .output()
         .await?;
+
     Ok(zsplit(&output.stdout)
         .into_iter()
         .chain(parse_merge_msg_for_conflicts().await?)
