@@ -292,10 +292,11 @@ async fn all_filenames(
         debug!("All files in the repo: {}", files.len());
         return Ok(files);
     }
-    // TODO: implement merge conflict
-    // if is_in_merge_conflict() {
-    //     return get_conflicted_files();
-    // }
+    if git::is_in_merge_conflict() {
+        let files = git::get_conflicted_files().await?;
+        debug!("Conflicted files: {}", files.len());
+        return Ok(files);
+    }
     let files = git::get_staged_files().await?;
     debug!("Staged files: {}", files.len());
     Ok(files)

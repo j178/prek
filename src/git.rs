@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
@@ -54,9 +55,7 @@ fn zsplit(s: &[u8]) -> Vec<String> {
     if s.is_empty() {
         vec![]
     } else {
-        s.split('\0')
-            .map(std::string::ToString::to_string)
-            .collect()
+        s.split('\0').map(ToString::to_string).collect()
     }
 }
 
@@ -148,6 +147,50 @@ pub async fn has_unmerged_paths() -> Result<bool, Error> {
         .output()
         .await?;
     Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
+}
+
+pub async fn is_in_merge_conflict() -> Result<bool, Error> {
+    let git_dir = get_git_dir().await?;
+    Ok(git_dir.join("MERGE_HEAD").exists() && git_dir.join("MERGE_MSG").exists())
+}
+
+pub async fn get_conflicted_files() -> Result<Vec<String>, Error> {
+    let tree = git_cmd("git write-tree")?
+        .arg("write-tree")
+        .check(true)
+        .output()
+        .await?;
+
+    let output = git_cmd("get conflicted files")?
+        .arg("diff")
+        .arg("--name-only")
+        .arg("--no-ext-diff") // Disable external diff drivers
+        .arg("-z") // Use NUL as line terminator
+        .arg("-m")
+        .arg(String::from_utf8_lossy(&tree.stdout).trim())
+        .arg("HEAD")
+        .arg("MERGE_HEAD")
+        .check(true)
+        .output()
+        .await?;
+    Ok(zsplit(&output.stdout)
+        .into_iter()
+        .chain(parse_merge_msg_for_conflicts()?)
+        .collect::<HashSet<String>>()
+        .into_iter()
+        .collect())
+}
+
+fn parse_merge_msg_for_conflicts() -> Result<Vec<String>, Error> {
+    let git_dir = get_git_dir().await?;
+    let merge_msg = git_dir.join("MERGE_MSG");
+    let content = std::fs::read_to_string(&merge_msg)?;
+    let conflicts = content
+        .lines()
+        .filter(|line| line.starts_with("CONFLICT"))
+        .map(|line| line.to_string())
+        .collect();
+    Ok(conflicts)
 }
 
 pub async fn get_diff() -> Result<Vec<u8>, Error> {
