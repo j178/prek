@@ -199,7 +199,7 @@ pub(crate) struct InstallArgs {
     #[arg(long)]
     pub(crate) install_hooks: bool,
 
-    #[arg(short = 't', long, value_enum, value_delimiter = ' ')]
+    #[arg(short = 't', long = "hook-type", value_name = "HOOK_TYPE", value_enum)]
     pub(crate) hook_types: Vec<HookType>,
 
     /// Allow a missing `pre-commit` configuration file.
@@ -209,7 +209,7 @@ pub(crate) struct InstallArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct UninstallArgs {
-    #[arg(short = 't', long, value_enum, value_delimiter = ' ')]
+    #[arg(short = 't', long = "hook-type", value_name = "HOOK_TYPE", value_enum)]
     pub(crate) hook_types: Vec<HookType>,
 }
 
