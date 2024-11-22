@@ -69,7 +69,7 @@ fn setup_logging(level: Level) -> Result<()> {
     tracing_subscriber::fmt::fmt()
         .with_env_filter(filter)
         .event_format(format)
-        .with_writer(std::io::stderr)
+        .with_writer(anstream::stderr)
         .init();
     Ok(())
 }
