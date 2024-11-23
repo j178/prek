@@ -1,10 +1,9 @@
 use std::collections::HashMap;
-use std::fmt::{Debug, Display};
 use std::sync::Arc;
 
 use anyhow::Result;
 
-use crate::config;
+use crate::config::Language;
 use crate::hook::Hook;
 
 mod docker;
@@ -13,10 +12,16 @@ mod node;
 mod python;
 mod system;
 
+pub static PYTHON: python::Python = python::Python;
+pub static NODE: node::Node = node::Node;
+pub static SYSTEM: system::System = system::System;
+pub static FAIL: fail::Fail = fail::Fail;
+pub static DOCKER: docker::Docker = docker::Docker;
+
 pub const DEFAULT_VERSION: &str = "default";
 
 trait LanguageImpl {
-    fn name(&self) -> config::Language;
+    fn name(&self) -> Language;
     fn default_version(&self) -> &str;
     fn environment_dir(&self) -> Option<&str>;
     async fn install(&self, hook: &Hook) -> Result<()>;
@@ -29,103 +34,48 @@ trait LanguageImpl {
     ) -> Result<(i32, Vec<u8>)>;
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum Language {
-    Python(python::Python),
-    Node(node::Node),
-    System(system::System),
-    Fail(fail::Fail),
-    Docker(docker::Docker),
-}
-
-impl From<config::Language> for Language {
-    fn from(language: config::Language) -> Self {
-        match language {
-            // config::Language::Conda => Language::Conda,
-            // config::Language::Coursier => Language::Coursier,
-            // config::Language::Dart => Language::Dart,
-            config::Language::Docker => Language::Docker(docker::Docker),
-            // config::Language::DockerImage => Language::DockerImage,
-            // config::Language::Dotnet => Language::Dotnet,
-            config::Language::Fail => Language::Fail(fail::Fail),
-            // config::Language::Golang => Language::Golang,
-            // config::Language::Haskell => Language::Haskell,
-            // config::Language::Lua => Language::Lua,
-            config::Language::Node => Language::Node(node::Node),
-            // config::Language::Perl => Language::Perl,
-            config::Language::Python => Language::Python(python::Python),
-            // config::Language::R => Language::R,
-            // config::Language::Ruby => Language::Ruby,
-            // config::Language::Rust => Language::Rust,
-            // config::Language::Swift => Language::Swift,
-            // config::Language::Pygrep => Language::Pygrep,
-            // config::Language::Script => Language::Script,
-            config::Language::System => Language::System(system::System),
-            _ => todo!("Not implemented yet"),
-        }
-    }
-}
-
-impl Display for Language {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Python(python) => python.fmt(f),
-            Self::Node(node) => node.fmt(f),
-            Self::System(system) => system.fmt(f),
-            Self::Fail(fail) => fail.fmt(f),
-            Self::Docker(docker) => docker.fmt(f),
-        }
-    }
-}
-
 impl Language {
-    pub fn name(self) -> config::Language {
-        match self {
-            Self::Python(python) => python.name(),
-            Self::Node(node) => node.name(),
-            Self::System(system) => system.name(),
-            Self::Fail(fail) => fail.name(),
-            Self::Docker(docker) => docker.name(),
-        }
-    }
-
     pub fn default_version(&self) -> &str {
         match self {
-            Self::Python(python) => python.default_version(),
-            Self::Node(node) => node.default_version(),
-            Self::System(system) => system.default_version(),
-            Self::Fail(fail) => fail.default_version(),
-            Self::Docker(docker) => docker.default_version(),
+            Self::Python => PYTHON.default_version(),
+            Self::Node => NODE.default_version(),
+            Self::System => SYSTEM.default_version(),
+            Self::Fail => FAIL.default_version(),
+            Self::Docker => DOCKER.default_version(),
+            _ => todo!(),
         }
     }
 
     pub fn environment_dir(&self) -> Option<&str> {
         match self {
-            Self::Python(python) => python.environment_dir(),
-            Self::Node(node) => node.environment_dir(),
-            Self::System(system) => system.environment_dir(),
-            Self::Fail(fail) => fail.environment_dir(),
-            Self::Docker(docker) => docker.environment_dir(),
+            Self::Python => PYTHON.environment_dir(),
+            Self::Node => NODE.environment_dir(),
+            Self::System => SYSTEM.environment_dir(),
+            Self::Fail => FAIL.environment_dir(),
+            Self::Docker => DOCKER.environment_dir(),
+            _ => todo!(),
         }
     }
 
     pub async fn install(&self, hook: &Hook) -> Result<()> {
         match self {
-            Self::Python(python) => python.install(hook).await,
-            Self::Node(node) => node.install(hook).await,
-            Self::System(system) => system.install(hook).await,
-            Self::Fail(fail) => fail.install(hook).await,
-            Self::Docker(docker) => docker.install(hook).await,
+            Self::Python => PYTHON.install(hook).await,
+            Self::Node => NODE.install(hook).await,
+            Self::System => SYSTEM.install(hook).await,
+            Self::Fail => FAIL.install(hook).await,
+            Self::Docker => DOCKER.install(hook).await,
+            _ => todo!(),
         }
     }
 
     pub async fn check_health(&self) -> Result<()> {
         match self {
-            Self::Python(python) => python.check_health().await,
-            Self::Node(node) => node.check_health().await,
-            Self::System(system) => system.check_health().await,
-            Self::Fail(fail) => fail.check_health().await,
-            Self::Docker(docker) => docker.check_health().await,
+            Self::Python => PYTHON.check_health().await,
+            Self::Node => NODE.check_health().await,
+            Self::System => SYSTEM.check_health().await,
+            Self::Fail => FAIL.check_health().await,
+            Self::Docker => DOCKER.check_health().await,
+            _ => todo!(),
         }
     }
 
@@ -136,11 +86,12 @@ impl Language {
         env_vars: Arc<HashMap<&'static str, String>>,
     ) -> Result<(i32, Vec<u8>)> {
         match self {
-            Self::Python(python) => python.run(hook, filenames, env_vars).await,
-            Self::Node(node) => node.run(hook, filenames, env_vars).await,
-            Self::System(system) => system.run(hook, filenames, env_vars).await,
-            Self::Fail(fail) => fail.run(hook, filenames, env_vars).await,
-            Self::Docker(docker) => docker.run(hook, filenames, env_vars).await,
+            Self::Python => PYTHON.run(hook, filenames, env_vars).await,
+            Self::Node => NODE.run(hook, filenames, env_vars).await,
+            Self::System => SYSTEM.run(hook, filenames, env_vars).await,
+            Self::Fail => FAIL.run(hook, filenames, env_vars).await,
+            Self::Docker => DOCKER.run(hook, filenames, env_vars).await,
+            _ => todo!(),
         }
     }
 }
