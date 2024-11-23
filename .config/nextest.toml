@@ -5,6 +5,6 @@ uv = { max-threads = 1}
 # due to concurrent uv cache writes.
 # Configure these tests to run sequentially.
 [[profile.default.overrides]]
-filter = 'test(/^(run::run_basic)|(run::local_need_install)$/)'
+filter = 'test(run_basic) | test(local_need_install)'
 platform = 'cfg(windows)'
 test-group = 'uv'
