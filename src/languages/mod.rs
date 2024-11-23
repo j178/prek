@@ -12,11 +12,11 @@ mod node;
 mod python;
 mod system;
 
-pub static PYTHON: python::Python = python::Python;
-pub static NODE: node::Node = node::Node;
-pub static SYSTEM: system::System = system::System;
-pub static FAIL: fail::Fail = fail::Fail;
-pub static DOCKER: docker::Docker = docker::Docker;
+static PYTHON: python::Python = python::Python;
+static NODE: node::Node = node::Node;
+static SYSTEM: system::System = system::System;
+static FAIL: fail::Fail = fail::Fail;
+static DOCKER: docker::Docker = docker::Docker;
 
 pub const DEFAULT_VERSION: &str = "default";
 
