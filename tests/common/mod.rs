@@ -186,7 +186,25 @@ impl TestContext {
             .success();
     }
 
-    /// Run `git add` in the temporary directory.
+    /// Configure git user and email.
+    pub fn configure_git_author(&self) {
+        Command::new("git")
+            .arg("config")
+            .arg("user.name")
+            .arg("Pre-Commit Test")
+            .current_dir(&self.temp_dir)
+            .assert()
+            .success();
+        Command::new("git")
+            .arg("config")
+            .arg("user.email")
+            .arg("test@pre-commit-rs.dev")
+            .current_dir(&self.temp_dir)
+            .assert()
+            .success();
+    }
+
+    /// Run `git add`.
     pub fn git_add(&self, path: impl AsRef<OsStr>) {
         Command::new("git")
             .arg("add")
@@ -196,7 +214,7 @@ impl TestContext {
             .success();
     }
 
-    /// Run `git commit` in the temporary directory.
+    /// Run `git commit`.
     pub fn git_commit(&self, message: &str) {
         Command::new("git")
             .arg("commit")

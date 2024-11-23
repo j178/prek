@@ -728,6 +728,7 @@ fn merge_conflicts() -> Result<()> {
     let cwd = context.workdir();
     cwd.child("file.txt").write_str("Hello, world!")?;
     context.git_add(".");
+    context.configure_git_author();
     context.git_commit("Initial commit");
 
     Command::new("git")

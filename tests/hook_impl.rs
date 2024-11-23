@@ -25,7 +25,7 @@ fn hook_impl() {
     "});
 
     context.git_add(".");
-
+    context.configure_git_author();
     let mut commit = Command::new("git");
     commit
         .arg("commit")
