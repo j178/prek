@@ -21,7 +21,6 @@ static DOCKER: docker::Docker = docker::Docker;
 pub const DEFAULT_VERSION: &str = "default";
 
 trait LanguageImpl {
-    fn name(&self) -> Language;
     fn default_version(&self) -> &str;
     fn environment_dir(&self) -> Option<&str>;
     async fn install(&self, hook: &Hook) -> Result<()>;

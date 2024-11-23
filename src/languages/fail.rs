@@ -1,6 +1,5 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::config;
 use crate::hook::Hook;
 use crate::languages::{LanguageImpl, DEFAULT_VERSION};
 
@@ -8,10 +7,6 @@ use crate::languages::{LanguageImpl, DEFAULT_VERSION};
 pub struct Fail;
 
 impl LanguageImpl for Fail {
-    fn name(&self) -> config::Language {
-        config::Language::Fail
-    }
-
     fn default_version(&self) -> &str {
         DEFAULT_VERSION
     }

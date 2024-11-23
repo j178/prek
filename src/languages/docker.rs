@@ -9,7 +9,6 @@ use anyhow::Result;
 use fancy_regex::Regex;
 use tracing::trace;
 
-use crate::config::Language;
 use crate::fs::CWD;
 use crate::hook::Hook;
 use crate::languages::{LanguageImpl, DEFAULT_VERSION};
@@ -162,10 +161,6 @@ impl Docker {
 }
 
 impl LanguageImpl for Docker {
-    fn name(&self) -> Language {
-        Language::Docker
-    }
-
     fn default_version(&self) -> &str {
         DEFAULT_VERSION
     }

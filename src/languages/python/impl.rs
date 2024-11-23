@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::config;
 use crate::hook::Hook;
 use crate::languages::python::uv::ensure_uv;
 use crate::languages::LanguageImpl;
@@ -13,10 +12,6 @@ use crate::run::run_by_batch;
 pub struct Python;
 
 impl LanguageImpl for Python {
-    fn name(&self) -> config::Language {
-        config::Language::Python
-    }
-
     fn default_version(&self) -> &str {
         // TODO find the version of python on the system
         "python3"

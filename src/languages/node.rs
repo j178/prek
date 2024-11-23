@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::config;
 use crate::hook::Hook;
 use crate::languages::{LanguageImpl, DEFAULT_VERSION};
 
@@ -9,10 +8,6 @@ use crate::languages::{LanguageImpl, DEFAULT_VERSION};
 pub struct Node;
 
 impl LanguageImpl for Node {
-    fn name(&self) -> config::Language {
-        config::Language::Node
-    }
-
     fn default_version(&self) -> &str {
         DEFAULT_VERSION
     }
