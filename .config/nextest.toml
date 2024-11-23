@@ -1,0 +1,10 @@
+[test-groups]
+uv = { max-threads = 1}
+
+# On Windows, concurrent uv runs may fail by `Access Denied` errors
+# due to concurrent uv cache writes.
+# Configure these tests to run sequentially.
+[[profile.default.overrides]]
+filter = 'test(/^(run::run_basic)|(run::local_need_install)$/)'
+platform = 'cfg(windows)'
+test-group = 'uv'
