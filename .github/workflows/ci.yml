@@ -36,9 +36,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+
       - name: "Install Rust toolchain"
         run: rustup component add clippy
       - name: "Clippy"
@@ -85,9 +85,7 @@ jobs:
     name: "cargo test | ubuntu"
     steps:
       - uses: actions/checkout@v4
-
       - uses: rui314/setup-mold@v1
-
       - uses: Swatinem/rust-cache@v2
 
       - name: "Install Rust toolchain"
