@@ -181,6 +181,7 @@ impl TestContext {
     pub fn init_project(&self) {
         Command::new("git")
             .arg("init")
+            .arg("--initial-branch=master")
             .current_dir(&self.temp_dir)
             .assert()
             .success();
