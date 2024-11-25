@@ -61,12 +61,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
+          # Add a key to invalidate previous caches.
+          key: 1
           workspaces: ${{ env.PRE_COMMIT_WORKSPACE }}
 
       - name: "Install Rust toolchain"
         run: rustup component add clippy
 
       - name: "Clippy"
+        working-directory: ${{ env.PRE_COMMIT_WORKSPACE }}
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-shear:
