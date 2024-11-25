@@ -213,7 +213,6 @@ impl LanguageImpl for Docker {
                     .args(hook_args.as_ref())
                     .args(batch)
                     .check(false)
-                    .stderr(std::process::Stdio::inherit())
                     .envs(env_vars.as_ref());
 
                 let mut output = cmd.output().await?;

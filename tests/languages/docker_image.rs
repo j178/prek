@@ -1,42 +1,46 @@
-use crate::common::{cmd_snapshot, TestContext};
 use anyhow::Result;
 use assert_cmd::Command;
-use assert_fs::prelude::*;
+use assert_fs::fixture::{FileWriteStr, PathChild};
+
+use crate::common::{cmd_snapshot, TestContext};
 
 #[test]
 fn docker_image() -> Result<()> {
     let context = TestContext::new();
-
     context.init_project();
 
     let cwd = context.workdir();
-    // test suit from https://github.com/super-linter/super-linter/tree/main/test/linters/gitleaks/bad
-    cwd.child("gitleaks_bad_01.txt").write_str(
-        r"aws_access_key_id = AROA47DSWDEZA3RQASWB
-aws_secret_access_key = wQwdsZDiWg4UA5ngO0OSI2TkM4kkYxF6d2S1aYWM",
-    )?;
+    // Test suit from https://github.com/super-linter/super-linter/tree/main/test/linters/gitleaks/bad
+    cwd.child("gitleaks_bad_01.txt")
+        .write_str(indoc::indoc! {r"
+        aws_access_key_id = AROA47DSWDEZA3RQASWB
+        aws_secret_access_key = wQwdsZDiWg4UA5ngO0OSI2TkM4kkYxF6d2S1aYWM
+    "})?;
 
     Command::new("docker")
         .args(["pull", "zricethezav/gitleaks:v8.21.2"])
         .assert()
         .success();
 
-    context.write_pre_commit_config(indoc::indoc!
-        // language=yaml
-        {r"
-            repos:
-                - repo: local
-                  hooks:
-                      - id: gitleaks-docker
-                        name: Detect hardcoded secrets
-                        language: docker_image
-                        entry: zricethezav/gitleaks:v8.21.2 git --pre-commit --redact --staged --verbose
-                        pass_filenames: false
-        "});
-
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: gitleaks-docker
+                name: Detect hardcoded secrets
+                language: docker_image
+                entry: zricethezav/gitleaks:v8.21.2 git --pre-commit --redact --staged --verbose
+                pass_filenames: false
+    "});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\d\d?:\d\d(AM|PM)", "[TIME]")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -51,8 +55,7 @@ aws_secret_access_key = wQwdsZDiWg4UA5ngO0OSI2TkM4kkYxF6d2S1aYWM",
       Line:        1
       Fingerprint: gitleaks_bad_01.txt:generic-api-key:1
 
-      Finding:     ...ROA47DSWDEZA3RQASWB
-      aws_secret_access_key = REDACTED
+      Finding:     aws_secret_access_key = REDACTED
       Secret:      REDACTED
       RuleID:      generic-api-key
       Entropy:     4.703056
@@ -72,6 +75,6 @@ aws_secret_access_key = wQwdsZDiWg4UA5ngO0OSI2TkM4kkYxF6d2S1aYWM",
       [TIME] WRN leaks found: 2
 
     ----- stderr -----
-    ");
+    "#);
     Ok(())
 }

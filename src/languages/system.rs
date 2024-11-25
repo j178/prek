@@ -47,7 +47,6 @@ impl LanguageImpl for System {
                     .args(&cmds[1..])
                     .args(hook_args.as_ref())
                     .args(batch)
-                    .stderr(std::process::Stdio::inherit())
                     .envs(env_vars.as_ref())
                     .check(false)
                     .output()

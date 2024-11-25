@@ -13,6 +13,7 @@ fn docker() {
             hooks:
               - id: hello-world
                 entry: "echo Hello, world!"
+                verbose: true
                 always_run: true
     "#});
 
@@ -25,6 +26,9 @@ fn docker() {
     Cloning https://github.com/j178/pre-commit-docker-hooks@master
     Installing environment for https://github.com/j178/pre-commit-docker-hooks@master
     Hello World..............................................................Passed
+    - hook id: hello-world
+    - duration: [TIME]
+      Hello, world! .pre-commit-config.yaml
 
     ----- stderr -----
     "#);

@@ -1,10 +1,10 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use crate::hook::Hook;
 use crate::languages::docker::Docker;
 use crate::languages::{LanguageImpl, DEFAULT_VERSION};
 use crate::run::run_by_batch;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tracing::debug;
 
 #[derive(Debug, Copy, Clone)]
 pub struct DockerImage;
@@ -48,11 +48,8 @@ impl LanguageImpl for DockerImage {
                     .args(&cmds[..])
                     .args(hook_args.as_ref())
                     .args(batch)
-                    .stderr(std::process::Stdio::inherit())
                     .check(false)
                     .envs(env_vars.as_ref());
-
-                debug!(%cmd, "docker");
 
                 let mut output = cmd.output().await?;
                 output.stdout.extend(output.stderr);
