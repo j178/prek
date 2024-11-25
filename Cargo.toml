@@ -29,6 +29,7 @@ clap = { version = "4.5.16", features = ["derive", "env"] }
 clap_complete = "4.5.37"
 ctrlc = "3.4.5"
 dunce = "1.0.5"
+enum_dispatch = "0.3.13"
 fancy-regex = "0.14.0"
 fs-err = "2.11.0"
 fs2 = "0.4.3"

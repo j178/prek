@@ -25,6 +25,7 @@ use crate::git;
 use crate::git::{get_diff, git_cmd, GIT};
 use crate::hook::Hook;
 use crate::identify::tags_from_path;
+use crate::languages::LanguageImpl;
 use crate::printer::Printer;
 use crate::store::Store;
 

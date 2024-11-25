@@ -13,10 +13,10 @@ use url::Url;
 
 use crate::config::{
     self, read_config, read_manifest, ConfigLocalHook, ConfigRemoteHook, ConfigRepo, ConfigWire,
-    Language, ManifestHook, Stage, CONFIG_FILE, MANIFEST_FILE,
+    ManifestHook, Stage, CONFIG_FILE, MANIFEST_FILE,
 };
 use crate::fs::{Simplified, CWD};
-use crate::languages::DEFAULT_VERSION;
+use crate::languages::{Language, LanguageImpl, DEFAULT_VERSION};
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::warn_user;
@@ -340,7 +340,8 @@ impl HookBuilder {
                 .and_then(|v| v.get(&language).cloned());
         }
         if self.config.language_version.is_none() {
-            self.config.language_version = Some(language.default_version().to_string());
+            self.config.language_version =
+                Some(Language::from(language).default_version().to_string());
         }
 
         if self.config.stages.is_none() {
@@ -374,7 +375,7 @@ impl HookBuilder {
     /// Check the hook configuration.
     fn check(&self) {
         let language = self.config.language;
-        if language.environment_dir().is_none() {
+        if Language::from(language).environment_dir().is_none() {
             if self.config.language_version != Some(DEFAULT_VERSION.to_string()) {
                 warn_user!(
                     "Language {} does not need environment, but language_version is set",
@@ -402,7 +403,7 @@ impl HookBuilder {
             id: self.config.id,
             name: self.config.name,
             entry: self.config.entry,
-            language: self.config.language,
+            language: self.config.language.into(),
             alias: self.config.alias.expect("alias not set"),
             files: self.config.files,
             exclude: self.config.exclude,

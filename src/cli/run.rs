@@ -15,6 +15,7 @@ use crate::config::Stage;
 use crate::fs::{normalize_path, Simplified};
 use crate::git;
 use crate::hook::{Hook, Project};
+use crate::languages::LanguageImpl;
 use crate::printer::Printer;
 use crate::run::{run_hooks, FilenameFilter, WorkTreeKeeper};
 use crate::store::Store;

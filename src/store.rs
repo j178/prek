@@ -10,6 +10,7 @@ use crate::config::ConfigRemoteRepo;
 use crate::fs::{copy_dir_all, LockedFile};
 use crate::git::clone_repo;
 use crate::hook::{Hook, Repo};
+use crate::languages::LanguageImpl;
 use crate::printer::Printer;
 
 #[derive(Debug, Error)]
