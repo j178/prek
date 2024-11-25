@@ -61,6 +61,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
+          # Add a key to invalidate previous caches.
+          key: 1
           workspaces: ${{ env.PRE_COMMIT_WORKSPACE }}
 
       - name: "Install Rust toolchain"
