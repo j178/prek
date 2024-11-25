@@ -67,6 +67,7 @@ jobs:
         run: rustup component add clippy
 
       - name: "Clippy"
+        working-directory: ${{ env.PRE_COMMIT_WORKSPACE }}
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-shear:
