@@ -1,7 +1,7 @@
-# This creates a 20GB dev drive, and exports all required environment
+# This creates a 10GB dev drive, and exports all required environment
 # variables so that rustup, pre-commit and others all use the dev drive as much
 # as possible.
-$Volume = New-VHD -Path C:/pre-commit_dev_drive.vhdx -SizeBytes 20GB |
+$Volume = New-VHD -Path C:/pre-commit_dev_drive.vhdx -SizeBytes 10GB |
 					Mount-VHD -Passthru |
 					Initialize-Disk -Passthru |
 					New-Partition -AssignDriveLetter -UseMaximumSize |
