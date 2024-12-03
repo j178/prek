@@ -1,7 +1,7 @@
 # This creates a 10GB dev drive, and exports all required environment
-# variables so that rustup, pre-commit and others all use the dev drive as much
+# variables so that rustup, prefligit and others all use the dev drive as much
 # as possible.
-$Volume = New-VHD -Path C:/pre-commit_dev_drive.vhdx -SizeBytes 10GB |
+$Volume = New-VHD -Path C:/prefligit_dev_drive.vhdx -SizeBytes 10GB |
 					Mount-VHD -Passthru |
 					Initialize-Disk -Passthru |
 					New-Partition -AssignDriveLetter -UseMaximumSize |
@@ -10,7 +10,7 @@ $Volume = New-VHD -Path C:/pre-commit_dev_drive.vhdx -SizeBytes 10GB |
 Write-Output $Volume
 
 $Drive = "$($Volume.DriveLetter):"
-$Tmp = "$($Drive)/pre-commit-tmp"
+$Tmp = "$($Drive)/prefligit-tmp"
 
 # Create the directory ahead of time in an attempt to avoid race-conditions
 New-Item $Tmp -ItemType Directory
@@ -19,8 +19,8 @@ Write-Output `
 	"DEV_DRIVE=$($Drive)" `
 	"TMP=$($Tmp)" `
 	"TEMP=$($Tmp)" `
-	"PRE_COMMIT_INTERNAL__TEST_DIR=$($Tmp)" `
+	"PREFLIGIT_INTERNAL__TEST_DIR=$($Tmp)" `
 	"RUSTUP_HOME=$($Drive)/.rustup" `
 	"CARGO_HOME=$($Drive)/.cargo" `
-	"PRE_COMMIT_WORKSPACE=$($Drive)/pre-commit" `
+	"PREFLIGIT_WORKSPACE=$($Drive)/prefligit" `
 	>> $env:GITHUB_ENV

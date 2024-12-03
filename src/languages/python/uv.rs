@@ -22,7 +22,7 @@ pub(crate) async fn ensure_uv() -> Result<PathBuf> {
         return Ok(uv);
     }
 
-    // 2) Check if `uv` is installed by `pre-commit-rs`
+    // 2) Check if `uv` is installed by `prefligit`
     let store = Store::from_settings()?;
 
     let uv_dir = store.uv_path();

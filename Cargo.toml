@@ -1,10 +1,10 @@
 [package]
-name = "pre-commit-rs"
+name = "prefligit"
 version = "0.0.5"
 authors = ["j178 <hi@j178.dev>"]
 description = "pre-commit implemeneted in Rust"
-repository = "https://github.com/j178/pre-commit-rs"
-homepage = "https://github.com/j178/pre-commit-rs"
+repository = "https://github.com/j178/prefligit"
+homepage = "https://github.com/j178/prefligit"
 edition = "2021"
 license-file = "LICENSE"
 # `cargo publish` failed because of this, disabled for now.
@@ -12,7 +12,7 @@ license-file = "LICENSE"
 
 [[bin]]
 path = "src/main.rs"
-name = "pre-commit"
+name = "prefligit"
 
 [features]
 default = ["docker"]

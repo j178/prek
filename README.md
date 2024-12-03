@@ -1,7 +1,7 @@
-# pre-commit-rs
+# prefligit
 
 ![Development Status](https://img.shields.io/badge/Development-Early_Stage-yellowgreen)
-[![CI](https://github.com/j178/pre-commit-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/j178/pre-commit-rs/actions/workflows/ci.yml)
+[![CI](https://github.com/j178/prefligit/actions/workflows/ci.yml/badge.svg)](https://github.com/j178/prefligit/actions/workflows/ci.yml)
 
 A reimplementation of the [pre-commit](https://pre-commit.com/) tool in Rust, providing a faster and dependency-free alternative.
 It aims to be a drop-in replacement for the original tool while also providing some more advanced features.
@@ -23,37 +23,37 @@ It aims to be a drop-in replacement for the original tool while also providing s
 
 ### Standalone installer
 
-`pre-commit-rs` provides a standalone installer script to download and install the tool:
+`prefligit` provides a standalone installer script to download and install the tool:
 
 ```console
 # On Linux and macOS
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/pre-commit-rs/releases/download/v0.0.5/pre-commit-rs-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prefligit/releases/download/v0.0.6/prefligit-installer.sh | sh
 
 # On Windows
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/pre-commit-rs/releases/download/v0.0.5/pre-commit-rs-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prefligit/releases/download/v0.0.6/prefligit-installer.ps1 | iex"
 ```
 
 ### PyPI
 
-`pre-commit-rs` is published as Python binary wheel to PyPI under the name `pre-commit-rusty`,
+`prefligit` is published as Python binary wheel to PyPI under the name `pre-commit-rusty`,
 you can install it using `pip`, `uv` (recommended), or `pipx`:
 
 ```console
-pip install pre-commit-rusty
+pip install prefligit
 
 # or
 
-uv tool install pre-commit-rusty
+uv tool install prefligit
 
 # or
 
-pipx install pre-commit-rusty
+pipx install prefligit
 ```
 
 ### Homebrew
 
 ```console
-brew install j178/tap/pre-commit-rs
+brew install j178/tap/prefligit
 ```
 
 ### Cargo
@@ -61,23 +61,20 @@ brew install j178/tap/pre-commit-rs
 Build from source using Cargo:
 
 ```console
-cargo install --locked pre-commit-rs
+cargo install --locked prefligit
 ```
 
 Install from the binary directly using `cargo binstall`:
 
 ```console
-cargo binstall pre-commit-rs
+cargo binstall prefligit
 ```
 
 ### GitHub Releases
 
-`pre-commit-rs` release artifacts can be downloaded directly from the [GitHub releases](https://github.com/j178/pre-commit-rs/releases).
+`prefligit` release artifacts can be downloaded directly from the [GitHub releases](https://github.com/j178/prefligit/releases).
 
 ## Usage
-
-> [!NOTE]
-> The binary executable is named `pre-commit` (or `pre-commit.exe` on Windows) - without the `-rs` suffix. It should be available in your `PATH` after installation.
 
 This tool is designed to be a drop-in replacement for the original pre-commit tool, so you can use it with your existing configurations and hooks.
 

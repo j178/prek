@@ -180,7 +180,7 @@ pub(crate) enum Command {
     #[command(hide = true)]
     HookImpl(HookImplArgs),
 
-    /// `pre-commit-rs` self management.
+    /// `prefligit` self management.
     #[command(name = "self")]
     Self_(SelfNamespace),
 
@@ -317,14 +317,14 @@ pub struct SelfNamespace {
 
 #[derive(Debug, Subcommand)]
 pub enum SelfCommand {
-    /// Update pre-commit-rs.
+    /// Update prefligit.
     Update(SelfUpdateArgs),
 }
 
 #[derive(Debug, Args)]
 pub struct SelfUpdateArgs {
     /// Update to the specified version.
-    /// If not provided, pre-commit-rs will update to the latest version.
+    /// If not provided, prefligit will update to the latest version.
     pub target_version: Option<String>,
 
     /// A GitHub token for authentication.

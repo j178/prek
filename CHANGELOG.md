@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.0.6
+
+### Breaking changes
+
+In this release, we’ve renamed the project to `prefligit` (a deliberate misspelling of preflight) to prevent confusion with the existing pre-commit tool. For further information, refer to issue #73.
+
+- The command-line name is now `prefligit`. We suggest uninstalling any previous version of `pre-commit-rs` and installing `prefligit` from scratch.
+- The PyPI package is now listed as [`prefligit`](https://pypi.org/project/prefligit/).
+- The Cargo package is also now [`prefligit`](https://crates.io/crates/prefligit).
+- The Homebrew formula has been updated to `prefligit`.
+
+### Enhancements
+
+- Support `docker_image` language ([#113](https://github.com/j178/pre-commit-rs/pull/113))
+- Support `init-templatedir` subcommand ([#101](https://github.com/j178/pre-commit-rs/pull/101))
+- Implement get filenames from merge conflicts ([#103](https://github.com/j178/pre-commit-rs/pull/103))
+
+### Bug fixes
+
+- Fix `prefligit install --hook-type` name ([#102](https://github.com/j178/pre-commit-rs/pull/102))
+
+### Other changes
+
+- Apply color option to log ([#100](https://github.com/j178/pre-commit-rs/pull/100))
+- Improve tests ([#106](https://github.com/j178/pre-commit-rs/pull/106))
+- Remove intermedia Language enum ([#107](https://github.com/j178/pre-commit-rs/pull/107))
+- Run `cargo clippy` in the dev drive workspace ([#115](https://github.com/j178/pre-commit-rs/pull/115))
+
 ## 0.0.5
 
 ### Enhancements

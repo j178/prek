@@ -63,13 +63,13 @@ impl TestContext {
     }
 
     pub fn test_bucket_dir() -> PathBuf {
-        env::var("PRE_COMMIT_INTERNAL__TEST_DIR")
+        env::var("PREFLIGIT_INTERNAL__TEST_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
                 etcetera::base_strategy::choose_base_strategy()
                     .expect("Failed to find base strategy")
                     .data_dir()
-                    .join("pre-commit-rs")
+                    .join("prefligit")
                     .join("tests")
             })
     }
@@ -192,14 +192,14 @@ impl TestContext {
         Command::new("git")
             .arg("config")
             .arg("user.name")
-            .arg("Pre-Commit Test")
+            .arg("Prefligit Test")
             .current_dir(&self.temp_dir)
             .assert()
             .success();
         Command::new("git")
             .arg("config")
             .arg("user.email")
-            .arg("test@pre-commit-rs.dev")
+            .arg("test@prefligit.dev")
             .current_dir(&self.temp_dir)
             .assert()
             .success();
