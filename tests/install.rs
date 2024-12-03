@@ -13,12 +13,12 @@ fn install() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
 
-    // Install `pre-commit` hook.
+    // Install `prefligit` hook.
     cmd_snapshot!(context.filters(), context.install(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    pre-commit installed at .git/hooks/pre-commit
+    prefligit installed at .git/hooks/pre-commit
 
     ----- stderr -----
     "#);
@@ -35,10 +35,9 @@ fn install() -> anyhow::Result<()> {
 
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
-            PRE_COMMIT="[CURRENT_EXE]"
+            PREFLIGIT="[CURRENT_EXE]"
 
-            exec "$PRE_COMMIT" "${ARGS[@]}"
-
+            exec "$PREFLIGIT" "${ARGS[@]}"
             "##);
         }
     );
@@ -54,8 +53,8 @@ fn install() -> anyhow::Result<()> {
     exit_code: 0
     ----- stdout -----
     Hook already exists at .git/hooks/pre-commit, move it to .git/hooks/pre-commit.legacy.
-    pre-commit installed at .git/hooks/pre-commit
-    pre-commit installed at .git/hooks/post-commit
+    prefligit installed at .git/hooks/pre-commit
+    prefligit installed at .git/hooks/post-commit
 
     ----- stderr -----
     "#);
@@ -71,10 +70,9 @@ fn install() -> anyhow::Result<()> {
 
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
-            PRE_COMMIT="[CURRENT_EXE]"
+            PREFLIGIT="[CURRENT_EXE]"
 
-            exec "$PRE_COMMIT" "${ARGS[@]}"
-
+            exec "$PREFLIGIT" "${ARGS[@]}"
             "##);
         }
     );
@@ -96,10 +94,9 @@ fn install() -> anyhow::Result<()> {
 
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
-            PRE_COMMIT="[CURRENT_EXE]"
+            PREFLIGIT="[CURRENT_EXE]"
 
-            exec "$PRE_COMMIT" "${ARGS[@]}"
-
+            exec "$PREFLIGIT" "${ARGS[@]}"
             "##);
         }
     );
@@ -110,9 +107,9 @@ fn install() -> anyhow::Result<()> {
     exit_code: 0
     ----- stdout -----
     Overwriting existing hook at .git/hooks/pre-commit
-    pre-commit installed at .git/hooks/pre-commit
+    prefligit installed at .git/hooks/pre-commit
     Overwriting existing hook at .git/hooks/post-commit
-    pre-commit installed at .git/hooks/post-commit
+    prefligit installed at .git/hooks/post-commit
 
     ----- stderr -----
     "#);
@@ -129,10 +126,9 @@ fn install() -> anyhow::Result<()> {
 
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
-            PRE_COMMIT="[CURRENT_EXE]"
+            PREFLIGIT="[CURRENT_EXE]"
 
-            exec "$PRE_COMMIT" "${ARGS[@]}"
-
+            exec "$PREFLIGIT" "${ARGS[@]}"
             "##);
         }
     );
@@ -148,10 +144,9 @@ fn install() -> anyhow::Result<()> {
 
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
-            PRE_COMMIT="[CURRENT_EXE]"
+            PREFLIGIT="[CURRENT_EXE]"
 
-            exec "$PRE_COMMIT" "${ARGS[@]}"
-
+            exec "$PREFLIGIT" "${ARGS[@]}"
             "##);
         }
     );
@@ -201,7 +196,7 @@ fn uninstall() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    .git/hooks/pre-commit is not managed by pre-commit, skipping.
+    .git/hooks/pre-commit is not managed by prefligit, skipping.
     "#);
 
     // Restore previous hook.
@@ -248,7 +243,7 @@ fn init_template_dir() {
     success: true
     exit_code: 0
     ----- stdout -----
-    pre-commit installed at .git/hooks/pre-commit
+    prefligit installed at .git/hooks/pre-commit
 
     ----- stderr -----
     `init.templateDir` not set to the target directory

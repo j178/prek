@@ -76,7 +76,7 @@ impl From<ColorChoice> for anstream::ColorChoice {
 
 #[derive(Parser)]
 #[command(
-    name = "pre-commit",
+    name = "prefligit",
     author,
     version,
     about = "pre-commit reimplemented in Rust"
@@ -135,7 +135,7 @@ pub(crate) struct GlobalArgs {
     #[arg(global = true, short, long, action = ArgAction::Count)]
     pub(crate) verbose: u8,
 
-    /// Display the pre-commit version.
+    /// Display the prefligit version.
     #[arg(global = true, short = 'V', long, action = clap::ArgAction::Version)]
     version: Option<bool>,
 
@@ -148,14 +148,14 @@ pub(crate) struct GlobalArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Install the git pre-commit hook.
+    /// Install the git prefligit hook.
     #[command(name = "install")]
     Install(InstallArgs),
     /// Create hook environments for all hooks used in the config file.
     InstallHooks,
     /// Run hooks.
     Run(Box<RunArgs>),
-    /// Uninstall the pre-commit script.
+    /// Uninstall the prefligit script.
     Uninstall(UninstallArgs),
     /// Validate `.pre-commit-config.yaml` files.
     ValidateConfig(ValidateConfigArgs),

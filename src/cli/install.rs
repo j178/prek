@@ -136,13 +136,13 @@ fn install_hook_script(
         args.push("--skip-on-missing-config".to_string());
     }
 
-    let pre_commit = std::env::current_exe()?;
-    let pre_commit = pre_commit.simplified().display().to_string();
+    let prefligit = std::env::current_exe()?;
+    let pre_commit = prefligit.simplified().display().to_string();
     let hook_script = HOOK_TMPL
         .replace("ARGS=(hook-impl)", &format!("ARGS=({})", args.join(" ")))
         .replace(
-            r#"PRE_COMMIT="pre-commit""#,
-            &format!(r#"PRE_COMMIT="{pre_commit}""#),
+            r#"PREFLIGIT="prefligit""#,
+            &format!(r#"PREFLIGIT="{pre_commit}""#),
         );
     fs_err::OpenOptions::new()
         .write(true)
@@ -162,7 +162,7 @@ fn install_hook_script(
 
     writeln!(
         printer.stdout(),
-        "pre-commit installed at {}",
+        "prefligit installed at {}",
         hook_path.user_display().cyan()
     )?;
 
@@ -178,9 +178,9 @@ ARGS=(hook-impl)
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ARGS+=(--hook-dir "$HERE" -- "$@")
-PRE_COMMIT="pre-commit"
+PREFLIGIT="prefligit"
 
-exec "$PRE_COMMIT" "${ARGS[@]}"
+exec "$PREFLIGIT" "${ARGS[@]}"
 
 "# };
 
@@ -190,7 +190,7 @@ static PRIOR_HASHES: &[&str] = &[];
 // Use a different hash from `pre-commit` since our script is different.
 static CURRENT_HASH: &str = "182c10f181da4464a3eec51b83331688";
 
-/// Checks if the script contains any of the hashes that `pre-commit` has used in the past.
+/// Checks if the script contains any of the hashes that `prefligit` has used in the past.
 fn is_our_script(hook_path: &Path) -> Result<bool> {
     let content = fs_err::read_to_string(hook_path)?;
     Ok(std::iter::once(CURRENT_HASH)
@@ -217,7 +217,7 @@ pub(crate) async fn uninstall(
         } else if !is_our_script(&hook_path)? {
             writeln!(
                 printer.stderr(),
-                "{} is not managed by pre-commit, skipping.",
+                "{} is not managed by prefligit, skipping.",
                 hook_path.user_display().cyan()
             )?;
         } else {

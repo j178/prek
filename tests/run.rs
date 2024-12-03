@@ -778,7 +778,7 @@ fn merge_conflicts() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    You have unmerged paths. Resolve them before running pre-commit.
+    You have unmerged paths. Resolve them before running prefligit.
     "#);
 
     // Fix the conflict and run again.

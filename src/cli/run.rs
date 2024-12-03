@@ -46,7 +46,7 @@ pub(crate) async fn run(
     if should_stash && git::has_unmerged_paths().await? {
         writeln!(
             printer.stderr(),
-            "You have unmerged paths. Resolve them before running pre-commit."
+            "You have unmerged paths. Resolve them before running prefligit."
         )?;
         return Ok(ExitStatus::Failure);
     }

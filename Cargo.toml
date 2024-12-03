@@ -10,10 +10,6 @@ license-file = "LICENSE"
 # `cargo publish` failed because of this, disabled for now.
 # include = ["licenses/.*"]
 
-[[bin]]
-path = "src/main.rs"
-name = "prefligit"
-
 [features]
 default = ["docker"]
 profiler = ["dep:pprof", "profiler-flamegraph"]
@@ -143,7 +139,7 @@ publish-jobs = ["./publish", "homebrew"]
 # A GitHub repo to push Homebrew formulas to
 tap = "j178/homebrew-tap"
 # Customize the Homebrew formula name
-formula = "pre-commit-rs"
+formula = "prefligit"
 # Whether to install an updater program
 install-updater = false
 # Path that installers should place binaries in

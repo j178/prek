@@ -47,7 +47,7 @@ impl TestContext {
                 .map(|pattern| (pattern, "[HOME]/".to_string())),
         );
 
-        let current_exe = assert_cmd::cargo::cargo_bin("pre-commit");
+        let current_exe = assert_cmd::cargo::cargo_bin("prefligit");
         filters.extend(
             Self::path_patterns(&current_exe)
                 .into_iter()
@@ -112,7 +112,7 @@ impl TestContext {
     }
 
     pub fn command(&self) -> Command {
-        let bin = assert_cmd::cargo::cargo_bin("pre-commit");
+        let bin = assert_cmd::cargo::cargo_bin("prefligit");
         let mut cmd = Command::new(bin);
         cmd.current_dir(self.workdir());
         cmd.env("PRE_COMMIT_HOME", &*self.home_dir);
@@ -177,7 +177,7 @@ impl TestContext {
         &self.temp_dir
     }
 
-    /// Initialize a sample project for pre-commit.
+    /// Initialize a sample project for prefligit.
     pub fn init_project(&self) {
         Command::new("git")
             .arg("init")
@@ -241,7 +241,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d]|\.\.)", "/$1"),
-    (r"pre-commit.exe", "pre-commit"),
+    (r"prefligit.exe", "prefligit"),
     // The exact message is host language dependent
     (
         r"Caused by: .* \(os error 2\)",

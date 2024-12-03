@@ -29,7 +29,7 @@ pub(crate) async fn hook_impl(
                     "- To temporarily silence this, run `PRE_COMMIT_ALLOW_NO_CONFIG=1 git ...`"
                 );
                 eprintln!("- To permanently silence this, install hooks with the `--allow-missing-config` flag");
-                eprintln!("- To uninstall hooks, run `pre-commit uninstall`");
+                eprintln!("- To uninstall hooks, run `prefligit uninstall`");
                 Ok(ExitStatus::Failure)
             };
         }

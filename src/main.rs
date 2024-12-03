@@ -128,7 +128,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         cli.command = Some(Command::Run(Box::new(cli.run_args.clone())));
     }
 
-    debug!("pre-commit: {}", env!("CARGO_PKG_VERSION"));
+    debug!("prefligit: {}", env!("CARGO_PKG_VERSION"));
 
     match get_root().await {
         Ok(root) => {
