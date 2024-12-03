@@ -10,6 +10,10 @@ It aims to be a drop-in replacement for the original tool while also providing s
 > This project is still in very early development, only a few of the original pre-commit features are implemented.
 > It is not recommended for normal use yet, but feel free to try it out and provide feedback.
 
+> [!NOTE]
+> This project was previously named `pre-commit-rs`, but it was renamed to `prefligit` to prevent confusion with the existing pre-commit tool.
+> See #73 for more information.
+
 ## Features
 
 - A single binary with no dependencies, does not require Python or any other runtime.
