@@ -39,8 +39,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prefligit/rel
 
 ### PyPI
 
-`prefligit` is published as Python binary wheel to PyPI under the name `pre-commit-rusty`,
-you can install it using `pip`, `uv` (recommended), or `pipx`:
+`prefligit` is published as Python binary wheel to PyPI, you can install it using `pip`, `uv` (recommended), or `pipx`:
 
 ```console
 pip install prefligit
