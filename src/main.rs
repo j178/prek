@@ -46,8 +46,8 @@ pub(crate) enum Level {
 fn setup_logging(level: Level) -> Result<()> {
     let directive = match level {
         Level::Default => tracing::level_filters::LevelFilter::OFF.into(),
-        Level::Verbose => Directive::from_str("pre_commit=debug")?,
-        Level::ExtraVerbose => Directive::from_str("pre_commit=trace")?,
+        Level::Verbose => Directive::from_str("prefligit=debug")?,
+        Level::ExtraVerbose => Directive::from_str("prefligit=trace")?,
     };
 
     let filter = EnvFilter::builder()
