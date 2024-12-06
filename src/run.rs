@@ -1,6 +1,6 @@
 use std::cmp::max;
 use std::collections::HashMap;
-use std::fmt::Write as _;
+use std::fmt::{Display, Write as _};
 use std::future::Future;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use anstream::{eprintln, ColorChoice};
 use anyhow::Result;
 use fancy_regex::{self as regex, Regex};
-use owo_colors::{OwoColorize, Style};
+use owo_colors::OwoColorize;
 use rand::prelude::{SliceRandom, StdRng};
 use rand::SeedableRng;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -102,15 +102,10 @@ impl<'a> FileTagFilter<'a> {
     }
 }
 
-fn status_line(start: &str, cols: usize, end_msg: &str, end_color: Style, postfix: &str) -> String {
+fn status_line(start: &str, cols: usize, postfix: &str, end_msg: impl Display) -> String {
+    let end_msg = end_msg.to_string();
     let dots = cols - start.width_cjk() - end_msg.len() - postfix.len() - 1;
-    format!(
-        "{}{}{}{}",
-        start,
-        ".".repeat(dots),
-        postfix,
-        end_msg.style(end_color)
-    )
+    format!("{}{}{}{}", start, ".".repeat(dots), postfix, end_msg,)
 }
 
 fn calculate_columns(hooks: &[Hook]) -> usize {
@@ -207,13 +202,7 @@ async fn run_hook(
         writeln!(
             printer.stdout(),
             "{}",
-            status_line(
-                &hook.name,
-                columns,
-                SKIPPED,
-                Style::new().black().on_yellow(),
-                "",
-            )
+            status_line(&hook.name, columns, "", SKIPPED.black().on_yellow())
         )?;
         return Ok((true, diff));
     }
@@ -241,13 +230,7 @@ async fn run_hook(
         writeln!(
             printer.stdout(),
             "{}",
-            status_line(
-                &hook.name,
-                columns,
-                SKIPPED,
-                Style::new().black().on_cyan(),
-                NO_FILES,
-            )
+            status_line(&hook.name, columns, NO_FILES, SKIPPED.black().on_cyan())
         )?;
         return Ok((true, diff));
     }
