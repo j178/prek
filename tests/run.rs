@@ -37,8 +37,6 @@ fn run_basic() -> Result<()> {
     success: false
     exit_code: 1
     ----- stdout -----
-    Cloning https://github.com/pre-commit/pre-commit-hooks@v5.0.0
-    Installing environment for https://github.com/pre-commit/pre-commit-hooks@v5.0.0
     trim trailing whitespace.................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
@@ -132,8 +130,6 @@ fn local_need_install() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Preparing local repo local
-    Installing environment for local
     local....................................................................Passed
 
     ----- stderr -----

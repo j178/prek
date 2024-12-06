@@ -23,8 +23,6 @@ fn docker() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Cloning https://github.com/j178/pre-commit-docker-hooks@master
-    Installing environment for https://github.com/j178/pre-commit-docker-hooks@master
     Hello World..............................................................Passed
     - hook id: hello-world
     - duration: [TIME]
