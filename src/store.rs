@@ -1,4 +1,3 @@
-use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -10,7 +9,6 @@ use crate::config::ConfigRemoteRepo;
 use crate::fs::{copy_dir_all, LockedFile};
 use crate::git::clone_repo;
 use crate::hook::{Hook, Repo};
-use crate::printer::Printer;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -177,12 +175,7 @@ impl Store {
     /// Prepare a local repo for a local hook.
     /// All local hooks with same additional dependencies, e.g. no dependencies,
     /// are stored in the same directory (even they use different language).
-    pub fn prepare_local_repo(
-        &self,
-        hook: &Hook,
-        deps: &[String],
-        printer: Printer,
-    ) -> Result<PathBuf, Error> {
+    pub fn prepare_local_repo(&self, hook: &Hook, deps: &[String]) -> Result<PathBuf, Error> {
         const LOCAL_NAME: &str = "local";
         const LOCAL_REV: &str = "1";
 
@@ -199,7 +192,6 @@ impl Store {
                 .tempdir_in(&self.path)?;
 
             let path = temp.path().to_string_lossy().to_string();
-            writeln!(printer.stdout(), "Preparing local repo {}", hook.id)?;
             debug!(hook = hook.id, path, "Preparing local repo");
             make_local_repo(LOCAL_NAME, temp.path())?;
             self.insert_repo(LOCAL_NAME, LOCAL_REV, &path, deps)?;
@@ -214,7 +206,6 @@ impl Store {
         &self,
         repo_config: &ConfigRemoteRepo,
         deps: &[String],
-        printer: Printer,
     ) -> Result<PathBuf, Error> {
         if let Some((_, _, path)) = self.get_repo(
             repo_config.repo.as_str(),
@@ -232,12 +223,6 @@ impl Store {
         let path = temp.path().to_string_lossy().to_string();
 
         if deps.is_empty() {
-            writeln!(
-                printer.stdout(),
-                "Cloning {}@{}",
-                repo_config.repo,
-                repo_config.rev
-            )?;
             debug!(
                 target = path,
                 repo = format!("{}@{}", repo_config.repo, repo_config.rev),
@@ -251,13 +236,6 @@ impl Store {
             let (_, _, base_repo_path) = self
                 .get_repo(repo_config.repo.as_str(), repo_config.rev.as_str(), &[])?
                 .expect("base repo should be cloned before");
-            writeln!(
-                printer.stdout(),
-                "Preparing {}@{} with dependencies {}",
-                repo_config.repo,
-                repo_config.rev,
-                deps.join(","),
-            )?;
             debug!(
                 source = base_repo_path,
                 target = path,

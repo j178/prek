@@ -17,7 +17,6 @@ use crate::config::{
 };
 use crate::fs::{Simplified, CWD};
 use crate::languages::DEFAULT_VERSION;
-use crate::printer::Printer;
 use crate::store::Store;
 use crate::warn_user;
 
@@ -151,17 +150,22 @@ impl Project {
         &self.config_path
     }
 
-    async fn init_repos(&mut self, store: &Store, printer: Printer) -> Result<(), Error> {
+    async fn init_repos(
+        &mut self,
+        store: &Store,
+        reporter: &dyn HookInitReporter,
+    ) -> Result<(), Error> {
+        // TODO: unique repos
         let mut repos = Vec::with_capacity(self.config.repos.len());
 
-        // TODO: progress bar
         let mut tasks = FuturesUnordered::new();
         for (idx, repo) in self.config.repos.iter().enumerate() {
             match repo {
                 ConfigRepo::Remote(repo) => {
                     tasks.push(async move {
-                        let path = store.prepare_remote_repo(repo, &[], printer).await;
-                        (idx, path)
+                        let progress = reporter.on_repo_clone_start(&format!("{repo}"));
+                        let path = store.prepare_remote_repo(repo, &[]).await;
+                        (idx, path, progress)
                     });
                 }
                 ConfigRepo::Local(repo) => {
@@ -174,7 +178,7 @@ impl Project {
             }
         }
 
-        while let Some((idx, repo_path)) = tasks.next().await {
+        while let Some((idx, repo_path, progress)) = tasks.next().await {
             let repo_path = repo_path.map_err(Box::new)?;
             let ConfigRepo::Remote(repo_config) = &self.config.repos[idx] else {
                 unreachable!();
@@ -184,6 +188,7 @@ impl Project {
                 &repo_config.rev,
                 &repo_path.to_string_lossy(),
             )?;
+            reporter.on_repo_clone_complete(progress);
             repos.push((idx, Rc::new(repo)));
         }
 
@@ -197,13 +202,12 @@ impl Project {
     pub async fn init_hooks(
         &mut self,
         store: &Store,
-        printer: Printer,
+        reporter: &dyn HookInitReporter,
     ) -> Result<Vec<Hook>, Error> {
-        self.init_repos(store, printer).await?;
+        self.init_repos(store, reporter).await?;
 
         let mut hooks = Vec::new();
 
-        // TODO: progress bar
         for (repo_config, repo) in zip_eq(self.config.repos.iter(), self.repos.iter()) {
             match repo_config {
                 ConfigRepo::Remote(repo_config) => {
@@ -229,11 +233,7 @@ impl Project {
                         } else {
                             // Prepare hooks with `additional_dependencies` (they need separate environments).
                             let path = store
-                                .prepare_remote_repo(
-                                    repo_config,
-                                    &hook.additional_dependencies,
-                                    printer,
-                                )
+                                .prepare_remote_repo(repo_config, &hook.additional_dependencies)
                                 .await
                                 .map_err(Box::new)?;
 
@@ -253,7 +253,7 @@ impl Project {
                         // If the hook doesn't need an environment, don't do any preparation.
                         if hook.language.environment_dir().is_some() {
                             let path = store
-                                .prepare_local_repo(&hook, &hook.additional_dependencies, printer)
+                                .prepare_local_repo(&hook, &hook.additional_dependencies)
                                 .map_err(Box::new)?;
 
                             hook = hook.with_path(path);
@@ -271,8 +271,16 @@ impl Project {
             }
         }
 
+        reporter.on_complete();
+
         Ok(hooks)
     }
+}
+
+pub trait HookInitReporter {
+    fn on_repo_clone_start(&self, repo: &str) -> usize;
+    fn on_repo_clone_complete(&self, id: usize);
+    fn on_complete(&self);
 }
 
 struct HookBuilder {

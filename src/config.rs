@@ -381,16 +381,34 @@ pub struct ConfigRemoteRepo {
     pub hooks: Vec<ConfigRemoteHook>,
 }
 
+impl Display for ConfigRemoteRepo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{}", self.repo, self.rev)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ConfigLocalRepo {
     pub repo: String,
     pub hooks: Vec<ConfigLocalHook>,
 }
 
+impl Display for ConfigLocalRepo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("local")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ConfigMetaRepo {
     pub repo: String,
     pub hooks: Vec<ConfigMetaHook>,
+}
+
+impl Display for ConfigMetaRepo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("meta")
+    }
 }
 
 #[derive(Debug, Clone)]

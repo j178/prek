@@ -10,6 +10,7 @@ use owo_colors::OwoColorize;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tracing::{debug, trace};
 
+use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::Stage;
 use crate::fs::{normalize_path, Simplified};
@@ -67,8 +68,10 @@ pub(crate) async fn run(
     let mut project = Project::new(config_file)?;
     let store = Store::from_settings()?.init()?;
 
+    let reporter = HookInitReporter::from(printer);
+
     let lock = store.lock_async().await?;
-    let hooks = project.init_hooks(&store, printer).await?;
+    let hooks = project.init_hooks(&store, &reporter).await?;
 
     let hooks: Vec<_> = hooks
         .into_iter()
@@ -117,7 +120,8 @@ pub(crate) async fn run(
         "Hooks going to run: {:?}",
         to_run.iter().map(|h| &h.id).collect::<Vec<_>>()
     );
-    install_hooks(&to_run, printer).await?;
+    let reporter = HookInstallReporter::from(printer);
+    install_hooks(&to_run, &reporter).await?;
     drop(lock);
 
     // Clear any unstaged changes from the git working directory.
@@ -302,12 +306,7 @@ async fn all_filenames(
     Ok(files)
 }
 
-async fn install_hook(hook: &Hook, env_dir: PathBuf, printer: Printer) -> Result<()> {
-    writeln!(
-        printer.stdout(),
-        "Installing environment for {}",
-        hook.repo(),
-    )?;
+async fn install_hook(hook: &Hook, env_dir: PathBuf) -> Result<()> {
     debug!(%hook, target = %env_dir.display(), "Install environment");
 
     if env_dir.try_exists()? {
@@ -324,8 +323,7 @@ async fn install_hook(hook: &Hook, env_dir: PathBuf, printer: Printer) -> Result
     Ok(())
 }
 
-// TODO: progress bar
-pub async fn install_hooks(hooks: &[Hook], printer: Printer) -> Result<()> {
+pub async fn install_hooks(hooks: &[Hook], reporter: &HookInstallReporter) -> Result<()> {
     let to_install = hooks
         .iter()
         .filter(|&hook| !hook.installed())
@@ -334,12 +332,19 @@ pub async fn install_hooks(hooks: &[Hook], printer: Printer) -> Result<()> {
     let mut tasks = FuturesUnordered::new();
     for hook in to_install {
         if let Some(env_dir) = hook.environment_dir() {
-            tasks.push(async move { install_hook(hook, env_dir, printer).await });
+            tasks.push(async move {
+                let progress = reporter.on_install_start(hook);
+                let result = install_hook(hook, env_dir).await;
+                (result, progress)
+            });
         }
     }
-    while let Some(result) = tasks.next().await {
+    while let Some((result, progress)) = tasks.next().await {
+        reporter.on_install_complete(progress);
         result?;
     }
+
+    reporter.on_complete();
 
     Ok(())
 }

@@ -7,6 +7,7 @@ use indoc::indoc;
 use owo_colors::OwoColorize;
 use same_file::is_same_file;
 
+use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run;
 use crate::cli::{ExitStatus, HookType};
 use crate::fs::Simplified;
@@ -64,8 +65,10 @@ pub(crate) async fn install(
         let store = Store::from_settings()?.init()?;
         let _lock = store.lock_async().await?;
 
-        let hooks = project.init_hooks(&store, printer).await?;
-        run::install_hooks(&hooks, printer).await?;
+        let reporter = HookInitReporter::from(printer);
+        let hooks = project.init_hooks(&store, &reporter).await?;
+        let reporter = HookInstallReporter::from(printer);
+        run::install_hooks(&hooks, &reporter).await?;
     }
 
     Ok(ExitStatus::Success)
