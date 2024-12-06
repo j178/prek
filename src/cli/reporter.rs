@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -25,65 +26,42 @@ impl BarState {
     }
 }
 
-struct SubProgress {
-    state: Arc<Mutex<BarState>>,
-    multi: MultiProgress,
-}
-
-pub(crate) struct HookInitReporter {
+struct ProgressReporter {
     printer: Printer,
     root: ProgressBar,
-    sub: SubProgress,
+    state: Arc<Mutex<BarState>>,
+    children: MultiProgress,
 }
 
-impl HookInitReporter {
-    pub(crate) fn new(root: ProgressBar, multi_progress: MultiProgress, printer: Printer) -> Self {
+impl ProgressReporter {
+    fn new(root: ProgressBar, children: MultiProgress, printer: Printer) -> Self {
         Self {
             printer,
             root,
-            sub: SubProgress {
-                state: Arc::default(),
-                multi: multi_progress,
-            },
+            state: Arc::default(),
+            children,
         }
     }
-}
 
-impl From<Printer> for HookInitReporter {
-    fn from(printer: Printer) -> Self {
-        let multi = MultiProgress::with_draw_target(printer.target());
-        let root = multi.add(ProgressBar::with_draw_target(None, printer.target()));
-        root.enable_steady_tick(Duration::from_millis(200));
-        root.set_style(
-            ProgressStyle::with_template("{spinner:.white} {msg:.dim}")
-                .unwrap()
-                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
-        );
-        root.set_message("Initializing hooks...");
-        Self::new(root, multi, printer)
-    }
-}
-
-impl hook::HookInitReporter for HookInitReporter {
-    fn on_repo_clone_start(&self, repo: &str) -> usize {
-        let mut state = self.sub.state.lock().unwrap();
+    fn on_start(&self, msg: impl Into<Cow<'static, str>>) -> usize {
+        let mut state = self.state.lock().unwrap();
         let id = state.id();
 
-        let progress = self.sub.multi.insert_before(
+        let progress = self.children.insert_before(
             &self.root,
             ProgressBar::with_draw_target(None, self.printer.target()),
         );
 
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        progress.set_message(format!("{} {}", "Cloning".bold().cyan(), repo.dimmed(),));
+        progress.set_message(msg);
 
         state.bars.insert(id, progress);
         id
     }
 
-    fn on_repo_clone_complete(&self, id: usize) {
+    fn on_progress(&self, id: usize) {
         let progress = {
-            let mut state = self.sub.state.lock().unwrap();
+            let mut state = self.state.lock().unwrap();
             state.bars.remove(&id).unwrap()
         };
 
@@ -97,58 +75,44 @@ impl hook::HookInitReporter for HookInitReporter {
     }
 }
 
-pub struct HookInstallReporter {
-    printer: Printer,
-    root: ProgressBar,
-    sub: SubProgress,
+pub(crate) struct HookInitReporter {
+    reporter: ProgressReporter,
 }
 
-impl HookInstallReporter {
-    pub fn new(root: ProgressBar, multi_progress: MultiProgress, printer: Printer) -> Self {
-        Self {
-            printer,
-            root,
-            sub: SubProgress {
-                state: Arc::default(),
-                multi: multi_progress,
-            },
-        }
-    }
-
-    pub fn on_install_start(&self, hook: &Hook) -> usize {
-        let mut state = self.sub.state.lock().unwrap();
-        let id = state.id();
-
-        let progress = self.sub.multi.insert_before(
-            &self.root,
-            ProgressBar::with_draw_target(None, self.printer.target()),
+impl From<Printer> for HookInitReporter {
+    fn from(printer: Printer) -> Self {
+        let multi = MultiProgress::with_draw_target(printer.target());
+        let root = multi.add(ProgressBar::with_draw_target(None, printer.target()));
+        root.enable_steady_tick(Duration::from_millis(200));
+        root.set_style(
+            ProgressStyle::with_template("{spinner:.white} {msg:.dim}")
+                .unwrap()
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
+        root.set_message("Initializing hooks...");
 
-        progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        progress.set_message(format!(
-            "{} {}",
-            "Installing".bold().cyan(),
-            hook.id.dimmed(),
-        ));
+        let reporter = ProgressReporter::new(root, multi, printer);
+        Self { reporter }
+    }
+}
 
-        state.bars.insert(id, progress);
-        id
+impl hook::HookInitReporter for HookInitReporter {
+    fn on_clone_start(&self, repo: &str) -> usize {
+        self.reporter
+            .on_start(format!("{} {}", "Cloning".bold().cyan(), repo.dimmed()))
     }
 
-    pub fn on_install_complete(&self, id: usize) {
-        let progress = {
-            let mut state = self.sub.state.lock().unwrap();
-            state.bars.remove(&id).unwrap()
-        };
-
-        self.root.inc(1);
-        progress.finish_and_clear();
+    fn on_clone_complete(&self, id: usize) {
+        self.reporter.on_progress(id);
     }
 
-    pub fn on_complete(&self) {
-        self.root.set_message("");
-        self.root.finish_and_clear();
+    fn on_complete(&self) {
+        self.reporter.on_complete();
     }
+}
+
+pub struct HookInstallReporter {
+    reporter: ProgressReporter,
 }
 
 impl From<Printer> for HookInstallReporter {
@@ -162,6 +126,26 @@ impl From<Printer> for HookInstallReporter {
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         root.set_message("Installing hooks...");
-        Self::new(root, multi, printer)
+
+        let reporter = ProgressReporter::new(root, multi, printer);
+        Self { reporter }
+    }
+}
+
+impl HookInstallReporter {
+    pub fn on_install_start(&self, hook: &Hook) -> usize {
+        self.reporter.on_start(format!(
+            "{} {}",
+            "Installing".bold().cyan(),
+            hook.id.dimmed(),
+        ))
+    }
+
+    pub fn on_install_complete(&self, id: usize) {
+        self.reporter.on_progress(id);
+    }
+
+    pub fn on_complete(&self) {
+        self.reporter.on_complete();
     }
 }

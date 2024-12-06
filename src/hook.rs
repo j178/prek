@@ -163,7 +163,7 @@ impl Project {
             match repo {
                 ConfigRepo::Remote(repo) => {
                     tasks.push(async move {
-                        let progress = reporter.on_repo_clone_start(&format!("{repo}"));
+                        let progress = reporter.on_clone_start(&format!("{repo}"));
                         let path = store.prepare_remote_repo(repo, &[]).await;
                         (idx, path, progress)
                     });
@@ -188,7 +188,7 @@ impl Project {
                 &repo_config.rev,
                 &repo_path.to_string_lossy(),
             )?;
-            reporter.on_repo_clone_complete(progress);
+            reporter.on_clone_complete(progress);
             repos.push((idx, Rc::new(repo)));
         }
 
@@ -278,8 +278,8 @@ impl Project {
 }
 
 pub trait HookInitReporter {
-    fn on_repo_clone_start(&self, repo: &str) -> usize;
-    fn on_repo_clone_complete(&self, id: usize);
+    fn on_clone_start(&self, repo: &str) -> usize;
+    fn on_clone_complete(&self, id: usize);
     fn on_complete(&self);
 }
 

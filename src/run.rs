@@ -136,7 +136,6 @@ pub async fn run_hooks(
     let env_vars = Arc::new(env_vars);
 
     let columns = calculate_columns(hooks);
-    // TODO: progress bar, format output
     let mut success = true;
 
     let mut diff = get_diff().await?;
