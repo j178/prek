@@ -79,6 +79,53 @@ fn run_basic() -> Result<()> {
     Ok(())
 }
 
+/// Use same repo multiple times, with same or different revisions.
+#[test]
+fn same_repo() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.workdir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: trailing-whitespace
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: trailing-whitespace
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v4.6.0
+            hooks:
+              - id: trailing-whitespace
+    "});
+
+    cwd.child("file.txt").write_str("Hello, world!\n")?;
+    cwd.child("valid.json").write_str("{}")?;
+    cwd.child("invalid.json").write_str("{}")?;
+    cwd.child("main.py").write_str(r#"print "abc"  "#)?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    trim trailing whitespace.................................................Failed
+    - hook id: trailing-whitespace
+    - exit code: 1
+    - files were modified by this hook
+      Fixing main.py
+    trim trailing whitespace.................................................Passed
+    trim trailing whitespace.................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
 #[test]
 fn local() {
     let context = TestContext::new();

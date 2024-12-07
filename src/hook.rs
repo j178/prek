@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -155,22 +156,46 @@ impl Project {
         store: &Store,
         reporter: &dyn HookInitReporter,
     ) -> Result<(), Error> {
-        // TODO: unique repos
-        let mut repos = Vec::with_capacity(self.config.repos.len());
-
         let mut tasks = FuturesUnordered::new();
-        for (idx, repo) in self.config.repos.iter().enumerate() {
+        let mut seen = HashSet::new();
+        for repo in &self.config.repos {
+            if let ConfigRepo::Remote(repo) = repo {
+                if !seen.insert((&repo.repo, &repo.rev)) {
+                    continue;
+                }
+                tasks.push(async move {
+                    let progress = reporter.on_clone_start(&format!("{repo}"));
+                    let path = store.prepare_remote_repo(repo, &[]).await;
+                    reporter.on_clone_complete(progress);
+
+                    (repo, path)
+                });
+            }
+        }
+
+        let mut remote_repos = HashMap::new();
+        while let Some((repo_config, repo_path)) = tasks.next().await {
+            let repo_path = repo_path.map_err(Box::new)?;
+            let repo = Rc::new(Repo::remote(
+                repo_config.repo.as_str(),
+                &repo_config.rev,
+                &repo_path.to_string_lossy(),
+            )?);
+            remote_repos.insert((&repo_config.repo, &repo_config.rev), repo.clone());
+        }
+
+        let mut repos = Vec::with_capacity(self.config.repos.len());
+        for repo in &self.config.repos {
             match repo {
-                ConfigRepo::Remote(repo) => {
-                    tasks.push(async move {
-                        let progress = reporter.on_clone_start(&format!("{repo}"));
-                        let path = store.prepare_remote_repo(repo, &[]).await;
-                        (idx, path, progress)
-                    });
+                ConfigRepo::Remote(repo_config) => {
+                    let repo = remote_repos
+                        .get(&(&repo_config.repo, &repo_config.rev))
+                        .expect("repo not found");
+                    repos.push(repo.clone());
                 }
                 ConfigRepo::Local(repo) => {
                     let repo = Repo::local(repo.hooks.clone());
-                    repos.push((idx, Rc::new(repo)));
+                    repos.push(Rc::new(repo));
                 }
                 ConfigRepo::Meta(_) => {
                     todo!()
@@ -178,22 +203,7 @@ impl Project {
             }
         }
 
-        while let Some((idx, repo_path, progress)) = tasks.next().await {
-            let repo_path = repo_path.map_err(Box::new)?;
-            let ConfigRepo::Remote(repo_config) = &self.config.repos[idx] else {
-                unreachable!();
-            };
-            let repo = Repo::remote(
-                repo_config.repo.as_str(),
-                &repo_config.rev,
-                &repo_path.to_string_lossy(),
-            )?;
-            reporter.on_clone_complete(progress);
-            repos.push((idx, Rc::new(repo)));
-        }
-
-        repos.sort_unstable_by_key(|(idx, _)| *idx);
-        self.repos = repos.into_iter().map(|(_, repo)| repo).collect();
+        self.repos = repos;
 
         Ok(())
     }
