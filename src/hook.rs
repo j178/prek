@@ -160,7 +160,7 @@ impl Project {
         let mut seen = HashSet::new();
         for repo in &self.config.repos {
             if let ConfigRepo::Remote(repo) = repo {
-                if !seen.insert((&repo.repo, &repo.rev)) {
+                if !seen.insert(repo) {
                     continue;
                 }
                 tasks.push(async move {
@@ -181,16 +181,14 @@ impl Project {
                 &repo_config.rev,
                 &repo_path.to_string_lossy(),
             )?);
-            remote_repos.insert((&repo_config.repo, &repo_config.rev), repo.clone());
+            remote_repos.insert(repo_config, repo.clone());
         }
 
         let mut repos = Vec::with_capacity(self.config.repos.len());
         for repo in &self.config.repos {
             match repo {
                 ConfigRepo::Remote(repo_config) => {
-                    let repo = remote_repos
-                        .get(&(&repo_config.repo, &repo_config.rev))
-                        .expect("repo not found");
+                    let repo = remote_repos.get(repo_config).expect("repo not found");
                     repos.push(repo.clone());
                 }
                 ConfigRepo::Local(repo) => {

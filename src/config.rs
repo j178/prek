@@ -381,6 +381,21 @@ pub struct ConfigRemoteRepo {
     pub hooks: Vec<ConfigRemoteHook>,
 }
 
+impl PartialEq for ConfigRemoteRepo {
+    fn eq(&self, other: &Self) -> bool {
+        self.repo == other.repo && self.rev == other.rev
+    }
+}
+
+impl Eq for ConfigRemoteRepo {}
+
+impl std::hash::Hash for ConfigRemoteRepo {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.repo.hash(state);
+        self.rev.hash(state);
+    }
+}
+
 impl Display for ConfigRemoteRepo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}@{}", self.repo, self.rev)
@@ -474,16 +489,6 @@ impl<'de> Deserialize<'de> for ConfigRepo {
                     hooks,
                 }))
             }
-        }
-    }
-}
-
-impl ConfigRepo {
-    pub fn hook_ids(&self) -> Vec<&str> {
-        match self {
-            ConfigRepo::Remote(repo) => repo.hooks.iter().map(|h| h.id.as_str()).collect(),
-            ConfigRepo::Local(repo) => repo.hooks.iter().map(|h| h.id.as_str()).collect(),
-            ConfigRepo::Meta(repo) => repo.hooks.iter().map(|h| h.id.as_str()).collect(),
         }
     }
 }
