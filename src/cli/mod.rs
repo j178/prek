@@ -2,6 +2,8 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use clap::builder::styling::{AnsiColor, Effects};
+use clap::builder::Styles;
 use clap::{ArgAction, Args, Parser, Subcommand};
 
 use crate::config::{HookType, Stage};
@@ -75,6 +77,12 @@ impl From<ColorChoice> for anstream::ColorChoice {
     }
 }
 
+const STYLES: Styles = Styles::styled()
+    .header(AnsiColor::Green.on_default().effects(Effects::BOLD))
+    .usage(AnsiColor::Green.on_default().effects(Effects::BOLD))
+    .literal(AnsiColor::Cyan.on_default().effects(Effects::BOLD))
+    .placeholder(AnsiColor::Cyan.on_default());
+
 #[derive(Parser)]
 #[command(
     name = "prefligit",
@@ -88,6 +96,7 @@ impl From<ColorChoice> for anstream::ColorChoice {
     disable_help_subcommand = true,
     disable_version_flag = true
 )]
+#[command(styles=STYLES)]
 pub(crate) struct Cli {
     #[command(subcommand)]
     pub(crate) command: Option<Command>,
