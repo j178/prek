@@ -27,9 +27,19 @@ impl LanguageImpl for Python {
 
         let uv = ensure_uv().await?;
 
-        // Set uv cache dir? tools dir? python dir?
+        let uv_cmd = |summary| {
+            #[allow(unused_mut)]
+            let mut cmd = Cmd::new(&uv, summary);
+            // Don't use cache in Windows, multiple uv instances will conflict with each other.
+            // See https://github.com/astral-sh/uv/issues/8664
+            #[cfg(windows)]
+            cmd.env("UV_NO_CACHE", "1");
+            cmd
+        };
+
+        // TODO: Set uv cache dir? tools dir? python dir?
         // Create venv
-        Cmd::new(&uv, "create venv")
+        uv_cmd("create venv")
             .arg("venv")
             .arg(&venv)
             .arg("--python")
@@ -41,7 +51,7 @@ impl LanguageImpl for Python {
         patch_cfg_version_info(&venv).await?;
 
         // Install dependencies
-        Cmd::new(&uv, "install dependencies")
+        uv_cmd("install dependencies")
             .arg("pip")
             .arg("install")
             .arg(".")

@@ -31,7 +31,7 @@ fs2 = "0.4.3"
 futures = "0.3.31"
 home = "0.5.9"
 http = "1.1.0"
-indicatif = { version = "0.17.8", features = ["improved_unicode"] }
+indicatif = "0.17.8"
 indoc = "2.0.5"
 itertools = "0.13.0"
 md5 = "0.7.0"
