@@ -79,7 +79,7 @@ impl From<ColorChoice> for anstream::ColorChoice {
 #[command(
     name = "prefligit",
     author,
-    version,
+    long_version = crate::version::version(),
     about = "pre-commit reimplemented in Rust"
 )]
 #[command(propagate_version = true)]

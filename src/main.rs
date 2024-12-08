@@ -30,6 +30,7 @@ mod process;
 mod profiler;
 mod run;
 mod store;
+mod version;
 mod warnings;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -128,7 +129,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         cli.command = Some(Command::Run(Box::new(cli.run_args.clone())));
     }
 
-    debug!("prefligit: {}", env!("CARGO_PKG_VERSION"));
+    debug!("prefligit: {}", version::version());
 
     match get_root().await {
         Ok(root) => {
@@ -143,8 +144,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             error!("Failed to find git root: {}", err);
         }
     }
-
-    // TODO: read git commit info
 
     macro_rules! show_settings {
         ($arg:expr) => {
