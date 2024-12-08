@@ -5,6 +5,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
+use fancy_regex as regex;
 use serde::{Deserialize, Deserializer, Serialize};
 use url::Url;
 
@@ -275,6 +276,7 @@ impl Display for RepoLocation {
     }
 }
 
+/// Common hook options.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct HookOptions {
     /// Not documented in the official docs.
@@ -328,18 +330,18 @@ pub struct HookOptions {
 }
 
 impl HookOptions {
-    pub fn merge(&mut self, other: &Self) {
-        macro_rules! merge_if_none {
+    pub fn update(&mut self, other: &Self) {
+        macro_rules! update_if_some {
             ($($field:ident),* $(,)?) => {
                 $(
-                if self.$field.is_some() {
+                if other.$field.is_some() {
                     self.$field.clone_from(&other.$field);
                 }
                 )*
             };
         }
 
-        merge_if_none!(
+        update_if_some!(
             alias,
             files,
             exclude,
@@ -419,7 +421,7 @@ impl FromStr for MetaHookID {
 
 /// A meta hook predefined in pre-commit.
 ///
-/// It's the same as the manifest hook definition.
+/// It's the same as the manifest hook definition but with only a few predefined id allowed.
 #[derive(Debug, Clone)]
 pub struct ConfigMetaHook(ManifestHook);
 
@@ -432,7 +434,7 @@ impl<'de> Deserialize<'de> for ConfigMetaHook {
 
         let id = MetaHookID::from_str(&hook.id)
             .map_err(|()| serde::de::Error::custom("Unknown meta hook id"))?;
-        if hook.language != Some(Language::System) {
+        if hook.language.is_some_and(|l| l != Language::System) {
             return Err(serde::de::Error::custom(
                 "language must be system for meta hook",
             ));
@@ -448,9 +450,9 @@ impl<'de> Deserialize<'de> for ConfigMetaHook {
                 id: "check-hooks-apply".to_string(),
                 name: "Check hooks apply".to_string(),
                 language: Language::System,
-                entry: "a".to_string(),
+                entry: "a".to_string(), // TODO: direct call to the hook
                 options: HookOptions {
-                    files: Some(r"\.yaml$".to_string()), // TODO
+                    files: Some(format!("^{}$", regex::escape(CONFIG_FILE))),
                     ..Default::default()
                 },
             },
@@ -460,7 +462,7 @@ impl<'de> Deserialize<'de> for ConfigMetaHook {
                 language: Language::System,
                 entry: "a".to_string(),
                 options: HookOptions {
-                    files: Some(r"\.yaml$".to_string()), // TODO
+                    files: Some(format!("^{}$", regex::escape(CONFIG_FILE))),
                     ..Default::default()
                 },
             },
@@ -476,9 +478,15 @@ impl<'de> Deserialize<'de> for ConfigMetaHook {
             },
         };
 
-        defaults.options.merge(&hook.options);
+        defaults.options.update(&hook.options);
 
         Ok(ConfigMetaHook(defaults))
+    }
+}
+
+impl From<ConfigMetaHook> for ManifestHook {
+    fn from(hook: ConfigMetaHook) -> Self {
+        hook.0
     }
 }
 
@@ -693,24 +701,26 @@ mod tests {
                                     name: "cargo fmt",
                                     entry: "cargo fmt --",
                                     language: System,
-                                    alias: None,
-                                    files: None,
-                                    exclude: None,
-                                    types: None,
-                                    types_or: None,
-                                    exclude_types: None,
-                                    additional_dependencies: None,
-                                    args: None,
-                                    always_run: None,
-                                    fail_fast: None,
-                                    pass_filenames: None,
-                                    description: None,
-                                    language_version: None,
-                                    log_file: None,
-                                    require_serial: None,
-                                    stages: None,
-                                    verbose: None,
-                                    minimum_pre_commit_version: None,
+                                    options: HookOptions {
+                                        alias: None,
+                                        files: None,
+                                        exclude: None,
+                                        types: None,
+                                        types_or: None,
+                                        exclude_types: None,
+                                        additional_dependencies: None,
+                                        args: None,
+                                        always_run: None,
+                                        fail_fast: None,
+                                        pass_filenames: None,
+                                        description: None,
+                                        language_version: None,
+                                        log_file: None,
+                                        require_serial: None,
+                                        stages: None,
+                                        verbose: None,
+                                        minimum_pre_commit_version: None,
+                                    },
                                 },
                             ],
                         },
@@ -782,24 +792,26 @@ mod tests {
                                     name: None,
                                     entry: None,
                                     language: None,
-                                    alias: None,
-                                    files: None,
-                                    exclude: None,
-                                    types: None,
-                                    types_or: None,
-                                    exclude_types: None,
-                                    additional_dependencies: None,
-                                    args: None,
-                                    always_run: None,
-                                    fail_fast: None,
-                                    pass_filenames: None,
-                                    description: None,
-                                    language_version: None,
-                                    log_file: None,
-                                    require_serial: None,
-                                    stages: None,
-                                    verbose: None,
-                                    minimum_pre_commit_version: None,
+                                    options: HookOptions {
+                                        alias: None,
+                                        files: None,
+                                        exclude: None,
+                                        types: None,
+                                        types_or: None,
+                                        exclude_types: None,
+                                        additional_dependencies: None,
+                                        args: None,
+                                        always_run: None,
+                                        fail_fast: None,
+                                        pass_filenames: None,
+                                        description: None,
+                                        language_version: None,
+                                        log_file: None,
+                                        require_serial: None,
+                                        stages: None,
+                                        verbose: None,
+                                        minimum_pre_commit_version: None,
+                                    },
                                 },
                             ],
                         },
@@ -890,25 +902,214 @@ mod tests {
                                     name: "cargo fmt",
                                     entry: "cargo fmt",
                                     language: Rust,
-                                    alias: None,
-                                    files: None,
-                                    exclude: None,
-                                    types: None,
-                                    types_or: None,
-                                    exclude_types: None,
-                                    additional_dependencies: None,
-                                    args: None,
-                                    always_run: None,
-                                    fail_fast: None,
-                                    pass_filenames: None,
-                                    description: None,
-                                    language_version: None,
-                                    log_file: None,
-                                    require_serial: None,
-                                    stages: None,
-                                    verbose: None,
-                                    minimum_pre_commit_version: None,
+                                    options: HookOptions {
+                                        alias: None,
+                                        files: None,
+                                        exclude: None,
+                                        types: None,
+                                        types_or: None,
+                                        exclude_types: None,
+                                        additional_dependencies: None,
+                                        args: None,
+                                        always_run: None,
+                                        fail_fast: None,
+                                        pass_filenames: None,
+                                        description: None,
+                                        language_version: None,
+                                        log_file: None,
+                                        require_serial: None,
+                                        stages: None,
+                                        verbose: None,
+                                        minimum_pre_commit_version: None,
+                                    },
                                 },
+                            ],
+                        },
+                    ),
+                ],
+                default_install_hook_types: None,
+                default_language_version: None,
+                default_stages: None,
+                files: None,
+                exclude: None,
+                fail_fast: None,
+                minimum_pre_commit_version: None,
+                ci: None,
+            },
+        )
+        "###);
+    }
+
+    #[test]
+    fn meta_hooks() {
+        // Invalid rev
+        let yaml = indoc::indoc! { r"
+            repos:
+              - repo: meta
+                rev: v1.0.0
+                hooks:
+                  - name: typos
+                    alias: typo
+        "};
+        let result = serde_yaml::from_str::<ConfigWire>(yaml);
+        insta::assert_debug_snapshot!(result, @r###"
+        Err(
+            Error("repos: Invalid meta repo: unknown field `rev`, expected `hooks`", line: 2, column: 3),
+        )
+        "###);
+
+        // Invalid meta hook id
+        let yaml = indoc::indoc! { r"
+            repos:
+              - repo: meta
+                hooks:
+                  - id: hello
+        "};
+        let result = serde_yaml::from_str::<ConfigWire>(yaml);
+        insta::assert_debug_snapshot!(result, @r###"
+        Err(
+            Error("repos: Invalid meta repo: Unknown meta hook id", line: 2, column: 3),
+        )
+        "###);
+
+        // Invalid language
+        let yaml = indoc::indoc! { r"
+            repos:
+              - repo: meta
+                hooks:
+                  - id: check-hooks-apply
+                    language: python
+        "};
+        let result = serde_yaml::from_str::<ConfigWire>(yaml);
+        insta::assert_debug_snapshot!(result, @r###"
+        Err(
+            Error("repos: Invalid meta repo: language must be system for meta hook", line: 2, column: 3),
+        )
+        "###);
+
+        // Invalid entry
+        let yaml = indoc::indoc! { r"
+            repos:
+              - repo: meta
+                hooks:
+                  - id: check-hooks-apply
+                    entry: echo hell world
+        "};
+        let result = serde_yaml::from_str::<ConfigWire>(yaml);
+        insta::assert_debug_snapshot!(result, @r###"
+        Err(
+            Error("repos: Invalid meta repo: entry is not allowed for meta hook", line: 2, column: 3),
+        )
+        "###);
+
+        // Valid meta hook
+        let yaml = indoc::indoc! { r"
+            repos:
+              - repo: meta
+                hooks:
+                  - id: check-hooks-apply
+                  - id: check-useless-excludes
+                  - id: identify
+        "};
+        let result = serde_yaml::from_str::<ConfigWire>(yaml);
+        insta::assert_debug_snapshot!(result, @r###"
+        Ok(
+            ConfigWire {
+                repos: [
+                    Meta(
+                        ConfigMetaRepo {
+                            repo: "meta",
+                            hooks: [
+                                ConfigMetaHook(
+                                    ManifestHook {
+                                        id: "check-hooks-apply",
+                                        name: "Check hooks apply",
+                                        entry: "a",
+                                        language: System,
+                                        options: HookOptions {
+                                            alias: None,
+                                            files: Some(
+                                                "^\\.pre-commit-config\\.yaml$",
+                                            ),
+                                            exclude: None,
+                                            types: None,
+                                            types_or: None,
+                                            exclude_types: None,
+                                            additional_dependencies: None,
+                                            args: None,
+                                            always_run: None,
+                                            fail_fast: None,
+                                            pass_filenames: None,
+                                            description: None,
+                                            language_version: None,
+                                            log_file: None,
+                                            require_serial: None,
+                                            stages: None,
+                                            verbose: None,
+                                            minimum_pre_commit_version: None,
+                                        },
+                                    },
+                                ),
+                                ConfigMetaHook(
+                                    ManifestHook {
+                                        id: "check-useless-excludes",
+                                        name: "Check useless excludes",
+                                        entry: "a",
+                                        language: System,
+                                        options: HookOptions {
+                                            alias: None,
+                                            files: Some(
+                                                "^\\.pre-commit-config\\.yaml$",
+                                            ),
+                                            exclude: None,
+                                            types: None,
+                                            types_or: None,
+                                            exclude_types: None,
+                                            additional_dependencies: None,
+                                            args: None,
+                                            always_run: None,
+                                            fail_fast: None,
+                                            pass_filenames: None,
+                                            description: None,
+                                            language_version: None,
+                                            log_file: None,
+                                            require_serial: None,
+                                            stages: None,
+                                            verbose: None,
+                                            minimum_pre_commit_version: None,
+                                        },
+                                    },
+                                ),
+                                ConfigMetaHook(
+                                    ManifestHook {
+                                        id: "identify",
+                                        name: "identify",
+                                        entry: "a",
+                                        language: System,
+                                        options: HookOptions {
+                                            alias: None,
+                                            files: None,
+                                            exclude: None,
+                                            types: None,
+                                            types_or: None,
+                                            exclude_types: None,
+                                            additional_dependencies: None,
+                                            args: None,
+                                            always_run: None,
+                                            fail_fast: None,
+                                            pass_filenames: None,
+                                            description: None,
+                                            language_version: None,
+                                            log_file: None,
+                                            require_serial: None,
+                                            stages: None,
+                                            verbose: Some(
+                                                true,
+                                            ),
+                                            minimum_pre_commit_version: None,
+                                        },
+                                    },
+                                ),
                             ],
                         },
                     ),

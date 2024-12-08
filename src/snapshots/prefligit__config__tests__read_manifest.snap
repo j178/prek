@@ -9,111 +9,117 @@ ManifestWire {
             name: "pip-compile",
             entry: "uv pip compile",
             language: Python,
-            alias: None,
-            files: Some(
-                "^requirements\\.(in|txt)$",
-            ),
-            exclude: None,
-            types: None,
-            types_or: None,
-            exclude_types: None,
-            additional_dependencies: Some(
-                [],
-            ),
-            args: Some(
-                [],
-            ),
-            always_run: None,
-            fail_fast: None,
-            pass_filenames: Some(
-                false,
-            ),
-            description: Some(
-                "Automatically run 'uv pip compile' on your requirements",
-            ),
-            language_version: None,
-            log_file: None,
-            require_serial: None,
-            stages: None,
-            verbose: None,
-            minimum_pre_commit_version: Some(
-                "2.9.2",
-            ),
+            options: HookOptions {
+                alias: None,
+                files: Some(
+                    "^requirements\\.(in|txt)$",
+                ),
+                exclude: None,
+                types: None,
+                types_or: None,
+                exclude_types: None,
+                additional_dependencies: Some(
+                    [],
+                ),
+                args: Some(
+                    [],
+                ),
+                always_run: None,
+                fail_fast: None,
+                pass_filenames: Some(
+                    false,
+                ),
+                description: Some(
+                    "Automatically run 'uv pip compile' on your requirements",
+                ),
+                language_version: None,
+                log_file: None,
+                require_serial: None,
+                stages: None,
+                verbose: None,
+                minimum_pre_commit_version: Some(
+                    "2.9.2",
+                ),
+            },
         },
         ManifestHook {
             id: "uv-lock",
             name: "uv-lock",
             entry: "uv lock",
             language: Python,
-            alias: None,
-            files: Some(
-                "^(uv\\.lock|pyproject\\.toml|uv\\.toml)$",
-            ),
-            exclude: None,
-            types: None,
-            types_or: None,
-            exclude_types: None,
-            additional_dependencies: Some(
-                [],
-            ),
-            args: Some(
-                [],
-            ),
-            always_run: None,
-            fail_fast: None,
-            pass_filenames: Some(
-                false,
-            ),
-            description: Some(
-                "Automatically run 'uv lock' on your project dependencies",
-            ),
-            language_version: None,
-            log_file: None,
-            require_serial: None,
-            stages: None,
-            verbose: None,
-            minimum_pre_commit_version: Some(
-                "2.9.2",
-            ),
+            options: HookOptions {
+                alias: None,
+                files: Some(
+                    "^(uv\\.lock|pyproject\\.toml|uv\\.toml)$",
+                ),
+                exclude: None,
+                types: None,
+                types_or: None,
+                exclude_types: None,
+                additional_dependencies: Some(
+                    [],
+                ),
+                args: Some(
+                    [],
+                ),
+                always_run: None,
+                fail_fast: None,
+                pass_filenames: Some(
+                    false,
+                ),
+                description: Some(
+                    "Automatically run 'uv lock' on your project dependencies",
+                ),
+                language_version: None,
+                log_file: None,
+                require_serial: None,
+                stages: None,
+                verbose: None,
+                minimum_pre_commit_version: Some(
+                    "2.9.2",
+                ),
+            },
         },
         ManifestHook {
             id: "uv-export",
             name: "uv-export",
             entry: "uv export",
             language: Python,
-            alias: None,
-            files: Some(
-                "^uv\\.lock$",
-            ),
-            exclude: None,
-            types: None,
-            types_or: None,
-            exclude_types: None,
-            additional_dependencies: Some(
-                [],
-            ),
-            args: Some(
-                [
-                    "--frozen",
-                    "--output-file=requirements.txt",
-                ],
-            ),
-            always_run: None,
-            fail_fast: None,
-            pass_filenames: Some(
-                false,
-            ),
-            description: Some(
-                "Automatically run 'uv export' on your project dependencies",
-            ),
-            language_version: None,
-            log_file: None,
-            require_serial: None,
-            stages: None,
-            verbose: None,
-            minimum_pre_commit_version: Some(
-                "2.9.2",
-            ),
+            options: HookOptions {
+                alias: None,
+                files: Some(
+                    "^uv\\.lock$",
+                ),
+                exclude: None,
+                types: None,
+                types_or: None,
+                exclude_types: None,
+                additional_dependencies: Some(
+                    [],
+                ),
+                args: Some(
+                    [
+                        "--frozen",
+                        "--output-file=requirements.txt",
+                    ],
+                ),
+                always_run: None,
+                fail_fast: None,
+                pass_filenames: Some(
+                    false,
+                ),
+                description: Some(
+                    "Automatically run 'uv export' on your project dependencies",
+                ),
+                language_version: None,
+                log_file: None,
+                require_serial: None,
+                stages: None,
+                verbose: None,
+                minimum_pre_commit_version: Some(
+                    "2.9.2",
+                ),
+            },
         },
     ],
 }

@@ -13,8 +13,8 @@ use tracing::{debug, error};
 use url::Url;
 
 use crate::config::{
-    self, read_config, read_manifest, ConfigLocalHook, ConfigRemoteHook, ConfigRepo, ConfigWire,
-    Language, ManifestHook, Stage, CONFIG_FILE, MANIFEST_FILE,
+    self, read_config, read_manifest, ConfigLocalHook, ConfigMetaHook, ConfigRemoteHook,
+    ConfigRepo, ConfigWire, Language, ManifestHook, Stage, CONFIG_FILE, MANIFEST_FILE,
 };
 use crate::fs::{Simplified, CWD};
 use crate::languages::DEFAULT_VERSION;
@@ -47,7 +47,9 @@ pub enum Repo {
     Local {
         hooks: Vec<ManifestHook>,
     },
-    Meta,
+    Meta {
+        hooks: Vec<ManifestHook>,
+    },
 }
 
 impl Repo {
@@ -72,8 +74,11 @@ impl Repo {
         Self::Local { hooks }
     }
 
-    pub fn meta() -> Result<Self, Error> {
-        todo!()
+    /// Construct a meta repo.
+    pub fn meta(hooks: Vec<ConfigMetaHook>) -> Self {
+        Self::Meta {
+            hooks: hooks.into_iter().map(ManifestHook::from).collect(),
+        }
     }
 
     /// Get a hook by id.
@@ -81,16 +86,17 @@ impl Repo {
         let hooks = match self {
             Repo::Remote { ref hooks, .. } => hooks,
             Repo::Local { ref hooks } => hooks,
-            Repo::Meta => return None,
+            Repo::Meta { ref hooks } => hooks,
         };
         hooks.iter().find(|hook| hook.id == id)
     }
 
+    /// Get the path to the repo.
     pub fn path(&self) -> &Path {
         match self {
             Repo::Remote { ref path, .. } => path,
             Repo::Local { .. } => &CWD,
-            Repo::Meta => todo!(),
+            Repo::Meta { .. } => &CWD,
         }
     }
 }
@@ -100,7 +106,7 @@ impl Display for Repo {
         match self {
             Repo::Remote { url, rev, .. } => write!(f, "{url}@{rev}"),
             Repo::Local { .. } => write!(f, "local"),
-            Repo::Meta => write!(f, "meta"),
+            Repo::Meta { .. } => write!(f, "meta"),
         }
     }
 }
@@ -195,8 +201,9 @@ impl Project {
                     let repo = Repo::local(repo.hooks.clone());
                     repos.push(Rc::new(repo));
                 }
-                ConfigRepo::Meta(_) => {
-                    todo!()
+                ConfigRepo::Meta(repo) => {
+                    let repo = Repo::meta(repo.hooks.clone());
+                    repos.push(Rc::new(repo));
                 }
             }
         }
@@ -273,8 +280,18 @@ impl Project {
                         hooks.push(hook);
                     }
                 }
-                ConfigRepo::Meta(_) => {
-                    todo!()
+                ConfigRepo::Meta(repo_config) => {
+                    for hook_config in &repo_config.hooks {
+                        let repo = Rc::clone(repo);
+                        let hook_config = ManifestHook::from(hook_config.clone());
+                        let mut builder = HookBuilder::new(repo, hook_config);
+                        builder.combine(&self.config);
+                        let mut hook = builder.build();
+
+                        let path = hook.repo.path().to_path_buf();
+                        hook = hook.with_path(path);
+                        hooks.push(hook);
+                    }
                 }
             }
         }
@@ -313,7 +330,7 @@ impl HookBuilder {
             self.config.language.clone_from(language);
         }
 
-        self.config.options.merge(&config.options);
+        self.config.options.update(&config.options);
 
         self
     }
