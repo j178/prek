@@ -3,10 +3,10 @@
 ![Development Status](https://img.shields.io/badge/Development-Early_Stage-yellowgreen)
 [![CI](https://github.com/j178/prefligit/actions/workflows/ci.yml/badge.svg)](https://github.com/j178/prefligit/actions/workflows/ci.yml)
 
-<img width="665" alt="Snipaste_2024-12-05_13-27-31" src="https://github.com/user-attachments/assets/51b0e80e-07a2-441e-9c7c-9efa62f9a44f">
+<img width="665" alt="prefligit" src="https://github.com/user-attachments/assets/51b0e80e-07a2-441e-9c7c-9efa62f9a44f">
 
-A reimplementation of the [pre-commit](https://pre-commit.com/) tool in Rust, providing a faster and dependency-free alternative.
-It aims to be a drop-in replacement for the original tool while also providing some more advanced features.
+A reimplementation of the [pre-commit](https://pre-commit.com/) tool in Rust, designed to be a faster, dependency-free and drop-in alternative,
+while also providing some additional opinionated features.
 
 > [!WARNING]
 > This project is still in very early development, only a few of the original pre-commit features are implemented.
@@ -14,16 +14,16 @@ It aims to be a drop-in replacement for the original tool while also providing s
 
 > [!NOTE]
 > This project was previously named `pre-commit-rs`, but it was renamed to `prefligit` to prevent confusion with the existing pre-commit tool.
-> See #73 for more information.
+> See [#73](https://github.com/j178/prefligit/issues/73) for more information.
 
 ## Features
 
 - A single binary with no dependencies, does not require Python or any other runtime.
 - Improved performance in hook preparation and execution.
 - Fully compatible with the original pre-commit configurations and hooks.
+- Integration with [`uv`](https://github.com/astral-sh/uv) for managing Python tools and environments.
 - (TODO) Built-in support for monorepos.
 - (TODO) Built-in implementation of some common hooks.
-- (TODO) Integration with [`uv`](https://github.com/astral-sh/uv) for managing Python tools and environments.
 
 ## Installation
 
