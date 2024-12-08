@@ -7,17 +7,16 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tracing::{debug, trace};
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::Stage;
-use crate::fs::{normalize_path, Simplified};
+use crate::fs::Simplified;
 use crate::git;
 use crate::hook::{Hook, Project};
 use crate::printer::Printer;
-use crate::run::{run_hooks, FilenameFilter, WorkTreeKeeper};
+use crate::run::{all_filenames, run_hooks, FileFilter, FileOptions, WorkTreeKeeper};
 use crate::store::Store;
 
 #[allow(clippy::too_many_arguments)]
@@ -130,40 +129,27 @@ pub(crate) async fn run(
         _guard = Some(WorkTreeKeeper::clean(&store).await?);
     }
 
-    let mut filenames = all_filenames(
+    let filenames = all_filenames(FileOptions {
         hook_stage,
         from_ref,
         to_ref,
         all_files,
         files,
-        extra_args.commit_msg_filename.as_ref(),
-    )
+        commit_msg_filename: extra_args.commit_msg_filename.clone(),
+    })
     .await?;
-    for filename in &mut filenames {
-        normalize_path(filename);
-    }
 
-    let filter = FilenameFilter::new(
+    let filter = FileFilter::new(
+        &filenames,
         project.config().files.as_deref(),
         project.config().exclude.as_deref(),
     )?;
-    let filenames = filenames
-        .into_par_iter()
-        .filter(|filename| filter.filter(filename))
-        .filter(|filename| {
-            // Ignore not existing files.
-            std::fs::symlink_metadata(filename)
-                .map(|m| m.file_type().is_file())
-                .unwrap_or(false)
-        })
-        .collect::<Vec<_>>();
-
-    trace!("Files after filtered: {}", filenames.len());
+    trace!("Files after filtered: {}", filter.len());
 
     run_hooks(
         &hooks,
         &skips,
-        filenames,
+        &filter,
         env_vars,
         project.config().fail_fast.unwrap_or(false),
         show_diff_on_failure,
@@ -251,59 +237,6 @@ fn get_skips() -> Vec<String> {
             .collect::<Vec<_>>(),
         _ => vec![],
     }
-}
-
-/// Get all filenames to run hooks on.
-#[allow(clippy::too_many_arguments)]
-async fn all_filenames(
-    hook_stage: Option<Stage>,
-    from_ref: Option<String>,
-    to_ref: Option<String>,
-    all_files: bool,
-    files: Vec<PathBuf>,
-    commit_msg_filename: Option<&PathBuf>,
-) -> Result<Vec<String>> {
-    if hook_stage.is_some_and(|stage| !stage.operate_on_files()) {
-        return Ok(vec![]);
-    }
-    if hook_stage.is_some_and(|stage| matches!(stage, Stage::PrepareCommitMsg | Stage::CommitMsg)) {
-        return Ok(vec![commit_msg_filename
-            .unwrap()
-            .to_string_lossy()
-            .to_string()]);
-    }
-    if let (Some(from_ref), Some(to_ref)) = (from_ref, to_ref) {
-        let files = git::get_changed_files(&from_ref, &to_ref).await?;
-        debug!(
-            "Files changed between {} and {}: {}",
-            from_ref,
-            to_ref,
-            files.len()
-        );
-        return Ok(files);
-    }
-
-    if !files.is_empty() {
-        let files: Vec<_> = files
-            .into_iter()
-            .map(|f| f.to_string_lossy().to_string())
-            .collect();
-        debug!("Files passed as arguments: {}", files.len());
-        return Ok(files);
-    }
-    if all_files {
-        let files = git::get_all_files().await?;
-        debug!("All files in the repo: {}", files.len());
-        return Ok(files);
-    }
-    if git::is_in_merge_conflict().await? {
-        let files = git::get_conflicted_files().await?;
-        debug!("Conflicted files: {}", files.len());
-        return Ok(files);
-    }
-    let files = git::get_staged_files().await?;
-    debug!("Staged files: {}", files.len());
-    Ok(files)
 }
 
 async fn install_hook(hook: &Hook, env_dir: PathBuf) -> Result<()> {

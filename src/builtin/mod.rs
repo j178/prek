@@ -22,9 +22,9 @@ pub async fn run_fast_path(
         Repo::Meta { .. } => match hook.id.as_str() {
             "check-hooks-apply" => meta_hooks::check_hooks_apply(hook, filenames, env_vars).await,
             "check-useless-excludes" => {
-                meta_hooks::check_useless_excludes(hook, filenames, env_vars)
+                meta_hooks::check_useless_excludes(hook, filenames, env_vars).await
             }
-            "identity" => meta_hooks::identity(hook, filenames, env_vars),
+            "identity" => Ok(meta_hooks::identity(hook, filenames, env_vars)),
             _ => unreachable!(),
         },
         _ => unreachable!(),

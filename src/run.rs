@@ -13,14 +13,15 @@ use fancy_regex::{self as regex, Regex};
 use owo_colors::{OwoColorize, Style};
 use rand::prelude::{SliceRandom, StdRng};
 use rand::SeedableRng;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use tokio::task::JoinSet;
-use tracing::{error, trace};
+use tracing::{debug, error, trace};
 use unicode_width::UnicodeWidthStr;
 
 use crate::cleanup::add_cleanup;
 use crate::cli::ExitStatus;
-use crate::fs::Simplified;
+use crate::config::Stage;
+use crate::fs::{normalize_path, Simplified};
 use crate::git;
 use crate::git::{get_diff, git_cmd, GIT};
 use crate::hook::Hook;
@@ -32,7 +33,7 @@ const SKIPPED: &str = "Skipped";
 const NO_FILES: &str = "(no files to check)";
 
 /// Filter filenames by include/exclude patterns.
-pub struct FilenameFilter {
+struct FilenameFilter {
     include: Option<Regex>,
     exclude: Option<Regex>,
 }
@@ -102,6 +103,160 @@ impl<'a> FileTagFilter<'a> {
     }
 }
 
+pub struct FileFilter<'a> {
+    filenames: Vec<&'a String>,
+}
+
+impl<'a> FileFilter<'a> {
+    pub fn new(
+        filenames: &'a [String],
+        include: Option<&str>,
+        exclude: Option<&str>,
+    ) -> Result<Self, Box<regex::Error>> {
+        let filter = FilenameFilter::new(include, exclude)?;
+
+        let filenames = filenames
+            .into_par_iter()
+            .filter(|filename| filter.filter(filename))
+            .filter(|filename| {
+                // TODO: does this check really necessary?
+                // Ignore not existing files.
+                std::fs::symlink_metadata(filename)
+                    .map(|m| m.file_type().is_file())
+                    .unwrap_or(false)
+            })
+            .collect::<Vec<_>>();
+
+        Ok(Self { filenames })
+    }
+
+    pub fn len(&self) -> usize {
+        self.filenames.len()
+    }
+
+    pub fn for_hook(&self, hook: &Hook) -> Result<Vec<&String>, Box<regex::Error>> {
+        let filter = FilenameFilter::from_hook(hook)?;
+        let filenames = self
+            .filenames
+            .par_iter()
+            .filter(|filename| filter.filter(filename));
+
+        let filter = FileTagFilter::from_hook(hook);
+        let filenames: Vec<_> = filenames
+            .filter(|filename| {
+                let path = Path::new(filename);
+                match tags_from_path(path) {
+                    Ok(tags) => filter.filter(&tags),
+                    Err(err) => {
+                        error!(filename, error = %err, "Failed to get tags");
+                        false
+                    }
+                }
+            })
+            .copied()
+            .collect();
+
+        Ok(filenames)
+    }
+}
+
+#[derive(Default)]
+pub struct FileOptions {
+    pub hook_stage: Option<Stage>,
+    pub from_ref: Option<String>,
+    pub to_ref: Option<String>,
+    pub all_files: bool,
+    pub files: Vec<PathBuf>,
+    pub commit_msg_filename: Option<PathBuf>,
+}
+
+impl FileOptions {
+    pub fn with_all_files(mut self, all_files: bool) -> Self {
+        self.all_files = all_files;
+        self
+    }
+}
+
+/// Get all filenames to run hooks on.
+#[allow(clippy::too_many_arguments)]
+pub async fn all_filenames(opts: FileOptions) -> Result<Vec<String>> {
+    let FileOptions {
+        hook_stage,
+        from_ref,
+        to_ref,
+        all_files,
+        files,
+        commit_msg_filename,
+    } = opts;
+
+    let mut filenames = filenames_from_args(
+        hook_stage,
+        from_ref,
+        to_ref,
+        all_files,
+        files,
+        commit_msg_filename,
+    )
+    .await?;
+
+    for filename in &mut filenames {
+        normalize_path(filename);
+    }
+    Ok(filenames)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn filenames_from_args(
+    hook_stage: Option<Stage>,
+    from_ref: Option<String>,
+    to_ref: Option<String>,
+    all_files: bool,
+    files: Vec<PathBuf>,
+    commit_msg_filename: Option<PathBuf>,
+) -> Result<Vec<String>> {
+    if hook_stage.is_some_and(|stage| !stage.operate_on_files()) {
+        return Ok(vec![]);
+    }
+    if hook_stage.is_some_and(|stage| matches!(stage, Stage::PrepareCommitMsg | Stage::CommitMsg)) {
+        return Ok(vec![commit_msg_filename
+            .unwrap()
+            .to_string_lossy()
+            .to_string()]);
+    }
+    if let (Some(from_ref), Some(to_ref)) = (from_ref, to_ref) {
+        let files = git::get_changed_files(&from_ref, &to_ref).await?;
+        debug!(
+            "Files changed between {} and {}: {}",
+            from_ref,
+            to_ref,
+            files.len()
+        );
+        return Ok(files);
+    }
+
+    if !files.is_empty() {
+        let files: Vec<_> = files
+            .into_iter()
+            .map(|f| f.to_string_lossy().to_string())
+            .collect();
+        debug!("Files passed as arguments: {}", files.len());
+        return Ok(files);
+    }
+    if all_files {
+        let files = git::get_all_files().await?;
+        debug!("All files in the repo: {}", files.len());
+        return Ok(files);
+    }
+    if git::is_in_merge_conflict().await? {
+        let files = git::get_conflicted_files().await?;
+        debug!("Conflicted files: {}", files.len());
+        return Ok(files);
+    }
+    let files = git::get_staged_files().await?;
+    debug!("Staged files: {}", files.len());
+    Ok(files)
+}
+
 fn status_line(start: &str, cols: usize, end_msg: &str, end_color: Style, postfix: &str) -> String {
     let dots = cols - start.width_cjk() - end_msg.len() - postfix.len() - 1;
     format!(
@@ -126,7 +281,7 @@ fn calculate_columns(hooks: &[Hook]) -> usize {
 pub async fn run_hooks(
     hooks: &[Hook],
     skips: &[String],
-    filenames: Vec<String>,
+    filter: &FileFilter<'_>,
     env_vars: HashMap<&'static str, String>,
     fail_fast: bool,
     show_diff_on_failure: bool,
@@ -143,7 +298,7 @@ pub async fn run_hooks(
     for hook in hooks {
         let (hook_success, new_diff) = run_hook(
             hook,
-            &filenames,
+            filter,
             env_vars.clone(),
             skips,
             diff,
@@ -195,7 +350,7 @@ fn shuffle<T>(filenames: &mut [T]) {
 
 async fn run_hook(
     hook: &Hook,
-    filenames: &[String],
+    filter: &FileFilter<'_>,
     env_vars: Arc<HashMap<&'static str, String>>,
     skips: &[String],
     diff: Vec<u8>,
@@ -218,24 +373,7 @@ async fn run_hook(
         return Ok((true, diff));
     }
 
-    let filter = FilenameFilter::from_hook(hook)?;
-    let filenames = filenames
-        .into_par_iter()
-        .filter(|filename| filter.filter(filename));
-
-    let filter = FileTagFilter::from_hook(hook);
-    let mut filenames: Vec<_> = filenames
-        .filter(|filename| {
-            let path = Path::new(filename);
-            match tags_from_path(path) {
-                Ok(tags) => filter.filter(&tags),
-                Err(err) => {
-                    error!(filename, error = %err, "Failed to get tags");
-                    false
-                }
-            }
-        })
-        .collect();
+    let mut filenames = filter.for_hook(hook)?;
 
     if filenames.is_empty() && !hook.always_run {
         writeln!(

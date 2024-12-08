@@ -170,11 +170,8 @@ impl Project {
                     continue;
                 }
                 tasks.push(async move {
-                    let progress = if let Some(reporter) = reporter {
-                        Some((reporter, reporter.on_clone_start(&format!("{repo}"))))
-                    } else {
-                        None
-                    };
+                    let progress = reporter
+                        .map(|reporter| (reporter, reporter.on_clone_start(&format!("{repo}"))));
 
                     let path = store.prepare_remote_repo(repo, &[]).await;
 
