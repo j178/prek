@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::Result;
-
+use crate::builtin;
 use crate::config::Language;
 use crate::hook::Hook;
+use anyhow::Result;
 
 mod docker;
 mod docker_image;
@@ -90,6 +90,11 @@ impl Language {
         filenames: &[&String],
         env_vars: Arc<HashMap<&'static str, String>>,
     ) -> Result<(i32, Vec<u8>)> {
+        // fast path for hooks implemented in Rust
+        if builtin::check_fast_path(hook) {
+            return builtin::run_fast_path(hook, filenames, env_vars).await;
+        }
+
         match self {
             Self::Python => PYTHON.run(hook, filenames, env_vars).await,
             Self::Node => NODE.run(hook, filenames, env_vars).await,

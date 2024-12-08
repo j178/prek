@@ -16,6 +16,7 @@ use crate::cli::{Cli, Command, ExitStatus, SelfCommand, SelfNamespace, SelfUpdat
 use crate::git::get_root;
 use crate::printer::Printer;
 
+mod builtin;
 mod cleanup;
 mod cli;
 mod config;

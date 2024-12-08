@@ -102,7 +102,6 @@ ConfigWire {
         ),
         Local(
             ConfigLocalRepo {
-                repo: "local",
                 hooks: [
                     ManifestHook {
                         id: "cargo-fmt",
@@ -141,7 +140,6 @@ ConfigWire {
         ),
         Local(
             ConfigLocalRepo {
-                repo: "local",
                 hooks: [
                     ManifestHook {
                         id: "cargo-dev-generate-all",

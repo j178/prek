@@ -184,6 +184,31 @@ fn local_need_install() {
 }
 
 #[test]
+fn meta_hooks() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: meta
+            hooks:
+              - id: check-hooks-apply
+              - id: check-useless-excludes
+              - id: identity
+    "#});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local....................................................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
 fn invalid_hook_id() {
     let context = TestContext::new();
     context.init_project();

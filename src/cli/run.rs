@@ -71,7 +71,7 @@ pub(crate) async fn run(
     let reporter = HookInitReporter::from(printer);
 
     let lock = store.lock_async().await?;
-    let hooks = project.init_hooks(&store, &reporter).await?;
+    let hooks = project.init_hooks(&store, Some(&reporter)).await?;
 
     let hooks: Vec<_> = hooks
         .into_iter()

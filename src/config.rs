@@ -392,7 +392,7 @@ pub type ConfigLocalHook = ManifestHook;
 pub enum MetaHookID {
     CheckHooksApply,
     CheckUselessExcludes,
-    Identify,
+    Identity,
 }
 
 impl Display for MetaHookID {
@@ -400,7 +400,7 @@ impl Display for MetaHookID {
         let name = match self {
             MetaHookID::CheckHooksApply => "check-hooks-apply",
             MetaHookID::CheckUselessExcludes => "check-useless-excludes",
-            MetaHookID::Identify => "identify",
+            MetaHookID::Identity => "identity",
         };
         f.write_str(name)
     }
@@ -413,7 +413,7 @@ impl FromStr for MetaHookID {
         match s {
             "check-hooks-apply" => Ok(MetaHookID::CheckHooksApply),
             "check-useless-excludes" => Ok(MetaHookID::CheckUselessExcludes),
-            "identify" => Ok(MetaHookID::Identify),
+            "identity" => Ok(MetaHookID::Identity),
             _ => Err(()),
         }
     }
@@ -447,30 +447,30 @@ impl<'de> Deserialize<'de> for ConfigMetaHook {
 
         let mut defaults = match id {
             MetaHookID::CheckHooksApply => ManifestHook {
-                id: "check-hooks-apply".to_string(),
+                id: MetaHookID::CheckHooksApply.to_string(),
                 name: "Check hooks apply".to_string(),
                 language: Language::System,
-                entry: "a".to_string(), // TODO: direct call to the hook
+                entry: String::new(),
                 options: HookOptions {
                     files: Some(format!("^{}$", regex::escape(CONFIG_FILE))),
                     ..Default::default()
                 },
             },
             MetaHookID::CheckUselessExcludes => ManifestHook {
-                id: "check-useless-excludes".to_string(),
+                id: MetaHookID::CheckUselessExcludes.to_string(),
                 name: "Check useless excludes".to_string(),
                 language: Language::System,
-                entry: "a".to_string(),
+                entry: String::new(),
                 options: HookOptions {
                     files: Some(format!("^{}$", regex::escape(CONFIG_FILE))),
                     ..Default::default()
                 },
             },
-            MetaHookID::Identify => ManifestHook {
-                id: "identify".to_string(),
-                name: "identify".to_string(),
+            MetaHookID::Identity => ManifestHook {
+                id: MetaHookID::Identity.to_string(),
+                name: "identity".to_string(),
                 language: Language::System,
-                entry: "a".to_string(),
+                entry: String::new(),
                 options: HookOptions {
                     verbose: Some(true),
                     ..Default::default()
@@ -520,7 +520,6 @@ impl Display for ConfigRemoteRepo {
 
 #[derive(Debug, Clone)]
 pub struct ConfigLocalRepo {
-    pub repo: String,
     pub hooks: Vec<ConfigLocalHook>,
 }
 
@@ -532,7 +531,6 @@ impl Display for ConfigLocalRepo {
 
 #[derive(Debug, Clone)]
 pub struct ConfigMetaRepo {
-    pub repo: String,
     pub hooks: Vec<ConfigMetaHook>,
 }
 
@@ -587,10 +585,7 @@ impl<'de> Deserialize<'de> for ConfigRepo {
                 }
                 let LocalRepo { hooks } = LocalRepo::deserialize(rest)
                     .map_err(|e| serde::de::Error::custom(format!("Invalid local repo: {e}")))?;
-                Ok(ConfigRepo::Local(ConfigLocalRepo {
-                    repo: "local".to_string(),
-                    hooks,
-                }))
+                Ok(ConfigRepo::Local(ConfigLocalRepo { hooks }))
             }
             RepoLocation::Meta => {
                 #[derive(Deserialize)]
@@ -600,10 +595,7 @@ impl<'de> Deserialize<'de> for ConfigRepo {
                 }
                 let MetaRepo { hooks } = MetaRepo::deserialize(rest)
                     .map_err(|e| serde::de::Error::custom(format!("Invalid meta repo: {e}")))?;
-                Ok(ConfigRepo::Meta(ConfigMetaRepo {
-                    repo: "meta".to_string(),
-                    hooks,
-                }))
+                Ok(ConfigRepo::Meta(ConfigMetaRepo { hooks }))
             }
         }
     }
@@ -694,7 +686,6 @@ mod tests {
                 repos: [
                     Local(
                         ConfigLocalRepo {
-                            repo: "local",
                             hooks: [
                                 ManifestHook {
                                     id: "cargo-fmt",
@@ -895,7 +886,6 @@ mod tests {
                 repos: [
                     Local(
                         ConfigLocalRepo {
-                            repo: "local",
                             hooks: [
                                 ManifestHook {
                                     id: "cargo-fmt",
@@ -1009,7 +999,7 @@ mod tests {
                 hooks:
                   - id: check-hooks-apply
                   - id: check-useless-excludes
-                  - id: identify
+                  - id: identity
         "};
         let result = serde_yaml::from_str::<ConfigWire>(yaml);
         insta::assert_debug_snapshot!(result, @r###"
@@ -1018,13 +1008,12 @@ mod tests {
                 repos: [
                     Meta(
                         ConfigMetaRepo {
-                            repo: "meta",
                             hooks: [
                                 ConfigMetaHook(
                                     ManifestHook {
                                         id: "check-hooks-apply",
                                         name: "Check hooks apply",
-                                        entry: "a",
+                                        entry: "",
                                         language: System,
                                         options: HookOptions {
                                             alias: None,
@@ -1054,7 +1043,7 @@ mod tests {
                                     ManifestHook {
                                         id: "check-useless-excludes",
                                         name: "Check useless excludes",
-                                        entry: "a",
+                                        entry: "",
                                         language: System,
                                         options: HookOptions {
                                             alias: None,
@@ -1082,9 +1071,9 @@ mod tests {
                                 ),
                                 ConfigMetaHook(
                                     ManifestHook {
-                                        id: "identify",
-                                        name: "identify",
-                                        entry: "a",
+                                        id: "identity",
+                                        name: "identity",
+                                        entry: "",
                                         language: System,
                                         options: HookOptions {
                                             alias: None,
