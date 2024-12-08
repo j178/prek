@@ -275,33 +275,25 @@ impl Display for RepoLocation {
     }
 }
 
-/// A remote hook in the configuration file.
-///
-/// All keys in manifest hook dict are valid in a config hook dict, but are optional.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct ConfigRemoteHook {
-    /// The id of the hook.
-    pub id: String,
-    /// Override the name of the hook.
-    pub name: Option<String>,
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct HookOptions {
     /// Not documented in the official docs.
-    pub entry: Option<String>,
-    /// Not documented in the official docs.
-    pub language: Option<Language>,
-    /// Allows the hook to be referenced using an additional id when using pre-commit run <hookid>
     pub alias: Option<String>,
-    /// Override the pattern of files to run on.
+    /// The pattern of files to run on.
     pub files: Option<String>,
-    /// Override the pattern of files to exclude.
+    /// Exclude files that were matched by `files`.
+    /// Default is `$^`, which matches nothing.
     pub exclude: Option<String>,
-    /// Override the types of files to run on (AND).
+    /// List of file types to run on (AND).
+    /// Default is `[file]`, which matches all files.
     pub types: Option<Vec<String>>,
-    /// Override the types of files to run on (OR).
+    /// List of file types to run on (OR).
+    /// Default is `[]`.
     pub types_or: Option<Vec<String>>,
-    /// Override the types of files to exclude.
+    /// List of file types to exclude.
+    /// Default is `[]`.
     pub exclude_types: Option<Vec<String>>,
-    /// Additional dependencies to install in the environment where the hook runs.
+    /// Not documented in the official docs.
     pub additional_dependencies: Option<Vec<String>>,
     /// Additional arguments to pass to the hook.
     pub args: Option<Vec<String>>,
@@ -335,6 +327,59 @@ pub struct ConfigRemoteHook {
     pub minimum_pre_commit_version: Option<String>,
 }
 
+impl HookOptions {
+    pub fn merge(&mut self, other: &Self) {
+        macro_rules! merge_if_none {
+            ($($field:ident),* $(,)?) => {
+                $(
+                if self.$field.is_some() {
+                    self.$field.clone_from(&other.$field);
+                }
+                )*
+            };
+        }
+
+        merge_if_none!(
+            alias,
+            files,
+            exclude,
+            types,
+            types_or,
+            exclude_types,
+            additional_dependencies,
+            args,
+            always_run,
+            fail_fast,
+            pass_filenames,
+            description,
+            language_version,
+            log_file,
+            require_serial,
+            stages,
+            verbose,
+            minimum_pre_commit_version,
+        );
+    }
+}
+
+/// A remote hook in the configuration file.
+///
+/// All keys in manifest hook dict are valid in a config hook dict, but are optional.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ConfigRemoteHook {
+    /// The id of the hook.
+    pub id: String,
+    /// Override the name of the hook.
+    pub name: Option<String>,
+    /// Not documented in the official docs.
+    pub entry: Option<String>,
+    /// Not documented in the official docs.
+    pub language: Option<Language>,
+    #[serde(flatten)]
+    pub options: HookOptions,
+}
+
 /// A local hook in the configuration file.
 ///
 /// It's the same as the manifest hook definition.
@@ -348,30 +393,93 @@ pub enum MetaHookID {
     Identify,
 }
 
-impl MetaHookID {
-    pub fn as_str(&self) -> &str {
-        match self {
+impl Display for MetaHookID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
             MetaHookID::CheckHooksApply => "check-hooks-apply",
             MetaHookID::CheckUselessExcludes => "check-useless-excludes",
             MetaHookID::Identify => "identify",
+        };
+        f.write_str(name)
+    }
+}
+
+impl FromStr for MetaHookID {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "check-hooks-apply" => Ok(MetaHookID::CheckHooksApply),
+            "check-useless-excludes" => Ok(MetaHookID::CheckUselessExcludes),
+            "identify" => Ok(MetaHookID::Identify),
+            _ => Err(()),
         }
     }
 }
 
-impl Display for MetaHookID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
+/// A meta hook predefined in pre-commit.
+///
+/// It's the same as the manifest hook definition.
+#[derive(Debug, Clone)]
+pub struct ConfigMetaHook(ManifestHook);
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
-pub struct ConfigMetaHook {
-    pub id: MetaHookID,
-    // only "system" is allowed
-    pub language: Option<Language>,
-    // TODO: entry is not allowed
+impl<'de> Deserialize<'de> for ConfigMetaHook {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let hook = ConfigRemoteHook::deserialize(deserializer)?;
+
+        let id = MetaHookID::from_str(&hook.id)
+            .map_err(|()| serde::de::Error::custom("Unknown meta hook id"))?;
+        if hook.language != Some(Language::System) {
+            return Err(serde::de::Error::custom(
+                "language must be system for meta hook",
+            ));
+        }
+        if hook.entry.is_some() {
+            return Err(serde::de::Error::custom(
+                "entry is not allowed for meta hook",
+            ));
+        }
+
+        let mut defaults = match id {
+            MetaHookID::CheckHooksApply => ManifestHook {
+                id: "check-hooks-apply".to_string(),
+                name: "Check hooks apply".to_string(),
+                language: Language::System,
+                entry: "a".to_string(),
+                options: HookOptions {
+                    files: Some(r"\.yaml$".to_string()), // TODO
+                    ..Default::default()
+                },
+            },
+            MetaHookID::CheckUselessExcludes => ManifestHook {
+                id: "check-useless-excludes".to_string(),
+                name: "Check useless excludes".to_string(),
+                language: Language::System,
+                entry: "a".to_string(),
+                options: HookOptions {
+                    files: Some(r"\.yaml$".to_string()), // TODO
+                    ..Default::default()
+                },
+            },
+            MetaHookID::Identify => ManifestHook {
+                id: "identify".to_string(),
+                name: "identify".to_string(),
+                language: Language::System,
+                entry: "a".to_string(),
+                options: HookOptions {
+                    verbose: Some(true),
+                    ..Default::default()
+                },
+            },
+        };
+
+        defaults.options.merge(&hook.options);
+
+        Ok(ConfigMetaHook(defaults))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -506,54 +614,8 @@ pub struct ManifestHook {
     pub entry: String,
     /// The language of the hook. Tells pre-commit how to install and run the hook.
     pub language: Language,
-    /// Not documented in the official docs.
-    pub alias: Option<String>,
-    /// The pattern of files to run on.
-    pub files: Option<String>,
-    /// Exclude files that were matched by `files`.
-    /// Default is `$^`, which matches nothing.
-    pub exclude: Option<String>,
-    /// List of file types to run on (AND).
-    /// Default is `[file]`, which matches all files.
-    pub types: Option<Vec<String>>,
-    /// List of file types to run on (OR).
-    /// Default is `[]`.
-    pub types_or: Option<Vec<String>>,
-    /// List of file types to exclude.
-    /// Default is `[]`.
-    pub exclude_types: Option<Vec<String>>,
-    /// Not documented in the official docs.
-    pub additional_dependencies: Option<Vec<String>>,
-    /// Additional arguments to pass to the hook.
-    pub args: Option<Vec<String>>,
-    /// This hook will run even if there are no matching files.
-    /// Default is false.
-    pub always_run: Option<bool>,
-    /// If this hook fails, don't run any more hooks.
-    /// Default is false.
-    pub fail_fast: Option<bool>,
-    /// Append filenames that would be checked to the hook entry as arguments.
-    /// Default is true.
-    pub pass_filenames: Option<bool>,
-    /// A description of the hook. For metadata only.
-    pub description: Option<String>,
-    /// Run the hook on a specific version of the language.
-    /// Default is `default`.
-    /// See <https://pre-commit.com/#overriding-language-version>.
-    pub language_version: Option<String>,
-    /// Write the output of the hook to a file when the hook fails or verbose is enabled.
-    pub log_file: Option<String>,
-    /// This hook will execute using a single process instead of in parallel.
-    /// Default is false.
-    pub require_serial: Option<bool>,
-    /// Select which git hook(s) to run for.
-    /// Default all stages are selected.
-    /// See <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.
-    pub stages: Option<Vec<Stage>>,
-    /// Print the output of the hook even if it passes.
-    /// Default is false.
-    pub verbose: Option<bool>,
-    pub minimum_pre_commit_version: Option<String>,
+    #[serde(flatten)]
+    pub options: HookOptions,
 }
 
 #[derive(Debug, Clone, Deserialize)]
