@@ -621,7 +621,6 @@ fn log_file() {
 }
 
 /// Pass pre-commit environment variables to the hook.
-#[cfg(unix)]
 #[test]
 fn pass_env_vars() {
     let context = TestContext::new();
@@ -635,21 +634,21 @@ fn pass_env_vars() {
               - id: env-vars
                 name: Pass environment
                 language: system
-                entry: sh -c "echo $PRE_COMMIT > env.txt"
+                entry: python3 -c "import os, sys; print(os.getenv('PRE_COMMIT')); sys.exit(1)"
                 always_run: true
     "#});
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
-    success: true
-    exit_code: 0
+    cmd_snapshot!(context.filters(), context.run(), @r###"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    Pass environment.........................................................Passed
+    Pass environment.........................................................Failed
+    - hook id: env-vars
+    - exit code: 1
+      1
 
     ----- stderr -----
-    "#);
-
-    let env = context.read("env.txt");
-    assert_eq!(env, "1\n");
+    "###);
 }
 
 #[test]
