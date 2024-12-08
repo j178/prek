@@ -67,7 +67,8 @@ fn commit_info(workspace_root: &Path) {
         .arg("-1")
         .arg("--date=short")
         .arg("--abbrev=9")
-        .arg("--format=%H %h %cd %(describe)")
+        // describe:tags => Instead of only considering annotated tags, consider lightweight tags as well.
+        .arg("--format=%H %h %cd %(describe:tags)")
         .output()
     {
         Ok(output) if output.status.success() => output,
