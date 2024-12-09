@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.0.7
+
+### Enhancements
+
+- Add progress bar for hook init and install ([#122](https://github.com/j178/prefligit/pull/122))
+- Add color to command help ([#131](https://github.com/j178/prefligit/pull/131))
+- Add commit info to version display ([#130](https://github.com/j178/prefligit/pull/130))
+- Support meta hooks reading ([#134](https://github.com/j178/prefligit/pull/134))
+- Implement meta hooks ([#135](https://github.com/j178/prefligit/pull/135))
+
+### Bug fixes
+
+- Fix same repo clone multiple times ([#125](https://github.com/j178/prefligit/pull/125))
+- Fix logging level after renaming ([#119](https://github.com/j178/prefligit/pull/119))
+- Fix version tag distance ([#132](https://github.com/j178/prefligit/pull/132))
+
+### Other changes
+
+- Disable uv cache on Windows ([#127](https://github.com/j178/prefligit/pull/127))
+- Impl Eq and Hash for ConfigRemoteRepo ([#126](https://github.com/j178/prefligit/pull/126))
+- Make `pass_env_vars` runs on Windows ([#133](https://github.com/j178/prefligit/pull/133))
+- Run cargo update ([#129](https://github.com/j178/prefligit/pull/129))
+- Update Readme ([#128](https://github.com/j178/prefligit/pull/128))
+
 ## 0.0.6
 
 ### Breaking changes
