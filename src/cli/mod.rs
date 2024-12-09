@@ -12,7 +12,7 @@ mod clean;
 mod hook_impl;
 mod install;
 mod reporter;
-mod run;
+pub mod run;
 mod sample_config;
 mod self_update;
 mod validate;

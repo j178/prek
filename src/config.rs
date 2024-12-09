@@ -127,7 +127,6 @@ impl Display for HookType {
     }
 }
 
-// TODO: warn on deprecated stages
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum Stage {
@@ -265,7 +264,7 @@ impl RepoLocation {
         match self {
             RepoLocation::Local => "local",
             RepoLocation::Meta => "meta",
-            RepoLocation::Remote(_) => "remote",
+            RepoLocation::Remote(url) => url.as_str(),
         }
     }
 }
@@ -600,8 +599,6 @@ impl<'de> Deserialize<'de> for ConfigRepo {
         }
     }
 }
-
-// TODO: check minimum_pre_commit_version
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]

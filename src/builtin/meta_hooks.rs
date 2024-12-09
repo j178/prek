@@ -5,9 +5,9 @@ use std::sync::Arc;
 use anyhow::Result;
 use itertools::Itertools;
 
+use crate::cli::run::{get_filenames, FileFilter, FileOptions};
 use crate::config::Language;
 use crate::hook::{Hook, Project};
-use crate::run::{all_filenames, FileFilter, FileOptions};
 use crate::store::Store;
 
 /// Ensures that the configured hooks apply to at least one file in the repository.
@@ -18,7 +18,7 @@ pub async fn check_hooks_apply(
 ) -> Result<(i32, Vec<u8>)> {
     let store = Store::from_settings()?.init()?;
 
-    let input = all_filenames(FileOptions::default().with_all_files(true)).await?;
+    let input = get_filenames(FileOptions::default().with_all_files(true)).await?;
 
     let mut code = 0;
     let mut output = Vec::new();
@@ -67,7 +67,7 @@ pub async fn check_useless_excludes(
 ) -> Result<(i32, Vec<u8>)> {
     let store = Store::from_settings()?.init()?;
 
-    let input = all_filenames(FileOptions::default().with_all_files(true)).await?;
+    let input = get_filenames(FileOptions::default().with_all_files(true)).await?;
 
     let mut code = 0;
     let mut output = Vec::new();

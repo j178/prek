@@ -188,14 +188,14 @@ fn meta_hooks() {
     let context = TestContext::new();
     context.init_project();
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:
               - id: check-hooks-apply
               - id: check-useless-excludes
               - id: identity
-    "#});
+    "});
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
