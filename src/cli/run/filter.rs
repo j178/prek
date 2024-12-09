@@ -13,7 +13,7 @@ use crate::hook::Hook;
 use crate::identify::tags_from_path;
 
 /// Filter filenames by include/exclude patterns.
-struct FilenameFilter {
+pub struct FilenameFilter {
     include: Option<Regex>,
     exclude: Option<Regex>,
 }
@@ -112,6 +112,27 @@ impl<'a> FileFilter<'a> {
 
     pub fn len(&self) -> usize {
         self.filenames.len()
+    }
+
+    pub fn by_tag(&self, hook: &Hook) -> Vec<&String> {
+        let filter = FileTagFilter::from_hook(hook);
+        let filenames: Vec<_> = self
+            .filenames
+            .par_iter()
+            .filter(|filename| {
+                let path = Path::new(filename);
+                match tags_from_path(path) {
+                    Ok(tags) => filter.filter(&tags),
+                    Err(err) => {
+                        error!(filename, error = %err, "Failed to get tags");
+                        false
+                    }
+                }
+            })
+            .copied()
+            .collect();
+
+        filenames
     }
 
     pub fn for_hook(&self, hook: &Hook) -> Result<Vec<&String>, Box<regex::Error>> {
