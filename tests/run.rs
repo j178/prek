@@ -194,7 +194,7 @@ fn meta_hooks() -> Result<()> {
     cwd.child("invalid.json").write_str("{}")?;
     cwd.child("main.py").write_str(r#"print "abc"  "#)?;
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:
@@ -213,7 +213,7 @@ fn meta_hooks() -> Result<()> {
                 language: system
                 entry: python3 -c 'import sys; sys.exit(0)'
                 exclude: $nonexistent^
-    "#});
+    "});
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
