@@ -21,6 +21,7 @@ anstream = "0.6.15"
 anyhow = "1.0.86"
 assert_cmd = { version = "2.0.16", features = ["color"] }
 axoupdater = { version = "0.8.1", default-features = false, features = [ "github_releases"] }
+bstr = "1.11.0"
 clap = { version = "4.5.16", features = ["derive", "env", "string", "wrap_help"] }
 clap_complete = "4.5.37"
 ctrlc = "3.4.5"
@@ -48,7 +49,7 @@ shlex = "1.3.0"
 tempfile = "3.13.0"
 textwrap = "0.16.1"
 thiserror = "1.0.64"
-tokio = { version = "1.40.0", features = ["process", "rt", "sync"] }
+tokio = { version = "1.40.0", features = ["fs", "process", "rt", "sync"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 unicode-width = "0.2.0"

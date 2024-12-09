@@ -1,16 +1,22 @@
-use crate::hook::{Hook, Repo};
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 
+use crate::builtin::pre_commit_hooks::{is_pre_commit_hooks, Implemented};
+use crate::hook::{Hook, Repo};
+
 mod meta_hooks;
+mod pre_commit_hooks;
 
 /// Returns true if the hook has a builtin Rust implementation.
 pub fn check_fast_path(hook: &Hook) -> bool {
-    if matches!(hook.repo(), Repo::Meta { .. }) {
-        return true;
-    };
-
-    false
+    match hook.repo() {
+        Repo::Meta { .. } => true,
+        Repo::Remote { url, .. } if is_pre_commit_hooks(url) => {
+            Implemented::from_str(hook.id.as_str()).is_ok()
+        }
+        _ => false,
+    }
 }
 
 pub async fn run_fast_path(
@@ -20,6 +26,12 @@ pub async fn run_fast_path(
 ) -> anyhow::Result<(i32, Vec<u8>)> {
     match hook.repo() {
         Repo::Meta { .. } => run_meta_hook(hook, filenames, env_vars).await,
+        Repo::Remote { url, .. } if is_pre_commit_hooks(url) => {
+            Implemented::from_str(hook.id.as_str())
+                .unwrap()
+                .run(hook, filenames, env_vars)
+                .await
+        }
         _ => unreachable!(),
     }
 }

@@ -13,7 +13,7 @@ use crate::hook::{Hook, Project};
 use crate::store::Store;
 
 /// Ensures that the configured hooks apply to at least one file in the repository.
-pub async fn check_hooks_apply(
+pub(crate) async fn check_hooks_apply(
     _hook: &Hook,
     filenames: &[&String],
     _env_vars: Arc<HashMap<&'static str, String>>,
@@ -82,7 +82,7 @@ fn excludes_any<T: AsRef<str> + Sync>(
 }
 
 /// Ensures that exclude directives apply to any file in the repository.
-pub async fn check_useless_excludes(
+pub(crate) async fn check_useless_excludes(
     _hook: &Hook,
     filenames: &[&String],
     _env_vars: Arc<HashMap<&'static str, String>>,

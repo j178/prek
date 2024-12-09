@@ -1543,6 +1543,7 @@ dependencies = [
  "assert_cmd",
  "assert_fs",
  "axoupdater",
+ "bstr",
  "clap",
  "clap_complete",
  "ctrlc",

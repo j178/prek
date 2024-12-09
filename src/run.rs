@@ -1,11 +1,13 @@
 use std::cmp::max;
 use std::future::Future;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use tokio::task::JoinSet;
 use tracing::trace;
 
 use crate::hook::Hook;
+
+pub static CONCURRENCY: LazyLock<usize> = LazyLock::new(|| target_concurrency(false));
 
 fn target_concurrency(serial: bool) -> usize {
     if serial || std::env::var_os("PRE_COMMIT_NO_CONCURRENCY").is_some() {
