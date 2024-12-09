@@ -119,9 +119,11 @@ pub(crate) async fn fix_trailing_whitespace(
                     let eol = if line.ends_with(b"\r\n") {
                         line = &line[..line.len() - 2];
                         b"\r\n".as_slice()
-                    } else {
+                    } else if line.ends_with(b"\n") {
                         line = &line[..line.len() - 1];
                         b"\n".as_slice()
+                    } else {
+                        b"".as_slice()
                     };
 
                     if line.is_empty() {
