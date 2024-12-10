@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -44,8 +45,7 @@ pub(crate) async fn check_hooks_apply(
 
             if filenames.is_empty() {
                 code = 1;
-                output
-                    .extend(format!("{} does not apply to this repository\n", hook.id).as_bytes());
+                writeln!(&mut output, "{} does not apply to this repository", hook.id)?;
             }
         }
     }
@@ -99,13 +99,11 @@ pub(crate) async fn check_useless_excludes(
 
         if !excludes_any(&input, None, project.config().exclude.as_deref())? {
             code = 1;
-            output.extend(
-                format!(
-                    "The global exclude pattern {:?} does not match any files",
-                    project.config().exclude.as_deref().unwrap_or("")
-                )
-                .as_bytes(),
-            );
+            writeln!(
+                &mut output,
+                "The global exclude pattern {:?} does not match any files",
+                project.config().exclude.as_deref().unwrap_or("")
+            )?;
         }
 
         let hooks = project.init_hooks(&store, None).await?;
@@ -124,14 +122,12 @@ pub(crate) async fn check_useless_excludes(
                 hook.exclude.as_deref(),
             )? {
                 code = 1;
-                output.extend(
-                    format!(
-                        "The exclude pattern {:?} for {} does not match any files\n",
-                        hook.exclude.as_deref().unwrap_or(""),
-                        hook.id
-                    )
-                    .as_bytes(),
-                );
+                writeln!(
+                    &mut output,
+                    "The exclude pattern {:?} for {} does not match any files",
+                    hook.exclude.as_deref().unwrap_or(""),
+                    hook.id
+                )?;
             }
         }
     }

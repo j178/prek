@@ -340,7 +340,7 @@ impl HookBuilder {
         self
     }
 
-    /// Combine the hook configuration with the project level hook configuration.
+    /// Combine the hook configuration with the project level configuration.
     fn combine(&mut self, config: &Config) {
         let options = &mut self.config.options;
         let language = self.config.language;

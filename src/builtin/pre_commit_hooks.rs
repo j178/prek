@@ -45,8 +45,6 @@ pub(crate) fn is_pre_commit_hooks(url: &Url) -> bool {
     url.host_str() == Some("github.com") && url.path() == "/pre-commit/pre-commit-hooks"
 }
 
-// TODO: parse entry to get arguments
-
 #[derive(Parser)]
 struct Args {
     #[arg(long)]
