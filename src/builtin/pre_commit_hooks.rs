@@ -61,7 +61,7 @@ pub(crate) async fn fix_trailing_whitespace(
     _env_vars: Arc<HashMap<&'static str, String>>,
 ) -> Result<(i32, Vec<u8>)> {
     let entry = shlex::split(&hook.entry).ok_or(anyhow::anyhow!("Failed to parse entry"))?;
-    let args = Args::try_parse_from(entry)?;
+    let args = Args::try_parse_from(entry.iter().chain(&hook.args))?;
 
     // Validate markdown extensions
     if args.markdown_linebreak_ext.contains(&String::new()) {

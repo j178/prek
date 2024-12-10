@@ -373,9 +373,9 @@ pub struct ConfigRemoteHook {
     pub id: String,
     /// Override the name of the hook.
     pub name: Option<String>,
-    /// Not documented in the official docs.
+    /// Override the entrypoint. Not documented in the official docs but works.
     pub entry: Option<String>,
-    /// Not documented in the official docs.
+    /// Override the language. Not documented in the official docs but works.
     pub language: Option<Language>,
     #[serde(flatten)]
     pub options: HookOptions,
