@@ -2,7 +2,7 @@
 source: src/config.rs
 expression: manifest
 ---
-ManifestWire {
+Manifest {
     hooks: [
         ManifestHook {
             id: "pip-compile",

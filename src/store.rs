@@ -5,7 +5,7 @@ use rusqlite::Connection;
 use thiserror::Error;
 use tracing::debug;
 
-use crate::config::ConfigRemoteRepo;
+use crate::config::RemoteRepo;
 use crate::fs::{copy_dir_all, LockedFile};
 use crate::git::clone_repo;
 use crate::hook::{Hook, Repo};
@@ -204,7 +204,7 @@ impl Store {
     /// Clone a remote repo into the store.
     pub async fn prepare_remote_repo(
         &self,
-        repo_config: &ConfigRemoteRepo,
+        repo_config: &RemoteRepo,
         deps: &[String],
     ) -> Result<PathBuf, Error> {
         if let Some((_, _, path)) = self.get_repo(

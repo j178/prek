@@ -2,10 +2,10 @@
 source: src/config.rs
 expression: config
 ---
-ConfigWire {
+Config {
     repos: [
         Remote(
-            ConfigRemoteRepo {
+            RemoteRepo {
                 repo: Url {
                     scheme: "https",
                     cannot_be_a_base: false,
@@ -23,7 +23,7 @@ ConfigWire {
                 },
                 rev: "v0.20.2",
                 hooks: [
-                    ConfigRemoteHook {
+                    RemoteHook {
                         id: "validate-pyproject",
                         name: None,
                         entry: None,
@@ -53,7 +53,7 @@ ConfigWire {
             },
         ),
         Remote(
-            ConfigRemoteRepo {
+            RemoteRepo {
                 repo: Url {
                     scheme: "https",
                     cannot_be_a_base: false,
@@ -71,7 +71,7 @@ ConfigWire {
                 },
                 rev: "v1.26.0",
                 hooks: [
-                    ConfigRemoteHook {
+                    RemoteHook {
                         id: "typos",
                         name: None,
                         entry: None,
@@ -101,7 +101,7 @@ ConfigWire {
             },
         ),
         Local(
-            ConfigLocalRepo {
+            LocalRepo {
                 hooks: [
                     ManifestHook {
                         id: "cargo-fmt",
@@ -139,7 +139,7 @@ ConfigWire {
             },
         ),
         Local(
-            ConfigLocalRepo {
+            LocalRepo {
                 hooks: [
                     ManifestHook {
                         id: "cargo-dev-generate-all",
@@ -179,7 +179,7 @@ ConfigWire {
             },
         ),
         Remote(
-            ConfigRemoteRepo {
+            RemoteRepo {
                 repo: Url {
                     scheme: "https",
                     cannot_be_a_base: false,
@@ -197,7 +197,7 @@ ConfigWire {
                 },
                 rev: "v3.1.0",
                 hooks: [
-                    ConfigRemoteHook {
+                    RemoteHook {
                         id: "prettier",
                         name: None,
                         entry: None,
@@ -232,7 +232,7 @@ ConfigWire {
             },
         ),
         Remote(
-            ConfigRemoteRepo {
+            RemoteRepo {
                 repo: Url {
                     scheme: "https",
                     cannot_be_a_base: false,
@@ -250,7 +250,7 @@ ConfigWire {
                 },
                 rev: "v0.6.9",
                 hooks: [
-                    ConfigRemoteHook {
+                    RemoteHook {
                         id: "ruff-format",
                         name: None,
                         entry: None,
@@ -276,7 +276,7 @@ ConfigWire {
                             minimum_pre_commit_version: None,
                         },
                     },
-                    ConfigRemoteHook {
+                    RemoteHook {
                         id: "ruff",
                         name: None,
                         entry: None,

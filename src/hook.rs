@@ -13,8 +13,8 @@ use tracing::{debug, error};
 use url::Url;
 
 use crate::config::{
-    self, read_config, read_manifest, ConfigLocalHook, ConfigMetaHook, ConfigRemoteHook,
-    ConfigRepo, ConfigWire, Language, ManifestHook, Stage, CONFIG_FILE, MANIFEST_FILE,
+    self, read_config, read_manifest, Config, Language, LocalHook, ManifestHook, MetaHook,
+    RemoteHook, Stage, CONFIG_FILE, MANIFEST_FILE,
 };
 use crate::fs::{Simplified, CWD};
 use crate::languages::DEFAULT_VERSION;
@@ -70,12 +70,12 @@ impl Repo {
     }
 
     /// Construct a local repo from a list of hooks.
-    pub fn local(hooks: Vec<ConfigLocalHook>) -> Self {
+    pub fn local(hooks: Vec<LocalHook>) -> Self {
         Self::Local { hooks }
     }
 
     /// Construct a meta repo.
-    pub fn meta(hooks: Vec<ConfigMetaHook>) -> Self {
+    pub fn meta(hooks: Vec<MetaHook>) -> Self {
         Self::Meta {
             hooks: hooks.into_iter().map(ManifestHook::from).collect(),
         }
@@ -113,7 +113,7 @@ impl Display for Repo {
 
 pub struct Project {
     config_path: PathBuf,
-    config: ConfigWire,
+    config: Config,
     repos: Vec<Rc<Repo>>,
 }
 
@@ -149,7 +149,7 @@ impl Project {
         })
     }
 
-    pub fn config(&self) -> &ConfigWire {
+    pub fn config(&self) -> &Config {
         &self.config
     }
 
@@ -165,7 +165,7 @@ impl Project {
         let mut tasks = FuturesUnordered::new();
         let mut seen = HashSet::new();
         for repo in &self.config.repos {
-            if let ConfigRepo::Remote(repo) = repo {
+            if let config::Repo::Remote(repo) = repo {
                 if !seen.insert(repo) {
                     continue;
                 }
@@ -198,15 +198,15 @@ impl Project {
         let mut repos = Vec::with_capacity(self.config.repos.len());
         for repo in &self.config.repos {
             match repo {
-                ConfigRepo::Remote(repo_config) => {
-                    let repo = remote_repos.get(repo_config).expect("repo not found");
+                config::Repo::Remote(repo) => {
+                    let repo = remote_repos.get(repo).expect("repo not found");
                     repos.push(repo.clone());
                 }
-                ConfigRepo::Local(repo) => {
+                config::Repo::Local(repo) => {
                     let repo = Repo::local(repo.hooks.clone());
                     repos.push(Rc::new(repo));
                 }
-                ConfigRepo::Meta(repo) => {
+                config::Repo::Meta(repo) => {
                     let repo = Repo::meta(repo.hooks.clone());
                     repos.push(Rc::new(repo));
                 }
@@ -230,7 +230,7 @@ impl Project {
 
         for (repo_config, repo) in zip_eq(self.config.repos.iter(), self.repos.iter()) {
             match repo_config {
-                ConfigRepo::Remote(repo_config) => {
+                config::Repo::Remote(repo_config) => {
                     for hook_config in &repo_config.hooks {
                         // Check hook id is valid.
                         let Some(hook) = repo.get_hook(&hook_config.id) else {
@@ -263,7 +263,7 @@ impl Project {
                         hooks.push(hook);
                     }
                 }
-                ConfigRepo::Local(repo_config) => {
+                config::Repo::Local(repo_config) => {
                     for hook_config in &repo_config.hooks {
                         let repo = Rc::clone(repo);
                         let mut builder = HookBuilder::new(repo, hook_config.clone());
@@ -285,7 +285,7 @@ impl Project {
                         hooks.push(hook);
                     }
                 }
-                ConfigRepo::Meta(repo_config) => {
+                config::Repo::Meta(repo_config) => {
                     for hook_config in &repo_config.hooks {
                         let repo = Rc::clone(repo);
                         let hook_config = ManifestHook::from(hook_config.clone());
@@ -324,7 +324,7 @@ impl HookBuilder {
     }
 
     /// Update the hook from the project level hook configuration.
-    fn update(&mut self, config: &ConfigRemoteHook) -> &mut Self {
+    fn update(&mut self, config: &RemoteHook) -> &mut Self {
         if let Some(name) = &config.name {
             self.config.name.clone_from(name);
         }
@@ -341,7 +341,7 @@ impl HookBuilder {
     }
 
     /// Combine the hook configuration with the project level hook configuration.
-    fn combine(&mut self, config: &ConfigWire) {
+    fn combine(&mut self, config: &Config) {
         let options = &mut self.config.options;
         let language = self.config.language;
         if options.language_version.is_none() {

@@ -207,8 +207,8 @@ impl Stage {
 // TODO: check minimum_pre_commit_version
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct ConfigWire {
-    pub repos: Vec<ConfigRepo>,
+pub struct Config {
+    pub repos: Vec<Repo>,
     /// A list of --hook-types which will be used by default when running pre-commit install.
     /// Default is `[pre-commit]`.
     pub default_install_hook_types: Option<Vec<HookType>>,
@@ -368,7 +368,7 @@ impl HookOptions {
 /// All keys in manifest hook dict are valid in a config hook dict, but are optional.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct ConfigRemoteHook {
+pub struct RemoteHook {
     /// The id of the hook.
     pub id: String,
     /// Override the name of the hook.
@@ -384,7 +384,7 @@ pub struct ConfigRemoteHook {
 /// A local hook in the configuration file.
 ///
 /// It's the same as the manifest hook definition.
-pub type ConfigLocalHook = ManifestHook;
+pub type LocalHook = ManifestHook;
 
 #[derive(Debug, Copy, Clone, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -422,14 +422,14 @@ impl FromStr for MetaHookID {
 ///
 /// It's the same as the manifest hook definition but with only a few predefined id allowed.
 #[derive(Debug, Clone)]
-pub struct ConfigMetaHook(ManifestHook);
+pub struct MetaHook(ManifestHook);
 
-impl<'de> Deserialize<'de> for ConfigMetaHook {
+impl<'de> Deserialize<'de> for MetaHook {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let hook = ConfigRemoteHook::deserialize(deserializer)?;
+        let hook = RemoteHook::deserialize(deserializer)?;
 
         let id = MetaHookID::from_str(&hook.id)
             .map_err(|()| serde::de::Error::custom("Unknown meta hook id"))?;
@@ -479,74 +479,74 @@ impl<'de> Deserialize<'de> for ConfigMetaHook {
 
         defaults.options.update(&hook.options);
 
-        Ok(ConfigMetaHook(defaults))
+        Ok(MetaHook(defaults))
     }
 }
 
-impl From<ConfigMetaHook> for ManifestHook {
-    fn from(hook: ConfigMetaHook) -> Self {
+impl From<MetaHook> for ManifestHook {
+    fn from(hook: MetaHook) -> Self {
         hook.0
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ConfigRemoteRepo {
+pub struct RemoteRepo {
     pub repo: Url,
     pub rev: String,
-    pub hooks: Vec<ConfigRemoteHook>,
+    pub hooks: Vec<RemoteHook>,
 }
 
-impl PartialEq for ConfigRemoteRepo {
+impl PartialEq for RemoteRepo {
     fn eq(&self, other: &Self) -> bool {
         self.repo == other.repo && self.rev == other.rev
     }
 }
 
-impl Eq for ConfigRemoteRepo {}
+impl Eq for RemoteRepo {}
 
-impl std::hash::Hash for ConfigRemoteRepo {
+impl std::hash::Hash for RemoteRepo {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.repo.hash(state);
         self.rev.hash(state);
     }
 }
 
-impl Display for ConfigRemoteRepo {
+impl Display for RemoteRepo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}@{}", self.repo, self.rev)
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ConfigLocalRepo {
-    pub hooks: Vec<ConfigLocalHook>,
+pub struct LocalRepo {
+    pub hooks: Vec<LocalHook>,
 }
 
-impl Display for ConfigLocalRepo {
+impl Display for LocalRepo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("local")
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ConfigMetaRepo {
-    pub hooks: Vec<ConfigMetaHook>,
+pub struct MetaRepo {
+    pub hooks: Vec<MetaHook>,
 }
 
-impl Display for ConfigMetaRepo {
+impl Display for MetaRepo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("meta")
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum ConfigRepo {
-    Remote(ConfigRemoteRepo),
-    Local(ConfigLocalRepo),
-    Meta(ConfigMetaRepo),
+pub enum Repo {
+    Remote(RemoteRepo),
+    Local(LocalRepo),
+    Meta(MetaRepo),
 }
 
-impl<'de> Deserialize<'de> for ConfigRepo {
+impl<'de> Deserialize<'de> for Repo {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -563,14 +563,14 @@ impl<'de> Deserialize<'de> for ConfigRepo {
         match repo {
             RepoLocation::Remote(url) => {
                 #[derive(Deserialize)]
-                struct RemoteRepo {
+                struct _RemoteRepo {
                     rev: String,
-                    hooks: Vec<ConfigRemoteHook>,
+                    hooks: Vec<RemoteHook>,
                 }
-                let RemoteRepo { rev, hooks } = RemoteRepo::deserialize(rest)
+                let _RemoteRepo { rev, hooks } = _RemoteRepo::deserialize(rest)
                     .map_err(|e| serde::de::Error::custom(format!("Invalid remote repo: {e}")))?;
 
-                Ok(ConfigRepo::Remote(ConfigRemoteRepo {
+                Ok(Repo::Remote(RemoteRepo {
                     repo: url,
                     rev,
                     hooks,
@@ -579,22 +579,22 @@ impl<'de> Deserialize<'de> for ConfigRepo {
             RepoLocation::Local => {
                 #[derive(Deserialize)]
                 #[serde(deny_unknown_fields)]
-                struct LocalRepo {
-                    hooks: Vec<ConfigLocalHook>,
+                struct _LocalRepo {
+                    hooks: Vec<LocalHook>,
                 }
-                let LocalRepo { hooks } = LocalRepo::deserialize(rest)
+                let _LocalRepo { hooks } = _LocalRepo::deserialize(rest)
                     .map_err(|e| serde::de::Error::custom(format!("Invalid local repo: {e}")))?;
-                Ok(ConfigRepo::Local(ConfigLocalRepo { hooks }))
+                Ok(Repo::Local(LocalRepo { hooks }))
             }
             RepoLocation::Meta => {
                 #[derive(Deserialize)]
                 #[serde(deny_unknown_fields)]
-                struct MetaRepo {
-                    hooks: Vec<ConfigMetaHook>,
+                struct _MetaRepo {
+                    hooks: Vec<MetaHook>,
                 }
-                let MetaRepo { hooks } = MetaRepo::deserialize(rest)
+                let _MetaRepo { hooks } = _MetaRepo::deserialize(rest)
                     .map_err(|e| serde::de::Error::custom(format!("Invalid meta repo: {e}")))?;
-                Ok(ConfigRepo::Meta(ConfigMetaRepo { hooks }))
+                Ok(Repo::Meta(MetaRepo { hooks }))
             }
         }
     }
@@ -618,7 +618,7 @@ pub struct ManifestHook {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(transparent)]
-pub struct ManifestWire {
+pub struct Manifest {
     pub hooks: Vec<ManifestHook>,
 }
 
@@ -638,7 +638,7 @@ pub enum Error {
 }
 
 /// Read the configuration file from the given path.
-pub fn read_config(path: &Path) -> Result<ConfigWire, Error> {
+pub fn read_config(path: &Path) -> Result<Config, Error> {
     let content = match fs_err::read_to_string(path) {
         Ok(content) => content,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -653,7 +653,7 @@ pub fn read_config(path: &Path) -> Result<ConfigWire, Error> {
 
 // TODO: check id duplication?
 /// Read the manifest file from the given path.
-pub fn read_manifest(path: &Path) -> Result<ManifestWire, Error> {
+pub fn read_manifest(path: &Path) -> Result<Manifest, Error> {
     let content = fs_err::read_to_string(path)?;
     let manifest = serde_yaml::from_str(&content)
         .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
@@ -676,13 +676,13 @@ mod tests {
                     entry: cargo fmt --
                     language: system
         "};
-        let result = serde_yaml::from_str::<ConfigWire>(yaml);
-        insta::assert_debug_snapshot!(result, @r###"
+        let result = serde_yaml::from_str::<Config>(yaml);
+        insta::assert_debug_snapshot!(result, @r#"
         Ok(
-            ConfigWire {
+            Config {
                 repos: [
                     Local(
-                        ConfigLocalRepo {
+                        LocalRepo {
                             hooks: [
                                 ManifestHook {
                                     id: "cargo-fmt",
@@ -724,7 +724,7 @@ mod tests {
                 ci: None,
             },
         )
-        "###);
+        "#);
 
         let yaml = indoc::indoc! {r"
             repos:
@@ -736,7 +736,7 @@ mod tests {
                     types:
                       - rust
         "};
-        let result = serde_yaml::from_str::<ConfigWire>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result, @r###"
         Err(
             Error("repos: Invalid local repo: unknown field `rev`, expected `hooks`", line: 2, column: 3),
@@ -751,13 +751,13 @@ mod tests {
                 hooks:
                   - id: typos
         "};
-        let result = serde_yaml::from_str::<ConfigWire>(yaml);
-        insta::assert_debug_snapshot!(result, @r###"
+        let result = serde_yaml::from_str::<Config>(yaml);
+        insta::assert_debug_snapshot!(result, @r#"
         Ok(
-            ConfigWire {
+            Config {
                 repos: [
                     Remote(
-                        ConfigRemoteRepo {
+                        RemoteRepo {
                             repo: Url {
                                 scheme: "https",
                                 cannot_be_a_base: false,
@@ -775,7 +775,7 @@ mod tests {
                             },
                             rev: "v1.0.0",
                             hooks: [
-                                ConfigRemoteHook {
+                                RemoteHook {
                                     id: "typos",
                                     name: None,
                                     entry: None,
@@ -815,7 +815,7 @@ mod tests {
                 ci: None,
             },
         )
-        "###);
+        "#);
 
         let yaml = indoc::indoc! {r"
             repos:
@@ -823,7 +823,7 @@ mod tests {
                 hooks:
                   - id: typos
         "};
-        let result = serde_yaml::from_str::<ConfigWire>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result, @r###"
         Err(
             Error("repos: Invalid remote repo: missing field `rev`", line: 2, column: 3),
@@ -842,7 +842,7 @@ mod tests {
                   - name: typos
                     alias: typo
         "};
-        let result = serde_yaml::from_str::<ConfigWire>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result, @r###"
         Err(
             Error("repos: Invalid remote repo: missing field `id`", line: 2, column: 3),
@@ -860,7 +860,7 @@ mod tests {
                     types:
                       - rust
         "};
-        let result = serde_yaml::from_str::<ConfigWire>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result, @r###"
         Err(
             Error("repos: Invalid local repo: missing field `language`", line: 2, column: 3),
@@ -876,13 +876,13 @@ mod tests {
                     entry: cargo fmt
                     language: rust
         "};
-        let result = serde_yaml::from_str::<ConfigWire>(yaml);
-        insta::assert_debug_snapshot!(result, @r###"
+        let result = serde_yaml::from_str::<Config>(yaml);
+        insta::assert_debug_snapshot!(result, @r#"
         Ok(
-            ConfigWire {
+            Config {
                 repos: [
                     Local(
-                        ConfigLocalRepo {
+                        LocalRepo {
                             hooks: [
                                 ManifestHook {
                                     id: "cargo-fmt",
@@ -924,7 +924,7 @@ mod tests {
                 ci: None,
             },
         )
-        "###);
+        "#);
     }
 
     #[test]
@@ -938,7 +938,7 @@ mod tests {
                   - name: typos
                     alias: typo
         "};
-        let result = serde_yaml::from_str::<ConfigWire>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result, @r###"
         Err(
             Error("repos: Invalid meta repo: unknown field `rev`, expected `hooks`", line: 2, column: 3),
@@ -952,7 +952,7 @@ mod tests {
                 hooks:
                   - id: hello
         "};
-        let result = serde_yaml::from_str::<ConfigWire>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result, @r###"
         Err(
             Error("repos: Invalid meta repo: Unknown meta hook id", line: 2, column: 3),
@@ -967,7 +967,7 @@ mod tests {
                   - id: check-hooks-apply
                     language: python
         "};
-        let result = serde_yaml::from_str::<ConfigWire>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result, @r###"
         Err(
             Error("repos: Invalid meta repo: language must be system for meta hook", line: 2, column: 3),
@@ -982,7 +982,7 @@ mod tests {
                   - id: check-hooks-apply
                     entry: echo hell world
         "};
-        let result = serde_yaml::from_str::<ConfigWire>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result, @r###"
         Err(
             Error("repos: Invalid meta repo: entry is not allowed for meta hook", line: 2, column: 3),
@@ -998,15 +998,15 @@ mod tests {
                   - id: check-useless-excludes
                   - id: identity
         "};
-        let result = serde_yaml::from_str::<ConfigWire>(yaml);
-        insta::assert_debug_snapshot!(result, @r###"
+        let result = serde_yaml::from_str::<Config>(yaml);
+        insta::assert_debug_snapshot!(result, @r#"
         Ok(
-            ConfigWire {
+            Config {
                 repos: [
                     Meta(
-                        ConfigMetaRepo {
+                        MetaRepo {
                             hooks: [
-                                ConfigMetaHook(
+                                MetaHook(
                                     ManifestHook {
                                         id: "check-hooks-apply",
                                         name: "Check hooks apply",
@@ -1036,7 +1036,7 @@ mod tests {
                                         },
                                     },
                                 ),
-                                ConfigMetaHook(
+                                MetaHook(
                                     ManifestHook {
                                         id: "check-useless-excludes",
                                         name: "Check useless excludes",
@@ -1066,7 +1066,7 @@ mod tests {
                                         },
                                     },
                                 ),
-                                ConfigMetaHook(
+                                MetaHook(
                                     ManifestHook {
                                         id: "identity",
                                         name: "identity",
@@ -1110,7 +1110,7 @@ mod tests {
                 ci: None,
             },
         )
-        "###);
+        "#);
     }
 
     #[test]
