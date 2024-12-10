@@ -63,11 +63,6 @@ pub(crate) async fn fix_trailing_whitespace(
     let entry = shlex::split(&hook.entry).ok_or(anyhow::anyhow!("Failed to parse entry"))?;
     let args = Args::try_parse_from(entry.iter().chain(&hook.args))?;
 
-    // Validate markdown extensions
-    if args.markdown_linebreak_ext.contains(&String::new()) {
-        return Err(anyhow::anyhow!("Empty string in --markdown-linebreak-ext"));
-    }
-
     let force_markdown = args.markdown_linebreak_ext.iter().any(|ext| ext == "*");
     let markdown_exts = args
         .markdown_linebreak_ext
@@ -78,7 +73,7 @@ pub(crate) async fn fix_trailing_whitespace(
     let chars = if args.chars.is_empty() {
         None
     } else {
-        Some(args.chars.iter().collect::<Vec<_>>())
+        Some(args.chars)
     };
 
     // Validate extensions don't contain path separators
@@ -88,8 +83,7 @@ pub(crate) async fn fix_trailing_whitespace(
             .any(|c| matches!(c, '.' | '/' | '\\' | ':'))
         {
             return Err(anyhow::anyhow!(
-                "bad --markdown-linebreak-ext extension '{}' (has . / \\ :)",
-                ext
+                "bad --markdown-linebreak-ext extension '{ext}' (has . / \\ :)"
             ));
         }
     }
@@ -139,7 +133,7 @@ pub(crate) async fn fix_trailing_whitespace(
                     {
                         // Preserve trailing two spaces for markdown, but trim any additional whitespace
                         let trimmed = if let Some(chars) = chars.as_deref() {
-                            line[..line.len() - 2].trim_end_with(|b| chars.contains(&&b))
+                            line[..line.len() - 2].trim_end_with(|b| chars.contains(&b))
                         } else {
                             line[..line.len() - 2].trim_ascii_end()
                         };
@@ -149,7 +143,7 @@ pub(crate) async fn fix_trailing_whitespace(
                     } else {
                         // Normal whitespace trimming
                         let trimmed = if let Some(chars) = chars.as_deref() {
-                            line.trim_end_with(|b| chars.contains(&&b))
+                            line.trim_end_with(|b| chars.contains(&b))
                         } else {
                             line.trim_ascii_end()
                         };
