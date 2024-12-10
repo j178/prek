@@ -42,10 +42,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Error, Diagnostic)]
 pub enum Error {
     /// The command fundamentally failed to execute (usually means it didn't exist)
-    #[error("failed to {summary}")]
+    #[error("failed to {summary} (cmd: {cmd})")]
     Exec {
         /// Summary of what the Command was trying to do
         summary: String,
+        /// Command name
+        cmd: String,
         /// What failed
         #[source]
         cause: std::io::Error,
@@ -125,6 +127,7 @@ impl Cmd {
         self.log_command();
         self.inner.spawn().map_err(|cause| Error::Exec {
             summary: self.summary.clone(),
+            cmd: self.get_program().to_string_lossy().to_string(),
             cause,
         })
     }
@@ -135,6 +138,7 @@ impl Cmd {
         self.log_command();
         let res = self.inner.output().await.map_err(|cause| Error::Exec {
             summary: self.summary.clone(),
+            cmd: self.get_program().to_string_lossy().to_string(),
             cause,
         })?;
         self.maybe_check_status(res.status)?;
@@ -147,6 +151,7 @@ impl Cmd {
         self.log_command();
         let res = self.inner.status().await.map_err(|cause| Error::Exec {
             summary: self.summary.clone(),
+            cmd: self.get_program().to_string_lossy().to_string(),
             cause,
         })?;
         self.maybe_check_status(res)?;
