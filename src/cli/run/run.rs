@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use anstream::ColorChoice;
 use anyhow::Result;
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::{OwoColorize, Style};
@@ -268,21 +267,22 @@ async fn install_hook(hook: &Hook, env_dir: PathBuf) -> Result<()> {
 pub async fn install_hooks(hooks: &[Hook], reporter: &HookInstallReporter) -> Result<()> {
     let to_install = hooks
         .iter()
-        .filter(|&hook| !hook.installed())
-        .unique_by(|&hook| hook.install_key());
+        .filter(|hook| !hook.installed())
+        .unique_by(|hook| hook.install_key())
+        .filter(|hook| hook.environment_dir().is_some());
 
-    let mut tasks = FuturesUnordered::new();
-    for hook in to_install {
-        if let Some(env_dir) = hook.environment_dir() {
-            tasks.push(async move {
-                let progress = reporter.on_install_start(hook);
-                let result = install_hook(hook, env_dir).await;
-                (result, progress)
-            });
-        }
-    }
-    while let Some((result, progress)) = tasks.next().await {
-        reporter.on_install_complete(progress);
+    let mut tasks = futures::stream::iter(to_install)
+        .map(|hook| async move {
+            let env_dir = hook.environment_dir().expect("environment_dir is None");
+            let progress = reporter.on_install_start(hook);
+            let result = install_hook(hook, env_dir).await;
+            reporter.on_install_complete(progress);
+
+            result
+        })
+        .buffer_unordered(5);
+
+    while let Some(result) = tasks.next().await {
         result?;
     }
 
