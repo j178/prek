@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use crate::cli::{self, ExitStatus, RunArgs};
 use crate::config::HookType;
+use crate::env_vars::EnvVars;
 use crate::printer::Printer;
 use anstream::eprintln;
 
@@ -20,7 +21,7 @@ pub(crate) async fn hook_impl(
     if let Some(ref config_file) = config {
         if !config_file.try_exists()? {
             return if skip_on_missing_config
-                || std::env::var_os("PRE_COMMIT_ALLOW_NO_CONFIG").is_some()
+                || std::env::var_os(EnvVars::PRE_COMMIT_ALLOW_NO_CONFIG).is_some()
             {
                 Ok(ExitStatus::Success)
             } else {

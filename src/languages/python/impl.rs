@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::env_vars::EnvVars;
 use crate::hook::Hook;
 use crate::languages::python::uv::ensure_uv;
 use crate::languages::LanguageImpl;
@@ -86,7 +87,7 @@ impl LanguageImpl for Python {
         // Construct PATH with venv bin directory first
         let new_path = std::env::join_paths(
             std::iter::once(bin_dir(env_dir.as_path())).chain(
-                std::env::var_os("PATH")
+                std::env::var_os(EnvVars::PATH)
                     .as_ref()
                     .iter()
                     .flat_map(std::env::split_paths),

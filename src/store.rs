@@ -6,6 +6,7 @@ use thiserror::Error;
 use tracing::debug;
 
 use crate::config::RemoteRepo;
+use crate::env_vars::EnvVars;
 use crate::fs::{copy_dir_all, LockedFile};
 use crate::git::clone_repo;
 use crate::hook::{Hook, Repo};
@@ -37,13 +38,13 @@ pub struct Store {
 
 impl Store {
     pub fn from_settings() -> Result<Self, Error> {
-        if let Some(path) = std::env::var_os("PRE_COMMIT_HOME") {
+        if let Some(path) = std::env::var_os(EnvVars::PRE_COMMIT_HOME) {
             debug!(
                 path = %path.to_string_lossy(),
                 "Loading store from PRE_COMMIT_HOME",
             );
             return Ok(Self::from_path(path));
-        } else if let Some(path) = std::env::var_os("XDG_CACHE_HOME") {
+        } else if let Some(path) = std::env::var_os(EnvVars::XDG_CACHE_HOME) {
             let path = PathBuf::from(path).join("pre-commit");
             debug!(
                 path = %path.to_string_lossy(),

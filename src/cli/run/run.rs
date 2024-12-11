@@ -20,6 +20,7 @@ use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{get_filenames, FileFilter, FileOptions};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::Stage;
+use crate::env_vars::EnvVars;
 use crate::fs::Simplified;
 use crate::git;
 use crate::git::{get_diff, git_cmd};
@@ -43,7 +44,7 @@ pub(crate) async fn run(
 ) -> Result<ExitStatus> {
     // Prevent recursive post-checkout hooks.
     if matches!(hook_stage, Some(Stage::PostCheckout))
-        && std::env::var_os("_PRE_COMMIT_SKIP_POST_CHECKOUT").is_some()
+        && std::env::var_os(EnvVars::_PRE_COMMIT_SKIP_POST_CHECKOUT).is_some()
     {
         return Ok(ExitStatus::Success);
     }
@@ -236,7 +237,7 @@ fn fill_envs(
 }
 
 fn get_skips() -> Vec<String> {
-    match std::env::var_os("SKIP") {
+    match std::env::var_os(EnvVars::SKIP) {
         Some(s) if !s.is_empty() => s
             .to_string_lossy()
             .split(',')
