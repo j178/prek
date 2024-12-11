@@ -269,11 +269,10 @@ pub async fn install_hooks(hooks: &[Hook], reporter: &HookInstallReporter) -> Re
         .iter()
         .filter(|hook| !hook.installed())
         .unique_by(|hook| hook.install_key())
-        .filter(|hook| hook.environment_dir().is_some());
+        .filter_map(|hook| hook.environment_dir().map(|env_dir| (hook, env_dir)));
 
     let mut tasks = futures::stream::iter(to_install)
-        .map(|hook| async move {
-            let env_dir = hook.environment_dir().expect("environment_dir is None");
+        .map(|(hook, env_dir)| async move {
             let progress = reporter.on_install_start(hook);
             let result = install_hook(hook, env_dir).await;
             reporter.on_install_complete(progress);
