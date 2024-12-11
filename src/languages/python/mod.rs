@@ -1,4 +1,5 @@
-mod r#impl;
+#[allow(clippy::module_inception)]
+mod python;
 mod uv;
 
-pub use r#impl::Python;
+pub use python::Python;

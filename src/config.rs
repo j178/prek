@@ -67,7 +67,7 @@ impl Language {
 
     /// Return whether the language allows specifying the version.
     /// See <https://pre-commit.com/#overriding-language-version>
-    pub fn allow_specify_version(self) -> bool {
+    pub fn supports_language_version(self) -> bool {
         matches!(
             self,
             Self::Python | Self::Node | Self::Ruby | Self::Rust | Self::Golang
@@ -315,8 +315,12 @@ impl LanguageVersion {
         matches!(self, Self::Default)
     }
 
-    pub fn is_system(&self) -> bool {
-        matches!(self, Self::System)
+    pub fn allows_system(&self) -> bool {
+        !matches!(self, Self::Specific(_))
+    }
+
+    pub fn allows_download(&self) -> bool {
+        !matches!(self, Self::System)
     }
 
     pub fn as_str(&self) -> &str {

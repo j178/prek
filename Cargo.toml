@@ -31,7 +31,9 @@ constants = { workspace = true }
 anstream = "0.6.15"
 anyhow = "1.0.86"
 assert_cmd = { version = "2.0.16", features = ["color"] }
-axoupdater = { version = "0.9.0", default-features = false, features = [ "github_releases"] }
+async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
+async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "c909fda63fcafe4af496a07bfda28a5aae97e58d", features = ["tokio"] }
+axoupdater = { version = "0.8.1", default-features = false, features = [ "github_releases"] }
 bstr = "1.11.0"
 clap = { version = "4.5.16", features = ["derive", "env", "string", "wrap_help"] }
 clap_complete = "4.5.37"
@@ -51,13 +53,15 @@ miette = { version = "7.5.0", features = ["fancy-no-backtrace"] }
 owo-colors = "4.1.0"
 rand = "0.9.0"
 rayon = "1.10.0"
-reqwest = { version = "0.12.9", default-features = false }
+reqwest = { version = "0.12.9", default-features = false, features = ["stream"] }
 same-file = "1.0.6"
+semver = { version = "1.0.24", features = ["serde"] }
 seahash = "4.1.0"
 serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.132"
 serde_yaml = "0.9.34"
 shlex = "1.3.0"
+target-lexicon = "0.13.0"
 tempfile = "3.13.0"
 textwrap = "0.16.1"
 thiserror = "2.0.11"
@@ -67,6 +71,7 @@ tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 unicode-width = "0.2.0"
 url = { version = "2.5.2", features = ["serde"] }
 which = "7.0.1"
+tokio-util = "0.7.13"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.164"

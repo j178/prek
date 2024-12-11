@@ -379,7 +379,7 @@ impl HookBuilder {
                     "Language {} does not need environment, but language_version is set",
                     language
                 );
-            } else if !language.allow_specify_version() {
+            } else if !language.supports_language_version() {
                 warn_user!(
                     "Language {} does not support specifying version, but language_version is set",
                     language

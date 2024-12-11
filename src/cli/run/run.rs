@@ -24,7 +24,6 @@ use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::Stage;
 use crate::fs::Simplified;
 use crate::git;
-use crate::git::{get_diff, git_cmd};
 use crate::hook::{Hook, Project};
 use crate::printer::Printer;
 use crate::store::Store;
@@ -332,7 +331,7 @@ pub async fn run_hooks(
     let columns = calculate_columns(hooks);
     let mut success = true;
 
-    let mut diff = get_diff().await?;
+    let mut diff = git::get_diff().await?;
     // hooks must run in serial
     for hook in hooks {
         let (hook_success, new_diff) = run_hook(
@@ -361,7 +360,7 @@ pub async fn run_hooks(
             ColorChoice::Always | ColorChoice::AlwaysAnsi => "--color=always",
             ColorChoice::Never => "--color=never",
         };
-        git_cmd("git diff")?
+        git::git_cmd("git diff")?
             .arg("--no-pager")
             .arg("diff")
             .arg("--no-ext-diff")
@@ -448,7 +447,7 @@ async fn run_hook(
 
     let duration = start.elapsed();
 
-    let new_diff = get_diff().await?;
+    let new_diff = git::get_diff().await?;
     let file_modified = diff != new_diff;
     let success = status == 0 && !file_modified;
 
