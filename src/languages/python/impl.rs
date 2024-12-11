@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::env_vars::EnvVars;
 use crate::hook::Hook;
-use crate::languages::python::uv::ensure_uv;
+use crate::languages::python::uv::UvInstaller;
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
@@ -26,7 +26,7 @@ impl LanguageImpl for Python {
     async fn install(&self, hook: &Hook) -> anyhow::Result<()> {
         let venv = hook.environment_dir().expect("No environment dir found");
 
-        let uv = ensure_uv().await?;
+        let uv = UvInstaller::install().await?;
 
         let uv_cmd = |summary| {
             #[allow(unused_mut)]

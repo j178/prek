@@ -40,6 +40,7 @@ miette = { version = "7.2.0", features = ["owo-colors", "textwrap"] }
 owo-colors = "4.1.0"
 rand = "0.8.5"
 rayon = "1.10.0"
+reqwest = { version = "0.12.9", default-features = false }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 same-file = "1.0.6"
 serde = { version = "1.0.210", features = ["derive"] }
@@ -49,7 +50,7 @@ shlex = "1.3.0"
 tempfile = "3.13.0"
 textwrap = "0.16.1"
 thiserror = "1.0.64"
-tokio = { version = "1.40.0", features = ["fs", "process", "rt", "sync"] }
+tokio = { version = "1.40.0", features = ["fs", "process", "rt", "sync", "macros"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 unicode-width = "0.2.0"
