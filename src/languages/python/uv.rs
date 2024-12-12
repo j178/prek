@@ -8,6 +8,7 @@ use tokio::task::JoinSet;
 use tracing::{debug, enabled, trace, warn};
 
 use crate::fs::LockedFile;
+use crate::process::Cmd;
 use crate::store::Store;
 
 // The version of `uv` to install. Should update periodically.
@@ -43,8 +44,12 @@ impl PyPiMirror {
 
 #[derive(Debug)]
 enum InstallSource {
+    /// Download uv from GitHub releases.
     GitHub,
+    /// Download uv from `PyPi`.
     PyPi(PyPiMirror),
+    /// Install uv by running `pip install uv`.
+    Pip,
 }
 
 impl InstallSource {
@@ -52,6 +57,7 @@ impl InstallSource {
         match self {
             Self::GitHub => self.install_from_github(target).await,
             Self::PyPi(source) => self.install_from_pypi(target, source).await,
+            Self::Pip => self.install_from_pip(target).await,
         }
     }
 
@@ -92,8 +98,43 @@ impl InstallSource {
         }
     }
 
-    async fn install_from_pypi(&self, _target: &Path, _source: &PyPiMirror) -> Result<()> {
-        unimplemented!()
+    async fn install_from_pypi(&self, target: &Path, _source: &PyPiMirror) -> Result<()> {
+        // TODO: Implement this, currently just fallback to pip install
+        // Determine the host system
+        // Get the html page
+        // Parse html, get the latest version url
+        // Download the tarball
+        // Extract the tarball
+        self.install_from_pip(target).await
+    }
+
+    async fn install_from_pip(&self, target: &Path) -> Result<()> {
+        Cmd::new("python3", "pip install uv")
+            .arg("-m")
+            .arg("pip")
+            .arg("install")
+            .arg("--prefix")
+            .arg(target)
+            .arg(format!("uv=={UV_VERSION}"))
+            .check(true)
+            .output()
+            .await?;
+
+        let bin_dir = target.join(if cfg!(windows) { "Scripts" } else { "bin" });
+        let lib_dir = target.join(if cfg!(windows) { "Lib" } else { "lib" });
+
+        let uv = target
+            .join(&bin_dir)
+            .join("uv")
+            .with_extension(env::consts::EXE_EXTENSION);
+        fs_err::rename(
+            &uv,
+            target.join("uv").with_extension(env::consts::EXE_EXTENSION),
+        )?;
+        fs_err::remove_dir_all(bin_dir)?;
+        fs_err::remove_dir_all(lib_dir)?;
+
+        Ok(())
     }
 }
 
@@ -101,34 +142,38 @@ pub struct UvInstaller;
 
 impl UvInstaller {
     async fn select_source() -> Result<InstallSource> {
-        async fn check_github() -> Result<bool> {
+        async fn check_github(client: &reqwest::Client) -> Result<bool> {
             let url = format!("https://github.com/astral-sh/uv/releases/download/{UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz");
-            let response = reqwest::Client::new()
+            let response = client
                 .head(url)
                 .timeout(Duration::from_secs(3))
                 .send()
                 .await?;
+            trace!(?response, "Checked GitHub");
             Ok(response.status().is_success())
         }
 
-        async fn best_pypi() -> Result<PyPiMirror> {
+        async fn select_best_pypi(client: &reqwest::Client) -> Result<PyPiMirror> {
             let mut best = PyPiMirror::Pypi;
             let mut tasks = PyPiMirror::iter()
-                .map(|source| async move {
-                    let url = format!("{}uv/", source.url());
-                    let response = reqwest::Client::new()
-                        .head(&url)
-                        .timeout(Duration::from_secs(2))
-                        .send()
-                        .await;
-                    (source, response)
+                .map(|source| {
+                    let client = client.clone();
+                    async move {
+                        let url = format!("{}uv/", source.url());
+                        let response = client
+                            .head(&url)
+                            .timeout(Duration::from_secs(2))
+                            .send()
+                            .await;
+                        (source, response)
+                    }
                 })
                 .collect::<JoinSet<_>>();
 
             while let Some(result) = tasks.join_next().await {
                 if let Ok((source, response)) = result {
                     trace!(?source, ?response, "Checked source");
-                    if response.is_ok_and(|resp|resp.status().is_success()) {
+                    if response.is_ok_and(|resp| resp.status().is_success()) {
                         best = source;
                         break;
                     }
@@ -138,12 +183,13 @@ impl UvInstaller {
             Ok(best)
         }
 
+        let client = reqwest::Client::new();
         let source = tokio::select! {
-            Ok(true) = check_github() => InstallSource::GitHub,
-            Ok(source) = best_pypi() => InstallSource::PyPi(source),
+            Ok(true) = check_github(&client) => InstallSource::GitHub,
+            Ok(source) = select_best_pypi(&client) => InstallSource::PyPi(source),
             else => {
-                warn!("Failed to check uv source availability, defaulting to GitHub");
-                InstallSource::GitHub
+                warn!("Failed to check uv source availability, falling back to pip install");
+                InstallSource::Pip
             }
         };
 
