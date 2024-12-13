@@ -1,16 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::hook::Hook;
-use crate::languages::{LanguageImpl, DEFAULT_VERSION};
+use crate::languages::LanguageImpl;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Fail;
 
 impl LanguageImpl for Fail {
-    fn default_version(&self) -> &str {
-        DEFAULT_VERSION
-    }
-
     fn environment_dir(&self) -> Option<&str> {
         None
     }

@@ -64,6 +64,15 @@ impl Language {
             Self::System => "system",
         }
     }
+
+    /// Return whether the language allows specifying the version.
+    /// See <https://pre-commit.com/#overriding-language-version>
+    pub fn allow_specify_version(self) -> bool {
+        matches!(
+            self,
+            Self::Python | Self::Node | Self::Ruby | Self::Rust | Self::Golang
+        )
+    }
 }
 
 impl Display for Language {
@@ -213,7 +222,7 @@ pub struct Config {
     /// Default is `[pre-commit]`.
     pub default_install_hook_types: Option<Vec<HookType>>,
     /// A mapping from language to the default `language_version`.
-    pub default_language_version: Option<HashMap<Language, String>>,
+    pub default_language_version: Option<HashMap<Language, LanguageVersion>>,
     /// A configuration-wide default for the stages property of hooks.
     /// Default to all stages.
     pub default_stages: Option<Vec<Stage>>,
@@ -275,6 +284,52 @@ impl Display for RepoLocation {
     }
 }
 
+#[derive(Default, Debug, Clone)]
+pub enum LanguageVersion {
+    #[default]
+    Default,
+    System,
+    Specific(String),
+}
+
+impl<'de> Deserialize<'de> for LanguageVersion {
+    fn deserialize<D>(deserializer: D) -> Result<LanguageVersion, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match &*s {
+            "default" => Ok(LanguageVersion::Default),
+            "system" => Ok(LanguageVersion::System),
+            _ => Ok(LanguageVersion::Specific(s)),
+        }
+    }
+}
+
+impl LanguageVersion {
+    pub fn is_default(&self) -> bool {
+        matches!(self, Self::Default)
+    }
+
+    pub fn is_system(&self) -> bool {
+        matches!(self, Self::System)
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Default => "default",
+            Self::System => "system",
+            Self::Specific(s) => s,
+        }
+    }
+}
+
+impl Display for LanguageVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Common hook options.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct HookOptions {
@@ -312,7 +367,7 @@ pub struct HookOptions {
     /// Run the hook on a specific version of the language.
     /// Default is `default`.
     /// See <https://pre-commit.com/#overriding-language-version>.
-    pub language_version: Option<String>,
+    pub language_version: Option<LanguageVersion>,
     /// Write the output of the hook to a file when the hook fails or verbose is enabled.
     pub log_file: Option<String>,
     /// This hook will execute using a single process instead of in parallel.

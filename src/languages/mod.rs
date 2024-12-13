@@ -20,10 +20,7 @@ static FAIL: fail::Fail = fail::Fail;
 static DOCKER: docker::Docker = docker::Docker;
 static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
 
-pub const DEFAULT_VERSION: &str = "default";
-
 trait LanguageImpl {
-    fn default_version(&self) -> &str;
     fn environment_dir(&self) -> Option<&str>;
     async fn install(&self, hook: &Hook) -> Result<()>;
     async fn check_health(&self) -> Result<()>;
@@ -36,18 +33,6 @@ trait LanguageImpl {
 }
 
 impl Language {
-    pub fn default_version(&self) -> &str {
-        match self {
-            Self::Python => PYTHON.default_version(),
-            Self::Node => NODE.default_version(),
-            Self::System => SYSTEM.default_version(),
-            Self::Fail => FAIL.default_version(),
-            Self::Docker => DOCKER.default_version(),
-            Self::DockerImage => DOCKER_IMAGE.default_version(),
-            _ => todo!(),
-        }
-    }
-
     pub fn environment_dir(&self) -> Option<&str> {
         match self {
             Self::Python => PYTHON.environment_dir(),

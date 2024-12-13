@@ -11,7 +11,7 @@ use tracing::trace;
 
 use crate::fs::CWD;
 use crate::hook::Hook;
-use crate::languages::{LanguageImpl, DEFAULT_VERSION};
+use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 
@@ -161,10 +161,6 @@ impl Docker {
 }
 
 impl LanguageImpl for Docker {
-    fn default_version(&self) -> &str {
-        DEFAULT_VERSION
-    }
-
     fn environment_dir(&self) -> Option<&str> {
         Some("docker")
     }

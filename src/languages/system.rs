@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::hook::Hook;
-use crate::languages::{LanguageImpl, DEFAULT_VERSION};
+use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 
@@ -10,10 +10,6 @@ use crate::run::run_by_batch;
 pub struct System;
 
 impl LanguageImpl for System {
-    fn default_version(&self) -> &str {
-        DEFAULT_VERSION
-    }
-
     fn environment_dir(&self) -> Option<&str> {
         None
     }

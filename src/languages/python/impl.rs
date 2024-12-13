@@ -1,23 +1,18 @@
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-
+use crate::config::LanguageVersion;
 use crate::env_vars::EnvVars;
 use crate::hook::Hook;
 use crate::languages::python::uv::UvInstaller;
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Python;
 
 impl LanguageImpl for Python {
-    fn default_version(&self) -> &str {
-        // TODO find the version of python on the system
-        "python3"
-    }
-
     fn environment_dir(&self) -> Option<&str> {
         Some("py_env")
     }
@@ -40,14 +35,19 @@ impl LanguageImpl for Python {
 
         // TODO: Set uv cache dir? tools dir? python dir?
         // Create venv
-        uv_cmd("create venv")
-            .arg("venv")
-            .arg(&venv)
-            .arg("--python")
-            .arg(&hook.language_version)
-            .check(true)
-            .output()
-            .await?;
+        let mut cmd = uv_cmd("create venv");
+        cmd.arg("venv").arg(&venv);
+        match hook.language_version {
+            LanguageVersion::Specific(ref version) => {
+                cmd.arg("--python").arg(version);
+            }
+            LanguageVersion::System => {
+                cmd.arg("--python-preference").arg("only-system");
+            }
+            LanguageVersion::Default => {}
+        }
+
+        cmd.check(true).output().await?;
 
         patch_cfg_version_info(&venv).await?;
 

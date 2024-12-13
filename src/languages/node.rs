@@ -2,16 +2,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::hook::Hook;
-use crate::languages::{LanguageImpl, DEFAULT_VERSION};
+use crate::languages::LanguageImpl;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Node;
 
 impl LanguageImpl for Node {
-    fn default_version(&self) -> &str {
-        DEFAULT_VERSION
-    }
-
     fn environment_dir(&self) -> Option<&str> {
         Some("node_env")
     }
@@ -20,6 +16,7 @@ impl LanguageImpl for Node {
         // TODO: install node automatically
         let env = hook.environment_dir().expect("No environment dir found");
         fs_err::create_dir_all(env)?;
+
         Ok(())
     }
 

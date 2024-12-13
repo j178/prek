@@ -3,17 +3,13 @@ use std::sync::Arc;
 
 use crate::hook::Hook;
 use crate::languages::docker::Docker;
-use crate::languages::{LanguageImpl, DEFAULT_VERSION};
+use crate::languages::LanguageImpl;
 use crate::run::run_by_batch;
 
 #[derive(Debug, Copy, Clone)]
 pub struct DockerImage;
 
 impl LanguageImpl for DockerImage {
-    fn default_version(&self) -> &str {
-        DEFAULT_VERSION
-    }
-
     fn environment_dir(&self) -> Option<&str> {
         None
     }

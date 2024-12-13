@@ -13,11 +13,10 @@ use tracing::{debug, error};
 use url::Url;
 
 use crate::config::{
-    self, read_config, read_manifest, Config, Language, LocalHook, ManifestHook, MetaHook,
-    RemoteHook, Stage, CONFIG_FILE, MANIFEST_FILE,
+    self, read_config, read_manifest, Config, Language, LanguageVersion, LocalHook, ManifestHook,
+    MetaHook, RemoteHook, Stage, CONFIG_FILE, MANIFEST_FILE,
 };
 use crate::fs::{Simplified, CWD};
-use crate::languages::DEFAULT_VERSION;
 use crate::store::Store;
 use crate::warn_user;
 
@@ -363,9 +362,6 @@ impl HookBuilder {
                 .as_ref()
                 .and_then(|v| v.get(&language).cloned());
         }
-        if options.language_version.is_none() {
-            options.language_version = Some(language.default_version().to_string());
-        }
 
         if options.stages.is_none() {
             options.stages.clone_from(&config.default_stages);
@@ -375,14 +371,12 @@ impl HookBuilder {
     /// Fill in the default values for the hook configuration.
     fn fill_in_defaults(&mut self) {
         let options = &mut self.config.options;
-        options
-            .language_version
-            .get_or_insert(DEFAULT_VERSION.to_string());
-        options.alias.get_or_insert(String::new());
-        options.args.get_or_insert(Vec::new());
+        options.language_version.get_or_insert_default();
+        options.alias.get_or_insert_default();
+        options.args.get_or_insert_default();
         options.types.get_or_insert(vec!["file".to_string()]);
-        options.types_or.get_or_insert(Vec::new());
-        options.exclude_types.get_or_insert(Vec::new());
+        options.types_or.get_or_insert_default();
+        options.exclude_types.get_or_insert_default();
         options.always_run.get_or_insert(false);
         options.fail_fast.get_or_insert(false);
         options.pass_filenames.get_or_insert(true);
@@ -391,23 +385,34 @@ impl HookBuilder {
         options
             .stages
             .get_or_insert(Stage::value_variants().to_vec());
-        options.additional_dependencies.get_or_insert(Vec::new());
+        options.additional_dependencies.get_or_insert_default();
     }
 
     /// Check the hook configuration.
     fn check(&self) {
         let language = self.config.language;
+        let options = &self.config.options;
         if language.environment_dir().is_none() {
-            if self.config.options.language_version != Some(DEFAULT_VERSION.to_string()) {
+            if options.additional_dependencies.is_some() {
+                warn_user!(
+                    "Language {} does not need environment, but additional_dependencies is set",
+                    language
+                );
+            }
+        }
+        if options
+            .language_version
+            .as_ref()
+            .is_some_and(|v| !v.is_default())
+        {
+            if language.environment_dir().is_none() {
                 warn_user!(
                     "Language {} does not need environment, but language_version is set",
                     language
                 );
-            }
-
-            if self.config.options.additional_dependencies.is_some() {
+            } else if !language.allow_specify_version() {
                 warn_user!(
-                    "Language {} does not need environment, but additional_dependencies is set",
+                    "Language {} does not support specifying version, but language_version is set",
                     language
                 );
             }
@@ -473,7 +478,7 @@ pub struct Hook {
     pub fail_fast: bool,
     pub pass_filenames: bool,
     pub description: Option<String>,
-    pub language_version: String,
+    pub language_version: LanguageVersion,
     pub log_file: Option<String>,
     pub require_serial: bool,
     pub stages: Vec<Stage>,
