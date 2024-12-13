@@ -1173,6 +1173,139 @@ mod tests {
     }
 
     #[test]
+    fn language_version() {
+        let yaml = indoc::indoc! { r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: hook-1
+                    name: hook 1
+                    entry: echo hello world
+                    language: system
+                    language_version: default
+                  - id: hook-2
+                    name: hook 2
+                    entry: echo hello world
+                    language: system
+                    language_version: system
+                  - id: hook-3
+                    name: hook 3
+                    entry: echo hello world
+                    language: system
+                    language_version: '3.8'
+        "};
+        let result = serde_yaml::from_str::<Config>(yaml);
+        insta::assert_debug_snapshot!(result, @r#"
+        Ok(
+            Config {
+                repos: [
+                    Local(
+                        LocalRepo {
+                            hooks: [
+                                ManifestHook {
+                                    id: "hook-1",
+                                    name: "hook 1",
+                                    entry: "echo hello world",
+                                    language: System,
+                                    options: HookOptions {
+                                        alias: None,
+                                        files: None,
+                                        exclude: None,
+                                        types: None,
+                                        types_or: None,
+                                        exclude_types: None,
+                                        additional_dependencies: None,
+                                        args: None,
+                                        always_run: None,
+                                        fail_fast: None,
+                                        pass_filenames: None,
+                                        description: None,
+                                        language_version: Some(
+                                            Default,
+                                        ),
+                                        log_file: None,
+                                        require_serial: None,
+                                        stages: None,
+                                        verbose: None,
+                                        minimum_pre_commit_version: None,
+                                    },
+                                },
+                                ManifestHook {
+                                    id: "hook-2",
+                                    name: "hook 2",
+                                    entry: "echo hello world",
+                                    language: System,
+                                    options: HookOptions {
+                                        alias: None,
+                                        files: None,
+                                        exclude: None,
+                                        types: None,
+                                        types_or: None,
+                                        exclude_types: None,
+                                        additional_dependencies: None,
+                                        args: None,
+                                        always_run: None,
+                                        fail_fast: None,
+                                        pass_filenames: None,
+                                        description: None,
+                                        language_version: Some(
+                                            System,
+                                        ),
+                                        log_file: None,
+                                        require_serial: None,
+                                        stages: None,
+                                        verbose: None,
+                                        minimum_pre_commit_version: None,
+                                    },
+                                },
+                                ManifestHook {
+                                    id: "hook-3",
+                                    name: "hook 3",
+                                    entry: "echo hello world",
+                                    language: System,
+                                    options: HookOptions {
+                                        alias: None,
+                                        files: None,
+                                        exclude: None,
+                                        types: None,
+                                        types_or: None,
+                                        exclude_types: None,
+                                        additional_dependencies: None,
+                                        args: None,
+                                        always_run: None,
+                                        fail_fast: None,
+                                        pass_filenames: None,
+                                        description: None,
+                                        language_version: Some(
+                                            Specific(
+                                                "3.8",
+                                            ),
+                                        ),
+                                        log_file: None,
+                                        require_serial: None,
+                                        stages: None,
+                                        verbose: None,
+                                        minimum_pre_commit_version: None,
+                                    },
+                                },
+                            ],
+                        },
+                    ),
+                ],
+                default_install_hook_types: None,
+                default_language_version: None,
+                default_stages: None,
+                files: None,
+                exclude: None,
+                fail_fast: None,
+                minimum_pre_commit_version: None,
+                ci: None,
+            },
+        )
+        "#);
+    }
+
+    #[test]
     fn test_read_config() -> Result<()> {
         let config = read_config(Path::new("tests/files/uv-pre-commit-config.yaml"))?;
         insta::assert_debug_snapshot!(config);
