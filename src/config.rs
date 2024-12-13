@@ -286,9 +286,13 @@ impl Display for RepoLocation {
 
 #[derive(Default, Debug, Clone)]
 pub enum LanguageVersion {
+    /// By default, pre-commit will use the system installed version,
+    /// if not found, it will try to download and install a version.
     #[default]
     Default,
+    /// Use the system installed version.
     System,
+    /// Download and install a specific version.
     Specific(String),
 }
 

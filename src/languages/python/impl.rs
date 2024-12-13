@@ -44,6 +44,7 @@ impl LanguageImpl for Python {
             LanguageVersion::System => {
                 cmd.arg("--python-preference").arg("only-system");
             }
+            // uv will try to use system Python and download if not found
             LanguageVersion::Default => {}
         }
 
