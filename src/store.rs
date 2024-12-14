@@ -276,7 +276,7 @@ impl Store {
 
     /// The path to the tool directory in the store.
     pub fn tools_path(&self, tool: ToolBucket) -> PathBuf {
-        self.path.join(tool.as_str())
+        self.path.join("tools").join(tool.as_str())
     }
 }
 
