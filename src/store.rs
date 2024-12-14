@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use anyhow::Result;
 use rusqlite::Connection;
@@ -29,6 +30,28 @@ pub enum Error {
     Git(#[from] crate::git::Error),
 }
 
+static STORE_HOME: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
+    if let Some(path) = std::env::var_os(EnvVars::PRE_COMMIT_HOME) {
+        debug!(
+            path = %path.to_string_lossy(),
+            "Loading store from PRE_COMMIT_HOME",
+        );
+        Some(path.into())
+    } else if let Some(path) = std::env::var_os(EnvVars::XDG_CACHE_HOME) {
+        let path = PathBuf::from(path).join("pre-commit");
+        debug!(
+            path = %path.to_string_lossy(),
+            "Loading store from XDG_CACHE_HOME",
+        );
+        Some(path)
+    } else {
+        let home = home::home_dir()?;
+        let path = home.join(".cache").join("pre-commit");
+        debug!(path = %path.display(), "Loading store from ~/.cache");
+        Some(path)
+    }
+});
+
 /// A store for managing repos.
 #[derive(Debug)]
 pub struct Store {
@@ -38,25 +61,9 @@ pub struct Store {
 
 impl Store {
     pub fn from_settings() -> Result<Self, Error> {
-        if let Some(path) = std::env::var_os(EnvVars::PRE_COMMIT_HOME) {
-            debug!(
-                path = %path.to_string_lossy(),
-                "Loading store from PRE_COMMIT_HOME",
-            );
-            return Ok(Self::from_path(path));
-        } else if let Some(path) = std::env::var_os(EnvVars::XDG_CACHE_HOME) {
-            let path = PathBuf::from(path).join("pre-commit");
-            debug!(
-                path = %path.to_string_lossy(),
-                "Loading store from XDG_CACHE_HOME",
-            );
-            return Ok(Self::from_path(path));
-        }
-
-        let home = home::home_dir().ok_or(Error::HomeNotFound)?;
-        let path = home.join(".cache").join("pre-commit");
-        debug!(path = %path.display(), "Loading store from ~/.cache");
-        Ok(Self::from_path(path))
+        Ok(Self::from_path(
+            STORE_HOME.as_ref().ok_or(Error::HomeNotFound)?,
+        ))
     }
 
     pub fn from_path(path: impl Into<PathBuf>) -> Self {
@@ -267,8 +274,26 @@ impl Store {
         LockedFile::acquire(self.path.join(".lock"), "store").await
     }
 
-    pub fn uv_path(&self) -> PathBuf {
-        self.path.join("tools").join("uv")
+    /// The path to the tool directory in the store.
+    pub fn tools_path(&self, tool: ToolBucket) -> PathBuf {
+        self.path.join(tool.as_str())
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum ToolBucket {
+    Uv,
+    Python,
+    Node,
+}
+
+impl ToolBucket {
+    pub fn as_str(&self) -> &str {
+        match self {
+            ToolBucket::Uv => "uv",
+            ToolBucket::Python => "python",
+            ToolBucket::Node => "node",
+        }
     }
 }
 

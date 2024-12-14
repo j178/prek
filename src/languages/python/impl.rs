@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
 use crate::config::LanguageVersion;
 use crate::env_vars::EnvVars;
 use crate::hook::Hook;
@@ -5,9 +9,7 @@ use crate::languages::python::uv::UvInstaller;
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use crate::store::{Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Python;
@@ -23,17 +25,21 @@ impl LanguageImpl for Python {
 
         let uv = UvInstaller::install().await?;
 
+        let store = Store::from_settings()?;
+        let python_install_dir = store.tools_path(ToolBucket::Python);
+
         let uv_cmd = |summary| {
             #[allow(unused_mut)]
             let mut cmd = Cmd::new(&uv, summary);
             // Don't use cache in Windows, multiple uv instances will conflict with each other.
             // See https://github.com/astral-sh/uv/issues/8664
             #[cfg(windows)]
-            cmd.env("UV_NO_CACHE", "1");
+            cmd.env(EnvVars::UV_NO_CACHE, "1");
+
+            cmd.env(EnvVars::UV_PYTHON_INSTALL_DIR, &python_install_dir);
             cmd
         };
 
-        // TODO: Set uv cache dir? tools dir? python dir?
         // Create venv
         let mut cmd = uv_cmd("create venv");
         cmd.arg("venv").arg(&venv);

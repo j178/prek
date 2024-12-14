@@ -9,7 +9,7 @@ use tracing::{debug, enabled, trace, warn};
 
 use crate::fs::LockedFile;
 use crate::process::Cmd;
-use crate::store::Store;
+use crate::store::{Store, ToolBucket};
 
 // The version of `uv` to install. Should update periodically.
 const UV_VERSION: &str = "0.5.8";
@@ -207,7 +207,7 @@ impl UvInstaller {
         // 2) Check if `uv` is installed by `prefligit`
         let store = Store::from_settings()?;
 
-        let uv_dir = store.uv_path();
+        let uv_dir = store.tools_path(ToolBucket::Uv);
         let uv = uv_dir.join("uv").with_extension(env::consts::EXE_EXTENSION);
         if uv.is_file() {
             trace!(uv = %uv.display(), "Found managed uv");
