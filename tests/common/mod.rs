@@ -115,7 +115,7 @@ impl TestContext {
         let bin = assert_cmd::cargo::cargo_bin("prefligit");
         let mut cmd = Command::new(bin);
         cmd.current_dir(self.workdir());
-        cmd.env("PRE_COMMIT_HOME", &*self.home_dir);
+        cmd.env("PREFLIGIT_HOME", &*self.home_dir);
         cmd
     }
 

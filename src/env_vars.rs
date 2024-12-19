@@ -1,11 +1,14 @@
 pub struct EnvVars;
 
 impl EnvVars {
-    pub const PRE_COMMIT_HOME: &'static str = "PRE_COMMIT_HOME";
-    pub const XDG_CACHE_HOME: &'static str = "XDG_CACHE_HOME";
+    pub const PATH: &'static str = "PATH";
+
     pub const SKIP: &'static str = "SKIP";
 
-    pub const PATH: &'static str = "PATH";
+    pub const PREFLIGIT_HOME: &'static str = "PREFLIGIT_HOME";
+
+    // Pre-commit specific environment variables
+    pub const PRE_COMMIT_HOME: &'static str = "PRE_COMMIT_HOME";
     pub const PRE_COMMIT_ALLOW_NO_CONFIG: &'static str = "PRE_COMMIT_ALLOW_NO_CONFIG";
     pub const PRE_COMMIT_NO_CONCURRENCY: &'static str = "PRE_COMMIT_NO_CONCURRENCY";
     pub const _PRE_COMMIT_SKIP_POST_CHECKOUT: &'static str = "_PRE_COMMIT_SKIP_POST_CHECKOUT";

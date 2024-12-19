@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use anyhow::Result;
+use etcetera::BaseStrategy;
 use rusqlite::Connection;
 use thiserror::Error;
 use tracing::debug;
@@ -31,24 +32,16 @@ pub enum Error {
 }
 
 static STORE_HOME: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
-    if let Some(path) = std::env::var_os(EnvVars::PRE_COMMIT_HOME) {
+    if let Some(path) = std::env::var_os(EnvVars::PREFLIGIT_HOME) {
         debug!(
             path = %path.to_string_lossy(),
-            "Loading store from PRE_COMMIT_HOME",
+            "Loading store from PREFLIGIT_HOME env var",
         );
         Some(path.into())
-    } else if let Some(path) = std::env::var_os(EnvVars::XDG_CACHE_HOME) {
-        let path = PathBuf::from(path).join("pre-commit");
-        debug!(
-            path = %path.to_string_lossy(),
-            "Loading store from XDG_CACHE_HOME",
-        );
-        Some(path)
     } else {
-        let home = home::home_dir()?;
-        let path = home.join(".cache").join("pre-commit");
-        debug!(path = %path.display(), "Loading store from ~/.cache");
-        Some(path)
+        etcetera::choose_base_strategy()
+            .map(|path| path.cache_dir().join("prefligit"))
+            .ok()
     }
 });
 

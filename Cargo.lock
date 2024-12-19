@@ -1553,7 +1553,6 @@ dependencies = [
  "fs-err",
  "fs2",
  "futures",
- "home",
  "http",
  "indicatif",
  "indoc",
