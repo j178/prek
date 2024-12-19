@@ -1,0 +1,33 @@
+repos:
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.1.0
+    hooks:
+      - id: prettier
+        types_or: [yaml, json5]
+        language_version: default
+      - id: prettier
+        types_or: [yaml, json5]
+        language_version: system
+      - id: prettier
+        types_or: [yaml, json5]
+        language_version: system
+      - id: prettier
+        types_or: [yaml, json5]
+        # code name
+        language_version: jod
+      - id: prettier
+        types_or: [yaml, json5]
+        # major version
+        language_version: '23'
+      - id: prettier
+        types_or: [yaml, json5]
+        # major and minor version
+        language_version: '23.4'
+      - id: prettier
+        types_or: [yaml, json5]
+        # major and minor version and patch
+        language_version: 23.4.0
+      - id: prettier
+        types_or: [yaml, json5]
+        # version requirement
+        language_version: ^23.4.0

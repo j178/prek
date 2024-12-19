@@ -41,7 +41,7 @@ impl Lts {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Debug)]
 pub struct NodeVersion {
     pub version: semver::Version,
     pub lts: Lts,
@@ -50,6 +50,7 @@ pub struct NodeVersion {
 impl FromStr for NodeVersion {
     type Err = semver::Error;
 
+    /// Parse from `<version>[-<code_name>]` format.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (ver, code_name) = if s.contains('-') {
             s.split_once('-').unwrap()
@@ -63,6 +64,27 @@ impl FromStr for NodeVersion {
             Lts::CodeName(code_name.to_string())
         };
         Ok(NodeVersion { version, lts })
+    }
+}
+
+impl<'de> Deserialize<'de> for NodeVersion {
+    fn deserialize<D>(deserializer: D) -> Result<NodeVersion, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct _Version {
+            version: String,
+            lts: Lts,
+        }
+
+        let raw = _Version::deserialize(deserializer)?;
+        let version_str = raw.version.trim_start_matches('v');
+        let version = semver::Version::parse(version_str).map_err(serde::de::Error::custom)?;
+        Ok(NodeVersion {
+            version,
+            lts: raw.lts,
+        })
     }
 }
 
