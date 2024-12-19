@@ -530,16 +530,6 @@ impl Hook {
         )
     }
 
-    pub fn install_key(&self) -> String {
-        format!(
-            "{}-{}-{}-{}",
-            self.repo,
-            self.language,
-            self.language_version,
-            self.additional_dependencies.join(",")
-        )
-    }
-
     // TODO: health check
     /// Check if the hook is installed in the environment.
     pub fn installed(&self) -> bool {

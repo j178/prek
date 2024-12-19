@@ -269,8 +269,8 @@ pub async fn install_hooks(hooks: &[Hook], reporter: &HookInstallReporter) -> Re
     let to_install = hooks
         .iter()
         .filter(|hook| !hook.installed())
-        .unique_by(|hook| hook.install_key())
-        .filter_map(|hook| hook.environment_dir().map(|env_dir| (hook, env_dir)));
+        .filter_map(|hook| hook.environment_dir().map(|env_dir| (hook, env_dir)))
+        .unique_by(|(_, env_dir)| env_dir.clone());
 
     let mut tasks = futures::stream::iter(to_install)
         .map(|(hook, env_dir)| async move {

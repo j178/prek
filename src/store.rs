@@ -238,6 +238,7 @@ impl Store {
             );
             clone_repo(repo_config.repo.as_str(), &repo_config.rev, temp.path()).await?;
         } else {
+            // FIXME: Do not copy env dir.
             // TODO: use hardlink?
             // Optimization: This is an optimization from the Python pre-commit implementation.
             // Copy already cloned base remote repo.
