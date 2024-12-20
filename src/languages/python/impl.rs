@@ -56,8 +56,6 @@ impl LanguageImpl for Python {
 
         cmd.check(true).output().await?;
 
-        patch_cfg_version_info(&venv).await?;
-
         // Install dependencies
         uv_cmd("install dependencies")
             .arg("pip")
@@ -156,43 +154,4 @@ fn bin_dir(venv: &Path) -> PathBuf {
     } else {
         venv.join("bin")
     }
-}
-
-async fn get_full_version(path: &Path) -> anyhow::Result<String> {
-    let python = bin_dir(path).join("python");
-    let output = Cmd::new(&python, "run python")
-        .check(true)
-        .arg("-S")
-        .arg("-c")
-        .arg(r#"import sys; print(".".join(str(p) for p in sys.version_info))"#)
-        .output()
-        .await?;
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-}
-
-// Patch pyvenv.cfg `version_info` to ".".join(str(p) for p in sys.version_info)
-/// pre-commit use virtualenv to create venv, which sets `version_info` to the full version:
-/// "3.12.5.final.0" instead of "3.12.5"
-async fn patch_cfg_version_info(path: &Path) -> anyhow::Result<()> {
-    let full_version = get_full_version(path).await?;
-
-    let cfg = path.join("pyvenv.cfg");
-    let content = fs_err::read_to_string(&cfg)?;
-    let mut patched = String::new();
-    for line in content.lines() {
-        let Some((key, _)) = line.split_once('=') else {
-            patched.push_str(line);
-            patched.push('\n');
-            continue;
-        };
-        if key.trim() == "version_info" {
-            patched.push_str(&format!("version_info = {full_version}\n"));
-        } else {
-            patched.push_str(line);
-            patched.push('\n');
-        }
-    }
-
-    fs_err::write(&cfg, patched)?;
-    Ok(())
 }
