@@ -51,25 +51,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create Dev Drive using ReFS
+      - name: Create Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
-      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
-      - name: Copy Git Repo to Dev Drive
-        run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.PREFLIGIT_WORKSPACE }}" -Recurse
-
       - uses: Swatinem/rust-cache@v2
-        with:
-          # Add a key to invalidate previous caches.
-          key: 1
-          workspaces: ${{ env.PREFLIGIT_WORKSPACE }}
 
       - name: "Install Rust toolchain"
         run: rustup component add clippy
 
       - name: "Clippy"
-        working-directory: ${{ env.PREFLIGIT_WORKSPACE }}
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-shear:
@@ -145,20 +135,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create Dev Drive using ReFS
+      - name: Create Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
-      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
-      - name: Copy Git Repo to Dev Drive
-        run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.PREFLIGIT_WORKSPACE }}" -Recurse
-
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ${{ env.PREFLIGIT_WORKSPACE }}
 
       - name: "Install Rust toolchain"
-        working-directory: ${{ env.PREFLIGIT_WORKSPACE }}
         run: rustup show
 
       - name: "Install cargo nextest"
@@ -172,7 +154,6 @@ jobs:
           cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
 
       - name: "Cargo test"
-        working-directory: ${{ env.PREFLIGIT_WORKSPACE }}
         run: |
           cargo nextest show-config test-groups
           cargo nextest run --workspace --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow

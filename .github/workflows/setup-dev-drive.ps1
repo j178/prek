@@ -22,5 +22,4 @@ Write-Output `
 	"PREFLIGIT_INTERNAL__TEST_DIR=$($Tmp)" `
 	"RUSTUP_HOME=$($Drive)/.rustup" `
 	"CARGO_HOME=$($Drive)/.cargo" `
-	"PREFLIGIT_WORKSPACE=$($Drive)/prefligit" `
 	>> $env:GITHUB_ENV
