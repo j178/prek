@@ -20,7 +20,7 @@ docker = []
 anstream = "0.6.15"
 anyhow = "1.0.86"
 assert_cmd = { version = "2.0.16", features = ["color"] }
-axoupdater = { version = "0.8.1", default-features = false, features = [ "github_releases"] }
+axoupdater = { version = "0.9.0", default-features = false, features = [ "github_releases"] }
 bstr = "1.11.0"
 clap = { version = "4.5.16", features = ["derive", "env", "string", "wrap_help"] }
 clap_complete = "4.5.37"
@@ -116,36 +116,3 @@ lto = "thin"
 
 [package.metadata.dist]
 dist = true
-
-# Config for 'dist'
-[workspace.metadata.dist]
-# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.25.1"
-# The archive format to use for non-windows builds (defaults .tar.xz)
-unix-archive = ".tar.gz"
-# CI backends to support
-ci = "github"
-# Whether CI should include auto-generated code to build local artifacts
-build-local-artifacts = false
-# Whether CI should trigger releases with dispatches instead of tag pushes
-dispatch-releases = true
-# Which actions to run on pull requests
-pr-run-mode = "plan"
-# Which phase dist should use to create the GitHub release
-github-release = "announce"
-# The installers to generate for each app
-installers = ["shell", "powershell", "homebrew"]
-# Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
-# Local artifacts jobs to run in CI
-local-artifacts-jobs = ["./build-binaries"]
-# Publish jobs to run in CI
-publish-jobs = ["./publish", "homebrew"]
-# A GitHub repo to push Homebrew formulas to
-tap = "j178/homebrew-tap"
-# Customize the Homebrew formula name
-formula = "prefligit"
-# Whether to install an updater program
-install-updater = false
-# Path that installers should place binaries in
-install-path = ["$XDG_BIN_HOME/", "$XDG_DATA_HOME/../bin", "~/.local/bin"]
