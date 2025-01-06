@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.0.8
+
+### Enhancements
+
+- Move home dir to `~/.cache/prefligit` ([#154](https://github.com/j178/prefligit/pull/154))
+- Implement trailing-whitespace in Rust ([#137](https://github.com/j178/prefligit/pull/137))
+- Limit hook install concurrency ([#145](https://github.com/j178/prefligit/pull/145))
+- Simplify language default version implementation ([#150](https://github.com/j178/prefligit/pull/150))
+- Support install uv from pypi ([#149](https://github.com/j178/prefligit/pull/149))
+- Add executing command to error message ([#141](https://github.com/j178/prefligit/pull/141))
+
+### Bug fixes
+
+- Use hook `args` in fast path ([#139](https://github.com/j178/prefligit/pull/139))
+
+### Other changes
+
+- Remove hook install_key ([#153](https://github.com/j178/prefligit/pull/153))
+- Remove pyvenv.cfg patch ([#156](https://github.com/j178/prefligit/pull/156))
+- Try to use D drive on Windows CI ([#157](https://github.com/j178/prefligit/pull/157))
+- Tweak trailing-whitespace-fixer ([#140](https://github.com/j178/prefligit/pull/140))
+- Upgrade dist to v0.27.0 ([#158](https://github.com/j178/prefligit/pull/158))
+- Uv install python into tools path ([#151](https://github.com/j178/prefligit/pull/151))
+
 ## 0.0.7
 
 ### Enhancements
