@@ -113,6 +113,3 @@ strip = false # keep symbols for the profiler
 [profile.dist]
 inherits = "release"
 lto = "thin"
-
-[package.metadata.dist]
-dist = true
