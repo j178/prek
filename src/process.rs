@@ -36,6 +36,8 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::trace;
 
+use crate::git::GIT;
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// An error from executing a Command
@@ -285,6 +287,16 @@ impl Cmd {
     }
 }
 
+fn should_omit_arg(cmd: &OsStr, arg: &OsStr, val: Option<&&OsStr>) -> bool {
+    if GIT.as_ref().is_ok_and(|git| cmd == git) && arg == "-c" {
+        return val.is_some_and(|flag| {
+            let flag = flag.as_encoded_bytes();
+            flag.starts_with(b"core.useBuiltinFSMonitor") || flag.starts_with(b"protocol.version")
+        });
+    };
+    false
+}
+
 /// Simplified Command Debug output, with args truncated if they're too long.
 impl std::fmt::Display for Cmd {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -292,16 +304,19 @@ impl std::fmt::Display for Cmd {
             write!(f, "cd {} && ", cwd.to_string_lossy())?;
         }
         let program = self.get_program();
-        let mut args = self.get_args();
-        if let Some(arg) = args.next() {
-            write!(f, "{} ", program.to_string_lossy().cyan())?;
-            if arg != program {
-                write!(f, "{}", arg.to_string_lossy().dimmed())?;
-            }
+        let mut args = self.get_args().peekable();
+
+        write!(f, "{}", program.to_string_lossy().cyan())?;
+        if args.peek().is_some_and(|arg| *arg == program) {
+            args.next(); // Skip the program if it's repeated
         }
 
         let mut len = 0;
-        for arg in args {
+        while let Some(arg) = args.next() {
+            if should_omit_arg(program, arg, args.peek()) {
+                args.next();
+                continue;
+            }
             write!(f, " {}", arg.to_string_lossy().dimmed())?;
             len += arg.len() + 1;
             if len > 100 {
