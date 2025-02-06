@@ -664,7 +664,7 @@ pub fn tags_from_path(path: &Path) -> Result<Vec<&str>> {
     #[cfg(not(unix))]
     let executable = {
         let ext = path.extension().and_then(|ext| ext.to_str());
-        ext.map_or(false, |ext| ext == "exe" || ext == "bat" || ext == "cmd")
+        ext.is_some_and(|ext| ext == "exe" || ext == "bat" || ext == "cmd")
     };
 
     if executable {

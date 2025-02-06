@@ -81,7 +81,7 @@ cargo binstall prefligit
 
 ## Usage
 
-This tool is designed to be a drop-in replacement for the original pre-commit tool, so you can use it with your existing configurations and hooks.
+This tool is designed to be a drop-in alternative for the original pre-commit tool, so you can use it with your existing configurations and hooks.
 
 Please refer to the [official documentation](https://pre-commit.com/) for more information on how to configure and use pre-commit.
 

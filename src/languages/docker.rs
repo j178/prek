@@ -7,6 +7,7 @@ use std::sync::Arc;
 use anstream::ColorChoice;
 use anyhow::Result;
 use fancy_regex::Regex;
+use md5::Digest;
 use tracing::trace;
 
 use crate::fs::CWD;
@@ -25,7 +26,7 @@ impl Docker {
         hook.path()
             .file_name()
             .and_then(OsStr::to_str)
-            .map(|s| format!("pre-commit-{:x}", md5::compute(s)))
+            .map(|s| format!("pre-commit-{:x}", md5::Md5::digest(s)))
     }
 
     async fn build_docker_image(hook: &Hook, pull: bool) -> Result<()> {

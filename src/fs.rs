@@ -101,7 +101,7 @@ impl LockedFile {
 
 impl Drop for LockedFile {
     fn drop(&mut self) {
-        if let Err(err) = self.0.file().unlock() {
+        if let Err(err) = FileExt::unlock(self.0.file()) {
             error!(
                 "Failed to unlock {}; program may be stuck: {}",
                 self.0.path().display(),

@@ -28,20 +28,20 @@ ctrlc = "3.4.5"
 dunce = "1.0.5"
 etcetera = "0.8.0"
 fancy-regex = "0.14.0"
-fs-err = "2.11.0"
+fs-err = "3.1.0"
 fs2 = "0.4.3"
 futures = "0.3.31"
 http = "1.1.0"
 indicatif = "0.17.8"
 indoc = "2.0.5"
-itertools = "0.13.0"
-md5 = "0.7.0"
-miette = { version = "7.2.0", features = ["owo-colors", "textwrap"] }
+itertools = "0.14.0"
+md-5 = "0.10.6"
+miette = { version = "7.5.0", features = ["fancy-no-backtrace"] }
 owo-colors = "4.1.0"
-rand = "0.8.5"
+rand = "0.9.0"
 rayon = "1.10.0"
 reqwest = { version = "0.12.9", default-features = false }
-rusqlite = { version = "0.32.1", features = ["bundled"] }
+rusqlite = { version = "0.33.0", features = ["bundled"] }
 same-file = "1.0.6"
 serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.132"
@@ -49,13 +49,13 @@ serde_yaml = "0.9.34"
 shlex = "1.3.0"
 tempfile = "3.13.0"
 textwrap = "0.16.1"
-thiserror = "1.0.64"
+thiserror = "2.0.11"
 tokio = { version = "1.40.0", features = ["fs", "process", "rt", "sync", "macros"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 unicode-width = "0.2.0"
 url = { version = "2.5.2", features = ["serde"] }
-which = "6.0.3"
+which = "7.0.1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.164"
@@ -70,7 +70,7 @@ predicates = "3.1.2"
 regex = "1.11.0"
 
 [build-dependencies]
-fs-err = "2.11.0"
+fs-err = "3.1.0"
 
 [lints.rust]
 dead_code = "allow"
