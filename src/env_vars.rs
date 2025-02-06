@@ -7,6 +7,8 @@ impl EnvVars {
 
     pub const PREFLIGIT_HOME: &'static str = "PREFLIGIT_HOME";
 
+    pub const PREFLIGIT_INTERNAL__SORT_FILENAMES: &'static str = "PREFLIGIT_INTERNAL__SORT_FILENAMES";
+
     // Pre-commit specific environment variables
     pub const PRE_COMMIT_HOME: &'static str = "PRE_COMMIT_HOME";
     pub const PRE_COMMIT_ALLOW_NO_CONFIG: &'static str = "PRE_COMMIT_ALLOW_NO_CONFIG";

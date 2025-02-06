@@ -116,6 +116,7 @@ impl TestContext {
         let mut cmd = Command::new(bin);
         cmd.current_dir(self.workdir());
         cmd.env("PREFLIGIT_HOME", &*self.home_dir);
+        cmd.env("PREFLIGIT_INTERNAL__SORT_FILENAMES", "1");
         cmd
     }
 

@@ -7,6 +7,7 @@ use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterato
 use tracing::{debug, error};
 
 use crate::config::Stage;
+use crate::env_vars::EnvVars;
 use crate::fs::normalize_path;
 use crate::git;
 use crate::hook::Hook;
@@ -200,6 +201,11 @@ pub async fn get_filenames(opts: FileOptions) -> Result<Vec<String>> {
     )
     .await?;
 
+    // Sort filenames if in tests to make the order consistent.
+    if std::env::var_os(EnvVars::PREFLIGIT_INTERNAL__SORT_FILENAMES).is_some() {
+        filenames.sort_unstable();
+    }
+
     for filename in &mut filenames {
         normalize_path(filename);
     }
@@ -215,15 +221,18 @@ async fn filenames_for_args(
     files: Vec<PathBuf>,
     commit_msg_filename: Option<PathBuf>,
 ) -> Result<Vec<String>> {
-    if hook_stage.is_some_and(|stage| !stage.operate_on_files()) {
-        return Ok(vec![]);
+    if let Some(hook_stage) = hook_stage {
+        if !hook_stage.operate_on_files() {
+            return Ok(vec![]);
+        }
+        if hook_stage == Stage::PrepareCommitMsg || hook_stage == Stage::CommitMsg {
+            return Ok(vec![commit_msg_filename
+                .expect("commit message filename is required")
+                .to_string_lossy()
+                .to_string()]);
+        }
     }
-    if hook_stage.is_some_and(|stage| matches!(stage, Stage::PrepareCommitMsg | Stage::CommitMsg)) {
-        return Ok(vec![commit_msg_filename
-            .unwrap()
-            .to_string_lossy()
-            .to_string()]);
-    }
+
     if let (Some(from_ref), Some(to_ref)) = (from_ref, to_ref) {
         let files = git::get_changed_files(&from_ref, &to_ref).await?;
         debug!(
@@ -253,6 +262,7 @@ async fn filenames_for_args(
         debug!("Conflicted files: {}", files.len());
         return Ok(files);
     }
+
     let files = git::get_staged_files().await?;
     debug!("Staged files: {}", files.len());
     Ok(files)
