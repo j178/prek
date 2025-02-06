@@ -2,7 +2,7 @@
 name = "prefligit"
 version = "0.0.8"
 authors = ["j178 <hi@j178.dev>"]
-description = "pre-commit implemeneted in Rust"
+description = "pre-commit implemented in Rust"
 repository = "https://github.com/j178/prefligit"
 homepage = "https://github.com/j178/prefligit"
 edition = "2021"
