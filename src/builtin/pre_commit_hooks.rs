@@ -102,6 +102,7 @@ pub(crate) async fn fix_trailing_whitespace(
                 let is_markdown =
                     force_markdown || ext.is_some_and(|ext| markdown_exts.contains(&ext));
 
+                // TODO: read file in chunks
                 let content = tokio::fs::read(filename).await?;
 
                 let mut modified = false;

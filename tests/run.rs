@@ -46,9 +46,9 @@ fn run_basic() -> Result<()> {
     - hook id: end-of-file-fixer
     - exit code: 1
     - files were modified by this hook
-      Fixing invalid.json
-      Fixing valid.json
       Fixing main.py
+      Fixing valid.json
+      Fixing invalid.json
     check json...............................................................Passed
 
     ----- stderr -----
@@ -231,11 +231,11 @@ fn meta_hooks() -> Result<()> {
     identity.................................................................Passed
     - hook id: identity
     - duration: [TIME]
-      invalid.json
-      valid.json
-      main.py
-      .pre-commit-config.yaml
       file.txt
+      .pre-commit-config.yaml
+      valid.json
+      invalid.json
+      main.py
     match no files.......................................(no files to check)Skipped
     useless exclude..........................................................Passed
 
@@ -545,11 +545,11 @@ fn file_types() -> Result<()> {
     trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
-      ['json.json', 'main.py']
+      ['main.py', 'json.json']
     trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
-      ['.pre-commit-config.yaml', 'file.txt', 'main.py']
+      ['file.txt', '.pre-commit-config.yaml', 'main.py']
     trailing-whitespace..................................(no files to check)Skipped
 
     ----- stderr -----
