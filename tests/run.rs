@@ -33,7 +33,7 @@ fn run_basic() -> Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("-vv"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
