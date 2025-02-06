@@ -131,7 +131,7 @@ where
             let batch: Vec<_> = batch.into_iter().map(ToString::to_string).collect();
             run(batch)
         })
-        .buffer_unordered(concurrency);
+        .buffered(concurrency);
 
     let mut results = Vec::new();
     while let Some(result) = tasks.next().await {

@@ -4,7 +4,7 @@ use anyhow::Result;
 use fancy_regex as regex;
 use fancy_regex::Regex;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use tracing::{debug, error, trace};
+use tracing::{debug, error};
 
 use crate::config::Stage;
 use crate::env_vars::EnvVars;
@@ -204,7 +204,6 @@ pub async fn get_filenames(opts: FileOptions) -> Result<Vec<String>> {
     // Sort filenames if in tests to make the order consistent.
     if std::env::var_os(EnvVars::PREFLIGIT_INTERNAL__SORT_FILENAMES).is_some() {
         filenames.sort_unstable();
-        trace!(?filenames, "Sorted filenames");
     }
 
     for filename in &mut filenames {

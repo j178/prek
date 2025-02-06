@@ -163,7 +163,7 @@ pub(crate) async fn fix_trailing_whitespace(
                 }
             }
         })
-        .buffer_unordered(*CONCURRENCY);
+        .buffered(*CONCURRENCY);
 
     let mut code = 0;
     let mut output = Vec::new();
