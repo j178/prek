@@ -33,7 +33,7 @@ fn run_basic() -> Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run().arg("-vv"), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -46,9 +46,9 @@ fn run_basic() -> Result<()> {
     - hook id: end-of-file-fixer
     - exit code: 1
     - files were modified by this hook
-      Fixing main.py
       Fixing valid.json
       Fixing invalid.json
+      Fixing main.py
     check json...............................................................Passed
 
     ----- stderr -----
