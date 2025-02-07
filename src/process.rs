@@ -287,14 +287,23 @@ impl Cmd {
     }
 }
 
-fn should_omit_arg(cmd: &OsStr, arg: &OsStr, val: Option<&&OsStr>) -> bool {
-    if GIT.as_ref().is_ok_and(|git| cmd == git) && arg == "-c" {
-        return val.is_some_and(|flag| {
-            let flag = flag.as_encoded_bytes();
-            flag.starts_with(b"core.useBuiltinFSMonitor") || flag.starts_with(b"protocol.version")
-        });
+/// Returns the number of arguments to skip.
+fn skip_args(cmd: &OsStr, cur: &OsStr, next: Option<&&OsStr>) -> usize {
+    if GIT.as_ref().is_ok_and(|git| cmd == git) {
+        if cur == "-c" {
+            if let Some(flag) = next {
+                let flag = flag.as_encoded_bytes();
+                if flag.starts_with(b"core.useBuiltinFSMonitor")
+                    || flag.starts_with(b"protocol.version")
+                {
+                    return 2;
+                }
+            }
+        } else if cur == "--no-ext-diff" {
+            return 1;
+        }
     };
-    false
+    0
 }
 
 /// Simplified Command Debug output, with args truncated if they're too long.
@@ -313,8 +322,11 @@ impl std::fmt::Display for Cmd {
 
         let mut len = 0;
         while let Some(arg) = args.next() {
-            if should_omit_arg(program, arg, args.peek()) {
-                args.next();
+            let skip = skip_args(program, arg, args.peek());
+            if skip > 0 {
+                for _ in 1..skip {
+                    args.next();
+                }
                 continue;
             }
             write!(f, " {}", arg.to_string_lossy().dimmed())?;
