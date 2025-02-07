@@ -52,13 +52,15 @@ pub fn git_cmd(summary: &str) -> Result<Cmd, Error> {
 }
 
 fn zsplit(s: &[u8]) -> Vec<String> {
-    let s = String::from_utf8_lossy(s);
-    let s = s.trim_end_matches('\0');
-    if s.is_empty() {
-        vec![]
-    } else {
-        s.split('\0').map(ToString::to_string).collect()
-    }
+    s.split(|&b| b == b'\0')
+        .filter_map(|slice| {
+            if slice.is_empty() {
+                None
+            } else {
+                Some(String::from_utf8_lossy(slice).to_string())
+            }
+        })
+        .collect()
 }
 
 pub async fn intent_to_add_files() -> Result<Vec<String>, Error> {
