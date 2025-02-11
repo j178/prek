@@ -406,6 +406,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "constants"
+version = "0.0.1"
+
+[[package]]
 name = "cpp_demangle"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1639,6 +1643,7 @@ dependencies = [
  "bstr",
  "clap",
  "clap_complete",
+ "constants",
  "ctrlc",
  "dunce",
  "etcetera",

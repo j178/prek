@@ -2,11 +2,13 @@ use anyhow::Result;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
+use anstream::eprintln;
+
+use constants::env_vars::EnvVars;
+
 use crate::cli::{self, ExitStatus, RunArgs};
 use crate::config::HookType;
-use crate::env_vars::EnvVars;
 use crate::printer::Printer;
-use anstream::eprintln;
 
 pub(crate) async fn hook_impl(
     config: Option<PathBuf>,

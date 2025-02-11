@@ -9,6 +9,8 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
 use etcetera::BaseStrategy;
 
+use constants::env_vars::EnvVars;
+
 pub struct TestContext {
     temp_dir: ChildPath,
     home_dir: ChildPath,
@@ -63,7 +65,7 @@ impl TestContext {
     }
 
     pub fn test_bucket_dir() -> PathBuf {
-        env::var("PREFLIGIT_INTERNAL__TEST_DIR")
+        env::var(EnvVars::PREFLIGIT_INTERNAL__TEST_DIR)
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
                 etcetera::base_strategy::choose_base_strategy()
@@ -115,8 +117,8 @@ impl TestContext {
         let bin = assert_cmd::cargo::cargo_bin("prefligit");
         let mut cmd = Command::new(bin);
         cmd.current_dir(self.workdir());
-        cmd.env("PREFLIGIT_HOME", &*self.home_dir);
-        cmd.env("PREFLIGIT_INTERNAL__SORT_FILENAMES", "1");
+        cmd.env(EnvVars::PREFLIGIT_HOME, &*self.home_dir);
+        cmd.env(EnvVars::PREFLIGIT_INTERNAL__SORT_FILENAMES, "1");
         cmd
     }
 

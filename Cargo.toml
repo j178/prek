@@ -1,3 +1,12 @@
+[workspace]
+members = ["lib/*"]
+
+[workspace.package]
+edition = "2021"
+
+[workspace.dependencies]
+constants = { path = "lib/constants" }
+
 [package]
 name = "prefligit"
 version = "0.0.8"
@@ -5,10 +14,8 @@ authors = ["j178 <hi@j178.dev>"]
 description = "pre-commit implemented in Rust"
 repository = "https://github.com/j178/prefligit"
 homepage = "https://github.com/j178/prefligit"
-edition = "2021"
+edition.workspace = true
 license-file = "LICENSE"
-# `cargo publish` failed because of this, disabled for now.
-# include = ["licenses/.*"]
 
 [features]
 default = ["docker"]
@@ -17,6 +24,8 @@ profiler-flamegraph = ["pprof/flamegraph"]
 docker = []
 
 [dependencies]
+constants = { workspace = true }
+
 anstream = "0.6.15"
 anyhow = "1.0.86"
 assert_cmd = { version = "2.0.16", features = ["color"] }
@@ -72,10 +81,13 @@ regex = "1.11.0"
 [build-dependencies]
 fs-err = "3.1.0"
 
-[lints.rust]
+[lints]
+workspace = true
+
+[workspace.lints.rust]
 dead_code = "allow"
 
-[lints.clippy]
+[workspace.lints.clippy]
 pedantic = { level = "warn", priority = -2 }
 # Allowed pedantic lints
 char_lit_as_u8 = "allow"

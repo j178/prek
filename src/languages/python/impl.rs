@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use constants::env_vars::EnvVars;
+
 use crate::config::LanguageVersion;
-use crate::env_vars::EnvVars;
 use crate::hook::Hook;
 use crate::languages::python::uv::UvInstaller;
 use crate::languages::LanguageImpl;

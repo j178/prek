@@ -5,7 +5,8 @@ use std::sync::{Arc, LazyLock};
 use futures::StreamExt;
 use tracing::trace;
 
-use crate::env_vars::EnvVars;
+use constants::env_vars::EnvVars;
+
 use crate::hook::Hook;
 
 pub static CONCURRENCY: LazyLock<usize> = LazyLock::new(|| {

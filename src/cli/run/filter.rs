@@ -6,8 +6,9 @@ use fancy_regex::Regex;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use tracing::{debug, error};
 
+use constants::env_vars::EnvVars;
+
 use crate::config::Stage;
-use crate::env_vars::EnvVars;
 use crate::fs::normalize_path;
 use crate::git;
 use crate::hook::Hook;

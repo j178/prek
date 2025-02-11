@@ -15,12 +15,13 @@ use rand::SeedableRng;
 use tracing::{debug, trace};
 use unicode_width::UnicodeWidthStr;
 
+use constants::env_vars::EnvVars;
+
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{get_filenames, FileFilter, FileOptions};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::Stage;
-use crate::env_vars::EnvVars;
 use crate::fs::Simplified;
 use crate::git;
 use crate::git::{get_diff, git_cmd};

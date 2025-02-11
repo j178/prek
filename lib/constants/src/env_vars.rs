@@ -7,6 +7,7 @@ impl EnvVars {
 
     pub const PREFLIGIT_HOME: &'static str = "PREFLIGIT_HOME";
 
+    pub const PREFLIGIT_INTERNAL__TEST_DIR: &'static str = "PREFLIGIT_INTERNAL__TEST_DIR";
     pub const PREFLIGIT_INTERNAL__SORT_FILENAMES: &'static str =
         "PREFLIGIT_INTERNAL__SORT_FILENAMES";
 

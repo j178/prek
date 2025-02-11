@@ -7,8 +7,9 @@ use rusqlite::Connection;
 use thiserror::Error;
 use tracing::debug;
 
+use constants::env_vars::EnvVars;
+
 use crate::config::RemoteRepo;
-use crate::env_vars::EnvVars;
 use crate::fs::{copy_dir_all, LockedFile};
 use crate::git::clone_repo;
 use crate::hook::{Hook, Repo};

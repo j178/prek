@@ -20,7 +20,6 @@ mod builtin;
 mod cleanup;
 mod cli;
 mod config;
-mod env_vars;
 mod fs;
 mod git;
 mod hook;
