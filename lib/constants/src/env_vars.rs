@@ -37,17 +37,15 @@ impl EnvVars {
     pub fn var_os(name: &str) -> Option<OsString> {
         #[allow(clippy::disallowed_methods)]
         std::env::var_os(name).or_else(|| {
-            if let Some(name) = Self::pre_commit_name(name) {
-                if let Some(val) = std::env::var_os(name) {
-                    info!("Falling back to pre-commit environment variable for {name}");
-                    Some(val)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
+            let name = Self::pre_commit_name(name)?;
+            let val = std::env::var_os(name)?;
+            info!("Falling back to pre-commit environment variable for {name}");
+            Some(val)
         })
+    }
+
+    pub fn is_set(name: &str) -> bool {
+        Self::var_os(name).is_some()
     }
 
     /// Read an environment variable, falling back to pre-commit corresponding variable if not found.

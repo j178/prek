@@ -45,7 +45,7 @@ pub(crate) async fn run(
 ) -> Result<ExitStatus> {
     // Prevent recursive post-checkout hooks.
     if matches!(hook_stage, Some(Stage::PostCheckout))
-        && EnvVars::var_os(EnvVars::PREFLIGIT_INTERNAL__SKIP_POST_CHECKOUT).is_some()
+        && EnvVars::is_set(EnvVars::PREFLIGIT_INTERNAL__SKIP_POST_CHECKOUT)
     {
         return Ok(ExitStatus::Success);
     }

@@ -22,8 +22,7 @@ pub(crate) async fn hook_impl(
 
     if let Some(ref config_file) = config {
         if !config_file.try_exists()? {
-            return if skip_on_missing_config
-                || EnvVars::var_os(EnvVars::PREFLIGIT_ALLOW_NO_CONFIG).is_some()
+            return if skip_on_missing_config || EnvVars::is_set(EnvVars::PREFLIGIT_ALLOW_NO_CONFIG)
             {
                 Ok(ExitStatus::Success)
             } else {

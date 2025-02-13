@@ -203,7 +203,7 @@ pub async fn get_filenames(opts: FileOptions) -> Result<Vec<String>> {
     .await?;
 
     // Sort filenames if in tests to make the order consistent.
-    if EnvVars::var_os(EnvVars::PREFLIGIT_INTERNAL__SORT_FILENAMES).is_some() {
+    if EnvVars::is_set(EnvVars::PREFLIGIT_INTERNAL__SORT_FILENAMES) {
         filenames.sort_unstable();
     }
 
