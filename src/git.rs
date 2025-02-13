@@ -20,7 +20,7 @@ pub enum Error {
 
 pub static GIT: LazyLock<Result<PathBuf, which::Error>> = LazyLock::new(|| which::which("git"));
 
-static GIT_ENV: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
+static GIT_ENV_REMOVE: LazyLock<()> = LazyLock::new(|| {
     let keep = &[
         "GIT_EXEC_PATH",
         "GIT_SSH",
@@ -33,20 +33,23 @@ static GIT_ENV: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
         "GIT_ASKPASS",
     ];
 
-    std::env::vars()
-        .filter(|(k, _)| {
-            !k.starts_with("GIT_")
-                || k.starts_with("GIT_CONFIG_KEY_")
-                || k.starts_with("GIT_CONFIG_VALUE_")
-                || keep.contains(&k.as_str())
-        })
-        .collect()
+    let to_remove = std::env::vars().filter(|(k, _)| {
+        k.starts_with("GIT_")
+            && !k.starts_with("GIT_CONFIG_KEY_")
+            && !k.starts_with("GIT_CONFIG_VALUE_")
+            && !keep.contains(&k.as_str())
+    });
+
+    for (k, _) in to_remove {
+        unsafe { std::env::remove_var(&k) };
+    }
 });
 
 pub fn git_cmd(summary: &str) -> Result<Cmd, Error> {
     let mut cmd = Cmd::new(GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?, summary);
     cmd.arg("-c").arg("core.useBuiltinFSMonitor=false");
-    cmd.envs(GIT_ENV.iter().cloned());
+
+    LazyLock::force(&GIT_ENV_REMOVE);
 
     Ok(cmd)
 }
