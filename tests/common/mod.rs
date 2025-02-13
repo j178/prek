@@ -1,6 +1,5 @@
 #![allow(dead_code, unreachable_pub)]
 
-use std::env;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -65,7 +64,7 @@ impl TestContext {
     }
 
     pub fn test_bucket_dir() -> PathBuf {
-        env::var(EnvVars::PREFLIGIT_INTERNAL__TEST_DIR)
+        EnvVars::var(EnvVars::PREFLIGIT_INTERNAL__TEST_DIR)
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
                 etcetera::base_strategy::choose_base_strategy()

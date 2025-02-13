@@ -31,6 +31,7 @@ use fs_err as fs;
 fn main() {
     // The workspace root directory is not available without walking up the tree
     // https://github.com/rust-lang/cargo/issues/3946
+    #[allow(clippy::disallowed_methods)]
     let workspace_root = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).to_path_buf();
 
     commit_info(&workspace_root);

@@ -35,6 +35,7 @@ impl EnvVars {
 impl EnvVars {
     /// Read an environment variable, falling back to pre-commit corresponding variable if not found.
     pub fn var_os(name: &str) -> Option<OsString> {
+        #[allow(clippy::disallowed_methods)]
         std::env::var_os(name).or_else(|| {
             if let Some(name) = Self::pre_commit_name(name) {
                 if let Some(val) = std::env::var_os(name) {

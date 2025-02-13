@@ -1,0 +1,4 @@
+disallowed-methods = [
+    "std::env::var",
+    "std::env::var_os",
+]
