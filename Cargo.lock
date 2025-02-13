@@ -408,6 +408,9 @@ dependencies = [
 [[package]]
 name = "constants"
 version = "0.0.1"
+dependencies = [
+ "tracing",
+]
 
 [[package]]
 name = "cpp_demangle"

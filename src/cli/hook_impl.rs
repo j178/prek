@@ -23,13 +23,14 @@ pub(crate) async fn hook_impl(
     if let Some(ref config_file) = config {
         if !config_file.try_exists()? {
             return if skip_on_missing_config
-                || std::env::var_os(EnvVars::PRE_COMMIT_ALLOW_NO_CONFIG).is_some()
+                || EnvVars::var_os(EnvVars::PREFLIGIT_ALLOW_NO_CONFIG).is_some()
             {
                 Ok(ExitStatus::Success)
             } else {
                 eprintln!("Config file not found: {}", config_file.display());
                 eprintln!(
-                    "- To temporarily silence this, run `PRE_COMMIT_ALLOW_NO_CONFIG=1 git ...`"
+                    "- To temporarily silence this, run `{}=1 git ...`",
+                    EnvVars::PREFLIGIT_ALLOW_NO_CONFIG
                 );
                 eprintln!("- To permanently silence this, install hooks with the `--allow-missing-config` flag");
                 eprintln!("- To uninstall hooks, run `prefligit uninstall`");

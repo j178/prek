@@ -45,7 +45,7 @@ pub(crate) async fn run(
 ) -> Result<ExitStatus> {
     // Prevent recursive post-checkout hooks.
     if matches!(hook_stage, Some(Stage::PostCheckout))
-        && std::env::var_os(EnvVars::_PRE_COMMIT_SKIP_POST_CHECKOUT).is_some()
+        && EnvVars::var_os(EnvVars::PREFLIGIT_INTERNAL__SKIP_POST_CHECKOUT).is_some()
     {
         return Ok(ExitStatus::Success);
     }
@@ -238,7 +238,7 @@ fn fill_envs(
 }
 
 fn get_skips() -> Vec<String> {
-    match std::env::var_os(EnvVars::SKIP) {
+    match EnvVars::var_os(EnvVars::SKIP) {
         Some(s) if !s.is_empty() => s
             .to_string_lossy()
             .split(',')

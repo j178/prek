@@ -7,6 +7,8 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::{error, trace};
 
+use constants::env_vars::EnvVars;
+
 use crate::cleanup::add_cleanup;
 use crate::fs::Simplified;
 use crate::git::{self, git_cmd, GIT};
@@ -133,7 +135,7 @@ impl WorkingTreeKeeper {
             .arg("--")
             .arg(".")
             // prevent recursive post-checkout hooks
-            .env("_PRE_COMMIT_SKIP_POST_CHECKOUT", "1")
+            .env(EnvVars::PREFLIGIT_INTERNAL__SKIP_POST_CHECKOUT, "1")
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status()?;

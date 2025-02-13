@@ -33,7 +33,7 @@ pub enum Error {
 }
 
 static STORE_HOME: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
-    if let Some(path) = std::env::var_os(EnvVars::PREFLIGIT_HOME) {
+    if let Some(path) = EnvVars::var_os(EnvVars::PREFLIGIT_HOME) {
         debug!(
             path = %path.to_string_lossy(),
             "Loading store from PREFLIGIT_HOME env var",

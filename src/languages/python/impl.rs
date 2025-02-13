@@ -93,7 +93,7 @@ impl LanguageImpl for Python {
         // Construct PATH with venv bin directory first
         let new_path = std::env::join_paths(
             std::iter::once(bin_dir(env_dir.as_path())).chain(
-                std::env::var_os(EnvVars::PATH)
+                EnvVars::var_os(EnvVars::PATH)
                     .as_ref()
                     .iter()
                     .flat_map(std::env::split_paths),

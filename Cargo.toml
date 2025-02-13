@@ -7,6 +7,8 @@ edition = "2021"
 [workspace.dependencies]
 constants = { path = "lib/constants" }
 
+tracing = "0.1.40"
+
 [package]
 name = "prefligit"
 version = "0.0.8"
@@ -60,7 +62,7 @@ tempfile = "3.13.0"
 textwrap = "0.16.1"
 thiserror = "2.0.11"
 tokio = { version = "1.40.0", features = ["fs", "process", "rt", "sync", "macros"] }
-tracing = "0.1.40"
+tracing.workspace = true
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 unicode-width = "0.2.0"
 url = { version = "2.5.2", features = ["serde"] }
