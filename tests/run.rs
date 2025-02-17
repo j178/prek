@@ -757,9 +757,9 @@ fn staged_files_only() -> Result<()> {
       Hello, world!
 
     ----- stderr -----
-    Non-staged changes detected, saving to `[HOME]/[TIME]-[PID].patch`
+    Non-staged changes detected, saving to `[HOME]/patches/[TIME]-[PID].patch`
 
-    Restored working tree changes from `[HOME]/[TIME]-[PID].patch`
+    Restored working tree changes from `[HOME]/patches/[TIME]-[PID].patch`
     "#);
 
     let content = context.read("file.txt");
