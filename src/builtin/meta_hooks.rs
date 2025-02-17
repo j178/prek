@@ -8,7 +8,7 @@ use fancy_regex::Regex;
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use crate::cli::run::{get_filenames, FileFilter, FileOptions};
+use crate::cli::run::{collect_files, CollectOptions, FileFilter};
 use crate::config::Language;
 use crate::hook::{Hook, Project};
 use crate::store::Store;
@@ -21,7 +21,7 @@ pub(crate) async fn check_hooks_apply(
 ) -> Result<(i32, Vec<u8>)> {
     let store = Store::from_settings()?.init()?;
 
-    let input = get_filenames(FileOptions::default().with_all_files(true)).await?;
+    let input = collect_files(CollectOptions::default().with_all_files(true)).await?;
 
     let mut code = 0;
     let mut output = Vec::new();
@@ -89,7 +89,7 @@ pub(crate) async fn check_useless_excludes(
 ) -> Result<(i32, Vec<u8>)> {
     let store = Store::from_settings()?.init()?;
 
-    let input = get_filenames(FileOptions::default().with_all_files(true)).await?;
+    let input = collect_files(CollectOptions::default().with_all_files(true)).await?;
 
     let mut code = 0;
     let mut output = Vec::new();

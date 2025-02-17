@@ -1,4 +1,4 @@
-pub use filter::{get_filenames, FileFilter, FileOptions};
+pub use filter::{collect_files, CollectOptions, FileFilter};
 pub(crate) use run::{install_hooks, run};
 
 mod filter;

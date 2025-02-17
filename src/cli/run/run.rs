@@ -19,7 +19,7 @@ use constants::env_vars::EnvVars;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;
-use crate::cli::run::{get_filenames, FileFilter, FileOptions};
+use crate::cli::run::{collect_files, CollectOptions, FileFilter};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::Stage;
 use crate::fs::Simplified;
@@ -139,7 +139,7 @@ pub(crate) async fn run(
         _guard = Some(WorkTreeKeeper::clean(&store).await?);
     }
 
-    let filenames = get_filenames(FileOptions {
+    let filenames = collect_files(CollectOptions {
         hook_stage,
         from_ref,
         to_ref,

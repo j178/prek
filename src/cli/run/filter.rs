@@ -164,7 +164,7 @@ impl<'a> FileFilter<'a> {
 }
 
 #[derive(Default)]
-pub struct FileOptions {
+pub struct CollectOptions {
     pub hook_stage: Option<Stage>,
     pub from_ref: Option<String>,
     pub to_ref: Option<String>,
@@ -173,7 +173,7 @@ pub struct FileOptions {
     pub commit_msg_filename: Option<PathBuf>,
 }
 
-impl FileOptions {
+impl CollectOptions {
     pub fn with_all_files(mut self, all_files: bool) -> Self {
         self.all_files = all_files;
         self
@@ -182,8 +182,8 @@ impl FileOptions {
 
 /// Get all filenames to run hooks on.
 #[allow(clippy::too_many_arguments)]
-pub async fn get_filenames(opts: FileOptions) -> Result<Vec<String>> {
-    let FileOptions {
+pub async fn collect_files(opts: CollectOptions) -> Result<Vec<String>> {
+    let CollectOptions {
         hook_stage,
         from_ref,
         to_ref,
@@ -192,7 +192,7 @@ pub async fn get_filenames(opts: FileOptions) -> Result<Vec<String>> {
         commit_msg_filename,
     } = opts;
 
-    let mut filenames = filenames_for_args(
+    let mut filenames = collect_files_from_args(
         hook_stage,
         from_ref,
         to_ref,
@@ -214,7 +214,7 @@ pub async fn get_filenames(opts: FileOptions) -> Result<Vec<String>> {
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn filenames_for_args(
+async fn collect_files_from_args(
     hook_stage: Option<Stage>,
     from_ref: Option<String>,
     to_ref: Option<String>,
