@@ -106,7 +106,7 @@ impl WorkingTreeKeeper {
                 );
                 let patch_path = patch_dir.join(&patch_name);
 
-                anstream::eprintln!(
+                eprintln!(
                     "{}",
                     format!(
                         "Non-staged changes detected, saving to `{}`",
@@ -227,7 +227,7 @@ impl WorkTreeKeeper {
     pub async fn clean(store: &Store) -> Result<RestoreGuard> {
         let cleaner = Self {
             intent_to_add: Some(IntentToAddKeeper::clean().await?),
-            working_tree: Some(WorkingTreeKeeper::clean(store.path()).await?),
+            working_tree: Some(WorkingTreeKeeper::clean(&store.patches_dir()).await?),
         };
 
         // Set to the global for the cleanup hook.

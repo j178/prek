@@ -145,12 +145,16 @@ impl Store {
         Some(self.hooks_dir().join(digest))
     }
 
-    fn repos_dir(&self) -> PathBuf {
+    pub fn repos_dir(&self) -> PathBuf {
         self.path.join("repos")
     }
 
-    fn hooks_dir(&self) -> PathBuf {
+    pub fn hooks_dir(&self) -> PathBuf {
         self.path.join("hooks")
+    }
+
+    pub fn patches_dir(&self) -> PathBuf {
+        self.path.join("patches")
     }
 
     /// The path to the tool directory in the store.
