@@ -32,14 +32,7 @@ impl LanguageImpl for Python {
         let python_install_dir = store.tools_path(ToolBucket::Python);
 
         let uv_cmd = |summary| {
-            #[allow(unused_mut)]
             let mut cmd = Cmd::new(&uv, summary);
-            // Don't use cache in Windows, multiple uv instances will conflict with each other.
-            // See https://github.com/astral-sh/uv/issues/8664
-            // TODO: remove this
-            #[cfg(windows)]
-            cmd.env(EnvVars::UV_NO_CACHE, "1");
-
             cmd.env(EnvVars::UV_PYTHON_INSTALL_DIR, &python_install_dir);
             cmd
         };
@@ -47,6 +40,7 @@ impl LanguageImpl for Python {
         // Create venv
         let mut cmd = uv_cmd("create venv");
         cmd.arg("venv").arg(venv);
+
         match hook.language_version {
             LanguageVersion::Specific(ref version) => {
                 cmd.arg("--python").arg(version);

@@ -130,7 +130,8 @@ impl InstallSource {
         fs_err::tokio::rename(
             &uv,
             target.join("uv").with_extension(env::consts::EXE_EXTENSION),
-        ).await?;
+        )
+        .await?;
         fs_err::tokio::remove_dir_all(bin_dir).await?;
         fs_err::tokio::remove_dir_all(lib_dir).await?;
 
