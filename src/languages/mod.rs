@@ -22,7 +22,11 @@ static DOCKER: docker::Docker = docker::Docker;
 static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
 
 trait LanguageImpl {
-    fn environment_dir(&self) -> Option<&str>;
+    /// Whether the language supports installing dependencies.
+    ///
+    /// For example, Python and Node.js support installing dependencies, while
+    /// System and Fail do not.
+    fn supports_dependency(&self) -> bool;
     async fn install(&self, hook: &Hook) -> Result<()>;
     async fn check_health(&self) -> Result<()>;
     async fn run(
@@ -34,14 +38,14 @@ trait LanguageImpl {
 }
 
 impl Language {
-    pub fn environment_dir(&self) -> Option<&str> {
+    pub fn supports_dependency(self) -> bool {
         match self {
-            Self::Python => PYTHON.environment_dir(),
-            Self::Node => NODE.environment_dir(),
-            Self::System => SYSTEM.environment_dir(),
-            Self::Fail => FAIL.environment_dir(),
-            Self::Docker => DOCKER.environment_dir(),
-            Self::DockerImage => DOCKER_IMAGE.environment_dir(),
+            Self::Python => PYTHON.supports_dependency(),
+            Self::Node => NODE.supports_dependency(),
+            Self::System => SYSTEM.supports_dependency(),
+            Self::Fail => FAIL.supports_dependency(),
+            Self::Docker => DOCKER.supports_dependency(),
+            Self::DockerImage => DOCKER_IMAGE.supports_dependency(),
             _ => todo!(),
         }
     }

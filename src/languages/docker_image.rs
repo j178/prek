@@ -10,8 +10,8 @@ use crate::run::run_by_batch;
 pub struct DockerImage;
 
 impl LanguageImpl for DockerImage {
-    fn environment_dir(&self) -> Option<&str> {
-        None
+    fn supports_dependency(&self) -> bool {
+        false
     }
 
     async fn install(&self, _: &Hook) -> anyhow::Result<()> {

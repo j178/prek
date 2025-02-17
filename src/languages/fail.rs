@@ -7,8 +7,8 @@ use crate::languages::LanguageImpl;
 pub struct Fail;
 
 impl LanguageImpl for Fail {
-    fn environment_dir(&self) -> Option<&str> {
-        None
+    fn supports_dependency(&self) -> bool {
+        false
     }
 
     async fn install(&self, _hook: &Hook) -> anyhow::Result<()> {

@@ -8,15 +8,17 @@ use crate::languages::LanguageImpl;
 pub struct Node;
 
 impl LanguageImpl for Node {
-    fn environment_dir(&self) -> Option<&str> {
-        Some("node_env")
+    fn supports_dependency(&self) -> bool {
+        true
     }
 
     async fn install(&self, hook: &Hook) -> anyhow::Result<()> {
         // TODO: install node automatically
-        let env = hook.environment_dir().expect("No environment dir found");
-        fs_err::create_dir_all(env)?;
+        let Some(env) = hook.env_path() else {
+            return Ok(());
+        };
 
+        fs_err::create_dir_all(env)?;
         Ok(())
     }
 

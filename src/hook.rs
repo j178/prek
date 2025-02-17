@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
+use std::hash::Hash;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Mutex;
@@ -37,7 +38,7 @@ pub enum Error {
 #[derive(Debug, Clone)]
 pub enum Repo {
     Remote {
-        /// Path to the stored repo.
+        /// Path to the cloned repo.
         path: PathBuf,
         url: Url,
         rev: String,
@@ -53,17 +54,14 @@ pub enum Repo {
 
 impl Repo {
     /// Load the remote repo manifest from the path.
-    pub fn remote(url: &str, rev: &str, path: &str) -> Result<Self, Error> {
-        let url = Url::parse(url)?;
-
-        let path = PathBuf::from(path);
+    pub fn remote(url: Url, rev: String, path: PathBuf) -> Result<Self, Error> {
         let manifest = read_manifest(&path.join(MANIFEST_FILE))?;
         let hooks = manifest.hooks;
 
         Ok(Self::Remote {
             path,
             url,
-            rev: rev.to_string(),
+            rev,
             hooks,
         })
     }
@@ -80,6 +78,14 @@ impl Repo {
         }
     }
 
+    /// Get the path to the cloned repo if it is a remote repo.
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            Repo::Remote { ref path, .. } => Some(path),
+            _ => None,
+        }
+    }
+
     /// Get a hook by id.
     pub fn get_hook(&self, id: &str) -> Option<&ManifestHook> {
         let hooks = match self {
@@ -88,15 +94,6 @@ impl Repo {
             Repo::Meta { ref hooks } => hooks,
         };
         hooks.iter().find(|hook| hook.id == id)
-    }
-
-    /// Get the path to the repo.
-    pub fn path(&self) -> &Path {
-        match self {
-            Repo::Remote { ref path, .. } => path,
-            Repo::Local { .. } => &CWD,
-            Repo::Meta { .. } => &CWD,
-        }
     }
 }
 
@@ -178,19 +175,16 @@ impl Project {
                         (reporter, reporter.on_clone_start(&format!("{repo_config}")))
                     });
 
-                    let path = store
-                        .prepare_remote_repo(repo_config, &[])
-                        .await
-                        .map_err(Box::new)?;
+                    let path = store.clone_repo(repo_config).await.map_err(Box::new)?;
 
                     if let Some((reporter, progress)) = progress {
                         reporter.on_clone_complete(progress);
                     }
 
                     let repo = Rc::new(Repo::remote(
-                        repo_config.repo.as_str(),
-                        &repo_config.rev,
-                        &path.to_string_lossy(),
+                        repo_config.repo.clone(),
+                        repo_config.rev.clone(),
+                        path,
                     )?);
                     remote_repos
                         .lock()
@@ -256,22 +250,9 @@ impl Project {
                         let mut builder = HookBuilder::new(repo, hook.clone());
                         builder.update(hook_config);
                         builder.combine(&self.config);
+
                         let mut hook = builder.build();
-
-                        if hook.additional_dependencies.is_empty() {
-                            // Use the shared repo environment.
-                            let path = hook.repo.path().to_path_buf();
-                            hook = hook.with_path(path);
-                        } else {
-                            // Prepare hooks with `additional_dependencies` (they need separate environments).
-                            let path = store
-                                .prepare_remote_repo(repo_config, &hook.additional_dependencies)
-                                .await
-                                .map_err(Box::new)?;
-
-                            hook = hook.with_path(path);
-                        }
-
+                        hook.with_path(store.hook_path(&hook));
                         hooks.push(hook);
                     }
                 }
@@ -280,20 +261,9 @@ impl Project {
                         let repo = Rc::clone(repo);
                         let mut builder = HookBuilder::new(repo, hook_config.clone());
                         builder.combine(&self.config);
+
                         let mut hook = builder.build();
-
-                        // If the hook doesn't need an environment, don't do any preparation.
-                        if hook.language.environment_dir().is_some() {
-                            let path = store
-                                .prepare_local_repo(&hook, &hook.additional_dependencies)
-                                .map_err(Box::new)?;
-
-                            hook = hook.with_path(path);
-                        } else {
-                            // Use the shared repo environment.
-                            let path = hook.repo.path().to_path_buf();
-                            hook = hook.with_path(path);
-                        }
+                        hook.with_path(store.hook_path(&hook));
                         hooks.push(hook);
                     }
                 }
@@ -303,10 +273,9 @@ impl Project {
                         let hook_config = ManifestHook::from(hook_config.clone());
                         let mut builder = HookBuilder::new(repo, hook_config);
                         builder.combine(&self.config);
-                        let mut hook = builder.build();
 
-                        let path = hook.repo.path().to_path_buf();
-                        hook = hook.with_path(path);
+                        let mut hook = builder.build();
+                        hook.with_path(store.hook_path(&hook));
                         hooks.push(hook);
                     }
                 }
@@ -392,7 +361,7 @@ impl HookBuilder {
     fn check(&self) {
         let language = self.config.language;
         let options = &self.config.options;
-        if language.environment_dir().is_none() {
+        if !language.supports_dependency() {
             if options.additional_dependencies.is_some() {
                 warn_user!(
                     "Language {} does not need environment, but additional_dependencies is set",
@@ -405,7 +374,7 @@ impl HookBuilder {
             .as_ref()
             .is_some_and(|v| !v.is_default())
         {
-            if language.environment_dir().is_none() {
+            if !language.supports_dependency() {
                 warn_user!(
                     "Language {} does not need environment, but language_version is set",
                     language
@@ -489,17 +458,7 @@ pub struct Hook {
 impl Display for Hook {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if f.alternate() {
-            if let Some(ref path) = self.path {
-                write!(
-                    f,
-                    "{} ({} at {})",
-                    self.id,
-                    self.repo,
-                    path.to_string_lossy()
-                )
-            } else {
-                write!(f, "{} ({})", self.id, self.repo)
-            }
+            write!(f, "{} ({})", self.id, self.repo)
         } else {
             write!(f, "{}", self.id)
         }
@@ -507,49 +466,72 @@ impl Display for Hook {
 }
 
 impl Hook {
-    pub fn with_path(mut self, path: PathBuf) -> Self {
-        self.path = Some(path);
-        self
+    fn with_path(&mut self, path: Option<PathBuf>) {
+        self.path = path;
     }
 
     pub fn repo(&self) -> &Repo {
         &self.repo
     }
 
-    /// Get the working directory for the hook.
-    pub fn path(&self) -> &Path {
-        self.path.as_deref().unwrap_or_else(|| self.repo.path())
+    /// Get the path to the repository that contains the hook.
+    pub fn repo_path(&self) -> Option<&Path> {
+        self.repo.path()
     }
 
-    /// Get the environment directory that the hook will be installed to.
-    pub fn environment_dir(&self) -> Option<PathBuf> {
-        let env_dir = self.language.environment_dir()?;
-        Some(
-            self.path()
-                .join(format!("{}-{}", env_dir, &self.language_version)),
-        )
+    /// Get the path to the environment directory (where the hook is installed) if it exists.
+    pub fn env_path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
+    pub fn is_local(&self) -> bool {
+        matches!(&*self.repo, Repo::Local { .. })
+    }
+
+    pub fn is_remote(&self) -> bool {
+        matches!(&*self.repo, Repo::Remote { .. })
+    }
+
+    pub fn is_meta(&self) -> bool {
+        matches!(&*self.repo, Repo::Meta { .. })
     }
 
     // TODO: health check
+
     /// Check if the hook is installed in the environment.
     pub fn installed(&self) -> bool {
-        let Some(env) = self.environment_dir() else {
+        let Some(env) = self.env_path() else {
             return true;
         };
-
-        let state_file_v2 = env.join(".install_state_v2");
-        state_file_v2.exists()
-        // Drop support for state file v1.
+        env.join(".installed_ok").exists()
     }
 
     /// Write a state file to mark the hook as installed.
-    pub fn mark_installed(&self) -> Result<(), Error> {
-        let env = self.environment_dir().unwrap();
-        let state_file_v2 = env.join(".install_state_v2");
-        fs_err::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open(&state_file_v2)?;
+    pub fn mark_as_installed(&self) -> Result<(), Error> {
+        let Some(env) = self.env_path() else {
+            return Ok(());
+        };
+        fs_err::write(env.join(".installed_ok"), "")?;
+        fs_err::write(env.join(".repo_source"), self.repo.to_string())?;
         Ok(())
+    }
+}
+
+impl Hash for Hook {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match &*self.repo {
+            Repo::Remote { url, rev, .. } => {
+                url.hash(state);
+                rev.hash(state);
+            }
+            Repo::Local { .. } => {
+                "local".hash(state);
+            }
+            Repo::Meta { .. } => unreachable!(),
+        }
+
+        self.language.as_str().hash(state);
+        self.language_version.as_str().hash(state);
+        self.additional_dependencies.hash(state);
     }
 }

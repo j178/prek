@@ -16,13 +16,15 @@ use crate::store::{Store, ToolBucket};
 pub struct Python;
 
 impl LanguageImpl for Python {
-    fn environment_dir(&self) -> Option<&str> {
-        Some("py_env")
+    fn supports_dependency(&self) -> bool {
+        true
     }
 
     // TODO: fallback to virtualenv, pip
     async fn install(&self, hook: &Hook) -> anyhow::Result<()> {
-        let venv = hook.environment_dir().expect("No environment dir found");
+        let Some(venv) = hook.env_path() else {
+            return Ok(());
+        };
 
         let uv = UvInstaller::install().await?;
 
@@ -34,6 +36,7 @@ impl LanguageImpl for Python {
             let mut cmd = Cmd::new(&uv, summary);
             // Don't use cache in Windows, multiple uv instances will conflict with each other.
             // See https://github.com/astral-sh/uv/issues/8664
+            // TODO: remove this
             #[cfg(windows)]
             cmd.env(EnvVars::UV_NO_CACHE, "1");
 
@@ -43,7 +46,7 @@ impl LanguageImpl for Python {
 
         // Create venv
         let mut cmd = uv_cmd("create venv");
-        cmd.arg("venv").arg(&venv);
+        cmd.arg("venv").arg(venv);
         match hook.language_version {
             LanguageVersion::Specific(ref version) => {
                 cmd.arg("--python").arg(version);
@@ -58,17 +61,27 @@ impl LanguageImpl for Python {
         cmd.check(true).output().await?;
 
         // Install dependencies
-        uv_cmd("install dependencies")
-            .arg("pip")
-            .arg("install")
-            .arg(".")
-            .args(&hook.additional_dependencies)
-            .current_dir(hook.path())
-            .env("VIRTUAL_ENV", &venv)
-            .check(true)
-            .output()
-            .await?;
-
+        if let Some(repo_path) = hook.repo_path() {
+            uv_cmd("install dependencies")
+                .arg("pip")
+                .arg("install")
+                .arg(".")
+                .args(&hook.additional_dependencies)
+                .current_dir(repo_path)
+                .env("VIRTUAL_ENV", venv)
+                .check(true)
+                .output()
+                .await?;
+        } else {
+            uv_cmd("install dependencies")
+                .arg("pip")
+                .arg("install")
+                .args(&hook.additional_dependencies)
+                .env("VIRTUAL_ENV", venv)
+                .check(true)
+                .output()
+                .await?;
+        }
         Ok(())
     }
 
@@ -83,16 +96,14 @@ impl LanguageImpl for Python {
         env_vars: Arc<HashMap<&'static str, String>>,
     ) -> anyhow::Result<(i32, Vec<u8>)> {
         // Get environment directory and parse command
-        let env_dir = hook
-            .environment_dir()
-            .expect("No environment dir for Python");
+        let env_dir = hook.env_path().expect("Python must have env path");
 
         let cmds = shlex::split(&hook.entry)
             .ok_or_else(|| anyhow::anyhow!("Failed to parse entry command"))?;
 
         // Construct PATH with venv bin directory first
         let new_path = std::env::join_paths(
-            std::iter::once(bin_dir(env_dir.as_path())).chain(
+            std::iter::once(bin_dir(env_dir)).chain(
                 EnvVars::var_os(EnvVars::PATH)
                     .as_ref()
                     .iter()
@@ -102,7 +113,7 @@ impl LanguageImpl for Python {
 
         let cmds = Arc::new(cmds);
         let hook_args = Arc::new(hook.args.clone());
-        let env_dir = Arc::new(env_dir.clone());
+        let env_dir = Arc::new(env_dir.to_path_buf());
         let new_path = Arc::new(new_path);
 
         let run = move |batch: Vec<String>| {

@@ -10,8 +10,8 @@ use crate::run::run_by_batch;
 pub struct System;
 
 impl LanguageImpl for System {
-    fn environment_dir(&self) -> Option<&str> {
-        None
+    fn supports_dependency(&self) -> bool {
+        false
     }
 
     async fn install(&self, _hook: &Hook) -> anyhow::Result<()> {

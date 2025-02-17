@@ -189,6 +189,7 @@ fn fill_envs(
     to_ref: Option<&String>,
     args: &RunExtraArgs,
 ) -> HashMap<&'static str, String> {
+    // TODO: how to change these env vars?
     let mut env = HashMap::new();
     env.insert("PRE_COMMIT", "1".into());
 
@@ -249,7 +250,7 @@ fn get_skips() -> Vec<String> {
     }
 }
 
-async fn install_hook(hook: &Hook, env_dir: PathBuf) -> Result<()> {
+async fn install_hook(hook: &Hook, env_dir: &Path) -> Result<()> {
     debug!(%hook, target = %env_dir.display(), "Install environment");
 
     if env_dir.try_exists()? {
@@ -257,11 +258,11 @@ async fn install_hook(hook: &Hook, env_dir: PathBuf) -> Result<()> {
             env_dir = %env_dir.display(),
             "Removing existing environment directory",
         );
-        fs_err::remove_dir_all(&env_dir)?;
+        fs_err::remove_dir_all(env_dir)?;
     }
 
     hook.language.install(hook).await?;
-    hook.mark_installed()?;
+    hook.mark_as_installed()?;
 
     Ok(())
 }
@@ -270,8 +271,8 @@ pub async fn install_hooks(hooks: &[Hook], reporter: &HookInstallReporter) -> Re
     let to_install = hooks
         .iter()
         .filter(|hook| !hook.installed())
-        .filter_map(|hook| hook.environment_dir().map(|env_dir| (hook, env_dir)))
-        .unique_by(|(_, env_dir)| env_dir.clone());
+        .filter_map(|hook| hook.env_path().map(|env_dir| (hook, env_dir)))
+        .unique_by(|(_, env_dir)| *env_dir);
 
     let mut tasks = futures::stream::iter(to_install)
         .map(|(hook, env_dir)| async move {

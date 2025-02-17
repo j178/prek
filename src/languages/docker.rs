@@ -1,13 +1,13 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::ffi::OsStr;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use anstream::ColorChoice;
 use anyhow::Result;
 use fancy_regex::Regex;
-use md5::Digest;
+use seahash::SeaHasher;
 use tracing::trace;
 
 use crate::fs::CWD;
@@ -23,13 +23,17 @@ pub struct Docker;
 
 impl Docker {
     fn docker_tag(hook: &Hook) -> Option<String> {
-        hook.path()
-            .file_name()
-            .and_then(OsStr::to_str)
-            .map(|s| format!("pre-commit-{:x}", md5::Md5::digest(s)))
+        let path = hook.env_path()?;
+        let mut hasher = SeaHasher::new();
+        path.hash(&mut hasher);
+        Some(format!("pre-commit-{:x}", hasher.finish()))
     }
 
     async fn build_docker_image(hook: &Hook, pull: bool) -> Result<()> {
+        let Some(src) = hook.repo_path() else {
+            anyhow::bail!("Cannot build docker image without a repo path");
+        };
+
         let mut cmd = Cmd::new("docker", "build docker image");
 
         let cmd = cmd
@@ -47,7 +51,7 @@ impl Docker {
         // see https://github.com/pre-commit/pre-commit/issues/477
         cmd.arg(".");
 
-        cmd.current_dir(hook.path()).check(true).output().await?;
+        cmd.current_dir(src).check(true).output().await?;
 
         Ok(())
     }
@@ -162,12 +166,14 @@ impl Docker {
 }
 
 impl LanguageImpl for Docker {
-    fn environment_dir(&self) -> Option<&str> {
-        Some("docker")
+    fn supports_dependency(&self) -> bool {
+        true
     }
 
     async fn install(&self, hook: &Hook) -> Result<()> {
-        let env = hook.environment_dir().expect("No environment dir found");
+        let Some(env) = hook.env_path() else {
+            return Ok(());
+        };
 
         Docker::build_docker_image(hook, true).await?;
         fs_err::create_dir_all(env)?;
