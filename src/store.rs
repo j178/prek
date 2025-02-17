@@ -75,7 +75,7 @@ impl Store {
             .write(true)
             .create_new(true)
             .open(self.path.join("README")) {
-            Ok(mut f) => f.write_all(b"This directory is maintained by the pre-commit project.\nLearn more: https://github.com/pre-commit/pre-commit\n")?,
+            Ok(mut f) => f.write_all(b"This directory is maintained by the prefligit project.\nLearn more: https://github.com/j178/prefligit\n")?,
             Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => (),
             Err(err) => return Err(err.into()),
         }
