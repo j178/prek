@@ -12,7 +12,7 @@ use crate::process::Cmd;
 use crate::store::{Store, ToolBucket};
 
 // The version of `uv` to install. Should update periodically.
-const UV_VERSION: &str = "0.5.8";
+const UV_VERSION: &str = "0.6.0";
 
 #[derive(Debug)]
 enum PyPiMirror {
@@ -127,12 +127,12 @@ impl InstallSource {
             .join(&bin_dir)
             .join("uv")
             .with_extension(env::consts::EXE_EXTENSION);
-        fs_err::rename(
+        fs_err::tokio::rename(
             &uv,
             target.join("uv").with_extension(env::consts::EXE_EXTENSION),
-        )?;
-        fs_err::remove_dir_all(bin_dir)?;
-        fs_err::remove_dir_all(lib_dir)?;
+        ).await?;
+        fs_err::tokio::remove_dir_all(bin_dir).await?;
+        fs_err::tokio::remove_dir_all(lib_dir).await?;
 
         Ok(())
     }
@@ -214,7 +214,7 @@ impl UvInstaller {
             return Ok(uv);
         }
 
-        fs_err::create_dir_all(&uv_dir)?;
+        fs_err::tokio::create_dir_all(&uv_dir).await?;
         let _lock = LockedFile::acquire(uv_dir.join(".lock"), "uv").await?;
 
         if uv.is_file() {
