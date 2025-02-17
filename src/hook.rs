@@ -507,12 +507,12 @@ impl Hook {
     }
 
     /// Write a state file to mark the hook as installed.
-    pub fn mark_as_installed(&self) -> Result<(), Error> {
+    pub async fn mark_as_installed(&self) -> Result<(), Error> {
         let Some(env) = self.env_path() else {
             return Ok(());
         };
-        fs_err::write(env.join(".installed_ok"), "")?;
-        fs_err::write(env.join(".repo_source"), self.repo.to_string())?;
+        fs_err::tokio::write(env.join(".installed_ok"), "").await?;
+        fs_err::tokio::write(env.join(".repo_source"), self.repo.to_string()).await?;
         Ok(())
     }
 }

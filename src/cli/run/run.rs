@@ -245,7 +245,7 @@ fn get_skips() -> Vec<String> {
             .split(',')
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>(),
+            .collect(),
         _ => vec![],
     }
 }
@@ -258,11 +258,11 @@ async fn install_hook(hook: &Hook, env_dir: &Path) -> Result<()> {
             env_dir = %env_dir.display(),
             "Removing existing environment directory",
         );
-        fs_err::remove_dir_all(env_dir)?;
+        fs_err::tokio::remove_dir_all(env_dir).await?;
     }
 
     hook.language.install(hook).await?;
-    hook.mark_as_installed()?;
+    hook.mark_as_installed().await?;
 
     Ok(())
 }

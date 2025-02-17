@@ -1,4 +1,5 @@
 use std::hash::{Hash, Hasher};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
@@ -69,7 +70,15 @@ impl Store {
     /// Initialize the store.
     pub fn init(self) -> Result<Self, Error> {
         fs_err::create_dir_all(&self.path)?;
-        // TODO: add a readme
+
+        match fs_err::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(self.path.join("README")) {
+            Ok(mut f) => f.write_all(b"This directory is maintained by the pre-commit project.\nLearn more: https://github.com/pre-commit/pre-commit\n")?,
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => (),
+            Err(err) => return Err(err.into()),
+        }
         Ok(self)
     }
 
