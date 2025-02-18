@@ -22,9 +22,7 @@ impl LanguageImpl for Python {
 
     // TODO: fallback to virtualenv, pip
     async fn install(&self, hook: &Hook) -> anyhow::Result<()> {
-        let Some(venv) = hook.env_path() else {
-            return Ok(());
-        };
+        let venv = hook.env_path().expect("Python must have env path");
 
         let uv = UvInstaller::install().await?;
 

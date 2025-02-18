@@ -20,8 +20,6 @@ use crate::hook::Hook;
 pub enum Error {
     #[error("Home directory not found")]
     HomeNotFound,
-    #[error("Local hook {0} does not need env")]
-    LocalHookNoNeedEnv(String),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -181,6 +179,6 @@ impl ToolBucket {
 }
 
 /// Convert a u64 to a hex string.
-fn to_hex(num: u64) -> String {
+pub fn to_hex(num: u64) -> String {
     hex::encode(num.to_le_bytes())
 }

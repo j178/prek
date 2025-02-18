@@ -22,16 +22,16 @@ const PRE_COMMIT_LABEL: &str = "PRE_COMMIT";
 pub struct Docker;
 
 impl Docker {
-    fn docker_tag(hook: &Hook) -> Option<String> {
-        let path = hook.env_path()?;
+    fn docker_tag(hook: &Hook) -> String {
         let mut hasher = SeaHasher::new();
-        path.hash(&mut hasher);
-        Some(format!("pre-commit-{:x}", hasher.finish()))
+        hook.hash(&mut hasher);
+        let digest = crate::store::to_hex(hasher.finish());
+        format!("prefligit-{digest}")
     }
 
     async fn build_docker_image(hook: &Hook, pull: bool) -> Result<()> {
         let Some(src) = hook.repo_path() else {
-            anyhow::bail!("Cannot build docker image without a repo path");
+            anyhow::bail!("Language `docker` cannot work with `local` repository");
         };
 
         let mut cmd = Cmd::new("docker", "build docker image");
@@ -39,7 +39,7 @@ impl Docker {
         let cmd = cmd
             .arg("build")
             .arg("--tag")
-            .arg(Self::docker_tag(hook).expect("Failed to get docker tag"))
+            .arg(Self::docker_tag(hook))
             .arg("--label")
             .arg(PRE_COMMIT_LABEL);
 
@@ -171,12 +171,15 @@ impl LanguageImpl for Docker {
     }
 
     async fn install(&self, hook: &Hook) -> Result<()> {
-        let Some(env) = hook.env_path() else {
-            return Ok(());
-        };
+        let env = hook.env_path().expect("Docker must have env path");
+
+        // TODO: check unsupported language version
+        if !hook.additional_dependencies.is_empty() {
+            anyhow::bail!("Docker does not support additional dependencies");
+        }
 
         Docker::build_docker_image(hook, true).await?;
-        fs_err::create_dir_all(env)?;
+        fs_err::tokio::create_dir_all(env).await?;
         Ok(())
     }
 
@@ -192,7 +195,7 @@ impl LanguageImpl for Docker {
     ) -> Result<(i32, Vec<u8>)> {
         Docker::build_docker_image(hook, false).await?;
 
-        let docker_tag = Docker::docker_tag(hook).expect("Failed to get docker tag");
+        let docker_tag = Docker::docker_tag(hook);
 
         let cmds = shlex::split(&hook.entry).ok_or(anyhow::anyhow!("Failed to parse entry"))?;
 

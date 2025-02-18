@@ -14,11 +14,9 @@ impl LanguageImpl for Node {
 
     async fn install(&self, hook: &Hook) -> anyhow::Result<()> {
         // TODO: install node automatically
-        let Some(env) = hook.env_path() else {
-            return Ok(());
-        };
+        let env = hook.env_path().expect("Node must have env path");
 
-        fs_err::create_dir_all(env)?;
+        fs_err::tokio::create_dir_all(env).await?;
         Ok(())
     }
 

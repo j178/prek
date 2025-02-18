@@ -500,6 +500,7 @@ impl Hook {
 
     /// Check if the hook is installed in the environment.
     pub fn installed(&self) -> bool {
+        // Hooks that no need to install considered as installed.
         let Some(env) = self.env_path() else {
             return true;
         };
