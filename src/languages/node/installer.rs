@@ -343,11 +343,11 @@ impl NodeInstaller {
 
         if target.is_dir() {
             trace!(target = %target.display(), "Removing existing target");
-            fs_err::remove_dir_all(&target)?;
+            fs_err::tokio::remove_dir_all(&target).await?;
         }
 
         trace!(temp_dir = ?extracted, target = %target.display(), "Moving node to target");
-        fs_err::rename(extracted, &target)?;
+        fs_err::tokio::rename(extracted, &target).await?;
 
         let node = bin_dir(&target).join("node").with_extension(EXE_EXTENSION);
         let npm = bin_dir(&target).join("npm").with_extension(EXE_EXTENSION);
