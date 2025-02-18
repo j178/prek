@@ -26,9 +26,8 @@ impl LanguageImpl for Node {
         let installer = NodeInstaller::new(node_dir);
         let node = installer.install(&hook.language_version).await?;
 
-        dbg!(node);
-
         // TODO: Create an env
+        _ = node;
 
         Ok(())
     }

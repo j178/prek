@@ -196,11 +196,7 @@ impl Display for NodeResult {
         write!(
             f,
             "{}",
-            self.node
-                .as_ref()
-                .or_else(|| self.dir.as_ref())
-                .unwrap()
-                .display()
+            self.node.as_ref().or(self.dir.as_ref()).unwrap().display()
         )?;
         Ok(())
     }
