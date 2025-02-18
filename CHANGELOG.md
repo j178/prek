@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.0.9
+## 0.0.10
 
 ### Breaking changes
 
@@ -25,6 +25,7 @@ rm -rf ~/.cache/prefligit
 
 ### Other changes
 
+- Do not publish to crates.io ([#191](https://github.com/j178/prefligit/pull/191))
 - Bump cargo-dist to v0.28.0 ([#170](https://github.com/j178/prefligit/pull/170))
 - Bump uv version to 0.6.0 ([#184](https://github.com/j178/prefligit/pull/184))
 - Configure Renovate ([#168](https://github.com/j178/prefligit/pull/168))
@@ -36,6 +37,10 @@ rm -rf ~/.cache/prefligit
 - Update Rust crate which to v7.0.2 ([#163](https://github.com/j178/prefligit/pull/163))
 - Update astral-sh/setup-uv action to v5 ([#164](https://github.com/j178/prefligit/pull/164))
 - Upgrade Rust to 1.84 and upgrade dependencies ([#161](https://github.com/j178/prefligit/pull/161))
+
+## 0.0.9
+
+Due to a mistake in the release process, this release is skipped.
 
 ## 0.0.8
 
