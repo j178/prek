@@ -30,19 +30,3 @@ jobs:
           merge-multiple: true
       - name: Publish to PyPi
         run: uv publish -v wheels/*
-
-  crates-publish:
-    name: Publish to crates.io
-    runs-on: ubuntu-latest
-    environment:
-      name: release
-    steps:
-      - uses: actions/checkout@v4
-      - uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
-      - name: "Install Rust toolchain"
-        run: rustup show
-      - name: "Publish to crates.io"
-        run: cargo publish
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

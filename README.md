@@ -73,15 +73,8 @@ brew install j178/tap/prefligit
 Build from source using Cargo:
 
 ```console
-cargo install --locked prefligit
+cargo install --locked --git https://github.com/j178/prefligit
 ```
-
-Install from the binary directly using `cargo binstall`:
-
-```console
-cargo binstall prefligit
-```
-</details>
 
 <details>
 <summary>GitHub Releases</summary>
