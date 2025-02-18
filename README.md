@@ -29,15 +29,15 @@ while also providing some additional opinionated features.
 
 <details>
 <summary>Standalone installer</summary>
-  
+
 `prefligit` provides a standalone installer script to download and install the tool:
 
 ```console
 # On Linux and macOS
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prefligit/releases/download/v0.0.8/prefligit-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prefligit/releases/download/v0.0.9/prefligit-installer.sh | sh
 
 # On Windows
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prefligit/releases/download/v0.0.8/prefligit-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prefligit/releases/download/v0.0.9/prefligit-installer.ps1 | iex"
 ```
 </details>
 

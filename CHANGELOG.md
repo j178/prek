@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.0.9
+
+### Breaking changes
+
+**Warning**: This release changed the store layout, it's recommended to delete the old store and install from scratch.
+
+To delete the old store, run:
+
+```sh
+rm -rf ~/.cache/prefligit
+```
+
+### Enhancements
+
+- Restructure store folders layout ([#181](https://github.com/j178/prefligit/pull/181))
+- Fallback some env vars to to pre-commit ([#175](https://github.com/j178/prefligit/pull/175))
+- Save patches to `$PREFLIGIT_HOME/patches` ([#182](https://github.com/j178/prefligit/pull/182))
+
+### Bug fixes
+
+- Fix removing git env vars ([#176](https://github.com/j178/prefligit/pull/176))
+- Fix typo in Cargo.toml ([#160](https://github.com/j178/prefligit/pull/160))
+
+### Other changes
+
+- Bump cargo-dist to v0.28.0 ([#170](https://github.com/j178/prefligit/pull/170))
+- Bump uv version to 0.6.0 ([#184](https://github.com/j178/prefligit/pull/184))
+- Configure Renovate ([#168](https://github.com/j178/prefligit/pull/168))
+- Format sample config output ([#172](https://github.com/j178/prefligit/pull/172))
+- Make env vars a shareable crate ([#171](https://github.com/j178/prefligit/pull/171))
+- Reduce String alloc ([#166](https://github.com/j178/prefligit/pull/166))
+- Skip common git flags in command trace log ([#162](https://github.com/j178/prefligit/pull/162))
+- Update Rust crate clap to v4.5.29 ([#173](https://github.com/j178/prefligit/pull/173))
+- Update Rust crate which to v7.0.2 ([#163](https://github.com/j178/prefligit/pull/163))
+- Update astral-sh/setup-uv action to v5 ([#164](https://github.com/j178/prefligit/pull/164))
+- Upgrade Rust to 1.84 and upgrade dependencies ([#161](https://github.com/j178/prefligit/pull/161))
+
 ## 0.0.8
 
 ### Enhancements
