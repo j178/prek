@@ -24,9 +24,9 @@ impl LanguageImpl for Node {
         let node_dir = store.tools_path(ToolBucket::Node);
 
         let installer = NodeInstaller::new(node_dir);
-        let (node, npm) = installer.install(&hook.language_version).await?;
+        let node = installer.install(&hook.language_version).await?;
 
-        dbg!(node, npm);
+        dbg!(node);
 
         // TODO: Create an env
 

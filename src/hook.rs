@@ -532,6 +532,7 @@ impl Hash for Hook {
         }
 
         self.language.as_str().hash(state);
+        // TODO: should we resolve the language version first?
         self.language_version.as_str().hash(state);
         self.additional_dependencies.hash(state);
     }

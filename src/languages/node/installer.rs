@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::env::consts::EXE_EXTENSION;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
@@ -183,6 +184,66 @@ impl TryFrom<LanguageVersion> for VersionRequest {
     }
 }
 
+#[derive(Debug)]
+pub struct NodeResult {
+    node: Option<PathBuf>,
+    npm: Option<PathBuf>,
+    dir: Option<PathBuf>,
+}
+
+impl Display for NodeResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.node
+                .as_ref()
+                .or_else(|| self.dir.as_ref())
+                .unwrap()
+                .display()
+        )?;
+        Ok(())
+    }
+}
+
+impl NodeResult {
+    pub fn from_executables(node: PathBuf, npm: PathBuf) -> Self {
+        Self {
+            node: Some(node),
+            npm: Some(npm),
+            dir: None,
+        }
+    }
+
+    pub fn from_dir(dir: PathBuf) -> Self {
+        Self {
+            node: None,
+            npm: None,
+            dir: Some(dir),
+        }
+    }
+
+    pub fn node(&self) -> Cow<PathBuf> {
+        self.node.as_ref().map(Cow::Borrowed).unwrap_or_else(|| {
+            Cow::Owned(
+                bin_dir(self.dir.as_ref().unwrap())
+                    .join("node")
+                    .with_extension(EXE_EXTENSION),
+            )
+        })
+    }
+
+    pub fn npm(&self) -> Cow<PathBuf> {
+        self.npm.as_ref().map(Cow::Borrowed).unwrap_or_else(|| {
+            Cow::Owned(
+                bin_dir(self.dir.as_ref().unwrap())
+                    .join("npm")
+                    .with_extension(EXE_EXTENSION),
+            )
+        })
+    }
+}
+
 /// A Node.js installer.
 /// The `language_version` field of node language, can be one of the following:
 /// - `default`: Find the system installed node, or download the latest version.
@@ -207,13 +268,13 @@ impl NodeInstaller {
     }
 
     /// Install a version of Node.js.
-    pub async fn install(&self, version: &LanguageVersion) -> Result<(PathBuf, PathBuf)> {
+    pub async fn install(&self, version: &LanguageVersion) -> Result<NodeResult> {
         if version.allows_system() {
             let node = which::which("node");
             let npm = which::which("npm");
             if let (Ok(node), Ok(npm)) = (node, npm) {
                 trace!(node = %node.display(), npm = %npm.display(), "Found system node and npm");
-                return Ok((node, npm));
+                return Ok(NodeResult::from_executables(node, npm));
             }
         }
         if !version.allows_download() {
@@ -225,16 +286,16 @@ impl NodeInstaller {
         fs_err::create_dir_all(&self.root)?;
 
         let version_req = VersionRequest::try_from(version.clone())?;
-        if let Ok((node, npm)) = self.get_installed(&version_req) {
-            trace!(node = %node.display(), npm = %npm.display(), "Found installed node and npm");
-            return Ok((node, npm));
+        if let Ok(node) = self.get_installed(&version_req) {
+            trace!(%node, "Found installed node");
+            return Ok(node);
         }
 
         let _lock = LockedFile::acquire(self.root.join(".lock"), "node").await?;
 
-        if let Ok((node, npm)) = self.get_installed(&version_req) {
-            trace!(node = %node.display(), npm = %npm.display(), "Found installed node and npm");
-            return Ok((node, npm));
+        if let Ok(node) = self.get_installed(&version_req) {
+            trace!(%node, "Found installed node");
+            return Ok(node);
         }
 
         let resolved_version = self.resolve_version(&version_req).await?;
@@ -244,7 +305,7 @@ impl NodeInstaller {
     }
 
     /// Get the installed version of Node.js.
-    fn get_installed(&self, req: &VersionRequest) -> Result<(PathBuf, PathBuf)> {
+    fn get_installed(&self, req: &VersionRequest) -> Result<NodeResult> {
         let mut installed = fs_err::read_dir(&self.root)
             .ok()
             .into_iter()
@@ -268,9 +329,7 @@ impl NodeInstaller {
         installed
             .find_map(|(v, path)| {
                 if req.matches(&v) {
-                    let node = bin_dir(&path).join("node").with_extension(EXE_EXTENSION);
-                    let npm = bin_dir(&path).join("npm").with_extension(EXE_EXTENSION);
-                    Some((node, npm))
+                    Some(NodeResult::from_dir(path))
                 } else {
                     None
                 }
@@ -295,7 +354,7 @@ impl NodeInstaller {
     }
 
     /// Install a specific version of Node.js.
-    async fn install_node(&self, version: &NodeVersion) -> Result<(PathBuf, PathBuf)> {
+    async fn install_node(&self, version: &NodeVersion) -> Result<NodeResult> {
         let arch = match HOST.architecture {
             Architecture::X86_32(X86_32Architecture::I686) => "x86",
             Architecture::X86_64 => "x64",
@@ -349,9 +408,7 @@ impl NodeInstaller {
         trace!(temp_dir = ?extracted, target = %target.display(), "Moving node to target");
         fs_err::tokio::rename(extracted, &target).await?;
 
-        let node = bin_dir(&target).join("node").with_extension(EXE_EXTENSION);
-        let npm = bin_dir(&target).join("npm").with_extension(EXE_EXTENSION);
-        Ok((node, npm))
+        Ok(NodeResult::from_dir(target))
     }
 }
 
