@@ -166,6 +166,7 @@ checksum = "df895a515f70646414f4b45c0b79082783b80552b373a68283012928df56f522"
 dependencies = [
  "flate2",
  "futures-core",
+ "futures-io",
  "memchr",
  "pin-project-lite",
  "tokio",
@@ -177,6 +178,7 @@ name = "async_zip"
 version = "0.0.17"
 source = "git+https://github.com/charliermarsh/rs-async-zip?rev=c909fda63fcafe4af496a07bfda28a5aae97e58d#c909fda63fcafe4af496a07bfda28a5aae97e58d"
 dependencies = [
+ "async-compression",
  "crc32fast",
  "futures-lite",
  "pin-project",
