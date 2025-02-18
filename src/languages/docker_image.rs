@@ -39,7 +39,7 @@ impl LanguageImpl for DockerImage {
             let env_vars = env_vars.clone();
 
             async move {
-                let mut cmd = Docker::docker_cmd().await?;
+                let mut cmd = Docker::docker_run_cmd().await?;
                 let cmd = cmd
                     .args(&cmds[..])
                     .args(hook_args.as_ref())

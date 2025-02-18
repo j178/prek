@@ -43,6 +43,7 @@ impl Docker {
             .arg("--label")
             .arg(PRE_COMMIT_LABEL);
 
+        // Always attempt to pull all referenced images.
         if pull {
             cmd.arg("--pull");
         }
@@ -131,7 +132,7 @@ impl Docker {
         Ok(Cow::Borrowed(path))
     }
 
-    pub(crate) async fn docker_cmd() -> Result<Cmd> {
+    pub(crate) async fn docker_run_cmd() -> Result<Cmd> {
         let mut command = Cmd::new("docker", "run container");
         command.arg("run").arg("--rm");
 
@@ -210,7 +211,7 @@ impl LanguageImpl for Docker {
 
             async move {
                 // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
-                let mut cmd = Docker::docker_cmd().await?;
+                let mut cmd = Docker::docker_run_cmd().await?;
                 let cmd = cmd
                     .arg("--entrypoint")
                     .arg(&cmds[0])
