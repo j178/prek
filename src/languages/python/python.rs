@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use tracing::debug;
+
 use constants::env_vars::EnvVars;
 
 use crate::config::LanguageVersion;
@@ -64,7 +66,7 @@ impl LanguageImpl for Python {
                 .check(true)
                 .output()
                 .await?;
-        } else {
+        } else if !hook.additional_dependencies.is_empty() {
             uv_cmd("install dependencies")
                 .arg("pip")
                 .arg("install")
@@ -73,6 +75,8 @@ impl LanguageImpl for Python {
                 .check(true)
                 .output()
                 .await?;
+        } else {
+            debug!("No dependencies to install");
         }
         Ok(())
     }

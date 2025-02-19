@@ -901,3 +901,34 @@ fn merge_conflicts() -> Result<()> {
 
     Ok(())
 }
+
+/// Local python hook with no additional dependencies.
+#[test]
+fn local_python_hook() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: local-python-hook
+                name: local-python-hook
+                language: python
+                entry: python3 -c 'import sys; print("Hello, world!"); sys.exit(1)'
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    local-python-hook........................................................Failed
+    - hook id: local-python-hook
+    - exit code: 1
+      Hello, world!
+
+    ----- stderr -----
+    "#);
+}

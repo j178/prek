@@ -120,8 +120,7 @@ impl Store {
     /// Returns the path to the cloned repo.
     fn repo_path(&self, repo: &RemoteRepo) -> PathBuf {
         let mut hasher = SeaHasher::new();
-        repo.repo.hash(&mut hasher);
-        repo.rev.hash(&mut hasher);
+        repo.hash(&mut hasher);
         let digest = to_hex(hasher.finish());
         self.repos_dir().join(digest)
     }
