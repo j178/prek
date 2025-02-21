@@ -14,10 +14,10 @@ use tracing::{debug, error};
 use url::Url;
 
 use crate::config::{
-    self, read_config, read_manifest, Config, Language, LanguageVersion, LocalHook, ManifestHook,
-    MetaHook, RemoteHook, Stage, CONFIG_FILE, MANIFEST_FILE,
+    self, CONFIG_FILE, Config, Language, LanguageVersion, LocalHook, MANIFEST_FILE, ManifestHook,
+    MetaHook, RemoteHook, Stage, read_config, read_manifest,
 };
-use crate::fs::{Simplified, CWD};
+use crate::fs::{CWD, Simplified};
 use crate::store::Store;
 use crate::warn_user;
 
@@ -81,7 +81,7 @@ impl Repo {
     /// Get the path to the cloned repo if it is a remote repo.
     pub fn path(&self) -> Option<&Path> {
         match self {
-            Repo::Remote { ref path, .. } => Some(path),
+            Repo::Remote { path, .. } => Some(path),
             _ => None,
         }
     }
@@ -89,9 +89,9 @@ impl Repo {
     /// Get a hook by id.
     pub fn get_hook(&self, id: &str) -> Option<&ManifestHook> {
         let hooks = match self {
-            Repo::Remote { ref hooks, .. } => hooks,
-            Repo::Local { ref hooks } => hooks,
-            Repo::Meta { ref hooks } => hooks,
+            Repo::Remote { hooks, .. } => hooks,
+            Repo::Local { hooks } => hooks,
+            Repo::Meta { hooks } => hooks,
         };
         hooks.iter().find(|hook| hook.id == id)
     }

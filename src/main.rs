@@ -3,13 +3,13 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::str::FromStr;
 
-use anstream::{eprintln, ColorChoice};
+use anstream::{ColorChoice, eprintln};
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
 use tracing::{debug, error};
-use tracing_subscriber::filter::Directive;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::filter::Directive;
 
 use crate::cleanup::cleanup;
 use crate::cli::{Cli, Command, ExitStatus, SelfCommand, SelfNamespace, SelfUpdateArgs};

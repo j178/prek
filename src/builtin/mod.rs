@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::builtin::pre_commit_hooks::{is_pre_commit_hooks, Implemented};
+use crate::builtin::pre_commit_hooks::{Implemented, is_pre_commit_hooks};
 use crate::hook::{Hook, Repo};
 
 mod meta_hooks;

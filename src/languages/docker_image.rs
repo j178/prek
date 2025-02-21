@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::hook::Hook;
-use crate::languages::docker::Docker;
 use crate::languages::LanguageImpl;
+use crate::languages::docker::Docker;
 use crate::run::run_by_batch;
 
 #[derive(Debug, Copy, Clone)]

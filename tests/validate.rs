@@ -1,6 +1,6 @@
 use assert_fs::fixture::{FileWriteStr, PathChild};
 
-use crate::common::{cmd_snapshot, TestContext};
+use crate::common::{TestContext, cmd_snapshot};
 
 mod common;
 

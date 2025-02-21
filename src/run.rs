@@ -20,11 +20,7 @@ pub static CONCURRENCY: LazyLock<usize> = LazyLock::new(|| {
 });
 
 fn target_concurrency(serial: bool) -> usize {
-    if serial {
-        1
-    } else {
-        *CONCURRENCY
-    }
+    if serial { 1 } else { *CONCURRENCY }
 }
 
 /// Iterator that yields partitions of filenames that fit within the maximum command line length.

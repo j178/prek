@@ -31,7 +31,9 @@ pub(crate) async fn hook_impl(
                     "- To temporarily silence this, run `{}=1 git ...`",
                     EnvVars::PREFLIGIT_ALLOW_NO_CONFIG
                 );
-                eprintln!("- To permanently silence this, install hooks with the `--allow-missing-config` flag");
+                eprintln!(
+                    "- To permanently silence this, install hooks with the `--allow-missing-config` flag"
+                );
                 eprintln!("- To uninstall hooks, run `prefligit uninstall`");
                 Ok(ExitStatus::Failure)
             };

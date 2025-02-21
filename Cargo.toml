@@ -2,7 +2,7 @@
 members = ["lib/*"]
 
 [workspace.package]
-edition = "2021"
+edition = "2024"
 
 [workspace.dependencies]
 constants = { path = "lib/constants" }

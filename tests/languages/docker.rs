@@ -1,4 +1,4 @@
-use crate::common::{cmd_snapshot, TestContext};
+use crate::common::{TestContext, cmd_snapshot};
 
 /// GitHub Action only has docker for linux hosted runners.
 #[test]

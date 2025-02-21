@@ -74,12 +74,12 @@ impl InstallSource {
         });
         if enabled!(tracing::Level::DEBUG) {
             installer.enable_installer_output();
-            env::set_var("INSTALLER_PRINT_VERBOSE", "1");
+            unsafe { env::set_var("INSTALLER_PRINT_VERBOSE", "1") };
         } else {
             installer.disable_installer_output();
         }
         // We don't want the installer to modify the PATH, and don't need the receipt.
-        env::set_var("UV_UNMANAGED_INSTALL", "1");
+        unsafe { env::set_var("UV_UNMANAGED_INSTALL", "1") };
 
         match installer.run().await {
             Ok(Some(result)) => {
@@ -144,7 +144,9 @@ pub struct UvInstaller;
 impl UvInstaller {
     async fn select_source() -> Result<InstallSource> {
         async fn check_github(client: &reqwest::Client) -> Result<bool> {
-            let url = format!("https://github.com/astral-sh/uv/releases/download/{UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz");
+            let url = format!(
+                "https://github.com/astral-sh/uv/releases/download/{UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz"
+            );
             let response = client
                 .head(url)
                 .timeout(Duration::from_secs(3))

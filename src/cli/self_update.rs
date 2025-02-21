@@ -39,7 +39,7 @@ pub(crate) async fn self_update(
 ) -> Result<ExitStatus> {
     let mut updater = AxoUpdater::new_for("prefligit");
     if enabled!(tracing::Level::DEBUG) {
-        env::set_var("INSTALLER_PRINT_VERBOSE", "1");
+        unsafe { env::set_var("INSTALLER_PRINT_VERBOSE", "1") };
         updater.enable_installer_output();
     } else {
         updater.disable_installer_output();
@@ -58,10 +58,10 @@ pub(crate) async fn self_update(
             "{}",
             format_args!(
                 concat!(
-                "{}{} Self-update is only available for prefligit binaries installed via the standalone installation scripts.",
-                "\n",
-                "\n",
-                "If you installed prefligit with pip, brew, or another package manager, update prefligit with `pip install --upgrade`, `brew upgrade`, or similar."
+                    "{}{} Self-update is only available for prefligit binaries installed via the standalone installation scripts.",
+                    "\n",
+                    "\n",
+                    "If you installed prefligit with pip, brew, or another package manager, update prefligit with `pip install --upgrade`, `brew upgrade`, or similar."
                 ),
                 "warning".yellow().bold(),
                 ":".bold()
@@ -82,10 +82,10 @@ pub(crate) async fn self_update(
             "{}",
             format_args!(
                 concat!(
-                "{}{} Self-update is only available for prefligit binaries installed via the standalone installation scripts.",
-                "\n",
-                "\n",
-                "If you installed prefligit with pip, brew, or another package manager, update prefligit with `pip install --upgrade`, `brew upgrade`, or similar."
+                    "{}{} Self-update is only available for prefligit binaries installed via the standalone installation scripts.",
+                    "\n",
+                    "\n",
+                    "If you installed prefligit with pip, brew, or another package manager, update prefligit with `pip install --upgrade`, `brew upgrade`, or similar."
                 ),
                 "warning".yellow().bold(),
                 ":".bold()

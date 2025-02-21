@@ -8,7 +8,7 @@ use fancy_regex::Regex;
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use crate::cli::run::{collect_files, CollectOptions, FileFilter};
+use crate::cli::run::{CollectOptions, FileFilter, collect_files};
 use crate::config::Language;
 use crate::hook::{Hook, Project};
 use crate::store::Store;

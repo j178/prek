@@ -10,7 +10,7 @@ use futures::TryStreamExt;
 use itertools::Itertools;
 use reqwest::Client;
 use serde::Deserialize;
-use target_lexicon::{Architecture, OperatingSystem, X86_32Architecture, HOST};
+use target_lexicon::{Architecture, HOST, OperatingSystem, X86_32Architecture};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{trace, warn};
 
@@ -158,7 +158,7 @@ impl FromStr for VersionRequest {
                 [major] => return Ok(VersionRequest::Major(*major)),
                 [major, minor] => return Ok(VersionRequest::MajorMinor(*major, *minor)),
                 [major, minor, patch] => {
-                    return Ok(VersionRequest::MajorMinorPatch(*major, *minor, *patch))
+                    return Ok(VersionRequest::MajorMinorPatch(*major, *minor, *patch));
                 }
                 _ => {}
             }

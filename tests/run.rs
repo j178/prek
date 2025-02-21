@@ -5,7 +5,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use crate::common::{cmd_snapshot, TestContext};
+use crate::common::{TestContext, cmd_snapshot};
 
 mod common;
 

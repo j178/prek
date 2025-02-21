@@ -10,8 +10,8 @@ use anyhow::Result;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::{OwoColorize, Style};
-use rand::prelude::{SliceRandom, StdRng};
 use rand::SeedableRng;
+use rand::prelude::{SliceRandom, StdRng};
 use tracing::{debug, trace};
 use unicode_width::UnicodeWidthStr;
 
@@ -19,7 +19,7 @@ use constants::env_vars::EnvVars;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;
-use crate::cli::run::{collect_files, CollectOptions, FileFilter};
+use crate::cli::run::{CollectOptions, FileFilter, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::Stage;
 use crate::fs::Simplified;

@@ -2,8 +2,8 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use clap::builder::styling::{AnsiColor, Effects};
 use clap::builder::Styles;
+use clap::builder::styling::{AnsiColor, Effects};
 use clap::{ArgAction, Args, Parser, Subcommand};
 
 use crate::config::{HookType, Stage};

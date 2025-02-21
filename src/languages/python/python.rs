@@ -8,8 +8,8 @@ use constants::env_vars::EnvVars;
 
 use crate::config::LanguageVersion;
 use crate::hook::Hook;
-use crate::languages::python::uv::UvInstaller;
 use crate::languages::LanguageImpl;
+use crate::languages::python::uv::UvInstaller;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::{Store, ToolBucket};

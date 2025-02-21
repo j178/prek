@@ -227,10 +227,12 @@ async fn collect_files_from_args(
             return Ok(vec![]);
         }
         if hook_stage == Stage::PrepareCommitMsg || hook_stage == Stage::CommitMsg {
-            return Ok(vec![commit_msg_filename
-                .expect("commit message filename is required")
-                .to_string_lossy()
-                .to_string()]);
+            return Ok(vec![
+                commit_msg_filename
+                    .expect("commit message filename is required")
+                    .to_string_lossy()
+                    .to_string(),
+            ]);
         }
     }
 

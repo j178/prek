@@ -4,8 +4,8 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use crate::hook::Hook;
-use crate::languages::node::installer::NodeInstaller;
 use crate::languages::LanguageImpl;
+use crate::languages::node::installer::NodeInstaller;
 use crate::store::{Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone)]

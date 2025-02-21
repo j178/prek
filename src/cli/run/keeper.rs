@@ -11,7 +11,7 @@ use constants::env_vars::EnvVars;
 
 use crate::cleanup::add_cleanup;
 use crate::fs::Simplified;
-use crate::git::{self, git_cmd, GIT};
+use crate::git::{self, GIT, git_cmd};
 use crate::store::Store;
 
 static RESTORE_WORKTREE: Mutex<Option<WorkTreeKeeper>> = Mutex::new(None);

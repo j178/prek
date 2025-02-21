@@ -2,7 +2,7 @@ use anyhow::Result;
 use assert_cmd::Command;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 
-use crate::common::{cmd_snapshot, TestContext};
+use crate::common::{TestContext, cmd_snapshot};
 
 #[test]
 fn docker_image() -> Result<()> {
