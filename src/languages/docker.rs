@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
 
 use anstream::ColorChoice;
 use anyhow::Result;
@@ -192,7 +191,7 @@ impl LanguageImpl for Docker {
         &self,
         hook: &Hook,
         filenames: &[&String],
-        env_vars: Arc<HashMap<&'static str, String>>,
+        env_vars: &HashMap<&'static str, String>,
     ) -> Result<(i32, Vec<u8>)> {
         Docker::build_docker_image(hook, false).await?;
 
@@ -200,33 +199,23 @@ impl LanguageImpl for Docker {
 
         let cmds = shlex::split(&hook.entry).ok_or(anyhow::anyhow!("Failed to parse entry"))?;
 
-        let cmds = Arc::new(cmds);
-        let hook_args = Arc::new(hook.args.clone());
+        let run = async move |batch: Vec<String>| {
+            // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
+            let mut cmd = Docker::docker_run_cmd().await?;
+            let cmd = cmd
+                .arg("--entrypoint")
+                .arg(&cmds[0])
+                .arg(&docker_tag)
+                .args(&cmds[1..])
+                .args(&hook.args)
+                .args(batch)
+                .check(false)
+                .envs(env_vars);
 
-        let run = move |batch: Vec<String>| {
-            let cmds = cmds.clone();
-            let docker_tag = docker_tag.clone();
-            let hook_args = hook_args.clone();
-            let env_vars = env_vars.clone();
-
-            async move {
-                // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
-                let mut cmd = Docker::docker_run_cmd().await?;
-                let cmd = cmd
-                    .arg("--entrypoint")
-                    .arg(&cmds[0])
-                    .arg(&docker_tag)
-                    .args(&cmds[1..])
-                    .args(hook_args.as_ref())
-                    .args(batch)
-                    .check(false)
-                    .envs(env_vars.as_ref());
-
-                let mut output = cmd.output().await?;
-                output.stdout.extend(output.stderr);
-                let code = output.status.code().unwrap_or(1);
-                anyhow::Ok((code, output.stdout))
-            }
+            let mut output = cmd.output().await?;
+            output.stdout.extend(output.stderr);
+            let code = output.status.code().unwrap_or(1);
+            anyhow::Ok((code, output.stdout))
         };
 
         let results = run_by_batch(hook, filenames, run).await?;

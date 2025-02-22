@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use anyhow::Result;
 
@@ -33,7 +32,7 @@ trait LanguageImpl {
         &self,
         hook: &Hook,
         filenames: &[&String],
-        env_vars: Arc<HashMap<&'static str, String>>,
+        env_vars: &HashMap<&'static str, String>,
     ) -> Result<(i32, Vec<u8>)>;
 }
 
@@ -78,7 +77,7 @@ impl Language {
         &self,
         hook: &Hook,
         filenames: &[&String],
-        env_vars: Arc<HashMap<&'static str, String>>,
+        env_vars: &HashMap<&'static str, String>,
     ) -> Result<(i32, Vec<u8>)> {
         // fast path for hooks implemented in Rust
         if builtin::check_fast_path(hook) {

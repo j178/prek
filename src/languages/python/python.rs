@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
+use anyhow::Result;
 use tracing::debug;
 
 use constants::env_vars::EnvVars;
@@ -81,7 +81,7 @@ impl LanguageImpl for Python {
         Ok(())
     }
 
-    async fn check_health(&self) -> anyhow::Result<()> {
+    async fn check_health(&self) -> Result<()> {
         todo!()
     }
 
@@ -89,8 +89,8 @@ impl LanguageImpl for Python {
         &self,
         hook: &Hook,
         filenames: &[&String],
-        env_vars: Arc<HashMap<&'static str, String>>,
-    ) -> anyhow::Result<(i32, Vec<u8>)> {
+        env_vars: &HashMap<&'static str, String>,
+    ) -> Result<(i32, Vec<u8>)> {
         // Get environment directory and parse command
         let env_dir = hook.env_path().expect("Python must have env path");
 
@@ -107,38 +107,23 @@ impl LanguageImpl for Python {
             ),
         )?;
 
-        let cmds = Arc::new(cmds);
-        let hook_args = Arc::new(hook.args.clone());
-        let env_dir = Arc::new(env_dir.to_path_buf());
-        let new_path = Arc::new(new_path);
-
-        let run = move |batch: Vec<String>| {
-            // This closure should be Fn, as it is called for each batch. We need to clone the variables,
-            // otherwise it will be moved into the async block and can't be used again.
-            let cmds = cmds.clone();
-            let hook_args = hook_args.clone();
-            let env_dir = env_dir.clone();
-            let new_path = new_path.clone();
-            let env_vars = env_vars.clone();
-
+        let run = async move |batch: Vec<String>| {
             // TODO: combine stdout and stderr
-            async move {
-                let mut output = Cmd::new(&cmds[0], "run python command")
-                    .args(&cmds[1..])
-                    .env("VIRTUAL_ENV", env_dir.as_ref())
-                    .env("PATH", new_path.as_ref())
-                    .env_remove("PYTHONHOME")
-                    .envs(env_vars.as_ref())
-                    .args(hook_args.as_slice())
-                    .args(batch)
-                    .check(false)
-                    .output()
-                    .await?;
+            let mut output = Cmd::new(&cmds[0], "run python command")
+                .args(&cmds[1..])
+                .env("VIRTUAL_ENV", env_dir)
+                .env("PATH", &new_path)
+                .env_remove("PYTHONHOME")
+                .envs(env_vars)
+                .args(&hook.args)
+                .args(batch)
+                .check(false)
+                .output()
+                .await?;
 
-                output.stdout.extend(output.stderr);
-                let code = output.status.code().unwrap_or(1);
-                anyhow::Ok((code, output.stdout))
-            }
+            output.stdout.extend(output.stderr);
+            let code = output.status.code().unwrap_or(1);
+            anyhow::Ok((code, output.stdout))
         };
 
         let results = run_by_batch(hook, filenames, run).await?;

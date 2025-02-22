@@ -1,6 +1,5 @@
 use std::cmp::max;
-use std::future::Future;
-use std::sync::{Arc, LazyLock};
+use std::sync::LazyLock;
 
 use futures::StreamExt;
 use tracing::trace;
@@ -98,15 +97,13 @@ impl<'a> Iterator for Partitions<'a> {
     }
 }
 
-pub async fn run_by_batch<T, F, Fut>(
+pub async fn run_by_batch<T, F>(
     hook: &Hook,
     filenames: &[&String],
     run: F,
 ) -> anyhow::Result<Vec<T>>
 where
-    F: Fn(Vec<String>) -> Fut,
-    F: Clone + Send + Sync + 'static,
-    Fut: Future<Output = anyhow::Result<T>> + Send + 'static,
+    F: AsyncFn(Vec<String>) -> anyhow::Result<T>,
     T: Send + 'static,
 {
     let concurrency = target_concurrency(hook.require_serial);
@@ -120,11 +117,8 @@ where
         hook.id,
     );
 
-    let run = Arc::new(run);
-
     let mut tasks = futures::stream::iter(partitions)
         .map(|batch| {
-            let run = run.clone();
             let batch: Vec<_> = batch.into_iter().map(ToString::to_string).collect();
             run(batch)
         })

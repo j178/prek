@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use anyhow::Result;
 
@@ -40,7 +39,7 @@ impl LanguageImpl for Node {
         &self,
         _hook: &Hook,
         _filenames: &[&String],
-        _env_vars: Arc<HashMap<&'static str, String>>,
+        _env_vars: &HashMap<&'static str, String>,
     ) -> Result<(i32, Vec<u8>)> {
         Ok((0, Vec::new()))
     }

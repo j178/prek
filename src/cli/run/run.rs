@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use anstream::ColorChoice;
 use anyhow::Result;
@@ -326,8 +325,6 @@ pub async fn run_hooks(
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let env_vars = Arc::new(env_vars);
-
     let columns = calculate_columns(hooks);
     let mut success = true;
 
@@ -335,14 +332,7 @@ pub async fn run_hooks(
     // hooks must run in serial
     for hook in hooks {
         let (hook_success, new_diff) = run_hook(
-            hook,
-            filter,
-            env_vars.clone(),
-            skips,
-            diff,
-            columns,
-            verbose,
-            printer,
+            hook, filter, &env_vars, skips, diff, columns, verbose, printer,
         )
         .await?;
 
@@ -389,7 +379,7 @@ fn shuffle<T>(filenames: &mut [T]) {
 async fn run_hook(
     hook: &Hook,
     filter: &FileFilter<'_>,
-    env_vars: Arc<HashMap<&'static str, String>>,
+    env_vars: &HashMap<&'static str, String>,
     skips: &[String],
     diff: Vec<u8>,
     columns: usize,

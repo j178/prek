@@ -1,4 +1,6 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+
+use anyhow::Result;
 
 use crate::hook::Hook;
 use crate::languages::LanguageImpl;
@@ -23,8 +25,8 @@ impl LanguageImpl for Fail {
         &self,
         hook: &Hook,
         filenames: &[&String],
-        _env_vars: Arc<HashMap<&'static str, String>>,
-    ) -> anyhow::Result<(i32, Vec<u8>)> {
+        _env_vars: &HashMap<&'static str, String>,
+    ) -> Result<(i32, Vec<u8>)> {
         let mut out = hook.entry.as_bytes().to_vec();
         out.extend(b"\n\n");
         for f in filenames {

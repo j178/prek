@@ -32,7 +32,7 @@ impl Implemented {
         self,
         hook: &Hook,
         filenames: &[&String],
-        env_vars: Arc<HashMap<&'static str, String>>,
+        env_vars: &HashMap<&'static str, String>,
     ) -> Result<(i32, Vec<u8>)> {
         match self {
             Self::TrailingWhitespace => fix_trailing_whitespace(hook, filenames, env_vars).await,
@@ -56,7 +56,7 @@ struct Args {
 pub(crate) async fn fix_trailing_whitespace(
     hook: &Hook,
     filenames: &[&String],
-    _env_vars: Arc<HashMap<&'static str, String>>,
+    _env_vars: &HashMap<&'static str, String>,
 ) -> Result<(i32, Vec<u8>)> {
     let entry = shlex::split(&hook.entry).ok_or(anyhow::anyhow!("Failed to parse entry"))?;
     let args = Args::try_parse_from(entry.iter().chain(&hook.args))?;

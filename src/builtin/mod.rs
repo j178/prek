@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::str::FromStr;
-use std::sync::Arc;
 
 use crate::builtin::pre_commit_hooks::{Implemented, is_pre_commit_hooks};
 use crate::hook::{Hook, Repo};
@@ -22,7 +21,7 @@ pub fn check_fast_path(hook: &Hook) -> bool {
 pub async fn run_fast_path(
     hook: &Hook,
     filenames: &[&String],
-    env_vars: Arc<HashMap<&'static str, String>>,
+    env_vars: &HashMap<&'static str, String>,
 ) -> anyhow::Result<(i32, Vec<u8>)> {
     match hook.repo() {
         Repo::Meta { .. } => run_meta_hook(hook, filenames, env_vars).await,
@@ -39,7 +38,7 @@ pub async fn run_fast_path(
 async fn run_meta_hook(
     hook: &Hook,
     filenames: &[&String],
-    env_vars: Arc<HashMap<&'static str, String>>,
+    env_vars: &HashMap<&'static str, String>,
 ) -> anyhow::Result<(i32, Vec<u8>)> {
     match hook.id.as_str() {
         "check-hooks-apply" => meta_hooks::check_hooks_apply(hook, filenames, env_vars).await,
