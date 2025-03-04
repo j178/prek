@@ -40,17 +40,22 @@ pub(crate) enum Level {
     /// Suppress all tracing output by default (overridable by `RUST_LOG`).
     #[default]
     Default,
-    /// Show debug messages by default (overridable by `RUST_LOG`).
+    /// Show verbose messages.
     Verbose,
-    /// Show messages in a hierarchical span tree. By default, debug messages are shown (overridable by `RUST_LOG`).
-    ExtraVerbose,
+    /// Show debug messages by default (overridable by `RUST_LOG`).
+    Debug,
+    /// Show trace messages by default (overridable by `RUST_LOG`).
+    Trace,
+    /// Show trace messages for all crates by default (overridable by `RUST_LOG`).
+    TraceAll,
 }
 
 fn setup_logging(level: Level) -> Result<()> {
     let directive = match level {
-        Level::Default => tracing::level_filters::LevelFilter::OFF.into(),
-        Level::Verbose => Directive::from_str("prefligit=debug")?,
-        Level::ExtraVerbose => Directive::from_str("prefligit=trace")?,
+        Level::Default | Level::Verbose => tracing::level_filters::LevelFilter::OFF.into(),
+        Level::Debug => Directive::from_str("prefligit=debug")?,
+        Level::Trace => Directive::from_str("prefligit=trace")?,
+        Level::TraceAll => Directive::from_str("trace")?,
     };
 
     let filter = EnvFilter::builder()
@@ -108,7 +113,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     setup_logging(match cli.globals.verbose {
         0 => Level::Default,
         1 => Level::Verbose,
-        _ => Level::ExtraVerbose,
+        2 => Level::Debug,
+        3 => Level::Trace,
+        _ => Level::TraceAll,
     })?;
 
     let printer = if cli.globals.quiet {
