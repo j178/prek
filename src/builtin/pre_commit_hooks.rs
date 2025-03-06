@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::Arc;
 
 use anyhow::Result;
 use bstr::ByteSlice;
@@ -86,81 +85,72 @@ pub(crate) async fn fix_trailing_whitespace(
         }
     }
 
-    let markdown_exts = Arc::new(markdown_exts);
-    let chars = Arc::new(chars);
-
     let mut tasks = futures::stream::iter(filenames)
-        .map(|filename| {
-            let markdown_exts = markdown_exts.clone();
-            let chars = chars.clone();
+        .map(async |filename| {
+            let ext = Path::new(filename)
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| format!(".{}", ext.to_ascii_lowercase()));
+            let is_markdown = force_markdown || ext.is_some_and(|ext| markdown_exts.contains(&ext));
 
-            async move {
-                let ext = Path::new(filename)
-                    .extension()
-                    .and_then(|ext| ext.to_str())
-                    .map(|ext| format!(".{}", ext.to_ascii_lowercase()));
-                let is_markdown =
-                    force_markdown || ext.is_some_and(|ext| markdown_exts.contains(&ext));
+            // TODO: read file in chunks
+            let content = fs_err::tokio::read(filename).await?;
 
-                // TODO: read file in chunks
-                let content = tokio::fs::read(filename).await?;
+            let mut modified = false;
+            let mut output = Vec::new();
 
-                let mut modified = false;
-                let mut output = Vec::new();
-
-                for mut line in content.split_inclusive(|&b| b == b'\n') {
-                    let eol = if line.ends_with(b"\r\n") {
-                        line = &line[..line.len() - 2];
-                        b"\r\n".as_slice()
-                    } else if line.ends_with(b"\n") {
-                        line = &line[..line.len() - 1];
-                        b"\n".as_slice()
-                    } else {
-                        b"".as_slice()
-                    };
-
-                    if line.is_empty() {
-                        output.extend_from_slice(eol);
-                        continue;
-                    }
-
-                    let output_len = output.len();
-
-                    if is_markdown
-                        && !line.iter().all(|&b| b.is_ascii_whitespace())
-                        && line.ends_with(b"  ")
-                    {
-                        // Preserve trailing two spaces for markdown, but trim any additional whitespace
-                        let trimmed = if let Some(chars) = chars.as_deref() {
-                            line[..line.len() - 2].trim_end_with(|b| chars.contains(&b))
-                        } else {
-                            line[..line.len() - 2].trim_ascii_end()
-                        };
-                        output.extend_from_slice(trimmed);
-                        output.extend_from_slice(b"  ");
-                        output.extend_from_slice(eol);
-                    } else {
-                        // Normal whitespace trimming
-                        let trimmed = if let Some(chars) = chars.as_deref() {
-                            line.trim_end_with(|b| chars.contains(&b))
-                        } else {
-                            line.trim_ascii_end()
-                        };
-                        output.extend_from_slice(trimmed);
-                        output.extend_from_slice(eol);
-                    };
-
-                    if line.len() + eol.len() != output.len() - output_len {
-                        modified = true;
-                    }
-                }
-
-                if modified {
-                    tokio::fs::write(filename, &output).await?;
-                    anyhow::Ok((1, format!("Fixing {filename}\n").into_bytes()))
+            for mut line in content.split_inclusive(|&b| b == b'\n') {
+                let eol = if line.ends_with(b"\r\n") {
+                    line = &line[..line.len() - 2];
+                    b"\r\n".as_slice()
+                } else if line.ends_with(b"\n") {
+                    line = &line[..line.len() - 1];
+                    b"\n".as_slice()
                 } else {
-                    anyhow::Ok((0, Vec::new()))
+                    b"".as_slice()
+                };
+
+                if line.is_empty() {
+                    output.extend_from_slice(eol);
+                    continue;
                 }
+
+                let output_len = output.len();
+
+                if is_markdown
+                    && !line.iter().all(|&b| b.is_ascii_whitespace())
+                    && line.ends_with(b"  ")
+                {
+                    // Preserve trailing two spaces for markdown, but trim any additional whitespace
+                    let trimmed = if let Some(chars) = chars.as_deref() {
+                        line[..line.len() - 2].trim_end_with(|b| chars.contains(&b))
+                    } else {
+                        line[..line.len() - 2].trim_ascii_end()
+                    };
+                    output.extend_from_slice(trimmed);
+                    output.extend_from_slice(b"  ");
+                    output.extend_from_slice(eol);
+                } else {
+                    // Normal whitespace trimming
+                    let trimmed = if let Some(chars) = chars.as_deref() {
+                        line.trim_end_with(|b| chars.contains(&b))
+                    } else {
+                        line.trim_ascii_end()
+                    };
+                    output.extend_from_slice(trimmed);
+                    output.extend_from_slice(eol);
+                };
+
+                if line.len() + eol.len() != output.len() - output_len {
+                    modified = true;
+                }
+            }
+
+            if modified {
+                fs_err::tokio::write(filename, &output).await?;
+                anyhow::Ok((1, format!("Fixing {filename}\n").into_bytes()))
+            } else {
+                anyhow::Ok((0, Vec::new()))
             }
         })
         .buffered(*CONCURRENCY);
