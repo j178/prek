@@ -14,8 +14,8 @@ use tracing::{debug, error};
 use url::Url;
 
 use crate::config::{
-    self, CONFIG_FILE, Config, Language, LanguageVersion, LocalHook, MANIFEST_FILE, ManifestHook,
-    MetaHook, RemoteHook, Stage, read_config, read_manifest,
+    self, ALTER_CONFIG_FILE, CONFIG_FILE, Config, Language, LanguageVersion, LocalHook,
+    MANIFEST_FILE, ManifestHook, MetaHook, RemoteHook, Stage, read_config, read_manifest,
 };
 use crate::fs::{CWD, Simplified};
 use crate::store::Store;
@@ -116,12 +116,25 @@ pub struct Project {
 impl Project {
     /// Find the configuration file in the given path or the current working directory.
     pub fn find_config_file(config: Option<PathBuf>) -> Result<PathBuf, Error> {
-        let file = config.unwrap_or_else(|| CWD.join(CONFIG_FILE));
-        if file.try_exists()? {
-            return Ok(file);
+        if let Some(config) = config {
+            if config.try_exists()? {
+                return Ok(config);
+            }
+            return Err(Error::Config(config::Error::NotFound(
+                config.user_display().to_string(),
+            )));
         }
-        let file = file.user_display().to_string();
-        Err(Error::Config(config::Error::NotFound(file)))
+
+        let config = CWD.join(CONFIG_FILE);
+        if config.try_exists()? {
+            return Ok(config);
+        }
+        let config = CWD.join(ALTER_CONFIG_FILE);
+        if config.try_exists()? {
+            return Ok(config);
+        }
+
+        Err(Error::Config(config::Error::NotFound(CONFIG_FILE.into())))
     }
 
     /// Initialize a new project from the configuration file or the file in the current working directory.

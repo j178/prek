@@ -12,6 +12,7 @@ use url::Url;
 use crate::fs::Simplified;
 
 pub const CONFIG_FILE: &str = ".pre-commit-config.yaml";
+pub const ALTER_CONFIG_FILE: &str = ".pre-commit-config.yml";
 pub const MANIFEST_FILE: &str = ".pre-commit-hooks.yaml";
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Deserialize)]
@@ -514,7 +515,11 @@ impl<'de> Deserialize<'de> for MetaHook {
                 language: Language::System,
                 entry: String::new(),
                 options: HookOptions {
-                    files: Some(format!("^{}$", regex::escape(CONFIG_FILE))),
+                    files: Some(format!(
+                        "^{}|{}$",
+                        regex::escape(CONFIG_FILE),
+                        regex::escape(ALTER_CONFIG_FILE)
+                    )),
                     ..Default::default()
                 },
             },
@@ -524,7 +529,11 @@ impl<'de> Deserialize<'de> for MetaHook {
                 language: Language::System,
                 entry: String::new(),
                 options: HookOptions {
-                    files: Some(format!("^{}$", regex::escape(CONFIG_FILE))),
+                    files: Some(format!(
+                        "^{}|{}$",
+                        regex::escape(CONFIG_FILE),
+                        regex::escape(ALTER_CONFIG_FILE)
+                    )),
                     ..Default::default()
                 },
             },
@@ -1078,7 +1087,7 @@ mod tests {
                                         options: HookOptions {
                                             alias: None,
                                             files: Some(
-                                                "^\\.pre-commit-config\\.yaml$",
+                                                "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
                                             ),
                                             exclude: None,
                                             types: None,
@@ -1108,7 +1117,7 @@ mod tests {
                                         options: HookOptions {
                                             alias: None,
                                             files: Some(
-                                                "^\\.pre-commit-config\\.yaml$",
+                                                "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
                                             ),
                                             exclude: None,
                                             types: None,
