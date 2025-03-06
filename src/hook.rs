@@ -125,13 +125,20 @@ impl Project {
             )));
         }
 
-        let config = CWD.join(CONFIG_FILE);
-        if config.try_exists()? {
-            return Ok(config);
+        let main = CWD.join(CONFIG_FILE);
+        let alternate = CWD.join(ALTER_CONFIG_FILE);
+        if main.try_exists()? && alternate.try_exists()? {
+            warn_user!(
+                "Both {main} and {alternate} exist, using {main}",
+                main = main.display(),
+                alternate = alternate.display()
+            );
         }
-        let config = CWD.join(ALTER_CONFIG_FILE);
-        if config.try_exists()? {
-            return Ok(config);
+        if main.try_exists()? {
+            return Ok(main);
+        }
+        if alternate.try_exists()? {
+            return Ok(alternate);
         }
 
         Err(Error::Config(config::Error::NotFound(CONFIG_FILE.into())))
