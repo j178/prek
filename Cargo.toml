@@ -40,7 +40,7 @@ clap = { version = "4.5.16", features = ["derive", "env", "string", "wrap_help"]
 clap_complete = "4.5.37"
 ctrlc = "3.4.5"
 dunce = "1.0.5"
-etcetera = "0.9.0"
+etcetera = "0.10.0"
 fancy-regex = "0.14.0"
 fs-err = { version = "3.1.0", features = ["tokio"] }
 fs2 = "0.4.3"
@@ -80,7 +80,7 @@ pprof = { version = "0.14.0", optional = true }
 
 [dev-dependencies]
 assert_fs = "1.1.2"
-etcetera = "0.9.0"
+etcetera = "0.10.0"
 insta = { version = "1.40.0", features = ["filters"] }
 insta-cmd = "0.6.0"
 predicates = "3.1.2"
