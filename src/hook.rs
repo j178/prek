@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
-use std::hash::Hash;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Mutex;
@@ -188,31 +188,29 @@ impl Project {
             _ => None,
         });
         let mut tasks = futures::stream::iter(remotes_iter)
-            .map(|repo_config| {
+            .map(async |repo_config| {
                 let remote_repos = remote_repos.clone();
-                async move {
-                    let progress = reporter.map(|reporter| {
-                        (reporter, reporter.on_clone_start(&format!("{repo_config}")))
-                    });
 
-                    let path = store.clone_repo(repo_config).await.map_err(Box::new)?;
+                let progress = reporter
+                    .map(|reporter| (reporter, reporter.on_clone_start(&format!("{repo_config}"))));
 
-                    if let Some((reporter, progress)) = progress {
-                        reporter.on_clone_complete(progress);
-                    }
+                let path = store.clone_repo(repo_config).await.map_err(Box::new)?;
 
-                    let repo = Rc::new(Repo::remote(
-                        repo_config.repo.clone(),
-                        repo_config.rev.clone(),
-                        path,
-                    )?);
-                    remote_repos
-                        .lock()
-                        .unwrap()
-                        .insert(repo_config, repo.clone());
-
-                    Ok::<(), Error>(())
+                if let Some((reporter, progress)) = progress {
+                    reporter.on_clone_complete(progress);
                 }
+
+                let repo = Rc::new(Repo::remote(
+                    repo_config.repo.clone(),
+                    repo_config.rev.clone(),
+                    path,
+                )?);
+                remote_repos
+                    .lock()
+                    .unwrap()
+                    .insert(repo_config, repo.clone());
+
+                Ok::<(), Error>(())
             })
             .buffer_unordered(5);
 
@@ -271,8 +269,7 @@ impl Project {
                         builder.update(hook_config);
                         builder.combine(&self.config);
 
-                        let mut hook = builder.build();
-                        hook.with_path(store.hook_path(&hook));
+                        let hook = builder.build();
                         hooks.push(hook);
                     }
                 }
@@ -282,8 +279,7 @@ impl Project {
                         let mut builder = HookBuilder::new(repo, hook_config.clone());
                         builder.combine(&self.config);
 
-                        let mut hook = builder.build();
-                        hook.with_path(store.hook_path(&hook));
+                        let hook = builder.build();
                         hooks.push(hook);
                     }
                 }
@@ -294,8 +290,7 @@ impl Project {
                         let mut builder = HookBuilder::new(repo, hook_config);
                         builder.combine(&self.config);
 
-                        let mut hook = builder.build();
-                        hook.with_path(store.hook_path(&hook));
+                        let hook = builder.build();
                         hooks.push(hook);
                     }
                 }
@@ -416,7 +411,6 @@ impl HookBuilder {
         let options = self.config.options;
         Hook {
             repo: self.repo,
-            path: None,
             id: self.config.id,
             name: self.config.name,
             entry: self.config.entry,
@@ -449,7 +443,6 @@ impl HookBuilder {
 #[derive(Debug, Clone)]
 pub struct Hook {
     repo: Rc<Repo>,
-    path: Option<PathBuf>,
 
     pub id: String,
     pub name: String,
@@ -486,10 +479,6 @@ impl Display for Hook {
 }
 
 impl Hook {
-    fn with_path(&mut self, path: Option<PathBuf>) {
-        self.path = path;
-    }
-
     pub fn repo(&self) -> &Repo {
         &self.repo
     }
@@ -497,11 +486,6 @@ impl Hook {
     /// Get the path to the repository that contains the hook.
     pub fn repo_path(&self) -> Option<&Path> {
         self.repo.path()
-    }
-
-    /// Get the path to the environment directory (where the hook is installed) if it exists.
-    pub fn env_path(&self) -> Option<&Path> {
-        self.path.as_deref()
     }
 
     pub fn is_local(&self) -> bool {
@@ -515,45 +499,57 @@ impl Hook {
     pub fn is_meta(&self) -> bool {
         matches!(&*self.repo, Repo::Meta { .. })
     }
+}
 
-    // TODO: health check
+#[derive(Debug, Clone)]
+pub struct ResolvedHook {
+    hook: Hook,
+    env: Option<PathBuf>,
+    language_version: semver::Version,
+}
+
+impl Deref for ResolvedHook {
+    type Target = Hook;
+
+    fn deref(&self) -> &Self::Target {
+        &self.hook
+    }
+}
+
+impl Display for ResolvedHook {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} ({})", self.id, self.repo)
+    }
+}
+
+impl ResolvedHook {
+    pub fn new(hook: Hook, language_version: semver::Version, path: PathBuf) -> Self {
+        Self {
+            hook,
+            env: Some(path),
+            language_version,
+        }
+    }
+
+    pub fn env_path(&self) -> Option<&Path> {
+        self.env.as_deref()
+    }
 
     /// Check if the hook is installed in the environment.
     pub fn installed(&self) -> bool {
-        // Hooks that no need to install considered as installed.
-        let Some(env) = self.env_path() else {
+        let Some(env) = &self.env else {
             return true;
         };
         env.join(".installed_ok").exists()
     }
 
-    /// Write a state file to mark the hook as installed.
-    pub async fn mark_as_installed(&self) -> Result<(), Error> {
-        let Some(env) = self.env_path() else {
+    /// Mark the hook as installed in the environment.
+    pub async fn mark_as_installed(&self, _store: &Store) -> Result<(), Error> {
+        let Some(env) = &self.env else {
             return Ok(());
         };
         fs_err::tokio::write(env.join(".installed_ok"), "").await?;
         fs_err::tokio::write(env.join(".repo_source"), self.repo.to_string()).await?;
         Ok(())
-    }
-}
-
-impl Hash for Hook {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match &*self.repo {
-            Repo::Remote { url, rev, .. } => {
-                url.hash(state);
-                rev.hash(state);
-            }
-            Repo::Local { .. } => {
-                "local".hash(state);
-            }
-            Repo::Meta { .. } => unreachable!(),
-        }
-
-        self.language.as_str().hash(state);
-        // TODO: should we resolve the language version first?
-        self.language_version.as_str().hash(state);
-        self.additional_dependencies.hash(state);
     }
 }

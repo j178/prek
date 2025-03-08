@@ -10,10 +10,11 @@ use seahash::SeaHasher;
 use tracing::trace;
 
 use crate::fs::CWD;
-use crate::hook::Hook;
+use crate::hook::{Hook, ResolvedHook};
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
+use crate::store::Store;
 
 const PRE_COMMIT_LABEL: &str = "PRE_COMMIT";
 
@@ -21,14 +22,14 @@ const PRE_COMMIT_LABEL: &str = "PRE_COMMIT";
 pub struct Docker;
 
 impl Docker {
-    fn docker_tag(hook: &Hook) -> String {
+    fn docker_tag(hook: &ResolvedHook) -> String {
         let mut hasher = SeaHasher::new();
         hook.hash(&mut hasher);
         let digest = crate::store::to_hex(hasher.finish());
         format!("prefligit-{digest}")
     }
 
-    async fn build_docker_image(hook: &Hook, pull: bool) -> Result<()> {
+    async fn build_docker_image(hook: &ResolvedHook, pull: bool) -> Result<()> {
         let Some(src) = hook.repo_path() else {
             anyhow::bail!("Language `docker` cannot work with `local` repository");
         };
@@ -170,7 +171,11 @@ impl LanguageImpl for Docker {
         true
     }
 
-    async fn install(&self, hook: &Hook) -> Result<()> {
+    async fn resolve(&self, _hook: &Hook, _store: &Store) -> Result<Option<ResolvedHook>> {
+        Ok(None)
+    }
+
+    async fn install(&self, hook: &ResolvedHook, _store: &Store) -> Result<()> {
         let env = hook.env_path().expect("Docker must have env path");
 
         // TODO: check unsupported language version
@@ -189,9 +194,10 @@ impl LanguageImpl for Docker {
 
     async fn run(
         &self,
-        hook: &Hook,
+        hook: &ResolvedHook,
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
+        _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         Docker::build_docker_image(hook, false).await?;
 

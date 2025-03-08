@@ -1,13 +1,15 @@
 use std::env;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::Result;
 use axoupdater::{AxoUpdater, ReleaseSource, ReleaseSourceType, UpdateRequest};
-use tokio::task::JoinSet;
+use futures::StreamExt;
 use tracing::{debug, enabled, trace, warn};
 
 use crate::fs::LockedFile;
+use crate::hook::{Hook, ResolvedHook};
 use crate::process::Cmd;
 use crate::store::{Store, ToolBucket};
 
@@ -142,6 +144,36 @@ impl InstallSource {
 pub struct UvInstaller;
 
 impl UvInstaller {
+    pub async fn resolve(uv: &Path, hook: &Hook, store: &Store) -> Result<Option<ResolvedHook>> {
+        let output = Cmd::new(uv, "uv resolve")
+            .arg("python")
+            .arg("find")
+            .arg(hook.language_version.as_str())
+            .env(
+                "UV_PYTHON_INSTALL_DIR",
+                store.tools_path(ToolBucket::Python),
+            )
+            .output()
+            .await?;
+        let python = if output.status.success() {
+            PathBuf::from(OsString::from_encoded_bytes_unchecked(&output.stdout))
+        } else {
+            let output = Cmd::new(uv, "install python")
+                .arg("python")
+                .arg("install")
+                .arg(hook.language_version.as_str())
+                .env(
+                    "UV_PYTHON_INSTALL_DIR",
+                    store.tools_path(ToolBucket::Python),
+                )
+                .check(true)
+                .output()
+                .await?;
+            let python = PathBuf::from(OsString::from_encoded_bytes_unchecked(&output.stdout));
+            python
+        };
+    }
+
     async fn select_source() -> Result<InstallSource> {
         async fn check_github(client: &reqwest::Client) -> Result<bool> {
             let url = format!(
@@ -200,7 +232,7 @@ impl UvInstaller {
         Ok(source)
     }
 
-    pub async fn install() -> Result<PathBuf> {
+    pub async fn install(store: &Store) -> Result<PathBuf> {
         // 1) Check if `uv` is installed already.
         // TODO: check minimum supported uv version
         if let Ok(uv) = which::which("uv") {
@@ -209,8 +241,6 @@ impl UvInstaller {
         }
 
         // 2) Check if `uv` is installed by `prefligit`
-        let store = Store::from_settings()?;
-
         let uv_dir = store.tools_path(ToolBucket::Uv);
         let uv = uv_dir.join("uv").with_extension(env::consts::EXE_EXTENSION);
         if uv.is_file() {

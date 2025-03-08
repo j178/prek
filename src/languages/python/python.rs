@@ -8,6 +8,7 @@ use constants::env_vars::EnvVars;
 
 use crate::config::LanguageVersion;
 use crate::hook::Hook;
+use crate::hook::ResolvedHook;
 use crate::languages::LanguageImpl;
 use crate::languages::python::uv::UvInstaller;
 use crate::process::Cmd;
@@ -22,13 +23,18 @@ impl LanguageImpl for Python {
         true
     }
 
+    async fn resolve(&self, _hook: &Hook, store: &Store) -> Result<Option<ResolvedHook>> {
+        todo!()
+        // let uv = UvInstaller::install(store).await?;
+        // let UvInstaller
+    }
+
     // TODO: fallback to virtualenv, pip
-    async fn install(&self, hook: &Hook) -> anyhow::Result<()> {
+    async fn install(&self, hook: &ResolvedHook, store: &Store) -> Result<()> {
         let venv = hook.env_path().expect("Python must have env path");
 
-        let uv = UvInstaller::install().await?;
+        let uv = UvInstaller::install(store).await?;
 
-        let store = Store::from_settings()?;
         let python_install_dir = store.tools_path(ToolBucket::Python);
 
         let uv_cmd = |summary| {
@@ -87,9 +93,10 @@ impl LanguageImpl for Python {
 
     async fn run(
         &self,
-        hook: &Hook,
+        hook: &ResolvedHook,
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
+        _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         // Get environment directory and parse command
         let env_dir = hook.env_path().expect("Python must have env path");

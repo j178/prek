@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::hook::Hook;
+use crate::hook::ResolvedHook;
 use crate::languages::LanguageImpl;
 use crate::languages::node::installer::NodeInstaller;
 use crate::store::{Store, ToolBucket};
@@ -15,11 +16,14 @@ impl LanguageImpl for Node {
         true
     }
 
-    async fn install(&self, hook: &Hook) -> Result<()> {
+    async fn resolve(&self, _hook: &Hook, _store: &Store) -> Result<Option<ResolvedHook>> {
+        todo!()
+    }
+
+    async fn install(&self, hook: &ResolvedHook, store: &Store) -> Result<()> {
         let env = hook.env_path().expect("Node must have env path");
         fs_err::create_dir_all(env)?;
 
-        let store = Store::from_settings()?;
         let node_dir = store.tools_path(ToolBucket::Node);
 
         let installer = NodeInstaller::new(node_dir);
@@ -37,9 +41,10 @@ impl LanguageImpl for Node {
 
     async fn run(
         &self,
-        _hook: &Hook,
+        _hook: &ResolvedHook,
         _filenames: &[&String],
         _env_vars: &HashMap<&'static str, String>,
+        _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         Ok((0, Vec::new()))
     }

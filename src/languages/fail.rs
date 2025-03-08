@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
-use crate::hook::Hook;
+use crate::hook::{Hook, ResolvedHook};
 use crate::languages::LanguageImpl;
+use crate::store::Store;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Fail;
@@ -13,19 +14,24 @@ impl LanguageImpl for Fail {
         false
     }
 
-    async fn install(&self, _hook: &Hook) -> anyhow::Result<()> {
+    async fn resolve(&self, _hook: &Hook, _store: &Store) -> Result<Option<ResolvedHook>> {
+        Ok(None)
+    }
+
+    async fn install(&self, _hook: &ResolvedHook, _store: &Store) -> Result<()> {
         Ok(())
     }
 
-    async fn check_health(&self) -> anyhow::Result<()> {
+    async fn check_health(&self) -> Result<()> {
         Ok(())
     }
 
     async fn run(
         &self,
-        hook: &Hook,
+        hook: &ResolvedHook,
         filenames: &[&String],
         _env_vars: &HashMap<&'static str, String>,
+        _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let mut out = hook.entry.as_bytes().to_vec();
         out.extend(b"\n\n");

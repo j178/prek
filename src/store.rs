@@ -14,7 +14,6 @@ use constants::env_vars::EnvVars;
 use crate::config::RemoteRepo;
 use crate::fs::LockedFile;
 use crate::git::clone_repo;
-use crate::hook::Hook;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -123,23 +122,6 @@ impl Store {
         repo.hash(&mut hasher);
         let digest = to_hex(hasher.finish());
         self.repos_dir().join(digest)
-    }
-
-    /// Returns the path to the installed hook environment.
-    pub fn hook_path(&self, hook: &Hook) -> Option<PathBuf> {
-        // Languages that can't install dependencies, no matter it's local or remote.
-        if !hook.language.supports_dependency() {
-            return None;
-        }
-        // Meta hooks never get installed.
-        if hook.is_meta() {
-            return None;
-        }
-
-        let mut hasher = SeaHasher::new();
-        hook.hash(&mut hasher);
-        let digest = to_hex(hasher.finish());
-        Some(self.hooks_dir().join(digest))
     }
 
     pub fn repos_dir(&self) -> PathBuf {
