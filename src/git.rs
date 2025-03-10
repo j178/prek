@@ -1,8 +1,11 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::LazyLock;
 
 use anyhow::Result;
+use itertools::Itertools;
+use tokio::io::AsyncWriteExt;
 use tracing::warn;
 
 use crate::process;
@@ -373,4 +376,37 @@ pub async fn has_hooks_path_set() -> Result<bool> {
     } else {
         Ok(false)
     }
+}
+
+pub async fn lfs_files<T: FromIterator<String>>(paths: &[&String]) -> Result<T, Error> {
+    let mut job = git_cmd("check the file is lfs file or not")?
+        .arg("check-attr")
+        .arg("filter")
+        .arg("-z")
+        .arg("--stdin")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .check(true)
+        // .output()
+        .spawn()?;
+
+    {
+        let mut stdin = job.stdin.take().expect("Failed to open stdin");
+        stdin.write_all(paths.iter().join("\0").as_ref()).await?;
+    }
+
+    Ok(
+        String::from_utf8_lossy(&job.wait_with_output().await?.stdout)
+            .trim()
+            .split('\0')
+            .tuples::<(_, _, _)>()
+            .filter_map(|(file, _, attr)| {
+                if attr == "lfs" {
+                    Some(file.to_owned())
+                } else {
+                    None
+                }
+            })
+            .collect(),
+    )
 }

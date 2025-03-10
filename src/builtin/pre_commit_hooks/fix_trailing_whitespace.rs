@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::hook::Hook;
+use crate::run::CONCURRENCY;
 use anyhow::Result;
 use bstr::ByteSlice;
 use clap::Parser;
 use futures::StreamExt;
-
-use crate::hook::Hook;
-use crate::run::CONCURRENCY;
 
 #[derive(Parser)]
 struct Args {
