@@ -101,6 +101,7 @@ impl Store {
         // TODO: add windows retry
         fs_err::tokio::remove_dir_all(&target).await.ok();
         fs_err::tokio::rename(temp, &target).await?;
+
         fs_err::tokio::write(target.join(".repo_source"), repo.to_string()).await?;
         fs_err::tokio::write(target.join(".cloned_ok"), "").await?;
 
@@ -157,6 +158,11 @@ impl ToolBucket {
             ToolBucket::Node => "node",
         }
     }
+}
+
+pub struct ClonedRepo {
+    pub repo: String,
+    pub rev: String,
 }
 
 /// Convert a u64 to a hex string.
