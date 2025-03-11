@@ -114,9 +114,11 @@ impl NodeVersion {
     }
 }
 
+// TODO: remove code name support
 pub enum VersionRequest {
     Any,
     None,
+    // TODO: remove, just use semver::VersionReq
     Major(u64),
     MajorMinor(u64, u64),
     MajorMinorPatch(u64, u64, u64),
@@ -175,12 +177,8 @@ impl FromStr for VersionRequest {
 impl TryFrom<LanguageVersion> for VersionRequest {
     type Error = <Self as FromStr>::Err;
 
-    fn try_from(version: LanguageVersion) -> Result<Self, Self::Error> {
-        match version {
-            LanguageVersion::Default => Ok(VersionRequest::Any),
-            LanguageVersion::System => Ok(VersionRequest::None),
-            LanguageVersion::Specific(v) => v.parse(),
-        }
+    fn try_from(_version: LanguageVersion) -> Result<Self, Self::Error> {
+        todo!()
     }
 }
 
@@ -265,7 +263,7 @@ impl NodeInstaller {
 
     /// Install a version of Node.js.
     pub async fn install(&self, version: &LanguageVersion) -> Result<NodeResult> {
-        if version.allows_system() {
+        if version.allow_system() {
             let node = which::which("node");
             let npm = which::which("npm");
             if let (Ok(node), Ok(npm)) = (node, npm) {
@@ -273,7 +271,7 @@ impl NodeInstaller {
                 return Ok(NodeResult::from_executables(node, npm));
             }
         }
-        if !version.allows_download() {
+        if !version.allow_managed() {
             return Err(anyhow::anyhow!(
                 "Node not found on the system and downloading is disabled"
             ));

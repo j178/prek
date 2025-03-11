@@ -6,16 +6,15 @@ use std::sync::LazyLock;
 use anyhow::Result;
 use etcetera::BaseStrategy;
 use seahash::SeaHasher;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
 
 use constants::env_vars::EnvVars;
 
-use crate::config::{Language, LanguageVersion, RemoteRepo};
+use crate::config::RemoteRepo;
 use crate::fs::LockedFile;
 use crate::git::clone_repo;
-use crate::hook::InstalledInfo;
+use crate::hook::InstallInfo;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -110,7 +109,7 @@ impl Store {
         Ok(target)
     }
 
-    pub fn installed_hooks(&self) -> Result<impl Iterator<Item = InstalledInfo>, Error> {
+    pub fn installed_hooks(&self) -> impl Iterator<Item = InstallInfo> {
         fs_err::read_dir(self.repos_dir())
             .ok()
             .into_iter()
@@ -122,11 +121,8 @@ impl Store {
                     return None;
                 }
 
-                let mut file = fs_err::File::open(path).ok()?;
-                let mut contents = String::new();
-                file.read_to_string(&mut contents).ok()?;
-
-                serde_json::from_str(&contents).ok()
+                let mut file = fs_err::File::open(path.join(".prefligit-hook.json")).ok()?;
+                serde_json::from_reader(&mut file).ok()
             })
     }
 

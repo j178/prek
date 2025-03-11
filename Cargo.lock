@@ -1725,7 +1725,6 @@ dependencies = [
  "insta-cmd",
  "itertools",
  "libc",
- "log",
  "miette",
  "owo-colors",
  "pprof",

@@ -15,7 +15,7 @@ pub const CONFIG_FILE: &str = ".pre-commit-config.yaml";
 pub const ALTER_CONFIG_FILE: &str = ".pre-commit-config.yml";
 pub const MANIFEST_FILE: &str = ".pre-commit-hooks.yaml";
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Language {
     Conda,
@@ -64,15 +64,6 @@ impl Language {
             Self::Script => "script",
             Self::System => "system",
         }
-    }
-
-    /// Return whether the language allows specifying the version.
-    /// See <https://pre-commit.com/#overriding-language-version>
-    pub fn supports_language_version(self) -> bool {
-        matches!(
-            self,
-            Self::Python | Self::Node | Self::Ruby | Self::Rust | Self::Golang
-        )
     }
 }
 
@@ -293,7 +284,7 @@ pub enum LanguagePreference {
     OnlyManaged,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LanguageVersion {
     pub preference: LanguagePreference,
     pub request: Option<semver::VersionReq>,
@@ -326,6 +317,7 @@ impl FromStr for LanguageVersion {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
         if s.is_empty() {
             return Ok(Self {
                 preference: LanguagePreference::default(),
@@ -333,35 +325,33 @@ impl FromStr for LanguageVersion {
             });
         }
 
-        let mut parts = s.splitn(2, ';');
-
-        // First part could be either preference or version
-        let first = parts.next().unwrap().trim();
-        match LanguagePreference::from_str(first) {
-            Ok(preference) => {
-                // If we found a valid preference, check for version part
-                let request = parts
-                    .next()
-                    .map(|ver| {
-                        semver::VersionReq::parse(ver.trim())
-                            .map_err(|e| format!("invalid version request: {}", e))
-                    })
-                    .transpose()?;
-
+        match s.split_once(';') {
+            None => {
+                // First try to parse as a language preference
+                match LanguagePreference::from_str(s) {
+                    Ok(pref) => Ok(Self {
+                        preference: pref,
+                        request: None,
+                    }),
+                    // If failed, treat it as a version request
+                    Err(_) => {
+                        let request = semver::VersionReq::parse(s)
+                            .map_err(|e| format!("invalid version requirement: {e}"))?;
+                        Ok(Self {
+                            preference: LanguagePreference::default(),
+                            request: Some(request),
+                        })
+                    }
+                }
+            }
+            Some((pref, request)) => {
+                let preference = LanguagePreference::from_str(pref.trim())
+                    .map_err(|_| "invalid language preference")?;
+                let request = semver::VersionReq::parse(request.trim())
+                    .map_err(|e| format!("invalid version requirement: {e}"))?;
                 Ok(Self {
                     preference,
-                    request,
-                })
-            }
-            Err(_) => {
-                // If first part isn't a valid preference, try parsing as version
-                let request = Some(
-                    semver::VersionReq::parse(first)
-                        .map_err(|e| format!("invalid version request: {}", e))?,
-                );
-                Ok(Self {
-                    preference: LanguagePreference::default(),
-                    request,
+                    request: Some(request),
                 })
             }
         }

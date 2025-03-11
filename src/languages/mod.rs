@@ -40,6 +40,15 @@ trait LanguageImpl {
 }
 
 impl Language {
+    /// Return whether the language allows specifying the version.
+    /// See <https://pre-commit.com/#overriding-language-version>
+    pub fn supports_language_version(self) -> bool {
+        matches!(
+            self,
+            Self::Python | Self::Node | Self::Ruby | Self::Rust | Self::Golang
+        )
+    }
+
     pub fn supports_dependency(self) -> bool {
         match self {
             Self::Python => PYTHON.supports_dependency(),

@@ -85,7 +85,7 @@ pub(crate) async fn run(
         .filter(|h| {
             hook_id
                 .as_deref()
-                .is_none_or(|hook_id| &h.id == hook_id || &h.alias == hook_id)
+                .is_none_or(|hook_id| h.id == hook_id || h.alias == hook_id)
         })
         .filter(|h| hook_stage.is_none_or(|stage| h.stages.contains(&stage)))
         .collect();
@@ -246,6 +246,7 @@ async fn install_hook(hook: &ResolvedHook, store: &Store) -> Result<()> {
         return Ok(());
     }
 
+    let env_dir = hook.env_path().expect("Hook must have env path");
     debug!(%hook, target = %env_dir.display(), "Install environment");
 
     if env_dir.try_exists()? {
@@ -269,8 +270,8 @@ pub async fn install_hooks(
 ) -> Result<Vec<ResolvedHook>> {
     let mut tasks = futures::stream::iter(hooks)
         .map(async |hook| {
-            let resolved = hook.language.resolve(&hook, store).await?;
-            let progress = reporter.on_install_start(&hook);
+            let resolved = hook.language.resolve(hook, store).await?;
+            let progress = reporter.on_install_start(hook);
             install_hook(&resolved, store).await?;
             reporter.on_install_complete(progress);
             anyhow::Ok(resolved)

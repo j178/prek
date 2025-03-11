@@ -1,19 +1,19 @@
 use std::env;
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::config::LanguagePreference;
-use crate::fs::LockedFile;
-use crate::hook::{Hook, ResolvedHook};
-use crate::process::Cmd;
-use crate::store::{Store, ToolBucket};
 use anyhow::Result;
 use axoupdater::{AxoUpdater, ReleaseSource, ReleaseSourceType, UpdateRequest};
-use constants::env_vars::EnvVars;
-use futures::StreamExt;
 use tokio::task::JoinSet;
 use tracing::{debug, enabled, trace, warn};
+
+use crate::config::LanguagePreference;
+use crate::fs::LockedFile;
+use crate::hook::Hook;
+use crate::process::Cmd;
+use crate::store::{Store, ToolBucket};
+
+use constants::env_vars::EnvVars;
 
 // The version of `uv` to install. Should update periodically.
 const UV_VERSION: &str = "0.6.0";
@@ -156,11 +156,7 @@ impl Uv {
         Cmd::new(&self.path, summary)
     }
 
-    pub async fn query_python(
-        &self,
-        hook: &Hook,
-        store: &Store,
-    ) -> Result<impl Iterator<Item = PathBuf>> {
+    pub async fn query_python(&self, hook: &Hook, store: &Store) -> Result<Vec<PathBuf>> {
         let python_preference = match hook.language_version.preference {
             LanguagePreference::Managed => "managed",
             LanguagePreference::OnlySystem => "only-system",
@@ -183,7 +179,7 @@ impl Uv {
 
         let output = cmd.check(true).output().await?;
         let stdout = String::from_utf8(output.stdout)?;
-        Ok(stdout.lines().map(PathBuf::from))
+        Ok(stdout.lines().map(PathBuf::from).collect())
     }
 
     async fn select_source() -> Result<InstallSource> {

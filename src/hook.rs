@@ -1,6 +1,7 @@
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::fmt::Display;
-use std::hash::Hasher;
+use std::fmt::{Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -37,7 +38,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
-    JSON(#[from] serde_json::Error),
+    Json(#[from] serde_json::Error),
 }
 
 #[derive(Debug, Clone)]
@@ -392,7 +393,8 @@ impl HookBuilder {
         if options
             .language_version
             .as_ref()
-            .is_some_and(|v| !v.is_default())
+            .and_then(|v| v.request.as_ref())
+            .is_some()
         {
             if !language.supports_dependency() {
                 warn_user!(
@@ -474,9 +476,9 @@ pub struct Hook {
 }
 
 impl Display for Hook {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if f.alternate() {
-            write!(f, "{} ({})", self.id, self.repo)
+            write!(f, "{}:{}", self.repo, self.id)
         } else {
             write!(f, "{}", self.id)
         }
@@ -504,18 +506,30 @@ impl Hook {
     pub fn is_meta(&self) -> bool {
         matches!(&*self.repo, Repo::Meta { .. })
     }
+
+    pub fn dependencies(&self) -> Cow<'_, Vec<String>> {
+        if self.is_remote() {
+            let mut deps = Vec::with_capacity(1 + self.additional_dependencies.len());
+            deps.push(self.repo.to_string());
+            deps.extend(self.additional_dependencies.iter().map(ToString::to_string));
+            Cow::Owned(deps)
+        } else {
+            Cow::Borrowed(&self.additional_dependencies)
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub enum ResolvedHook {
     Installed {
         hook: Hook,
-        env: PathBuf,
-        info: InstalledInfo,
+        info: InstallInfo,
     },
     NotInstalled {
         hook: Hook,
-        info: InstalledInfo,
+        info: InstallInfo,
+        /// Additional resolved toolchain information, like the path to Python executable.
+        toolchain: PathBuf,
     },
     NoNeedInstall(Hook),
 }
@@ -532,26 +546,35 @@ impl Deref for ResolvedHook {
     }
 }
 
-impl ResolvedHook {
-    pub fn new(hook: Hook, language_version: semver::Version, path: PathBuf) -> Self {
-        Self {
-            hook,
-            env: Some(path),
-            language_version,
+impl Display for ResolvedHook {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // TODO: add more information
+        self.deref().fmt(f)
+    }
+}
+
+impl Hash for ResolvedHook {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            ResolvedHook::Installed { info, .. } => {
+                info.hash(state);
+            }
+            ResolvedHook::NotInstalled { info, .. } => {
+                info.hash(state);
+            }
+            ResolvedHook::NoNeedInstall(hook) => {
+                hook.to_string().hash(state);
+            }
         }
     }
+}
 
+impl ResolvedHook {
     pub fn env_path(&self) -> Option<&Path> {
         match self {
-            ResolvedHook::Installed { env, .. } => Some(env),
-            ResolvedHook::NotInstalled { hook, info, .. } => {
-                let mut hasher = SeaHasher::new();
-                hook.hash(&mut hasher);
-                info.hash(&mut hasher);
-                let hash = to_hex(hasher.finish());
-                // TODO: store?
-            }
-            _ => None,
+            ResolvedHook::Installed { info, .. } => Some(&info.env_path),
+            ResolvedHook::NotInstalled { info, .. } => Some(&info.env_path),
+            ResolvedHook::NoNeedInstall(_) => None,
         }
     }
 
@@ -562,30 +585,58 @@ impl ResolvedHook {
 
     /// Mark the hook as installed in the environment.
     pub async fn mark_as_installed(&self, _store: &Store) -> Result<(), Error> {
-        let (env, info) = match self {
-            Self::Installed { env, info, .. } => (env, info),
-            Self::NotInstalled { env, info, .. } => (env, info),
-            _ => return Ok(()),
+        let Self::NotInstalled { info, .. } = self else {
+            return Ok(());
         };
 
         let content = serde_json::to_string_pretty(info)?;
-        fs_err::tokio::write(env.join(".prefligit.json"), content).await?;
+        fs_err::tokio::write(info.env_path.join(".prefligit-hook.json"), content).await?;
         Ok(())
     }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct InstalledInfo {
+pub struct InstallInfo {
     pub language: Language,
     pub language_version: semver::Version,
     pub dependencies: Vec<String>,
-    pub toolchain: HashMap<String, String>,
+    pub env_path: PathBuf,
 }
 
-impl InstalledInfo {
+impl Hash for InstallInfo {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.language.hash(state);
+        self.language_version.hash(state);
+        self.dependencies.hash(state);
+    }
+}
+
+impl InstallInfo {
+    pub fn new(
+        language: Language,
+        language_version: semver::Version,
+        dependencies: Vec<String>,
+        store: &Store,
+    ) -> Self {
+        // Calculate the hook directory.
+        let mut hasher = SeaHasher::new();
+        language.hash(&mut hasher);
+        language_version.hash(&mut hasher);
+        dependencies.hash(&mut hasher);
+        let hash = to_hex(hasher.finish());
+
+        Self {
+            language,
+            language_version,
+            dependencies,
+            env_path: store.hooks_dir().join(hash),
+        }
+    }
+
     pub fn matches(&self, hook: &Hook) -> bool {
         self.language == hook.language
             && hook.language_version.matches(&self.language_version)
+            // TODO: should we compare ignore order?
             && self.dependencies == hook.additional_dependencies
     }
 }

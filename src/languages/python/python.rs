@@ -2,19 +2,17 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
-use itertools::Itertools;
 use tracing::debug;
 
-use crate::config::LanguageVersion;
-use crate::hook::Hook;
 use crate::hook::ResolvedHook;
+use crate::hook::{Hook, InstallInfo};
 use crate::languages::LanguageImpl;
 use crate::languages::python::uv::Uv;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::{Store, ToolBucket};
+
 use constants::env_vars::EnvVars;
-use log::debug;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Python;
@@ -26,8 +24,11 @@ impl LanguageImpl for Python {
 
     async fn resolve(&self, hook: &Hook, store: &Store) -> Result<ResolvedHook> {
         // Select from installed hooks
-        if let Some(hook) = store.installed_hooks()?.find(|h| h.matches(&hook)) {
-            return Ok(hook.into());
+        if let Some(info) = store.installed_hooks().find(|info| info.matches(hook)) {
+            return Ok(ResolvedHook::Installed {
+                hook: hook.clone(),
+                info,
+            });
         }
 
         // Select toolchain from system or managed
@@ -35,20 +36,36 @@ impl LanguageImpl for Python {
         let python = uv
             .query_python(hook, store)
             .await?
+            .into_iter()
             .next()
             .ok_or_else(|| anyhow!("Failed to resolve hook"))?;
         debug!(python = %python.display(), "Resolved Python");
 
+        // Get Python version
+        let stdout = Cmd::new(&python, "get Python version")
+            .arg("--version")
+            .check(true)
+            .output()
+            .await?
+            .stdout;
+        let version = String::from_utf8_lossy(&stdout)
+            .trim()
+            .parse::<semver::Version>()?;
+
         Ok(ResolvedHook::NotInstalled {
             hook: hook.clone(),
-            env: python,
-            info,
+            toolchain: python.clone(),
+            info: InstallInfo::new(hook.language, version, hook.dependencies().to_vec(), store),
         })
     }
 
-    // TODO: fallback to virtualenv, pip
     async fn install(&self, hook: &ResolvedHook, store: &Store) -> Result<()> {
-        let ResolvedHook::NotInstalled { hook, env, info } = hook else {
+        let ResolvedHook::NotInstalled {
+            hook,
+            toolchain,
+            info,
+        } = hook
+        else {
             unreachable!("Python hook must be NotInstalled")
         };
 
@@ -56,42 +73,35 @@ impl LanguageImpl for Python {
 
         // Create venv
         let mut cmd = uv.cmd("create venv");
-        cmd.arg("venv").arg(env).env(
-            EnvVars::UV_PYTHON_INSTALL_DIR,
-            &store.tools_path(ToolBucket::Python),
-        );
-
-        match hook.language_version {
-            LanguageVersion::Specific(ref version) => {
-                cmd.arg("--python").arg(version);
-            }
-            LanguageVersion::System => {
-                cmd.arg("--python-preference").arg("only-system");
-            }
-            // uv will try to use system Python and download if not found
-            LanguageVersion::Default => {}
-        }
+        cmd.arg("venv")
+            .arg(&info.env_path)
+            .arg("--python")
+            .arg(toolchain)
+            .env(
+                EnvVars::UV_PYTHON_INSTALL_DIR,
+                store.tools_path(ToolBucket::Python),
+            );
 
         cmd.check(true).output().await?;
 
         // Install dependencies
         if let Some(repo_path) = hook.repo_path() {
-            uv_cmd("install dependencies")
+            uv.cmd("install dependencies")
                 .arg("pip")
                 .arg("install")
                 .arg(".")
                 .args(&hook.additional_dependencies)
                 .current_dir(repo_path)
-                .env("VIRTUAL_ENV", venv)
+                .env("VIRTUAL_ENV", &info.env_path)
                 .check(true)
                 .output()
                 .await?;
         } else if !hook.additional_dependencies.is_empty() {
-            uv_cmd("install dependencies")
+            uv.cmd("install dependencies")
                 .arg("pip")
                 .arg("install")
                 .args(&hook.additional_dependencies)
-                .env("VIRTUAL_ENV", venv)
+                .env("VIRTUAL_ENV", &info.env_path)
                 .check(true)
                 .output()
                 .await?;

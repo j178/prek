@@ -1,10 +1,10 @@
 [package]
 name = "constants"
 version = "0.0.1"
-edition.workspace = true
+edition = { workspace = true }
 
 [dependencies]
-tracing.workspace = true
+tracing = { workspace = true }
 
 [lints]
 workspace = true
