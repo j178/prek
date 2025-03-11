@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use tracing::debug;
 
 use crate::hook::ResolvedHook;
@@ -43,14 +43,17 @@ impl LanguageImpl for Python {
 
         // Get Python version
         let stdout = Cmd::new(&python, "get Python version")
-            .arg("--version")
+            .arg("-I")
+            .arg("-c")
+            .arg("import sys; print('.'.join(map(str, sys.version_info[:3])))")
             .check(true)
             .output()
             .await?
             .stdout;
         let version = String::from_utf8_lossy(&stdout)
             .trim()
-            .parse::<semver::Version>()?;
+            .parse::<semver::Version>()
+            .with_context(|| "Failed to parse Python version")?;
 
         Ok(ResolvedHook::NotInstalled {
             hook: hook.clone(),

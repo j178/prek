@@ -1309,7 +1309,10 @@ mod tests {
                                         pass_filenames: None,
                                         description: None,
                                         language_version: Some(
-                                            Default,
+                                            LanguageVersion {
+                                                preference: Managed,
+                                                request: None,
+                                            },
                                         ),
                                         log_file: None,
                                         require_serial: None,
@@ -1337,7 +1340,10 @@ mod tests {
                                         pass_filenames: None,
                                         description: None,
                                         language_version: Some(
-                                            System,
+                                            LanguageVersion {
+                                                preference: OnlySystem,
+                                                request: None,
+                                            },
                                         ),
                                         log_file: None,
                                         require_serial: None,
@@ -1365,9 +1371,24 @@ mod tests {
                                         pass_filenames: None,
                                         description: None,
                                         language_version: Some(
-                                            Specific(
-                                                "3.8",
-                                            ),
+                                            LanguageVersion {
+                                                preference: Managed,
+                                                request: Some(
+                                                    VersionReq {
+                                                        comparators: [
+                                                            Comparator {
+                                                                op: Caret,
+                                                                major: 3,
+                                                                minor: Some(
+                                                                    8,
+                                                                ),
+                                                                patch: None,
+                                                                pre: Prerelease(""),
+                                                            },
+                                                        ],
+                                                    },
+                                                ),
+                                            },
                                         ),
                                         log_file: None,
                                         require_serial: None,
