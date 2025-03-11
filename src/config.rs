@@ -325,6 +325,23 @@ impl FromStr for LanguageVersion {
             });
         }
 
+        // For compatibility with pre-commit, allow `default` and `system` as language version.
+        match s {
+            "default" => {
+                return Ok(Self {
+                    preference: LanguagePreference::Managed,
+                    request: None,
+                });
+            }
+            "system" => {
+                return Ok(Self {
+                    preference: LanguagePreference::OnlySystem,
+                    request: None,
+                });
+            }
+            _ => {}
+        };
+
         match s.split_once(';') {
             None => {
                 // First try to parse as a language preference
