@@ -6,14 +6,16 @@ use std::sync::LazyLock;
 use anyhow::Result;
 use etcetera::BaseStrategy;
 use seahash::SeaHasher;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
 
 use constants::env_vars::EnvVars;
 
-use crate::config::RemoteRepo;
+use crate::config::{Language, LanguageVersion, RemoteRepo};
 use crate::fs::LockedFile;
 use crate::git::clone_repo;
+use crate::hook::InstalledInfo;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -108,6 +110,26 @@ impl Store {
         Ok(target)
     }
 
+    pub fn installed_hooks(&self) -> Result<impl Iterator<Item = InstalledInfo>, Error> {
+        fs_err::read_dir(self.repos_dir())
+            .ok()
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|entry| {
+                let path = entry.path();
+                if path.is_dir() {
+                    return None;
+                }
+
+                let mut file = fs_err::File::open(path).ok()?;
+                let mut contents = String::new();
+                file.read_to_string(&mut contents).ok()?;
+
+                serde_json::from_str(&contents).ok()
+            })
+    }
+
     /// Lock the store.
     pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
         LockedFile::acquire_blocking(self.path.join(".lock"), "store")
@@ -158,11 +180,6 @@ impl ToolBucket {
             ToolBucket::Node => "node",
         }
     }
-}
-
-pub struct ClonedRepo {
-    pub repo: String,
-    pub rev: String,
 }
 
 /// Convert a u64 to a hex string.

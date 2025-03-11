@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
+use std::hash::Hasher;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -9,6 +10,8 @@ use anyhow::Result;
 use clap::ValueEnum;
 use futures::StreamExt;
 use itertools::zip_eq;
+use seahash::SeaHasher;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, error};
 use url::Url;
@@ -18,7 +21,7 @@ use crate::config::{
     MANIFEST_FILE, ManifestHook, MetaHook, RemoteHook, Stage, read_config, read_manifest,
 };
 use crate::fs::{CWD, Simplified};
-use crate::store::Store;
+use crate::store::{Store, to_hex};
 use crate::warn_user;
 
 #[derive(Debug, Error)]
@@ -33,6 +36,8 @@ pub enum Error {
     Store(#[from] Box<crate::store::Error>),
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
+    JSON(#[from] serde_json::Error),
 }
 
 #[derive(Debug, Clone)]
@@ -502,23 +507,28 @@ impl Hook {
 }
 
 #[derive(Debug, Clone)]
-pub struct ResolvedHook {
-    hook: Hook,
-    env: Option<PathBuf>,
-    language_version: semver::Version,
+pub enum ResolvedHook {
+    Installed {
+        hook: Hook,
+        env: PathBuf,
+        info: InstalledInfo,
+    },
+    NotInstalled {
+        hook: Hook,
+        info: InstalledInfo,
+    },
+    NoNeedInstall(Hook),
 }
 
 impl Deref for ResolvedHook {
     type Target = Hook;
 
     fn deref(&self) -> &Self::Target {
-        &self.hook
-    }
-}
-
-impl Display for ResolvedHook {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ({})", self.id, self.repo)
+        match self {
+            ResolvedHook::Installed { hook, .. } => hook,
+            ResolvedHook::NotInstalled { hook, .. } => hook,
+            ResolvedHook::NoNeedInstall(hook) => hook,
+        }
     }
 }
 
@@ -532,24 +542,50 @@ impl ResolvedHook {
     }
 
     pub fn env_path(&self) -> Option<&Path> {
-        self.env.as_deref()
+        match self {
+            ResolvedHook::Installed { env, .. } => Some(env),
+            ResolvedHook::NotInstalled { hook, info, .. } => {
+                let mut hasher = SeaHasher::new();
+                hook.hash(&mut hasher);
+                info.hash(&mut hasher);
+                let hash = to_hex(hasher.finish());
+                // TODO: store?
+            }
+            _ => None,
+        }
     }
 
     /// Check if the hook is installed in the environment.
     pub fn installed(&self) -> bool {
-        let Some(env) = &self.env else {
-            return true;
-        };
-        env.join(".installed_ok").exists()
+        !matches!(self, ResolvedHook::NotInstalled { .. })
     }
 
     /// Mark the hook as installed in the environment.
     pub async fn mark_as_installed(&self, _store: &Store) -> Result<(), Error> {
-        let Some(env) = &self.env else {
-            return Ok(());
+        let (env, info) = match self {
+            Self::Installed { env, info, .. } => (env, info),
+            Self::NotInstalled { env, info, .. } => (env, info),
+            _ => return Ok(()),
         };
-        fs_err::tokio::write(env.join(".installed_ok"), "").await?;
-        fs_err::tokio::write(env.join(".repo_source"), self.repo.to_string()).await?;
+
+        let content = serde_json::to_string_pretty(info)?;
+        fs_err::tokio::write(env.join(".prefligit.json"), content).await?;
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InstalledInfo {
+    pub language: Language,
+    pub language_version: semver::Version,
+    pub dependencies: Vec<String>,
+    pub toolchain: HashMap<String, String>,
+}
+
+impl InstalledInfo {
+    pub fn matches(&self, hook: &Hook) -> bool {
+        self.language == hook.language
+            && hook.language_version.matches(&self.language_version)
+            && self.dependencies == hook.additional_dependencies
     }
 }

@@ -242,9 +242,6 @@ fn get_skips() -> Vec<String> {
 }
 
 async fn install_hook(hook: &ResolvedHook, store: &Store) -> Result<()> {
-    let Some(env_dir) = hook.env_path() else {
-        return Ok(());
-    };
     if hook.installed() {
         return Ok(());
     }
@@ -273,23 +270,16 @@ pub async fn install_hooks(
     let mut tasks = futures::stream::iter(hooks)
         .map(async |hook| {
             let resolved = hook.language.resolve(&hook, store).await?;
-
-            if let Some(resolved) = resolved {
-                let progress = reporter.on_install_start(&hook);
-                install_hook(&resolved, store).await?;
-                reporter.on_install_complete(progress);
-                anyhow::Ok(Some(resolved))
-            } else {
-                anyhow::Ok(None)
-            }
+            let progress = reporter.on_install_start(&hook);
+            install_hook(&resolved, store).await?;
+            reporter.on_install_complete(progress);
+            anyhow::Ok(resolved)
         })
         .buffer_unordered(5);
 
     let mut hooks = Vec::new();
     while let Some(result) = tasks.next().await {
-        if let Some(hook) = result? {
-            hooks.push(hook);
-        }
+        hooks.push(result?);
     }
 
     reporter.on_complete();

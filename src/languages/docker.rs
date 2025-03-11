@@ -171,8 +171,8 @@ impl LanguageImpl for Docker {
         true
     }
 
-    async fn resolve(&self, _hook: &Hook, _store: &Store) -> Result<Option<ResolvedHook>> {
-        Ok(None)
+    async fn resolve(&self, hook: &Hook, _store: &Store) -> Result<ResolvedHook> {
+        Ok(ResolvedHook::NoNeedInstall(hook.clone()))
     }
 
     async fn install(&self, hook: &ResolvedHook, _store: &Store) -> Result<()> {

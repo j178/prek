@@ -16,7 +16,7 @@ impl LanguageImpl for Node {
         true
     }
 
-    async fn resolve(&self, _hook: &Hook, _store: &Store) -> Result<Option<ResolvedHook>> {
+    async fn resolve(&self, _hook: &Hook, _store: &Store) -> Result<ResolvedHook> {
         todo!()
     }
 

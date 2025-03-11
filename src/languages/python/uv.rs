@@ -3,15 +3,17 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use anyhow::Result;
-use axoupdater::{AxoUpdater, ReleaseSource, ReleaseSourceType, UpdateRequest};
-use futures::StreamExt;
-use tracing::{debug, enabled, trace, warn};
-
+use crate::config::LanguagePreference;
 use crate::fs::LockedFile;
 use crate::hook::{Hook, ResolvedHook};
 use crate::process::Cmd;
 use crate::store::{Store, ToolBucket};
+use anyhow::Result;
+use axoupdater::{AxoUpdater, ReleaseSource, ReleaseSourceType, UpdateRequest};
+use constants::env_vars::EnvVars;
+use futures::StreamExt;
+use tokio::task::JoinSet;
+use tracing::{debug, enabled, trace, warn};
 
 // The version of `uv` to install. Should update periodically.
 const UV_VERSION: &str = "0.6.0";
@@ -141,37 +143,47 @@ impl InstallSource {
     }
 }
 
-pub struct UvInstaller;
+pub struct Uv {
+    path: PathBuf,
+}
 
-impl UvInstaller {
-    pub async fn resolve(uv: &Path, hook: &Hook, store: &Store) -> Result<Option<ResolvedHook>> {
-        let output = Cmd::new(uv, "uv resolve")
-            .arg("python")
-            .arg("find")
-            .arg(hook.language_version.as_str())
-            .env(
-                "UV_PYTHON_INSTALL_DIR",
-                store.tools_path(ToolBucket::Python),
-            )
-            .output()
-            .await?;
-        let python = if output.status.success() {
-            PathBuf::from(OsString::from_encoded_bytes_unchecked(&output.stdout))
-        } else {
-            let output = Cmd::new(uv, "install python")
-                .arg("python")
-                .arg("install")
-                .arg(hook.language_version.as_str())
-                .env(
-                    "UV_PYTHON_INSTALL_DIR",
-                    store.tools_path(ToolBucket::Python),
-                )
-                .check(true)
-                .output()
-                .await?;
-            let python = PathBuf::from(OsString::from_encoded_bytes_unchecked(&output.stdout));
-            python
+impl Uv {
+    pub fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+
+    pub fn cmd(&self, summary: &str) -> Cmd {
+        Cmd::new(&self.path, summary)
+    }
+
+    pub async fn query_python(
+        &self,
+        hook: &Hook,
+        store: &Store,
+    ) -> Result<impl Iterator<Item = PathBuf>> {
+        let python_preference = match hook.language_version.preference {
+            LanguagePreference::Managed => "managed",
+            LanguagePreference::OnlySystem => "only-system",
+            LanguagePreference::OnlyManaged => "only-managed",
         };
+
+        let mut cmd = Cmd::new(&self.path, "uv resolve");
+
+        cmd.arg("python")
+            .arg("find")
+            .arg("--python-preference")
+            .arg(python_preference)
+            .env(
+                EnvVars::UV_PYTHON_INSTALL_DIR,
+                store.tools_path(ToolBucket::Python),
+            );
+        if let Some(req) = &hook.language_version.request {
+            cmd.arg(req.to_string());
+        }
+
+        let output = cmd.check(true).output().await?;
+        let stdout = String::from_utf8(output.stdout)?;
+        Ok(stdout.lines().map(PathBuf::from))
     }
 
     async fn select_source() -> Result<InstallSource> {
@@ -232,12 +244,12 @@ impl UvInstaller {
         Ok(source)
     }
 
-    pub async fn install(store: &Store) -> Result<PathBuf> {
+    pub async fn install(store: &Store) -> Result<Self> {
         // 1) Check if `uv` is installed already.
         // TODO: check minimum supported uv version
         if let Ok(uv) = which::which("uv") {
             trace!(uv = %uv.display(), "Found uv from PATH");
-            return Ok(uv);
+            return Ok(Self::new(uv));
         }
 
         // 2) Check if `uv` is installed by `prefligit`
@@ -245,7 +257,7 @@ impl UvInstaller {
         let uv = uv_dir.join("uv").with_extension(env::consts::EXE_EXTENSION);
         if uv.is_file() {
             trace!(uv = %uv.display(), "Found managed uv");
-            return Ok(uv);
+            return Ok(Self::new(uv));
         }
 
         fs_err::tokio::create_dir_all(&uv_dir).await?;
@@ -253,12 +265,12 @@ impl UvInstaller {
 
         if uv.is_file() {
             trace!(uv = %uv.display(), "Found managed uv");
-            return Ok(uv);
+            return Ok(Self::new(uv));
         }
 
         let source = Self::select_source().await?;
         source.install(&uv_dir).await?;
 
-        Ok(uv)
+        Ok(Self::new(uv))
     }
 }

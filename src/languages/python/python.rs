@@ -1,19 +1,20 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+use itertools::Itertools;
 use tracing::debug;
-
-use constants::env_vars::EnvVars;
 
 use crate::config::LanguageVersion;
 use crate::hook::Hook;
 use crate::hook::ResolvedHook;
 use crate::languages::LanguageImpl;
-use crate::languages::python::uv::UvInstaller;
+use crate::languages::python::uv::Uv;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::{Store, ToolBucket};
+use constants::env_vars::EnvVars;
+use log::debug;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Python;
@@ -23,29 +24,42 @@ impl LanguageImpl for Python {
         true
     }
 
-    async fn resolve(&self, _hook: &Hook, store: &Store) -> Result<Option<ResolvedHook>> {
-        todo!()
-        // let uv = UvInstaller::install(store).await?;
-        // let UvInstaller
+    async fn resolve(&self, hook: &Hook, store: &Store) -> Result<ResolvedHook> {
+        // Select from installed hooks
+        if let Some(hook) = store.installed_hooks()?.find(|h| h.matches(&hook)) {
+            return Ok(hook.into());
+        }
+
+        // Select toolchain from system or managed
+        let uv = Uv::install(store).await?;
+        let python = uv
+            .query_python(hook, store)
+            .await?
+            .next()
+            .ok_or_else(|| anyhow!("Failed to resolve hook"))?;
+        debug!(python = %python.display(), "Resolved Python");
+
+        Ok(ResolvedHook::NotInstalled {
+            hook: hook.clone(),
+            env: python,
+            info,
+        })
     }
 
     // TODO: fallback to virtualenv, pip
     async fn install(&self, hook: &ResolvedHook, store: &Store) -> Result<()> {
-        let venv = hook.env_path().expect("Python must have env path");
-
-        let uv = UvInstaller::install(store).await?;
-
-        let python_install_dir = store.tools_path(ToolBucket::Python);
-
-        let uv_cmd = |summary| {
-            let mut cmd = Cmd::new(&uv, summary);
-            cmd.env(EnvVars::UV_PYTHON_INSTALL_DIR, &python_install_dir);
-            cmd
+        let ResolvedHook::NotInstalled { hook, env, info } = hook else {
+            unreachable!("Python hook must be NotInstalled")
         };
 
+        let uv = Uv::install(store).await?;
+
         // Create venv
-        let mut cmd = uv_cmd("create venv");
-        cmd.arg("venv").arg(venv);
+        let mut cmd = uv.cmd("create venv");
+        cmd.arg("venv").arg(env).env(
+            EnvVars::UV_PYTHON_INSTALL_DIR,
+            &store.tools_path(ToolBucket::Python),
+        );
 
         match hook.language_version {
             LanguageVersion::Specific(ref version) => {

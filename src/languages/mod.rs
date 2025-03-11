@@ -27,7 +27,7 @@ trait LanguageImpl {
     /// For example, Python and Node.js support installing dependencies, while
     /// System and Fail do not.
     fn supports_dependency(&self) -> bool;
-    async fn resolve(&self, hook: &Hook, store: &Store) -> Result<Option<ResolvedHook>>;
+    async fn resolve(&self, hook: &Hook, store: &Store) -> Result<ResolvedHook>;
     async fn install(&self, hook: &ResolvedHook, store: &Store) -> Result<()>;
     async fn check_health(&self) -> Result<()>;
     async fn run(
@@ -52,7 +52,7 @@ impl Language {
         }
     }
 
-    pub async fn resolve(&self, hook: &Hook, store: &Store) -> Result<Option<ResolvedHook>> {
+    pub async fn resolve(&self, hook: &Hook, store: &Store) -> Result<ResolvedHook> {
         match self {
             Self::Python => PYTHON.resolve(hook, store).await,
             Self::Node => NODE.resolve(hook, store).await,
