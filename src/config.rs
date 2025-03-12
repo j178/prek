@@ -636,10 +636,11 @@ impl From<MetaHook> for ManifestHook {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct RemoteRepo {
     pub repo: Url,
     pub rev: String,
+    #[serde(skip)]
     pub hooks: Vec<RemoteHook>,
 }
 

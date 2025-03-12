@@ -38,7 +38,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
-    Json(#[from] serde_json::Error),
+    Serde(#[from] serde_json::Error),
 }
 
 #[derive(Debug, Clone)]

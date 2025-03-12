@@ -28,6 +28,8 @@ pub enum Error {
     Repo(#[from] crate::hook::Error),
     #[error(transparent)]
     Git(#[from] crate::git::Error),
+    #[error(transparent)]
+    Serde(#[from] serde_json::Error),
 }
 
 static STORE_HOME: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
@@ -84,7 +86,7 @@ impl Store {
     pub async fn clone_repo(&self, repo: &RemoteRepo) -> Result<PathBuf, Error> {
         // Check if the repo is already cloned.
         let target = self.repo_path(repo);
-        if target.join(".cloned_ok").try_exists()? {
+        if target.join(".prefligit-repo.json").try_exists()? {
             return Ok(target);
         }
 
@@ -103,8 +105,8 @@ impl Store {
         fs_err::tokio::remove_dir_all(&target).await.ok();
         fs_err::tokio::rename(temp, &target).await?;
 
-        fs_err::tokio::write(target.join(".repo_source"), repo.to_string()).await?;
-        fs_err::tokio::write(target.join(".cloned_ok"), "").await?;
+        let content = serde_json::to_string_pretty(&repo)?;
+        fs_err::tokio::write(target.join(".prefligit-repo.json"), content).await?;
 
         Ok(target)
     }
