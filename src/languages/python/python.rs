@@ -25,16 +25,18 @@ impl LanguageImpl for Python {
     async fn resolve(&self, hook: &Hook, store: &Store) -> Result<ResolvedHook> {
         // Select from installed hooks
         if let Some(info) = store.installed_hooks().find(|info| info.matches(hook)) {
+            debug!("Found installed hook: {}", info.env_path.display());
             return Ok(ResolvedHook::Installed {
                 hook: hook.clone(),
                 info,
             });
         }
+        debug!("No matching installed hook found for {}", hook);
 
         // Select toolchain from system or managed
         let uv = Uv::install(store).await?;
         let python = uv
-            .query_python(hook, store)
+            .find_python(hook, store)
             .await?
             .into_iter()
             .next()

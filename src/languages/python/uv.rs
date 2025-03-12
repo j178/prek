@@ -156,7 +156,7 @@ impl Uv {
         Cmd::new(&self.path, summary)
     }
 
-    pub async fn query_python(&self, hook: &Hook, store: &Store) -> Result<Vec<PathBuf>> {
+    pub async fn find_python(&self, hook: &Hook, store: &Store) -> Result<Vec<PathBuf>> {
         let python_preference = match hook.language_version.preference {
             LanguagePreference::Managed => "managed",
             LanguagePreference::OnlySystem => "only-system",
@@ -169,6 +169,7 @@ impl Uv {
             .arg("find")
             .arg("--python-preference")
             .arg(python_preference)
+            .arg("--no-project")
             .env(
                 EnvVars::UV_PYTHON_INSTALL_DIR,
                 store.tools_path(ToolBucket::Python),

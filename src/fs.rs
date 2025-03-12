@@ -70,7 +70,7 @@ impl LockedFile {
                     )
                 })?;
 
-                debug!(resource, "Acquired lock");
+                trace!(resource, "Acquired lock");
                 Ok(Self(file))
             }
         }
@@ -108,7 +108,7 @@ impl Drop for LockedFile {
                 err
             );
         } else {
-            debug!(path = %self.0.path().display(), "Released lock");
+            trace!(path = %self.0.path().display(), "Released lock");
         }
     }
 }

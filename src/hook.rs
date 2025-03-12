@@ -637,6 +637,6 @@ impl InstallInfo {
         self.language == hook.language
             && hook.language_version.matches(&self.language_version)
             // TODO: should we compare ignore order?
-            && self.dependencies == hook.additional_dependencies
+            && self.dependencies == hook.dependencies().to_vec()
     }
 }

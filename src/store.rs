@@ -110,17 +110,13 @@ impl Store {
     }
 
     pub fn installed_hooks(&self) -> impl Iterator<Item = InstallInfo> {
-        fs_err::read_dir(self.repos_dir())
+        fs_err::read_dir(self.hooks_dir())
             .ok()
             .into_iter()
             .flatten()
             .flatten()
             .filter_map(|entry| {
                 let path = entry.path();
-                if path.is_dir() {
-                    return None;
-                }
-
                 let mut file = fs_err::File::open(path.join(".prefligit-hook.json")).ok()?;
                 serde_json::from_reader(&mut file).ok()
             })

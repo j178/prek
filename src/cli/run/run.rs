@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use anstream::ColorChoice;
 use anyhow::Result;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
+use itertools::Itertools;
 use owo_colors::{OwoColorize, Style};
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
@@ -268,24 +270,33 @@ pub async fn install_hooks(
     store: &Store,
     reporter: &HookInstallReporter,
 ) -> Result<Vec<ResolvedHook>> {
-    let mut tasks = futures::stream::iter(hooks)
-        .map(async |hook| {
-            let resolved = hook.language.resolve(hook, store).await?;
-            let progress = reporter.on_install_start(hook);
-            install_hook(&resolved, store).await?;
-            reporter.on_install_complete(progress);
-            anyhow::Ok(resolved)
-        })
-        .buffer_unordered(5);
+    let mut all_resolved_hooks = Vec::new();
+    let mut group_futures = FuturesUnordered::new();
 
-    let mut hooks = Vec::new();
-    while let Some(result) = tasks.next().await {
-        hooks.push(result?);
+    // Group hooks by their language, so we can install them in parallel.
+    for (_, hooks) in &hooks.iter().chunk_by(|h| &h.language) {
+        let hooks: Vec<_> = hooks.collect();
+        group_futures.push(async move {
+            let mut resolved = Vec::new();
+            // Process hooks sequentially within each language group
+            for hook in hooks {
+                let resolved_hook = hook.language.resolve(hook, store).await?;
+                let progress = reporter.on_install_start(hook);
+                install_hook(&resolved_hook, store).await?;
+                reporter.on_install_complete(progress);
+                resolved.push(resolved_hook);
+            }
+            anyhow::Ok(resolved)
+        });
+    }
+
+    while let Some(result) = group_futures.next().await {
+        all_resolved_hooks.extend(result?);
     }
 
     reporter.on_complete();
 
-    Ok(hooks)
+    Ok(all_resolved_hooks)
 }
 
 const SKIPPED: &str = "Skipped";
