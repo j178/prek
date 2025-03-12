@@ -271,7 +271,7 @@ impl Project {
                         };
 
                         let repo = Rc::clone(repo);
-                        let mut builder = HookBuilder::new(repo, hook.clone());
+                        let mut builder = HookBuilder::new(repo, hook.clone(), hooks.len());
                         builder.update(hook_config);
                         builder.combine(&self.config);
 
@@ -282,7 +282,7 @@ impl Project {
                 config::Repo::Local(repo_config) => {
                     for hook_config in &repo_config.hooks {
                         let repo = Rc::clone(repo);
-                        let mut builder = HookBuilder::new(repo, hook_config.clone());
+                        let mut builder = HookBuilder::new(repo, hook_config.clone(), hooks.len());
                         builder.combine(&self.config);
 
                         let hook = builder.build();
@@ -293,7 +293,7 @@ impl Project {
                     for hook_config in &repo_config.hooks {
                         let repo = Rc::clone(repo);
                         let hook_config = ManifestHook::from(hook_config.clone());
-                        let mut builder = HookBuilder::new(repo, hook_config);
+                        let mut builder = HookBuilder::new(repo, hook_config, hooks.len());
                         builder.combine(&self.config);
 
                         let hook = builder.build();
@@ -318,11 +318,12 @@ pub trait HookInitReporter {
 struct HookBuilder {
     repo: Rc<Repo>,
     config: ManifestHook,
+    idx: usize,
 }
 
 impl HookBuilder {
-    fn new(repo: Rc<Repo>, config: ManifestHook) -> Self {
-        Self { repo, config }
+    fn new(repo: Rc<Repo>, config: ManifestHook, idx: usize) -> Self {
+        Self { repo, config, idx }
     }
 
     /// Update the hook from the project level hook configuration.
@@ -418,6 +419,7 @@ impl HookBuilder {
         let options = self.config.options;
         Hook {
             repo: self.repo,
+            idx: self.idx,
             id: self.config.id,
             name: self.config.name,
             entry: self.config.entry,
@@ -451,6 +453,8 @@ impl HookBuilder {
 pub struct Hook {
     repo: Rc<Repo>,
 
+    /// The index of the hook defined in the configuration file.
+    pub idx: usize,
     pub id: String,
     pub name: String,
     pub entry: String,
@@ -508,6 +512,7 @@ impl Hook {
     }
 
     pub fn dependencies(&self) -> Cow<'_, Vec<String>> {
+        // For remote hooks, itself is a implicit dependency of the hook.
         if self.is_remote() {
             let mut deps = Vec::with_capacity(1 + self.additional_dependencies.len());
             deps.push(self.repo.to_string());
@@ -637,6 +642,6 @@ impl InstallInfo {
         self.language == hook.language
             && hook.language_version.matches(&self.language_version)
             // TODO: should we compare ignore order?
-            && self.dependencies == hook.dependencies().to_vec()
+            && self.dependencies == hook.dependencies().as_slice()
     }
 }
