@@ -1712,6 +1712,7 @@ dependencies = [
  "constants",
  "ctrlc",
  "dunce",
+ "either",
  "etcetera",
  "fancy-regex",
  "fs-err",

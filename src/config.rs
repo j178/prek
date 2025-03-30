@@ -5,6 +5,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
+use either::Either;
 use fancy_regex as regex;
 use serde::{Deserialize, Deserializer, Serialize};
 use url::Url;
@@ -287,7 +288,7 @@ pub enum LanguagePreference {
 #[derive(Debug, Clone, Default)]
 pub struct LanguageVersion {
     pub preference: LanguagePreference,
-    pub request: Option<semver::VersionReq>,
+    pub request: Option<Either<semver::VersionReq, String>>,
 }
 
 impl FromStr for LanguagePreference {
@@ -353,7 +354,8 @@ impl FromStr for LanguageVersion {
                     // If failed, treat it as a version request
                     Err(_) => {
                         let request = semver::VersionReq::parse(s)
-                            .map_err(|e| format!("invalid version requirement: {e}"))?;
+                            .map(Either::Left)
+                            .unwrap_or(Either::Right(s.to_string()));
                         Ok(Self {
                             preference: LanguagePreference::default(),
                             request: Some(request),
@@ -368,7 +370,7 @@ impl FromStr for LanguageVersion {
                     .map_err(|e| format!("invalid version requirement: {e}"))?;
                 Ok(Self {
                     preference,
-                    request: Some(request),
+                    request: Some(Either::Left(request)),
                 })
             }
         }
@@ -410,7 +412,10 @@ impl LanguageVersion {
     }
 
     pub fn matches(&self, version: &semver::Version) -> bool {
-        self.request.as_ref().is_none_or(|req| req.matches(version))
+        match self.request.as_ref() {
+            Some(Either::Left(req)) => req.matches(version),
+            _ => true,
+        }
     }
 }
 
@@ -1375,19 +1380,21 @@ mod tests {
                                             LanguageVersion {
                                                 preference: Managed,
                                                 request: Some(
-                                                    VersionReq {
-                                                        comparators: [
-                                                            Comparator {
-                                                                op: Caret,
-                                                                major: 3,
-                                                                minor: Some(
-                                                                    8,
-                                                                ),
-                                                                patch: None,
-                                                                pre: Prerelease(""),
-                                                            },
-                                                        ],
-                                                    },
+                                                    Left(
+                                                        VersionReq {
+                                                            comparators: [
+                                                                Comparator {
+                                                                    op: Caret,
+                                                                    major: 3,
+                                                                    minor: Some(
+                                                                        8,
+                                                                    ),
+                                                                    patch: None,
+                                                                    pre: Prerelease(""),
+                                                                },
+                                                            ],
+                                                        },
+                                                    ),
                                                 ),
                                             },
                                         ),
