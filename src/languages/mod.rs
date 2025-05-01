@@ -57,7 +57,7 @@ impl Language {
             Self::Fail => FAIL.supports_dependency(),
             Self::Docker => DOCKER.supports_dependency(),
             Self::DockerImage => DOCKER_IMAGE.supports_dependency(),
-            _ => todo!(),
+            _ => todo!("{}", self.as_str()),
         }
     }
 
@@ -69,7 +69,7 @@ impl Language {
             Self::Fail => FAIL.resolve(hook, store).await,
             Self::Docker => DOCKER.resolve(hook, store).await,
             Self::DockerImage => DOCKER_IMAGE.resolve(hook, store).await,
-            _ => todo!(),
+            _ => todo!("{}", self.as_str()),
         }
     }
 
@@ -81,7 +81,7 @@ impl Language {
             Self::Fail => FAIL.install(hook, store).await,
             Self::Docker => DOCKER.install(hook, store).await,
             Self::DockerImage => DOCKER_IMAGE.install(hook, store).await,
-            _ => todo!(),
+            _ => todo!("{}", self.as_str()),
         }
     }
 
@@ -93,7 +93,7 @@ impl Language {
             Self::Fail => FAIL.check_health().await,
             Self::Docker => DOCKER.check_health().await,
             Self::DockerImage => DOCKER_IMAGE.check_health().await,
-            _ => todo!(),
+            _ => todo!("{}", self.as_str()),
         }
     }
 
@@ -116,7 +116,7 @@ impl Language {
             Self::Fail => FAIL.run(hook, filenames, env_vars, store).await,
             Self::Docker => DOCKER.run(hook, filenames, env_vars, store).await,
             Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, env_vars, store).await,
-            _ => todo!(),
+            _ => todo!("{}", self.as_str()),
         }
     }
 }
