@@ -104,7 +104,7 @@ pub(crate) async fn fix_trailing_whitespace(
                     };
                     output.extend_from_slice(trimmed);
                     output.extend_from_slice(eol);
-                };
+                }
 
                 if line.len() + eol.len() != output.len() - output_len {
                     modified = true;

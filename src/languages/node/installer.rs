@@ -217,24 +217,26 @@ impl NodeResult {
         }
     }
 
-    pub fn node(&self) -> Cow<PathBuf> {
-        self.node.as_ref().map(Cow::Borrowed).unwrap_or_else(|| {
-            Cow::Owned(
+    pub fn node(&self) -> Cow<Path> {
+        match &self.node {
+            Some(path) => Cow::Borrowed(path),
+            None => Cow::Owned(
                 bin_dir(self.dir.as_ref().unwrap())
                     .join("node")
                     .with_extension(EXE_EXTENSION),
-            )
-        })
+            ),
+        }
     }
 
-    pub fn npm(&self) -> Cow<PathBuf> {
-        self.npm.as_ref().map(Cow::Borrowed).unwrap_or_else(|| {
-            Cow::Owned(
+    pub fn npm(&self) -> Cow<Path> {
+        match &self.npm {
+            Some(path) => Cow::Borrowed(path),
+            None => Cow::Owned(
                 bin_dir(self.dir.as_ref().unwrap())
                     .join("npm")
                     .with_extension(EXE_EXTENSION),
-            )
-        })
+            ),
+        }
     }
 }
 
@@ -246,7 +248,7 @@ impl NodeResult {
 /// - `x.y`: Install the latest version of node with the same major and minor version.
 /// - `x`: Install the latest version of node with the same major version.
 /// - `^x.y.z`: Install the latest version of node that satisfies the version requirement.
-///    Or any other semver compatible version requirement.
+///   Or any other semver compatible version requirement.
 /// - `codename`: Install the latest version of node with the specified code name.
 pub struct NodeInstaller {
     root: PathBuf,
@@ -378,7 +380,7 @@ impl NodeInstaller {
             .send()
             .await?
             .bytes_stream()
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+            .map_err(std::io::Error::other)
             .into_async_read()
             .compat();
 
@@ -390,7 +392,7 @@ impl NodeInstaller {
 
         let extracted = match archive::strip_component(temp_dir.path()) {
             Ok(top_level) => top_level,
-            Err(archive::Error::NonSingularArchive(_)) => temp_dir.into_path(),
+            Err(archive::Error::NonSingularArchive(_)) => temp_dir.keep(),
             Err(err) => return Err(err.into()),
         };
 

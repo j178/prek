@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{BufRead, Read};
 #[cfg(unix)]
@@ -330,262 +329,328 @@ fn by_extension() -> &'static HashMap<&'static str, Vec<&'static str>> {
     })
 }
 
-fn by_filename() -> &'static HashMap<&'static str, Cow<'static, Vec<&'static str>>> {
-    static FILENAMES: OnceLock<HashMap<&'static str, Cow<'static, Vec<&'static str>>>> =
-        OnceLock::new();
+fn by_filename() -> &'static HashMap<&'static str, &'static [&'static str]> {
+    static FILENAMES: OnceLock<HashMap<&'static str, &'static [&'static str]>> = OnceLock::new();
     FILENAMES.get_or_init(|| {
-        let mut map = HashMap::new();
+        let mut map = HashMap::<_, &'static [&'static str]>::new();
         let extensions = by_extension();
 
-        map.insert(".ansible-lint", Cow::Borrowed(&extensions["yaml"]));
+        map.insert(".ansible-lint", &extensions["yaml"]);
         map.insert(
             ".babelrc",
-            Cow::Owned(
+            Box::leak(
                 extensions["json"]
                     .iter()
                     .chain(&["babelrc"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
-        map.insert(".bash_aliases", Cow::Borrowed(&extensions["bash"]));
-        map.insert(".bash_profile", Cow::Borrowed(&extensions["bash"]));
-        map.insert(".bashrc", Cow::Borrowed(&extensions["bash"]));
-        map.insert(".bazelrc", Cow::Owned(vec!["text", "bazelrc"]));
+        map.insert(".bash_aliases", &extensions["bash"]);
+        map.insert(".bash_profile", &extensions["bash"]);
+        map.insert(".bashrc", &extensions["bash"]);
+        map.insert(
+            ".bazelrc",
+            Box::leak(vec!["text", "bazelrc"].into_boxed_slice()),
+        );
         map.insert(
             ".bowerrc",
-            Cow::Owned(
+            Box::leak(
                 extensions["json"]
                     .iter()
                     .chain(&["bowerrc"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
         map.insert(
             ".browserslistrc",
-            Cow::Owned(vec!["text", "browserslistrc"]),
+            Box::leak(vec!["text", "browserslistrc"].into_boxed_slice()),
         );
-        map.insert(".clang-format", Cow::Borrowed(&extensions["yaml"]));
-        map.insert(".clang-tidy", Cow::Borrowed(&extensions["yaml"]));
+        map.insert(".clang-format", &extensions["yaml"]);
+        map.insert(".clang-tidy", &extensions["yaml"]);
         map.insert(
             ".codespellrc",
-            Cow::Owned(
+            Box::leak(
                 extensions["ini"]
                     .iter()
                     .chain(&["codespellrc"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
         map.insert(
             ".coveragerc",
-            Cow::Owned(
+            Box::leak(
                 extensions["ini"]
                     .iter()
                     .chain(&["coveragerc"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
-        map.insert(".cshrc", Cow::Borrowed(&extensions["csh"]));
+        map.insert(".cshrc", &extensions["csh"]);
         map.insert(
             ".csslintrc",
-            Cow::Owned(
+            Box::leak(
                 extensions["json"]
                     .iter()
                     .chain(&["csslintrc"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
-        map.insert(".dockerignore", Cow::Owned(vec!["text", "dockerignore"]));
-        map.insert(".editorconfig", Cow::Owned(vec!["text", "editorconfig"]));
+        map.insert(
+            ".dockerignore",
+            Box::leak(vec!["text", "dockerignore"].into_boxed_slice()),
+        );
+        map.insert(
+            ".editorconfig",
+            Box::leak(vec!["text", "editorconfig"].into_boxed_slice()),
+        );
         map.insert(
             ".flake8",
-            Cow::Owned(
+            Box::leak(
                 extensions["ini"]
                     .iter()
                     .chain(&["flake8"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
-        map.insert(".gitattributes", Cow::Owned(vec!["text", "gitattributes"]));
+        map.insert(
+            ".gitattributes",
+            Box::leak(vec!["text", "gitattributes"].into_boxed_slice()),
+        );
         map.insert(
             ".gitconfig",
-            Cow::Owned(
+            Box::leak(
                 extensions["ini"]
                     .iter()
                     .chain(&["gitconfig"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
-        map.insert(".gitignore", Cow::Owned(vec!["text", "gitignore"]));
+        map.insert(
+            ".gitignore",
+            Box::leak(vec!["text", "gitignore"].into_boxed_slice()),
+        );
         map.insert(
             ".gitlint",
-            Cow::Owned(
+            Box::leak(
                 extensions["ini"]
                     .iter()
                     .chain(&["gitlint"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
-        map.insert(".gitmodules", Cow::Owned(vec!["text", "gitmodules"]));
+        map.insert(
+            ".gitmodules",
+            Box::leak(vec!["text", "gitmodules"].into_boxed_slice()),
+        );
         map.insert(
             ".hgrc",
-            Cow::Owned(extensions["ini"].iter().chain(&["hgrc"]).copied().collect()),
+            Box::leak(
+                extensions["ini"]
+                    .iter()
+                    .chain(&["hgrc"])
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            ),
         );
         map.insert(
             ".isort.cfg",
-            Cow::Owned(
+            Box::leak(
                 extensions["ini"]
                     .iter()
                     .chain(&["isort"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
         map.insert(
             ".jshintrc",
-            Cow::Owned(
+            Box::leak(
                 extensions["json"]
                     .iter()
                     .chain(&["jshintrc"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
-        map.insert(".mailmap", Cow::Owned(vec!["text", "mailmap"]));
+        map.insert(
+            ".mailmap",
+            Box::leak(vec!["text", "mailmap"].into_boxed_slice()),
+        );
         map.insert(
             ".mention-bot",
-            Cow::Owned(
+            Box::leak(
                 extensions["json"]
                     .iter()
                     .chain(&["mention-bot"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
-        map.insert(".npmignore", Cow::Owned(vec!["text", "npmignore"]));
+        map.insert(
+            ".npmignore",
+            Box::leak(vec!["text", "npmignore"].into_boxed_slice()),
+        );
         map.insert(
             ".pdbrc",
-            Cow::Owned(extensions["py"].iter().chain(&["pdbrc"]).copied().collect()),
+            Box::leak(
+                extensions["py"]
+                    .iter()
+                    .chain(&["pdbrc"])
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            ),
         );
         map.insert(
             ".prettierignore",
-            Cow::Owned(vec!["text", "gitignore", "prettierignore"]),
+            Box::leak(vec!["text", "gitignore", "prettierignore"].into_boxed_slice()),
         );
         map.insert(
             ".pypirc",
-            Cow::Owned(
+            Box::leak(
                 extensions["ini"]
                     .iter()
                     .chain(&["pypirc"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
-        map.insert(".rstcheck.cfg", Cow::Borrowed(&extensions["ini"]));
+        map.insert(".rstcheck.cfg", &extensions["ini"]);
         map.insert(
             ".salt-lint",
-            Cow::Owned(
+            Box::leak(
                 extensions["yaml"]
                     .iter()
                     .chain(&["salt-lint"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
         map.insert(
             ".yamllint",
-            Cow::Owned(
+            Box::leak(
                 extensions["yaml"]
                     .iter()
                     .chain(&["yamllint"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
-        map.insert(".zlogin", Cow::Borrowed(&extensions["zsh"]));
-        map.insert(".zlogout", Cow::Borrowed(&extensions["zsh"]));
-        map.insert(".zprofile", Cow::Borrowed(&extensions["zsh"]));
-        map.insert(".zshrc", Cow::Borrowed(&extensions["zsh"]));
-        map.insert(".zshenv", Cow::Borrowed(&extensions["zsh"]));
-        map.insert("AUTHORS", Cow::Borrowed(&extensions["txt"]));
-        map.insert("BUILD", Cow::Borrowed(&extensions["bzl"]));
+        map.insert(".zlogin", &extensions["zsh"]);
+        map.insert(".zlogout", &extensions["zsh"]);
+        map.insert(".zprofile", &extensions["zsh"]);
+        map.insert(".zshrc", &extensions["zsh"]);
+        map.insert(".zshenv", &extensions["zsh"]);
+        map.insert("AUTHORS", &extensions["txt"]);
+        map.insert("BUILD", &extensions["bzl"]);
         map.insert(
             "Cargo.toml",
-            Cow::Owned(
+            Box::leak(
                 extensions["toml"]
                     .iter()
                     .chain(&["cargo"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
         map.insert(
             "Cargo.lock",
-            Cow::Owned(
+            Box::leak(
                 extensions["toml"]
                     .iter()
                     .chain(&["cargo-lock"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
-        map.insert("CMakeLists.txt", Cow::Borrowed(&extensions["cmake"]));
-        map.insert("CHANGELOG", Cow::Borrowed(&extensions["txt"]));
-        map.insert("config.ru", Cow::Borrowed(&extensions["rb"]));
-        map.insert("Containerfile", Cow::Owned(vec!["text", "dockerfile"]));
-        map.insert("CONTRIBUTING", Cow::Borrowed(&extensions["txt"]));
-        map.insert("copy.bara.sky", Cow::Borrowed(&extensions["bzl"]));
-        map.insert("COPYING", Cow::Borrowed(&extensions["txt"]));
-        map.insert("Dockerfile", Cow::Owned(vec!["text", "dockerfile"]));
-        map.insert("Gemfile", Cow::Borrowed(&extensions["rb"]));
-        map.insert("Gemfile.lock", Cow::Owned(vec!["text"]));
-        map.insert("GNUmakefile", Cow::Borrowed(&extensions["mk"]));
-        map.insert("go.mod", Cow::Owned(vec!["text", "go-mod"]));
-        map.insert("go.sum", Cow::Owned(vec!["text", "go-sum"]));
-        map.insert("Jenkinsfile", Cow::Borrowed(&extensions["jenkins"]));
-        map.insert("LICENSE", Cow::Borrowed(&extensions["txt"]));
-        map.insert("MAINTAINERS", Cow::Borrowed(&extensions["txt"]));
-        map.insert("Makefile", Cow::Borrowed(&extensions["mk"]));
-        map.insert("meson.build", Cow::Borrowed(&extensions["meson"]));
-        map.insert("meson_options.txt", Cow::Borrowed(&extensions["meson"]));
-        map.insert("makefile", Cow::Borrowed(&extensions["mk"]));
-        map.insert("NEWS", Cow::Borrowed(&extensions["txt"]));
-        map.insert("NOTICE", Cow::Borrowed(&extensions["txt"]));
-        map.insert("PATENTS", Cow::Borrowed(&extensions["txt"]));
-        map.insert("Pipfile", Cow::Borrowed(&extensions["toml"]));
-        map.insert("Pipfile.lock", Cow::Borrowed(&extensions["json"]));
+        map.insert("CMakeLists.txt", &extensions["cmake"]);
+        map.insert("CHANGELOG", &extensions["txt"]);
+        map.insert("config.ru", &extensions["rb"]);
+        map.insert(
+            "Containerfile",
+            Box::leak(vec!["text", "dockerfile"].into_boxed_slice()),
+        );
+        map.insert("CONTRIBUTING", &extensions["txt"]);
+        map.insert("copy.bara.sky", &extensions["bzl"]);
+        map.insert("COPYING", &extensions["txt"]);
+        map.insert(
+            "Dockerfile",
+            Box::leak(vec!["text", "dockerfile"].into_boxed_slice()),
+        );
+        map.insert("Gemfile", &extensions["rb"]);
+        map.insert("Gemfile.lock", Box::leak(vec!["text"].into_boxed_slice()));
+        map.insert("GNUmakefile", &extensions["mk"]);
+        map.insert(
+            "go.mod",
+            Box::leak(vec!["text", "go-mod"].into_boxed_slice()),
+        );
+        map.insert(
+            "go.sum",
+            Box::leak(vec!["text", "go-sum"].into_boxed_slice()),
+        );
+        map.insert("Jenkinsfile", &extensions["jenkins"]);
+        map.insert("LICENSE", &extensions["txt"]);
+        map.insert("MAINTAINERS", &extensions["txt"]);
+        map.insert("Makefile", &extensions["mk"]);
+        map.insert("meson.build", &extensions["meson"]);
+        map.insert("meson_options.txt", &extensions["meson"]);
+        map.insert("makefile", &extensions["mk"]);
+        map.insert("NEWS", &extensions["txt"]);
+        map.insert("NOTICE", &extensions["txt"]);
+        map.insert("PATENTS", &extensions["txt"]);
+        map.insert("Pipfile", &extensions["toml"]);
+        map.insert("Pipfile.lock", &extensions["json"]);
         map.insert(
             "PKGBUILD",
-            Cow::Owned(vec!["text", "bash", "pkgbuild", "alpm"]),
+            Box::leak(vec!["text", "bash", "pkgbuild", "alpm"].into_boxed_slice()),
         );
-        map.insert("poetry.lock", Cow::Borrowed(&extensions["toml"]));
-        map.insert("pom.xml", Cow::Borrowed(&extensions["pom"]));
+        map.insert("poetry.lock", &extensions["toml"]);
+        map.insert("pom.xml", &extensions["pom"]);
         map.insert(
             "pylintrc",
-            Cow::Owned(
+            Box::leak(
                 extensions["ini"]
                     .iter()
                     .chain(&["pylintrc"])
                     .copied()
-                    .collect(),
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
             ),
         );
-        map.insert("README", Cow::Borrowed(&extensions["txt"]));
-        map.insert("Rakefile", Cow::Borrowed(&extensions["rb"]));
-        map.insert("rebar.config", Cow::Borrowed(&extensions["erl"]));
-        map.insert("setup.cfg", Cow::Borrowed(&extensions["ini"]));
-        map.insert("sys.config", Cow::Borrowed(&extensions["erl"]));
-        map.insert("sys.config.src", Cow::Borrowed(&extensions["erl"]));
-        map.insert("Vagrantfile", Cow::Borrowed(&extensions["rb"]));
-        map.insert("WORKSPACE", Cow::Borrowed(&extensions["bzl"]));
-        map.insert("wscript", Cow::Borrowed(&extensions["py"]));
+        map.insert("README", &extensions["txt"]);
+        map.insert("Rakefile", &extensions["rb"]);
+        map.insert("rebar.config", &extensions["erl"]);
+        map.insert("setup.cfg", &extensions["ini"]);
+        map.insert("sys.config", &extensions["erl"]);
+        map.insert("sys.config.src", &extensions["erl"]);
+        map.insert("Vagrantfile", &extensions["rb"]);
+        map.insert("WORKSPACE", &extensions["bzl"]);
+        map.insert("wscript", &extensions["py"]);
         map
     })
 }

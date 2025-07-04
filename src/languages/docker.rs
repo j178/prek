@@ -86,7 +86,7 @@ impl Docker {
     async fn get_docker_path(path: &str) -> Result<Cow<'_, str>> {
         if !Self::is_in_docker() {
             return Ok(Cow::Borrowed(path));
-        };
+        }
 
         let Ok(container_id) = Self::current_container_id() else {
             return Ok(Cow::Borrowed(path));

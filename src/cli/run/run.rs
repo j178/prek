@@ -406,7 +406,7 @@ async fn run_hooks(
             .spawn()?
             .wait()
             .await?;
-    };
+    }
 
     if success {
         Ok(ExitStatus::Success)
@@ -542,7 +542,7 @@ async fn run_hook(
                     "{}",
                     textwrap::indent(&String::from_utf8_lossy(stdout), "  ").dimmed()
                 )?;
-            };
+            }
         }
     }
 

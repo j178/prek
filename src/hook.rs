@@ -511,8 +511,8 @@ impl Hook {
         matches!(&*self.repo, Repo::Meta { .. })
     }
 
-    pub fn dependencies(&self) -> Cow<'_, Vec<String>> {
-        // For remote hooks, itself is a implicit dependency of the hook.
+    pub fn dependencies(&self) -> Cow<'_, [String]> {
+        // For remote hooks, itself is an implicit dependency of the hook.
         if self.is_remote() {
             let mut deps = Vec::with_capacity(1 + self.additional_dependencies.len());
             deps.push(self.repo.to_string());
@@ -642,6 +642,6 @@ impl InstallInfo {
         self.language == hook.language
             && hook.language_version.matches(&self.language_version)
             // TODO: should we compare ignore order?
-            && self.dependencies == hook.dependencies().as_slice()
+            && self.dependencies.as_slice() == hook.dependencies().iter().as_slice()
     }
 }

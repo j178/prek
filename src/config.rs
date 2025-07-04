@@ -340,25 +340,24 @@ impl FromStr for LanguageVersion {
                 });
             }
             _ => {}
-        };
+        }
 
         match s.split_once(';') {
             None => {
                 // First try to parse as a language preference
-                match LanguagePreference::from_str(s) {
-                    Ok(pref) => Ok(Self {
+                if let Ok(pref) = LanguagePreference::from_str(s) {
+                    Ok(Self {
                         preference: pref,
                         request: None,
-                    }),
+                    })
+                } else {
                     // If failed, treat it as a version request
-                    Err(_) => {
-                        let request = semver::VersionReq::parse(s)
-                            .map_err(|e| format!("invalid version requirement: {e}"))?;
-                        Ok(Self {
-                            preference: LanguagePreference::default(),
-                            request: Some(request),
-                        })
-                    }
+                    let request = semver::VersionReq::parse(s)
+                        .map_err(|e| format!("invalid version requirement: {e}"))?;
+                    Ok(Self {
+                        preference: LanguagePreference::default(),
+                        request: Some(request),
+                    })
                 }
             }
             Some((pref, request)) => {

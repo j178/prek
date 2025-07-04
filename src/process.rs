@@ -302,7 +302,7 @@ fn skip_args(cmd: &OsStr, cur: &OsStr, next: Option<&&OsStr>) -> usize {
         } else if cur == "--no-ext-diff" {
             return 1;
         }
-    };
+    }
     0
 }
 

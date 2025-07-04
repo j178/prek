@@ -59,15 +59,12 @@ impl LockedFile {
                     "Waiting to acquire lock",
                 );
                 file.file().lock_exclusive().map_err(|err| {
-                    // Not an fs_err method, we need to build our own path context
-                    std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!(
-                            "Could not acquire lock for `{resource}` at `{}`: {}",
-                            file.path().display(),
-                            err
-                        ),
-                    )
+                    // Not a fs_err method, we need to build our own path context
+                    std::io::Error::other(format!(
+                        "Could not acquire lock for `{resource}` at `{}`: {}",
+                        file.path().display(),
+                        err
+                    ))
                 })?;
 
                 trace!(resource, "Acquired lock");
@@ -140,14 +137,11 @@ pub fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::
     )?;
     fs_err::write(&temp_file, &data)?;
     temp_file.persist(&path).map_err(|err| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!(
-                "Failed to persist temporary file to {}: {}",
-                path.as_ref().display(),
-                err.error
-            ),
-        )
+        std::io::Error::other(format!(
+            "Failed to persist temporary file to {}: {}",
+            path.as_ref().display(),
+            err.error
+        ))
     })?;
     Ok(())
 }
@@ -157,14 +151,11 @@ pub fn copy_atomic(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io::Res
     let temp_file = tempfile_in(to.as_ref().parent().expect("Write path must have a parent"))?;
     fs_err::copy(from.as_ref(), &temp_file)?;
     temp_file.persist(&to).map_err(|err| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!(
-                "Failed to persist temporary file to {}: {}",
-                to.as_ref().display(),
-                err.error
-            ),
-        )
+        std::io::Error::other(format!(
+            "Failed to persist temporary file to {}: {}",
+            to.as_ref().display(),
+            err.error
+        ))
     })?;
     Ok(())
 }
@@ -230,19 +221,16 @@ pub fn relative_to(
                 .map(|stripped| (stripped, ancestor))
         })
         .ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Trivial strip failed: {} vs. {}",
-                    path.as_ref().display(),
-                    base.as_ref().display()
-                ),
-            )
+            std::io::Error::other(format!(
+                "Trivial strip failed: {} vs. {}",
+                path.as_ref().display(),
+                base.as_ref().display()
+            ))
         })?;
 
     // go as many levels up as required
     let levels_up = base.as_ref().components().count() - common_prefix.components().count();
-    let up = std::iter::repeat("..").take(levels_up).collect::<PathBuf>();
+    let up = std::iter::repeat_n("..", levels_up).collect::<PathBuf>();
 
     Ok(up.join(stripped))
 }

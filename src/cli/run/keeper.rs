@@ -176,7 +176,7 @@ impl WorkingTreeKeeper {
 
             Self::checkout_working_tree()?;
             Self::git_apply(patch)?;
-        };
+        }
 
         eprintln!(
             "{}",
