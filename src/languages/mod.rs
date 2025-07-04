@@ -12,6 +12,7 @@ mod docker_image;
 mod fail;
 mod node;
 mod python;
+mod script;
 mod system;
 
 static PYTHON: python::Python = python::Python;
@@ -20,6 +21,7 @@ static SYSTEM: system::System = system::System;
 static FAIL: fail::Fail = fail::Fail;
 static DOCKER: docker::Docker = docker::Docker;
 static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
+static SCRIPT: script::Script = script::Script;
 
 trait LanguageImpl {
     /// Whether the language supports installing dependencies.
@@ -57,6 +59,7 @@ impl Language {
             Self::Fail => FAIL.supports_dependency(),
             Self::Docker => DOCKER.supports_dependency(),
             Self::DockerImage => DOCKER_IMAGE.supports_dependency(),
+            Self::Script => SCRIPT.supports_dependency(),
             _ => todo!("{}", self.as_str()),
         }
     }
@@ -69,6 +72,7 @@ impl Language {
             Self::Fail => FAIL.resolve(hook, store).await,
             Self::Docker => DOCKER.resolve(hook, store).await,
             Self::DockerImage => DOCKER_IMAGE.resolve(hook, store).await,
+            Self::Script => SCRIPT.resolve(hook, store).await,
             _ => todo!("{}", self.as_str()),
         }
     }
@@ -81,6 +85,7 @@ impl Language {
             Self::Fail => FAIL.install(hook, store).await,
             Self::Docker => DOCKER.install(hook, store).await,
             Self::DockerImage => DOCKER_IMAGE.install(hook, store).await,
+            Self::Script => SCRIPT.install(hook, store).await,
             _ => todo!("{}", self.as_str()),
         }
     }
@@ -93,6 +98,7 @@ impl Language {
             Self::Fail => FAIL.check_health().await,
             Self::Docker => DOCKER.check_health().await,
             Self::DockerImage => DOCKER_IMAGE.check_health().await,
+            Self::Script => SCRIPT.check_health().await,
             _ => todo!("{}", self.as_str()),
         }
     }
@@ -116,6 +122,7 @@ impl Language {
             Self::Fail => FAIL.run(hook, filenames, env_vars, store).await,
             Self::Docker => DOCKER.run(hook, filenames, env_vars, store).await,
             Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, env_vars, store).await,
+            Self::Script => SCRIPT.run(hook, filenames, env_vars, store).await,
             _ => todo!("{}", self.as_str()),
         }
     }
