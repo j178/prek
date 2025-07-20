@@ -23,25 +23,24 @@ pub(crate) async fn fix_end_of_file(
             // Find the last character that is not a newline char.
             let last_char_pos = content.iter().rposition(|&c| c != b'\n' && c != b'\r');
 
-            let modified = if let Some(pos) = last_char_pos {
+            if let Some(pos) = last_char_pos {
                 // The file has content other than newlines.
                 let new_content = [&content[..=pos], b"\n"].concat();
-                if new_content != content {
+                if new_content == content {
+                    anyhow::Ok((0, Vec::new()))
+                } else {
                     fs_err::tokio::write(filename, &new_content).await?;
                     anyhow::Ok((1, format!("Fixing {filename}\n").into_bytes()))
-                } else {
-                    anyhow::Ok((0, Vec::new()))
                 }
             } else {
                 // The file consists only of newlines. Normalize to a single newline.
-                if content != b"\n" {
+                if content == b"\n" {
+                    anyhow::Ok((0, Vec::new()))
+                } else {
                     fs_err::tokio::write(filename, b"\n").await?;
                     anyhow::Ok((1, format!("Fixing {filename}\n").into_bytes()))
-                } else {
-                    anyhow::Ok((0, Vec::new()))
                 }
-            };
-            modified
+            }
         })
         .buffered(*CONCURRENCY);
 

@@ -33,13 +33,13 @@ fn end_of_file_fixer_hook() -> Result<()> {
     context.init_project();
     context.configure_git_author();
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/pre-commit/pre-commit-hooks
             rev: v5.0.0
             hooks:
               - id: end-of-file-fixer
-    "#});
+    "});
 
     let cwd = context.workdir();
 
