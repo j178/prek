@@ -20,8 +20,8 @@ pub(crate) async fn fix_end_of_file(
                 return Ok((0, Vec::new()));
             }
 
-            // Find the last non-newline character.
-            let last_char_pos = content.iter().rposition(|&c| c != b'\n');
+            // Find the last character that is not a newline char.
+            let last_char_pos = content.iter().rposition(|&c| c != b'\n' && c != b'\r');
 
             let modified = if let Some(pos) = last_char_pos {
                 // The file has content other than newlines.
@@ -33,7 +33,7 @@ pub(crate) async fn fix_end_of_file(
                     anyhow::Ok((0, Vec::new()))
                 }
             } else {
-                // The file consists only of newlines.
+                // The file consists only of newlines. Normalize to a single newline.
                 if content != b"\n" {
                     fs_err::tokio::write(filename, b"\n").await?;
                     anyhow::Ok((1, format!("Fixing {filename}\n").into_bytes()))
