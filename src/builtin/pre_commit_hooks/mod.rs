@@ -7,11 +7,13 @@ use url::Url;
 use crate::hook::Hook;
 
 mod check_added_large_files;
+mod fix_end_of_file;
 mod fix_trailing_whitespace;
 
 pub(crate) enum Implemented {
     TrailingWhitespace,
     CheckAddedLargeFiles,
+    EndOfFileFixer,
 }
 
 impl FromStr for Implemented {
@@ -21,6 +23,7 @@ impl FromStr for Implemented {
         match s {
             "trailing-whitespace" => Ok(Self::TrailingWhitespace),
             "check-added-large-files" => Ok(Self::CheckAddedLargeFiles),
+            "end-of-file-fixer" => Ok(Self::EndOfFileFixer),
             _ => Err(()),
         }
     }
@@ -39,6 +42,9 @@ impl Implemented {
             }
             Self::CheckAddedLargeFiles => {
                 check_added_large_files::check_added_large_files(hook, filenames, env_vars).await
+            }
+            Self::EndOfFileFixer => {
+                fix_end_of_file::fix_end_of_file(hook, filenames, env_vars).await
             }
         }
     }
