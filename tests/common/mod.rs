@@ -116,7 +116,7 @@ impl TestContext {
         let bin = assert_cmd::cargo::cargo_bin("prefligit");
         let mut cmd = Command::new(bin);
         cmd.current_dir(self.workdir());
-        cmd.env(EnvVars::PREFLIGIT_HOME, &*self.home_dir);
+        cmd.env(EnvVars::PREFLIGIT_HOME, &**self.home_dir());
         cmd.env(EnvVars::PREFLIGIT_INTERNAL__SORT_FILENAMES, "1");
         cmd
     }
@@ -151,6 +151,12 @@ impl TestContext {
         command
     }
 
+    pub fn install_hooks(&self) -> Command {
+        let mut command = self.command();
+        command.arg("install-hooks");
+        command
+    }
+
     pub fn uninstall(&self) -> Command {
         let mut command = self.command();
         command.arg("uninstall");
@@ -177,6 +183,11 @@ impl TestContext {
     /// Get the working directory for the test context.
     pub fn workdir(&self) -> &ChildPath {
         &self.temp_dir
+    }
+
+    /// Get the home directory for the test context.
+    pub fn home_dir(&self) -> &ChildPath {
+        &self.home_dir
     }
 
     /// Initialize a sample project for prefligit.

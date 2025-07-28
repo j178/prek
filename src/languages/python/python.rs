@@ -25,7 +25,11 @@ impl LanguageImpl for Python {
     async fn resolve(&self, hook: &Hook, store: &Store) -> Result<ResolvedHook> {
         // Select from installed hooks
         if let Some(info) = store.installed_hooks().find(|info| info.matches(hook)) {
-            debug!("Found installed hook: {}", info.env_path.display());
+            debug!(
+                "Found installed hook for {}: {}",
+                hook,
+                info.env_path.display()
+            );
             return Ok(ResolvedHook::Installed {
                 hook: hook.clone(),
                 info,
