@@ -1,10 +1,8 @@
-// FILE: ./tests/builtin_hooks.rs
 use anyhow::Result;
-use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use crate::common::TestContext;
+use crate::common::{TestContext, cmd_snapshot};
 
 mod common;
 
@@ -43,7 +41,7 @@ fn end_of_file_fixer_hook() -> Result<()> {
 
     let cwd = context.workdir();
 
-    // --- Create test files ---
+    // Create test files
     cwd.child("correct_lf.txt").write_str("Hello World\n")?;
     cwd.child("correct_crlf.txt").write_str("Hello World\r\n")?;
     cwd.child("no_newline.txt")
@@ -59,22 +57,23 @@ fn end_of_file_fixer_hook() -> Result<()> {
     context.git_add(".");
 
     // First run: hooks should fail and fix the files
-    let first_run_output = context.run().assert().failure().get_output().clone();
-    let normalized_first_run = normalize_output(&first_run_output);
-
-    // Snapshot the normalized, deterministic output
-    assert_snapshot!(normalized_first_run, @r###"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
     fix end of files.........................................................Failed
     - hook id: end-of-file-fixer
     - exit code: 1
     - files were modified by this hook
       Fixing correct_crlf.txt
       Fixing multiple_crlf.txt
-      Fixing multiple_lf.txt
-      Fixing no_newline.txt
       Fixing only_newlines.txt
       Fixing only_win_newlines.txt
-    "###);
+      Fixing no_newline.txt
+      Fixing multiple_lf.txt
+
+    ----- stderr -----
+    "#);
 
     // Assert that the files have been corrected
     assert_snapshot!(context.read("correct_lf.txt"), @"Hello World\n");
@@ -89,10 +88,14 @@ fn end_of_file_fixer_hook() -> Result<()> {
     context.git_add(".");
 
     // Second run: hooks should now pass. The output will be stable.
-    let second_run_output = context.run().assert().success().get_output().clone();
-    let normalized_second_run = normalize_output(&second_run_output);
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    fix end of files.........................................................Passed
 
-    assert_snapshot!(normalized_second_run, @"fix end of files.........................................................Passed");
+    ----- stderr -----
+    "#);
 
     Ok(())
 }

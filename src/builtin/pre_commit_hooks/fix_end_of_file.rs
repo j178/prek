@@ -13,6 +13,7 @@ pub(crate) async fn fix_end_of_file(
 ) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
         .map(async |filename| {
+            // TODO: avoid reading the whole file into memory
             let content = fs_err::tokio::read(filename).await?;
 
             // If the file is empty, do nothing.
@@ -23,6 +24,7 @@ pub(crate) async fn fix_end_of_file(
             // Find the last character that is not a newline char.
             let last_char_pos = content.iter().rposition(|&c| c != b'\n' && c != b'\r');
 
+            // FIXME: /r/n should be kept as is
             if let Some(pos) = last_char_pos {
                 // The file has content other than newlines.
                 let new_content = [&content[..=pos], b"\n"].concat();
