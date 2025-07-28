@@ -529,13 +529,13 @@ async fn run_hook(
         let stdout = output.trim_ascii();
         if !stdout.is_empty() {
             if let Some(file) = hook.log_file.as_deref() {
-                fs_err::tokio::OpenOptions::new()
+                let mut file = fs_err::tokio::OpenOptions::new()
                     .create(true)
                     .append(true)
                     .open(file)
-                    .await?
-                    .write_all(stdout)
                     .await?;
+                file.write_all(stdout).await?;
+                file.flush().await?;
             } else {
                 writeln!(
                     printer.stdout(),

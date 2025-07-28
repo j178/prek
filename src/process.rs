@@ -299,7 +299,11 @@ fn skip_args(cmd: &OsStr, cur: &OsStr, next: Option<&&OsStr>) -> usize {
                     return 2;
                 }
             }
-        } else if cur == "--no-ext-diff" {
+        } else if cur == "--no-ext-diff"
+            || cur == "--no-textconv"
+            || cur == "--ignore-submodules"
+            || cur == "--no-color"
+        {
             return 1;
         }
     }
