@@ -1416,14 +1416,14 @@ mod tests {
 
     #[test]
     fn test_read_config() -> Result<()> {
-        let config = read_config(Path::new("tests/files/uv-pre-commit-config.yaml"))?;
+        let config = read_config(Path::new("tests/fixtures/uv-pre-commit-config.yaml"))?;
         insta::assert_debug_snapshot!(config);
         Ok(())
     }
 
     #[test]
     fn test_read_manifest() -> Result<()> {
-        let manifest = read_manifest(Path::new("tests/files/uv-pre-commit-hooks.yaml"))?;
+        let manifest = read_manifest(Path::new("tests/fixtures/uv-pre-commit-hooks.yaml"))?;
         insta::assert_debug_snapshot!(manifest);
         Ok(())
     }
