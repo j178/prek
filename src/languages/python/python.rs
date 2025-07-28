@@ -26,7 +26,7 @@ impl LanguageImpl for Python {
         // Select from installed hooks
         if let Some(info) = store.installed_hooks().find(|info| info.matches(hook)) {
             debug!(
-                "Found installed hook for {}: {}",
+                "Found installed environment for {}: {}",
                 hook,
                 info.env_path.display()
             );
