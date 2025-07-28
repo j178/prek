@@ -54,7 +54,7 @@ impl Language {
     pub fn supports_dependency(self) -> bool {
         match self {
             Self::Python => PYTHON.supports_dependency(),
-            Self::Node => NODE.supports_dependency(),
+            // Self::Node => NODE.supports_dependency(),
             Self::System => SYSTEM.supports_dependency(),
             Self::Fail => FAIL.supports_dependency(),
             Self::Docker => DOCKER.supports_dependency(),
@@ -67,7 +67,7 @@ impl Language {
     pub async fn resolve(&self, hook: &Hook, store: &Store) -> Result<ResolvedHook> {
         match self {
             Self::Python => PYTHON.resolve(hook, store).await,
-            Self::Node => NODE.resolve(hook, store).await,
+            // Self::Node => NODE.resolve(hook, store).await,
             Self::System => SYSTEM.resolve(hook, store).await,
             Self::Fail => FAIL.resolve(hook, store).await,
             Self::Docker => DOCKER.resolve(hook, store).await,
@@ -80,7 +80,7 @@ impl Language {
     pub async fn install(&self, hook: &ResolvedHook, store: &Store) -> Result<()> {
         match self {
             Self::Python => PYTHON.install(hook, store).await,
-            Self::Node => NODE.install(hook, store).await,
+            // Self::Node => NODE.install(hook, store).await,
             Self::System => SYSTEM.install(hook, store).await,
             Self::Fail => FAIL.install(hook, store).await,
             Self::Docker => DOCKER.install(hook, store).await,
@@ -93,7 +93,7 @@ impl Language {
     pub async fn check_health(&self) -> Result<()> {
         match self {
             Self::Python => PYTHON.check_health().await,
-            Self::Node => NODE.check_health().await,
+            // Self::Node => NODE.check_health().await,
             Self::System => SYSTEM.check_health().await,
             Self::Fail => FAIL.check_health().await,
             Self::Docker => DOCKER.check_health().await,
@@ -117,7 +117,7 @@ impl Language {
 
         match self {
             Self::Python => PYTHON.run(hook, filenames, env_vars, store).await,
-            Self::Node => NODE.run(hook, filenames, env_vars, store).await,
+            // Self::Node => NODE.run(hook, filenames, env_vars, store).await,
             Self::System => SYSTEM.run(hook, filenames, env_vars, store).await,
             Self::Fail => FAIL.run(hook, filenames, env_vars, store).await,
             Self::Docker => DOCKER.run(hook, filenames, env_vars, store).await,
