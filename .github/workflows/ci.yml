@@ -121,6 +121,32 @@ jobs:
             --workspace \
             --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow
 
+  cargo-test-python-setup:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    name: "cargo test | python setup"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rui314/setup-mold@v1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: "Cargo test"
+        run: |
+          cargo nextest show-config test-groups
+          cargo nextest run \
+            --workspace \
+            --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow
+
   cargo-test-macos:
     timeout-minutes: 10
     runs-on: macos-latest
