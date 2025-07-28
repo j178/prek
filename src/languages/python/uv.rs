@@ -16,7 +16,7 @@ use crate::store::{Store, ToolBucket};
 use constants::env_vars::EnvVars;
 
 // The version of `uv` to install. Should update periodically.
-const UV_VERSION: &str = "0.6.0";
+const UV_VERSION: &str = "0.8.3";
 
 #[derive(Debug)]
 enum PyPiMirror {

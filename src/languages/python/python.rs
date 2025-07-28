@@ -35,7 +35,7 @@ impl LanguageImpl for Python {
                 info,
             });
         }
-        debug!("No matching installed hook found for {}", hook);
+        debug!("No matching installed environment found for {}", hook);
 
         // Select toolchain from system or managed
         let uv = Uv::install(store).await?;
