@@ -5,14 +5,13 @@
 ### Enhancements
 
 - Support reading `.pre-commit-config.yml` as well ([#213](https://github.com/j178/prefligit/pull/213))
-- Implement `install-hooks` ([#258](https://github.com/j178/prefligit/pull/258))
+- Implement `prefligit install-hooks` command ([#258](https://github.com/j178/prefligit/pull/258))
+- Implement `pre-commit-hooks:end-of-file-fixer` hook ([#255](https://github.com/j178/prefligit/pull/255))
+- Implement `pre-commit-hooks:check_added_large_files` hook ([#219](https://github.com/j178/prefligit/pull/219))
+- Implement `script` language hooks ([#252](https://github.com/j178/prefligit/pull/252))
 - Implement node.js installer ([#152](https://github.com/j178/prefligit/pull/152))
-- Implement pre-commit-hooks:end-of-file-fixer ([#255](https://github.com/j178/prefligit/pull/255))
-- Improve builtin hook tests ([#262](https://github.com/j178/prefligit/pull/262))
 - Use `-v` to show only verbose message, `-vv` show debug log, `-vvv` show trace log ([#211](https://github.com/j178/prefligit/pull/211))
 - Write `.prefligit-repo.json` inside cloned repo ([#225](https://github.com/j178/prefligit/pull/225))
-- Add script hooks support to prefligit ([#252](https://github.com/j178/prefligit/pull/252))
-- Add check_added_large_files hook ([#219](https://github.com/j178/prefligit/pull/219))
 - Add language name to 'not yet implemented' messages ([#251](https://github.com/j178/prefligit/pull/251))
 
 ### Bug fixes
@@ -26,8 +25,6 @@
 - Bump to Rust 1.88 and `cargo update` ([#254](https://github.com/j178/prefligit/pull/254))
 - Upgrade to Rust 2024 edition ([#196](https://github.com/j178/prefligit/pull/196))
 - Bump uv version ([#260](https://github.com/j178/prefligit/pull/260))
-- Change renovate schedule to monthly ([#215](https://github.com/j178/prefligit/pull/215))
-- Move `pre-commit-hooks` to a module ([#220](https://github.com/j178/prefligit/pull/220))
 - Refactor language version resolution and hook install dir ([#221](https://github.com/j178/prefligit/pull/221))
 - Simplify archive extraction implementation ([#193](https://github.com/j178/prefligit/pull/193))
 - Use `astral-sh/rs-async-zip` ([#259](https://github.com/j178/prefligit/pull/259))
