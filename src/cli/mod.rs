@@ -19,7 +19,7 @@ mod validate;
 
 pub(crate) use clean::clean;
 pub(crate) use hook_impl::hook_impl;
-pub(crate) use install::{init_template_dir, install, uninstall};
+pub(crate) use install::{init_template_dir, install, install_hooks, uninstall};
 pub(crate) use run::run;
 pub(crate) use sample_config::sample_config;
 pub(crate) use self_update::self_update;
@@ -158,14 +158,16 @@ pub(crate) struct GlobalArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Install the git prefligit hook.
+    /// Install the prefligit git hook.
     #[command(name = "install")]
     Install(InstallArgs),
     /// Create hook environments for all hooks used in the config file.
+    ///
+    /// This command does not install the git hook. To install the git hook along with the hook environments in one command, use `prefligit install --install-hooks`.
     InstallHooks,
     /// Run hooks.
     Run(Box<RunArgs>),
-    /// Uninstall the prefligit script.
+    /// Uninstall the prefligit git hook.
     Uninstall(UninstallArgs),
     /// Validate `.pre-commit-config.yaml` files.
     ValidateConfig(ValidateConfigArgs),

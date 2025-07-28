@@ -20,7 +20,7 @@ use crate::store::Store;
 pub(crate) async fn install(
     config: Option<PathBuf>,
     hook_types: Vec<HookType>,
-    install_hooks: bool,
+    install_hook_environments: bool,
     overwrite: bool,
     allow_missing_config: bool,
     printer: Printer,
@@ -37,21 +37,19 @@ pub(crate) async fn install(
         return Ok(ExitStatus::Failure);
     }
 
-    let hook_types = get_hook_types(config.clone(), hook_types);
+    let project = Project::from_config_file(config.clone()).ok();
+    let hook_types = get_hook_types(project.as_ref(), hook_types);
 
     let hooks_path = if let Some(dir) = git_dir {
         dir.join("hooks")
     } else {
         git::get_git_common_dir().await?.join("hooks")
     };
-
     fs_err::create_dir_all(&hooks_path)?;
 
-    let project = Project::from_config_file(config);
-    let config_file = project.as_ref().ok().map(Project::config_file);
     for hook_type in hook_types {
         install_hook_script(
-            config_file,
+            project.as_ref(),
             hook_type,
             &hooks_path,
             overwrite,
@@ -60,25 +58,29 @@ pub(crate) async fn install(
         )?;
     }
 
-    if install_hooks {
-        let mut project = project?;
-        let store = Store::from_settings()?.init()?;
-        let _lock = store.lock_async().await?;
-
-        let reporter = HookInitReporter::from(printer);
-        let hooks = project.init_hooks(&store, Some(&reporter)).await?;
-        let reporter = HookInstallReporter::from(printer);
-        run::install_hooks(&hooks, &store, &reporter).await?;
+    if install_hook_environments {
+        install_hooks(config, printer).await?;
     }
 
     Ok(ExitStatus::Success)
 }
 
-fn get_hook_types(config_file: Option<PathBuf>, hook_types: Vec<HookType>) -> Vec<HookType> {
-    let project = Project::from_config_file(config_file);
+pub(crate) async fn install_hooks(config: Option<PathBuf>, printer: Printer) -> Result<ExitStatus> {
+    let mut project = Project::from_config_file(config)?;
+    let store = Store::from_settings()?.init()?;
+    let _lock = store.lock_async().await?;
 
+    let reporter = HookInitReporter::from(printer);
+    let hooks = project.init_hooks(&store, Some(&reporter)).await?;
+    let reporter = HookInstallReporter::from(printer);
+    run::install_hooks(&hooks, &store, &reporter).await?;
+
+    Ok(ExitStatus::Success)
+}
+
+fn get_hook_types(project: Option<&Project>, hook_types: Vec<HookType>) -> Vec<HookType> {
     let mut hook_types = if hook_types.is_empty() {
-        if let Ok(ref project) = project {
+        if let Some(project) = project {
             project
                 .config()
                 .default_install_hook_types
@@ -98,7 +100,7 @@ fn get_hook_types(config_file: Option<PathBuf>, hook_types: Vec<HookType>) -> Ve
 }
 
 fn install_hook_script(
-    config_file: Option<&Path>,
+    project: Option<&Project>,
     hook_type: HookType,
     hooks_path: &Path,
     overwrite: bool,
@@ -132,8 +134,11 @@ fn install_hook_script(
         "hook-impl".to_string(),
         format!("--hook-type={}", hook_type.as_str()),
     ];
-    if let Some(config_file) = config_file {
-        args.push(format!(r#"--config="{}""#, config_file.user_display()));
+    if let Some(project) = project {
+        args.push(format!(
+            r#"--config="{}""#,
+            project.config_file().user_display()
+        ));
     }
     if skip_on_missing_config {
         args.push("--skip-on-missing-config".to_string());
@@ -206,7 +211,8 @@ pub(crate) async fn uninstall(
     hook_types: Vec<HookType>,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    for hook_type in get_hook_types(config, hook_types) {
+    let project = Project::from_config_file(config).ok();
+    for hook_type in get_hook_types(project.as_ref(), hook_types) {
         let hooks_path = git::get_git_common_dir().await?.join("hooks");
         let hook_path = hooks_path.join(hook_type.as_str());
         let legacy_path = hooks_path.join(format!("{}.legacy", hook_type.as_str()));
