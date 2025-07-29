@@ -325,23 +325,23 @@ fn config_outside_repo() -> Result<()> {
     context
         .work_dir()
         .child("c.yaml")
-        .write_str(indoc::indoc! {r"
+        .write_str(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
               - id: trailing-whitespace
                 name: trailing-whitespace
                 language: system
-                entry: python3 -V
-    "})?;
+                entry: python3 -c 'print("Hello world")'
+    "#})?;
 
-    cmd_snapshot!(context.filters(), context.run().current_dir(&root).arg("-c").arg("../c.yaml").arg("invalid-hook-id"), @r#"
-    success: false
-    exit_code: 1
+    cmd_snapshot!(context.filters(), context.run().current_dir(&root).arg("-c").arg("../c.yaml"), @r#"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    trailing-whitespace..................................(no files to check)Skipped
 
     ----- stderr -----
-    No hook found for id `invalid-hook-id`
     "#);
 
     Ok(())
