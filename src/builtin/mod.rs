@@ -1,17 +1,26 @@
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::LazyLock;
 
 use crate::builtin::pre_commit_hooks::{Implemented, is_pre_commit_hooks};
 use crate::hook::{Hook, Repo};
 
+use constants::env_vars::EnvVars;
+
 mod meta_hooks;
 mod pre_commit_hooks;
+
+static NO_FAST_PATH: LazyLock<bool> =
+    LazyLock::new(|| EnvVars::is_set(EnvVars::PREFLIGIT_NO_FAST_PATH));
 
 /// Returns true if the hook has a builtin Rust implementation.
 pub fn check_fast_path(hook: &Hook) -> bool {
     match hook.repo() {
         Repo::Meta { .. } => true,
         Repo::Remote { url, .. } if is_pre_commit_hooks(url) => {
+            if *NO_FAST_PATH {
+                return false;
+            }
             Implemented::from_str(hook.id.as_str()).is_ok()
         }
         _ => false,

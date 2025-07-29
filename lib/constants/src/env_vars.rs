@@ -13,6 +13,7 @@ impl EnvVars {
     pub const PREFLIGIT_HOME: &'static str = "PREFLIGIT_HOME";
     pub const PREFLIGIT_ALLOW_NO_CONFIG: &'static str = "PREFLIGIT_ALLOW_NO_CONFIG";
     pub const PREFLIGIT_NO_CONCURRENCY: &'static str = "PREFLIGIT_NO_CONCURRENCY";
+    pub const PREFLIGIT_NO_FAST_PATH: &'static str = "PREFLIGIT_NO_FAST_PATH";
 
     // Prefligit internal environment variables
     pub const PREFLIGIT_INTERNAL__TEST_DIR: &'static str = "PREFLIGIT_INTERNAL__TEST_DIR";
