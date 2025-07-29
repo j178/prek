@@ -8,6 +8,7 @@ use anstream::ColorChoice;
 use anyhow::Result;
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
+use indoc::indoc;
 use itertools::Itertools;
 use owo_colors::{OwoColorize, Style};
 use rand::SeedableRng;
@@ -70,7 +71,10 @@ pub(crate) async fn run(
     if should_stash && config_not_staged(&config_file).await? {
         writeln!(
             printer.stderr(),
-            "Your pre-commit configuration is unstaged.\n`git add {}` to fix this.",
+            indoc!(
+                "Your prefligit configuration file is not staged.
+                Run `git add {}` to fix this."
+            ),
             &config_file.user_display()
         )?;
         return Ok(ExitStatus::Failure);
@@ -199,7 +203,7 @@ async fn config_not_staged(config: &Path) -> Result<bool> {
         .status()
         .await?;
 
-    Ok(!status.success())
+    Ok(status.code().is_some_and(|code| code == 1))
 }
 
 fn fill_envs(

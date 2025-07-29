@@ -36,7 +36,7 @@ fn validate_config() -> anyhow::Result<()> {
     "#);
 
     context
-        .workdir()
+        .work_dir()
         .child("config-1.yaml")
         .write_str(indoc::indoc! {r"
             repos:
@@ -71,7 +71,7 @@ fn validate_manifest() -> anyhow::Result<()> {
     "#);
 
     context
-        .workdir()
+        .work_dir()
         .child(".pre-commit-hooks.yaml")
         .write_str(indoc::indoc! {r"
             -   id: check-added-large-files
@@ -92,7 +92,7 @@ fn validate_manifest() -> anyhow::Result<()> {
     "#);
 
     context
-        .workdir()
+        .work_dir()
         .child("hooks-1.yaml")
         .write_str(indoc::indoc! {r"
             -   id: check-added-large-files

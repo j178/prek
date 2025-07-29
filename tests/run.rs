@@ -14,7 +14,7 @@ fn run_basic() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
-    let cwd = context.workdir();
+    let cwd = context.work_dir();
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -85,7 +85,7 @@ fn same_repo() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
-    let cwd = context.workdir();
+    let cwd = context.work_dir();
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -188,7 +188,7 @@ fn meta_hooks() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
-    let cwd = context.workdir();
+    let cwd = context.work_dir();
     cwd.child("file.txt").write_str("Hello, world!\n")?;
     cwd.child("valid.json").write_str("{}")?;
     cwd.child("invalid.json").write_str("{}")?;
@@ -278,7 +278,10 @@ fn config_not_staged() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
-    context.workdir().child(".pre-commit-config.yaml").touch()?;
+    context
+        .work_dir()
+        .child(".pre-commit-config.yaml")
+        .touch()?;
     context.git_add(".");
 
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -297,8 +300,48 @@ fn config_not_staged() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Your pre-commit configuration is unstaged.
-    `git add .pre-commit-config.yaml` to fix this.
+    Your prefligit configuration file is not staged.
+    Run `git add .pre-commit-config.yaml` to fix this.
+    "#);
+
+    Ok(())
+}
+
+/// `.pre-commit-config.yaml` outside the repository should not be checked.
+#[test]
+fn config_outside_repo() -> Result<()> {
+    let context = TestContext::new();
+
+    // Initialize a git repository in ./work.
+    let root = context.work_dir().child("work");
+    root.create_dir_all()?;
+    Command::new("git")
+        .arg("init")
+        .current_dir(&root)
+        .assert()
+        .success();
+
+    // Create a configuration file in . (outside the repository).
+    context
+        .work_dir()
+        .child("c.yaml")
+        .write_str(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -V
+    "})?;
+
+    cmd_snapshot!(context.filters(), context.run().current_dir(&root).arg("-c").arg("../c.yaml").arg("invalid-hook-id"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    No hook found for id `invalid-hook-id`
     "#);
 
     Ok(())
@@ -398,7 +441,7 @@ fn files_and_exclude() -> Result<()> {
 
     context.init_project();
 
-    let cwd = context.workdir();
+    let cwd = context.work_dir();
     cwd.child("file.txt").write_str("Hello, world!  \n")?;
     cwd.child("valid.json").write_str("{}\n  ")?;
     cwd.child("invalid.json").write_str("{}")?;
@@ -495,7 +538,7 @@ fn file_types() -> Result<()> {
 
     context.init_project();
 
-    let cwd = context.workdir();
+    let cwd = context.work_dir();
     cwd.child("file.txt").write_str("Hello, world!  ")?;
     cwd.child("json.json").write_str("{}\n  ")?;
     cwd.child("main.py").write_str(r#"print "abc"  "#)?;
@@ -616,7 +659,7 @@ fn subdirectory() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
-    let cwd = context.workdir();
+    let cwd = context.work_dir();
     let child = cwd.child("foo/bar/baz");
     child.create_dir_all()?;
 
@@ -730,14 +773,14 @@ fn staged_files_only() -> Result<()> {
    "#});
 
     context
-        .workdir()
+        .work_dir()
         .child("file.txt")
         .write_str("Hello, world!")?;
     context.git_add(".");
 
     // Non-staged files should be stashed and restored.
     context
-        .workdir()
+        .work_dir()
         .child("file.txt")
         .write_str("Hello world again!")?;
 
@@ -787,14 +830,14 @@ fn restore_on_interrupt() -> Result<()> {
    "#});
 
     context
-        .workdir()
+        .work_dir()
         .child("file.txt")
         .write_str("Hello, world!")?;
     context.git_add(".");
 
     // Non-staged files should be stashed and restored.
     context
-        .workdir()
+        .work_dir()
         .child("file.txt")
         .write_str("Hello world again!")?;
 
@@ -829,7 +872,7 @@ fn merge_conflicts() -> Result<()> {
     context.init_project();
 
     // Create a merge conflict.
-    let cwd = context.workdir();
+    let cwd = context.work_dir();
     cwd.child("file.txt").write_str("Hello, world!")?;
     context.git_add(".");
     context.configure_git_author();
@@ -940,7 +983,7 @@ fn alternate_config_file() -> Result<()> {
     context.init_project();
 
     context
-        .workdir()
+        .work_dir()
         .child(".pre-commit-config.yml")
         .write_str(indoc::indoc! {r#"
         repos:

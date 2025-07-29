@@ -115,7 +115,7 @@ impl TestContext {
     pub fn command(&self) -> Command {
         let bin = assert_cmd::cargo::cargo_bin("prefligit");
         let mut cmd = Command::new(bin);
-        cmd.current_dir(self.workdir());
+        cmd.current_dir(self.work_dir());
         cmd.env(EnvVars::PREFLIGIT_HOME, &**self.home_dir());
         cmd.env(EnvVars::PREFLIGIT_INTERNAL__SORT_FILENAMES, "1");
         cmd
@@ -181,7 +181,7 @@ impl TestContext {
     }
 
     /// Get the working directory for the test context.
-    pub fn workdir(&self) -> &ChildPath {
+    pub fn work_dir(&self) -> &ChildPath {
         &self.temp_dir
     }
 

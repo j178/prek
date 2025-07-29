@@ -10,7 +10,7 @@ fn fail() -> Result<()> {
 
     context.init_project();
 
-    let cwd = context.workdir();
+    let cwd = context.work_dir();
     cwd.child("changelog").create_dir_all()?;
     cwd.child("changelog/changelog.md").touch()?;
 

@@ -9,7 +9,7 @@ fn docker_image() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
-    let cwd = context.workdir();
+    let cwd = context.work_dir();
     // Test suit from https://github.com/super-linter/super-linter/tree/main/test/linters/gitleaks/bad
     cwd.child("gitleaks_bad_01.txt")
         .write_str(indoc::indoc! {r"

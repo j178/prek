@@ -9,7 +9,7 @@ mod common;
 fn clean() -> anyhow::Result<()> {
     let context = TestContext::new();
 
-    let home = context.workdir().child("home");
+    let home = context.work_dir().child("home");
     home.create_dir_all()?;
 
     cmd_snapshot!(context.filters(), context.clean().env("PREFLIGIT_HOME", &*home), @r#"

@@ -39,7 +39,7 @@ fn end_of_file_fixer_hook() -> Result<()> {
               - id: end-of-file-fixer
     "});
 
-    let cwd = context.workdir();
+    let cwd = context.work_dir();
 
     // Create test files
     cwd.child("correct_lf.txt").write_str("Hello World\n")?;

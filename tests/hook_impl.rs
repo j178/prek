@@ -29,7 +29,7 @@ fn hook_impl() {
     let mut commit = Command::new("git");
     commit
         .arg("commit")
-        .current_dir(context.workdir())
+        .current_dir(context.work_dir())
         .arg("-m")
         .arg("Initial commit");
 

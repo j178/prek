@@ -44,7 +44,7 @@ fn install() -> anyhow::Result<()> {
 
     // Install `pre-commit` and `post-commit` hook.
     context
-        .workdir()
+        .work_dir()
         .child(".git/hooks/pre-commit")
         .write_str("#!/bin/sh\necho 'pre-commit'\n")?;
 
@@ -237,7 +237,7 @@ fn install_hooks_only() -> anyhow::Result<()> {
 
     // Ensure the git hook is not installed.
     context
-        .workdir()
+        .work_dir()
         .child(".git/hooks/pre-commit")
         .assert(predicate::path::missing());
 
@@ -271,13 +271,13 @@ fn uninstall() -> anyhow::Result<()> {
     ----- stderr -----
     "#);
     context
-        .workdir()
+        .work_dir()
         .child(".git/hooks/pre-commit")
         .assert(predicate::path::missing());
 
     // Hook is not managed by `pre-commit`.
     context
-        .workdir()
+        .work_dir()
         .child(".git/hooks/pre-commit")
         .write_str("#!/bin/sh\necho 'pre-commit'\n")?;
     cmd_snapshot!(context.filters(), context.uninstall(), @r#"
