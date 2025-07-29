@@ -1,10 +1,22 @@
 # Changelog
 
+## 0.0.12
+
+### Bug fixes
+
+- Ignore `config not staged` error for config outside the repo ([#270](https://github.com/j178/prefligit/pull/270))
+
+### Other changes
+
+- Add test fixture files ([#266](https://github.com/j178/prefligit/pull/266))
+- Use `sync_all` over `flush` ([#269](https://github.com/j178/prefligit/pull/269))
+
 ## 0.0.11
 
 ### Enhancements
 
 - Support reading `.pre-commit-config.yml` as well ([#213](https://github.com/j178/prefligit/pull/213))
+- Refactor language version resolution and hook install dir ([#221](https://github.com/j178/prefligit/pull/221))
 - Implement `prefligit install-hooks` command ([#258](https://github.com/j178/prefligit/pull/258))
 - Implement `pre-commit-hooks:end-of-file-fixer` hook ([#255](https://github.com/j178/prefligit/pull/255))
 - Implement `pre-commit-hooks:check_added_large_files` hook ([#219](https://github.com/j178/prefligit/pull/219))
@@ -25,7 +37,6 @@
 - Bump to Rust 1.88 and `cargo update` ([#254](https://github.com/j178/prefligit/pull/254))
 - Upgrade to Rust 2024 edition ([#196](https://github.com/j178/prefligit/pull/196))
 - Bump uv version ([#260](https://github.com/j178/prefligit/pull/260))
-- Refactor language version resolution and hook install dir ([#221](https://github.com/j178/prefligit/pull/221))
 - Simplify archive extraction implementation ([#193](https://github.com/j178/prefligit/pull/193))
 - Use `astral-sh/rs-async-zip` ([#259](https://github.com/j178/prefligit/pull/259))
 - Use `ubuntu-latest` for release action ([#216](https://github.com/j178/prefligit/pull/216))

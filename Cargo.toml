@@ -11,7 +11,7 @@ tracing = "0.1.40"
 
 [package]
 name = "prefligit"
-version = "0.0.11"
+version = "0.0.12"
 authors = ["j178 <hi@j178.dev>"]
 description = "pre-commit implemented in Rust"
 repository = "https://github.com/j178/prefligit"
