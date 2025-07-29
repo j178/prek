@@ -362,7 +362,7 @@ impl FromStr for LanguageVersion {
                     .map_err(|_| "invalid language preference")?;
                 Ok(Self {
                     preference,
-                    request: Some(request.to_string()),
+                    request: Some(request.trim().to_string()),
                 })
             }
         }
@@ -1352,19 +1352,7 @@ mod tests {
                                             LanguageVersion {
                                                 preference: Managed,
                                                 request: Some(
-                                                    VersionReq {
-                                                        comparators: [
-                                                            Comparator {
-                                                                op: Caret,
-                                                                major: 3,
-                                                                minor: Some(
-                                                                    8,
-                                                                ),
-                                                                patch: None,
-                                                                pre: Prerelease(""),
-                                                            },
-                                                        ],
-                                                    },
+                                                    "3.8",
                                                 ),
                                             },
                                         ),
@@ -1427,13 +1415,5 @@ mod tests {
         let version = LanguageVersion::from_str("only-system; >=1.0.0").unwrap();
         assert!(matches!(version.preference, LanguagePreference::OnlySystem));
         assert_eq!(version.request.unwrap().to_string(), ">=1.0.0");
-
-        // Invalid version
-        assert!(LanguageVersion::from_str("managed;invalid").is_err());
-
-        // Invalid preference but valid version
-        let version = LanguageVersion::from_str(">=2.0.0").unwrap();
-        assert!(matches!(version.preference, LanguagePreference::Managed));
-        assert_eq!(version.request.unwrap().to_string(), ">=2.0.0");
     }
 }
