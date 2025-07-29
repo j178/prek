@@ -307,8 +307,8 @@ pub async fn install_hooks(
             let mut resolved = Vec::with_capacity(hooks.len());
             // Process hooks sequentially within each language group
             for hook in hooks {
-                let resolved_hook = hook.language.resolve(hook, store).await?;
                 let progress = reporter.on_install_start(hook);
+                let resolved_hook = hook.language.resolve(hook, store).await?;
 
                 install_hook(&resolved_hook, store).await?;
                 resolved.push(resolved_hook);
@@ -535,7 +535,7 @@ async fn run_hook(
                     .open(file)
                     .await?;
                 file.write_all(stdout).await?;
-                file.flush().await?;
+                file.sync_all().await?;
             } else {
                 writeln!(
                     printer.stdout(),
