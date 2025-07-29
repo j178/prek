@@ -13,6 +13,7 @@ use crate::hook::Hook;
 use crate::process::Cmd;
 use crate::store::{Store, ToolBucket};
 
+use crate::languages::version::LanguageRequest;
 use constants::env_vars::EnvVars;
 
 // The version of `uv` to install. Should update periodically.
@@ -163,7 +164,7 @@ impl Uv {
             LanguagePreference::OnlyManaged => "only-managed",
         };
 
-        let mut cmd = Cmd::new(&self.path, "uv resolve");
+        let mut cmd = Cmd::new(&self.path, "uv find python");
 
         cmd.arg("python")
             .arg("find")
@@ -174,8 +175,14 @@ impl Uv {
                 EnvVars::UV_PYTHON_INSTALL_DIR,
                 store.tools_path(ToolBucket::Python),
             );
-        if let Some(req) = &hook.language_version.request {
-            cmd.arg(req.to_string());
+        match &hook.language_version.request {
+            LanguageRequest::Any => {}
+            LanguageRequest::Range(_, raw) => {
+                cmd.arg(raw);
+            }
+            LanguageRequest::Path(path) => {
+                cmd.arg(path);
+            }
         }
 
         let output = cmd.check(true).output().await?;

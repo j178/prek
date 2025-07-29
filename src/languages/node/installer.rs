@@ -16,8 +16,8 @@ use tracing::{trace, warn};
 
 use crate::archive;
 use crate::archive::ArchiveExtension;
-use crate::config::LanguageVersion;
 use crate::fs::LockedFile;
+use crate::languages::version::LanguageVersion;
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]

@@ -14,6 +14,7 @@ mod node;
 mod python;
 mod script;
 mod system;
+pub mod version;
 
 static PYTHON: python::Python = python::Python;
 static NODE: node::Node = node::Node;

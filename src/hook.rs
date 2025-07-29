@@ -18,10 +18,11 @@ use tracing::{debug, error};
 use url::Url;
 
 use crate::config::{
-    self, ALTER_CONFIG_FILE, CONFIG_FILE, Config, Language, LanguageVersion, LocalHook,
-    MANIFEST_FILE, ManifestHook, MetaHook, RemoteHook, Stage, read_config, read_manifest,
+    self, ALTER_CONFIG_FILE, CONFIG_FILE, Config, Language, LocalHook, MANIFEST_FILE, ManifestHook,
+    MetaHook, RemoteHook, Stage, read_config, read_manifest,
 };
 use crate::fs::{CWD, Simplified};
+use crate::languages::version;
 use crate::store::{Store, to_hex};
 use crate::warn_user;
 
@@ -39,6 +40,8 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
+    #[error(transparent)]
+    Version(#[from] version::Error),
 }
 
 #[derive(Debug, Clone)]
@@ -275,7 +278,7 @@ impl Project {
                         builder.update(hook_config);
                         builder.combine(&self.config);
 
-                        let hook = builder.build();
+                        let hook = builder.build()?;
                         hooks.push(hook);
                     }
                 }
@@ -285,7 +288,7 @@ impl Project {
                         let mut builder = HookBuilder::new(repo, hook_config.clone(), hooks.len());
                         builder.combine(&self.config);
 
-                        let hook = builder.build();
+                        let hook = builder.build()?;
                         hooks.push(hook);
                     }
                 }
@@ -296,7 +299,7 @@ impl Project {
                         let mut builder = HookBuilder::new(repo, hook_config, hooks.len());
                         builder.combine(&self.config);
 
-                        let hook = builder.build();
+                        let hook = builder.build()?;
                         hooks.push(hook);
                     }
                 }
@@ -380,15 +383,14 @@ impl HookBuilder {
     }
 
     /// Check the hook configuration.
-    fn check(&self) {
+    fn check(&self) -> Result<(), Error> {
         let language = self.config.language;
         let options = &self.config.options;
         if !language.supports_dependency() {
             if options.additional_dependencies.is_some() {
-                warn_user!(
-                    "Language {} does not need environment, but additional_dependencies is set",
-                    language
-                );
+                return Err(Error::Config(config::Error::InvalidConfig(format!(
+                    "Language {language} does not support `additional_dependencies`",
+                ))));
             }
         }
         if options
@@ -398,26 +400,30 @@ impl HookBuilder {
             .is_some()
         {
             if !language.supports_dependency() {
-                warn_user!(
-                    "Language {} does not need environment, but language_version is set",
-                    language
-                );
+                return Err(Error::Config(config::Error::InvalidConfig(format!(
+                    "Language {language} does not support `language_version`",
+                ))));
             } else if !language.supports_language_version() {
-                warn_user!(
-                    "Language {} does not support specifying version, but language_version is set",
-                    language
-                );
+                return Err(Error::Config(config::Error::InvalidConfig(format!(
+                    "Language {language} does not support specifying version, but `language_version` is set",
+                ))));
             }
         }
+
+        Ok(())
     }
 
     /// Build the hook.
-    fn build(mut self) -> Hook {
-        self.check();
+    fn build(mut self) -> Result<Hook, Error> {
+        self.check()?;
         self.fill_in_defaults();
 
         let options = self.config.options;
-        Hook {
+        let language_version = options.language_version.expect("language_version not set");
+        let language_version =
+            version::LanguageVersion::parse(self.config.language, &language_version)?;
+
+        Ok(Hook {
             repo: self.repo,
             idx: self.idx,
             id: self.config.id,
@@ -438,13 +444,13 @@ impl HookBuilder {
             fail_fast: options.fail_fast.expect("fail_fast not set"),
             pass_filenames: options.pass_filenames.expect("pass_filenames not set"),
             description: options.description,
-            language_version: options.language_version.expect("language_version not set"),
+            language_version,
             log_file: options.log_file,
             require_serial: options.require_serial.expect("require_serial not set"),
             stages: options.stages.expect("stages not set"),
             verbose: options.verbose.expect("verbose not set"),
             minimum_pre_commit_version: options.minimum_pre_commit_version,
-        }
+        })
     }
 }
 
@@ -471,7 +477,7 @@ pub struct Hook {
     pub fail_fast: bool,
     pub pass_filenames: bool,
     pub description: Option<String>,
-    pub language_version: LanguageVersion,
+    pub language_version: version::LanguageVersion,
     pub log_file: Option<String>,
     pub require_serial: bool,
     pub stages: Vec<Stage>,
@@ -526,16 +532,8 @@ impl Hook {
 
 #[derive(Debug, Clone)]
 pub enum ResolvedHook {
-    Installed {
-        hook: Hook,
-        info: InstallInfo,
-    },
-    NotInstalled {
-        hook: Hook,
-        info: InstallInfo,
-        /// Additional resolved toolchain information, like the path to Python executable.
-        toolchain: PathBuf,
-    },
+    Installed { hook: Hook, info: InstallInfo },
+    NotInstalled { hook: Hook, info: InstallInfo },
     NoNeedInstall(Hook),
 }
 
@@ -596,6 +594,7 @@ impl ResolvedHook {
 
         let content = serde_json::to_string_pretty(info)?;
         fs_err::tokio::write(info.env_path.join(".prefligit-hook.json"), content).await?;
+
         Ok(())
     }
 }
@@ -606,6 +605,7 @@ pub struct InstallInfo {
     pub language_version: semver::Version,
     pub dependencies: Vec<String>,
     pub env_path: PathBuf,
+    pub toolchain: PathBuf,
 }
 
 impl Hash for InstallInfo {
@@ -621,6 +621,7 @@ impl InstallInfo {
         language: Language,
         language_version: semver::Version,
         dependencies: Vec<String>,
+        toolchain: PathBuf,
         store: &Store,
     ) -> Self {
         // Calculate the hook directory.
@@ -635,13 +636,14 @@ impl InstallInfo {
             language_version,
             dependencies,
             env_path: store.hooks_dir().join(hash),
+            toolchain,
         }
     }
 
     pub fn matches(&self, hook: &Hook) -> bool {
         self.language == hook.language
-            && hook.language_version.matches(&self.language_version)
             // TODO: should we compare ignore order?
             && self.dependencies.as_slice() == &*hook.dependencies()
+            && hook.language_version.satisfied_by(self)
     }
 }

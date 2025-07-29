@@ -37,6 +37,8 @@ impl LanguageImpl for Python {
         }
         debug!("No matching installed environment found for {}", hook);
 
+        // TODO: find_python cannot return Python that are downloadable
+        // TODO: support install Python with language_version
         // Select toolchain from system or managed
         let uv = Uv::install(store).await?;
         let python = uv
@@ -63,18 +65,18 @@ impl LanguageImpl for Python {
 
         Ok(ResolvedHook::NotInstalled {
             hook: hook.clone(),
-            toolchain: python.clone(),
-            info: InstallInfo::new(hook.language, version, hook.dependencies().to_vec(), store),
+            info: InstallInfo::new(
+                hook.language,
+                version,
+                hook.dependencies().to_vec(),
+                python,
+                store,
+            ),
         })
     }
 
     async fn install(&self, hook: &ResolvedHook, store: &Store) -> Result<()> {
-        let ResolvedHook::NotInstalled {
-            hook,
-            toolchain,
-            info,
-        } = hook
-        else {
+        let ResolvedHook::NotInstalled { hook, info } = hook else {
             unreachable!("Python hook must be NotInstalled")
         };
 
@@ -85,7 +87,7 @@ impl LanguageImpl for Python {
         cmd.arg("venv")
             .arg(&info.env_path)
             .arg("--python")
-            .arg(toolchain)
+            .arg(&info.toolchain)
             .env(
                 EnvVars::UV_PYTHON_INSTALL_DIR,
                 store.tools_path(ToolBucket::Python),
