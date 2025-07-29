@@ -164,7 +164,7 @@ impl Uv {
             LanguagePreference::OnlyManaged => "only-managed",
         };
 
-        let mut cmd = Cmd::new(&self.path, "uv find python");
+        let mut cmd = Cmd::new(&self.path, "find python");
 
         cmd.arg("python")
             .arg("find")

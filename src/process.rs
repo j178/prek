@@ -44,7 +44,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Error, Diagnostic)]
 pub enum Error {
     /// The command fundamentally failed to execute (usually means it didn't exist)
-    #[error("failed to {summary} (cmd: {cmd})")]
+    #[error("failed to run {summary} (cmd: {cmd})")]
     Exec {
         /// Summary of what the Command was trying to do
         summary: String,
@@ -56,7 +56,7 @@ pub enum Error {
     },
     /// The command ran but signaled some kind of error condition
     /// (assuming the exit code is used for that)
-    #[error("failed to {summary} (status: {status})")]
+    #[error("failed to run {summary} (status: {status})")]
     Status {
         /// Summary of what the Command was trying to do
         summary: String,
