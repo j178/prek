@@ -8,7 +8,7 @@ pub enum Error {
     InvalidVersion(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum LanguageRequest {
     Any,
     Semver(SemverRequest),
@@ -25,7 +25,7 @@ impl LanguageRequest {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SemverRequest(semver::VersionReq);
 
 impl SemverRequest {
