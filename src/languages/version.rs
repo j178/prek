@@ -1,13 +1,45 @@
-use std::path::PathBuf;
-
 use crate::config::{self, Language, LanguagePreference};
 use crate::hook::InstallInfo;
-use crate::languages::python;
+use crate::languages::python::PythonRequest;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Invalid language version: `{0}`")]
     InvalidVersion(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum LanguageRequest {
+    Any,
+    Semver(SemverRequest),
+    Python(PythonRequest),
+}
+
+impl LanguageRequest {
+    fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
+        match self {
+            LanguageRequest::Any => true,
+            LanguageRequest::Semver(req) => req.satisfied_by(install_info),
+            LanguageRequest::Python(req) => req.satisfied_by(install_info),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SemverRequest(semver::VersionReq);
+
+impl SemverRequest {
+    fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
+        self.0.matches(&install_info.language_version)
+    }
+}
+
+impl SemverRequest {
+    pub fn parse(request: &str) -> Result<LanguageRequest, Error> {
+        let version_req = semver::VersionReq::parse(request)
+            .map_err(|_| Error::InvalidVersion(request.to_string()))?;
+        Ok(LanguageRequest::Semver(SemverRequest(version_req)))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -18,7 +50,22 @@ pub struct LanguageVersion {
 
 impl LanguageVersion {
     pub fn parse(lang: Language, version: &config::LanguageVersion) -> Result<Self, Error> {
-        let request = parse_language_request(lang, version.request.as_deref())?;
+        let Some(ref request) = version.request else {
+            return Ok(Self {
+                preference: version.preference,
+                request: LanguageRequest::Any,
+            });
+        };
+
+        #[allow(clippy::single_match_else)]
+        let request = match lang {
+            Language::Python => PythonRequest::parse(request)?,
+            _ => {
+                // TODO: support other languages
+                SemverRequest::parse(request)?
+            }
+        };
+
         Ok(Self {
             preference: version.preference,
             request,
@@ -42,45 +89,5 @@ impl LanguageVersion {
             self.preference,
             LanguagePreference::Managed | LanguagePreference::OnlyManaged
         )
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum LanguageRequest {
-    Any,
-    Range(semver::VersionReq, String),
-    Path(PathBuf),
-}
-
-impl LanguageRequest {
-    pub fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
-        match self {
-            LanguageRequest::Any => true,
-            LanguageRequest::Range(version_req, _) => {
-                version_req.matches(&install_info.language_version)
-            }
-            // TODO: check path
-            LanguageRequest::Path(path) => &install_info.toolchain == path,
-        }
-    }
-}
-
-fn parse_language_request(
-    language: Language,
-    request: Option<&str>,
-) -> Result<LanguageRequest, Error> {
-    let Some(request) = request else {
-        return Ok(LanguageRequest::Any);
-    };
-
-    #[allow(clippy::single_match_else)]
-    match language {
-        Language::Python => python::parse_version(request),
-        _ => {
-            // TODO: support other languages
-            let req = semver::VersionReq::parse(request)
-                .map_err(|_| Error::InvalidVersion(request.to_string()))?;
-            Ok(LanguageRequest::Range(req, request.to_string()))
-        }
     }
 }

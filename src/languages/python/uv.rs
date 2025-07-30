@@ -13,6 +13,7 @@ use crate::hook::Hook;
 use crate::process::Cmd;
 use crate::store::{Store, ToolBucket};
 
+use crate::languages::python::PythonRequest;
 use crate::languages::version::LanguageRequest;
 use constants::env_vars::EnvVars;
 
@@ -177,12 +178,24 @@ impl Uv {
             );
         match &hook.language_version.request {
             LanguageRequest::Any => {}
-            LanguageRequest::Range(_, raw) => {
-                cmd.arg(raw);
-            }
-            LanguageRequest::Path(path) => {
-                cmd.arg(path);
-            }
+            LanguageRequest::Python(request) => match request {
+                PythonRequest::Major(major) => {
+                    cmd.arg(format!("{major}"));
+                }
+                PythonRequest::MajorMinor(major, minor) => {
+                    cmd.arg(format!("{major}.{minor}"));
+                }
+                PythonRequest::MajorMinorPatch(major, minor, patch) => {
+                    cmd.arg(format!("{major}.{minor}.{patch}"));
+                }
+                PythonRequest::Range(_, raw) => {
+                    cmd.arg(raw);
+                }
+                PythonRequest::Path(path) => {
+                    cmd.arg(path);
+                }
+            },
+            LanguageRequest::Semver(_) => unreachable!(),
         }
 
         // TODO: improve error reporting

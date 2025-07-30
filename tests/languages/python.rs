@@ -60,11 +60,11 @@ fn language_version() {
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 13, 5)
+      (3, 12, 11)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 13, 5)
+      (3, 12, 11)
     greater-than-python3.13..................................................Passed
     - hook id: greater-than-python3.13
     - duration: [TIME]

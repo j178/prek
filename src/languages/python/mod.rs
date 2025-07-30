@@ -4,4 +4,4 @@ mod uv;
 mod version;
 
 pub use python::Python;
-pub use version::parse_version;
+pub use version::PythonRequest;
