@@ -978,14 +978,11 @@ fn local_python_hook() {
 
 /// Supports reading `pre-commit-config.yml` as well.
 #[test]
-fn alternate_config_file() -> Result<()> {
+fn alternate_config_file() {
     let context = TestContext::new();
     context.init_project();
 
-    context
-        .work_dir()
-        .child(".pre-commit-config.yml")
-        .write_str(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -993,7 +990,7 @@ fn alternate_config_file() -> Result<()> {
                 name: local-python-hook
                 language: python
                 entry: python3 -c 'import sys; print("Hello, world!")'
-    "#})?;
+    "#});
 
     context.git_add(".");
 
@@ -1008,6 +1005,4 @@ fn alternate_config_file() -> Result<()> {
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }

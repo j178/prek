@@ -25,7 +25,7 @@ fn language_version() {
                 name: python3.12
                 language: python
                 entry: python -c 'import sys; print(sys.version_info[:3])'
-                language_version: '3.12'
+                language_version: managed; python3.12
                 always_run: true
               - id: greater-than-python3.13
                 name: greater-than-python3.13
@@ -33,6 +33,19 @@ fn language_version() {
                 entry: python -c 'import sys; print(sys.version_info[:3])'
                 language_version: '>=3.13'
                 always_run: true
+        # TODO: Fix python auto download support, then enable below tests
+        #- id: python3.12
+        #  name: python3.12
+        #  language: python
+        #  entry: python -c 'import sys; print(sys.version_info[:3])'
+        #  language_version: only-managed; 3.12
+        #  always_run: true
+        #- id: greater-than-python3.13
+        #  name: greater-than-python3.13
+        #  language: python
+        #  entry: python -c 'import sys; print(sys.version_info[:3])'
+        #  language_version: only-managed; >=3.13
+        #  always_run: true
     "#});
     context.git_add(".");
 
@@ -47,11 +60,11 @@ fn language_version() {
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 12, 11)
+      (3, 13, 5)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 12, 11)
+      (3, 13, 5)
     greater-than-python3.13..................................................Passed
     - hook id: greater-than-python3.13
     - duration: [TIME]

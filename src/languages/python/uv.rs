@@ -185,6 +185,7 @@ impl Uv {
             }
         }
 
+        // TODO: improve error reporting
         let output = cmd.check(true).output().await?;
         let stdout = String::from_utf8(output.stdout)?;
         Ok(stdout.lines().map(PathBuf::from).collect())
