@@ -1,13 +1,12 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
 
 use anstream::ColorChoice;
 use anyhow::Result;
 use fancy_regex::Regex;
-use seahash::SeaHasher;
 use tracing::trace;
 
 use crate::fs::CWD;
@@ -24,9 +23,12 @@ pub struct Docker;
 
 impl Docker {
     fn docker_tag(hook: &InstalledHook) -> String {
-        let mut hasher = SeaHasher::new();
-        hook.hash(&mut hasher);
-        let digest = crate::store::to_hex(hasher.finish());
+        let InstalledHook::Installed { info, .. } = hook else {
+            panic!("Docker tag can only be generated for installed hooks");
+        };
+        let mut hasher = DefaultHasher::new();
+        info.hash(&mut hasher);
+        let digest = hex::encode(hasher.finish().to_le_bytes());
         format!("prefligit-{digest}")
     }
 
@@ -169,13 +171,7 @@ impl Docker {
 
 impl LanguageImpl for Docker {
     async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
-        let info = InstallInfo::new(
-            hook.language,
-            semver::Version::new(0, 0, 0), // Docker does not have a version
-            hook.dependencies().to_vec(),
-            PathBuf::new(),
-            store,
-        );
+        let info = InstallInfo::new(hook.language, hook.dependencies().to_vec(), store);
         let installed_hook = InstalledHook::Installed {
             hook: hook.clone(),
             info,

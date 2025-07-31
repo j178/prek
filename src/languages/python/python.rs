@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
@@ -12,67 +13,58 @@ use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::{Store, ToolBucket};
 
+use crate::languages::python::PythonRequest;
+use crate::languages::version::LanguageRequest;
 use constants::env_vars::EnvVars;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Python;
 
+static QUERY_PYTHON_INFO: &str = indoc::indoc! {r#"\
+    import sys
+    print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+    print(sys.base_exec_prefix)
+"#};
+
 impl LanguageImpl for Python {
     async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
-        // TODO: find_python cannot return Python that are downloadable
-        // TODO: support install Python with language_version
-        // Select toolchain from system or managed
         let uv = Uv::install(store).await?;
-        let python = uv
-            .find_python(hook, store)
-            .await?
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow!("Failed to resolve hook"))?;
-        debug!(python = %python.display(), "Resolved Python");
 
-        // Get Python version
-        let stdout = Cmd::new(&python, "get Python version")
-            .arg("-I")
-            .arg("-c")
-            .arg("import sys; print('.'.join(map(str, sys.version_info[:3])))")
-            .check(true)
-            .output()
-            .await?
-            .stdout;
-        let version = String::from_utf8_lossy(&stdout)
-            .trim()
-            .parse::<semver::Version>()
-            .with_context(|| "Failed to parse Python version")?;
-
-        let info = InstallInfo::new(
-            hook.language,
-            version,
-            hook.dependencies().to_vec(),
-            python,
-            store,
-        );
-
-        if info.env_path.try_exists()? {
-            debug!(
-                env_dir = %info.env_path.display(),
-                "Removing existing environment directory",
-            );
-            fs_err::tokio::remove_dir_all(&info.env_path).await?;
-        }
+        let mut info = InstallInfo::new(hook.language, hook.dependencies().to_vec(), store);
+        info.clear_env_path().await?;
 
         debug!(%hook, target = %info.env_path.display(), "Install environment");
 
-        // Create venv
+        let python_request = match &hook.language_request {
+            LanguageRequest::Any => None,
+            LanguageRequest::Python(request) => match request {
+                PythonRequest::Major(major) => Some(format!("{major}")),
+                PythonRequest::MajorMinor(major, minor) => Some(format!("{major}.{minor}")),
+                PythonRequest::MajorMinorPatch(major, minor, patch) => {
+                    Some(format!("{major}.{minor}.{patch}"))
+                }
+                PythonRequest::Range(_, raw) => Some(raw.clone()),
+                PythonRequest::Path(path) => Some(path.to_string_lossy().to_string()),
+            },
+            _ => unreachable!(),
+        };
+
+        // Create venv (auto download Python if needed)
         let mut cmd = uv.cmd("create venv");
         cmd.arg("venv")
             .arg(&info.env_path)
-            .arg("--python")
-            .arg(&info.toolchain)
+            .arg("--python-preference")
+            .arg("managed")
+            .arg("--no-project")
+            .arg("--no-config")
+            .env(EnvVars::UV_PYTHON_DOWNLOADS, "true")
             .env(
                 EnvVars::UV_PYTHON_INSTALL_DIR,
                 store.tools_path(ToolBucket::Python),
             );
+        if let Some(python) = python_request {
+            cmd.arg("--python").arg(python);
+        }
 
         cmd.check(true).output().await?;
 
@@ -100,6 +92,32 @@ impl LanguageImpl for Python {
         } else {
             debug!("No dependencies to install");
         }
+
+        let python = python_exec(&info.env_path);
+        // Get Python version and executable
+        let stdout = Cmd::new(&python, "get Python info")
+            .arg("-I")
+            .arg("-c")
+            .arg(QUERY_PYTHON_INFO)
+            .check(true)
+            .output()
+            .await?
+            .stdout;
+        let stdout = String::from_utf8(stdout).context("Failed to parse Python info output")?;
+        let mut lines = stdout.lines();
+        let version = lines
+            .next()
+            .ok_or_else(|| anyhow!("Failed to get Python version"))?
+            .to_string()
+            .parse()?;
+        let base_exec_prefix = lines
+            .next()
+            .ok_or_else(|| anyhow!("Failed to get Python base_exec_prefix"))?
+            .to_string();
+        let python_exec = python_exec(&PathBuf::from(base_exec_prefix));
+
+        info.with_language_version(version)
+            .with_toolchain(python_exec);
 
         Ok(InstalledHook::Installed {
             hook: hook.clone(),
@@ -174,4 +192,8 @@ fn bin_dir(venv: &Path) -> PathBuf {
     } else {
         venv.join("bin")
     }
+}
+
+fn python_exec(venv: &Path) -> PathBuf {
+    bin_dir(venv).join("python").with_extension(EXE_EXTENSION)
 }

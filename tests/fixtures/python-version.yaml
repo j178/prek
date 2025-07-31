@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: python-3.11
+        name: Python 3.11
+        entry: python -c "import sys; print(sys.version_info[:3])"
+        language: python
+        language_version: '3.11'
+        always_run: true

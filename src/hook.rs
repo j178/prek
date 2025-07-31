@@ -11,7 +11,7 @@ use anyhow::Result;
 use clap::ValueEnum;
 use futures::StreamExt;
 use itertools::zip_eq;
-use seahash::SeaHasher;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, error};
@@ -24,7 +24,7 @@ use crate::config::{
 use crate::fs::{CWD, Simplified};
 use crate::languages::version;
 use crate::languages::version::LanguageRequest;
-use crate::store::{Store, to_hex};
+use crate::store::Store;
 use crate::warn_user;
 
 #[derive(Debug, Error)]
@@ -578,19 +578,6 @@ impl Display for InstalledHook {
     }
 }
 
-impl Hash for InstalledHook {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match self {
-            InstalledHook::Installed { info, .. } => {
-                info.hash(state);
-            }
-            InstalledHook::NoNeedInstall(hook) => {
-                hook.to_string().hash(state);
-            }
-        }
-    }
-}
-
 impl InstalledHook {
     pub fn env_path(&self) -> Option<&Path> {
         match self {
@@ -638,28 +625,47 @@ impl Hash for InstallInfo {
     }
 }
 
+fn random_directory() -> String {
+    rand::rng()
+        .sample_iter(&rand::distr::Alphanumeric)
+        .take(20)
+        .map(char::from)
+        .collect()
+}
+
 impl InstallInfo {
-    pub fn new(
-        language: Language,
-        language_version: semver::Version,
-        dependencies: Vec<String>,
-        toolchain: PathBuf,
-        store: &Store,
-    ) -> Self {
-        // Calculate the hook directory.
-        let mut hasher = SeaHasher::new();
-        language.hash(&mut hasher);
-        language_version.hash(&mut hasher);
-        dependencies.hash(&mut hasher);
-        let hash = to_hex(hasher.finish());
+    pub fn new(language: Language, dependencies: Vec<String>, store: &Store) -> Self {
+        let env = random_directory();
 
         Self {
             language,
-            language_version,
             dependencies,
-            env_path: store.hooks_dir().join(hash),
-            toolchain,
+            env_path: store.hooks_dir().join(env),
+            language_version: semver::Version::new(0, 0, 0),
+            toolchain: PathBuf::new(),
         }
+    }
+
+    pub fn with_language_version(&mut self, version: semver::Version) -> &mut Self {
+        self.language_version = version;
+        self
+    }
+
+    pub fn with_toolchain(&mut self, toolchain: PathBuf) -> &mut Self {
+        self.toolchain = toolchain;
+        self
+    }
+
+    pub async fn clear_env_path(&self) -> Result<(), Error> {
+        if self.env_path.try_exists()? {
+            debug!(
+                env_dir = %self.env_path.display(),
+                "Removing existing environment directory",
+            );
+            fs_err::tokio::remove_dir_all(&self.env_path).await?;
+        }
+
+        Ok(())
     }
 
     pub fn matches(&self, hook: &Hook) -> bool {

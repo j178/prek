@@ -1,11 +1,10 @@
-use std::hash::{Hash, Hasher};
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use anyhow::Result;
 use etcetera::BaseStrategy;
-use seahash::SeaHasher;
 use thiserror::Error;
 use tracing::debug;
 
@@ -135,7 +134,7 @@ impl Store {
 
     /// Returns the path to the cloned repo.
     fn repo_path(&self, repo: &RemoteRepo) -> PathBuf {
-        let mut hasher = SeaHasher::new();
+        let mut hasher = DefaultHasher::new();
         repo.hash(&mut hasher);
         let digest = to_hex(hasher.finish());
         self.repos_dir().join(digest)
@@ -177,6 +176,6 @@ impl ToolBucket {
 }
 
 /// Convert a u64 to a hex string.
-pub fn to_hex(num: u64) -> String {
+fn to_hex(num: u64) -> String {
     hex::encode(num.to_le_bytes())
 }
