@@ -98,8 +98,10 @@ fn language_version() -> anyhow::Result<()> {
             .join("tools")
             .join("python")
             .read_dir()?
+            .flatten()
+            .filter(|d| !d.file_name().to_string_lossy().starts_with('.'))
             .count(),
-        1
+        1,
     );
 
     Ok(())
