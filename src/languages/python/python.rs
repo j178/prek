@@ -19,20 +19,6 @@ pub struct Python;
 
 impl LanguageImpl for Python {
     async fn resolve(&self, hook: &Hook, store: &Store) -> Result<ResolvedHook> {
-        // Select from installed hooks
-        if let Some(info) = store.installed_hooks().find(|info| info.matches(hook)) {
-            debug!(
-                "Found installed environment for {}: {}",
-                hook,
-                info.env_path.display()
-            );
-            return Ok(ResolvedHook::Installed {
-                hook: hook.clone(),
-                info,
-            });
-        }
-        debug!("No matching installed environment found for {}", hook);
-
         // TODO: find_python cannot return Python that are downloadable
         // TODO: support install Python with language_version
         // Select toolchain from system or managed

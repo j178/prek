@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use anstream::ColorChoice;
 use anyhow::Result;
@@ -301,19 +302,36 @@ pub async fn install_hooks(
 ) -> Result<Vec<ResolvedHook>> {
     let mut resolved_hooks = Vec::with_capacity(hooks.len());
     let mut group_futures = FuturesUnordered::new();
+    // TODO: how to eliminate the Rc?
+    let installed_hooks = Rc::new(store.installed_hooks().collect::<Vec<_>>());
 
     // Group hooks by language to enable parallel installation across different languages.
     // Within each language group, hooks are installed sequentially, allowing later hooks
     // to leverage the environment or tools installed by previous ones.
     for (_, hooks) in &hooks.iter().chunk_by(|h| &h.language) {
         let hooks: Vec<_> = hooks.collect();
+        let installed_hooks = installed_hooks.clone();
+
         group_futures.push(async move {
             let mut resolved = Vec::with_capacity(hooks.len());
             // Process hooks sequentially within each language group
             for hook in hooks {
-                let progress = reporter.on_install_start(hook);
-                let resolved_hook = hook.language.resolve(hook, store).await?;
+                // Find a matching installed hook environment.
+                if let Some(info) = installed_hooks.iter().find(|i| i.matches(hook)) {
+                    debug!(
+                        "Found installed environment for hook `{hook}` at `{}`",
+                        info.env_path.display()
+                    );
+                    resolved.push(ResolvedHook::Installed {
+                        hook: hook.clone(),
+                        info: info.clone(),
+                    });
+                    continue;
+                }
 
+                let progress = reporter.on_install_start(hook);
+
+                let resolved_hook = hook.language.resolve(hook, store).await?;
                 install_hook(&resolved_hook, store).await?;
                 resolved.push(resolved_hook);
 
