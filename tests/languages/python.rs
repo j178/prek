@@ -49,7 +49,7 @@ fn language_version() -> anyhow::Result<()> {
                 name: python3.12
                 language: python
                 entry: python -c 'import sys; print(sys.version_info[:3])'
-                language_version: '3.12.10' # will auto download
+                language_version: '3.12.1' # will auto download
                 always_run: true
     "#});
     context.git_add(".");
@@ -87,7 +87,7 @@ fn language_version() -> anyhow::Result<()> {
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 12, 10)
+      (3, 12, 1)
 
     ----- stderr -----
     "#);
