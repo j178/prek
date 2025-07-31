@@ -58,6 +58,7 @@ impl LanguageImpl for Python {
             .arg("managed")
             .arg("--no-project")
             .arg("--no-config")
+            .arg("-v")
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "true")
             .env(
                 EnvVars::UV_PYTHON_INSTALL_DIR,
@@ -67,7 +68,7 @@ impl LanguageImpl for Python {
             cmd.arg("--python").arg(python);
         }
 
-        cmd.check(true).output().await?;
+        cmd.check(true).status().await?;
 
         // Install dependencies
         if let Some(repo_path) = hook.repo_path() {
