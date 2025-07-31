@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::builtin;
 use crate::config::Language;
-use crate::hook::{Hook, ResolvedHook};
+use crate::hook::{Hook, InstalledHook};
 use crate::store::Store;
 
 mod docker;
@@ -25,12 +25,11 @@ static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
 static SCRIPT: script::Script = script::Script;
 
 trait LanguageImpl {
-    async fn resolve(&self, hook: &Hook, store: &Store) -> Result<ResolvedHook>;
-    async fn install(&self, hook: &ResolvedHook, store: &Store) -> Result<()>;
+    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook>;
     async fn check_health(&self) -> Result<()>;
     async fn run(
         &self,
-        hook: &ResolvedHook,
+        hook: &InstalledHook,
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         store: &Store,
@@ -95,23 +94,10 @@ impl Language {
         )
     }
 
-    pub async fn resolve(&self, hook: &Hook, store: &Store) -> Result<ResolvedHook> {
-        match self {
-            Self::Python => PYTHON.resolve(hook, store).await,
-            // Self::Node => NODE.resolve(hook, store).await,
-            Self::System => SYSTEM.resolve(hook, store).await,
-            Self::Fail => FAIL.resolve(hook, store).await,
-            Self::Docker => DOCKER.resolve(hook, store).await,
-            Self::DockerImage => DOCKER_IMAGE.resolve(hook, store).await,
-            Self::Script => SCRIPT.resolve(hook, store).await,
-            _ => todo!("{}", self.as_str()),
-        }
-    }
-
-    pub async fn install(&self, hook: &ResolvedHook, store: &Store) -> Result<()> {
+    pub async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
         match self {
             Self::Python => PYTHON.install(hook, store).await,
-            // Self::Node => NODE.install(hook, store).await,
+            Self::Node => NODE.install(hook, store).await,
             Self::System => SYSTEM.install(hook, store).await,
             Self::Fail => FAIL.install(hook, store).await,
             Self::Docker => DOCKER.install(hook, store).await,
@@ -124,7 +110,7 @@ impl Language {
     pub async fn check_health(&self) -> Result<()> {
         match self {
             Self::Python => PYTHON.check_health().await,
-            // Self::Node => NODE.check_health().await,
+            Self::Node => NODE.check_health().await,
             Self::System => SYSTEM.check_health().await,
             Self::Fail => FAIL.check_health().await,
             Self::Docker => DOCKER.check_health().await,
@@ -136,7 +122,7 @@ impl Language {
 
     pub async fn run(
         &self,
-        hook: &ResolvedHook,
+        hook: &InstalledHook,
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         store: &Store,
@@ -148,7 +134,7 @@ impl Language {
 
         match self {
             Self::Python => PYTHON.run(hook, filenames, env_vars, store).await,
-            // Self::Node => NODE.run(hook, filenames, env_vars, store).await,
+            Self::Node => NODE.run(hook, filenames, env_vars, store).await,
             Self::System => SYSTEM.run(hook, filenames, env_vars, store).await,
             Self::Fail => FAIL.run(hook, filenames, env_vars, store).await,
             Self::Docker => DOCKER.run(hook, filenames, env_vars, store).await,

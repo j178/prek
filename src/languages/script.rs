@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::hook::Hook;
-use crate::hook::ResolvedHook;
+use crate::hook::InstalledHook;
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
@@ -13,13 +13,8 @@ use crate::store::Store;
 pub struct Script;
 
 impl LanguageImpl for Script {
-    async fn resolve(&self, hook: &Hook, _store: &Store) -> Result<ResolvedHook> {
-        Ok(ResolvedHook::NoNeedInstall(hook.clone()))
-    }
-
-    async fn install(&self, _hook: &ResolvedHook, _store: &Store) -> Result<()> {
-        // No installation step needed for Bash scripts
-        Ok(())
+    async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook> {
+        Ok(InstalledHook::NoNeedInstall(hook.clone()))
     }
 
     async fn check_health(&self) -> Result<()> {
@@ -28,7 +23,7 @@ impl LanguageImpl for Script {
 
     async fn run(
         &self,
-        hook: &ResolvedHook,
+        hook: &InstalledHook,
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,

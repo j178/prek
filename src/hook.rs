@@ -555,64 +555,62 @@ impl Hook {
 }
 
 #[derive(Debug, Clone)]
-pub enum ResolvedHook {
+pub enum InstalledHook {
     Installed { hook: Hook, info: InstallInfo },
-    NotInstalled { hook: Hook, info: InstallInfo },
     NoNeedInstall(Hook),
 }
 
-impl Deref for ResolvedHook {
+impl Deref for InstalledHook {
     type Target = Hook;
 
     fn deref(&self) -> &Self::Target {
         match self {
-            ResolvedHook::Installed { hook, .. } => hook,
-            ResolvedHook::NotInstalled { hook, .. } => hook,
-            ResolvedHook::NoNeedInstall(hook) => hook,
+            InstalledHook::Installed { hook, .. } => hook,
+            InstalledHook::NoNeedInstall(hook) => hook,
         }
     }
 }
 
-impl Display for ResolvedHook {
+impl Display for InstalledHook {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // TODO: add more information
         self.deref().fmt(f)
     }
 }
 
-impl Hash for ResolvedHook {
+impl Hash for InstalledHook {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            ResolvedHook::Installed { info, .. } => {
+            InstalledHook::Installed { info, .. } => {
                 info.hash(state);
             }
-            ResolvedHook::NotInstalled { info, .. } => {
-                info.hash(state);
-            }
-            ResolvedHook::NoNeedInstall(hook) => {
+            InstalledHook::NoNeedInstall(hook) => {
                 hook.to_string().hash(state);
             }
         }
     }
 }
 
-impl ResolvedHook {
+impl InstalledHook {
     pub fn env_path(&self) -> Option<&Path> {
         match self {
-            ResolvedHook::Installed { info, .. } => Some(&info.env_path),
-            ResolvedHook::NotInstalled { info, .. } => Some(&info.env_path),
-            ResolvedHook::NoNeedInstall(_) => None,
+            InstalledHook::Installed { info, .. } => Some(&info.env_path),
+            InstalledHook::NoNeedInstall(_) => None,
         }
     }
 
     /// Check if the hook is installed in the environment.
     pub fn installed(&self) -> bool {
-        !matches!(self, ResolvedHook::NotInstalled { .. })
+        let Self::Installed { info, .. } = self else {
+            return true;
+        };
+        // Check if the environment path exists.
+        info.env_path.join(".prefligit-hook.json").is_file()
     }
 
     /// Mark the hook as installed in the environment.
     pub async fn mark_as_installed(&self, _store: &Store) -> Result<(), Error> {
-        let Self::NotInstalled { info, .. } = self else {
+        let Self::Installed { info, .. } = self else {
             return Ok(());
         };
 

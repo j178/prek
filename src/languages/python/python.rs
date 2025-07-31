@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow};
 use tracing::debug;
 
-use crate::hook::ResolvedHook;
+use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::LanguageImpl;
 use crate::languages::python::uv::Uv;
@@ -18,7 +18,7 @@ use constants::env_vars::EnvVars;
 pub struct Python;
 
 impl LanguageImpl for Python {
-    async fn resolve(&self, hook: &Hook, store: &Store) -> Result<ResolvedHook> {
+    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
         // TODO: find_python cannot return Python that are downloadable
         // TODO: support install Python with language_version
         // Select toolchain from system or managed
@@ -45,24 +45,23 @@ impl LanguageImpl for Python {
             .parse::<semver::Version>()
             .with_context(|| "Failed to parse Python version")?;
 
-        Ok(ResolvedHook::NotInstalled {
-            hook: hook.clone(),
-            info: InstallInfo::new(
-                hook.language,
-                version,
-                hook.dependencies().to_vec(),
-                python,
-                store,
-            ),
-        })
-    }
+        let info = InstallInfo::new(
+            hook.language,
+            version,
+            hook.dependencies().to_vec(),
+            python,
+            store,
+        );
 
-    async fn install(&self, hook: &ResolvedHook, store: &Store) -> Result<()> {
-        let ResolvedHook::NotInstalled { hook, info } = hook else {
-            unreachable!("Python hook must be NotInstalled")
-        };
+        if info.env_path.try_exists()? {
+            debug!(
+                env_dir = %info.env_path.display(),
+                "Removing existing environment directory",
+            );
+            fs_err::tokio::remove_dir_all(&info.env_path).await?;
+        }
 
-        let uv = Uv::install(store).await?;
+        debug!(%hook, target = %info.env_path.display(), "Install environment");
 
         // Create venv
         let mut cmd = uv.cmd("create venv");
@@ -101,7 +100,11 @@ impl LanguageImpl for Python {
         } else {
             debug!("No dependencies to install");
         }
-        Ok(())
+
+        Ok(InstalledHook::Installed {
+            hook: hook.clone(),
+            info,
+        })
     }
 
     async fn check_health(&self) -> Result<()> {
@@ -110,7 +113,7 @@ impl LanguageImpl for Python {
 
     async fn run(
         &self,
-        hook: &ResolvedHook,
+        hook: &InstalledHook,
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,

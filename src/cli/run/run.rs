@@ -27,13 +27,13 @@ use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::Stage;
 use crate::fs::Simplified;
 use crate::git;
-use crate::hook::{Hook, Project, ResolvedHook};
+use crate::hook::{Hook, InstalledHook, Project};
 use crate::printer::Printer;
 use crate::store::Store;
 
 enum HookToRun {
     Skipped(Hook),
-    ToRun(ResolvedHook),
+    ToRun(InstalledHook),
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -273,34 +273,12 @@ fn get_skips() -> Vec<String> {
     }
 }
 
-async fn install_hook(hook: &ResolvedHook, store: &Store) -> Result<()> {
-    if hook.installed() {
-        return Ok(());
-    }
-
-    let env_dir = hook.env_path().expect("Hook must have env path");
-    debug!(%hook, target = %env_dir.display(), "Install environment");
-
-    if env_dir.try_exists()? {
-        debug!(
-            env_dir = %env_dir.display(),
-            "Removing existing environment directory",
-        );
-        fs_err::tokio::remove_dir_all(env_dir).await?;
-    }
-
-    hook.language.install(hook, store).await?;
-    hook.mark_as_installed(store).await?;
-
-    Ok(())
-}
-
 pub async fn install_hooks(
     hooks: &[Hook],
     store: &Store,
     reporter: &HookInstallReporter,
-) -> Result<Vec<ResolvedHook>> {
-    let mut resolved_hooks = Vec::with_capacity(hooks.len());
+) -> Result<Vec<InstalledHook>> {
+    let mut new_installed = Vec::with_capacity(hooks.len());
     let mut group_futures = FuturesUnordered::new();
     // TODO: how to eliminate the Rc?
     let installed_hooks = Rc::new(store.installed_hooks().collect::<Vec<_>>());
@@ -313,7 +291,7 @@ pub async fn install_hooks(
         let installed_hooks = installed_hooks.clone();
 
         group_futures.push(async move {
-            let mut resolved = Vec::with_capacity(hooks.len());
+            let mut installed = Vec::with_capacity(hooks.len());
             // Process hooks sequentially within each language group
             for hook in hooks {
                 // Find a matching installed hook environment.
@@ -322,7 +300,7 @@ pub async fn install_hooks(
                         "Found installed environment for hook `{hook}` at `{}`",
                         info.env_path.display()
                     );
-                    resolved.push(ResolvedHook::Installed {
+                    installed.push(InstalledHook::Installed {
                         hook: hook.clone(),
                         info: info.clone(),
                     });
@@ -331,22 +309,23 @@ pub async fn install_hooks(
 
                 let progress = reporter.on_install_start(hook);
 
-                let resolved_hook = hook.language.resolve(hook, store).await?;
-                install_hook(&resolved_hook, store).await?;
-                resolved.push(resolved_hook);
+                let installed_hook = hook.language.install(hook, store).await?;
+                installed_hook.mark_as_installed(store).await?;
+
+                installed.push(installed_hook);
 
                 reporter.on_install_complete(progress);
             }
-            anyhow::Ok(resolved)
+            anyhow::Ok(installed)
         });
     }
 
     while let Some(result) = group_futures.next().await {
-        resolved_hooks.extend(result?);
+        new_installed.extend(result?);
     }
     reporter.on_complete();
 
-    Ok(resolved_hooks)
+    Ok(new_installed)
 }
 
 const SKIPPED: &str = "Skipped";

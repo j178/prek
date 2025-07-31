@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
-use crate::hook::{Hook, ResolvedHook};
+use crate::hook::{Hook, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::docker::Docker;
 use crate::run::run_by_batch;
@@ -12,12 +12,8 @@ use crate::store::Store;
 pub struct DockerImage;
 
 impl LanguageImpl for DockerImage {
-    async fn resolve(&self, hook: &Hook, _store: &Store) -> Result<ResolvedHook> {
-        Ok(ResolvedHook::NoNeedInstall(hook.clone()))
-    }
-
-    async fn install(&self, _hook: &ResolvedHook, _store: &Store) -> Result<()> {
-        Ok(())
+    async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook> {
+        Ok(InstalledHook::NoNeedInstall(hook.clone()))
     }
 
     async fn check_health(&self) -> Result<()> {
@@ -26,7 +22,7 @@ impl LanguageImpl for DockerImage {
 
     async fn run(
         &self,
-        hook: &ResolvedHook,
+        hook: &InstalledHook,
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,
