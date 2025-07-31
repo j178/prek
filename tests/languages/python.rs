@@ -102,7 +102,20 @@ fn can_not_download() {
     "});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run().arg("-v"), @r#"
+    let mut filters = context
+        .filters()
+        .into_iter()
+        .chain([(
+            "managed installations, search path, or registry",
+            "managed installations or search path",
+        )])
+        .collect::<Vec<_>>();
+    if cfg!(windows) {
+        // Unix uses "exit status", Windows uses "exit code"
+        filters.push((r"exit code: ", "exit status: "));
+    }
+
+    cmd_snapshot!(filters, context.run().arg("-v"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
