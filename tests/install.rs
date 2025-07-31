@@ -2,7 +2,6 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use insta::assert_snapshot;
-use predicates::prelude::predicate;
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -171,6 +170,15 @@ fn install_with_hooks() -> anyhow::Result<()> {
               - id: trailing-whitespace
     "});
 
+    context
+        .home_dir()
+        .child("repos")
+        .assert(predicates::path::missing());
+    context
+        .home_dir()
+        .child("hooks")
+        .assert(predicates::path::missing());
+
     cmd_snapshot!(context.filters(), context.install().arg("--install-hooks"), @r#"
     success: true
     exit_code: 0
@@ -223,6 +231,15 @@ fn install_hooks_only() -> anyhow::Result<()> {
               - id: trailing-whitespace
     "});
 
+    context
+        .home_dir()
+        .child("repos")
+        .assert(predicates::path::missing());
+    context
+        .home_dir()
+        .child("hooks")
+        .assert(predicates::path::missing());
+
     cmd_snapshot!(context.filters(), context.install_hooks(), @r#"
     success: true
     exit_code: 0
@@ -239,7 +256,7 @@ fn install_hooks_only() -> anyhow::Result<()> {
     context
         .work_dir()
         .child(".git/hooks/pre-commit")
-        .assert(predicate::path::missing());
+        .assert(predicates::path::missing());
 
     Ok(())
 }
@@ -273,7 +290,7 @@ fn uninstall() -> anyhow::Result<()> {
     context
         .work_dir()
         .child(".git/hooks/pre-commit")
-        .assert(predicate::path::missing());
+        .assert(predicates::path::missing());
 
     // Hook is not managed by `pre-commit`.
     context

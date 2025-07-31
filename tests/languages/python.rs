@@ -1,3 +1,6 @@
+use assert_fs::assert::PathAssert;
+use assert_fs::fixture::PathChild;
+
 use crate::common::{TestContext, cmd_snapshot};
 
 /// Test `language_version` parsing.
@@ -5,7 +8,7 @@ use crate::common::{TestContext, cmd_snapshot};
 /// as system Python.
 /// Other versions may need to be downloaded while running the tests.
 #[test]
-fn language_version() {
+fn language_version() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.write_pre_commit_config(indoc::indoc! {r#"
@@ -51,6 +54,12 @@ fn language_version() {
     "#});
     context.git_add(".");
 
+    context
+        .home_dir()
+        .child("tools")
+        .child("python")
+        .assert(predicates::path::missing());
+
     cmd_snapshot!(context.filters(), context.run().arg("-v"), @r#"
     success: true
     exit_code: 0
@@ -82,6 +91,18 @@ fn language_version() {
 
     ----- stderr -----
     "#);
+
+    assert_eq!(
+        context
+            .home_dir()
+            .join("tools")
+            .join("python")
+            .read_dir()?
+            .count(),
+        1
+    );
+
+    Ok(())
 }
 
 /// Request a version that neither can be found nor downloaded.
