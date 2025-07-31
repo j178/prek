@@ -120,7 +120,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     let printer = if cli.globals.quiet {
         Printer::Quiet
-    } else if cli.globals.verbose > 0 {
+    } else if cli.globals.verbose > 1 {
         Printer::Verbose
     } else if cli.globals.no_progress {
         Printer::NoProgress
