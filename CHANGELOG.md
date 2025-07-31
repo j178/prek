@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.0.13
+
+### Enhancements
+
+- Add `PREFLIGIT_NO_FAST_PATH` to disable Rust fast path ([#272](https://github.com/j178/prefligit/pull/272))
+- Improve subprocess error message ([#276](https://github.com/j178/prefligit/pull/276))
+- Remove `LanguagePreference` and improve language check ([#277](https://github.com/j178/prefligit/pull/277))
+- Support downloading requested Python version automatically ([#281](https://github.com/j178/prefligit/pull/281))
+- Implement language specific version parsing ([#273](https://github.com/j178/prefligit/pull/273))
+
+### Bug fixes
+
+- Fix python version matching ([#275](https://github.com/j178/prefligit/pull/275))
+- Show progress bar in verbose mode ([#278](https://github.com/j178/prefligit/pull/278))
+
+
 ## 0.0.12
 
 ### Bug fixes
