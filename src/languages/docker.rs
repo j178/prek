@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs;
 use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
 
 use anstream::ColorChoice;
 use anyhow::Result;
@@ -10,7 +11,7 @@ use seahash::SeaHasher;
 use tracing::trace;
 
 use crate::fs::CWD;
-use crate::hook::{Hook, InstalledHook};
+use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
@@ -167,13 +168,27 @@ impl Docker {
 }
 
 impl LanguageImpl for Docker {
-    async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook> {
-        let hook = InstalledHook::NoNeedInstall(hook.clone());
-        let env = hook.env_path().expect("Docker must have env path");
+    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
+        let info = InstallInfo::new(
+            hook.language,
+            semver::Version::new(0, 0, 0), // Docker does not have a version
+            hook.dependencies().to_vec(),
+            PathBuf::new(),
+            store,
+        );
+        let installed_hook = InstalledHook::Installed {
+            hook: hook.clone(),
+            info,
+        };
 
-        Docker::build_docker_image(&hook, true).await?;
+        Docker::build_docker_image(&installed_hook, true).await?;
+        let env = installed_hook
+            .env_path()
+            .expect("Docker must have env path");
+
         fs_err::tokio::create_dir_all(env).await?;
-        Ok(hook)
+
+        Ok(installed_hook)
     }
 
     async fn check_health(&self) -> Result<()> {
