@@ -214,7 +214,7 @@ pub struct Config {
     /// Default is `[pre-commit]`.
     pub default_install_hook_types: Option<Vec<HookType>>,
     /// A mapping from language to the default `language_version`.
-    pub default_language_version: Option<HashMap<Language, LanguageVersion>>,
+    pub default_language_version: Option<HashMap<Language, String>>,
     /// A configuration-wide default for the stages property of hooks.
     /// Default to all stages.
     pub default_stages: Option<Vec<Stage>>,
@@ -276,118 +276,6 @@ impl Display for RepoLocation {
     }
 }
 
-#[derive(Default, Debug, Copy, Clone)]
-pub enum LanguagePreference {
-    #[default]
-    Managed,
-    OnlySystem,
-    OnlyManaged,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct LanguageVersion {
-    pub preference: LanguagePreference,
-    pub request: Option<String>,
-}
-
-impl FromStr for LanguagePreference {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim() {
-            "managed" => Ok(Self::Managed),
-            "only-system" => Ok(Self::OnlySystem),
-            "only-managed" => Ok(Self::OnlyManaged),
-            _ => Err("invalid language preference"),
-        }
-    }
-}
-
-impl Display for LanguagePreference {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Managed => "managed",
-            Self::OnlySystem => "only-system",
-            Self::OnlyManaged => "only-managed",
-        })
-    }
-}
-
-impl FromStr for LanguageVersion {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim();
-        if s.is_empty() {
-            return Ok(Self {
-                preference: LanguagePreference::default(),
-                request: None,
-            });
-        }
-
-        // For compatibility with pre-commit, allow `default` and `system` as language version.
-        match s {
-            "default" => {
-                return Ok(Self {
-                    preference: LanguagePreference::Managed,
-                    request: None,
-                });
-            }
-            "system" => {
-                return Ok(Self {
-                    preference: LanguagePreference::OnlySystem,
-                    request: None,
-                });
-            }
-            _ => {}
-        }
-
-        match s.split_once(';') {
-            None => {
-                // First try to parse as a language preference
-                if let Ok(pref) = LanguagePreference::from_str(s) {
-                    Ok(Self {
-                        preference: pref,
-                        request: None,
-                    })
-                } else {
-                    Ok(Self {
-                        preference: LanguagePreference::default(),
-                        request: Some(s.to_string()),
-                    })
-                }
-            }
-            Some((pref, request)) => {
-                let preference = LanguagePreference::from_str(pref.trim())
-                    .map_err(|_| "invalid language preference")?;
-                Ok(Self {
-                    preference,
-                    request: Some(request.trim().to_string()),
-                })
-            }
-        }
-    }
-}
-
-impl Display for LanguageVersion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.request {
-            Some(req) => write!(f, "{}; {}", self.preference, req),
-            None => Display::fmt(&self.preference, f),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for LanguageVersion {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        s.parse().map_err(serde::de::Error::custom)
-    }
-}
-
 /// Common hook options.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct HookOptions {
@@ -425,7 +313,7 @@ pub struct HookOptions {
     /// Run the hook on a specific version of the language.
     /// Default is `default`.
     /// See <https://pre-commit.com/#overriding-language-version>.
-    pub language_version: Option<LanguageVersion>,
+    pub language_version: Option<String>,
     /// Write the output of the hook to a file when the hook fails or verbose is enabled.
     pub log_file: Option<String>,
     /// This hook will execute using a single process instead of in parallel.
@@ -776,7 +664,6 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
     Ok(config)
 }
 
-// TODO: check id duplication?
 /// Read the manifest file from the given path.
 pub fn read_manifest(path: &Path) -> Result<Manifest, Error> {
     let content = fs_err::read_to_string(path)?;
@@ -1287,10 +1174,7 @@ mod tests {
                                         pass_filenames: None,
                                         description: None,
                                         language_version: Some(
-                                            LanguageVersion {
-                                                preference: Managed,
-                                                request: None,
-                                            },
+                                            "default",
                                         ),
                                         log_file: None,
                                         require_serial: None,
@@ -1318,10 +1202,7 @@ mod tests {
                                         pass_filenames: None,
                                         description: None,
                                         language_version: Some(
-                                            LanguageVersion {
-                                                preference: OnlySystem,
-                                                request: None,
-                                            },
+                                            "system",
                                         ),
                                         log_file: None,
                                         require_serial: None,
@@ -1349,12 +1230,7 @@ mod tests {
                                         pass_filenames: None,
                                         description: None,
                                         language_version: Some(
-                                            LanguageVersion {
-                                                preference: Managed,
-                                                request: Some(
-                                                    "3.8",
-                                                ),
-                                            },
+                                            "3.8",
                                         ),
                                         log_file: None,
                                         require_serial: None,
@@ -1392,28 +1268,5 @@ mod tests {
         let manifest = read_manifest(Path::new("tests/fixtures/uv-pre-commit-hooks.yaml"))?;
         insta::assert_debug_snapshot!(manifest);
         Ok(())
-    }
-
-    #[test]
-    fn test_language_version_from_str() {
-        // Empty string
-        let version = LanguageVersion::from_str("").unwrap();
-        assert!(matches!(version.preference, LanguagePreference::Managed));
-        assert!(version.request.is_none());
-
-        // Preference only
-        let version = LanguageVersion::from_str("managed").unwrap();
-        assert!(matches!(version.preference, LanguagePreference::Managed));
-        assert!(version.request.is_none());
-
-        // Version only
-        let version = LanguageVersion::from_str(">=1.0.0").unwrap();
-        assert!(matches!(version.preference, LanguagePreference::Managed));
-        assert_eq!(version.request.unwrap().to_string(), ">=1.0.0");
-
-        // Both preference and version
-        let version = LanguageVersion::from_str("only-system; >=1.0.0").unwrap();
-        assert!(matches!(version.preference, LanguagePreference::OnlySystem));
-        assert_eq!(version.request.unwrap().to_string(), ">=1.0.0");
     }
 }

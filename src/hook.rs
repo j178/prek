@@ -18,11 +18,12 @@ use tracing::{debug, error};
 use url::Url;
 
 use crate::config::{
-    self, ALTER_CONFIG_FILE, CONFIG_FILE, Config, Language, LocalHook, MANIFEST_FILE, ManifestHook,
-    MetaHook, RemoteHook, Stage, read_config, read_manifest,
+    self, ALTER_CONFIG_FILE, CONFIG_FILE, Config, HookOptions, Language, LocalHook, MANIFEST_FILE,
+    ManifestHook, MetaHook, RemoteHook, Stage, read_config, read_manifest,
 };
 use crate::fs::{CWD, Simplified};
 use crate::languages::version;
+use crate::languages::version::LanguageRequest;
 use crate::store::{Store, to_hex};
 use crate::warn_user;
 
@@ -32,7 +33,7 @@ pub enum Error {
     InvalidUrl(#[from] url::ParseError),
     #[error(transparent)]
     Config(#[from] config::Error),
-    #[error("Hook {hook} in not present in repository {repo}")]
+    #[error("Hook `{hook}` in not present in repository `{repo}`")]
     HookNotFound { hook: String, repo: String },
     #[error(transparent)]
     Store(#[from] Box<crate::store::Error>),
@@ -40,8 +41,12 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
-    #[error(transparent)]
-    Version(#[from] version::Error),
+    #[error("Failed to parse `language_version` for hook `{hook}`")]
+    Version {
+        hook: String,
+        #[source]
+        error: version::Error,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -385,27 +390,41 @@ impl HookBuilder {
     /// Check the hook configuration.
     fn check(&self) -> Result<(), Error> {
         let language = self.config.language;
-        let options = &self.config.options;
-        if !language.supports_dependency() {
-            if options.additional_dependencies.is_some() {
+        let HookOptions {
+            language_version,
+            additional_dependencies,
+            ..
+        } = &self.config.options;
+
+        let additional_dependencies = additional_dependencies
+            .as_ref()
+            .map_or(&[][..], |deps| deps.as_slice());
+
+        if !language.supports_dependency() && !additional_dependencies.is_empty() {
+            return Err(Error::Config(config::Error::InvalidConfig(format!(
+                "Hook `{}` specified `additional_dependencies` `{}` but the language `{}` does not support installing dependencies for now",
+                self.config.id,
+                additional_dependencies.join(", "),
+                language,
+            ))));
+        }
+
+        if !language.supports_install_env() {
+            if let Some(language_version) = language_version
+                && language_version != "default"
+            {
                 return Err(Error::Config(config::Error::InvalidConfig(format!(
-                    "Language {language} does not support `additional_dependencies`",
+                    "Hook `{}` specified `language_version` `{}` but the language `{}` does not install an environment",
+                    self.config.id, language_version, language,
                 ))));
             }
-        }
-        if options
-            .language_version
-            .as_ref()
-            .and_then(|v| v.request.as_ref())
-            .is_some()
-        {
-            if !language.supports_dependency() {
+
+            if !additional_dependencies.is_empty() {
                 return Err(Error::Config(config::Error::InvalidConfig(format!(
-                    "Language {language} does not support `language_version`",
-                ))));
-            } else if !language.supports_language_version() {
-                return Err(Error::Config(config::Error::InvalidConfig(format!(
-                    "Language {language} does not support specifying version, but `language_version` is set",
+                    "Hook `{}` specified `additional_dependencies` `{}` but the language `{}` does not install an environment",
+                    self.config.id,
+                    additional_dependencies.join(", "),
+                    language,
                 ))));
             }
         }
@@ -419,9 +438,14 @@ impl HookBuilder {
         self.fill_in_defaults();
 
         let options = self.config.options;
-        let language_version = options.language_version.expect("language_version not set");
-        let language_version =
-            version::LanguageVersion::parse(self.config.language, &language_version)?;
+        let language_request = LanguageRequest::parse(
+            self.config.language,
+            &options.language_version.expect("language_version not set"),
+        )
+        .map_err(|e| Error::Version {
+            hook: self.config.id.clone(),
+            error: e,
+        })?;
 
         Ok(Hook {
             repo: self.repo,
@@ -444,7 +468,7 @@ impl HookBuilder {
             fail_fast: options.fail_fast.expect("fail_fast not set"),
             pass_filenames: options.pass_filenames.expect("pass_filenames not set"),
             description: options.description,
-            language_version,
+            language_request,
             log_file: options.log_file,
             require_serial: options.require_serial.expect("require_serial not set"),
             stages: options.stages.expect("stages not set"),
@@ -477,7 +501,7 @@ pub struct Hook {
     pub fail_fast: bool,
     pub pass_filenames: bool,
     pub description: Option<String>,
-    pub language_version: version::LanguageVersion,
+    pub language_request: LanguageRequest,
     pub log_file: Option<String>,
     pub require_serial: bool,
     pub stages: Vec<Stage>,
@@ -644,6 +668,6 @@ impl InstallInfo {
         self.language == hook.language
             // TODO: should we compare ignore order?
             && self.dependencies.as_slice() == &*hook.dependencies()
-            && hook.language_version.satisfied_by(self)
+            && hook.language_request.satisfied_by(self)
     }
 }

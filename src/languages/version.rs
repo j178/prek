@@ -1,4 +1,4 @@
-use crate::config::{self, Language, LanguagePreference};
+use crate::config::Language;
 use crate::hook::InstallInfo;
 use crate::languages::python::PythonRequest;
 
@@ -11,16 +11,41 @@ pub enum Error {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum LanguageRequest {
     Any,
-    Semver(SemverRequest),
     Python(PythonRequest),
+    Node(SemverRequest),
+    // TODO: all other languages default to semver for now.
+    Semver(SemverRequest),
 }
 
 impl LanguageRequest {
-    fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
+    pub fn parse(lang: Language, request: &str) -> Result<Self, Error> {
+        // `pre-commit` support these values in `language_version`:
+        // - `default`: substituted by language `get_default_version` function
+        //   In `get_default_version`, if a system version is available, it will return `system`.
+        //   For Python, it will find from sys.executable, `pythonX.Y`, or versions `py` can find.
+        //   Otherwise, it will still return `default`.
+        // - `system`: use current system installed version
+        // - Python version passed down to `virtualenv`, e.g. `python`, `python3`, `python3.8`
+        // - Node.js version passed down to `nodeenv`
+        // - Rust version passed down to `rustup`
+
+        if request == "default" || request.is_empty() {
+            return Ok(LanguageRequest::Any);
+        }
+
+        match lang {
+            Language::Python => PythonRequest::parse(request),
+            Language::Node => SemverRequest::parse(request),
+            _ => SemverRequest::parse(request),
+        }
+    }
+
+    pub fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
         match self {
             LanguageRequest::Any => true,
-            LanguageRequest::Semver(req) => req.satisfied_by(install_info),
+            LanguageRequest::Node(req) => req.satisfied_by(install_info),
             LanguageRequest::Python(req) => req.satisfied_by(install_info),
+            LanguageRequest::Semver(req) => req.satisfied_by(install_info),
         }
     }
 }
@@ -39,55 +64,5 @@ impl SemverRequest {
         let version_req = semver::VersionReq::parse(request)
             .map_err(|_| Error::InvalidVersion(request.to_string()))?;
         Ok(LanguageRequest::Semver(SemverRequest(version_req)))
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct LanguageVersion {
-    pub preference: LanguagePreference,
-    pub request: LanguageRequest,
-}
-
-impl LanguageVersion {
-    pub fn parse(lang: Language, version: &config::LanguageVersion) -> Result<Self, Error> {
-        let Some(ref request) = version.request else {
-            return Ok(Self {
-                preference: version.preference,
-                request: LanguageRequest::Any,
-            });
-        };
-
-        #[allow(clippy::single_match_else)]
-        let request = match lang {
-            Language::Python => PythonRequest::parse(request)?,
-            _ => {
-                // TODO: support other languages
-                SemverRequest::parse(request)?
-            }
-        };
-
-        Ok(Self {
-            preference: version.preference,
-            request,
-        })
-    }
-
-    pub fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
-        // TODO: check preference?
-        self.request.satisfied_by(install_info)
-    }
-
-    pub fn allow_system(&self) -> bool {
-        matches!(
-            self.preference,
-            LanguagePreference::Managed | LanguagePreference::OnlySystem
-        )
-    }
-
-    pub fn allow_managed(&self) -> bool {
-        matches!(
-            self.preference,
-            LanguagePreference::Managed | LanguagePreference::OnlyManaged
-        )
     }
 }

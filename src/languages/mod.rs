@@ -25,11 +25,6 @@ static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
 static SCRIPT: script::Script = script::Script;
 
 trait LanguageImpl {
-    /// Whether the language supports installing dependencies.
-    ///
-    /// For example, Python and Node.js support installing dependencies, while
-    /// System and Fail do not.
-    fn supports_dependency(&self) -> bool;
     async fn resolve(&self, hook: &Hook, store: &Store) -> Result<ResolvedHook>;
     async fn install(&self, hook: &ResolvedHook, store: &Store) -> Result<()>;
     async fn check_health(&self) -> Result<()>;
@@ -42,8 +37,38 @@ trait LanguageImpl {
     ) -> Result<(i32, Vec<u8>)>;
 }
 
+// `pre-commit` language support:
+// conda: only system version, support env, support additional deps
+// coursier: only system version, support env, support additional deps
+// dart: only system version, support env, support additional deps
+// docker_image: only system version, no env, no additional deps
+// docker: only system version, support env, no additional deps
+// dotnet: only system version, support env, no additional deps
+// fail: only system version, no env, no additional deps
+// golang: install requested version, support env, support additional deps
+// haskell: only system version, support env, support additional deps
+// lua: only system version, support env, support additional deps
+// node: install requested version, support env, support additional deps (delegated to nodeenv)
+// perl: only system version, support env, support additional deps
+// pygrep: only system version, no env, no additional deps
+// python: install requested version, support env, support additional deps (delegated to virtualenv)
+// r: only system version, support env, support additional deps
+// ruby: install requested version, support env, support additional deps (delegated to rbenv)
+// rust: install requested version, support env, support additional deps (delegated to rustup and cargo)
+// script: only system version, no env, no additional deps
+// swift: only system version, support env, no additional deps
+// system: only system version, no env, no additional deps
+
 impl Language {
-    /// Return whether the language allows specifying the version.
+    pub fn supports_install_env(self) -> bool {
+        !matches!(
+            self,
+            Self::DockerImage | Self::Fail | Self::Pygrep | Self::Script | Self::System
+        )
+    }
+
+    /// Return whether the language allows specifying the version, e.g. we can install a specific
+    /// requested language version.
     /// See <https://pre-commit.com/#overriding-language-version>
     pub fn supports_language_version(self) -> bool {
         matches!(
@@ -52,17 +77,22 @@ impl Language {
         )
     }
 
+    /// Whether the language supports installing dependencies.
+    ///
+    /// For example, Python and Node.js support installing dependencies, while
+    /// System and Fail do not.
     pub fn supports_dependency(self) -> bool {
-        match self {
-            Self::Python => PYTHON.supports_dependency(),
-            // Self::Node => NODE.supports_dependency(),
-            Self::System => SYSTEM.supports_dependency(),
-            Self::Fail => FAIL.supports_dependency(),
-            Self::Docker => DOCKER.supports_dependency(),
-            Self::DockerImage => DOCKER_IMAGE.supports_dependency(),
-            Self::Script => SCRIPT.supports_dependency(),
-            _ => todo!("{}", self.as_str()),
-        }
+        !matches!(
+            self,
+            Self::DockerImage
+                | Self::Fail
+                | Self::Pygrep
+                | Self::Script
+                | Self::System
+                | Self::Docker
+                | Self::Dotnet
+                | Self::Swift
+        )
     }
 
     pub async fn resolve(&self, hook: &Hook, store: &Store) -> Result<ResolvedHook> {

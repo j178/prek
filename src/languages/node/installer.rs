@@ -17,7 +17,7 @@ use tracing::{trace, warn};
 use crate::archive;
 use crate::archive::ArchiveExtension;
 use crate::fs::LockedFile;
-use crate::languages::version::LanguageVersion;
+use crate::languages::version::LanguageRequest;
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
@@ -174,10 +174,10 @@ impl FromStr for VersionRequest {
     }
 }
 
-impl TryFrom<LanguageVersion> for VersionRequest {
+impl TryFrom<LanguageRequest> for VersionRequest {
     type Error = <Self as FromStr>::Err;
 
-    fn try_from(_version: LanguageVersion) -> Result<Self, Self::Error> {
+    fn try_from(_version: LanguageRequest) -> Result<Self, Self::Error> {
         todo!()
     }
 }
@@ -264,19 +264,12 @@ impl NodeInstaller {
     }
 
     /// Install a version of Node.js.
-    pub async fn install(&self, version: &LanguageVersion) -> Result<NodeResult> {
-        if version.allow_system() {
-            let node = which::which("node");
-            let npm = which::which("npm");
-            if let (Ok(node), Ok(npm)) = (node, npm) {
-                trace!(node = %node.display(), npm = %npm.display(), "Found system node and npm");
-                return Ok(NodeResult::from_executables(node, npm));
-            }
-        }
-        if !version.allow_managed() {
-            return Err(anyhow::anyhow!(
-                "Node not found on the system and downloading is disabled"
-            ));
+    pub async fn install(&self, version: &LanguageRequest) -> Result<NodeResult> {
+        let node = which::which("node");
+        let npm = which::which("npm");
+        if let (Ok(node), Ok(npm)) = (node, npm) {
+            trace!(node = %node.display(), npm = %npm.display(), "Found system node and npm");
+            return Ok(NodeResult::from_executables(node, npm));
         }
 
         fs_err::create_dir_all(&self.root)?;

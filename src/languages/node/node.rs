@@ -12,10 +12,6 @@ use crate::store::{Store, ToolBucket};
 pub struct Node;
 
 impl LanguageImpl for Node {
-    fn supports_dependency(&self) -> bool {
-        true
-    }
-
     async fn resolve(&self, _hook: &Hook, _store: &Store) -> Result<ResolvedHook> {
         todo!()
     }
@@ -27,7 +23,7 @@ impl LanguageImpl for Node {
         let node_dir = store.tools_path(ToolBucket::Node);
 
         let installer = NodeInstaller::new(node_dir);
-        let node = installer.install(&hook.language_version).await?;
+        let node = installer.install(&hook.language_request).await?;
 
         // TODO: Create an env
         _ = node;

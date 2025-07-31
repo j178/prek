@@ -18,10 +18,6 @@ use constants::env_vars::EnvVars;
 pub struct Python;
 
 impl LanguageImpl for Python {
-    fn supports_dependency(&self) -> bool {
-        true
-    }
-
     async fn resolve(&self, hook: &Hook, store: &Store) -> Result<ResolvedHook> {
         // Select from installed hooks
         if let Some(info) = store.installed_hooks().find(|info| info.matches(hook)) {

@@ -12,10 +12,6 @@ use crate::store::Store;
 pub struct System;
 
 impl LanguageImpl for System {
-    fn supports_dependency(&self) -> bool {
-        false
-    }
-
     async fn resolve(&self, hook: &Hook, _store: &Store) -> Result<ResolvedHook> {
         Ok(ResolvedHook::NoNeedInstall(hook.clone()))
     }

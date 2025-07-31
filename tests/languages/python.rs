@@ -31,7 +31,7 @@ fn language_version() {
                 name: python3.12
                 language: python
                 entry: python -c 'import sys; print(sys.version_info[:3])'
-                language_version: managed; python3.12
+                language_version: python3.12
                 always_run: true
               - id: greater-than-python3.13
                 name: greater-than-python3.13
@@ -44,13 +44,13 @@ fn language_version() {
         #  name: python3.12
         #  language: python
         #  entry: python -c 'import sys; print(sys.version_info[:3])'
-        #  language_version: only-managed; 3.12
+        #  language_version: '3.12;
         #  always_run: true
         #- id: greater-than-python3.13
         #  name: greater-than-python3.13
         #  language: python
         #  entry: python -c 'import sys; print(sys.version_info[:3])'
-        #  language_version: only-managed; >=3.13
+        #  language_version: '>=3.13'
         #  always_run: true
     "#});
     context.git_add(".");

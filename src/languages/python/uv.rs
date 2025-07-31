@@ -7,7 +7,6 @@ use axoupdater::{AxoUpdater, ReleaseSource, ReleaseSourceType, UpdateRequest};
 use tokio::task::JoinSet;
 use tracing::{debug, enabled, trace, warn};
 
-use crate::config::LanguagePreference;
 use crate::fs::LockedFile;
 use crate::hook::Hook;
 use crate::process::Cmd;
@@ -159,24 +158,18 @@ impl Uv {
     }
 
     pub async fn find_python(&self, hook: &Hook, store: &Store) -> Result<Vec<PathBuf>> {
-        let python_preference = match hook.language_version.preference {
-            LanguagePreference::Managed => "managed",
-            LanguagePreference::OnlySystem => "only-system",
-            LanguagePreference::OnlyManaged => "only-managed",
-        };
-
         let mut cmd = Cmd::new(&self.path, "find python");
 
         cmd.arg("python")
             .arg("find")
             .arg("--python-preference")
-            .arg(python_preference)
+            .arg("managed")
             .arg("--no-project")
             .env(
                 EnvVars::UV_PYTHON_INSTALL_DIR,
                 store.tools_path(ToolBucket::Python),
             );
-        match &hook.language_version.request {
+        match &hook.language_request {
             LanguageRequest::Any => {}
             LanguageRequest::Python(request) => match request {
                 PythonRequest::Major(major) => {
@@ -195,7 +188,7 @@ impl Uv {
                     cmd.arg(path);
                 }
             },
-            LanguageRequest::Semver(_) => unreachable!(),
+            _ => unreachable!(),
         }
 
         // TODO: improve error reporting

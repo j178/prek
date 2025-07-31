@@ -79,6 +79,67 @@ fn run_basic() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn invalid_config() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config("invalid: config");
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: missing field `repos`
+    "#);
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: dotnet
+                additional_dependencies: ["dotnet@6"]
+                entry: echo Hello, world!
+    "#});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid config file: Hook `trailing-whitespace` specified `additional_dependencies` `dotnet@6` but the language `dotnet` does not support installing dependencies for now
+    "#);
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: fail
+                language_version: '6'
+                entry: echo Hello, world!
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid config file: Hook `trailing-whitespace` specified `language_version` `6` but the language `fail` does not install an environment
+    "#);
+}
+
 /// Use same repo multiple times, with same or different revisions.
 #[test]
 fn same_repo() -> Result<()> {

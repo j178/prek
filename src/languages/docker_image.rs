@@ -12,10 +12,6 @@ use crate::store::Store;
 pub struct DockerImage;
 
 impl LanguageImpl for DockerImage {
-    fn supports_dependency(&self) -> bool {
-        false
-    }
-
     async fn resolve(&self, hook: &Hook, _store: &Store) -> Result<ResolvedHook> {
         Ok(ResolvedHook::NoNeedInstall(hook.clone()))
     }

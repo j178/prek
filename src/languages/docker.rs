@@ -167,10 +167,6 @@ impl Docker {
 }
 
 impl LanguageImpl for Docker {
-    fn supports_dependency(&self) -> bool {
-        true
-    }
-
     async fn resolve(&self, hook: &Hook, _store: &Store) -> Result<ResolvedHook> {
         Ok(ResolvedHook::NoNeedInstall(hook.clone()))
     }

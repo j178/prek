@@ -13,11 +13,6 @@ use crate::store::Store;
 pub struct Script;
 
 impl LanguageImpl for Script {
-    fn supports_dependency(&self) -> bool {
-        // As of now: "if it needs additional dependencies the consumer must install them manually."
-        false
-    }
-
     async fn resolve(&self, hook: &Hook, _store: &Store) -> Result<ResolvedHook> {
         Ok(ResolvedHook::NoNeedInstall(hook.clone()))
     }
