@@ -25,6 +25,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 /// Adapt [axoprocess] to use [`tokio::process::Process`] instead of [`std::process::Command`].
+use std::fmt::Display;
+use std::process::Output;
 use std::{
     ffi::OsStr,
     path::Path,
@@ -44,25 +46,58 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Error, Diagnostic)]
 pub enum Error {
     /// The command fundamentally failed to execute (usually means it didn't exist)
-    #[error("failed to run {summary} (cmd: {cmd})")]
+    #[error("run command `{summary}` failed")]
     Exec {
         /// Summary of what the Command was trying to do
         summary: String,
-        /// Command name
-        cmd: String,
         /// What failed
         #[source]
         cause: std::io::Error,
     },
-    /// The command ran but signaled some kind of error condition
-    /// (assuming the exit code is used for that)
-    #[error("failed to run {summary} (status: {status})")]
-    Status {
-        /// Summary of what the Command was trying to do
-        summary: String,
-        /// What status the Command returned
-        status: ExitStatus,
-    },
+    #[error("command `{summary}` exited with an error:\n{error}")]
+    Status { summary: String, error: StatusError },
+}
+
+/// The command ran but signaled some kind of error condition
+/// (assuming the exit code is used for that)
+#[derive(Debug)]
+pub struct StatusError {
+    pub status: ExitStatus,
+    pub output: Option<Output>,
+}
+
+impl Display for StatusError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "\n{}\n{}", "[status]".red(), self.status)?;
+
+        if let Some(output) = &self.output {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = stdout
+                .split('\n')
+                .filter_map(|line| {
+                    let line = line.trim();
+                    if line.is_empty() { None } else { Some(line) }
+                })
+                .collect::<Vec<_>>();
+            let stderr = stderr
+                .split('\n')
+                .filter_map(|line| {
+                    let line = line.trim();
+                    if line.is_empty() { None } else { Some(line) }
+                })
+                .collect::<Vec<_>>();
+
+            if !stdout.is_empty() {
+                writeln!(f, "\n{}\n{}", "[stdout]".red(), stdout.join("\n"))?;
+            }
+            if !stderr.is_empty() {
+                writeln!(f, "\n{}\n{}", "[stderr]".red(), stderr.join("\n"))?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// A fancier Command, see the crate's top-level docs!
@@ -129,35 +164,32 @@ impl Cmd {
         self.log_command();
         self.inner.spawn().map_err(|cause| Error::Exec {
             summary: self.summary.clone(),
-            cmd: self.get_program().to_string_lossy().to_string(),
             cause,
         })
     }
 
     /// Equivalent to [`std::process::Command::output`][],
     /// but logged, with the error wrapped, and status checked (by default)
-    pub async fn output(&mut self) -> Result<std::process::Output> {
+    pub async fn output(&mut self) -> Result<Output> {
         self.log_command();
-        let res = self.inner.output().await.map_err(|cause| Error::Exec {
+        let output = self.inner.output().await.map_err(|cause| Error::Exec {
             summary: self.summary.clone(),
-            cmd: self.get_program().to_string_lossy().to_string(),
             cause,
         })?;
-        self.maybe_check_status(res.status)?;
-        Ok(res)
+        self.maybe_check_output(&output)?;
+        Ok(output)
     }
 
     /// Equivalent to [`std::process::Command::status`][]
     /// but logged, with the error wrapped, and status checked (by default)
     pub async fn status(&mut self) -> Result<ExitStatus> {
         self.log_command();
-        let res = self.inner.status().await.map_err(|cause| Error::Exec {
+        let status = self.inner.status().await.map_err(|cause| Error::Exec {
             summary: self.summary.clone(),
-            cmd: self.get_program().to_string_lossy().to_string(),
             cause,
         })?;
-        self.maybe_check_status(res)?;
-        Ok(res)
+        self.maybe_check_status(status)?;
+        Ok(status)
     }
 }
 
@@ -266,7 +298,24 @@ impl Cmd {
         } else {
             Err(Error::Status {
                 summary: self.summary.clone(),
-                status,
+                error: StatusError {
+                    status,
+                    output: None,
+                },
+            })
+        }
+    }
+
+    pub fn check_output(&self, output: &Output) -> Result<()> {
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(Error::Status {
+                summary: self.summary.clone(),
+                error: StatusError {
+                    status: output.status,
+                    output: Some(output.clone()),
+                },
             })
         }
     }
@@ -276,6 +325,15 @@ impl Cmd {
     pub fn maybe_check_status(&self, status: ExitStatus) -> Result<()> {
         if self.check_status {
             self.check_status(status)?;
+        }
+        Ok(())
+    }
+
+    /// Invoke [`Cmd::check_status`][] if [`Cmd::check`][] is `true`
+    /// (defaults to `true`).
+    pub fn maybe_check_output(&self, output: &Output) -> Result<()> {
+        if self.check_status {
+            self.check_output(output)?;
         }
         Ok(())
     }
