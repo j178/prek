@@ -33,7 +33,7 @@ impl LanguageImpl for Python {
         let mut info = InstallInfo::new(hook.language, hook.dependencies().to_vec(), store);
         info.clear_env_path().await?;
 
-        debug!(%hook, target = %info.env_path.display(), "Install environment");
+        debug!(%hook, target = %info.env_path.display(), "Installing environment");
 
         let python_request = match &hook.language_request {
             LanguageRequest::Any => None,

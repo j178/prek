@@ -291,16 +291,25 @@ pub async fn install_hooks(
         let installed_hooks = installed_hooks.clone();
 
         group_futures.push(async move {
-            let mut installed = Vec::with_capacity(hooks.len());
+            let mut installed_this_group = Vec::with_capacity(hooks.len());
             // Process hooks sequentially within each language group
             for hook in hooks {
                 // Find a matching installed hook environment.
-                if let Some(info) = installed_hooks.iter().find(|i| i.matches(hook)) {
+                if let Some(info) = installed_hooks
+                    .iter()
+                    .chain(installed_this_group.iter().filter_map(|i| {
+                        let InstalledHook::Installed { info, .. } = i else {
+                            return None;
+                        };
+                        Some(info)
+                    }))
+                    .find(|i| i.matches(hook))
+                {
                     debug!(
                         "Found installed environment for hook `{hook}` at `{}`",
                         info.env_path.display()
                     );
-                    installed.push(InstalledHook::Installed {
+                    installed_this_group.push(InstalledHook::Installed {
                         hook: hook.clone(),
                         info: info.clone(),
                     });
@@ -312,11 +321,11 @@ pub async fn install_hooks(
                 let installed_hook = hook.language.install(hook, store).await?;
                 installed_hook.mark_as_installed(store).await?;
 
-                installed.push(installed_hook);
+                installed_this_group.push(installed_hook);
 
                 reporter.on_install_complete(progress);
             }
-            anyhow::Ok(installed)
+            anyhow::Ok(installed_this_group)
         });
     }
 
