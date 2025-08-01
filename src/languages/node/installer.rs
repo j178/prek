@@ -526,22 +526,22 @@ impl NodeInstaller {
             .parent()
             .ok_or_else(|| anyhow!("Node executable has no parent directory"))?;
 
-        let npm_path = node_dir.join("npm").with_extension(EXE_EXTENSION);
-        if npm_path.try_exists()? && is_executable(&npm_path) {
-            trace!(
-                node = %node_path.display(),
-                npm = %npm_path.display(),
-                "Found npm in same directory as node"
-            );
-            Ok(Some(npm_path))
-        } else {
-            trace!(
-                node = %node_path.display(),
-                npm = %npm_path.display(),
-                "npm not found in same directory as node"
-            );
-            Ok(None)
+        for name in ["npm", "npm.cmd", "npm.bat"] {
+            let npm_path = node_dir.join(name);
+            if npm_path.try_exists()? && is_executable(&npm_path) {
+                trace!(
+                    node = %node_path.display(),
+                    npm = %npm_path.display(),
+                    "Found npm in same directory as node"
+                );
+                return Ok(Some(npm_path));
+            }
         }
+        trace!(
+            node = %node_path.display(),
+            "npm not found in same directory as node"
+        );
+        Ok(None)
     }
 }
 
@@ -558,7 +558,8 @@ pub(crate) fn bin_dir(root: &Path) -> PathBuf {
 fn is_executable(path: &Path) -> bool {
     #[cfg(windows)]
     {
-        path.extension().is_some_and(|ext| ext == EXE_EXTENSION)
+        path.extension()
+            .is_some_and(|ext| ext == EXE_EXTENSION || ext == "cmd" || ext == "bat")
     }
     #[cfg(not(windows))]
     {
