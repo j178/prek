@@ -160,16 +160,6 @@ impl LanguageImpl for Node {
                 .check(false)
                 .output()
                 .await?;
-            #[cfg(not(windows))]
-            let mut output = Cmd::new(&cmds[0], "run node command")
-                .args(&cmds[1..])
-                .env("PATH", &new_path)
-                .envs(env_vars)
-                .args(&hook.args)
-                .args(batch)
-                .check(false)
-                .output()
-                .await?;
 
             output.stdout.extend(output.stderr);
             let code = output.status.code().unwrap_or(1);
