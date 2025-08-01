@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env::consts::EXE_EXTENSION;
+use std::path::Path;
 
 use anyhow::Context;
 use tracing::debug;
@@ -46,10 +47,10 @@ impl LanguageImpl for Node {
         } else {
             fs_err::tokio::create_dir_all(info.env_path.join("lib/node_modules")).await?;
         }
-        // TODO: use copy on Windows
-        fs_err::tokio::symlink(
+        // Create symlink or copy on Windows
+        Self::create_symlink_or_copy(
             node.node(),
-            bin_dir.join("node").with_extension(EXE_EXTENSION),
+            &bin_dir.join("node").with_extension(EXE_EXTENSION),
         )
         .await?;
 
@@ -163,5 +164,79 @@ impl LanguageImpl for Node {
         }
 
         Ok((combined_status, combined_output))
+    }
+}
+
+impl Node {
+    /// Create a symlink or copy the file on Windows.
+    /// Tries symlink first, falls back to copy if symlink fails.
+    async fn create_symlink_or_copy(source: &Path, target: &Path) -> anyhow::Result<()> {
+        if target.exists() {
+            fs_err::tokio::remove_file(target).await?;
+        }
+
+        #[cfg(not(windows))]
+        {
+            // Try symlink on Unix systems
+            match fs_err::tokio::symlink(source, target).await {
+                Ok(()) => {
+                    debug!(
+                        "Created symlink from {} to {}",
+                        source.display(),
+                        target.display()
+                    );
+                    return Ok(());
+                }
+                Err(e) => {
+                    debug!(
+                        "Failed to create symlink from {} to {}: {}",
+                        source.display(),
+                        target.display(),
+                        e
+                    );
+                }
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            // Try Windows symlink API (requires admin privileges)
+            use std::os::windows::fs::symlink_file;
+            match symlink_file(source, target) {
+                Ok(()) => {
+                    debug!(
+                        "Created Windows symlink from {} to {}",
+                        source.display(),
+                        target.display()
+                    );
+                    return Ok(());
+                }
+                Err(e) => {
+                    debug!(
+                        "Failed to create Windows symlink from {} to {}: {}",
+                        source.display(),
+                        target.display(),
+                        e
+                    );
+                }
+            }
+        }
+
+        // Fallback to copy
+        debug!(
+            "Falling back to copy from {} to {}",
+            source.display(),
+            target.display()
+        );
+        fs_err::tokio::copy(source, target).await.map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to copy file from {} to {}: {}",
+                source.display(),
+                target.display(),
+                e
+            )
+        })?;
+
+        Ok(())
     }
 }

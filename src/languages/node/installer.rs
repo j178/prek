@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::string::ToString;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use futures::TryStreamExt;
 use itertools::Itertools;
 use reqwest::Client;
@@ -335,27 +335,16 @@ impl NodeInstaller {
             return Ok(node);
         }
 
-        // TODO: find all node and npm in PATH
-        let node = which::which("node");
-        let npm = which::which("npm");
-        if let (Ok(node), Ok(npm)) = (node, npm) {
-            trace!(node = %node.display(), npm = %npm.display(), "Found system node and npm");
-            if let Ok(node_result) = NodeResult::from_executables(node, npm).fill_version().await {
-                // Check if the system node matches the requested version
-                if node_request.is_none_or(|req| req.matches(node_result.version())) {
-                    trace!(%node_result, "Using system node");
-                    return Ok(node_result);
-                }
-                debug!(%node_result, "System node does not match requested version");
-            } else {
-                warn!("Failed to fill version for system node, proceeding with installation");
-            }
+        // Find all node and npm executables in PATH and check their versions
+        if let Some(node_result) = self.find_system_node(node_request).await? {
+            trace!(%node_result, "Using system node");
+            return Ok(node_result);
         }
 
         let resolved_version = self.resolve_version(node_request).await?;
         trace!(version = %resolved_version, "Installing node");
 
-        self.install_node(&resolved_version).await
+        self.download(&resolved_version).await
     }
 
     /// Get the installed version of Node.js.
@@ -409,7 +398,7 @@ impl NodeInstaller {
 
     // TODO: support mirror?
     /// Install a specific version of Node.js.
-    async fn install_node(&self, version: &NodeVersion) -> Result<NodeResult> {
+    async fn download(&self, version: &NodeVersion) -> Result<NodeResult> {
         let mut arch = match HOST.architecture {
             Architecture::X86_32(X86_32Architecture::I686) => "x86",
             Architecture::X86_64 => "x64",
@@ -470,6 +459,90 @@ impl NodeInstaller {
 
         Ok(NodeResult::from_dir(&target).with_version(version.clone()))
     }
+
+    /// Find a suitable system Node.js installation that matches the request.
+    async fn find_system_node(
+        &self,
+        node_request: Option<&NodeRequest>,
+    ) -> Result<Option<NodeResult>> {
+        let node_paths: Vec<_> = match which::which_all("node") {
+            Ok(paths) => paths.collect(),
+            Err(e) => {
+                debug!("No node executables found in PATH: {}", e);
+                return Ok(None);
+            }
+        };
+
+        trace!(
+            node_count = node_paths.len(),
+            "Found node executables in PATH"
+        );
+
+        // Check each node executable for a matching version, stop early if found
+        for node_path in node_paths {
+            if let Some(npm_path) = Self::find_npm_in_same_directory(&node_path)? {
+                match NodeResult::from_executables(node_path, npm_path)
+                    .fill_version()
+                    .await
+                {
+                    Ok(node_result) => {
+                        trace!(
+                            %node_result,
+                            "Successfully created NodeResult from system executables"
+                        );
+
+                        // Check if this version matches the request
+                        if node_request.is_none_or(|req| req.matches(node_result.version())) {
+                            debug!(
+                                %node_result,
+                                "Found matching system Node.js installation"
+                            );
+                            return Ok(Some(node_result));
+                        }
+                        debug!(
+                            %node_result,
+                            "System Node.js installation does not match requested version"
+                        );
+                    }
+                    Err(e) => {
+                        warn!(?e, "Failed to get version for system Node.js installation");
+                    }
+                }
+            } else {
+                debug!(
+                    node = %node_path.display(),
+                    "No npm found in same directory as node executable"
+                );
+            }
+        }
+
+        debug!("No system Node.js installation matches the requested version");
+        Ok(None)
+    }
+
+    /// Find npm executable in the same directory as the given node executable.
+    fn find_npm_in_same_directory(node_path: &Path) -> Result<Option<PathBuf>> {
+        let node_dir = node_path
+            .parent()
+            .ok_or_else(|| anyhow!("Node executable has no parent directory"))?;
+
+        let npm_path = node_dir.join("npm").with_extension(EXE_EXTENSION);
+        if npm_path.try_exists()? && is_executable(&npm_path) {
+            trace!(
+                node = %node_path.display(),
+                npm = %npm_path.display(),
+                "Found npm in same directory as node"
+            );
+            Ok(Some(npm_path))
+        } else {
+            trace!(
+                node = %node_path.display(),
+                npm = %npm_path.display(),
+                "npm not found in same directory as node"
+            );
+            Ok(None)
+        }
+    }
 }
 
 #[cfg(not(windows))]
@@ -480,4 +553,16 @@ pub(crate) fn bin_dir(root: &Path) -> PathBuf {
 #[cfg(windows)]
 pub(crate) fn bin_dir(root: &Path) -> PathBuf {
     root.to_path_buf()
+}
+
+fn is_executable(path: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        path.extension().is_some_and(|ext| ext == EXE_EXTENSION)
+    }
+    #[cfg(not(windows))]
+    {
+        use std::os::unix::fs::MetadataExt;
+        path.is_file() && fs_err::metadata(path).is_ok_and(|m| m.mode() & 0o111 != 0)
+    }
 }
