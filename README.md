@@ -10,7 +10,8 @@ while also providing some additional opinionated features.
 
 > [!WARNING]
 > This project is still in early stage of development, only a few of the original pre-commit features are implemented.
-> It is not recommended for normal use yet, but feel free to try it out and provide feedback.
+> It is not production-ready yet, but feel free to try it out and provide feedback.
+> Current supported languages are python, nodejs, docker, docker-image, system, script and fail.
 
 > [!NOTE]
 > This project was previously named `pre-commit-rs`, but it was renamed to `prefligit` to prevent confusion with the existing pre-commit tool.
@@ -25,6 +26,17 @@ while also providing some additional opinionated features.
 - Improved toolchain installations for Python, Node.js, Go, Rust and Ruby, shared between hooks.
 - Built-in implementation of some common hooks.
 - (TODO) Built-in support for monorepos.
+
+## Usage
+
+```console
+$ prefligit run
+trim trailing whitespace.................................................Passed
+fix end of files.........................................................Passed
+typos....................................................................Passed
+cargo fmt................................................................Passed
+cargo clippy.............................................................Passed
+```
 
 ## Installation
 
