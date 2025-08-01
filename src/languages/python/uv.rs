@@ -8,14 +8,8 @@ use tokio::task::JoinSet;
 use tracing::{debug, enabled, trace, warn};
 
 use crate::fs::LockedFile;
-use crate::hook::Hook;
 use crate::process::Cmd;
 use crate::store::{Store, ToolBucket};
-
-use crate::languages::python::PythonRequest;
-use crate::languages::version::LanguageRequest;
-
-use constants::env_vars::EnvVars;
 
 // The version of `uv` to install. Should update periodically.
 const UV_VERSION: &str = "0.8.3";
@@ -156,46 +150,6 @@ impl Uv {
 
     pub fn cmd(&self, summary: &str) -> Cmd {
         Cmd::new(&self.path, summary)
-    }
-
-    pub async fn find_python(&self, hook: &Hook, store: &Store) -> Result<Vec<PathBuf>> {
-        let mut cmd = Cmd::new(&self.path, "find python");
-
-        cmd.arg("python")
-            .arg("find")
-            .arg("--python-preference")
-            .arg("managed")
-            .arg("--no-project")
-            .env(
-                EnvVars::UV_PYTHON_INSTALL_DIR,
-                store.tools_path(ToolBucket::Python),
-            );
-        match &hook.language_request {
-            LanguageRequest::Any => {}
-            LanguageRequest::Python(request) => match request {
-                PythonRequest::Major(major) => {
-                    cmd.arg(format!("{major}"));
-                }
-                PythonRequest::MajorMinor(major, minor) => {
-                    cmd.arg(format!("{major}.{minor}"));
-                }
-                PythonRequest::MajorMinorPatch(major, minor, patch) => {
-                    cmd.arg(format!("{major}.{minor}.{patch}"));
-                }
-                PythonRequest::Range(_, raw) => {
-                    cmd.arg(raw);
-                }
-                PythonRequest::Path(path) => {
-                    cmd.arg(path);
-                }
-            },
-            _ => unreachable!(),
-        }
-
-        // TODO: improve error reporting
-        let output = cmd.check(true).output().await?;
-        let stdout = String::from_utf8(output.stdout)?;
-        Ok(stdout.lines().map(PathBuf::from).collect())
     }
 
     async fn select_source() -> Result<InstallSource> {
