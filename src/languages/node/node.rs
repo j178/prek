@@ -55,42 +55,9 @@ impl LanguageImpl for Node {
         .await?;
 
         // 3. Install dependencies
-        // TODO: can we install from directory directly?
-        let pkg = if let Some(repo_path) = hook.repo_path() {
-            Cmd::new(node.npm(), "npm install")
-                .arg("install")
-                .arg("--include=dev")
-                .arg("--include=prod")
-                .arg("--no-progress")
-                .arg("--no-save")
-                .arg("--no-fund")
-                .arg("--no-audit")
-                .current_dir(repo_path)
-                .check(true)
-                .output()
-                .await?;
-            let output = Cmd::new(node.npm(), "npm pack")
-                .arg("pack")
-                .current_dir(repo_path)
-                .check(true)
-                .output()
-                .await?;
-
-            if repo_path.join("node_modules").exists() {
-                debug!("Removing node_modules directory from repo path");
-                fs_err::tokio::remove_dir_all(repo_path.join("node_modules")).await?;
-            }
-
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            let pkg_name = output_str.trim();
-            Some(repo_path.join(pkg_name))
-        } else {
-            None
-        };
-
-        let deps = if let Some(pkg) = pkg {
+        let deps = if let Some(repo) = hook.repo_path() {
             let mut deps = hook.additional_dependencies.clone();
-            deps.insert(0, pkg.to_string_lossy().to_string());
+            deps.insert(0, repo.to_string_lossy().to_string());
             Cow::Owned(deps)
         } else {
             Cow::Borrowed(&hook.additional_dependencies)
