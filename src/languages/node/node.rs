@@ -1,11 +1,15 @@
+use std::borrow::Cow;
+use std::collections::HashMap;
+
+use anyhow::Context;
+use tracing::debug;
+
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::node::installer::{EXTRA_KEY_LTS, NodeInstaller};
 use crate::languages::{Error, LanguageImpl};
 use crate::process::Cmd;
 use crate::store::{Store, ToolBucket};
-use std::collections::HashMap;
-use tracing::debug;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Node;
@@ -29,9 +33,10 @@ impl LanguageImpl for Node {
         let mut info = InstallInfo::new(hook.language, hook.dependencies().to_vec(), store);
         info.clear_env_path().await?;
 
+        let lts = serde_json::to_string(&node.version().lts).context("Failed to serialize LTS")?;
         info.with_toolchain(node.node().to_path_buf());
         info.with_language_version(node.version().version.clone());
-        info.with_extra(EXTRA_KEY_LTS, &node.version().lts.to_string());
+        info.with_extra(EXTRA_KEY_LTS, &lts);
 
         // 2. Create env
         // TODO: windows different path?
@@ -39,8 +44,9 @@ impl LanguageImpl for Node {
         fs_err::tokio::create_dir_all(info.env_path.join("lib/node_modules")).await?;
 
         // 3. Install dependencies
+        // TODO: can we install from directory directly?
         let pkg = if let Some(repo_path) = hook.repo_path() {
-            Cmd::new(&*node.npm(), "npm install")
+            Cmd::new(node.npm(), "npm install")
                 .arg("install")
                 .arg("--include=dev")
                 .arg("--include=prod")
@@ -52,15 +58,17 @@ impl LanguageImpl for Node {
                 .check(true)
                 .output()
                 .await?;
-            let output = Cmd::new(&*node.npm(), "npm pack")
+            let output = Cmd::new(node.npm(), "npm pack")
                 .arg("pack")
                 .current_dir(repo_path)
                 .check(true)
                 .output()
                 .await?;
 
-            // Clean up node_modules
-            fs_err::tokio::remove_dir_all(repo_path.join("node_modules")).await?;
+            if repo_path.join("node_modules").exists() {
+                debug!("Removing node_modules directory from repo path");
+                fs_err::tokio::remove_dir_all(repo_path.join("node_modules")).await?;
+            }
 
             let output_str = String::from_utf8_lossy(&output.stdout);
             let pkg_name = output_str.trim();
@@ -69,25 +77,28 @@ impl LanguageImpl for Node {
             None
         };
 
-        let mut deps = hook.dependencies().to_vec();
-        if let Some(pkg) = pkg {
+        let deps = if let Some(pkg) = pkg {
+            let mut deps = hook.additional_dependencies.clone();
             deps.insert(0, pkg.to_string_lossy().to_string());
-        }
-        if !deps.is_empty() {
-            Cmd::new(&*node.npm(), "npm install")
+            Cow::Owned(deps)
+        } else {
+            Cow::Borrowed(&hook.additional_dependencies)
+        };
+        if deps.is_empty() {
+            debug!("No dependencies to install");
+        } else {
+            Cmd::new(node.npm(), "npm install")
                 .arg("install")
-                .arg("-g") // TODO?
+                .arg("-g")
                 .arg("--no-progress")
                 .arg("--no-save")
                 .arg("--no-fund")
                 .arg("--no-audit")
-                .args(&deps)
+                .args(&*deps)
                 .env("npm_config_prefix", &info.env_path)
                 .check(true)
                 .output()
                 .await?;
-        } else {
-            debug!("No dependencies to install");
         }
 
         Ok(InstalledHook::Installed {
