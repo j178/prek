@@ -1,4 +1,6 @@
 use std::cmp::max;
+use std::ffi::OsString;
+use std::path::Path;
 use std::sync::LazyLock;
 
 use futures::StreamExt;
@@ -8,7 +10,7 @@ use constants::env_vars::EnvVars;
 
 use crate::hook::Hook;
 
-pub static CONCURRENCY: LazyLock<usize> = LazyLock::new(|| {
+pub(crate) static CONCURRENCY: LazyLock<usize> = LazyLock::new(|| {
     if EnvVars::is_set(EnvVars::PREFLIGIT_NO_CONCURRENCY) {
         1
     } else {
@@ -98,7 +100,7 @@ impl<'a> Iterator for Partitions<'a> {
     }
 }
 
-pub async fn run_by_batch<T, F>(
+pub(crate) async fn run_by_batch<T, F>(
     hook: &Hook,
     filenames: &[&String],
     run: F,
@@ -132,4 +134,15 @@ where
     }
 
     Ok(results)
+}
+
+pub(crate) fn prepend_path(path: &Path) -> Result<OsString, std::env::JoinPathsError> {
+    std::env::join_paths(
+        std::iter::once(path.to_path_buf()).chain(
+            EnvVars::var_os(EnvVars::PATH)
+                .as_ref()
+                .iter()
+                .flat_map(std::env::split_paths),
+        ),
+    )
 }

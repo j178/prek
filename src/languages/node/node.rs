@@ -6,9 +6,10 @@ use tracing::debug;
 
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
-use crate::languages::node::installer::{EXTRA_KEY_LTS, NodeInstaller};
+use crate::languages::node::installer::{EXTRA_KEY_LTS, NodeInstaller, bin_dir};
 use crate::languages::{Error, LanguageImpl};
 use crate::process::Cmd;
+use crate::run::{prepend_path, run_by_batch};
 use crate::store::{Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone)]
@@ -21,8 +22,6 @@ impl LanguageImpl for Node {
         //   2) Find from system
         //   3) Download from remote
         // 2. Create env
-        //   1) Create a directory for the env
-        //   2) Create a symlink to the node binary in the env directory
         // 3. Install dependencies
 
         // 1. Install node
@@ -113,11 +112,45 @@ impl LanguageImpl for Node {
 
     async fn run(
         &self,
-        _hook: &InstalledHook,
-        _filenames: &[&String],
-        _env_vars: &HashMap<&'static str, String>,
+        hook: &InstalledHook,
+        filenames: &[&String],
+        env_vars: &HashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>), Error> {
-        Ok((0, Vec::new()))
+        let env_dir = hook.env_path().expect("Python must have env path");
+        // TODO: move split to hook construction
+        let cmds = shlex::split(&hook.entry)
+            .ok_or_else(|| anyhow::anyhow!("Failed to parse entry command"))?;
+
+        let new_path = prepend_path(&bin_dir(env_dir)).context("Failed to join PATH")?;
+
+        let run = async move |batch: Vec<String>| {
+            let mut output = Cmd::new(&cmds[0], "run node command")
+                .args(&cmds[1..])
+                .env("PATH", &new_path)
+                .envs(env_vars)
+                .args(&hook.args)
+                .args(batch)
+                .check(false)
+                .output()
+                .await?;
+
+            output.stdout.extend(output.stderr);
+            let code = output.status.code().unwrap_or(1);
+            anyhow::Ok((code, output.stdout))
+        };
+
+        let results = run_by_batch(hook, filenames, run).await?;
+
+        // Collect results
+        let mut combined_status = 0;
+        let mut combined_output = Vec::new();
+
+        for (code, output) in results {
+            combined_status |= code;
+            combined_output.extend(output);
+        }
+
+        Ok((combined_status, combined_output))
     }
 }

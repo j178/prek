@@ -447,11 +447,11 @@ impl NodeInstaller {
 }
 
 #[cfg(not(windows))]
-fn bin_dir(root: &Path) -> PathBuf {
+pub(crate) fn bin_dir(root: &Path) -> PathBuf {
     root.join("bin")
 }
 
 #[cfg(windows)]
-fn bin_dir(root: &Path) -> PathBuf {
+pub(crate) fn bin_dir(root: &Path) -> PathBuf {
     root.to_path_buf()
 }

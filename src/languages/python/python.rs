@@ -10,7 +10,7 @@ use crate::hook::{Hook, InstallInfo};
 use crate::languages::python::uv::Uv;
 use crate::languages::{Error, LanguageImpl};
 use crate::process::Cmd;
-use crate::run::run_by_batch;
+use crate::run::{prepend_path, run_by_batch};
 use crate::store::{Store, ToolBucket};
 
 use crate::languages::python::PythonRequest;
@@ -129,22 +129,12 @@ impl LanguageImpl for Python {
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>), Error> {
-        // Get environment directory and parse command
         let env_dir = hook.env_path().expect("Python must have env path");
-
         let cmds = shlex::split(&hook.entry)
             .ok_or_else(|| anyhow::anyhow!("Failed to parse entry command"))?;
 
         // Construct PATH with venv bin directory first
-        let new_path = std::env::join_paths(
-            std::iter::once(bin_dir(env_dir)).chain(
-                EnvVars::var_os(EnvVars::PATH)
-                    .as_ref()
-                    .iter()
-                    .flat_map(std::env::split_paths),
-            ),
-        )
-        .context("Failed to join PATH")?;
+        let new_path = prepend_path(&bin_dir(env_dir)).context("Failed to join PATH")?;
 
         let run = async move |batch: Vec<String>| {
             // TODO: combine stdout and stderr
