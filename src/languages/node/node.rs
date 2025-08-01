@@ -137,6 +137,30 @@ impl LanguageImpl for Node {
         let new_path = prepend_path(&bin_dir(env_dir)).context("Failed to join PATH")?;
 
         let run = async move |batch: Vec<String>| {
+            // Npm install scripts as `xxx.cmd` on Windows, we use `which::which` find the
+            // real command name `xxx.cmd` from `xxx`.
+            let mut cmd = if cfg!(windows) {
+                if let Some(path) =
+                    which::which_in_global(&cmds[0], Some(&new_path)).map_or(None, |mut p| p.next())
+                {
+                    Cmd::new(path, "run node command")
+                } else {
+                    Cmd::new(&cmds[0], "run node command")
+                }
+            } else {
+                Cmd::new(&cmds[0], "run node command")
+            };
+
+            let mut output = cmd
+                .args(&cmds[1..])
+                .env("PATH", &new_path)
+                .envs(env_vars)
+                .args(&hook.args)
+                .args(batch)
+                .check(false)
+                .output()
+                .await?;
+            #[cfg(not(windows))]
             let mut output = Cmd::new(&cmds[0], "run node command")
                 .args(&cmds[1..])
                 .env("PATH", &new_path)

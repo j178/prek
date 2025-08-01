@@ -58,7 +58,7 @@ fn language_version() -> anyhow::Result<()> {
         .child("node")
         .assert(predicates::path::missing());
 
-    cmd_snapshot!(context.filters(), context.run().arg("-vvv"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("-v"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -119,7 +119,7 @@ fn additional_dependencies() {
               - id: node
                 name: node
                 language: node
-                entry: cowsay Hello World!
+                entry: cowsay.cmd Hello World!
                 additional_dependencies: ["cowsay"]
                 always_run: true
                 verbose: true
@@ -128,7 +128,7 @@ fn additional_dependencies() {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -145,5 +145,5 @@ fn additional_dependencies() {
                       ||     ||
 
     ----- stderr -----
-    "#);
+    "###);
 }

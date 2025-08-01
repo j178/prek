@@ -1,0 +1,11 @@
+repos:
+  - repo: local
+    hooks:
+      - id: node
+        name: node
+        language: node
+        entry: cowsay Hello World!
+        additional_dependencies: ["cowsay"]
+        always_run: true
+        verbose: true
+        pass_filenames: false
