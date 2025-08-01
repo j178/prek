@@ -216,35 +216,6 @@ fn local() {
 }
 
 #[test]
-fn local_need_install() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
-        repos:
-          - repo: local
-            hooks:
-              - id: local
-                name: local
-                language: python
-                entry: pyecho Hello, world!
-                additional_dependencies: ["pyecho-cli"]
-                always_run: true
-    "#});
-
-    context.git_add(".");
-
-    cmd_snapshot!(context.filters(), context.run(), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    local....................................................................Passed
-
-    ----- stderr -----
-    "#);
-}
-
-#[test]
 fn meta_hooks() -> Result<()> {
     let context = TestContext::new();
     context.init_project();

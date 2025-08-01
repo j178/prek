@@ -153,3 +153,38 @@ fn can_not_download() {
     error: No interpreter found for Python <=3.6 in managed installations or search path
     "#);
 }
+
+/// Test that `additional_dependencies` are installed correctly.
+#[test]
+fn additional_dependencies() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: python
+                entry: pyecho Hello, world!
+                additional_dependencies: ["pyecho-cli"]
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local....................................................................Passed
+    - hook id: local
+    - duration: [TIME]
+      Hello, world!
+
+    ----- stderr -----
+    "#);
+}
