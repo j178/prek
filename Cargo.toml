@@ -75,7 +75,7 @@ which = { version = "8.0.0" }
 
 [target.'cfg(unix)'.dependencies]
 libc = { version = "0.2.164" }
-pprof = { version = "0.14.0", optional = true }
+pprof = { version = "0.15.0", optional = true }
 
 [dev-dependencies]
 assert_fs = { version = "1.1.2" }
