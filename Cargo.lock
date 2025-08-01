@@ -1675,7 +1675,7 @@ dependencies = [
 
 [[package]]
 name = "prefligit"
-version = "0.0.13"
+version = "0.0.14"
 dependencies = [
  "anstream",
  "anyhow",

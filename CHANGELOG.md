@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.0.14
+
+### Enhancements
+
+- Show unimplemented status instead of panic ([#290](https://github.com/j178/prefligit/pull/290))
+- Try default uv managed python first, fallback to download ([#291](https://github.com/j178/prefligit/pull/291))
+
+### Other changes
+
+- Update Rust crate fancy-regex to 0.16.0 ([#286](https://github.com/j178/prefligit/pull/286))
+- Update Rust crate indicatif to 0.18.0 ([#287](https://github.com/j178/prefligit/pull/287))
+- Update Rust crate pprof to 0.15.0 ([#288](https://github.com/j178/prefligit/pull/288))
+- Update Rust crate serde_json to v1.0.142 ([#285](https://github.com/j178/prefligit/pull/285))
+- Update astral-sh/setup-uv action to v6 ([#289](https://github.com/j178/prefligit/pull/289))
+
 ## 0.0.13
 
 ### Enhancements
@@ -14,7 +29,6 @@
 
 - Fix python version matching ([#275](https://github.com/j178/prefligit/pull/275))
 - Show progress bar in verbose mode ([#278](https://github.com/j178/prefligit/pull/278))
-
 
 ## 0.0.12
 
