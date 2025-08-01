@@ -4,8 +4,7 @@ use assert_fs::fixture::PathChild;
 use crate::common::{TestContext, cmd_snapshot};
 
 /// Test `language_version` parsing.
-/// Python 3.12.11 and 3.13.5 are installed in the CI environment, when running tests uv can find them
-/// as system Python.
+/// Python 3.12.11 and 3.13.5 are installed in the CI environment, when running tests uv can find them.
 /// Other versions may need to be downloaded while running the tests.
 #[test]
 fn language_version() -> anyhow::Result<()> {
@@ -144,7 +143,8 @@ fn can_not_download() {
     ----- stdout -----
 
     ----- stderr -----
-    error: command `create venv` exited with an error:
+    error: Failed to create Python virtual environment
+      caused by: command `create venv` exited with an error:
 
     [status]
     exit status: 2

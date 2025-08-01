@@ -224,7 +224,8 @@ impl Python {
         let mut cmd = uv.cmd("create venv");
         cmd.arg("venv")
             .arg(&info.env_path)
-            .arg("--managed-python")
+            .arg("--python-preference")
+            .arg("managed")
             .arg("--no-project")
             .arg("--no-config");
 
