@@ -119,7 +119,7 @@ fn additional_dependencies() {
               - id: node
                 name: node
                 language: node
-                entry: cowsay.cmd Hello World!
+                entry: cowsay Hello World!
                 additional_dependencies: ["cowsay"]
                 always_run: true
                 verbose: true
