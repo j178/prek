@@ -7,3 +7,4 @@ repos:
         language: python
         language_version: '3.11'
         always_run: true
+        pass_filenames: false

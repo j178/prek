@@ -1,6 +1,7 @@
 use std::env::consts::EXE_EXTENSION;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::string::ToString;
 
 use anyhow::Result;
@@ -11,7 +12,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use target_lexicon::{Architecture, HOST, OperatingSystem, X86_32Architecture};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{trace, warn};
+use tracing::{debug, trace, warn};
 
 use crate::archive;
 use crate::archive::ArchiveExtension;
@@ -108,6 +109,20 @@ impl Display for NodeVersion {
     }
 }
 
+impl FromStr for NodeVersion {
+    type Err = semver::Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        // Split on the first '-' to separate version and codename
+        let (version_part, lts) = match s.split_once('-') {
+            Some((ver, codename)) => (ver, Lts::Codename(codename.to_string())),
+            None => (s, Lts::NotLts),
+        };
+        let version = semver::Version::parse(version_part)?;
+        Ok(NodeVersion { version, lts })
+    }
+}
+
 impl NodeVersion {
     pub fn major(&self) -> u64 {
         self.version.major
@@ -123,6 +138,16 @@ impl NodeVersion {
     }
 }
 
+/// The `language_version` field of node language, can be one of the following:
+/// - `default`: Find the system installed node, or download the latest version.
+/// - `system`: Find the system installed node, or return an error if not found.
+/// - `x.y.z`: Install the specific version of node.
+/// - `x.y`: Install the latest version of node with the same major and minor version.
+/// - `x`: Install the latest version of node with the same major version.
+/// - `^x.y.z`: Install the latest version of node that satisfies the version requirement.
+///   Or any other semver compatible version requirement.
+/// - `lts/<codename>`: Install the latest version of node with the specified code name.
+/// - `local/path/to/node`: Use the node executable at the specified path.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum NodeRequest {
     Major(u8),
@@ -136,7 +161,7 @@ pub enum NodeRequest {
 pub(crate) const EXTRA_KEY_LTS: &str = "lts";
 
 impl NodeRequest {
-    pub(crate) fn parse(request: &str) -> std::result::Result<LanguageRequest, Error> {
+    pub(crate) fn parse(request: &str) -> Result<LanguageRequest, Error> {
         if request.is_empty() {
             return Ok(LanguageRequest::Any);
         }
@@ -146,6 +171,8 @@ impl NodeRequest {
                 return Ok(LanguageRequest::Any);
             }
             Self::parse_version_numbers(version_part, request)
+        } else if let Some(code_name) = request.strip_prefix("lts/") {
+            Ok(NodeRequest::CodeName(code_name.to_string()))
         } else {
             Self::parse_version_numbers(request, request)
                 .or_else(|_| {
@@ -160,10 +187,6 @@ impl NodeRequest {
                     } else {
                         Err(Error::InvalidVersion(request.to_string()))
                     }
-                })
-                .or_else(|_| {
-                    // If it doesn't match any known format, treat it as a code name
-                    Ok(NodeRequest::CodeName(request.to_string()))
                 })
         };
 
@@ -283,16 +306,6 @@ impl NodeResult {
     }
 }
 
-/// A Node.js installer.
-/// The `language_version` field of node language, can be one of the following:
-/// - `default`: Find the system installed node, or download the latest version.
-/// - `system`: Find the system installed node, or return an error if not found.
-/// - `x.y.z`: Install the specific version of node.
-/// - `x.y`: Install the latest version of node with the same major and minor version.
-/// - `x`: Install the latest version of node with the same major version.
-/// - `^x.y.z`: Install the latest version of node that satisfies the version requirement.
-///   Or any other semver compatible version requirement.
-/// - `codename`: Install the latest version of node with the specified code name.
 pub(crate) struct NodeInstaller {
     root: PathBuf,
     client: Client,
@@ -322,11 +335,21 @@ impl NodeInstaller {
             return Ok(node);
         }
 
+        // TODO: find all node and npm in PATH
         let node = which::which("node");
         let npm = which::which("npm");
         if let (Ok(node), Ok(npm)) = (node, npm) {
             trace!(node = %node.display(), npm = %npm.display(), "Found system node and npm");
-            return NodeResult::from_executables(node, npm).fill_version().await;
+            if let Ok(node_result) = NodeResult::from_executables(node, npm).fill_version().await {
+                // Check if the system node matches the requested version
+                if node_request.is_none_or(|req| req.matches(node_result.version())) {
+                    trace!(%node_result, "Using system node");
+                    return Ok(node_result);
+                }
+                debug!(%node_result, "System node does not match requested version");
+            } else {
+                warn!("Failed to fill version for system node, proceeding with installation");
+            }
         }
 
         let resolved_version = self.resolve_version(node_request).await?;
@@ -351,8 +374,7 @@ impl NodeInstaller {
             .filter(|entry| entry.file_type().is_ok_and(|f| f.is_dir()))
             .filter_map(|entry| {
                 let dir_name = entry.file_name();
-                let version: NodeVersion =
-                    serde_json::from_str(&dir_name.to_string_lossy()).ok()?;
+                let version = NodeVersion::from_str(&dir_name.to_string_lossy()).ok()?;
                 Some((version, entry.path()))
             })
             .sorted_unstable_by(|(a, _), (b, _)| a.version.cmp(&b.version))
@@ -388,7 +410,7 @@ impl NodeInstaller {
     // TODO: support mirror?
     /// Install a specific version of Node.js.
     async fn install_node(&self, version: &NodeVersion) -> Result<NodeResult> {
-        let arch = match HOST.architecture {
+        let mut arch = match HOST.architecture {
             Architecture::X86_32(X86_32Architecture::I686) => "x86",
             Architecture::X86_64 => "x64",
             Architecture::Aarch64(_) => "arm64",
@@ -405,6 +427,10 @@ impl NodeInstaller {
             OperatingSystem::Aix => "aix",
             _ => return Err(anyhow::anyhow!("Unsupported OS")),
         };
+        if os == "darwin" && arch == "arm64" && version.major() < 16 {
+            // Node.js 16 and later are required for arm64 on macOS.
+            arch = "x64";
+        }
         let ext = if cfg!(windows) { "zip" } else { "tar.xz" };
 
         let filename = format!("node-v{}-{os}-{arch}.{ext}", version.version());

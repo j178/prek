@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::env::consts::EXE_EXTENSION;
 
 use anyhow::Context;
 use tracing::debug;
@@ -38,9 +39,19 @@ impl LanguageImpl for Node {
         info.with_extra(EXTRA_KEY_LTS, &lts);
 
         // 2. Create env
-        // TODO: windows different path?
-        fs_err::tokio::create_dir_all(info.env_path.join("bin")).await?;
-        fs_err::tokio::create_dir_all(info.env_path.join("lib/node_modules")).await?;
+        let bin_dir = bin_dir(&info.env_path);
+        fs_err::tokio::create_dir_all(&bin_dir).await?;
+        if cfg!(windows) {
+            fs_err::tokio::create_dir_all(info.env_path.join("node_modules")).await?;
+        } else {
+            fs_err::tokio::create_dir_all(info.env_path.join("lib/node_modules")).await?;
+        }
+        // TODO: use copy on Windows
+        fs_err::tokio::symlink(
+            node.node(),
+            bin_dir.join("node").with_extension(EXE_EXTENSION),
+        )
+        .await?;
 
         // 3. Install dependencies
         // TODO: can we install from directory directly?

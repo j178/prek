@@ -15,16 +15,21 @@ pub(crate) enum PythonRequest {
     Range(semver::VersionReq, String),
 }
 
+/// Represents a request for a specific Python version or path.
+/// example formats:
+/// - `python`
+/// - `python3`
+/// - `python3.12`
+/// - `python3.13.2`
+/// - `3`
+/// - `3.12`
+/// - `3.12.3`
+/// - `>=3.12`
+/// - `>=3.8, <3.12`
+/// - `/path/to/python`
+/// - `/path/to/python3.12`
 impl PythonRequest {
     // TODO: support version like `3.8b1`, `3.8rc2`, `python3.8t`, `python3.8-64`.
-    // Parse Python language_version from pre-commit:
-    // If request begins with `python`, then it can not follow a VersionReq syntax.
-    // 1. `python3` => Major(3)
-    // 2. `python3.12` => MajorMinor(3, 12)
-    // 3. `python3.13.2` => MajorMinorPatch(3, 13, 2)
-    // Otherwise invalid
-    // Also parse `3`, `3.12`, `3.12.3` into Major, MajorMinor, MajorMinorPatch
-    // Try to parse into a VersionReq like `>= 3.12` or `>=3.8, <3.12`
     pub fn parse(request: &str) -> Result<LanguageRequest, version::Error> {
         if request.is_empty() {
             return Ok(LanguageRequest::Any);
