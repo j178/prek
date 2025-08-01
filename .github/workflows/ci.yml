@@ -177,6 +177,12 @@ jobs:
         with:
           node-version: '19.9.0'
 
+      - name: "Find node and npm versions"
+        run: |
+          Get-Command node -All
+          Get-Command npm -All
+        shell: pwsh
+
       - name: "Cargo test"
         run: |
           cargo nextest show-config test-groups

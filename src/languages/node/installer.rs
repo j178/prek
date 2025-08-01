@@ -493,13 +493,13 @@ impl NodeInstaller {
 
                         // Check if this version matches the request
                         if node_request.is_none_or(|req| req.matches(node_result.version())) {
-                            debug!(
+                            trace!(
                                 %node_result,
                                 "Found matching system Node.js installation"
                             );
                             return Ok(Some(node_result));
                         }
-                        debug!(
+                        trace!(
                             %node_result,
                             "System Node.js installation does not match requested version"
                         );
@@ -509,7 +509,7 @@ impl NodeInstaller {
                     }
                 }
             } else {
-                debug!(
+                trace!(
                     node = %node_path.display(),
                     "No npm found in same directory as node executable"
                 );

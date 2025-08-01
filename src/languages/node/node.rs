@@ -4,7 +4,7 @@ use std::env::consts::EXE_EXTENSION;
 use std::path::Path;
 
 use anyhow::Context;
-use tracing::debug;
+use tracing::{debug, trace};
 
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
@@ -180,7 +180,7 @@ impl Node {
             // Try symlink on Unix systems
             match fs_err::tokio::symlink(source, target).await {
                 Ok(()) => {
-                    debug!(
+                    trace!(
                         "Created symlink from {} to {}",
                         source.display(),
                         target.display()
@@ -188,7 +188,7 @@ impl Node {
                     return Ok(());
                 }
                 Err(e) => {
-                    debug!(
+                    trace!(
                         "Failed to create symlink from {} to {}: {}",
                         source.display(),
                         target.display(),
@@ -204,7 +204,7 @@ impl Node {
             use std::os::windows::fs::symlink_file;
             match symlink_file(source, target) {
                 Ok(()) => {
-                    debug!(
+                    trace!(
                         "Created Windows symlink from {} to {}",
                         source.display(),
                         target.display()
@@ -212,7 +212,7 @@ impl Node {
                     return Ok(());
                 }
                 Err(e) => {
-                    debug!(
+                    trace!(
                         "Failed to create Windows symlink from {} to {}: {}",
                         source.display(),
                         target.display(),
@@ -223,7 +223,7 @@ impl Node {
         }
 
         // Fallback to copy
-        debug!(
+        trace!(
             "Falling back to copy from {} to {}",
             source.display(),
             target.display()
