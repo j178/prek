@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, anyhow};
 use tracing::debug;
 
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
-use crate::languages::LanguageImpl;
 use crate::languages::python::uv::Uv;
+use crate::languages::{Error, LanguageImpl};
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::{Store, ToolBucket};
@@ -28,7 +28,7 @@ static QUERY_PYTHON_INFO: &str = indoc::indoc! {r#"\
 "#};
 
 impl LanguageImpl for Python {
-    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
+    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook, Error> {
         let uv = Uv::install(store).await?;
 
         let mut info = InstallInfo::new(hook.language, hook.dependencies().to_vec(), store);
@@ -110,7 +110,8 @@ impl LanguageImpl for Python {
             .next()
             .ok_or_else(|| anyhow!("Failed to get Python version"))?
             .to_string()
-            .parse()?;
+            .parse()
+            .context("Failed to parse Python version")?;
         let base_exec_prefix = lines
             .next()
             .ok_or_else(|| anyhow!("Failed to get Python base_exec_prefix"))?
@@ -126,7 +127,7 @@ impl LanguageImpl for Python {
         })
     }
 
-    async fn check_health(&self) -> Result<()> {
+    async fn check_health(&self) -> Result<(), Error> {
         todo!()
     }
 
@@ -136,7 +137,7 @@ impl LanguageImpl for Python {
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,
-    ) -> Result<(i32, Vec<u8>)> {
+    ) -> Result<(i32, Vec<u8>), Error> {
         // Get environment directory and parse command
         let env_dir = hook.env_path().expect("Python must have env path");
 
@@ -151,7 +152,8 @@ impl LanguageImpl for Python {
                     .iter()
                     .flat_map(std::env::split_paths),
             ),
-        )?;
+        )
+        .context("Failed to join PATH")?;
 
         let run = async move |batch: Vec<String>| {
             // TODO: combine stdout and stderr

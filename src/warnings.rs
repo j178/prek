@@ -66,7 +66,7 @@ pub static WARNINGS: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Mutex::def
 macro_rules! warn_user_once {
     ($($arg:tt)*) => {
         use $crate::warnings::anstream::eprintln;
-        use $crate::warnings::::owo_colors::OwoColorize;
+        use $crate::warnings::owo_colors::OwoColorize;
 
         if $crate::warnings::ENABLED.load(std::sync::atomic::Ordering::SeqCst) {
             if let Ok(mut states) = $crate::warnings::WARNINGS.lock() {

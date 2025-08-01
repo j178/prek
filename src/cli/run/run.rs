@@ -1,7 +1,6 @@
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
-use std::fmt::Write as _;
-use std::io::Write;
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -28,6 +27,7 @@ use crate::config::Stage;
 use crate::fs::Simplified;
 use crate::git;
 use crate::hook::{Hook, InstalledHook, Project};
+use crate::languages::Error;
 use crate::printer::Printer;
 use crate::store::Store;
 
@@ -337,8 +337,11 @@ pub async fn install_hooks(
     Ok(new_installed)
 }
 
+const PASSED: &str = "Passed";
+const FAILED: &str = "Failed";
 const SKIPPED: &str = "Skipped";
 const NO_FILES: &str = "(no files to check)";
+const UNIMPLEMENTED: &str = "(unimplemented yet)";
 
 fn status_line(start: &str, cols: usize, end_msg: &str, end_color: Style, postfix: &str) -> String {
     let dots = cols - start.width_cjk() - end_msg.len() - postfix.len() - 1;
@@ -478,21 +481,31 @@ async fn run_hook(
         return Ok((true, diff));
     }
 
-    write!(
-        printer.stdout(),
-        "{}{}",
-        &hook.name,
-        ".".repeat(columns - hook.name.width_cjk() - 6 - 1)
-    )?;
-    std::io::stdout().flush()?;
-
     let start = std::time::Instant::now();
 
-    let (status, output) = if hook.pass_filenames {
+    let run_result = if hook.pass_filenames {
         shuffle(&mut filenames);
-        hook.language.run(hook, &filenames, env_vars, store).await?
+        hook.language.run(hook, &filenames, env_vars, store).await
     } else {
-        hook.language.run(hook, &[], env_vars, store).await?
+        hook.language.run(hook, &[], env_vars, store).await
+    };
+    let (status, output) = match run_result {
+        Ok((status, output)) => (status, output),
+        Err(Error::Unimplemented { .. }) => {
+            writeln!(
+                printer.stdout(),
+                "{}",
+                status_line(
+                    &hook.name,
+                    columns,
+                    SKIPPED,
+                    Style::new().black().on_cyan(),
+                    UNIMPLEMENTED,
+                )
+            )?;
+            return Ok((true, diff));
+        }
+        Err(e) => return Err(e.into()),
     };
 
     let duration = start.elapsed();
@@ -501,10 +514,32 @@ async fn run_hook(
     let file_modified = diff != new_diff;
     let success = status == 0 && !file_modified;
 
+    // TODO: When there is no Unimplemented error, we can print `<hook_name>......` status
+    // before running the hook.
     if success {
-        writeln!(printer.stdout(), "{}", "Passed".on_green())?;
+        writeln!(
+            printer.stdout(),
+            "{}",
+            status_line(
+                &hook.name,
+                columns,
+                PASSED,
+                Style::new().black().on_green(),
+                "",
+            )
+        )?;
     } else {
-        writeln!(printer.stdout(), "{}", "Failed".on_red())?;
+        writeln!(
+            printer.stdout(),
+            "{}",
+            status_line(
+                &hook.name,
+                columns,
+                FAILED,
+                Style::new().black().on_red(),
+                "",
+            )
+        )?;
     }
 
     if verbose || hook.verbose || !success {

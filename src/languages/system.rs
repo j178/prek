@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
-use anyhow::Result;
-
 use crate::hook::{Hook, InstalledHook};
-use crate::languages::LanguageImpl;
+use crate::languages::{Error, LanguageImpl};
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::Store;
@@ -12,11 +10,11 @@ use crate::store::Store;
 pub struct System;
 
 impl LanguageImpl for System {
-    async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook> {
+    async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook, Error> {
         Ok(InstalledHook::NoNeedInstall(hook.clone()))
     }
 
-    async fn check_health(&self) -> Result<()> {
+    async fn check_health(&self) -> Result<(), Error> {
         Ok(())
     }
 
@@ -26,7 +24,7 @@ impl LanguageImpl for System {
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,
-    ) -> Result<(i32, Vec<u8>)> {
+    ) -> Result<(i32, Vec<u8>), Error> {
         let cmds = shlex::split(&hook.entry).ok_or(anyhow::anyhow!("Failed to parse entry"))?;
 
         let run = async move |batch: Vec<String>| {

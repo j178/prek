@@ -7,7 +7,7 @@ requires-python = ">=3.8"
 keywords = [ "pre-commit", "git", "hooks" ]
 readme = "README.md"
 license = { file = "LICENSE" }
-classfiers = [
+classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Environment :: Console",
   "Intended Audience :: Developers",

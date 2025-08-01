@@ -5,13 +5,13 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 
 use anstream::ColorChoice;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use fancy_regex::Regex;
 use tracing::trace;
 
 use crate::fs::CWD;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
-use crate::languages::LanguageImpl;
+use crate::languages::{Error, LanguageImpl};
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::Store;
@@ -170,7 +170,7 @@ impl Docker {
 }
 
 impl LanguageImpl for Docker {
-    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
+    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook, Error> {
         let info = InstallInfo::new(hook.language, hook.dependencies().to_vec(), store);
         let installed_hook = InstalledHook::Installed {
             hook: hook.clone(),
@@ -182,12 +182,14 @@ impl LanguageImpl for Docker {
             .env_path()
             .expect("Docker must have env path");
 
-        fs_err::tokio::create_dir_all(env).await?;
+        fs_err::tokio::create_dir_all(env)
+            .await
+            .context("Failed to create docker env dir")?;
 
         Ok(installed_hook)
     }
 
-    async fn check_health(&self) -> Result<()> {
+    async fn check_health(&self) -> Result<(), Error> {
         todo!()
     }
 
@@ -197,7 +199,7 @@ impl LanguageImpl for Docker {
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,
-    ) -> Result<(i32, Vec<u8>)> {
+    ) -> Result<(i32, Vec<u8>), Error> {
         Docker::build_docker_image(hook, false).await?;
 
         let docker_tag = Docker::docker_tag(hook);

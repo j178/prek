@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use anyhow::Result;
-
 use crate::builtin;
 use crate::config::Language;
 use crate::hook::{Hook, InstalledHook};
@@ -23,17 +21,55 @@ static FAIL: fail::Fail = fail::Fail;
 static DOCKER: docker::Docker = docker::Docker;
 static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
 static SCRIPT: script::Script = script::Script;
+static UNIMPLEMENTED: Unimplemented = Unimplemented;
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
+    #[error(transparent)]
+    Process(#[from] crate::process::Error),
+    #[error(transparent)]
+    Hook(#[from] crate::hook::Error),
+    #[error("Language `{language}` not implemented yet, hook `{hook}` is a no-op for now")]
+    Unimplemented { hook: String, language: String },
+}
 
 trait LanguageImpl {
-    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook>;
-    async fn check_health(&self) -> Result<()>;
+    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook, Error>;
+    async fn check_health(&self) -> Result<(), Error>;
     async fn run(
         &self,
         hook: &InstalledHook,
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         store: &Store,
-    ) -> Result<(i32, Vec<u8>)>;
+    ) -> Result<(i32, Vec<u8>), Error>;
+}
+
+struct Unimplemented;
+
+impl LanguageImpl for Unimplemented {
+    async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook, Error> {
+        Ok(InstalledHook::NoNeedInstall(hook.clone()))
+    }
+
+    async fn check_health(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
+    async fn run(
+        &self,
+        hook: &InstalledHook,
+        _filenames: &[&String],
+        _env_vars: &HashMap<&'static str, String>,
+        _store: &Store,
+    ) -> Result<(i32, Vec<u8>), Error> {
+        Err(Error::Unimplemented {
+            hook: hook.id.to_string(),
+            language: hook.language.to_string(),
+        })
+    }
 }
 
 // `pre-commit` language support:
@@ -94,29 +130,29 @@ impl Language {
         )
     }
 
-    pub async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
+    pub async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook, Error> {
         match self {
             Self::Python => PYTHON.install(hook, store).await,
-            Self::Node => NODE.install(hook, store).await,
+            // Self::Node => NODE.install(hook, store).await,
             Self::System => SYSTEM.install(hook, store).await,
             Self::Fail => FAIL.install(hook, store).await,
             Self::Docker => DOCKER.install(hook, store).await,
             Self::DockerImage => DOCKER_IMAGE.install(hook, store).await,
             Self::Script => SCRIPT.install(hook, store).await,
-            _ => todo!("{}", self.as_str()),
+            _ => UNIMPLEMENTED.install(hook, store).await,
         }
     }
 
-    pub async fn check_health(&self) -> Result<()> {
+    pub async fn check_health(&self) -> Result<(), Error> {
         match self {
             Self::Python => PYTHON.check_health().await,
-            Self::Node => NODE.check_health().await,
+            // Self::Node => NODE.check_health().await,
             Self::System => SYSTEM.check_health().await,
             Self::Fail => FAIL.check_health().await,
             Self::Docker => DOCKER.check_health().await,
             Self::DockerImage => DOCKER_IMAGE.check_health().await,
             Self::Script => SCRIPT.check_health().await,
-            _ => todo!("{}", self.as_str()),
+            _ => UNIMPLEMENTED.check_health().await,
         }
     }
 
@@ -126,21 +162,21 @@ impl Language {
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         store: &Store,
-    ) -> Result<(i32, Vec<u8>)> {
+    ) -> Result<(i32, Vec<u8>), Error> {
         // fast path for hooks implemented in Rust
         if builtin::check_fast_path(hook) {
-            return builtin::run_fast_path(hook, filenames, env_vars).await;
+            return Ok(builtin::run_fast_path(hook, filenames, env_vars).await?);
         }
 
         match self {
             Self::Python => PYTHON.run(hook, filenames, env_vars, store).await,
-            Self::Node => NODE.run(hook, filenames, env_vars, store).await,
+            // Self::Node => NODE.run(hook, filenames, env_vars, store).await,
             Self::System => SYSTEM.run(hook, filenames, env_vars, store).await,
             Self::Fail => FAIL.run(hook, filenames, env_vars, store).await,
             Self::Docker => DOCKER.run(hook, filenames, env_vars, store).await,
             Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, env_vars, store).await,
             Self::Script => SCRIPT.run(hook, filenames, env_vars, store).await,
-            _ => todo!("{}", self.as_str()),
+            _ => UNIMPLEMENTED.run(hook, filenames, env_vars, store).await,
         }
     }
 }
