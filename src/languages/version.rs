@@ -1,5 +1,6 @@
 use crate::config::Language;
 use crate::hook::InstallInfo;
+use crate::languages::node::NodeRequest;
 use crate::languages::python::PythonRequest;
 
 #[derive(thiserror::Error, Debug)]
@@ -12,7 +13,7 @@ pub enum Error {
 pub enum LanguageRequest {
     Any,
     Python(PythonRequest),
-    Node(SemverRequest),
+    Node(NodeRequest),
     // TODO: all other languages default to semver for now.
     Semver(SemverRequest),
 }
@@ -29,13 +30,14 @@ impl LanguageRequest {
         // - Node.js version passed down to `nodeenv`
         // - Rust version passed down to `rustup`
 
+        // TODO: support `system`? Does anyone use it?
         if request == "default" || request.is_empty() {
             return Ok(LanguageRequest::Any);
         }
 
         match lang {
             Language::Python => PythonRequest::parse(request),
-            Language::Node => SemverRequest::parse(request),
+            Language::Node => NodeRequest::parse(request),
             _ => SemverRequest::parse(request),
         }
     }
@@ -65,4 +67,11 @@ impl SemverRequest {
             .map_err(|_| Error::InvalidVersion(request.to_string()))?;
         Ok(LanguageRequest::Semver(SemverRequest(version_req)))
     }
+}
+
+pub(crate) fn try_into_u8_slice(version: &str) -> Result<Vec<u8>, std::num::ParseIntError> {
+    version
+        .split('.')
+        .map(|x| str::parse::<u8>(x))
+        .collect::<Result<Vec<_>, _>>()
 }

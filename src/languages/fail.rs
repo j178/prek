@@ -5,7 +5,7 @@ use crate::languages::{Error, LanguageImpl};
 use crate::store::Store;
 
 #[derive(Debug, Copy, Clone)]
-pub struct Fail;
+pub(crate) struct Fail;
 
 impl LanguageImpl for Fail {
     async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook, Error> {

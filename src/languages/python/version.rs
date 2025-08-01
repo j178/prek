@@ -4,10 +4,10 @@
 use std::path::PathBuf;
 
 use crate::languages::version;
-use crate::languages::version::LanguageRequest;
+use crate::languages::version::{LanguageRequest, try_into_u8_slice};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PythonRequest {
+pub(crate) enum PythonRequest {
     Major(u8),
     MajorMinor(u8, u8),
     MajorMinorPatch(u8, u8, u8),
@@ -31,7 +31,7 @@ impl PythonRequest {
         }
 
         // Check if it starts with "python" - parse as specific version
-        if let Some(version_part) = request.strip_prefix("python") {
+        let request = if let Some(version_part) = request.strip_prefix("python") {
             if version_part.is_empty() {
                 return Ok(LanguageRequest::Any);
             }
@@ -42,64 +42,54 @@ impl PythonRequest {
                 .or_else(|_| {
                     // Try to parse as a VersionReq (like ">= 3.12" or ">=3.8, <3.12")
                     semver::VersionReq::parse(request)
-                        .map(|version_req| {
-                            LanguageRequest::Python(PythonRequest::Range(
-                                version_req,
-                                request.into(),
-                            ))
-                        })
+                        .map(|version_req| PythonRequest::Range(version_req, request.into()))
                         .map_err(|_| version::Error::InvalidVersion(request.to_string()))
                 })
                 .or_else(|_| {
                     // If it doesn't match any known format, treat it as a path
                     let path = PathBuf::from(request);
                     if path.exists() {
-                        Ok(LanguageRequest::Python(PythonRequest::Path(path)))
+                        Ok(PythonRequest::Path(path))
                     } else {
                         Err(version::Error::InvalidVersion(request.to_string()))
                     }
                 })
-        }
+        };
+
+        Ok(LanguageRequest::Python(request?))
     }
 
     /// Parse version numbers into appropriate `PythonRequest` variants
     fn parse_version_numbers(
         version_str: &str,
         original_request: &str,
-    ) -> Result<LanguageRequest, version::Error> {
+    ) -> Result<PythonRequest, version::Error> {
         // Check if all parts are valid u8 numbers
-        let parts = version_str
-            .split('.')
-            .map(str::parse::<u8>)
-            .collect::<Result<Vec<_>, _>>()
+        let parts = try_into_u8_slice(version_str)
             .map_err(|_| version::Error::InvalidVersion(original_request.to_string()))?;
 
         match parts[..] {
-            [major] => Ok(LanguageRequest::Python(PythonRequest::Major(major))),
-            [major, minor] => Ok(LanguageRequest::Python(PythonRequest::MajorMinor(
-                major, minor,
-            ))),
-            [major, minor, patch] => Ok(LanguageRequest::Python(PythonRequest::MajorMinorPatch(
-                major, minor, patch,
-            ))),
+            [major] => Ok(PythonRequest::Major(major)),
+            [major, minor] => Ok(PythonRequest::MajorMinor(major, minor)),
+            [major, minor, patch] => Ok(PythonRequest::MajorMinorPatch(major, minor, patch)),
             _ => Err(version::Error::InvalidVersion(original_request.to_string())),
         }
     }
 
     pub(crate) fn satisfied_by(&self, install_info: &crate::hook::InstallInfo) -> bool {
+        let version = &install_info.language_version;
         match self {
-            PythonRequest::Major(major) => install_info.language_version.major == u64::from(*major),
+            PythonRequest::Major(major) => version.major == u64::from(*major),
             PythonRequest::MajorMinor(major, minor) => {
-                install_info.language_version.major == u64::from(*major)
-                    && install_info.language_version.minor == u64::from(*minor)
+                version.major == u64::from(*major) && version.minor == u64::from(*minor)
             }
             PythonRequest::MajorMinorPatch(major, minor, patch) => {
-                install_info.language_version.major == u64::from(*major)
-                    && install_info.language_version.minor == u64::from(*minor)
-                    && install_info.language_version.patch == u64::from(*patch)
+                version.major == u64::from(*major)
+                    && version.minor == u64::from(*minor)
+                    && version.patch == u64::from(*patch)
             }
             PythonRequest::Path(path) => path == &install_info.toolchain,
-            PythonRequest::Range(req, _) => req.matches(&install_info.language_version),
+            PythonRequest::Range(req, _) => req.matches(version),
         }
     }
 }

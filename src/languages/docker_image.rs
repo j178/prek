@@ -9,7 +9,7 @@ use crate::run::run_by_batch;
 use crate::store::Store;
 
 #[derive(Debug, Copy, Clone)]
-pub struct DockerImage;
+pub(crate) struct DockerImage;
 
 impl LanguageImpl for DockerImage {
     async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook, Error> {

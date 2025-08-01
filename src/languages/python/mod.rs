@@ -3,5 +3,5 @@ mod python;
 mod uv;
 mod version;
 
-pub use python::Python;
-pub use version::PythonRequest;
+pub(crate) use python::Python;
+pub(crate) use version::PythonRequest;

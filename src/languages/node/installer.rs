@@ -9,63 +9,67 @@ use anyhow::Result;
 use futures::TryStreamExt;
 use itertools::Itertools;
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::Value;
 use target_lexicon::{Architecture, HOST, OperatingSystem, X86_32Architecture};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{trace, warn};
 
 use crate::archive;
 use crate::archive::ArchiveExtension;
+use crate::config::Language;
 use crate::fs::LockedFile;
-use crate::languages::version::LanguageRequest;
+use crate::hook::InstallInfo;
+use crate::languages::python::PythonRequest;
+use crate::languages::version::{Error, LanguageRequest, try_into_u8_slice};
+use crate::process::Cmd;
 
-#[derive(Deserialize, Debug)]
-#[serde(untagged)]
-pub enum Lts {
-    Boolean(bool),
-    CodeName(String),
+#[derive(Debug)]
+pub(crate) enum Lts {
+    NotLts,
+    Codename(String),
 }
 
 impl Lts {
-    pub fn is_lts(&self) -> bool {
+    pub(crate) fn code_name(&self) -> Option<&str> {
         match self {
-            Lts::Boolean(b) => *b,
-            Lts::CodeName(_) => true,
+            Self::NotLts => None,
+            Self::Codename(name) => Some(name),
         }
     }
+}
 
-    pub fn code_name(&self) -> Option<&str> {
+impl<'de> Deserialize<'de> for Lts {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+        match value {
+            Value::String(s) => Ok(Lts::Codename(s)),
+            Value::Bool(false) => Ok(Lts::NotLts),
+            Value::Null => Ok(Lts::NotLts),
+            _ => Ok(Lts::NotLts),
+        }
+    }
+}
+
+impl Serialize for Lts {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
         match self {
-            Lts::Boolean(_) => None,
-            Lts::CodeName(name) => Some(name),
+            Lts::Codename(name) => serializer.serialize_str(name),
+            Lts::NotLts => serializer.serialize_bool(false),
         }
     }
 }
 
 #[derive(Debug)]
-pub struct NodeVersion {
+pub(crate) struct NodeVersion {
     pub version: semver::Version,
     pub lts: Lts,
-}
-
-impl FromStr for NodeVersion {
-    type Err = semver::Error;
-
-    /// Parse from `<version>[-<code_name>]` format.
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (ver, code_name) = if s.contains('-') {
-            s.split_once('-').unwrap()
-        } else {
-            (s, "")
-        };
-        let version = semver::Version::parse(ver)?;
-        let lts = if code_name.is_empty() {
-            Lts::Boolean(false)
-        } else {
-            Lts::CodeName(code_name.to_string())
-        };
-        Ok(NodeVersion { version, lts })
-    }
 }
 
 impl<'de> Deserialize<'de> for NodeVersion {
@@ -92,7 +96,7 @@ impl<'de> Deserialize<'de> for NodeVersion {
 impl Display for NodeVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.version)?;
-        if let Lts::CodeName(name) = &self.lts {
+        if let Some(name) = self.lts.code_name() {
             write!(f, "-{name}")?;
         }
         Ok(())
@@ -114,129 +118,138 @@ impl NodeVersion {
     }
 }
 
-// TODO: remove code name support
-pub enum VersionRequest {
-    Any,
-    None,
-    // TODO: remove, just use semver::VersionReq
-    Major(u64),
-    MajorMinor(u64, u64),
-    MajorMinorPatch(u64, u64, u64),
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum NodeRequest {
+    Major(u8),
+    MajorMinor(u8, u8),
+    MajorMinorPatch(u8, u8, u8),
+    Path(PathBuf),
     Range(semver::VersionReq),
     CodeName(String),
 }
 
-impl VersionRequest {
-    pub fn matches(&self, version: &NodeVersion) -> bool {
+pub(crate) const EXTRA_KEY_LTS: &str = "lts";
+
+impl NodeRequest {
+    pub(crate) fn parse(request: &str) -> std::result::Result<LanguageRequest, Error> {
+        if request.is_empty() {
+            return Ok(LanguageRequest::Any);
+        }
+
+        let request = if let Some(version_part) = request.strip_prefix("node") {
+            if version_part.is_empty() {
+                return Ok(LanguageRequest::Any);
+            }
+            Self::parse_version_numbers(version_part, request)
+        } else {
+            Self::parse_version_numbers(request, request)
+                .or_else(|_| {
+                    semver::VersionReq::parse(request)
+                        .map(|version_req| NodeRequest::Range(version_req))
+                        .map_err(|_| Error::InvalidVersion(request.to_string()))
+                })
+                .or_else(|_| {
+                    let path = PathBuf::from(request);
+                    if path.exists() {
+                        Ok(NodeRequest::Path(path))
+                    } else {
+                        Err(Error::InvalidVersion(request.to_string()))
+                    }
+                })
+                .or_else(|_| {
+                    // If it doesn't match any known format, treat it as a code name
+                    Ok(NodeRequest::CodeName(request.to_string()))
+                })
+        };
+
+        Ok(LanguageRequest::Node(request?))
+    }
+
+    fn parse_version_numbers(
+        version_str: &str,
+        original_request: &str,
+    ) -> std::result::Result<NodeRequest, Error> {
+        let parts = try_into_u8_slice(version_str)
+            .map_err(|_| Error::InvalidVersion(original_request.to_string()))?;
+
+        match parts.as_slice() {
+            [major] => Ok(NodeRequest::Major(*major)),
+            [major, minor] => Ok(NodeRequest::MajorMinor(*major, *minor)),
+            [major, minor, patch] => Ok(NodeRequest::MajorMinorPatch(*major, *minor, *patch)),
+            _ => Err(Error::InvalidVersion(original_request.to_string())),
+        }
+    }
+
+    pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
+        let version = &install_info.language_version;
+        let tls = install_info
+            .get_extra(EXTRA_KEY_LTS)
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or(Lts::NotLts);
+
         match self {
-            VersionRequest::Any => true,
-            VersionRequest::None => false,
-            VersionRequest::Major(major) => version.major() == *major,
-            VersionRequest::MajorMinor(major, minor) => {
+            NodeRequest::Major(major) => version.major() == *major,
+            NodeRequest::MajorMinor(major, minor) => {
                 version.major() == *major && version.minor() == *minor
             }
-            VersionRequest::MajorMinorPatch(major, minor, patch) => {
+            NodeRequest::MajorMinorPatch(major, minor, patch) => {
                 (version.major(), version.minor(), version.patch()) == (*major, *minor, *patch)
             }
-            VersionRequest::Range(req) => req.matches(version.version()),
-            VersionRequest::CodeName(name) => version
-                .lts
+            NodeRequest::Path(path) => path == &install_info.toolchain,
+            NodeRequest::Range(req) => req.matches(version.version()),
+            NodeRequest::CodeName(name) => tls
                 .code_name()
                 .is_some_and(|n| n.eq_ignore_ascii_case(name)),
         }
     }
 }
 
-impl FromStr for VersionRequest {
-    type Err = semver::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts = s
-            .split('.')
-            .map(str::parse::<u64>)
-            .collect::<Result<Vec<_>, _>>();
-        if let Ok(parts) = parts {
-            match parts.as_slice() {
-                [major] => return Ok(VersionRequest::Major(*major)),
-                [major, minor] => return Ok(VersionRequest::MajorMinor(*major, *minor)),
-                [major, minor, patch] => {
-                    return Ok(VersionRequest::MajorMinorPatch(*major, *minor, *patch));
-                }
-                _ => {}
-            }
-        }
-
-        if let Ok(req) = semver::VersionReq::parse(s) {
-            return Ok(VersionRequest::Range(req));
-        }
-
-        Ok(VersionRequest::CodeName(s.to_string()))
-    }
-}
-
-impl TryFrom<LanguageRequest> for VersionRequest {
-    type Error = <Self as FromStr>::Err;
-
-    fn try_from(_version: LanguageRequest) -> Result<Self, Self::Error> {
-        todo!()
-    }
-}
-
 #[derive(Debug)]
-pub struct NodeResult {
-    node: Option<PathBuf>,
-    npm: Option<PathBuf>,
-    dir: Option<PathBuf>,
+pub(crate) struct NodeResult {
+    node: PathBuf,
+    npm: PathBuf,
+    version: NodeVersion,
 }
 
 impl Display for NodeResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.node.as_ref().or(self.dir.as_ref()).unwrap().display()
-        )?;
+        write!(f, "{}", self.node.display())?;
         Ok(())
     }
 }
 
 impl NodeResult {
-    pub fn from_executables(node: PathBuf, npm: PathBuf) -> Self {
-        Self {
-            node: Some(node),
-            npm: Some(npm),
-            dir: None,
-        }
+    pub(crate) async fn from_executables(node: PathBuf, npm: PathBuf) -> Result<Self> {
+        // https://nodejs.org/api/process.html#processrelease
+        let output = Cmd::new(&node, "node -p")
+            .arg("-p")
+            .arg("JSON.stringify({version: process.version, lts: process.release.lts || false})")
+            .check(true)
+            .output()
+            .await?;
+        let output_str = String::from_utf8_lossy(&output.stdout);
+        let version: NodeVersion = serde_json::from_str(&output_str)
+            .map_err(|e| anyhow::anyhow!("Failed to parse node version: {}", e))?;
+
+        Ok(Self { node, npm, version })
     }
 
-    pub fn from_dir(dir: PathBuf) -> Self {
-        Self {
-            node: None,
-            npm: None,
-            dir: Some(dir),
-        }
+    pub(crate) async fn from_dir(dir: PathBuf) -> Result<Self> {
+        let node = bin_dir(&dir).join("node").with_extension(EXE_EXTENSION);
+        let npm = bin_dir(&dir).join("npm").with_extension(EXE_EXTENSION);
+        Self::from_executables(node, npm).await
     }
 
-    pub fn node(&self) -> Cow<Path> {
-        match &self.node {
-            Some(path) => Cow::Borrowed(path),
-            None => Cow::Owned(
-                bin_dir(self.dir.as_ref().unwrap())
-                    .join("node")
-                    .with_extension(EXE_EXTENSION),
-            ),
-        }
+    pub(crate) fn node(&self) -> &Path {
+        &self.node
     }
 
-    pub fn npm(&self) -> Cow<Path> {
-        match &self.npm {
-            Some(path) => Cow::Borrowed(path),
-            None => Cow::Owned(
-                bin_dir(self.dir.as_ref().unwrap())
-                    .join("npm")
-                    .with_extension(EXE_EXTENSION),
-            ),
-        }
+    pub(crate) fn npm(&self) -> &Path {
+        &self.npm
+    }
+
+    pub(crate) fn version(&self) -> &NodeVersion {
+        &self.version
     }
 }
 
@@ -250,13 +263,13 @@ impl NodeResult {
 /// - `^x.y.z`: Install the latest version of node that satisfies the version requirement.
 ///   Or any other semver compatible version requirement.
 /// - `codename`: Install the latest version of node with the specified code name.
-pub struct NodeInstaller {
+pub(crate) struct NodeInstaller {
     root: PathBuf,
     client: Client,
 }
 
 impl NodeInstaller {
-    pub fn new(root: PathBuf) -> Self {
+    pub(crate) fn new(root: PathBuf) -> Self {
         Self {
             root,
             client: Client::new(),
@@ -264,7 +277,21 @@ impl NodeInstaller {
     }
 
     /// Install a version of Node.js.
-    pub async fn install(&self, version: &LanguageRequest) -> Result<NodeResult> {
+    pub(crate) async fn install(&self, request: &LanguageRequest) -> Result<NodeResult> {
+        fs_err::create_dir_all(&self.root)?;
+
+        let _lock = LockedFile::acquire(self.root.join(".lock"), "node").await?;
+
+        let node_request = match request {
+            LanguageRequest::Any => None,
+            LanguageRequest::Node(request) => Some(request),
+            _ => unreachable!(),
+        };
+        if let Ok(node) = self.get_installed(node_request) {
+            trace!(%node, "Found installed node");
+            return Ok(node);
+        }
+
         let node = which::which("node");
         let npm = which::which("npm");
         if let (Ok(node), Ok(npm)) = (node, npm) {
@@ -272,29 +299,14 @@ impl NodeInstaller {
             return Ok(NodeResult::from_executables(node, npm));
         }
 
-        fs_err::create_dir_all(&self.root)?;
-
-        let version_req = VersionRequest::try_from(version.clone())?;
-        if let Ok(node) = self.get_installed(&version_req) {
-            trace!(%node, "Found installed node");
-            return Ok(node);
-        }
-
-        let _lock = LockedFile::acquire(self.root.join(".lock"), "node").await?;
-
-        if let Ok(node) = self.get_installed(&version_req) {
-            trace!(%node, "Found installed node");
-            return Ok(node);
-        }
-
-        let resolved_version = self.resolve_version(&version_req).await?;
+        let resolved_version = self.resolve_version(node_request).await?;
         trace!(version = %resolved_version, "Installing node");
 
         self.install_node(&resolved_version).await
     }
 
     /// Get the installed version of Node.js.
-    fn get_installed(&self, req: &VersionRequest) -> Result<NodeResult> {
+    fn get_installed(&self, req: Option<&NodeRequest>) -> Result<NodeResult> {
         let mut installed = fs_err::read_dir(&self.root)
             .ok()
             .into_iter()
@@ -309,7 +321,8 @@ impl NodeInstaller {
             .filter(|entry| entry.file_type().is_ok_and(|f| f.is_dir()))
             .filter_map(|entry| {
                 let dir_name = entry.file_name();
-                let version = NodeVersion::from_str(&dir_name.to_string_lossy()).ok()?;
+                let version: NodeVersion =
+                    serde_json::from_str(&dir_name.to_string_lossy()).ok()?;
                 Some((version, entry.path()))
             })
             .sorted_unstable_by(|(a, _), (b, _)| a.version.cmp(&b.version))
@@ -317,7 +330,7 @@ impl NodeInstaller {
 
         installed
             .find_map(|(v, path)| {
-                if req.matches(&v) {
+                if req.is_none_or(|req| req.matches(&v)) {
                     Some(NodeResult::from_dir(path))
                 } else {
                     None
@@ -326,11 +339,11 @@ impl NodeInstaller {
             .ok_or(anyhow::anyhow!("No installed node found"))
     }
 
-    async fn resolve_version(&self, req: &VersionRequest) -> Result<NodeVersion> {
+    async fn resolve_version(&self, req: Option<&NodeRequest>) -> Result<NodeVersion> {
         let versions = self.list_remote_versions().await?;
         let version = versions
             .into_iter()
-            .find(|version| req.matches(version))
+            .find(|version| req.is_none_or(|req| req.satisfied_by(version)))
             .ok_or(anyhow::anyhow!("Version not found"))?;
         Ok(version)
     }
@@ -342,6 +355,7 @@ impl NodeInstaller {
         Ok(versions)
     }
 
+    // TODO: support mirror?
     /// Install a specific version of Node.js.
     async fn install_node(&self, version: &NodeVersion) -> Result<NodeResult> {
         let arch = match HOST.architecture {
@@ -395,9 +409,10 @@ impl NodeInstaller {
         }
 
         trace!(temp_dir = ?extracted, target = %target.display(), "Moving node to target");
+        // TODO: retry on Windows
         fs_err::tokio::rename(extracted, &target).await?;
 
-        Ok(NodeResult::from_dir(target))
+        Ok(NodeResult::from_dir(target).await?)
     }
 }
 

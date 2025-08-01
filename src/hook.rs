@@ -615,6 +615,7 @@ pub struct InstallInfo {
     pub dependencies: Vec<String>,
     pub env_path: PathBuf,
     pub toolchain: PathBuf,
+    extra: HashMap<String, String>,
 }
 
 impl Hash for InstallInfo {
@@ -643,6 +644,7 @@ impl InstallInfo {
             env_path: store.hooks_dir().join(env),
             language_version: semver::Version::new(0, 0, 0),
             toolchain: PathBuf::new(),
+            extra: HashMap::new(),
         }
     }
 
@@ -654,6 +656,15 @@ impl InstallInfo {
     pub fn with_toolchain(&mut self, toolchain: PathBuf) -> &mut Self {
         self.toolchain = toolchain;
         self
+    }
+
+    pub fn with_extra(&mut self, key: &str, value: &str) -> &mut Self {
+        self.extra.insert(key.to_string(), value.to_string());
+        self
+    }
+
+    pub fn get_extra(&self, key: &str) -> Option<&String> {
+        self.extra.get(key)
     }
 
     pub async fn clear_env_path(&self) -> Result<(), Error> {

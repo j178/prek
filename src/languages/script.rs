@@ -8,7 +8,7 @@ use crate::run::run_by_batch;
 use crate::store::Store;
 
 #[derive(Debug, Copy, Clone)]
-pub struct Script;
+pub(crate) struct Script;
 
 impl LanguageImpl for Script {
     async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook, Error> {

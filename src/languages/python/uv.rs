@@ -139,16 +139,16 @@ impl InstallSource {
     }
 }
 
-pub struct Uv {
+pub(crate) struct Uv {
     path: PathBuf,
 }
 
 impl Uv {
-    pub fn new(path: PathBuf) -> Self {
+    pub(crate) fn new(path: PathBuf) -> Self {
         Self { path }
     }
 
-    pub fn cmd(&self, summary: &str) -> Cmd {
+    pub(crate) fn cmd(&self, summary: &str) -> Cmd {
         Cmd::new(&self.path, summary)
     }
 

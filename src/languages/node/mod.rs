@@ -2,4 +2,5 @@ mod installer;
 #[allow(clippy::module_inception)]
 mod node;
 
-pub use node::Node;
+pub(crate) use installer::NodeRequest;
+pub(crate) use node::Node;

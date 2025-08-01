@@ -20,13 +20,29 @@ use crate::process;
 use constants::env_vars::EnvVars;
 
 #[derive(Debug, Copy, Clone)]
-pub struct Python;
+pub(crate) struct Python;
 
 static QUERY_PYTHON_INFO: &str = indoc::indoc! {r#"\
     import sys
     print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
     print(sys.base_exec_prefix)
 "#};
+
+fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
+    match request {
+        LanguageRequest::Any => None,
+        LanguageRequest::Python(request) => match request {
+            PythonRequest::Major(major) => Some(format!("{major}")),
+            PythonRequest::MajorMinor(major, minor) => Some(format!("{major}.{minor}")),
+            PythonRequest::MajorMinorPatch(major, minor, patch) => {
+                Some(format!("{major}.{minor}.{patch}"))
+            }
+            PythonRequest::Range(_, raw) => Some(raw.clone()),
+            PythonRequest::Path(path) => Some(path.to_string_lossy().to_string()),
+        },
+        _ => unreachable!(),
+    }
+}
 
 impl LanguageImpl for Python {
     async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook, Error> {
@@ -37,19 +53,7 @@ impl LanguageImpl for Python {
 
         debug!(%hook, target = %info.env_path.display(), "Installing environment");
 
-        let python_request = match &hook.language_request {
-            LanguageRequest::Any => None,
-            LanguageRequest::Python(request) => match request {
-                PythonRequest::Major(major) => Some(format!("{major}")),
-                PythonRequest::MajorMinor(major, minor) => Some(format!("{major}.{minor}")),
-                PythonRequest::MajorMinorPatch(major, minor, patch) => {
-                    Some(format!("{major}.{minor}.{patch}"))
-                }
-                PythonRequest::Range(_, raw) => Some(raw.clone()),
-                PythonRequest::Path(path) => Some(path.to_string_lossy().to_string()),
-            },
-            _ => unreachable!(),
-        };
+        let python_request = to_uv_python_request(&hook.language_request);
 
         // Create venv (auto download Python if needed)
         Self::create_venv_with_retry(&uv, store, &info, python_request.as_ref())
@@ -58,7 +62,7 @@ impl LanguageImpl for Python {
 
         // Install dependencies
         if let Some(repo_path) = hook.repo_path() {
-            uv.cmd("install dependencies")
+            uv.cmd("uv pip install")
                 .arg("pip")
                 .arg("install")
                 .arg(".")
@@ -69,7 +73,7 @@ impl LanguageImpl for Python {
                 .output()
                 .await?;
         } else if !hook.additional_dependencies.is_empty() {
-            uv.cmd("install dependencies")
+            uv.cmd("uv pip install")
                 .arg("pip")
                 .arg("install")
                 .args(&hook.additional_dependencies)

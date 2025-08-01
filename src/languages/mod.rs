@@ -26,6 +26,8 @@ static UNIMPLEMENTED: Unimplemented = Unimplemented;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
     #[error(transparent)]
     Process(#[from] crate::process::Error),
@@ -99,6 +101,7 @@ impl Language {
         matches!(
             lang,
             Self::Python
+                | Self::Node
                 | Self::System
                 | Self::Fail
                 | Self::Docker
@@ -145,7 +148,7 @@ impl Language {
     pub async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook, Error> {
         match self {
             Self::Python => PYTHON.install(hook, store).await,
-            // Self::Node => NODE.install(hook, store).await,
+            Self::Node => NODE.install(hook, store).await,
             Self::System => SYSTEM.install(hook, store).await,
             Self::Fail => FAIL.install(hook, store).await,
             Self::Docker => DOCKER.install(hook, store).await,
@@ -158,7 +161,7 @@ impl Language {
     pub async fn check_health(&self) -> Result<(), Error> {
         match self {
             Self::Python => PYTHON.check_health().await,
-            // Self::Node => NODE.check_health().await,
+            Self::Node => NODE.check_health().await,
             Self::System => SYSTEM.check_health().await,
             Self::Fail => FAIL.check_health().await,
             Self::Docker => DOCKER.check_health().await,
@@ -182,7 +185,7 @@ impl Language {
 
         match self {
             Self::Python => PYTHON.run(hook, filenames, env_vars, store).await,
-            // Self::Node => NODE.run(hook, filenames, env_vars, store).await,
+            Self::Node => NODE.run(hook, filenames, env_vars, store).await,
             Self::System => SYSTEM.run(hook, filenames, env_vars, store).await,
             Self::Fail => FAIL.run(hook, filenames, env_vars, store).await,
             Self::Docker => DOCKER.run(hook, filenames, env_vars, store).await,

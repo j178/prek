@@ -19,7 +19,7 @@ use crate::store::Store;
 const PRE_COMMIT_LABEL: &str = "PRE_COMMIT";
 
 #[derive(Debug, Copy, Clone)]
-pub struct Docker;
+pub(crate) struct Docker;
 
 impl Docker {
     fn docker_tag(hook: &InstalledHook) -> String {

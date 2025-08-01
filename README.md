@@ -9,7 +9,7 @@ A reimplementation of the [pre-commit](https://pre-commit.com/) tool in Rust, de
 while also providing some additional opinionated features.
 
 > [!WARNING]
-> This project is still in very early development, only a few of the original pre-commit features are implemented.
+> This project is still in early stage of development, only a few of the original pre-commit features are implemented.
 > It is not recommended for normal use yet, but feel free to try it out and provide feedback.
 
 > [!NOTE]
