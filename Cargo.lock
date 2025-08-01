@@ -602,9 +602,9 @@ dependencies = [
 
 [[package]]
 name = "fancy-regex"
-version = "0.14.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e24cb5a94bcae1e5408b0effca5cd7172ea3c5755049c5f3af4cd283a165298"
+checksum = "921052e27ea019b147827df99754826a4d5f7385e0743b8d43b9464d980040f0"
 dependencies = [
  "bit-set",
  "regex-automata 0.4.9",
