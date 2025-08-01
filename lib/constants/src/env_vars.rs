@@ -25,7 +25,6 @@ impl EnvVars {
     // Other environment variables
     pub const UV_NO_CACHE: &'static str = "UV_NO_CACHE";
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
-    pub const UV_PYTHON_DOWNLOADS: &'static str = "UV_PYTHON_DOWNLOADS";
 }
 
 impl EnvVars {

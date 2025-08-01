@@ -16,6 +16,7 @@ use crate::store::{Store, ToolBucket};
 use crate::languages::python::PythonRequest;
 use crate::languages::version::LanguageRequest;
 
+use crate::process;
 use constants::env_vars::EnvVars;
 
 #[derive(Debug, Copy, Clone)]
@@ -51,23 +52,66 @@ impl LanguageImpl for Python {
         };
 
         // Create venv (auto download Python if needed)
+        // 1) Try to use the default uv Python install dir and disable downloads.
         let mut cmd = uv.cmd("create venv");
         cmd.arg("venv")
             .arg(&info.env_path)
-            .arg("--python-preference")
-            .arg("managed")
+            .arg("--managed-python")
             .arg("--no-project")
             .arg("--no-config")
-            .env(EnvVars::UV_PYTHON_DOWNLOADS, "true")
-            .env(
-                EnvVars::UV_PYTHON_INSTALL_DIR,
-                store.tools_path(ToolBucket::Python),
-            );
-        if let Some(python) = python_request {
+            .arg("--no-python-downloads");
+        if let Some(python) = &python_request {
             cmd.arg("--python").arg(python);
         }
 
-        cmd.check(true).output().await?;
+        match cmd.check(true).output().await {
+            Err(e @ process::Error::Status { .. }) => {
+                let process::Error::Status {
+                    error:
+                        process::StatusError {
+                            output: Some(output),
+                            ..
+                        },
+                    ..
+                } = &e
+                else {
+                    unreachable!()
+                };
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if stderr.contains("A managed Python download is available") {
+                    debug!(
+                        "Creating venv failed, but managed Python download is available, retrying with downloads"
+                    );
+
+                    let mut cmd = uv.cmd("create venv");
+                    cmd.arg("venv")
+                        .arg(&info.env_path)
+                        .arg("--managed-python")
+                        .arg("--no-project")
+                        .arg("--no-config")
+                        .arg("--allow-python-downloads")
+                        .env(
+                            EnvVars::UV_PYTHON_INSTALL_DIR,
+                            store.tools_path(ToolBucket::Python),
+                        );
+                    if let Some(python) = &python_request {
+                        cmd.arg("--python").arg(python);
+                    }
+
+                    cmd.check(true).output().await?;
+                } else {
+                    debug!("Failed to create venv with no downloads: {}", stderr);
+                    return Err(e.into());
+                }
+            }
+            Err(e) => {
+                debug!("Failed to create venv with no downloads: {}", e);
+                return Err(e.into());
+            }
+            Ok(_) => {
+                debug!("Venv created successfully with no downloads");
+            }
+        }
 
         // Install dependencies
         if let Some(repo_path) = hook.repo_path() {
