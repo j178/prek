@@ -1,6 +1,7 @@
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
-use std::fmt::Write;
+use std::fmt::Write as _;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -23,11 +24,10 @@ use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
-use crate::config::Stage;
+use crate::config::{Language, Stage};
 use crate::fs::Simplified;
 use crate::git;
 use crate::hook::{Hook, InstalledHook, Project};
-use crate::languages::Error;
 use crate::printer::Printer;
 use crate::store::Store;
 
@@ -69,7 +69,7 @@ pub(crate) async fn run(
     }
 
     let config_file = Project::find_config_file(config)?;
-    if should_stash && config_not_staged(&config_file).await? {
+    if should_stash && file_not_staged(&config_file).await? {
         writeln!(
             printer.stderr(),
             indoc!(
@@ -137,7 +137,7 @@ pub(crate) async fn run(
         to_run.iter().map(|h| &h.id).collect::<Vec<_>>()
     );
     let reporter = HookInstallReporter::from(printer);
-    let mut resolve_hooks = install_hooks(&to_run, &store, &reporter).await?;
+    let mut installed_hooks = install_hooks(&to_run, &store, &reporter).await?;
     drop(lock);
 
     let hooks = hooks
@@ -147,11 +147,11 @@ pub(crate) async fn run(
                 HookToRun::Skipped(h)
             } else {
                 // Find and remove the matching resolved hook
-                let resolved_idx = resolve_hooks
+                let resolved_idx = installed_hooks
                     .iter()
                     .position(|r| r.idx == h.idx)
                     .expect("Resolved hook must exist");
-                HookToRun::ToRun(resolve_hooks.swap_remove(resolved_idx))
+                HookToRun::ToRun(installed_hooks.swap_remove(resolved_idx))
             }
         })
         .collect::<Vec<_>>();
@@ -192,7 +192,7 @@ pub(crate) async fn run(
     .await
 }
 
-async fn config_not_staged(config: &Path) -> Result<bool> {
+async fn file_not_staged(config: &Path) -> Result<bool> {
     let status = git::git_cmd("git diff")?
         .arg("diff")
         .arg("--quiet") // Implies --exit-code
@@ -481,31 +481,36 @@ async fn run_hook(
         return Ok((true, diff));
     }
 
+    if !Language::supported(hook.language) {
+        writeln!(
+            printer.stdout(),
+            "{}",
+            status_line(
+                &hook.name,
+                columns,
+                SKIPPED,
+                Style::new().black().on_cyan(),
+                UNIMPLEMENTED,
+            )
+        )?;
+        return Ok((true, diff));
+    }
+
+    write!(
+        printer.stdout(),
+        "{}{}",
+        &hook.name,
+        ".".repeat(columns - hook.name.width_cjk() - PASSED.len() - 1)
+    )?;
+    std::io::stdout().flush()?;
+
     let start = std::time::Instant::now();
 
-    let run_result = if hook.pass_filenames {
+    let (status, output) = if hook.pass_filenames {
         shuffle(&mut filenames);
-        hook.language.run(hook, &filenames, env_vars, store).await
+        hook.language.run(hook, &filenames, env_vars, store).await?
     } else {
-        hook.language.run(hook, &[], env_vars, store).await
-    };
-    let (status, output) = match run_result {
-        Ok((status, output)) => (status, output),
-        Err(Error::Unimplemented { .. }) => {
-            writeln!(
-                printer.stdout(),
-                "{}",
-                status_line(
-                    &hook.name,
-                    columns,
-                    SKIPPED,
-                    Style::new().black().on_cyan(),
-                    UNIMPLEMENTED,
-                )
-            )?;
-            return Ok((true, diff));
-        }
-        Err(e) => return Err(e.into()),
+        hook.language.run(hook, &[], env_vars, store).await?
     };
 
     let duration = start.elapsed();
@@ -513,33 +518,10 @@ async fn run_hook(
     let new_diff = git::get_diff().await?;
     let file_modified = diff != new_diff;
     let success = status == 0 && !file_modified;
-
-    // TODO: When there is no Unimplemented error, we can print `<hook_name>......` status
-    // before running the hook.
     if success {
-        writeln!(
-            printer.stdout(),
-            "{}",
-            status_line(
-                &hook.name,
-                columns,
-                PASSED,
-                Style::new().black().on_green(),
-                "",
-            )
-        )?;
+        writeln!(printer.stdout(), "{}", PASSED.on_green())?;
     } else {
-        writeln!(
-            printer.stdout(),
-            "{}",
-            status_line(
-                &hook.name,
-                columns,
-                FAILED,
-                Style::new().black().on_red(),
-                "",
-            )
-        )?;
+        writeln!(printer.stdout(), "{}", FAILED.on_red())?;
     }
 
     if verbose || hook.verbose || !success {

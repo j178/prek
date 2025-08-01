@@ -95,6 +95,18 @@ impl LanguageImpl for Unimplemented {
 // system: only system version, no env, no additional deps
 
 impl Language {
+    pub fn supported(lang: Language) -> bool {
+        matches!(
+            lang,
+            Self::Python
+                | Self::System
+                | Self::Fail
+                | Self::Docker
+                | Self::DockerImage
+                | Self::Script
+        )
+    }
+
     pub fn supports_install_env(self) -> bool {
         !matches!(
             self,
