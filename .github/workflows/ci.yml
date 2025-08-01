@@ -93,7 +93,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
 
       - name: "Install Python"
-        run: uv python install
+        run: uv python install --no-bin
 
       - name: "Cargo test"
         run: |
@@ -125,7 +125,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
 
       - name: "Install Python"
-        run: uv python install
+        run: uv python install --no-bin
 
       - name: "Cargo test"
         run: |
@@ -160,7 +160,7 @@ jobs:
           cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
 
       - name: "Install Python"
-        run: uv python install
+        run: uv python install --no-bin
 
       - name: "Cargo test"
         run: |
