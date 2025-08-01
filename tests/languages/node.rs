@@ -104,8 +104,9 @@ fn language_version() -> anyhow::Result<()> {
             .read_dir()?
             .flatten()
             .filter(|d| !d.file_name().to_string_lossy().starts_with('.'))
-            .count(),
-        1,
+            .map(|d| d.file_name().to_string_lossy().to_string())
+            .collect::<Vec<_>>(),
+        vec!["19.9.0", "18.20.8"],
     );
 
     Ok(())
