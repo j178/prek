@@ -98,7 +98,7 @@ jobs:
       - name: "Install Node.js"
         uses: actions/setup-node@v4
         with:
-          node-version: '19'
+          node-version: '19.9.0'
 
       - name: "Cargo test"
         run: |
@@ -135,7 +135,7 @@ jobs:
       - name: "Install Node.js"
         uses: actions/setup-node@v4
         with:
-          node-version: '19'
+          node-version: '19.9.0'
 
       - name: "Cargo test"
         run: |
@@ -175,7 +175,7 @@ jobs:
       - name: "Install Node.js"
         uses: actions/setup-node@v4
         with:
-          node-version: '19'
+          node-version: '19.9.0'
 
       - name: "Cargo test"
         run: |
