@@ -1,6 +1,7 @@
 {
-  "formatter": {
-    "indentStyle": "space",
-    "indentWidth": 4
-  }
+    "root": false,
+    "formatter": {
+        "indentStyle": "space",
+        "indentWidth": 4
+    }
 }

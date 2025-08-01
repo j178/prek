@@ -80,7 +80,7 @@ impl Default for NodeVersion {
 impl<'de> Deserialize<'de> for NodeVersion {
     fn deserialize<D>(deserializer: D) -> Result<NodeVersion, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         #[derive(Deserialize)]
         struct _Version {
