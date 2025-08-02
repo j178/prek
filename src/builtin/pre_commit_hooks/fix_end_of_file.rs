@@ -58,46 +58,29 @@ async fn fix_file(filename: &str, content: &[u8]) -> Result<(i32, Vec<u8>)> {
             return Ok((1, format!("Fixing {filename}\n").into_bytes()));
         }
     } else {
-        // File consists only of newlines
-        let trimmed = trim_excess_newlines(content);
-        if trimmed.is_empty() {
-            // All newlines, make file empty
-            fs_err::tokio::write(filename, b"").await?;
-            return Ok((1, format!("Fixing {filename}\n").into_bytes()));
-        } else if trimmed != content {
-            // Some newlines trimmed
-            fs_err::tokio::write(filename, trimmed).await?;
-            return Ok((1, format!("Fixing {filename}\n").into_bytes()));
-        }
+        // File consists only of newlines - make it empty
+        fs_err::tokio::write(filename, b"").await?;
+        return Ok((1, format!("Fixing {filename}\n").into_bytes()));
     }
 
     Ok((0, Vec::new()))
 }
 
-/// Trim excess newlines at the end, preserving the line ending style.
+/// Trim excess newlines at the end, keeping only one.
 fn trim_excess_newlines(content: &[u8]) -> &[u8] {
     if content.is_empty() {
         return content;
     }
 
-    // Find the last non-newline character
-    let last_non_newline = content.iter().rposition(|&c| c != b'\n' && c != b'\r');
-
-    if let Some(pos) = last_non_newline {
-        // Check what comes after the last non-newline character
-        let after_content = &content[pos + 1..];
-
-        // Look for the first newline sequence and keep only that one
-        if after_content.starts_with(b"\r\n") {
-            return &content[..=pos + 1];
-        } else if after_content.starts_with(b"\n") || after_content.starts_with(b"\r") {
-            return &content[..=pos];
-        }
-
-        // No newline found, return content up to last non-newline
-        &content[..=pos]
+    // Since content only contains newlines, just keep the first one
+    if content.starts_with(b"\r\n") {
+        b"\r\n"
+    } else if content.starts_with(b"\n") {
+        b"\n"
+    } else if content.starts_with(b"\r") {
+        b"\r"
     } else {
-        // All newlines, return empty
+        // No newlines found (shouldn't happen given the context)
         &content[..0]
     }
 }
@@ -162,7 +145,6 @@ mod tests {
     async fn test_preserve_windows_line_endings() {
         let dir = tempdir().unwrap();
 
-        // Test file with Windows line endings (CRLF) and no final newline
         let content = b"line1\r\nline2\r\nline3";
         let file_path = create_test_file(&dir, "windows_no_eof.txt", content).await;
 
@@ -171,7 +153,6 @@ mod tests {
         assert_eq!(code, 1, "Should fix the file");
         assert!(output.as_bytes().contains_str("Fixing"));
 
-        // Verify the file now has CRLF at the end
         let new_content = fs_err::tokio::read(&file_path).await.unwrap();
         assert_eq!(new_content, b"line1\r\nline2\r\nline3\r\n");
     }
@@ -180,7 +161,6 @@ mod tests {
     async fn test_preserve_unix_line_endings() {
         let dir = tempdir().unwrap();
 
-        // Test file with Unix line endings (LF) and no final newline
         let content = b"line1\nline2\nline3";
         let file_path = create_test_file(&dir, "unix_no_eof.txt", content).await;
 
@@ -189,7 +169,6 @@ mod tests {
         assert_eq!(code, 1, "Should fix the file");
         assert!(output.as_bytes().contains_str("Fixing"));
 
-        // Verify the file now has LF at the end
         let new_content = fs_err::tokio::read(&file_path).await.unwrap();
         assert_eq!(new_content, b"line1\nline2\nline3\n");
     }
@@ -198,7 +177,6 @@ mod tests {
     async fn test_preserve_old_mac_line_endings() {
         let dir = tempdir().unwrap();
 
-        // Test file with old Mac line endings (CR) and no final newline
         let content = b"line1\rline2\rline3";
         let file_path = create_test_file(&dir, "mac_no_eof.txt", content).await;
 
@@ -207,7 +185,6 @@ mod tests {
         assert_eq!(code, 1, "Should fix the file");
         assert!(output.as_bytes().contains_str("Fixing"));
 
-        // Verify the file now has CR at the end
         let new_content = fs_err::tokio::read(&file_path).await.unwrap();
         assert_eq!(new_content, b"line1\rline2\rline3\r");
     }
@@ -216,7 +193,6 @@ mod tests {
     async fn test_already_has_correct_windows_ending() {
         let dir = tempdir().unwrap();
 
-        // Test file with Windows line endings (CRLF) and already has final newline
         let content = b"line1\r\nline2\r\nline3\r\n";
         let file_path = create_test_file(&dir, "windows_with_eof.txt", content).await;
 
@@ -225,7 +201,6 @@ mod tests {
         assert_eq!(code, 0, "Should not change the file");
         assert!(output.is_empty());
 
-        // Verify the file content is unchanged
         let new_content = fs_err::tokio::read(&file_path).await.unwrap();
         assert_eq!(new_content, content);
     }
@@ -234,7 +209,6 @@ mod tests {
     async fn test_already_has_correct_unix_ending() {
         let dir = tempdir().unwrap();
 
-        // Test file with Unix line endings (LF) and already has final newline
         let content = b"line1\nline2\nline3\n";
         let file_path = create_test_file(&dir, "unix_with_eof.txt", content).await;
 
@@ -243,7 +217,6 @@ mod tests {
         assert_eq!(code, 0, "Should not change the file");
         assert!(output.is_empty());
 
-        // Verify the file content is unchanged
         let new_content = fs_err::tokio::read(&file_path).await.unwrap();
         assert_eq!(new_content, content);
     }
@@ -252,7 +225,6 @@ mod tests {
     async fn test_empty_file() {
         let dir = tempdir().unwrap();
 
-        // Test empty file
         let content = b"";
         let file_path = create_test_file(&dir, "empty.txt", content).await;
 
@@ -261,45 +233,8 @@ mod tests {
         assert_eq!(code, 0, "Should not change empty file");
         assert!(output.is_empty());
 
-        // Verify the file remains empty
         let new_content = fs_err::tokio::read(&file_path).await.unwrap();
         assert_eq!(new_content, b"");
-    }
-
-    #[tokio::test]
-    async fn test_file_with_only_newlines_windows() {
-        let dir = tempdir().unwrap();
-
-        // Test file with only Windows newlines
-        let content = b"\r\n\r\n\r\n";
-        let file_path = create_test_file(&dir, "only_crlf.txt", content).await;
-
-        let (code, output) = run_fix_on_file(&file_path).await;
-
-        assert_eq!(code, 1, "Should normalize to single CRLF");
-        assert!(output.as_bytes().contains_str("Fixing"));
-
-        // Verify the file now has single CRLF
-        let new_content = fs_err::tokio::read(&file_path).await.unwrap();
-        assert_eq!(new_content, b"\r\n");
-    }
-
-    #[tokio::test]
-    async fn test_file_with_only_newlines_unix() {
-        let dir = tempdir().unwrap();
-
-        // Test file with only Unix newlines
-        let content = b"\n\n\n";
-        let file_path = create_test_file(&dir, "only_lf.txt", content).await;
-
-        let (code, output) = run_fix_on_file(&file_path).await;
-
-        assert_eq!(code, 1, "Should normalize to single LF");
-        assert!(output.as_bytes().contains_str("Fixing"));
-
-        // Verify the file now has single LF
-        let new_content = fs_err::tokio::read(&file_path).await.unwrap();
-        assert_eq!(new_content, b"\n");
     }
 
     #[tokio::test]
@@ -315,28 +250,17 @@ mod tests {
         assert_eq!(code, 1, "Should fix the file");
         assert!(output.as_bytes().contains_str("Fixing"));
 
-        // Verify the file uses CRLF (the most common type)
         let new_content = fs_err::tokio::read(&file_path).await.unwrap();
         assert_eq!(new_content, b"line1\r\nline2\nline3\r\nline4\r\n");
     }
 
     #[tokio::test]
     async fn test_detect_line_ending_function() {
-        // Test CRLF detection
         assert_eq!(detect_line_ending(b"line1\r\nline2\r\n"), b"\r\n");
-
-        // Test LF detection
         assert_eq!(detect_line_ending(b"line1\nline2\n"), b"\n");
-
-        // Test CR detection
         assert_eq!(detect_line_ending(b"line1\rline2\r"), b"\r");
-
-        // Test mixed with CRLF preference
         assert_eq!(detect_line_ending(b"line1\r\nline2\nline3\r\n"), b"\r\n");
-
-        // Test no line endings (default to LF)
         assert_eq!(detect_line_ending(b"no line endings"), b"\n");
-
         // Test empty content (default to LF)
         assert_eq!(detect_line_ending(b""), b"\n");
     }
@@ -345,7 +269,6 @@ mod tests {
     async fn test_excess_newlines_removal() {
         let dir = tempdir().unwrap();
 
-        // Test file with excess newlines at the end
         let content = b"line1\nline2\n\n\n\n";
         let file_path = create_test_file(&dir, "excess_newlines.txt", content).await;
 
@@ -354,7 +277,6 @@ mod tests {
         assert_eq!(code, 1, "Should fix the file");
         assert!(output.as_bytes().contains_str("Fixing"));
 
-        // Verify excess newlines are removed, keeping only one
         let new_content = fs_err::tokio::read(&file_path).await.unwrap();
         assert_eq!(new_content, b"line1\nline2\n");
     }
@@ -363,7 +285,6 @@ mod tests {
     async fn test_excess_crlf_removal() {
         let dir = tempdir().unwrap();
 
-        // Test file with excess CRLF at the end
         let content = b"line1\r\nline2\r\n\r\n\r\n";
         let file_path = create_test_file(&dir, "excess_crlf.txt", content).await;
 
@@ -372,7 +293,6 @@ mod tests {
         assert_eq!(code, 1, "Should fix the file");
         assert!(output.as_bytes().contains_str("Fixing"));
 
-        // Verify excess CRLF are removed, keeping only one
         let new_content = fs_err::tokio::read(&file_path).await.unwrap();
         assert_eq!(new_content, b"line1\r\nline2\r\n");
     }
@@ -381,7 +301,6 @@ mod tests {
     async fn test_all_newlines_make_empty() {
         let dir = tempdir().unwrap();
 
-        // Test file with only newlines (should become empty)
         let content = b"\n\n\n\n";
         let file_path = create_test_file(&dir, "only_newlines.txt", content).await;
 
@@ -390,7 +309,6 @@ mod tests {
         assert_eq!(code, 1, "Should fix the file");
         assert!(output.as_bytes().contains_str("Fixing"));
 
-        // Verify file becomes empty
         let new_content = fs_err::tokio::read(&file_path).await.unwrap();
         assert_eq!(new_content, b"");
     }
