@@ -15,7 +15,7 @@ pub(crate) async fn fix_end_of_file(
         .map(async |filename| {
             // TODO: avoid reading the whole file into memory
             let content = fs_err::tokio::read(filename).await?;
-            fix(filename, &content).await
+            fix_file(filename, &content).await
         })
         .buffered(*CONCURRENCY);
 
@@ -31,37 +31,74 @@ pub(crate) async fn fix_end_of_file(
     Ok((code, output))
 }
 
-async fn fix(filename: &str, content: &[u8]) -> Result<(i32, Vec<u8>)> {
+async fn fix_file(filename: &str, content: &[u8]) -> Result<(i32, Vec<u8>)> {
     // If the file is empty, do nothing.
     if content.is_empty() {
         return Ok((0, Vec::new()));
     }
 
-    // Find the last character that is not a newline char.
-    let last_char_pos = content.iter().rposition(|&c| c != b'\n' && c != b'\r');
+    // Find the last character that is not a newline
+    let last_non_newline_pos = content.iter().rposition(|&c| c != b'\n' && c != b'\r');
 
-    if let Some(pos) = last_char_pos {
-        // The file has content other than newlines.
-        // Determine the line ending type used in the file
-        let line_ending = detect_line_ending(content);
-        let new_content = [&content[..=pos], line_ending].concat();
-
-        if new_content == content {
-            Ok((0, Vec::new()))
-        } else {
+    if let Some(pos) = last_non_newline_pos {
+        // File has content other than newlines
+        if pos == content.len() - 1 {
+            // Last character is not a newline, add one
+            let line_ending = detect_line_ending(&content[..=pos]);
+            let new_content = [&content[..=pos], line_ending].concat();
             fs_err::tokio::write(filename, &new_content).await?;
-            Ok((1, format!("Fixing {filename}\n").into_bytes()))
+            return Ok((1, format!("Fixing {filename}\n").into_bytes()));
+        }
+        // Last character is a newline, check for excess newlines
+        let after_content = &content[pos + 1..];
+        let trimmed_after = trim_excess_newlines(after_content);
+        if trimmed_after != after_content {
+            let new_content = [&content[..=pos], trimmed_after].concat();
+            fs_err::tokio::write(filename, &new_content).await?;
+            return Ok((1, format!("Fixing {filename}\n").into_bytes()));
         }
     } else {
-        // The file consists only of newlines. Normalize to a single newline.
-        // Use the most common line ending in the file, or default to Unix
-        let line_ending = detect_line_ending(content);
-        if content == line_ending {
-            Ok((0, Vec::new()))
-        } else {
-            fs_err::tokio::write(filename, line_ending).await?;
-            Ok((1, format!("Fixing {filename}\n").into_bytes()))
+        // File consists only of newlines
+        let trimmed = trim_excess_newlines(content);
+        if trimmed.is_empty() {
+            // All newlines, make file empty
+            fs_err::tokio::write(filename, b"").await?;
+            return Ok((1, format!("Fixing {filename}\n").into_bytes()));
+        } else if trimmed != content {
+            // Some newlines trimmed
+            fs_err::tokio::write(filename, trimmed).await?;
+            return Ok((1, format!("Fixing {filename}\n").into_bytes()));
         }
+    }
+
+    Ok((0, Vec::new()))
+}
+
+/// Trim excess newlines at the end, preserving the line ending style.
+fn trim_excess_newlines(content: &[u8]) -> &[u8] {
+    if content.is_empty() {
+        return content;
+    }
+
+    // Find the last non-newline character
+    let last_non_newline = content.iter().rposition(|&c| c != b'\n' && c != b'\r');
+
+    if let Some(pos) = last_non_newline {
+        // Check what comes after the last non-newline character
+        let after_content = &content[pos + 1..];
+
+        // Look for the first newline sequence and keep only that one
+        if after_content.starts_with(b"\r\n") {
+            return &content[..=pos + 1];
+        } else if after_content.starts_with(b"\n") || after_content.starts_with(b"\r") {
+            return &content[..=pos];
+        }
+
+        // No newline found, return content up to last non-newline
+        &content[..=pos]
+    } else {
+        // All newlines, return empty
+        &content[..0]
     }
 }
 
@@ -104,6 +141,7 @@ fn detect_line_ending(content: &[u8]) -> &'static [u8] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use bstr::ByteSlice;
     use std::path::PathBuf;
     use tempfile::tempdir;
@@ -117,7 +155,7 @@ mod tests {
     async fn run_fix_on_file(file_path: &PathBuf) -> (i32, Vec<u8>) {
         let filename = file_path.to_string_lossy().to_string();
         let content = fs_err::tokio::read(file_path).await.unwrap();
-        fix(&filename, &content).await.unwrap()
+        fix_file(&filename, &content).await.unwrap()
     }
 
     #[tokio::test]
@@ -301,5 +339,59 @@ mod tests {
 
         // Test empty content (default to LF)
         assert_eq!(detect_line_ending(b""), b"\n");
+    }
+
+    #[tokio::test]
+    async fn test_excess_newlines_removal() {
+        let dir = tempdir().unwrap();
+
+        // Test file with excess newlines at the end
+        let content = b"line1\nline2\n\n\n\n";
+        let file_path = create_test_file(&dir, "excess_newlines.txt", content).await;
+
+        let (code, output) = run_fix_on_file(&file_path).await;
+
+        assert_eq!(code, 1, "Should fix the file");
+        assert!(output.as_bytes().contains_str("Fixing"));
+
+        // Verify excess newlines are removed, keeping only one
+        let new_content = fs_err::tokio::read(&file_path).await.unwrap();
+        assert_eq!(new_content, b"line1\nline2\n");
+    }
+
+    #[tokio::test]
+    async fn test_excess_crlf_removal() {
+        let dir = tempdir().unwrap();
+
+        // Test file with excess CRLF at the end
+        let content = b"line1\r\nline2\r\n\r\n\r\n";
+        let file_path = create_test_file(&dir, "excess_crlf.txt", content).await;
+
+        let (code, output) = run_fix_on_file(&file_path).await;
+
+        assert_eq!(code, 1, "Should fix the file");
+        assert!(output.as_bytes().contains_str("Fixing"));
+
+        // Verify excess CRLF are removed, keeping only one
+        let new_content = fs_err::tokio::read(&file_path).await.unwrap();
+        assert_eq!(new_content, b"line1\r\nline2\r\n");
+    }
+
+    #[tokio::test]
+    async fn test_all_newlines_make_empty() {
+        let dir = tempdir().unwrap();
+
+        // Test file with only newlines (should become empty)
+        let content = b"\n\n\n\n";
+        let file_path = create_test_file(&dir, "only_newlines.txt", content).await;
+
+        let (code, output) = run_fix_on_file(&file_path).await;
+
+        assert_eq!(code, 1, "Should fix the file");
+        assert!(output.as_bytes().contains_str("Fixing"));
+
+        // Verify file becomes empty
+        let new_content = fs_err::tokio::read(&file_path).await.unwrap();
+        assert_eq!(new_content, b"");
     }
 }
