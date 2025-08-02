@@ -22,30 +22,37 @@ use crate::config::{
     ManifestHook, MetaHook, RemoteHook, Stage, read_config, read_manifest,
 };
 use crate::fs::{CWD, Simplified};
-use crate::languages::version;
 use crate::languages::version::LanguageRequest;
 use crate::store::Store;
-use crate::warn_user;
+use crate::{store, warn_user};
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Failed to parse URL: {0}")]
-    InvalidUrl(#[from] url::ParseError),
     #[error(transparent)]
-    Config(#[from] config::Error),
-    #[error("Hook `{hook}` in not present in repository `{repo}`")]
-    HookNotFound { hook: String, repo: String },
-    #[error(transparent)]
-    Store(#[from] Box<crate::store::Error>),
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-    #[error(transparent)]
-    Serde(#[from] serde_json::Error),
-    #[error("Failed to parse `language_version` for hook `{hook}`")]
-    Version {
+    InvalidConfig(#[from] config::Error),
+
+    #[error("Hook `{hook}` is invalid")]
+    InvalidHook {
         hook: String,
         #[source]
-        error: version::Error,
+        error: anyhow::Error,
+    },
+
+    #[error("Hook `{hook}` not present in repo `{repo}`")]
+    HookNotFound { hook: String, repo: String },
+
+    #[error("Failed to install hook `{hook}`")]
+    InstallHook {
+        hook: String,
+        #[source]
+        error: anyhow::Error,
+    },
+
+    #[error("Failed to initialize repo `{repo}`")]
+    Store {
+        repo: String,
+        #[source]
+        error: Box<store::Error>,
     },
 }
 
@@ -131,31 +138,33 @@ impl Project {
     /// Find the configuration file in the given path or the current working directory.
     pub fn find_config_file(config: Option<PathBuf>) -> Result<PathBuf, Error> {
         if let Some(config) = config {
-            if config.try_exists()? {
+            if config.exists() {
                 return Ok(config);
             }
-            return Err(Error::Config(config::Error::NotFound(
+            return Err(Error::InvalidConfig(config::Error::NotFound(
                 config.user_display().to_string(),
             )));
         }
 
         let main = CWD.join(CONFIG_FILE);
         let alternate = CWD.join(ALTER_CONFIG_FILE);
-        if main.try_exists()? && alternate.try_exists()? {
+        if main.exists() && alternate.exists() {
             warn_user!(
                 "Both {main} and {alternate} exist, using {main}",
                 main = main.display(),
                 alternate = alternate.display()
             );
         }
-        if main.try_exists()? {
+        if main.exists() {
             return Ok(main);
         }
-        if alternate.try_exists()? {
+        if alternate.exists() {
             return Ok(alternate);
         }
 
-        Err(Error::Config(config::Error::NotFound(CONFIG_FILE.into())))
+        Err(Error::InvalidConfig(config::Error::NotFound(
+            CONFIG_FILE.into(),
+        )))
     }
 
     /// Initialize a new project from the configuration file or the file in the current working directory.
@@ -208,7 +217,13 @@ impl Project {
                 let progress = reporter
                     .map(|reporter| (reporter, reporter.on_clone_start(&format!("{repo_config}"))));
 
-                let path = store.clone_repo(repo_config).await.map_err(Box::new)?;
+                let path = store
+                    .clone_repo(repo_config)
+                    .await
+                    .map_err(|e| Error::Store {
+                        repo: format!("{}", repo_config.repo),
+                        error: Box::new(e),
+                    })?;
 
                 if let Some((reporter, progress)) = progress {
                     reporter.on_clone_complete(progress);
@@ -401,39 +416,39 @@ impl HookBuilder {
             .map_or(&[][..], |deps| deps.as_slice());
 
         if !language.supports_dependency() && !additional_dependencies.is_empty() {
-            return Err(Error::Config(config::Error::InvalidHook {
+            return Err(Error::InvalidHook {
                 hook: self.config.id.clone(),
                 error: anyhow::anyhow!(
                     "Hook specified `additional_dependencies` `{}` but the language `{}` does not support installing dependencies for now",
                     additional_dependencies.join(", "),
                     language,
                 ),
-            }));
+            });
         }
 
         if !language.supports_install_env() {
             if let Some(language_version) = language_version
                 && language_version != "default"
             {
-                return Err(Error::Config(config::Error::InvalidHook {
+                return Err(Error::InvalidHook {
                     hook: self.config.id.clone(),
                     error: anyhow::anyhow!(
                         "Hook specified `language_version` `{}` but the language `{}` does not install an environment",
                         language_version,
                         language,
                     ),
-                }));
+                });
             }
 
             if !additional_dependencies.is_empty() {
-                return Err(Error::Config(config::Error::InvalidHook {
+                return Err(Error::InvalidHook {
                     hook: self.config.id.clone(),
                     error: anyhow::anyhow!(
                         "Hook specified `additional_dependencies` `{}` but the language `{}` does not install an environment",
                         additional_dependencies.join(", "),
                         language,
                     ),
-                }));
+                });
             }
         }
 
@@ -446,23 +461,20 @@ impl HookBuilder {
         self.fill_in_defaults();
 
         let options = self.config.options;
-        let language_request = LanguageRequest::parse(
-            self.config.language,
-            &options.language_version.expect("language_version not set"),
-        )
-        .map_err(|e| Error::Version {
-            hook: self.config.id.clone(),
-            error: e,
-        })?;
-
-        let entry = shlex::split(&self.config.entry).ok_or_else(|| {
-            Error::Config(config::Error::InvalidHook {
+        let language_version = options.language_version.expect("language_version not set");
+        let language_request = LanguageRequest::parse(self.config.language, &language_version)
+            .map_err(|e| Error::InvalidHook {
                 hook: self.config.id.clone(),
-                error: anyhow::anyhow!(
-                    "Failed to parse `entry` `{}` as commands",
-                    &self.config.entry
-                ),
-            })
+                error: anyhow::anyhow!("Failed to parse `language_version` `{language_version}`",)
+                    .context(e),
+            })?;
+
+        let entry = shlex::split(&self.config.entry).ok_or_else(|| Error::InvalidHook {
+            hook: self.config.id.clone(),
+            error: anyhow::anyhow!(
+                "Failed to parse `entry` `{}` as commands",
+                &self.config.entry
+            ),
         })?;
 
         Ok(Hook {
@@ -619,8 +631,17 @@ impl InstalledHook {
             return Ok(());
         };
 
-        let content = serde_json::to_string_pretty(info)?;
-        fs_err::tokio::write(info.env_path.join(".prefligit-hook.json"), content).await?;
+        let content = serde_json::to_string_pretty(info).map_err(|e| Error::InstallHook {
+            hook: self.id.clone(),
+            error: anyhow::anyhow!("Failed to serialize install info: {e}"),
+        })?;
+
+        fs_err::tokio::write(info.env_path.join(".prefligit-hook.json"), content)
+            .await
+            .map_err(|e| Error::InstallHook {
+                hook: self.id.clone(),
+                error: anyhow::anyhow!("Failed to write install info: {e}"),
+            })?;
 
         Ok(())
     }
@@ -686,12 +707,17 @@ impl InstallInfo {
     }
 
     pub async fn clear_env_path(&self) -> Result<(), Error> {
-        if self.env_path.try_exists()? {
+        if self.env_path.exists() {
             debug!(
                 env_dir = %self.env_path.display(),
                 "Removing existing environment directory",
             );
-            fs_err::tokio::remove_dir_all(&self.env_path).await?;
+            fs_err::tokio::remove_dir_all(&self.env_path)
+                .await
+                .map_err(|e| Error::InstallHook {
+                    hook: self.language.to_string(),
+                    error: anyhow::anyhow!("Failed to remove environment directory: {e}"),
+                })?;
         }
 
         Ok(())
