@@ -115,7 +115,8 @@ fn invalid_config() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid config file: Hook `trailing-whitespace` specified `additional_dependencies` `dotnet@6` but the language `dotnet` does not support installing dependencies for now
+    error: Hook `trailing-whitespace` is invalid
+      caused by: Hook specified `additional_dependencies` `dotnet@6` but the language `dotnet` does not support installing dependencies for now
     "#);
 
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -136,7 +137,8 @@ fn invalid_config() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid config file: Hook `trailing-whitespace` specified `language_version` `6` but the language `fail` does not install an environment
+    error: Hook `trailing-whitespace` is invalid
+      caused by: Hook specified `language_version` `6` but the language `fail` does not install an environment
     "#);
 }
 
@@ -1063,6 +1065,7 @@ fn invalid_entry() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid config file: Failed to parse `entry` as commands
+    error: Hook `entry` is invalid
+      caused by: Failed to parse `entry` `"` as commands
     "#);
 }

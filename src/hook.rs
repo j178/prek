@@ -401,31 +401,39 @@ impl HookBuilder {
             .map_or(&[][..], |deps| deps.as_slice());
 
         if !language.supports_dependency() && !additional_dependencies.is_empty() {
-            return Err(Error::Config(config::Error::InvalidConfig(format!(
-                "Hook `{}` specified `additional_dependencies` `{}` but the language `{}` does not support installing dependencies for now",
-                self.config.id,
-                additional_dependencies.join(", "),
-                language,
-            ))));
+            return Err(Error::Config(config::Error::InvalidHook {
+                hook: self.config.id.clone(),
+                error: anyhow::anyhow!(
+                    "Hook specified `additional_dependencies` `{}` but the language `{}` does not support installing dependencies for now",
+                    additional_dependencies.join(", "),
+                    language,
+                ),
+            }));
         }
 
         if !language.supports_install_env() {
             if let Some(language_version) = language_version
                 && language_version != "default"
             {
-                return Err(Error::Config(config::Error::InvalidConfig(format!(
-                    "Hook `{}` specified `language_version` `{}` but the language `{}` does not install an environment",
-                    self.config.id, language_version, language,
-                ))));
+                return Err(Error::Config(config::Error::InvalidHook {
+                    hook: self.config.id.clone(),
+                    error: anyhow::anyhow!(
+                        "Hook specified `language_version` `{}` but the language `{}` does not install an environment",
+                        language_version,
+                        language,
+                    ),
+                }));
             }
 
             if !additional_dependencies.is_empty() {
-                return Err(Error::Config(config::Error::InvalidConfig(format!(
-                    "Hook `{}` specified `additional_dependencies` `{}` but the language `{}` does not install an environment",
-                    self.config.id,
-                    additional_dependencies.join(", "),
-                    language,
-                ))));
+                return Err(Error::Config(config::Error::InvalidHook {
+                    hook: self.config.id.clone(),
+                    error: anyhow::anyhow!(
+                        "Hook specified `additional_dependencies` `{}` but the language `{}` does not install an environment",
+                        additional_dependencies.join(", "),
+                        language,
+                    ),
+                }));
             }
         }
 
@@ -448,9 +456,13 @@ impl HookBuilder {
         })?;
 
         let entry = shlex::split(&self.config.entry).ok_or_else(|| {
-            Error::Config(config::Error::InvalidConfig(
-                "Failed to parse `entry` as commands".to_string(),
-            ))
+            Error::Config(config::Error::InvalidHook {
+                hook: self.config.id.clone(),
+                error: anyhow::anyhow!(
+                    "Failed to parse `entry` `{}` as commands",
+                    &self.config.entry
+                ),
+            })
         })?;
 
         Ok(Hook {

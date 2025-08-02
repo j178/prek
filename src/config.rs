@@ -637,8 +637,12 @@ pub enum Error {
     #[error("Config file not found: {0}")]
     NotFound(String),
 
-    #[error("Invalid config file: {0}")]
-    InvalidConfig(String),
+    #[error("Hook `{hook}` is invalid")]
+    InvalidHook {
+        hook: String,
+        #[source]
+        error: anyhow::Error,
+    },
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
