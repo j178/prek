@@ -1083,10 +1083,15 @@ fn init_nonexistent_repo() {
               - id: nonexistent
                 name: nonexistent
         "});
-
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"exit code: ", "exit status: ")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, context.run(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
