@@ -1069,3 +1069,36 @@ fn invalid_entry() {
       caused by: Failed to parse `entry` `"` as commands
     "#);
 }
+
+/// Initialize a repo that does not exist.
+#[test]
+fn init_nonexistent_repo() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://notexistent.com/nonexistent/repo
+            rev: v1.0.0
+            hooks:
+              - id: nonexistent
+                name: nonexistent
+        "});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to initialize repo `https://notexistent.com/nonexistent/repo`
+      caused by: command `git full clone` exited with an error:
+
+    [status]
+    exit status: 128
+
+    [stderr]
+    fatal: repository 'https://notexistent.com/nonexistent/repo/' not found
+    ");
+}
