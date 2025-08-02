@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::string::ToString;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result};
 use futures::TryStreamExt;
 use itertools::Itertools;
 use reqwest::Client;
@@ -285,8 +285,8 @@ impl NodeResult {
             .output()
             .await?;
         let output_str = String::from_utf8_lossy(&output.stdout);
-        let version: NodeVersion = serde_json::from_str(&output_str)
-            .map_err(|e| anyhow::anyhow!("Failed to parse node version: {}", e))?;
+        let version: NodeVersion =
+            serde_json::from_str(&output_str).context("Failed to parse node version")?;
 
         self.version = version;
 
@@ -377,7 +377,7 @@ impl NodeInstaller {
                     None
                 }
             })
-            .ok_or(anyhow::anyhow!("No installed node found"))
+            .context("No installed node found")
     }
 
     async fn resolve_version(&self, req: Option<&NodeRequest>) -> Result<NodeVersion> {
@@ -385,7 +385,7 @@ impl NodeInstaller {
         let version = versions
             .into_iter()
             .find(|version| req.is_none_or(|req| req.matches(version)))
-            .ok_or(anyhow::anyhow!("Version not found"))?;
+            .context("Version not found on remote")?;
         Ok(version)
     }
 
@@ -524,7 +524,7 @@ impl NodeInstaller {
     fn find_npm_in_same_directory(node_path: &Path) -> Result<Option<PathBuf>> {
         let node_dir = node_path
             .parent()
-            .ok_or_else(|| anyhow!("Node executable has no parent directory"))?;
+            .context("Node executable has no parent directory")?;
 
         for name in ["npm", "npm.cmd", "npm.bat"] {
             let npm_path = node_dir.join(name);

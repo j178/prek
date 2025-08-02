@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, anyhow};
+use anyhow::Context;
 use tracing::debug;
 
 use crate::hook::InstalledHook;
@@ -99,13 +99,13 @@ impl LanguageImpl for Python {
         let mut lines = stdout.lines();
         let version = lines
             .next()
-            .ok_or_else(|| anyhow!("Failed to get Python version"))?
+            .context("Failed to get Python version")?
             .to_string()
             .parse()
             .context("Failed to parse Python version")?;
         let base_exec_prefix = lines
             .next()
-            .ok_or_else(|| anyhow!("Failed to get Python base_exec_prefix"))?
+            .context("Failed to get Python base_exec_prefix")?
             .to_string();
         let python_exec = python_exec(&PathBuf::from(base_exec_prefix));
 
