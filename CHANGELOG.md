@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.0.16
+
+### Enhancements
+
+- Improve error message for hook ([#308](https://github.com/j178/prefligit/pull/308))
+- Improve error message for hook installation and run ([#310](https://github.com/j178/prefligit/pull/310))
+- Improve hook invalid error message ([#307](https://github.com/j178/prefligit/pull/307))
+- Parse `entry` when constructing hook ([#306](https://github.com/j178/prefligit/pull/306))
+- Rename `autoupdate` to `auto-update`, `init-templatedir` to `init-template-dir` ([#302](https://github.com/j178/prefligit/pull/302))
+
+### Bug fixes
+
+- Fix `end-of-file-fixer` replaces `\r\n` with `\n` ([#311](https://github.com/j178/prefligit/pull/311))
+
 ## 0.0.15
 
 In this release, `language: node` hooks are fully supported now (finally)!.
