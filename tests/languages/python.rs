@@ -133,7 +133,7 @@ fn invalid_version() {
 
     ----- stderr -----
     error: Hook `local` is invalid
-      caused by: Invalid `language_version`: `invalid-version`
+      caused by: Invalid `language_version` value: `invalid-version`
     "#);
 }
 
