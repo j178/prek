@@ -5,7 +5,7 @@ use crate::languages::python::PythonRequest;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("Invalid language version: `{0}`")]
+    #[error("Invalid `language_version` value: `{0}`")]
     InvalidVersion(String),
 }
 

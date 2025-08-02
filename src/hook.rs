@@ -465,8 +465,7 @@ impl HookBuilder {
         let language_request = LanguageRequest::parse(self.config.language, &language_version)
             .map_err(|e| Error::InvalidHook {
                 hook: self.config.id.clone(),
-                error: anyhow::anyhow!("Failed to parse `language_version` `{language_version}`",)
-                    .context(e),
+                error: anyhow::anyhow!(e),
             })?;
 
         let entry = shlex::split(&self.config.entry).ok_or_else(|| Error::InvalidHook {
@@ -633,14 +632,14 @@ impl InstalledHook {
 
         let content = serde_json::to_string_pretty(info).map_err(|e| Error::InstallHook {
             hook: self.id.clone(),
-            error: anyhow::anyhow!("Failed to serialize install info: {e}"),
+            error: anyhow::anyhow!(e).context("Failed to serialize install info"),
         })?;
 
         fs_err::tokio::write(info.env_path.join(".prefligit-hook.json"), content)
             .await
             .map_err(|e| Error::InstallHook {
                 hook: self.id.clone(),
-                error: anyhow::anyhow!("Failed to write install info: {e}"),
+                error: anyhow::anyhow!(e).context("Failed to write install info"),
             })?;
 
         Ok(())
@@ -716,7 +715,7 @@ impl InstallInfo {
                 .await
                 .map_err(|e| Error::InstallHook {
                     hook: self.language.to_string(),
-                    error: anyhow::anyhow!("Failed to remove environment directory: {e}"),
+                    error: anyhow::anyhow!(e).context("Failed to remove environment directory"),
                 })?;
         }
 

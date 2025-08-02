@@ -106,6 +106,37 @@ fn language_version() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn invalid_version() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: python
+                entry: python -c 'print("Hello, world!")'
+                language_version: 'invalid-version' # invalid version
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Hook `local` is invalid
+      caused by: Invalid `language_version`: `invalid-version`
+    "#);
+}
+
 /// Request a version that neither can be found nor downloaded.
 #[test]
 fn can_not_download() {
