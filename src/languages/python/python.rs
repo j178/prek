@@ -130,15 +130,12 @@ impl LanguageImpl for Python {
         _store: &Store,
     ) -> Result<(i32, Vec<u8>), Error> {
         let env_dir = hook.env_path().expect("Python must have env path");
-        let cmds = shlex::split(&hook.entry).context("Failed to parse entry")?;
-
-        // Construct PATH with venv bin directory first
         let new_path = prepend_path(&bin_dir(env_dir)).context("Failed to join PATH")?;
 
         let run = async move |batch: Vec<String>| {
             // TODO: combine stdout and stderr
-            let mut output = Cmd::new(&cmds[0], "run python command")
-                .args(&cmds[1..])
+            let mut output = Cmd::new(&hook.entry[0], "run python command")
+                .args(&hook.entry[1..])
                 .env("VIRTUAL_ENV", env_dir)
                 .env("PATH", &new_path)
                 .env_remove("PYTHONHOME")

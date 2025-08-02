@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use anyhow::Context;
-
 use crate::hook::{Hook, InstalledHook};
 use crate::languages::docker::Docker;
 use crate::languages::{Error, LanguageImpl};
@@ -27,12 +25,10 @@ impl LanguageImpl for DockerImage {
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>), Error> {
-        let cmds = shlex::split(&hook.entry).context("Failed to parse entry")?;
-
         let run = async move |batch: Vec<String>| {
             let mut cmd = Docker::docker_run_cmd().await?;
             let cmd = cmd
-                .args(&cmds[..])
+                .args(&hook.entry[..])
                 .args(&hook.args)
                 .args(batch)
                 .check(false)

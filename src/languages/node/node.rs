@@ -97,28 +97,25 @@ impl LanguageImpl for Node {
         _store: &Store,
     ) -> Result<(i32, Vec<u8>), Error> {
         let env_dir = hook.env_path().expect("Node must have env path");
-        // TODO: move split to hook construction
-        let cmds = shlex::split(&hook.entry).context("Failed to parse entry command")?;
-
         let new_path = prepend_path(&bin_dir(env_dir)).context("Failed to join PATH")?;
 
         let run = async move |batch: Vec<String>| {
             // Npm install scripts as `xxx.cmd` on Windows, we use `which::which` find the
             // real command name `xxx.cmd` from `xxx`.
             let mut cmd = if cfg!(windows) {
-                if let Some(path) =
-                    which::which_in_global(&cmds[0], Some(&new_path)).map_or(None, |mut p| p.next())
+                if let Some(path) = which::which_in_global(&hook.entry[0], Some(&new_path))
+                    .map_or(None, |mut p| p.next())
                 {
                     Cmd::new(path, "run node command")
                 } else {
-                    Cmd::new(&cmds[0], "run node command")
+                    Cmd::new(&hook.entry[0], "run node command")
                 }
             } else {
-                Cmd::new(&cmds[0], "run node command")
+                Cmd::new(&hook.entry[0], "run node command")
             };
 
             let mut output = cmd
-                .args(&cmds[1..])
+                .args(&hook.entry[1..])
                 .env("PATH", &new_path)
                 .envs(env_vars)
                 .args(&hook.args)

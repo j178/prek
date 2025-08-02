@@ -23,7 +23,9 @@ impl LanguageImpl for Fail {
         _env_vars: &HashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>), Error> {
-        let mut out = hook.entry.as_bytes().to_vec();
+        let mut out = shlex::try_join(hook.entry.iter().map(std::ops::Deref::deref))
+            .expect("Failed to join `entry` as command")
+            .into_bytes();
         out.extend(b"\n\n");
         for f in filenames {
             out.extend(f.as_bytes());

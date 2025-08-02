@@ -447,12 +447,18 @@ impl HookBuilder {
             error: e,
         })?;
 
+        let entry = shlex::split(&self.config.entry).ok_or_else(|| {
+            Error::Config(config::Error::InvalidConfig(
+                "Failed to parse `entry` as commands".to_string(),
+            ))
+        })?;
+
         Ok(Hook {
             repo: self.repo,
             idx: self.idx,
             id: self.config.id,
             name: self.config.name,
-            entry: self.config.entry,
+            entry,
             language: self.config.language,
             alias: options.alias.expect("alias not set"),
             files: options.files,
@@ -487,7 +493,7 @@ pub struct Hook {
     pub idx: usize,
     pub id: String,
     pub name: String,
-    pub entry: String,
+    pub entry: Vec<String>,
     pub language: Language,
     pub alias: String,
     pub files: Option<String>,

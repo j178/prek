@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use bstr::ByteSlice;
 use clap::Parser;
 use futures::StreamExt;
@@ -22,8 +22,7 @@ pub(crate) async fn fix_trailing_whitespace(
     filenames: &[&String],
     _env_vars: &HashMap<&'static str, String>,
 ) -> Result<(i32, Vec<u8>)> {
-    let entry = shlex::split(&hook.entry).context("Failed to parse entry")?;
-    let args = Args::try_parse_from(entry.iter().chain(&hook.args))?;
+    let args = Args::try_parse_from(hook.entry.iter().chain(&hook.args))?;
 
     let force_markdown = args.markdown_linebreak_ext.iter().any(|ext| ext == "*");
     let markdown_exts = args
