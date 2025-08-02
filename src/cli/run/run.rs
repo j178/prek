@@ -192,12 +192,12 @@ pub(crate) async fn run(
     .await
 }
 
-async fn file_not_staged(config: &Path) -> Result<bool> {
+async fn file_not_staged(file: &Path) -> Result<bool> {
     let status = git::git_cmd("git diff")?
         .arg("diff")
         .arg("--quiet") // Implies --exit-code
         .arg("--no-ext-diff")
-        .arg(config)
+        .arg(file)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .check(false)

@@ -232,7 +232,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             Ok(cli::validate_manifest(args.manifests))
         }
-        Command::SampleConfig(args) => Ok(cli::sample_config(args.file, printer)),
+        Command::SampleConfig(args) => cli::sample_config(args.file, printer),
         Command::Self_(SelfNamespace {
             command:
                 SelfCommand::Update(SelfUpdateArgs {

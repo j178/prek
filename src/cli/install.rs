@@ -145,12 +145,12 @@ fn install_hook_script(
     }
 
     let prefligit = std::env::current_exe()?;
-    let pre_commit = prefligit.simplified().display().to_string();
+    let prefligit = prefligit.simplified().display().to_string();
     let hook_script = HOOK_TMPL
         .replace("ARGS=(hook-impl)", &format!("ARGS=({})", args.join(" ")))
         .replace(
             r#"PREFLIGIT="prefligit""#,
-            &format!(r#"PREFLIGIT="{pre_commit}""#),
+            &format!(r#"PREFLIGIT="{prefligit}""#),
         );
     fs_err::OpenOptions::new()
         .write(true)

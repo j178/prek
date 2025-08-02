@@ -1,7 +1,7 @@
 use std::fmt::Write;
-use std::iter;
 use std::path::{Path, PathBuf};
 
+use anyhow::Result;
 use owo_colors::OwoColorize;
 
 use crate::cli::ExitStatus;
@@ -22,29 +22,23 @@ repos:
 ";
 
 #[allow(clippy::print_stdout)]
-pub(crate) fn sample_config(file: Option<PathBuf>, printer: Printer) -> ExitStatus {
+pub(crate) fn sample_config(file: Option<PathBuf>, printer: Printer) -> Result<ExitStatus> {
     if let Some(file) = file {
-        if let Err(err) = write_file(&file, SAMPLE_CONFIG, printer) {
-            anstream::eprintln!("{}: {}", "error".red().bold(), err);
-            for source in iter::successors(err.source(), |&err| err.source()) {
-                anstream::eprintln!("  {}: {}", "caused by".red().bold(), source);
-            }
-            return ExitStatus::Failure;
+        fs_err::create_dir_all(file.parent().unwrap_or(Path::new(".")))?;
+        if file.exists() {
+            anyhow::bail!("File `{}` already exists", file.simplified_display().cyan());
         }
-        return ExitStatus::Success;
+        fs_err::write(&file, SAMPLE_CONFIG)?;
+
+        writeln!(
+            printer.stdout(),
+            "Written to `{}`",
+            file.simplified_display().cyan()
+        )?;
+
+        return Ok(ExitStatus::Success);
     }
 
     print!("{SAMPLE_CONFIG}");
-    ExitStatus::Success
-}
-
-fn write_file(file: &Path, content: &str, printer: Printer) -> anyhow::Result<()> {
-    fs_err::write(file, content)?;
-
-    writeln!(
-        printer.stdout(),
-        "Written to `{}`",
-        file.simplified_display().cyan()
-    )?;
-    Ok(())
+    Ok(ExitStatus::Success)
 }
