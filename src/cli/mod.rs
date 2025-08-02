@@ -159,7 +159,6 @@ pub(crate) struct GlobalArgs {
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
     /// Install the prefligit git hook.
-    #[command(name = "install")]
     Install(InstallArgs),
     /// Create hook environments for all hooks used in the config file.
     ///
@@ -176,14 +175,14 @@ pub(crate) enum Command {
     /// Produce a sample `.pre-commit-config.yaml` file.
     SampleConfig,
     /// Auto-update pre-commit config to the latest repos' versions.
-    #[command(name = "autoupdate")]
+    #[command(name = "auto-update", alias = "autoupdate")]
     AutoUpdate(AutoUpdateArgs),
     /// Clean unused cached repos.
     GC,
     /// Clean out pre-commit files.
     Clean,
     /// Install hook script in a directory intended for use with `git config init.templateDir`.
-    #[command(name = "init-templatedir")]
+    #[command(name = "init-template-dir", alias = "init-templatedir")]
     InitTemplateDir(InitTemplateDirArgs),
     /// Try the pre-commit hooks in the current repo.
     TryRepo(Box<RunArgs>),
