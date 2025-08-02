@@ -65,7 +65,6 @@ fn end_of_file_fixer_hook() -> Result<()> {
     - hook id: end-of-file-fixer
     - exit code: 1
     - files were modified by this hook
-      Fixing correct_crlf.txt
       Fixing multiple_crlf.txt
       Fixing only_newlines.txt
       Fixing only_win_newlines.txt

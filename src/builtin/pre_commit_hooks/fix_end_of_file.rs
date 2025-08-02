@@ -15,34 +15,7 @@ pub(crate) async fn fix_end_of_file(
         .map(async |filename| {
             // TODO: avoid reading the whole file into memory
             let content = fs_err::tokio::read(filename).await?;
-
-            // If the file is empty, do nothing.
-            if content.is_empty() {
-                return Ok((0, Vec::new()));
-            }
-
-            // Find the last character that is not a newline char.
-            let last_char_pos = content.iter().rposition(|&c| c != b'\n' && c != b'\r');
-
-            // FIXME: /r/n should be kept as is
-            if let Some(pos) = last_char_pos {
-                // The file has content other than newlines.
-                let new_content = [&content[..=pos], b"\n"].concat();
-                if new_content == content {
-                    anyhow::Ok((0, Vec::new()))
-                } else {
-                    fs_err::tokio::write(filename, &new_content).await?;
-                    anyhow::Ok((1, format!("Fixing {filename}\n").into_bytes()))
-                }
-            } else {
-                // The file consists only of newlines. Normalize to a single newline.
-                if content == b"\n" {
-                    anyhow::Ok((0, Vec::new()))
-                } else {
-                    fs_err::tokio::write(filename, b"\n").await?;
-                    anyhow::Ok((1, format!("Fixing {filename}\n").into_bytes()))
-                }
-            }
+            fix(filename, &content).await
         })
         .buffered(*CONCURRENCY);
 
@@ -56,4 +29,277 @@ pub(crate) async fn fix_end_of_file(
     }
 
     Ok((code, output))
+}
+
+async fn fix(filename: &str, content: &[u8]) -> Result<(i32, Vec<u8>)> {
+    // If the file is empty, do nothing.
+    if content.is_empty() {
+        return Ok((0, Vec::new()));
+    }
+
+    // Find the last character that is not a newline char.
+    let last_char_pos = content.iter().rposition(|&c| c != b'\n' && c != b'\r');
+
+    if let Some(pos) = last_char_pos {
+        // The file has content other than newlines.
+        // Determine the line ending type used in the file
+        let line_ending = detect_line_ending(content);
+        let new_content = [&content[..=pos], line_ending].concat();
+
+        if new_content == content {
+            Ok((0, Vec::new()))
+        } else {
+            fs_err::tokio::write(filename, &new_content).await?;
+            Ok((1, format!("Fixing {filename}\n").into_bytes()))
+        }
+    } else {
+        // The file consists only of newlines. Normalize to a single newline.
+        // Use the most common line ending in the file, or default to Unix
+        let line_ending = detect_line_ending(content);
+        if content == line_ending {
+            Ok((0, Vec::new()))
+        } else {
+            fs_err::tokio::write(filename, line_ending).await?;
+            Ok((1, format!("Fixing {filename}\n").into_bytes()))
+        }
+    }
+}
+
+/// Detect the line ending type used in the file content.
+/// Returns the most common line ending, or Unix (\n) as default.
+fn detect_line_ending(content: &[u8]) -> &'static [u8] {
+    let mut crlf_count = 0;
+    let mut lf_count = 0;
+    let mut cr_count = 0;
+
+    let mut i = 0;
+    while i < content.len() {
+        if i + 1 < content.len() && content[i] == b'\r' && content[i + 1] == b'\n' {
+            crlf_count += 1;
+            i += 2;
+        } else if content[i] == b'\n' {
+            lf_count += 1;
+            i += 1;
+        } else if content[i] == b'\r' {
+            cr_count += 1;
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    // Return the most common line ending, with preference for CRLF > LF > CR
+    if crlf_count > 0 {
+        b"\r\n"
+    } else if lf_count > 0 {
+        b"\n"
+    } else if cr_count > 0 {
+        b"\r"
+    } else {
+        // Default to Unix line endings
+        b"\n"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bstr::ByteSlice;
+    use std::path::PathBuf;
+    use tempfile::tempdir;
+
+    async fn create_test_file(dir: &tempfile::TempDir, name: &str, content: &[u8]) -> PathBuf {
+        let file_path = dir.path().join(name);
+        fs_err::tokio::write(&file_path, content).await.unwrap();
+        file_path
+    }
+
+    async fn run_fix_on_file(file_path: &PathBuf) -> (i32, Vec<u8>) {
+        let filename = file_path.to_string_lossy().to_string();
+        let content = fs_err::tokio::read(file_path).await.unwrap();
+        fix(&filename, &content).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_preserve_windows_line_endings() {
+        let dir = tempdir().unwrap();
+
+        // Test file with Windows line endings (CRLF) and no final newline
+        let content = b"line1\r\nline2\r\nline3";
+        let file_path = create_test_file(&dir, "windows_no_eof.txt", content).await;
+
+        let (code, output) = run_fix_on_file(&file_path).await;
+
+        assert_eq!(code, 1, "Should fix the file");
+        assert!(output.as_bytes().contains_str("Fixing"));
+
+        // Verify the file now has CRLF at the end
+        let new_content = fs_err::tokio::read(&file_path).await.unwrap();
+        assert_eq!(new_content, b"line1\r\nline2\r\nline3\r\n");
+    }
+
+    #[tokio::test]
+    async fn test_preserve_unix_line_endings() {
+        let dir = tempdir().unwrap();
+
+        // Test file with Unix line endings (LF) and no final newline
+        let content = b"line1\nline2\nline3";
+        let file_path = create_test_file(&dir, "unix_no_eof.txt", content).await;
+
+        let (code, output) = run_fix_on_file(&file_path).await;
+
+        assert_eq!(code, 1, "Should fix the file");
+        assert!(output.as_bytes().contains_str("Fixing"));
+
+        // Verify the file now has LF at the end
+        let new_content = fs_err::tokio::read(&file_path).await.unwrap();
+        assert_eq!(new_content, b"line1\nline2\nline3\n");
+    }
+
+    #[tokio::test]
+    async fn test_preserve_old_mac_line_endings() {
+        let dir = tempdir().unwrap();
+
+        // Test file with old Mac line endings (CR) and no final newline
+        let content = b"line1\rline2\rline3";
+        let file_path = create_test_file(&dir, "mac_no_eof.txt", content).await;
+
+        let (code, output) = run_fix_on_file(&file_path).await;
+
+        assert_eq!(code, 1, "Should fix the file");
+        assert!(output.as_bytes().contains_str("Fixing"));
+
+        // Verify the file now has CR at the end
+        let new_content = fs_err::tokio::read(&file_path).await.unwrap();
+        assert_eq!(new_content, b"line1\rline2\rline3\r");
+    }
+
+    #[tokio::test]
+    async fn test_already_has_correct_windows_ending() {
+        let dir = tempdir().unwrap();
+
+        // Test file with Windows line endings (CRLF) and already has final newline
+        let content = b"line1\r\nline2\r\nline3\r\n";
+        let file_path = create_test_file(&dir, "windows_with_eof.txt", content).await;
+
+        let (code, output) = run_fix_on_file(&file_path).await;
+
+        assert_eq!(code, 0, "Should not change the file");
+        assert!(output.is_empty());
+
+        // Verify the file content is unchanged
+        let new_content = fs_err::tokio::read(&file_path).await.unwrap();
+        assert_eq!(new_content, content);
+    }
+
+    #[tokio::test]
+    async fn test_already_has_correct_unix_ending() {
+        let dir = tempdir().unwrap();
+
+        // Test file with Unix line endings (LF) and already has final newline
+        let content = b"line1\nline2\nline3\n";
+        let file_path = create_test_file(&dir, "unix_with_eof.txt", content).await;
+
+        let (code, output) = run_fix_on_file(&file_path).await;
+
+        assert_eq!(code, 0, "Should not change the file");
+        assert!(output.is_empty());
+
+        // Verify the file content is unchanged
+        let new_content = fs_err::tokio::read(&file_path).await.unwrap();
+        assert_eq!(new_content, content);
+    }
+
+    #[tokio::test]
+    async fn test_empty_file() {
+        let dir = tempdir().unwrap();
+
+        // Test empty file
+        let content = b"";
+        let file_path = create_test_file(&dir, "empty.txt", content).await;
+
+        let (code, output) = run_fix_on_file(&file_path).await;
+
+        assert_eq!(code, 0, "Should not change empty file");
+        assert!(output.is_empty());
+
+        // Verify the file remains empty
+        let new_content = fs_err::tokio::read(&file_path).await.unwrap();
+        assert_eq!(new_content, b"");
+    }
+
+    #[tokio::test]
+    async fn test_file_with_only_newlines_windows() {
+        let dir = tempdir().unwrap();
+
+        // Test file with only Windows newlines
+        let content = b"\r\n\r\n\r\n";
+        let file_path = create_test_file(&dir, "only_crlf.txt", content).await;
+
+        let (code, output) = run_fix_on_file(&file_path).await;
+
+        assert_eq!(code, 1, "Should normalize to single CRLF");
+        assert!(output.as_bytes().contains_str("Fixing"));
+
+        // Verify the file now has single CRLF
+        let new_content = fs_err::tokio::read(&file_path).await.unwrap();
+        assert_eq!(new_content, b"\r\n");
+    }
+
+    #[tokio::test]
+    async fn test_file_with_only_newlines_unix() {
+        let dir = tempdir().unwrap();
+
+        // Test file with only Unix newlines
+        let content = b"\n\n\n";
+        let file_path = create_test_file(&dir, "only_lf.txt", content).await;
+
+        let (code, output) = run_fix_on_file(&file_path).await;
+
+        assert_eq!(code, 1, "Should normalize to single LF");
+        assert!(output.as_bytes().contains_str("Fixing"));
+
+        // Verify the file now has single LF
+        let new_content = fs_err::tokio::read(&file_path).await.unwrap();
+        assert_eq!(new_content, b"\n");
+    }
+
+    #[tokio::test]
+    async fn test_mixed_line_endings() {
+        let dir = tempdir().unwrap();
+
+        // Test file with mixed line endings (should prefer CRLF as it appears first)
+        let content = b"line1\r\nline2\nline3\r\nline4";
+        let file_path = create_test_file(&dir, "mixed.txt", content).await;
+
+        let (code, output) = run_fix_on_file(&file_path).await;
+
+        assert_eq!(code, 1, "Should fix the file");
+        assert!(output.as_bytes().contains_str("Fixing"));
+
+        // Verify the file uses CRLF (the most common type)
+        let new_content = fs_err::tokio::read(&file_path).await.unwrap();
+        assert_eq!(new_content, b"line1\r\nline2\nline3\r\nline4\r\n");
+    }
+
+    #[tokio::test]
+    async fn test_detect_line_ending_function() {
+        // Test CRLF detection
+        assert_eq!(detect_line_ending(b"line1\r\nline2\r\n"), b"\r\n");
+
+        // Test LF detection
+        assert_eq!(detect_line_ending(b"line1\nline2\n"), b"\n");
+
+        // Test CR detection
+        assert_eq!(detect_line_ending(b"line1\rline2\r"), b"\r");
+
+        // Test mixed with CRLF preference
+        assert_eq!(detect_line_ending(b"line1\r\nline2\nline3\r\n"), b"\r\n");
+
+        // Test no line endings (default to LF)
+        assert_eq!(detect_line_ending(b"no line endings"), b"\n");
+
+        // Test empty content (default to LF)
+        assert_eq!(detect_line_ending(b""), b"\n");
+    }
 }
