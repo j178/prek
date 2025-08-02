@@ -23,6 +23,7 @@ static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
 static SCRIPT: script::Script = script::Script;
 static UNIMPLEMENTED: Unimplemented = Unimplemented;
 
+// TODO: improve run error message (include hook id)
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
