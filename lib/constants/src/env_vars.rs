@@ -11,6 +11,7 @@ impl EnvVars {
 
     // Prefligit specific environment variables, public for users
     pub const PREFLIGIT_HOME: &'static str = "PREFLIGIT_HOME";
+    pub const PREFLIGIT_COLOR: &'static str = "PREFLIGIT_COLOR";
     pub const PREFLIGIT_ALLOW_NO_CONFIG: &'static str = "PREFLIGIT_ALLOW_NO_CONFIG";
     pub const PREFLIGIT_NO_CONCURRENCY: &'static str = "PREFLIGIT_NO_CONCURRENCY";
     pub const PREFLIGIT_NO_FAST_PATH: &'static str = "PREFLIGIT_NO_FAST_PATH";

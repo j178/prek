@@ -6,7 +6,9 @@ use clap::builder::Styles;
 use clap::builder::styling::{AnsiColor, Effects};
 use clap::{ArgAction, Args, Parser, Subcommand};
 
-use crate::config::{HookType, Stage};
+use constants::env_vars::EnvVars;
+
+use crate::config::{CONFIG_FILE, HookType, Stage};
 
 mod clean;
 mod hook_impl;
@@ -122,7 +124,7 @@ pub(crate) struct GlobalArgs {
         global = true,
         long,
         value_enum,
-        env = "PRE_COMMIT_COLOR",
+        env = EnvVars::PREFLIGIT_COLOR,
         default_value_t = ColorChoice::Auto,
     )]
     pub(crate) color: ColorChoice,
@@ -173,7 +175,7 @@ pub(crate) enum Command {
     /// Validate `.pre-commit-hooks.yaml` files.
     ValidateManifest(ValidateManifestArgs),
     /// Produce a sample `.pre-commit-config.yaml` file.
-    SampleConfig,
+    SampleConfig(SampleConfigArgs),
     /// Auto-update pre-commit config to the latest repos' versions.
     #[command(name = "auto-update", alias = "autoupdate")]
     AutoUpdate(AutoUpdateArgs),
@@ -294,6 +296,18 @@ pub(crate) struct ValidateManifestArgs {
     /// The path to the manifest file.
     #[arg(value_name = "MANIFEST")]
     pub(crate) manifests: Vec<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct SampleConfigArgs {
+    /// Write the sample config to a file (`.pre-commit-config.yaml` by default).
+    #[arg(
+        short,
+        long,
+        num_args = 0..=1,
+        default_missing_value = CONFIG_FILE,
+    )]
+    pub(crate) file: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]

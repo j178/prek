@@ -2,6 +2,7 @@
 
 ![Development Status](https://img.shields.io/badge/Development-Early_Stage-yellowgreen)
 [![CI](https://github.com/j178/prefligit/actions/workflows/ci.yml/badge.svg)](https://github.com/j178/prefligit/actions/workflows/ci.yml)
+[![GitHub downloads](https://img.shields.io/github/downloads/j178/prefligit/total)](https://github.com/j178/prefligit/releases)
 
 <img width="250" alt="prefligit" src="https://github.com/user-attachments/assets/49080cb0-f528-4aa5-acb7-5a88eb9eff4a">
 
