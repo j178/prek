@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.0.15
+
+In this release, `language: node` hooks are fully supported now (finally)!.
+Give it a try and let us know if you run into any issues!
+
+### Enhancements
+
+- Support `nodejs` language hook ([#298](https://github.com/j178/prefligit/pull/298))
+- Show unimplemented message earlier ([#296](https://github.com/j178/prefligit/pull/296))
+- Simplify npm installing dependencies ([#299](https://github.com/j178/prefligit/pull/299))
+
+### Documentation
+
+- Update readme ([#300](https://github.com/j178/prefligit/pull/300))
+
 ## 0.0.14
 
 ### Enhancements

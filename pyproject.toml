@@ -1,6 +1,6 @@
 [project]
 name = "prefligit"
-version = "0.0.14"
+version = "0.0.15"
 description = "pre-commit reimplemented in Rust"
 authors = [{ name = "j178", email = "hi@j178.dev" }]
 requires-python = ">=3.8"
