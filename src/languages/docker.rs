@@ -11,7 +11,7 @@ use tracing::trace;
 
 use crate::fs::CWD;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
-use crate::languages::{Error, LanguageImpl};
+use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::Store;
@@ -170,14 +170,16 @@ impl Docker {
 }
 
 impl LanguageImpl for Docker {
-    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook, Error> {
+    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
         let info = InstallInfo::new(hook.language, hook.dependencies().to_vec(), store);
         let installed_hook = InstalledHook::Installed {
             hook: hook.clone(),
             info,
         };
 
-        Docker::build_docker_image(&installed_hook, true).await?;
+        Docker::build_docker_image(&installed_hook, true)
+            .await
+            .context("Failed to build docker image")?;
         let env = installed_hook
             .env_path()
             .expect("Docker must have env path");
@@ -189,7 +191,7 @@ impl LanguageImpl for Docker {
         Ok(installed_hook)
     }
 
-    async fn check_health(&self) -> Result<(), Error> {
+    async fn check_health(&self) -> Result<()> {
         todo!()
     }
 
@@ -199,8 +201,10 @@ impl LanguageImpl for Docker {
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,
-    ) -> Result<(i32, Vec<u8>), Error> {
-        Docker::build_docker_image(hook, false).await?;
+    ) -> Result<(i32, Vec<u8>)> {
+        Docker::build_docker_image(hook, false)
+            .await
+            .context("Failed to build docker image")?;
 
         let docker_tag = Docker::docker_tag(hook);
 

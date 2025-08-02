@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 
-use anyhow::Context;
+use anyhow::{Context, Result};
 use tracing::debug;
 
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
+use crate::languages::LanguageImpl;
 use crate::languages::python::uv::Uv;
-use crate::languages::{Error, LanguageImpl};
 use crate::process::Cmd;
 use crate::run::{prepend_path, run_by_batch};
 use crate::store::{Store, ToolBucket};
@@ -45,7 +45,7 @@ fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
 }
 
 impl LanguageImpl for Python {
-    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook, Error> {
+    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
         let uv = Uv::install(store).await?;
 
         let mut info = InstallInfo::new(hook.language, hook.dependencies().to_vec(), store);
@@ -87,7 +87,7 @@ impl LanguageImpl for Python {
 
         let python = python_exec(&info.env_path);
         // Get Python version and executable
-        let stdout = Cmd::new(&python, "get Python info")
+        let stdout = Cmd::new(&python, "python -c")
             .arg("-I")
             .arg("-c")
             .arg(QUERY_PYTHON_INFO)
@@ -118,7 +118,7 @@ impl LanguageImpl for Python {
         })
     }
 
-    async fn check_health(&self) -> Result<(), Error> {
+    async fn check_health(&self) -> Result<()> {
         todo!()
     }
 
@@ -128,7 +128,7 @@ impl LanguageImpl for Python {
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,
-    ) -> Result<(i32, Vec<u8>), Error> {
+    ) -> Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Python must have env path");
         let new_path = prepend_path(&bin_dir(env_dir)).context("Failed to join PATH")?;
 
@@ -172,7 +172,7 @@ impl Python {
         store: &Store,
         info: &InstallInfo,
         python_request: Option<&String>,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         // Try creating venv without downloads first
         match Self::create_venv_command(uv, store, info, python_request, false, false)
             .check(true)

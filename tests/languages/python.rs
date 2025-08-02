@@ -174,7 +174,8 @@ fn can_not_download() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to create Python virtual environment
+    error: Failed to install hook `less-than-3.6`
+      caused by: Failed to create Python virtual environment
       caused by: command `create venv` exited with an error:
 
     [status]

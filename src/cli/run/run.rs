@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use anstream::ColorChoice;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
 use indoc::indoc;
@@ -318,8 +318,16 @@ pub async fn install_hooks(
 
                 let progress = reporter.on_install_start(hook);
 
-                let installed_hook = hook.language.install(hook, store).await?;
-                installed_hook.mark_as_installed(store).await?;
+                let installed_hook = hook
+                    .language
+                    .install(hook, store)
+                    .await
+                    .context(format!("Failed to install hook `{hook}`"))?;
+
+                installed_hook
+                    .mark_as_installed(store)
+                    .await
+                    .context(format!("Failed to mark hook `{hook}` as installed"))?;
 
                 installed_this_group.push(installed_hook);
 
@@ -506,12 +514,18 @@ async fn run_hook(
 
     let start = std::time::Instant::now();
 
-    let (status, output) = if hook.pass_filenames {
+    let filenames = if hook.pass_filenames {
         shuffle(&mut filenames);
-        hook.language.run(hook, &filenames, env_vars, store).await?
+        filenames
     } else {
-        hook.language.run(hook, &[], env_vars, store).await?
+        vec![]
     };
+
+    let (status, output) = hook
+        .language
+        .run(hook, &filenames, env_vars, store)
+        .await
+        .context(format!("Failed to run hook `{hook}`"))?;
 
     let duration = start.elapsed();
 

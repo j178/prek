@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Mutex;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::ValueEnum;
 use futures::StreamExt;
 use itertools::zip_eq;
@@ -625,22 +625,17 @@ impl InstalledHook {
     }
 
     /// Mark the hook as installed in the environment.
-    pub async fn mark_as_installed(&self, _store: &Store) -> Result<(), Error> {
+    pub async fn mark_as_installed(&self, _store: &Store) -> Result<()> {
         let Self::Installed { info, .. } = self else {
             return Ok(());
         };
 
-        let content = serde_json::to_string_pretty(info).map_err(|e| Error::InstallHook {
-            hook: self.id.clone(),
-            error: anyhow::anyhow!(e).context("Failed to serialize install info"),
-        })?;
+        let content =
+            serde_json::to_string_pretty(info).context("Failed to serialize install info")?;
 
         fs_err::tokio::write(info.env_path.join(".prefligit-hook.json"), content)
             .await
-            .map_err(|e| Error::InstallHook {
-                hook: self.id.clone(),
-                error: anyhow::anyhow!(e).context("Failed to write install info"),
-            })?;
+            .context("Failed to write install info")?;
 
         Ok(())
     }

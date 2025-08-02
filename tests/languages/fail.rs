@@ -15,15 +15,15 @@ fn fail() -> Result<()> {
     cwd.child("changelog/changelog.md").touch()?;
 
     context.write_pre_commit_config(indoc::indoc! {r"
-            repos:
-              - repo: local
-                hooks:
-                - id: changelogs-rst
-                  name: changelogs must be rst
-                  entry: changelog filenames must end in .rst
-                  language: fail
-                  files: 'changelog/.*(?<!\.rst)$'
-        "});
+        repos:
+          - repo: local
+            hooks:
+            - id: changelogs-rst
+              name: changelogs must be rst
+              entry: changelog filenames must end in .rst
+              language: fail
+              files: 'changelog/.*(?<!\.rst)$'
+    "});
 
     context.git_add(".");
 

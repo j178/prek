@@ -3,13 +3,13 @@ use std::collections::HashMap;
 use std::env::consts::EXE_EXTENSION;
 use std::path::Path;
 
-use anyhow::Context;
+use anyhow::{Context, Result};
 use tracing::{debug, trace};
 
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
+use crate::languages::LanguageImpl;
 use crate::languages::node::installer::{EXTRA_KEY_LTS, NodeInstaller, bin_dir};
-use crate::languages::{Error, LanguageImpl};
 use crate::process::Cmd;
 use crate::run::{prepend_path, run_by_batch};
 use crate::store::{Store, ToolBucket};
@@ -18,7 +18,7 @@ use crate::store::{Store, ToolBucket};
 pub(crate) struct Node;
 
 impl LanguageImpl for Node {
-    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook, Error> {
+    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
         // 1. Install node
         //   1) Find from `$PREFLIGIT_HOME/tools/node`
         //   2) Find from system
@@ -85,7 +85,7 @@ impl LanguageImpl for Node {
         })
     }
 
-    async fn check_health(&self) -> Result<(), Error> {
+    async fn check_health(&self) -> Result<()> {
         todo!()
     }
 
@@ -95,7 +95,7 @@ impl LanguageImpl for Node {
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,
-    ) -> Result<(i32, Vec<u8>), Error> {
+    ) -> Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Node must have env path");
         let new_path = prepend_path(&bin_dir(env_dir)).context("Failed to join PATH")?;
 
@@ -205,12 +205,11 @@ impl Node {
             source.display(),
             target.display()
         );
-        fs_err::tokio::copy(source, target).await.map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to copy file from {} to {}: {}",
+        fs_err::tokio::copy(source, target).await.with_context(|| {
+            format!(
+                "Failed to copy file from {} to {}",
                 source.display(),
                 target.display(),
-                e
             )
         })?;
 

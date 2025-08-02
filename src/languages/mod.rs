@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use anyhow::Result;
+
 use crate::builtin;
 use crate::config::Language;
 use crate::hook::{Hook, InstalledHook};
@@ -23,41 +25,30 @@ static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
 static SCRIPT: script::Script = script::Script;
 static UNIMPLEMENTED: Unimplemented = Unimplemented;
 
-// TODO: improve run error message (include hook id)
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-    #[error(transparent)]
-    Anyhow(#[from] anyhow::Error),
-    #[error(transparent)]
-    Process(#[from] crate::process::Error),
-    #[error(transparent)]
-    Hook(#[from] crate::hook::Error),
-    #[error("Language `{language}` not implemented yet, hook `{hook}` is a no-op for now")]
-    Unimplemented { hook: String, language: String },
-}
-
 trait LanguageImpl {
-    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook, Error>;
-    async fn check_health(&self) -> Result<(), Error>;
+    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook>;
+    async fn check_health(&self) -> Result<()>;
     async fn run(
         &self,
         hook: &InstalledHook,
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         store: &Store,
-    ) -> Result<(i32, Vec<u8>), Error>;
+    ) -> Result<(i32, Vec<u8>)>;
 }
+
+#[derive(thiserror::Error, Debug)]
+#[error("Language `{0}` is not implemented yet")]
+struct UnimplementedError(String);
 
 struct Unimplemented;
 
 impl LanguageImpl for Unimplemented {
-    async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook, Error> {
+    async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook> {
         Ok(InstalledHook::NoNeedInstall(hook.clone()))
     }
 
-    async fn check_health(&self) -> Result<(), Error> {
+    async fn check_health(&self) -> Result<()> {
         Ok(())
     }
 
@@ -67,11 +58,8 @@ impl LanguageImpl for Unimplemented {
         _filenames: &[&String],
         _env_vars: &HashMap<&'static str, String>,
         _store: &Store,
-    ) -> Result<(i32, Vec<u8>), Error> {
-        Err(Error::Unimplemented {
-            hook: hook.id.to_string(),
-            language: hook.language.to_string(),
-        })
+    ) -> Result<(i32, Vec<u8>)> {
+        anyhow::bail!(UnimplementedError(format!("{}", hook.language)))
     }
 }
 
@@ -146,7 +134,7 @@ impl Language {
         )
     }
 
-    pub async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook, Error> {
+    pub async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
         match self {
             Self::Python => PYTHON.install(hook, store).await,
             Self::Node => NODE.install(hook, store).await,
@@ -159,7 +147,7 @@ impl Language {
         }
     }
 
-    pub async fn check_health(&self) -> Result<(), Error> {
+    pub async fn check_health(&self) -> Result<()> {
         match self {
             Self::Python => PYTHON.check_health().await,
             Self::Node => NODE.check_health().await,
@@ -178,10 +166,10 @@ impl Language {
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         store: &Store,
-    ) -> Result<(i32, Vec<u8>), Error> {
+    ) -> Result<(i32, Vec<u8>)> {
         // fast path for hooks implemented in Rust
         if builtin::check_fast_path(hook) {
-            return Ok(builtin::run_fast_path(hook, filenames, env_vars).await?);
+            return builtin::run_fast_path(hook, filenames, env_vars).await;
         }
 
         match self {

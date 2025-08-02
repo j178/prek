@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
+use anyhow::Result;
+
 use crate::hook::{Hook, InstalledHook};
+use crate::languages::LanguageImpl;
 use crate::languages::docker::Docker;
-use crate::languages::{Error, LanguageImpl};
 use crate::run::run_by_batch;
 use crate::store::Store;
 
@@ -10,11 +12,11 @@ use crate::store::Store;
 pub(crate) struct DockerImage;
 
 impl LanguageImpl for DockerImage {
-    async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook, Error> {
+    async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook> {
         Ok(InstalledHook::NoNeedInstall(hook.clone()))
     }
 
-    async fn check_health(&self) -> Result<(), Error> {
+    async fn check_health(&self) -> Result<()> {
         todo!()
     }
 
@@ -24,7 +26,7 @@ impl LanguageImpl for DockerImage {
         filenames: &[&String],
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,
-    ) -> Result<(i32, Vec<u8>), Error> {
+    ) -> Result<(i32, Vec<u8>)> {
         let run = async move |batch: Vec<String>| {
             let mut cmd = Docker::docker_run_cmd().await?;
             let cmd = cmd
