@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use anyhow::Context;
 use clap::Parser;
 use futures::StreamExt;
 
@@ -34,7 +35,7 @@ pub(crate) async fn check_added_large_files(
     filenames: &[&String],
     _env_vars: &HashMap<&'static str, String>,
 ) -> anyhow::Result<(i32, Vec<u8>)> {
-    let entry = shlex::split(&hook.entry).ok_or(anyhow::anyhow!("Failed to parse entry"))?;
+    let entry = shlex::split(&hook.entry).context("Failed to parse entry")?;
     let args = Args::try_parse_from(entry.iter().chain(&hook.args))?;
 
     let filter = if args.enforce_all {

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use anyhow::Context;
+
 use crate::hook::{Hook, InstalledHook};
 use crate::languages::{Error, LanguageImpl};
 use crate::process::Cmd;
@@ -25,7 +27,7 @@ impl LanguageImpl for System {
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>), Error> {
-        let cmds = shlex::split(&hook.entry).ok_or(anyhow::anyhow!("Failed to parse entry"))?;
+        let cmds = shlex::split(&hook.entry).context("Failed to parse entry")?;
 
         let run = async move |batch: Vec<String>| {
             let mut output = Cmd::new(&cmds[0], "run system command")

@@ -130,8 +130,7 @@ impl LanguageImpl for Python {
         _store: &Store,
     ) -> Result<(i32, Vec<u8>), Error> {
         let env_dir = hook.env_path().expect("Python must have env path");
-        let cmds = shlex::split(&hook.entry)
-            .ok_or_else(|| anyhow::anyhow!("Failed to parse entry command"))?;
+        let cmds = shlex::split(&hook.entry).context("Failed to parse entry")?;
 
         // Construct PATH with venv bin directory first
         let new_path = prepend_path(&bin_dir(env_dir)).context("Failed to join PATH")?;

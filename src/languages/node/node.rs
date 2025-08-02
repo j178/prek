@@ -96,10 +96,9 @@ impl LanguageImpl for Node {
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>), Error> {
-        let env_dir = hook.env_path().expect("Python must have env path");
+        let env_dir = hook.env_path().expect("Node must have env path");
         // TODO: move split to hook construction
-        let cmds = shlex::split(&hook.entry)
-            .ok_or_else(|| anyhow::anyhow!("Failed to parse entry command"))?;
+        let cmds = shlex::split(&hook.entry).context("Failed to parse entry command")?;
 
         let new_path = prepend_path(&bin_dir(env_dir)).context("Failed to join PATH")?;
 

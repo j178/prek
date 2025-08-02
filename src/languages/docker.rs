@@ -204,7 +204,7 @@ impl LanguageImpl for Docker {
 
         let docker_tag = Docker::docker_tag(hook);
 
-        let cmds = shlex::split(&hook.entry).ok_or(anyhow::anyhow!("Failed to parse entry"))?;
+        let cmds = shlex::split(&hook.entry).context("Failed to parse entry")?;
 
         let run = async move |batch: Vec<String>| {
             // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
