@@ -1038,3 +1038,31 @@ fn alternate_config_file() {
     ----- stderr -----
     "#);
 }
+
+/// Invalid `entry`
+#[test]
+fn invalid_entry() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: entry
+                name: entry
+                language: python
+                entry: '"'
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid config file: Failed to parse `entry` as commands
+    "#);
+}

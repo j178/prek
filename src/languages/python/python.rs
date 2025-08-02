@@ -134,7 +134,7 @@ impl LanguageImpl for Python {
 
         let run = async move |batch: Vec<String>| {
             // TODO: combine stdout and stderr
-            let mut output = Cmd::new(&hook.entry[0], "run python command")
+            let mut output = Cmd::new(&hook.entry[0], "python hook")
                 .args(&hook.entry[1..])
                 .env("VIRTUAL_ENV", env_dir)
                 .env("PATH", &new_path)

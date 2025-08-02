@@ -106,12 +106,12 @@ impl LanguageImpl for Node {
                 if let Some(path) = which::which_in_global(&hook.entry[0], Some(&new_path))
                     .map_or(None, |mut p| p.next())
                 {
-                    Cmd::new(path, "run node command")
+                    Cmd::new(path, "node hook")
                 } else {
-                    Cmd::new(&hook.entry[0], "run node command")
+                    Cmd::new(&hook.entry[0], "node hook")
                 }
             } else {
-                Cmd::new(&hook.entry[0], "run node command")
+                Cmd::new(&hook.entry[0], "node hook")
             };
 
             let mut output = cmd
