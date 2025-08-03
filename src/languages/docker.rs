@@ -174,7 +174,7 @@ impl LanguageImpl for Docker {
         let info = InstallInfo::new(hook.language, hook.dependencies().clone(), store);
         let installed_hook = InstalledHook::Installed {
             hook: Box::new(hook.clone()),
-            info,
+            info: Box::new(info),
         };
 
         Docker::build_docker_image(&installed_hook, true)

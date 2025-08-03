@@ -114,7 +114,7 @@ impl LanguageImpl for Python {
 
         Ok(InstalledHook::Installed {
             hook: Box::new(hook.clone()),
-            info,
+            info: Box::new(info),
         })
     }
 

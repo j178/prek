@@ -316,7 +316,7 @@ pub async fn install_hooks(
                     );
                     hook_envs.push(InstalledHook::Installed {
                         hook: Box::new(hook.clone()),
-                        info: info.clone(),
+                        info: Box::new(info.clone()),
                     });
                     continue;
                 }
@@ -337,7 +337,7 @@ pub async fn install_hooks(
                     .context(format!("Failed to mark hook `{hook}` as installed"))?;
 
                 if let InstalledHook::Installed { info, .. } = &installed_hook {
-                    newly_installed.push(info.clone());
+                    newly_installed.push(*info.clone());
                 }
                 hook_envs.push(installed_hook);
 

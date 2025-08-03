@@ -1105,6 +1105,6 @@ fn init_nonexistent_repo() {
     exit status: 128
 
     [stderr]
-    fatal: repository 'https://notexistentatallnevergonnahappen.com/nonexistent/repo/' not found
+    fatal: unable to access 'https://notexistentatallnevergonnahappen.com/nonexistent/repo/': Could not resolve host: notexistentatallnevergonnahappen.com
     ");
 }
