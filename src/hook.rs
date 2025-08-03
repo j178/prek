@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -471,11 +471,13 @@ impl HookBuilder {
         let entry = Entry::new(self.config.id.clone(), self.config.entry);
 
         Ok(Hook {
+            entry,
+            language_request,
+            dependencies: OnceCell::new(),
             repo: self.repo,
             idx: self.idx,
             id: self.config.id,
             name: self.config.name,
-            entry,
             language: self.config.language,
             alias: options.alias.expect("alias not set"),
             files: options.files,
@@ -491,7 +493,6 @@ impl HookBuilder {
             fail_fast: options.fail_fast.expect("fail_fast not set"),
             pass_filenames: options.pass_filenames.expect("pass_filenames not set"),
             description: options.description,
-            language_request,
             log_file: options.log_file,
             require_serial: options.require_serial.expect("require_serial not set"),
             stages: options.stages.expect("stages not set"),
@@ -528,6 +529,8 @@ impl Entry {
 #[derive(Debug, Clone)]
 pub(crate) struct Hook {
     repo: Rc<Repo>,
+    // Cached computed dependencies.
+    dependencies: OnceCell<Vec<String>>,
 
     /// The index of the hook defined in the configuration file.
     pub idx: usize,
@@ -587,16 +590,17 @@ impl Hook {
         matches!(&*self.repo, Repo::Meta { .. })
     }
 
-    pub(crate) fn dependencies(&self) -> Cow<'_, [String]> {
-        // For remote hooks, itself is an implicit dependency of the hook.
-        if self.is_remote() {
+    pub(crate) fn dependencies(&self) -> &[String] {
+        if !self.is_remote() {
+            return &self.additional_dependencies;
+        }
+        self.dependencies.get_or_init(|| {
+            // For remote hooks, itself is an implicit dependency of the hook.
             let mut deps = Vec::with_capacity(1 + self.additional_dependencies.len());
             deps.push(self.repo.to_string());
             deps.extend(self.additional_dependencies.iter().map(ToString::to_string));
-            Cow::Owned(deps)
-        } else {
-            Cow::Borrowed(&self.additional_dependencies)
-        }
+            deps
+        })
     }
 }
 
@@ -738,7 +742,7 @@ impl InstallInfo {
     pub fn matches(&self, hook: &Hook) -> bool {
         self.language == hook.language
             // TODO: should we compare ignore order?
-            && self.dependencies.as_slice() == &*hook.dependencies()
+            && self.dependencies.as_slice() == hook.dependencies()
             && hook.language_request.satisfied_by(self)
     }
 }

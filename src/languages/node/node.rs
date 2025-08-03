@@ -58,7 +58,7 @@ impl LanguageImpl for Node {
         let deps = if let Some(repo) = hook.repo_path() {
             let mut deps = hook.additional_dependencies.clone();
             deps.insert(0, repo.to_string_lossy().to_string());
-            Cow::Owned(deps)
+            Cow::Owned::<Vec<_>>(deps)
         } else {
             Cow::Borrowed(&hook.additional_dependencies)
         };
