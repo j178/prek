@@ -295,8 +295,8 @@ pub async fn install_hooks(
     // to leverage the environment or tools installed by previous ones.
     for (_, mut hooks) in hooks_by_language {
         let installed_hooks = installed_hooks.clone();
-        // Install hooks from the most dependent to the least dependent,
-        // the later hooks can use the environment of the earlier ones.
+        // Install hooks from the one with most dependencies to the least dependencies,
+        // the later hooks can reuse the environment of the earlier ones.
         hooks.sort_unstable_by_key(|h| Reverse(h.dependencies().len()));
 
         group_futures.push(async move {
@@ -307,7 +307,13 @@ pub async fn install_hooks(
                 // Find a matching installed hook environment.
                 if let Some(info) = installed_hooks
                     .iter()
-                    .chain(&newly_installed)
+                    .chain(newly_installed.iter().filter_map(|h| {
+                        if let InstalledHook::Installed { info, .. } = h {
+                            Some(info.as_ref())
+                        } else {
+                            None
+                        }
+                    }))
                     .find(|info| info.matches(hook))
                 {
                     debug!(
@@ -336,13 +342,13 @@ pub async fn install_hooks(
                     .await
                     .context(format!("Failed to mark hook `{hook}` as installed"))?;
 
-                if let InstalledHook::Installed { info, .. } = &installed_hook {
-                    newly_installed.push(*info.clone());
-                }
-                hook_envs.push(installed_hook);
+                newly_installed.push(installed_hook);
 
                 reporter.on_install_complete(progress);
             }
+
+            // Add newly installed hooks to the list.
+            hook_envs.extend(newly_installed);
             anyhow::Ok(hook_envs)
         });
     }
