@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use clap::Parser;
 use futures::StreamExt;
 
-use crate::git::{intent_to_add_files, lfs_files};
+use crate::git::{get_staged_files, lfs_files};
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
@@ -39,7 +39,7 @@ pub(crate) async fn check_added_large_files(
     let filter = if args.enforce_all {
         FileFilter::NoFilter
     } else {
-        let add_files: HashSet<_> = intent_to_add_files().await?.into_iter().collect();
+        let add_files: HashSet<_> = get_staged_files().await?.into_iter().collect();
         FileFilter::Files(add_files)
     };
 
