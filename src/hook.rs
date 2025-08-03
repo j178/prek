@@ -689,23 +689,27 @@ impl Hash for InstallInfo {
     }
 }
 
-// TODO: detect collision
-fn random_directory() -> String {
-    rand::rng()
-        .sample_iter(&rand::distr::Alphanumeric)
-        .take(20)
-        .map(char::from)
-        .collect()
+fn random_directory(base_dir: &Path) -> PathBuf {
+    loop {
+        let rand_dir: String = rand::rng()
+            .sample_iter(&rand::distr::Alphanumeric)
+            .take(20)
+            .map(char::from)
+            .collect();
+        let rand_dir = base_dir.join(rand_dir);
+
+        if !rand_dir.is_dir() {
+            return rand_dir;
+        }
+    }
 }
 
 impl InstallInfo {
     pub fn new(language: Language, dependencies: HashSet<String>, store: &Store) -> Self {
-        let env = random_directory();
-
         Self {
             language,
             dependencies,
-            env_path: store.hooks_dir().join(env),
+            env_path: random_directory(&store.hooks_dir()),
             language_version: semver::Version::new(0, 0, 0),
             toolchain: PathBuf::new(),
             extra: HashMap::new(),
