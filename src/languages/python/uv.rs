@@ -1,5 +1,6 @@
 use std::env;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -13,6 +14,12 @@ use crate::store::{Store, ToolBucket};
 
 // The version of `uv` to install. Should update periodically.
 const UV_VERSION: &str = "0.8.3";
+
+static UV_EXE: LazyLock<Result<PathBuf, which::Error>> = LazyLock::new(|| {
+    which::which("uv").inspect(|uv| {
+        debug!("Found uv in PATH: {}", uv.display());
+    })
+});
 
 #[derive(Debug)]
 enum PyPiMirror {
@@ -213,9 +220,8 @@ impl Uv {
     pub async fn install(store: &Store) -> Result<Self> {
         // 1) Check if `uv` is installed already.
         // TODO: check minimum supported uv version
-        if let Ok(uv) = which::which("uv") {
-            trace!(uv = %uv.display(), "Found uv from PATH");
-            return Ok(Self::new(uv));
+        if let Ok(uv) = UV_EXE.as_ref() {
+            return Ok(Self::new(uv.clone()));
         }
 
         // 2) Check if `uv` is installed by `prefligit`
