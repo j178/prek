@@ -1,4 +1,4 @@
-use std::cmp::max;
+use std::cmp::{Reverse, max};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::io::Write;
@@ -10,7 +10,6 @@ use anyhow::{Context, Result};
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
 use indoc::indoc;
-use itertools::Itertools;
 use owo_colors::{OwoColorize, Style};
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
@@ -283,38 +282,46 @@ pub async fn install_hooks(
     // TODO: how to eliminate the Rc?
     let installed_hooks = Rc::new(store.installed_hooks().collect::<Vec<_>>());
 
+    let mut hooks_by_language = HashMap::new();
+    for hook in hooks {
+        hooks_by_language
+            .entry(hook.language)
+            .or_insert_with(Vec::new)
+            .push(hook.clone());
+    }
+
     // Group hooks by language to enable parallel installation across different languages.
     // Within each language group, hooks are installed sequentially, allowing later hooks
     // to leverage the environment or tools installed by previous ones.
-    for (_, hooks) in &hooks.iter().chunk_by(|h| &h.language) {
-        let hooks: Vec<_> = hooks.collect();
+    for (_, mut hooks) in hooks_by_language {
         let installed_hooks = installed_hooks.clone();
+        // Install hooks from the most dependent to the least dependent,
+        // the later hooks can use the environment of the earlier ones.
+        hooks.sort_unstable_by_key(|h| Reverse(h.dependencies().len()));
 
         group_futures.push(async move {
-            let mut installed_this_group = Vec::with_capacity(hooks.len());
+            let mut hook_envs = Vec::with_capacity(hooks.len());
+            let mut newly_installed = Vec::new();
             // Process hooks sequentially within each language group
-            for hook in hooks {
+            for hook in &hooks {
                 // Find a matching installed hook environment.
                 if let Some(info) = installed_hooks
                     .iter()
-                    .chain(installed_this_group.iter().filter_map(|i| {
-                        let InstalledHook::Installed { info, .. } = i else {
-                            return None;
-                        };
-                        Some(info)
-                    }))
-                    .find(|i| i.matches(hook))
+                    .chain(&newly_installed)
+                    .find(|info| info.matches(hook))
                 {
                     debug!(
                         "Found installed environment for hook `{hook}` at `{}`",
                         info.env_path.display()
                     );
-                    installed_this_group.push(InstalledHook::Installed {
+                    hook_envs.push(InstalledHook::Installed {
                         hook: hook.clone(),
                         info: info.clone(),
                     });
                     continue;
                 }
+
+                debug!("No matching environment found for hook `{hook}`, installing...");
 
                 let progress = reporter.on_install_start(hook);
 
@@ -329,11 +336,14 @@ pub async fn install_hooks(
                     .await
                     .context(format!("Failed to mark hook `{hook}` as installed"))?;
 
-                installed_this_group.push(installed_hook);
+                if let InstalledHook::Installed { info, .. } = &installed_hook {
+                    newly_installed.push(info.clone());
+                }
+                hook_envs.push(installed_hook);
 
                 reporter.on_install_complete(progress);
             }
-            anyhow::Ok(installed_this_group)
+            anyhow::Ok(hook_envs)
         });
     }
 

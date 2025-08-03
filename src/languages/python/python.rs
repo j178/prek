@@ -48,7 +48,7 @@ impl LanguageImpl for Python {
     async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
         let uv = Uv::install(store).await?;
 
-        let mut info = InstallInfo::new(hook.language, hook.dependencies().to_vec(), store);
+        let mut info = InstallInfo::new(hook.language, hook.dependencies().clone(), store);
         info.clear_env_path().await?;
 
         debug!(%hook, target = %info.env_path.display(), "Installing environment");

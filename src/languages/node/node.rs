@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env::consts::EXE_EXTENSION;
 use std::path::Path;
 
@@ -31,7 +31,7 @@ impl LanguageImpl for Node {
         let installer = NodeInstaller::new(node_dir);
         let node = installer.install(&hook.language_request).await?;
 
-        let mut info = InstallInfo::new(hook.language, hook.dependencies().to_vec(), store);
+        let mut info = InstallInfo::new(hook.language, hook.dependencies().clone(), store);
         info.clear_env_path().await?;
 
         let lts = serde_json::to_string(&node.version().lts).context("Failed to serialize LTS")?;
@@ -57,8 +57,8 @@ impl LanguageImpl for Node {
         // 3. Install dependencies
         let deps = if let Some(repo) = hook.repo_path() {
             let mut deps = hook.additional_dependencies.clone();
-            deps.insert(0, repo.to_string_lossy().to_string());
-            Cow::Owned::<Vec<_>>(deps)
+            deps.insert(repo.to_string_lossy().to_string());
+            Cow::Owned::<HashSet<_>>(deps)
         } else {
             Cow::Borrowed(&hook.additional_dependencies)
         };

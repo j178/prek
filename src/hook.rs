@@ -470,9 +470,16 @@ impl HookBuilder {
 
         let entry = Entry::new(self.config.id.clone(), self.config.entry);
 
+        let additional_dependencies = options
+            .additional_dependencies
+            .expect("additional_dependencies should not be None")
+            .into_iter()
+            .collect::<HashSet<_>>();
+
         Ok(Hook {
             entry,
             language_request,
+            additional_dependencies,
             dependencies: OnceCell::new(),
             repo: self.repo,
             idx: self.idx,
@@ -485,9 +492,6 @@ impl HookBuilder {
             types: options.types.expect("types not set"),
             types_or: options.types_or.expect("types_or not set"),
             exclude_types: options.exclude_types.expect("exclude_types not set"),
-            additional_dependencies: options
-                .additional_dependencies
-                .expect("additional_dependencies should not be None"),
             args: options.args.expect("args not set"),
             always_run: options.always_run.expect("always_run not set"),
             fail_fast: options.fail_fast.expect("fail_fast not set"),
@@ -530,7 +534,7 @@ impl Entry {
 pub(crate) struct Hook {
     repo: Rc<Repo>,
     // Cached computed dependencies.
-    dependencies: OnceCell<Vec<String>>,
+    dependencies: OnceCell<HashSet<String>>,
 
     /// The index of the hook defined in the configuration file.
     pub idx: usize,
@@ -544,7 +548,7 @@ pub(crate) struct Hook {
     pub types: Vec<String>,
     pub types_or: Vec<String>,
     pub exclude_types: Vec<String>,
-    pub additional_dependencies: Vec<String>,
+    pub additional_dependencies: HashSet<String>,
     pub args: Vec<String>,
     pub always_run: bool,
     pub fail_fast: bool,
@@ -590,15 +594,15 @@ impl Hook {
         matches!(&*self.repo, Repo::Meta { .. })
     }
 
-    pub(crate) fn dependencies(&self) -> &[String] {
+    pub(crate) fn dependencies(&self) -> &HashSet<String> {
         if !self.is_remote() {
             return &self.additional_dependencies;
         }
         self.dependencies.get_or_init(|| {
             // For remote hooks, itself is an implicit dependency of the hook.
-            let mut deps = Vec::with_capacity(1 + self.additional_dependencies.len());
-            deps.push(self.repo.to_string());
-            deps.extend(self.additional_dependencies.iter().map(ToString::to_string));
+            let mut deps = HashSet::with_capacity(self.additional_dependencies.len() + 1);
+            deps.extend(self.additional_dependencies.clone());
+            deps.insert(self.repo.to_string());
             deps
         })
     }
@@ -666,7 +670,7 @@ impl InstalledHook {
 pub(crate) struct InstallInfo {
     pub language: Language,
     pub language_version: semver::Version,
-    pub dependencies: Vec<String>,
+    pub dependencies: HashSet<String>,
     pub env_path: PathBuf,
     pub toolchain: PathBuf,
     extra: HashMap<String, String>,
@@ -676,7 +680,9 @@ impl Hash for InstallInfo {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.language.hash(state);
         self.language_version.hash(state);
-        self.dependencies.hash(state);
+        let mut deps = self.dependencies.iter().collect::<Vec<_>>();
+        deps.sort_unstable();
+        deps.hash(state);
     }
 }
 
@@ -690,7 +696,7 @@ fn random_directory() -> String {
 }
 
 impl InstallInfo {
-    pub fn new(language: Language, dependencies: Vec<String>, store: &Store) -> Self {
+    pub fn new(language: Language, dependencies: HashSet<String>, store: &Store) -> Self {
         let env = random_directory();
 
         Self {
@@ -741,8 +747,7 @@ impl InstallInfo {
 
     pub fn matches(&self, hook: &Hook) -> bool {
         self.language == hook.language
-            // TODO: should we compare ignore order?
-            && self.dependencies.as_slice() == hook.dependencies()
+            && self.dependencies.is_superset(hook.dependencies())
             && hook.language_request.satisfied_by(self)
     }
 }
