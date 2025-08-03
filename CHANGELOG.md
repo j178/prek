@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.0.17
+
+### Enhancements
+
+- Add `sample-config --file` to write sample config to file ([#313](https://github.com/j178/prefligit/pull/313))
+- Cache computed `dependencies` on hook ([#319](https://github.com/j178/prefligit/pull/319))
+- Cache the found path to uv ([#323](https://github.com/j178/prefligit/pull/323))
+- Improve `sample-config` writing file ([#314](https://github.com/j178/prefligit/pull/314))
+- Reimplement find matching env logic ([#327](https://github.com/j178/prefligit/pull/327))
+
+### Bug fixes
+
+- Fix issue that `entry` of `pygrep` is not shell commands ([#316](https://github.com/j178/prefligit/pull/316))
+- Support `python311` as a valid language version ([#321](https://github.com/j178/prefligit/pull/321))
+
+### Other changes
+
+- Bump cargo-dist to 0.29.0 ([#322](https://github.com/j178/prefligit/pull/322))
+- Update DIFF.md ([#318](https://github.com/j178/prefligit/pull/318))
+
 ## 0.0.16
 
 ### Enhancements
