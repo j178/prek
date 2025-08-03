@@ -698,7 +698,7 @@ fn random_directory(base_dir: &Path) -> PathBuf {
             .collect();
         let rand_dir = base_dir.join(rand_dir);
 
-        if !rand_dir.is_dir() {
+        if !rand_dir.exists() {
             return rand_dir;
         }
     }
