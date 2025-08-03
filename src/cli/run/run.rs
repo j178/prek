@@ -31,8 +31,8 @@ use crate::printer::Printer;
 use crate::store::Store;
 
 enum HookToRun {
-    Skipped(Hook),
-    ToRun(InstalledHook),
+    Skipped(Box<Hook>),
+    ToRun(Box<InstalledHook>),
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -143,14 +143,14 @@ pub(crate) async fn run(
         .into_iter()
         .map(|h| {
             if skips.contains(&h.idx) {
-                HookToRun::Skipped(h)
+                HookToRun::Skipped(Box::new(h))
             } else {
                 // Find and remove the matching resolved hook
                 let resolved_idx = installed_hooks
                     .iter()
                     .position(|r| r.idx == h.idx)
                     .expect("Resolved hook must exist");
-                HookToRun::ToRun(installed_hooks.swap_remove(resolved_idx))
+                HookToRun::ToRun(Box::new(installed_hooks.swap_remove(resolved_idx)))
             }
         })
         .collect::<Vec<_>>();
@@ -315,7 +315,7 @@ pub async fn install_hooks(
                         info.env_path.display()
                     );
                     hook_envs.push(InstalledHook::Installed {
-                        hook: hook.clone(),
+                        hook: Box::new(hook.clone()),
                         info: info.clone(),
                     });
                     continue;

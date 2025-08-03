@@ -173,7 +173,7 @@ impl LanguageImpl for Docker {
     async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
         let info = InstallInfo::new(hook.language, hook.dependencies().clone(), store);
         let installed_hook = InstalledHook::Installed {
-            hook: hook.clone(),
+            hook: Box::new(hook.clone()),
             info,
         };
 

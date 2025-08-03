@@ -80,7 +80,7 @@ impl LanguageImpl for Node {
         }
 
         Ok(InstalledHook::Installed {
-            hook: hook.clone(),
+            hook: Box::new(hook.clone()),
             info,
         })
     }

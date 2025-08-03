@@ -13,7 +13,7 @@ pub(crate) struct DockerImage;
 
 impl LanguageImpl for DockerImage {
     async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook> {
-        Ok(InstalledHook::NoNeedInstall(hook.clone()))
+        Ok(InstalledHook::NoNeedInstall(Box::new(hook.clone())))
     }
 
     async fn check_health(&self) -> Result<()> {

@@ -1078,7 +1078,7 @@ fn init_nonexistent_repo() {
     context.init_project();
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://notexistent.com/nonexistent/repo
+          - repo: https://notexistentatallnevergonnahappen.com/nonexistent/repo
             rev: v1.0.0
             hooks:
               - id: nonexistent
@@ -1098,13 +1098,13 @@ fn init_nonexistent_repo() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to initialize repo `https://notexistent.com/nonexistent/repo`
+    error: Failed to initialize repo `https://notexistentatallnevergonnahappen.com/nonexistent/repo`
       caused by: command `git full clone` exited with an error:
 
     [status]
     exit status: 128
 
     [stderr]
-    fatal: repository 'https://notexistent.com/nonexistent/repo/' not found
+    fatal: repository 'https://notexistentatallnevergonnahappen.com/nonexistent/repo/' not found
     ");
 }

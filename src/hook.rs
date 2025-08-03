@@ -610,8 +610,8 @@ impl Hook {
 
 #[derive(Debug, Clone)]
 pub(crate) enum InstalledHook {
-    Installed { hook: Hook, info: InstallInfo },
-    NoNeedInstall(Hook),
+    Installed { hook: Box<Hook>, info: InstallInfo },
+    NoNeedInstall(Box<Hook>),
 }
 
 impl Deref for InstalledHook {
