@@ -18,7 +18,7 @@ use crate::archive;
 use crate::archive::ArchiveExtension;
 use crate::fs::LockedFile;
 use crate::hook::InstallInfo;
-use crate::languages::version::{Error, LanguageRequest, try_into_u8_slice};
+use crate::languages::version::{Error, LanguageRequest, try_into_u64_slice};
 use crate::process::Cmd;
 
 #[derive(Debug, Clone)]
@@ -150,9 +150,9 @@ impl NodeVersion {
 /// - `local/path/to/node`: Use the node executable at the specified path.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum NodeRequest {
-    Major(u8),
-    MajorMinor(u8, u8),
-    MajorMinorPatch(u8, u8, u8),
+    Major(u64),
+    MajorMinor(u64, u64),
+    MajorMinorPatch(u64, u64, u64),
     Path(PathBuf),
     Range(semver::VersionReq),
     CodeName(String),
@@ -197,7 +197,7 @@ impl NodeRequest {
         version_str: &str,
         original_request: &str,
     ) -> std::result::Result<NodeRequest, Error> {
-        let parts = try_into_u8_slice(version_str)
+        let parts = try_into_u64_slice(version_str)
             .map_err(|_| Error::InvalidVersion(original_request.to_string()))?;
 
         match parts.as_slice() {
@@ -223,14 +223,12 @@ impl NodeRequest {
 
     pub(crate) fn matches(&self, version: &NodeVersion) -> bool {
         match self {
-            NodeRequest::Major(major) => version.major() == u64::from(*major),
+            NodeRequest::Major(major) => version.major() == *major,
             NodeRequest::MajorMinor(major, minor) => {
-                version.major() == u64::from(*major) && version.minor() == u64::from(*minor)
+                version.major() == *major && version.minor() == *minor
             }
             NodeRequest::MajorMinorPatch(major, minor, patch) => {
-                version.major() == u64::from(*major)
-                    && version.minor() == u64::from(*minor)
-                    && version.patch() == u64::from(*patch)
+                version.major() == *major && version.minor() == *minor && version.patch() == *patch
             }
             NodeRequest::Path(path) => path.exists(),
             NodeRequest::Range(req) => req.matches(version.version()),

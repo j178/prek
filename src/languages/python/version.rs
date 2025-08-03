@@ -4,13 +4,13 @@
 use std::path::PathBuf;
 
 use crate::languages::version;
-use crate::languages::version::{LanguageRequest, try_into_u8_slice};
+use crate::languages::version::{LanguageRequest, try_into_u64_slice};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PythonRequest {
-    Major(u8),
-    MajorMinor(u8, u8),
-    MajorMinorPatch(u8, u8, u8),
+    Major(u64),
+    MajorMinor(u64, u64),
+    MajorMinorPatch(u64, u64, u64),
     Path(PathBuf),
     Range(semver::VersionReq, String),
 }
@@ -21,6 +21,7 @@ pub(crate) enum PythonRequest {
 /// - `python3`
 /// - `python3.12`
 /// - `python3.13.2`
+/// - `python311`
 /// - `3`
 /// - `3.12`
 /// - `3.12.3`
@@ -29,7 +30,7 @@ pub(crate) enum PythonRequest {
 /// - `/path/to/python`
 /// - `/path/to/python3.12`
 impl PythonRequest {
-    // TODO: support version like `3.8b1`, `3.8rc2`, `python3.8t`, `python3.8-64`.
+    // TODO: support version like `3.8b1`, `3.8rc2`, `python3.8t`, `python3.8-64`, `pypy3.8`.
     pub fn parse(request: &str) -> Result<LanguageRequest, version::Error> {
         if request.is_empty() {
             return Ok(LanguageRequest::Any);
@@ -70,8 +71,9 @@ impl PythonRequest {
         original_request: &str,
     ) -> Result<PythonRequest, version::Error> {
         // Check if all parts are valid u8 numbers
-        let parts = try_into_u8_slice(version_str)
+        let parts = try_into_u64_slice(version_str)
             .map_err(|_| version::Error::InvalidVersion(original_request.to_string()))?;
+        let parts = split_wheel_tag_version(parts);
 
         match parts[..] {
             [major] => Ok(PythonRequest::Major(major)),
@@ -84,19 +86,43 @@ impl PythonRequest {
     pub(crate) fn satisfied_by(&self, install_info: &crate::hook::InstallInfo) -> bool {
         let version = &install_info.language_version;
         match self {
-            PythonRequest::Major(major) => version.major == u64::from(*major),
+            PythonRequest::Major(major) => version.major == *major,
             PythonRequest::MajorMinor(major, minor) => {
-                version.major == u64::from(*major) && version.minor == u64::from(*minor)
+                version.major == *major && version.minor == *minor
             }
             PythonRequest::MajorMinorPatch(major, minor, patch) => {
-                version.major == u64::from(*major)
-                    && version.minor == u64::from(*minor)
-                    && version.patch == u64::from(*patch)
+                version.major == *major && version.minor == *minor && version.patch == *patch
             }
             PythonRequest::Path(path) => path == &install_info.toolchain,
             PythonRequest::Range(req, _) => req.matches(version),
         }
     }
+}
+
+/// Convert a wheel tag formatted version (e.g., `38`) to multiple components (e.g., `3.8`).
+///
+/// The major version is always assumed to be a single digit 0-9. The minor version is all
+/// the following content.
+///
+/// If not a wheel tag formatted version, the input is returned unchanged.
+fn split_wheel_tag_version(mut version: Vec<u64>) -> Vec<u64> {
+    if version.len() != 1 {
+        return version;
+    }
+
+    let release = version[0].to_string();
+    let mut chars = release.chars();
+    let Some(major) = chars.next().and_then(|c| c.to_digit(10)) else {
+        return version;
+    };
+
+    let Ok(minor) = chars.as_str().parse::<u32>() else {
+        return version;
+    };
+
+    version[0] = u64::from(major);
+    version.push(u64::from(minor));
+    version
 }
 
 #[cfg(test)]
@@ -135,6 +161,14 @@ mod tests {
         assert_eq!(
             PythonRequest::parse("3.12.3").unwrap(),
             LanguageRequest::Python(PythonRequest::MajorMinorPatch(3, 12, 3))
+        );
+        assert_eq!(
+            PythonRequest::parse("312").unwrap(),
+            LanguageRequest::Python(PythonRequest::MajorMinor(3, 12))
+        );
+        assert_eq!(
+            PythonRequest::parse("python312").unwrap(),
+            LanguageRequest::Python(PythonRequest::MajorMinor(3, 12))
         );
 
         // VersionReq

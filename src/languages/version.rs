@@ -69,9 +69,9 @@ impl SemverRequest {
     }
 }
 
-pub(crate) fn try_into_u8_slice(version: &str) -> Result<Vec<u8>, std::num::ParseIntError> {
+pub(crate) fn try_into_u64_slice(version: &str) -> Result<Vec<u64>, std::num::ParseIntError> {
     version
         .split('.')
-        .map(str::parse::<u8>)
+        .map(str::parse::<u64>)
         .collect::<Result<Vec<_>, _>>()
 }
