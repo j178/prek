@@ -26,8 +26,8 @@ use crate::languages::version::LanguageRequest;
 use crate::store::Store;
 use crate::{store, warn_user};
 
-#[derive(Debug, Error)]
-pub enum Error {
+#[derive(Error, Debug)]
+pub(crate) enum Error {
     #[error(transparent)]
     InvalidConfig(#[from] config::Error),
 
@@ -57,7 +57,7 @@ pub enum Error {
 }
 
 #[derive(Debug, Clone)]
-pub enum Repo {
+pub(crate) enum Repo {
     Remote {
         /// Path to the cloned repo.
         path: PathBuf,
@@ -75,7 +75,7 @@ pub enum Repo {
 
 impl Repo {
     /// Load the remote repo manifest from the path.
-    pub fn remote(url: Url, rev: String, path: PathBuf) -> Result<Self, Error> {
+    pub(crate) fn remote(url: Url, rev: String, path: PathBuf) -> Result<Self, Error> {
         let manifest = read_manifest(&path.join(MANIFEST_FILE))?;
         let hooks = manifest.hooks;
 
@@ -88,19 +88,19 @@ impl Repo {
     }
 
     /// Construct a local repo from a list of hooks.
-    pub fn local(hooks: Vec<LocalHook>) -> Self {
+    pub(crate) fn local(hooks: Vec<LocalHook>) -> Self {
         Self::Local { hooks }
     }
 
     /// Construct a meta repo.
-    pub fn meta(hooks: Vec<MetaHook>) -> Self {
+    pub(crate) fn meta(hooks: Vec<MetaHook>) -> Self {
         Self::Meta {
             hooks: hooks.into_iter().map(ManifestHook::from).collect(),
         }
     }
 
     /// Get the path to the cloned repo if it is a remote repo.
-    pub fn path(&self) -> Option<&Path> {
+    pub(crate) fn path(&self) -> Option<&Path> {
         match self {
             Repo::Remote { path, .. } => Some(path),
             _ => None,
@@ -108,7 +108,7 @@ impl Repo {
     }
 
     /// Get a hook by id.
-    pub fn get_hook(&self, id: &str) -> Option<&ManifestHook> {
+    pub(crate) fn get_hook(&self, id: &str) -> Option<&ManifestHook> {
         let hooks = match self {
             Repo::Remote { hooks, .. } => hooks,
             Repo::Local { hooks } => hooks,
@@ -332,7 +332,7 @@ impl Project {
     }
 }
 
-pub trait HookInitReporter {
+pub(crate) trait HookInitReporter {
     fn on_clone_start(&self, repo: &str) -> usize;
     fn on_clone_complete(&self, id: usize);
     fn on_complete(&self);
@@ -468,13 +468,7 @@ impl HookBuilder {
                 error: anyhow::anyhow!(e),
             })?;
 
-        let entry = shlex::split(&self.config.entry).ok_or_else(|| Error::InvalidHook {
-            hook: self.config.id.clone(),
-            error: anyhow::anyhow!(
-                "Failed to parse `entry` `{}` as commands",
-                &self.config.entry
-            ),
-        })?;
+        let entry = Entry::new(self.config.id.clone(), self.config.entry);
 
         Ok(Hook {
             repo: self.repo,
@@ -507,16 +501,39 @@ impl HookBuilder {
     }
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct Entry {
+    hook: String,
+    entry: String,
+}
+
+impl Entry {
+    pub(crate) fn new(hook: String, entry: String) -> Self {
+        Self { hook, entry }
+    }
+
+    pub(crate) fn parsed(&self) -> Result<Vec<String>, Error> {
+        shlex::split(&self.entry).ok_or_else(|| Error::InvalidHook {
+            hook: self.hook.clone(),
+            error: anyhow::anyhow!("Failed to parse entry `{}` as commands", &self.entry),
+        })
+    }
+
+    pub(crate) fn entry(&self) -> &str {
+        &self.entry
+    }
+}
+
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
-pub struct Hook {
+pub(crate) struct Hook {
     repo: Rc<Repo>,
 
     /// The index of the hook defined in the configuration file.
     pub idx: usize,
     pub id: String,
     pub name: String,
-    pub entry: Vec<String>,
+    pub entry: Entry,
     pub language: Language,
     pub alias: String,
     pub files: Option<String>,
@@ -549,28 +566,28 @@ impl Display for Hook {
 }
 
 impl Hook {
-    pub fn repo(&self) -> &Repo {
+    pub(crate) fn repo(&self) -> &Repo {
         &self.repo
     }
 
     /// Get the path to the repository that contains the hook.
-    pub fn repo_path(&self) -> Option<&Path> {
+    pub(crate) fn repo_path(&self) -> Option<&Path> {
         self.repo.path()
     }
 
-    pub fn is_local(&self) -> bool {
+    pub(crate) fn is_local(&self) -> bool {
         matches!(&*self.repo, Repo::Local { .. })
     }
 
-    pub fn is_remote(&self) -> bool {
+    pub(crate) fn is_remote(&self) -> bool {
         matches!(&*self.repo, Repo::Remote { .. })
     }
 
-    pub fn is_meta(&self) -> bool {
+    pub(crate) fn is_meta(&self) -> bool {
         matches!(&*self.repo, Repo::Meta { .. })
     }
 
-    pub fn dependencies(&self) -> Cow<'_, [String]> {
+    pub(crate) fn dependencies(&self) -> Cow<'_, [String]> {
         // For remote hooks, itself is an implicit dependency of the hook.
         if self.is_remote() {
             let mut deps = Vec::with_capacity(1 + self.additional_dependencies.len());
@@ -584,7 +601,7 @@ impl Hook {
 }
 
 #[derive(Debug, Clone)]
-pub enum InstalledHook {
+pub(crate) enum InstalledHook {
     Installed { hook: Hook, info: InstallInfo },
     NoNeedInstall(Hook),
 }
@@ -608,7 +625,7 @@ impl Display for InstalledHook {
 }
 
 impl InstalledHook {
-    pub fn env_path(&self) -> Option<&Path> {
+    pub(crate) fn env_path(&self) -> Option<&Path> {
         match self {
             InstalledHook::Installed { info, .. } => Some(&info.env_path),
             InstalledHook::NoNeedInstall(_) => None,
@@ -616,7 +633,7 @@ impl InstalledHook {
     }
 
     /// Check if the hook is installed in the environment.
-    pub fn installed(&self) -> bool {
+    pub(crate) fn installed(&self) -> bool {
         let Self::Installed { info, .. } = self else {
             return true;
         };
@@ -625,7 +642,7 @@ impl InstalledHook {
     }
 
     /// Mark the hook as installed in the environment.
-    pub async fn mark_as_installed(&self, _store: &Store) -> Result<()> {
+    pub(crate) async fn mark_as_installed(&self, _store: &Store) -> Result<()> {
         let Self::Installed { info, .. } = self else {
             return Ok(());
         };
@@ -642,7 +659,7 @@ impl InstalledHook {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct InstallInfo {
+pub(crate) struct InstallInfo {
     pub language: Language,
     pub language_version: semver::Version,
     pub dependencies: Vec<String>,
@@ -659,6 +676,7 @@ impl Hash for InstallInfo {
     }
 }
 
+// TODO: detect collision
 fn random_directory() -> String {
     rand::rng()
         .sample_iter(&rand::distr::Alphanumeric)

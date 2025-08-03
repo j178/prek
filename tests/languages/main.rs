@@ -7,5 +7,6 @@ mod docker;
 mod docker_image;
 mod fail;
 mod node;
+mod pygrep;
 mod python;
 mod unimplemented;

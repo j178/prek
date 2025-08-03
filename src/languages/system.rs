@@ -27,9 +27,11 @@ impl LanguageImpl for System {
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
+        let entry = hook.entry.parsed()?;
+
         let run = async move |batch: Vec<String>| {
-            let mut output = Cmd::new(&hook.entry[0], "run system command")
-                .args(&hook.entry[1..])
+            let mut output = Cmd::new(&entry[0], "run system command")
+                .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)
                 .envs(env_vars)

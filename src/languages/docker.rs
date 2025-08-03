@@ -207,15 +207,16 @@ impl LanguageImpl for Docker {
             .context("Failed to build docker image")?;
 
         let docker_tag = Docker::docker_tag(hook);
+        let entry = hook.entry.parsed()?;
 
         let run = async move |batch: Vec<String>| {
             // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
             let mut cmd = Docker::docker_run_cmd().await?;
             let cmd = cmd
                 .arg("--entrypoint")
-                .arg(&hook.entry[0])
+                .arg(&entry[0])
                 .arg(&docker_tag)
-                .args(&hook.entry[1..])
+                .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)
                 .check(false)

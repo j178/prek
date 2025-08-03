@@ -27,10 +27,11 @@ impl LanguageImpl for DockerImage {
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
+        let entry = hook.entry.parsed()?;
         let run = async move |batch: Vec<String>| {
             let mut cmd = Docker::docker_run_cmd().await?;
             let cmd = cmd
-                .args(&hook.entry[..])
+                .args(&entry[..])
                 .args(&hook.args)
                 .args(batch)
                 .check(false)

@@ -45,8 +45,10 @@ impl<'a> Partitions<'a> {
         } else {
             (1 << 15) - 2048 // UNICODE_STRING max - headroom
         };
-        let command_length =
-            hook.entry.len() + hook.args.iter().map(String::len).sum::<usize>() + hook.args.len();
+
+        let command_length = hook.entry.entry().len()
+            + hook.args.iter().map(String::len).sum::<usize>()
+            + hook.args.len();
 
         Self {
             hook,

@@ -28,9 +28,11 @@ impl LanguageImpl for Script {
         env_vars: &HashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
+        let entry = hook.entry.parsed()?;
+
         let run = async move |batch: Vec<String>| {
-            let mut command = Cmd::new(&hook.entry[0], "run script command")
-                .args(&hook.entry[1..])
+            let mut command = Cmd::new(&entry[0], "run script command")
+                .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)
                 .envs(env_vars)

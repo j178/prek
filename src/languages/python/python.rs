@@ -131,11 +131,12 @@ impl LanguageImpl for Python {
     ) -> Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Python must have env path");
         let new_path = prepend_path(&bin_dir(env_dir)).context("Failed to join PATH")?;
+        let entry = hook.entry.parsed()?;
 
         let run = async move |batch: Vec<String>| {
             // TODO: combine stdout and stderr
-            let mut output = Cmd::new(&hook.entry[0], "python hook")
-                .args(&hook.entry[1..])
+            let mut output = Cmd::new(&entry[0], "python hook")
+                .args(&entry[1..])
                 .env("VIRTUAL_ENV", env_dir)
                 .env("PATH", &new_path)
                 .env_remove("PYTHONHOME")
