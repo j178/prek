@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.0.19
+
+### Enhancements
+
+- Improve node support ([#346](https://github.com/j178/prefligit/pull/346))
+- Manage uv cache dir ([#345](https://github.com/j178/prefligit/pull/345))
+
+### Bug fixes
+
+- Add `--install-links` to `npm install` ([#347](https://github.com/j178/prefligit/pull/347))
+- Fix large file check to use staged_get instead of intent_add ([#332](https://github.com/j178/prefligit/pull/332))
+
 ## 0.0.18
 
 ### Enhancements
