@@ -399,7 +399,12 @@ impl StatusPrinter {
         )
     }
 
-    fn write_skipped(&self, hook_name: &str, reason: &str, style: Style) -> Result<()> {
+    fn write_skipped(
+        &self,
+        hook_name: &str,
+        reason: &str,
+        style: Style,
+    ) -> Result<(), std::fmt::Error> {
         let dots = self.columns - hook_name.width_cjk() - Self::SKIPPED.len() - reason.len() - 1;
         let line = format!(
             "{hook_name}{}{}{}",
@@ -407,28 +412,24 @@ impl StatusPrinter {
             reason,
             Self::SKIPPED.style(style)
         );
-        writeln!(self.printer.stdout(), "{line}")?;
-        Ok(())
+        writeln!(self.printer.stdout(), "{line}")
     }
 
-    fn write_running(&self, hook_name: &str) -> Result<()> {
+    fn write_running(&self, hook_name: &str) -> Result<(), std::fmt::Error> {
         write!(
             self.printer.stdout(),
             "{}{}",
             hook_name,
             ".".repeat(self.columns - hook_name.width_cjk() - Self::PASSED.len() - 1)
-        )?;
-        Ok(())
+        )
     }
 
-    fn write_passed(&self) -> Result<()> {
-        writeln!(self.printer.stdout(), "{}", Self::PASSED.on_green())?;
-        Ok(())
+    fn write_passed(&self) -> Result<(), std::fmt::Error> {
+        writeln!(self.printer.stdout(), "{}", Self::PASSED.on_green())
     }
 
-    fn write_failed(&self) -> Result<()> {
-        writeln!(self.printer.stdout(), "{}", Self::FAILED.on_red())?;
-        Ok(())
+    fn write_failed(&self) -> Result<(), std::fmt::Error> {
+        writeln!(self.printer.stdout(), "{}", Self::FAILED.on_red())
     }
 
     fn stdout(&self) -> Stdout {
