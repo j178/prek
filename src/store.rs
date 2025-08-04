@@ -168,6 +168,7 @@ pub(crate) enum ToolBucket {
     Uv,
     Python,
     Node,
+    Golang,
 }
 
 impl ToolBucket {
@@ -176,6 +177,7 @@ impl ToolBucket {
             ToolBucket::Uv => "uv",
             ToolBucket::Python => "python",
             ToolBucket::Node => "node",
+            ToolBucket::Golang => "golang",
         }
     }
 }

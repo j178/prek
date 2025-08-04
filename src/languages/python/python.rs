@@ -47,7 +47,8 @@ fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
 
 impl LanguageImpl for Python {
     async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
-        let uv = Uv::install(store).await?;
+        let uv_dir = store.tools_path(ToolBucket::Uv);
+        let uv = Uv::install(&uv_dir).await?;
 
         let mut info = InstallInfo::new(
             hook.language,

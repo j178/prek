@@ -98,13 +98,13 @@ impl NodeInstaller {
 
     /// Install a version of Node.js.
     pub(crate) async fn install(&self, request: &NodeRequest) -> Result<NodeResult> {
-        fs_err::create_dir_all(&self.root)?;
+        fs_err::tokio::create_dir_all(&self.root).await?;
 
         let _lock = LockedFile::acquire(self.root.join(".lock"), "node").await?;
 
-        if let Ok(node) = self.find_installed(request) {
-            trace!(%node, "Found installed node");
-            return Ok(node);
+        if let Ok(node_result) = self.find_installed(request) {
+            trace!(%node_result, "Found installed node");
+            return Ok(node_result);
         }
 
         // Find all node and npm executables in PATH and check their versions
@@ -149,11 +149,14 @@ impl NodeInstaller {
                     None
                 }
             })
-            .context("No installed node found")
+            .context("No installed node version matches the request")
     }
 
     async fn resolve_version(&self, req: &NodeRequest) -> Result<NodeVersion> {
-        let versions = self.list_remote_versions().await?;
+        let versions = self
+            .list_remote_versions()
+            .await
+            .context("Failed to list remote versions")?;
         let version = versions
             .into_iter()
             .find(|version| req.matches(version, None))
@@ -259,17 +262,17 @@ impl NodeInstaller {
                         if node_request.matches(node_result.version(), Some(&node_result.node)) {
                             trace!(
                                 %node_result,
-                                "Found matching system Node.js installation"
+                                "Found a matching system node"
                             );
                             return Ok(Some(node_result));
                         }
                         trace!(
                             %node_result,
-                            "System Node.js installation does not match requested version"
+                            "System node does not match requested version"
                         );
                     }
                     Err(e) => {
-                        warn!(?e, "Failed to get version for system Node.js installation");
+                        warn!(?e, "Failed to get version for system node");
                     }
                 }
             } else {
@@ -280,7 +283,7 @@ impl NodeInstaller {
             }
         }
 
-        debug!("No system Node.js installation matches the requested version");
+        debug!("No system node matches the requested version");
         Ok(None)
     }
 

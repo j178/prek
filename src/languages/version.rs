@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use crate::config::Language;
 use crate::hook::InstallInfo;
-use crate::languages::golang::GolangRequest;
+use crate::languages::golang::GoRequest;
 use crate::languages::node::NodeRequest;
 use crate::languages::python::PythonRequest;
 
@@ -17,7 +17,7 @@ pub enum LanguageRequest {
     Any,
     Python(PythonRequest),
     Node(NodeRequest),
-    Golang(GolangRequest),
+    Golang(GoRequest),
     // TODO: all other languages default to semver for now.
     Semver(SemverRequest),
 }

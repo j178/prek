@@ -221,7 +221,7 @@ impl Uv {
         Ok(source)
     }
 
-    pub async fn install(store: &Store) -> Result<Self> {
+    pub async fn install(uv_dir: &Path) -> Result<Self> {
         // 1) Check if `uv` is installed already.
         // TODO: check minimum supported uv version
         if let Ok(uv) = UV_EXE.as_ref() {
@@ -229,7 +229,6 @@ impl Uv {
         }
 
         // 2) Check if `uv` is installed by `prefligit`
-        let uv_dir = store.tools_path(ToolBucket::Uv);
         let uv = uv_dir.join("uv").with_extension(env::consts::EXE_EXTENSION);
         if uv.is_file() {
             trace!(uv = %uv.display(), "Found managed uv");

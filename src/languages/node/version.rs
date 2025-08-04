@@ -77,7 +77,7 @@ impl<'de> Deserialize<'de> for NodeVersion {
         }
 
         let raw = _Version::deserialize(deserializer)?;
-        let version_str = raw.version.trim_start_matches('v');
+        let version_str = raw.version.strip_prefix('v').unwrap_or(&raw.version).trim();
         let version = semver::Version::parse(version_str).map_err(serde::de::Error::custom)?;
         Ok(NodeVersion {
             version,
@@ -99,7 +99,7 @@ impl Display for NodeVersion {
 impl FromStr for NodeVersion {
     type Err = semver::Error;
 
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Split on the first '-' to separate version and codename
         let (version_part, lts) = match s.split_once('-') {
             Some((ver, codename)) => (ver, Lts::Codename(codename.to_string())),
