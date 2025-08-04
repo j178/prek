@@ -14,7 +14,7 @@ prefligit is a reimagined version of pre-commit, built in Rust. It is designed t
 > This project is still in early stage of development, only a few of the original pre-commit features are implemented.
 > It is not production-ready yet, but feel free to try it out and provide feedback.
 >
-> Current supported languages are `python`, `node`, `docker`, `docker-image`, `system`, `script` and `fail`.
+> Current supported languages are `python`, `node`, `go`, `docker`, `docker-image`, `system`, `script` and `fail`.
 
 ## Features
 

@@ -15,7 +15,7 @@ pub(crate) struct Golang;
 impl LanguageImpl for Golang {
     async fn install(&self, hook: Arc<Hook>, store: &Store) -> anyhow::Result<InstalledHook> {
         // 1. Install Go
-        let go_dir = store.tools_path(crate::store::ToolBucket::Golang);
+        let go_dir = store.tools_path(crate::store::ToolBucket::Go);
         let installer = GoInstaller::new(go_dir);
 
         let version = match &hook.language_request {

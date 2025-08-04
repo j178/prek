@@ -168,7 +168,7 @@ pub(crate) enum ToolBucket {
     Uv,
     Python,
     Node,
-    Golang,
+    Go,
 }
 
 impl ToolBucket {
@@ -177,7 +177,7 @@ impl ToolBucket {
             ToolBucket::Uv => "uv",
             ToolBucket::Python => "python",
             ToolBucket::Node => "node",
-            ToolBucket::Golang => "golang",
+            ToolBucket::Go => "go",
         }
     }
 }
@@ -185,12 +185,14 @@ impl ToolBucket {
 #[derive(Copy, Clone)]
 pub(crate) enum CacheBucket {
     Uv,
+    Go,
 }
 
 impl CacheBucket {
     pub(crate) fn as_str(&self) -> &str {
         match self {
             CacheBucket::Uv => "uv",
+            CacheBucket::Go => "go",
         }
     }
 }
