@@ -1,9 +1,18 @@
+use std::ops::Deref;
 use crate::languages::version::{Error, LanguageRequest};
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 pub(crate) struct GoVersion(semver::Version);
+
+impl Deref for GoVersion {
+    type Target = semver::Version;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl<'de> Deserialize<'de> for GoVersion {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>

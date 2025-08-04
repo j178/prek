@@ -1,8 +1,9 @@
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::sync::Arc;
 
 use crate::hook::{Hook, InstallInfo, InstalledHook};
-use crate::languages::LanguageImpl;
+use crate::languages::{create_symlink_or_copy, LanguageImpl};
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::installer::GoInstaller;
 use crate::languages::version::LanguageRequest;
@@ -13,6 +14,7 @@ pub(crate) struct Golang;
 
 impl LanguageImpl for Golang {
     async fn install(&self, hook: Arc<Hook>, store: &Store) -> anyhow::Result<InstalledHook> {
+        // 1. Install Go
         let go_dir = store.tools_path(crate::store::ToolBucket::Golang);
         let installer = GoInstaller::new(go_dir);
 
@@ -23,8 +25,23 @@ impl LanguageImpl for Golang {
         };
         let go = installer.install(version).await?;
 
-        let info = InstallInfo::new(hook.language, hook.dependencies().clone(), store);
-        info.clear_env_path().await?;
+        let mut info = InstallInfo::new(hook.language, hook.dependencies().clone(), &store.hooks_dir());
+        info.with_toolchain(go.bin().to_path_buf())
+            .with_language_version(go.version().deref().clone());
+
+        // 2. Create environment
+        fs_err::tokio::create_dir_all(&info.env_path).await?;
+        create_symlink_or_copy(go.bin(), &info.env_path).await?;
+
+        // 3. Install dependencies
+        go.cmd("go install")
+            .arg("");
+
+
+        Ok(InstalledHook::Installed {
+            hook,
+            info: Arc::new(info),
+        })
     }
 
     async fn check_health(&self) -> anyhow::Result<()> {

@@ -6,7 +6,7 @@ use crate::process::Cmd;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use reqwest::Client;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use target_lexicon::{Architecture, OperatingSystem, X86_32Architecture, HOST};
 use tracing::{debug, trace, warn};
@@ -28,7 +28,11 @@ impl GoResult {
         }
     }
 
-    fn version(&self) -> &GoVersion {
+    pub(crate) fn bin(&self) -> &Path {
+        &self.path
+    }
+
+    pub(crate) fn version(&self) -> &GoVersion {
         &self.version
     }
 
