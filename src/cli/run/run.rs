@@ -1,6 +1,7 @@
 use std::cmp::{Reverse, max};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
+use std::hash::Hash;
 use std::io::Write;
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -275,6 +276,7 @@ pub async fn install_hooks(
     store: &Store,
     reporter: &HookInstallReporter,
 ) -> Result<Vec<InstalledHook>> {
+    let num_hooks = hooks.len();
     let mut new_installed = Vec::with_capacity(hooks.len());
     let mut group_futures = FuturesUnordered::new();
     // TODO: how to eliminate the Rc?
@@ -289,68 +291,74 @@ pub async fn install_hooks(
     }
 
     // Group hooks by language to enable parallel installation across different languages.
-    // Within each language group, hooks are installed sequentially, allowing later hooks
-    // to leverage the environment or tools installed by previous ones.
-    for (_, mut hooks) in hooks_by_language {
-        let installed_hooks = installed_hooks.clone();
-        // Install hooks from the one with most dependencies to the least dependencies,
-        // the later hooks can reuse the environment of the earlier ones.
-        hooks.sort_unstable_by_key(|h| Reverse(h.dependencies().len()));
+    for (_, hooks) in hooks_by_language {
+        // Partition hooks into non-overlapping sets based on their dependencies.
+        // This allows us to install hooks that have no overlapping dependencies in parallel,
+        // while ensuring that hooks with overlapping dependencies are installed sequentially.
+        let partitions = partition_overlapping_sets(&hooks);
 
-        group_futures.push(async move {
-            let mut hook_envs = Vec::with_capacity(hooks.len());
-            let mut newly_installed = Vec::new();
-            // Process hooks sequentially within each language group
-            for hook in hooks {
-                // Find a matching installed hook environment.
-                if let Some(info) = installed_hooks
-                    .iter()
-                    .chain(newly_installed.iter().filter_map(|h| {
-                        if let InstalledHook::Installed { info, .. } = h {
-                            Some(info.as_ref())
-                        } else {
-                            None
-                        }
-                    }))
-                    .find(|info| info.matches(&hook))
-                {
-                    debug!(
-                        "Found installed environment for hook `{}` at `{}`",
-                        &hook,
-                        info.env_path.display()
-                    );
-                    hook_envs.push(InstalledHook::Installed {
-                        hook: Arc::new(hook),
-                        info: Arc::new(info.clone()),
-                    });
-                    continue;
+        for mut hooks in partitions {
+            let installed_hooks = installed_hooks.clone();
+
+            // Install hooks from the one with most dependencies to the least dependencies,
+            // the later hooks can reuse the environment of the earlier ones.
+            hooks.sort_unstable_by_key(|h| Reverse(h.dependencies().len()));
+
+            group_futures.push(async move {
+                let mut hook_envs = Vec::with_capacity(hooks.len());
+                let mut newly_installed = Vec::new();
+                // Process hooks sequentially within each language group
+                for hook in hooks {
+                    // Find a matching installed hook environment.
+                    if let Some(info) = installed_hooks
+                        .iter()
+                        .chain(newly_installed.iter().filter_map(|h| {
+                            if let InstalledHook::Installed { info, .. } = h {
+                                Some(info.as_ref())
+                            } else {
+                                None
+                            }
+                        }))
+                        .find(|info| info.matches(&hook))
+                    {
+                        debug!(
+                            "Found installed environment for hook `{}` at `{}`",
+                            &hook,
+                            info.env_path.display()
+                        );
+                        hook_envs.push(InstalledHook::Installed {
+                            hook: Arc::new(hook),
+                            info: Arc::new(info.clone()),
+                        });
+                        continue;
+                    }
+
+                    let hook = Arc::new(hook);
+                    debug!("No matching environment found for hook `{hook}`, installing...");
+
+                    let progress = reporter.on_install_start(&hook);
+
+                    let installed_hook = hook
+                        .language
+                        .install(hook.clone(), store)
+                        .await
+                        .context(format!("Failed to install hook `{hook}`"))?;
+
+                    installed_hook
+                        .mark_as_installed(store)
+                        .await
+                        .context(format!("Failed to mark hook `{hook}` as installed"))?;
+
+                    newly_installed.push(installed_hook);
+
+                    reporter.on_install_complete(progress);
                 }
 
-                let hook = Arc::new(hook);
-                debug!("No matching environment found for hook `{hook}`, installing...");
-
-                let progress = reporter.on_install_start(&hook);
-
-                let installed_hook = hook
-                    .language
-                    .install(hook.clone(), store)
-                    .await
-                    .context(format!("Failed to install hook `{hook}`"))?;
-
-                installed_hook
-                    .mark_as_installed(store)
-                    .await
-                    .context(format!("Failed to mark hook `{hook}` as installed"))?;
-
-                newly_installed.push(installed_hook);
-
-                reporter.on_install_complete(progress);
-            }
-
-            // Add newly installed hooks to the list.
-            hook_envs.extend(newly_installed);
-            anyhow::Ok(hook_envs)
-        });
+                // Add newly installed hooks to the list.
+                hook_envs.extend(newly_installed);
+                anyhow::Ok(hook_envs)
+            });
+        }
     }
 
     while let Some(result) = group_futures.next().await {
@@ -358,7 +366,66 @@ pub async fn install_hooks(
     }
     reporter.on_complete();
 
+    debug_assert_eq!(
+        num_hooks,
+        new_installed.len(),
+        "Number of hooks installed should match the number of hooks provided"
+    );
+
     Ok(new_installed)
+}
+
+fn sets_disjoint<T>(set1: &HashSet<T>, set2: &HashSet<T>) -> bool
+where
+    T: Eq + Hash,
+{
+    // Special case: empty sets overlap with each other
+    if set1.is_empty() && set2.is_empty() {
+        return true;
+    }
+
+    !set1.is_disjoint(set2)
+}
+
+fn partition_overlapping_sets(sets: &[Hook]) -> Vec<Vec<Hook>> {
+    if sets.is_empty() {
+        return vec![];
+    }
+
+    let n = sets.len();
+    let mut visited = vec![false; n];
+    let mut groups = Vec::new();
+
+    // DFS to find all connected sets
+    #[allow(clippy::items_after_statements)]
+    fn dfs(index: usize, sets: &[Hook], visited: &mut [bool], current_group: &mut Vec<usize>) {
+        visited[index] = true;
+        current_group.push(index);
+
+        for i in 0..sets.len() {
+            if !visited[i] && !sets_disjoint(sets[index].dependencies(), sets[i].dependencies()) {
+                dfs(i, sets, visited, current_group);
+            }
+        }
+    }
+
+    // Find all connected components
+    for i in 0..n {
+        if !visited[i] {
+            let mut current_group = Vec::new();
+            dfs(i, sets, &mut visited, &mut current_group);
+
+            // Convert indices back to actual sets
+            let group_sets: Vec<Hook> = current_group
+                .into_iter()
+                .map(|idx| sets[idx].clone())
+                .collect();
+
+            groups.push(group_sets);
+        }
+    }
+
+    groups
 }
 
 struct StatusPrinter {

@@ -705,7 +705,7 @@ impl InstallInfo {
         Self {
             language,
             dependencies,
-            env_path: hooks_dir.join(env),
+            env_path: hooks_dir.join(format!("{}-{env}", language.as_str())),
             language_version: semver::Version::new(0, 0, 0),
             toolchain: PathBuf::new(),
             extra: HashMap::new(),
