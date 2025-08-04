@@ -2,6 +2,7 @@ use std::cmp::{Reverse, max};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::io::Write;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -36,8 +37,10 @@ enum HookToRun {
     ToRun(Arc<InstalledHook>),
 }
 
-impl HookToRun {
-    fn hook(&self) -> &Hook {
+impl Deref for HookToRun {
+    type Target = Hook;
+
+    fn deref(&self) -> &Self::Target {
         match self {
             HookToRun::Skipped(hook) => hook,
             HookToRun::ToRun(hook) => hook,
@@ -378,7 +381,7 @@ impl StatusPrinter {
     fn calculate_columns(hooks: &[HookToRun]) -> usize {
         let name_len = hooks
             .iter()
-            .map(|hook| hook.hook().name.width_cjk())
+            .map(|hook| hook.name.width_cjk())
             .max()
             .unwrap_or(0);
         max(

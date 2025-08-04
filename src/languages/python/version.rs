@@ -1,13 +1,14 @@
 //! Implement `-p <python_spec>` argument parser of `virutualenv` from
 //! <https://github.com/pypa/virtualenv/blob/216dc9f3592aa1f3345290702f0e7ba3432af3ce/src/virtualenv/discovery/py_spec.py>
-
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use crate::languages::version;
-use crate::languages::version::{LanguageRequest, try_into_u64_slice};
+use crate::languages::version::try_into_u64_slice;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PythonRequest {
+    Any,
     Major(u64),
     MajorMinor(u64, u64),
     MajorMinorPatch(u64, u64, u64),
@@ -29,17 +30,19 @@ pub(crate) enum PythonRequest {
 /// - `>=3.8, <3.12`
 /// - `/path/to/python`
 /// - `/path/to/python3.12`
-impl PythonRequest {
-    // TODO: support version like `3.8b1`, `3.8rc2`, `python3.8t`, `python3.8-64`, `pypy3.8`.
-    pub fn parse(request: &str) -> Result<LanguageRequest, version::Error> {
+// TODO: support version like `3.8b1`, `3.8rc2`, `python3.8t`, `python3.8-64`, `pypy3.8`.
+impl FromStr for PythonRequest {
+    type Err = version::Error;
+
+    fn from_str(request: &str) -> Result<Self, Self::Err> {
         if request.is_empty() {
-            return Ok(LanguageRequest::Any);
+            return Ok(Self::Any);
         }
 
         // Check if it starts with "python" - parse as specific version
-        let request = if let Some(version_part) = request.strip_prefix("python") {
+        if let Some(version_part) = request.strip_prefix("python") {
             if version_part.is_empty() {
-                return Ok(LanguageRequest::Any);
+                return Ok(Self::Any);
             }
 
             Self::parse_version_numbers(version_part, request)
@@ -60,11 +63,11 @@ impl PythonRequest {
                         Err(version::Error::InvalidVersion(request.to_string()))
                     }
                 })
-        };
-
-        Ok(LanguageRequest::Python(request?))
+        }
     }
+}
 
+impl PythonRequest {
     /// Parse version numbers into appropriate `PythonRequest` variants
     fn parse_version_numbers(
         version_str: &str,
@@ -86,6 +89,7 @@ impl PythonRequest {
     pub(crate) fn satisfied_by(&self, install_info: &crate::hook::InstallInfo) -> bool {
         let version = &install_info.language_version;
         match self {
+            PythonRequest::Any => true,
             PythonRequest::Major(major) => version.major == *major,
             PythonRequest::MajorMinor(major, minor) => {
                 version.major == *major && version.minor == *minor
@@ -132,76 +136,76 @@ mod tests {
     #[test]
     fn test_parse_python_request() {
         // Empty request
-        assert_eq!(PythonRequest::parse("").unwrap(), LanguageRequest::Any);
+        assert_eq!(PythonRequest::from_str("").unwrap(), PythonRequest::Any);
         assert_eq!(
-            PythonRequest::parse("python").unwrap(),
-            LanguageRequest::Any
+            PythonRequest::from_str("python").unwrap(),
+            PythonRequest::Any
         );
 
         assert_eq!(
-            PythonRequest::parse("python3").unwrap(),
-            LanguageRequest::Python(PythonRequest::Major(3))
+            PythonRequest::from_str("python3").unwrap(),
+            PythonRequest::Major(3)
         );
         assert_eq!(
-            PythonRequest::parse("python3.12").unwrap(),
-            LanguageRequest::Python(PythonRequest::MajorMinor(3, 12))
+            PythonRequest::from_str("python3.12").unwrap(),
+            PythonRequest::MajorMinor(3, 12)
         );
         assert_eq!(
-            PythonRequest::parse("python3.13.2").unwrap(),
-            LanguageRequest::Python(PythonRequest::MajorMinorPatch(3, 13, 2))
+            PythonRequest::from_str("python3.13.2").unwrap(),
+            PythonRequest::MajorMinorPatch(3, 13, 2)
         );
         assert_eq!(
-            PythonRequest::parse("3").unwrap(),
-            LanguageRequest::Python(PythonRequest::Major(3))
+            PythonRequest::from_str("3").unwrap(),
+            PythonRequest::Major(3)
         );
         assert_eq!(
-            PythonRequest::parse("3.12").unwrap(),
-            LanguageRequest::Python(PythonRequest::MajorMinor(3, 12))
+            PythonRequest::from_str("3.12").unwrap(),
+            PythonRequest::MajorMinor(3, 12)
         );
         assert_eq!(
-            PythonRequest::parse("3.12.3").unwrap(),
-            LanguageRequest::Python(PythonRequest::MajorMinorPatch(3, 12, 3))
+            PythonRequest::from_str("3.12.3").unwrap(),
+            PythonRequest::MajorMinorPatch(3, 12, 3)
         );
         assert_eq!(
-            PythonRequest::parse("312").unwrap(),
-            LanguageRequest::Python(PythonRequest::MajorMinor(3, 12))
+            PythonRequest::from_str("312").unwrap(),
+            PythonRequest::MajorMinor(3, 12)
         );
         assert_eq!(
-            PythonRequest::parse("python312").unwrap(),
-            LanguageRequest::Python(PythonRequest::MajorMinor(3, 12))
+            PythonRequest::from_str("python312").unwrap(),
+            PythonRequest::MajorMinor(3, 12)
         );
 
         // VersionReq
         assert_eq!(
-            PythonRequest::parse(">=3.12").unwrap(),
-            LanguageRequest::Python(PythonRequest::Range(
+            PythonRequest::from_str(">=3.12").unwrap(),
+            PythonRequest::Range(
                 semver::VersionReq::parse(">=3.12").unwrap(),
                 ">=3.12".to_string()
-            ))
+            )
         );
         assert_eq!(
-            PythonRequest::parse(">=3.8, <3.12").unwrap(),
-            LanguageRequest::Python(PythonRequest::Range(
+            PythonRequest::from_str(">=3.8, <3.12").unwrap(),
+            PythonRequest::Range(
                 semver::VersionReq::parse(">=3.8, <3.12").unwrap(),
                 ">=3.8, <3.12".to_string()
-            ))
+            )
         );
 
         // Invalid versions
-        assert!(PythonRequest::parse("invalid").is_err());
-        assert!(PythonRequest::parse("3.12.3.4").is_err());
-        assert!(PythonRequest::parse("3.12.a").is_err());
-        assert!(PythonRequest::parse("3.b.1").is_err());
-        assert!(PythonRequest::parse("3..2").is_err());
-        assert!(PythonRequest::parse("a3.12").is_err());
+        assert!(PythonRequest::from_str("invalid").is_err());
+        assert!(PythonRequest::from_str("3.12.3.4").is_err());
+        assert!(PythonRequest::from_str("3.12.a").is_err());
+        assert!(PythonRequest::from_str("3.b.1").is_err());
+        assert!(PythonRequest::from_str("3..2").is_err());
+        assert!(PythonRequest::from_str("a3.12").is_err());
 
         // TODO: support
-        assert!(PythonRequest::parse("3.12.3a1").is_err(),);
-        assert!(PythonRequest::parse("3.12.3rc1").is_err(),);
-        assert!(PythonRequest::parse("python3.13.2a1").is_err());
-        assert!(PythonRequest::parse("python3.13.2rc1").is_err());
-        assert!(PythonRequest::parse("python3.13.2t1").is_err());
-        assert!(PythonRequest::parse("python3.13.2-64").is_err());
-        assert!(PythonRequest::parse("python3.13.2-64").is_err());
+        assert!(PythonRequest::from_str("3.12.3a1").is_err(),);
+        assert!(PythonRequest::from_str("3.12.3rc1").is_err(),);
+        assert!(PythonRequest::from_str("python3.13.2a1").is_err());
+        assert!(PythonRequest::from_str("python3.13.2rc1").is_err());
+        assert!(PythonRequest::from_str("python3.13.2t1").is_err());
+        assert!(PythonRequest::from_str("python3.13.2-64").is_err());
+        assert!(PythonRequest::from_str("python3.13.2-64").is_err());
     }
 }

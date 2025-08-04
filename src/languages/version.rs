@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::config::Language;
 use crate::hook::InstallInfo;
 use crate::languages::node::NodeRequest;
@@ -35,11 +37,11 @@ impl LanguageRequest {
             return Ok(LanguageRequest::Any);
         }
 
-        match lang {
-            Language::Python => PythonRequest::parse(request),
-            Language::Node => NodeRequest::parse(request),
-            _ => SemverRequest::parse(request),
-        }
+        Ok(match lang {
+            Language::Python => Self::Python(request.parse()?),
+            Language::Node => Self::Node(request.parse()?),
+            _ => Self::Semver(request.parse()?),
+        })
     }
 
     pub fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
@@ -55,17 +57,19 @@ impl LanguageRequest {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SemverRequest(semver::VersionReq);
 
-impl SemverRequest {
-    fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
-        self.0.matches(&install_info.language_version)
+impl FromStr for SemverRequest {
+    type Err = Error;
+
+    fn from_str(request: &str) -> Result<Self, Self::Err> {
+        semver::VersionReq::parse(request)
+            .map(SemverRequest)
+            .map_err(|_| Error::InvalidVersion(request.to_string()))
     }
 }
 
 impl SemverRequest {
-    pub fn parse(request: &str) -> Result<LanguageRequest, Error> {
-        let version_req = semver::VersionReq::parse(request)
-            .map_err(|_| Error::InvalidVersion(request.to_string()))?;
-        Ok(LanguageRequest::Semver(SemverRequest(version_req)))
+    fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
+        self.0.matches(&install_info.language_version)
     }
 }
 

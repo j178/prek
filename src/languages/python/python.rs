@@ -33,6 +33,7 @@ fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
     match request {
         LanguageRequest::Any => None,
         LanguageRequest::Python(request) => match request {
+            PythonRequest::Any => None,
             PythonRequest::Major(major) => Some(format!("{major}")),
             PythonRequest::MajorMinor(major, minor) => Some(format!("{major}.{minor}")),
             PythonRequest::MajorMinorPatch(major, minor, patch) => {
