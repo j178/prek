@@ -8,8 +8,8 @@ use itertools::Itertools;
 use tokio::io::AsyncWriteExt;
 use tracing::warn;
 
-use crate::process;
 use crate::process::Cmd;
+use crate::{git, process};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -147,6 +147,21 @@ pub async fn get_staged_files() -> Result<Vec<String>, Error> {
         .output()
         .await?;
     Ok(zsplit(&output.stdout))
+}
+
+pub async fn file_not_staged(file: &Path) -> Result<bool> {
+    let status = git::git_cmd("git diff")?
+        .arg("diff")
+        .arg("--quiet") // Implies --exit-code
+        .arg("--no-ext-diff")
+        .arg(file)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .check(false)
+        .status()
+        .await?;
+
+    Ok(status.code().is_some_and(|code| code == 1))
 }
 
 pub async fn has_unmerged_paths() -> Result<bool, Error> {

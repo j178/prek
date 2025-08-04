@@ -2,7 +2,7 @@ use std::cmp::{Reverse, max};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -34,6 +34,15 @@ use crate::store::Store;
 enum HookToRun {
     Skipped(Arc<Hook>),
     ToRun(Arc<InstalledHook>),
+}
+
+impl HookToRun {
+    fn hook(&self) -> &Hook {
+        match self {
+            HookToRun::Skipped(hook) => hook,
+            HookToRun::ToRun(hook) => hook,
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -69,7 +78,7 @@ pub(crate) async fn run(
     }
 
     let config_file = Project::find_config_file(config)?;
-    if should_stash && file_not_staged(&config_file).await? {
+    if should_stash && git::file_not_staged(&config_file).await? {
         writeln!(
             printer.stderr(),
             indoc!(
@@ -190,21 +199,6 @@ pub(crate) async fn run(
         printer,
     )
     .await
-}
-
-async fn file_not_staged(file: &Path) -> Result<bool> {
-    let status = git::git_cmd("git diff")?
-        .arg("diff")
-        .arg("--quiet") // Implies --exit-code
-        .arg("--no-ext-diff")
-        .arg(file)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .check(false)
-        .status()
-        .await?;
-
-    Ok(status.code().is_some_and(|code| code == 1))
 }
 
 fn fill_envs(
@@ -384,13 +378,7 @@ impl StatusPrinter {
     fn calculate_columns(hooks: &[HookToRun]) -> usize {
         let name_len = hooks
             .iter()
-            .filter_map(|hook| {
-                if let HookToRun::ToRun(hook) = hook {
-                    Some(hook.name.width_cjk())
-                } else {
-                    None
-                }
-            })
+            .map(|hook| hook.hook().name.width_cjk())
             .max()
             .unwrap_or(0);
         max(
@@ -534,7 +522,7 @@ async fn run_hook(
         printer.write_skipped(
             &hook.name,
             StatusPrinter::UNIMPLEMENTED,
-            Style::new().black().on_cyan(),
+            Style::new().black().on_yellow(),
         )?;
         return Ok((true, diff));
     }
