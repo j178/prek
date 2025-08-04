@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.0.18
+
+### Enhancements
+
+- Impl `FromStr` for language request ([#338](https://github.com/j178/prefligit/pull/338))
+
+### Performance
+
+- Use DFS to find connected components in hook dependencies ([#341](https://github.com/j178/prefligit/pull/341))
+- Use more `Arc<T>` over `Box<T>` ([#333](https://github.com/j178/prefligit/pull/333))
+
+### Bug fixes
+
+- Fix node path match, add tests ([#339](https://github.com/j178/prefligit/pull/339))
+- Skipped hook name should be taken into account for columns ([#335](https://github.com/j178/prefligit/pull/335))
+
+### Documentation
+
+- Add benchmarks ([#342](https://github.com/j178/prefligit/pull/342))
+- Update docs ([#337](https://github.com/j178/prefligit/pull/337))
+
 ## 0.0.17
 
 ### Enhancements
