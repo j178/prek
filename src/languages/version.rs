@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use crate::config::Language;
 use crate::hook::InstallInfo;
+use crate::languages::golang::GolangRequest;
 use crate::languages::node::NodeRequest;
 use crate::languages::python::PythonRequest;
 
@@ -16,6 +17,7 @@ pub enum LanguageRequest {
     Any,
     Python(PythonRequest),
     Node(NodeRequest),
+    Golang(GolangRequest),
     // TODO: all other languages default to semver for now.
     Semver(SemverRequest),
 }
@@ -40,6 +42,7 @@ impl LanguageRequest {
         Ok(match lang {
             Language::Python => Self::Python(request.parse()?),
             Language::Node => Self::Node(request.parse()?),
+            Language::Golang => Self::Golang(request.parse()?),
             _ => Self::Semver(request.parse()?),
         })
     }
@@ -47,8 +50,9 @@ impl LanguageRequest {
     pub fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
         match self {
             LanguageRequest::Any => true,
-            LanguageRequest::Node(req) => req.satisfied_by(install_info),
             LanguageRequest::Python(req) => req.satisfied_by(install_info),
+            LanguageRequest::Node(req) => req.satisfied_by(install_info),
+            LanguageRequest::Golang(req) => req.satisfied_by(install_info),
             LanguageRequest::Semver(req) => req.satisfied_by(install_info),
         }
     }

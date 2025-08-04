@@ -11,12 +11,14 @@ use crate::store::Store;
 mod docker;
 mod docker_image;
 mod fail;
+mod golang;
 mod node;
 mod python;
 mod script;
 mod system;
 pub mod version;
 
+static GOLANG: golang::Golang = golang::Golang;
 static PYTHON: python::Python = python::Python;
 static NODE: node::Node = node::Node;
 static SYSTEM: system::System = system::System;
@@ -90,7 +92,8 @@ impl Language {
     pub fn supported(lang: Language) -> bool {
         matches!(
             lang,
-            Self::Python
+            Self::Golang
+                | Self::Python
                 | Self::Node
                 | Self::System
                 | Self::Fail
@@ -137,6 +140,7 @@ impl Language {
 
     pub async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
         match self {
+            Self::Golang => GOLANG.install(hook, store).await,
             Self::Python => PYTHON.install(hook, store).await,
             Self::Node => NODE.install(hook, store).await,
             Self::System => SYSTEM.install(hook, store).await,
@@ -150,6 +154,7 @@ impl Language {
 
     pub async fn check_health(&self) -> Result<()> {
         match self {
+            Self::Golang => GOLANG.check_health().await,
             Self::Python => PYTHON.check_health().await,
             Self::Node => NODE.check_health().await,
             Self::System => SYSTEM.check_health().await,
@@ -174,6 +179,7 @@ impl Language {
         }
 
         match self {
+            Self::Golang => GOLANG.run(hook, filenames, env_vars, store).await,
             Self::Python => PYTHON.run(hook, filenames, env_vars, store).await,
             Self::Node => NODE.run(hook, filenames, env_vars, store).await,
             Self::System => SYSTEM.run(hook, filenames, env_vars, store).await,
