@@ -513,7 +513,7 @@ async fn run_hook(
 ) -> Result<(bool, Vec<u8>)> {
     let hook = match hook {
         HookToRun::Skipped(hook) => {
-            printer.write_skipped(&hook.name, "", Style::new().on_yellow())?;
+            printer.write_skipped(&hook.name, "", Style::new().black().on_yellow())?;
             return Ok((true, diff));
         }
         HookToRun::ToRun(hook) => hook,
