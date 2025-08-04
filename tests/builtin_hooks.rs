@@ -159,7 +159,7 @@ fn check_added_large_files_hook() -> Result<()> {
     "});
 
     // Second run: the hook should check all files even if not staged
-    cmd_snapshot!(context.filters(), context.run_all_files(), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----

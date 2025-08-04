@@ -127,12 +127,6 @@ impl TestContext {
         command
     }
 
-    pub fn run_all_files(&self) -> Command {
-        let mut command = self.run();
-        command.arg("--all-files");
-        command
-    }
-
     pub fn clean(&self) -> Command {
         let mut command = self.command();
         command.arg("clean");
