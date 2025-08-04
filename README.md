@@ -23,8 +23,8 @@
 ## Features
 
 - 🚀 A single binary with no dependencies, does not require Python or any other runtime.
+- ⚡  About [10x faster](https://github.com/j178/prefligit/blob/master/BENCHMARK.md) and uses roughly 2/3 less disk space than `pre-commit`.
 - 🔄 Fully compatible with the original pre-commit configurations and hooks.
-- ⚡  [~10x faster](https://github.com/j178/prefligit/blob/master/BENCHMARK.md) than `pre-commit` on hook installation.
 - 🐍 Integration with [`uv`](https://github.com/astral-sh/uv) for managing Python virtual environments and dependencies.
 - 🛠️ Improved toolchain installations for Python, Node.js, Go, Rust and Ruby, shared between hooks.
 - 📦 Built-in implementation of some common hooks.
