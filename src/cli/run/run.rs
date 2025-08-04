@@ -307,7 +307,7 @@ pub async fn install_hooks(
             group_futures.push(async move {
                 let mut hook_envs = Vec::with_capacity(hooks.len());
                 let mut newly_installed = Vec::new();
-                // Process hooks sequentially within each language group
+
                 for hook in hooks {
                     // Find a matching installed hook environment.
                     if let Some(info) = installed_hooks
@@ -381,10 +381,10 @@ where
 {
     // Special case: empty sets overlap with each other
     if set1.is_empty() && set2.is_empty() {
-        return true;
+        return false;
     }
 
-    !set1.is_disjoint(set2)
+    set1.is_disjoint(set2)
 }
 
 fn partition_overlapping_sets(sets: &[Hook]) -> Vec<Vec<Hook>> {
