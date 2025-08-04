@@ -731,23 +731,6 @@ impl InstallInfo {
         self.extra.get(key)
     }
 
-    pub async fn clear_env_path(&self) -> Result<(), Error> {
-        if self.env_path.exists() {
-            debug!(
-                env_dir = %self.env_path.display(),
-                "Removing existing environment directory",
-            );
-            fs_err::tokio::remove_dir_all(&self.env_path)
-                .await
-                .map_err(|e| Error::InstallHook {
-                    hook: self.language.to_string(),
-                    error: anyhow::anyhow!(e).context("Failed to remove environment directory"),
-                })?;
-        }
-
-        Ok(())
-    }
-
     pub fn matches(&self, hook: &Hook) -> bool {
         self.language == hook.language
             && self.dependencies.is_superset(hook.dependencies())

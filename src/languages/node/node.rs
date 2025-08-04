@@ -46,7 +46,6 @@ impl LanguageImpl for Node {
             hook.dependencies().clone(),
             &store.hooks_dir(),
         );
-        info.clear_env_path().await?;
 
         let lts = serde_json::to_string(&node.version().lts).context("Failed to serialize LTS")?;
         info.with_toolchain(node.node().to_path_buf());
