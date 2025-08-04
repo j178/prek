@@ -1,5 +1,5 @@
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::PathChild;
+use assert_fs::fixture::{FileWriteStr, PathChild};
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -146,4 +146,44 @@ fn additional_dependencies() {
 
     ----- stderr -----
     "###);
+}
+
+/// Test `https://github.com/thlorenz/doctoc` works correctly with prefligit.
+/// Previously, prefligit did not install its dependencies correctly.
+#[test]
+fn doctoc() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/thlorenz/doctoc
+            rev: v2.2.0
+            hooks:
+              - id: doctoc
+                name: Add TOC for Markdown
+    "});
+    context
+        .work_dir()
+        .child("README.md")
+        .write_str("# Hello World\n\nThis is a test file.\n\n## Subsection\n\nMore content here.\n")
+        .unwrap();
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Add TOC for Markdown.....................................................Failed
+    - hook id: doctoc
+    - files were modified by this hook
+      DocToccing single file "README.md" for github.com.
+
+      ==================
+
+      "README.md" will be updated
+
+      Everything is OK.
+
+    ----- stderr -----
+    "#);
 }
