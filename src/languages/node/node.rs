@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::env::consts::EXE_EXTENSION;
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use tracing::{debug, trace};
@@ -18,7 +19,7 @@ use crate::store::{Store, ToolBucket};
 pub(crate) struct Node;
 
 impl LanguageImpl for Node {
-    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
+    async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
         // 1. Install node
         //   1) Find from `$PREFLIGIT_HOME/tools/node`
         //   2) Find from system
@@ -80,8 +81,8 @@ impl LanguageImpl for Node {
         }
 
         Ok(InstalledHook::Installed {
-            hook: Box::new(hook.clone()),
-            info: Box::new(info),
+            hook,
+            info: Arc::new(info),
         })
     }
 

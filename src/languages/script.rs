@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use anyhow::Result;
 
@@ -13,8 +14,8 @@ use crate::store::Store;
 pub(crate) struct Script;
 
 impl LanguageImpl for Script {
-    async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook> {
-        Ok(InstalledHook::NoNeedInstall(Box::new(hook.clone())))
+    async fn install(&self, hook: Arc<Hook>, _store: &Store) -> Result<InstalledHook> {
+        Ok(InstalledHook::NoNeedInstall(hook))
     }
 
     async fn check_health(&self) -> Result<()> {

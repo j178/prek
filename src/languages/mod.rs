@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use anyhow::Result;
 
@@ -26,7 +27,7 @@ static SCRIPT: script::Script = script::Script;
 static UNIMPLEMENTED: Unimplemented = Unimplemented;
 
 trait LanguageImpl {
-    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook>;
+    async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook>;
     async fn check_health(&self) -> Result<()>;
     async fn run(
         &self,
@@ -44,8 +45,8 @@ struct UnimplementedError(String);
 struct Unimplemented;
 
 impl LanguageImpl for Unimplemented {
-    async fn install(&self, hook: &Hook, _store: &Store) -> Result<InstalledHook> {
-        Ok(InstalledHook::NoNeedInstall(Box::new(hook.clone())))
+    async fn install(&self, hook: Arc<Hook>, _store: &Store) -> Result<InstalledHook> {
+        Ok(InstalledHook::NoNeedInstall(hook))
     }
 
     async fn check_health(&self) -> Result<()> {
@@ -134,7 +135,7 @@ impl Language {
         )
     }
 
-    pub async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
+    pub async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
         match self {
             Self::Python => PYTHON.install(hook, store).await,
             Self::Node => NODE.install(hook, store).await,

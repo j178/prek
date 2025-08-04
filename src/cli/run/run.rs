@@ -4,6 +4,7 @@ use std::fmt::Write as _;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use anstream::ColorChoice;
 use anyhow::{Context, Result};
@@ -31,8 +32,8 @@ use crate::printer::Printer;
 use crate::store::Store;
 
 enum HookToRun {
-    Skipped(Box<Hook>),
-    ToRun(Box<InstalledHook>),
+    Skipped(Arc<Hook>),
+    ToRun(Arc<InstalledHook>),
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -136,21 +137,21 @@ pub(crate) async fn run(
         to_run.iter().map(|h| &h.id).collect::<Vec<_>>()
     );
     let reporter = HookInstallReporter::from(printer);
-    let mut installed_hooks = install_hooks(&to_run, &store, &reporter).await?;
+    let mut installed_hooks = install_hooks(to_run, &store, &reporter).await?;
     drop(lock);
 
     let hooks = hooks
         .into_iter()
         .map(|h| {
             if skips.contains(&h.idx) {
-                HookToRun::Skipped(Box::new(h))
+                HookToRun::Skipped(Arc::new(h))
             } else {
                 // Find and remove the matching resolved hook
-                let resolved_idx = installed_hooks
+                let idx = installed_hooks
                     .iter()
                     .position(|r| r.idx == h.idx)
                     .expect("Resolved hook must exist");
-                HookToRun::ToRun(Box::new(installed_hooks.swap_remove(resolved_idx)))
+                HookToRun::ToRun(Arc::new(installed_hooks.swap_remove(idx)))
             }
         })
         .collect::<Vec<_>>();
@@ -273,7 +274,7 @@ fn get_skips() -> Vec<String> {
 }
 
 pub async fn install_hooks(
-    hooks: &[Hook],
+    hooks: Vec<Hook>,
     store: &Store,
     reporter: &HookInstallReporter,
 ) -> Result<Vec<InstalledHook>> {
@@ -287,7 +288,7 @@ pub async fn install_hooks(
         hooks_by_language
             .entry(hook.language)
             .or_insert_with(Vec::new)
-            .push(hook.clone());
+            .push(hook);
     }
 
     // Group hooks by language to enable parallel installation across different languages.
@@ -303,7 +304,7 @@ pub async fn install_hooks(
             let mut hook_envs = Vec::with_capacity(hooks.len());
             let mut newly_installed = Vec::new();
             // Process hooks sequentially within each language group
-            for hook in &hooks {
+            for hook in hooks {
                 // Find a matching installed hook environment.
                 if let Some(info) = installed_hooks
                     .iter()
@@ -314,26 +315,28 @@ pub async fn install_hooks(
                             None
                         }
                     }))
-                    .find(|info| info.matches(hook))
+                    .find(|info| info.matches(&hook))
                 {
                     debug!(
-                        "Found installed environment for hook `{hook}` at `{}`",
+                        "Found installed environment for hook `{}` at `{}`",
+                        &hook,
                         info.env_path.display()
                     );
                     hook_envs.push(InstalledHook::Installed {
-                        hook: Box::new(hook.clone()),
-                        info: Box::new(info.clone()),
+                        hook: Arc::new(hook),
+                        info: Arc::new(info.clone()),
                     });
                     continue;
                 }
 
+                let hook = Arc::new(hook);
                 debug!("No matching environment found for hook `{hook}`, installing...");
 
-                let progress = reporter.on_install_start(hook);
+                let progress = reporter.on_install_start(&hook);
 
                 let installed_hook = hook
                     .language
-                    .install(hook, store)
+                    .install(hook.clone(), store)
                     .await
                     .context(format!("Failed to install hook `{hook}`"))?;
 

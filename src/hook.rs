@@ -1,11 +1,10 @@
-use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::{Context, Result};
 use clap::ValueEnum;
@@ -131,7 +130,7 @@ impl Display for Repo {
 pub struct Project {
     config_path: PathBuf,
     config: Config,
-    repos: Vec<Rc<Repo>>,
+    repos: Vec<Arc<Repo>>,
 }
 
 impl Project {
@@ -229,7 +228,7 @@ impl Project {
                     reporter.on_clone_complete(progress);
                 }
 
-                let repo = Rc::new(Repo::remote(
+                let repo = Arc::new(Repo::remote(
                     repo_config.repo.clone(),
                     repo_config.rev.clone(),
                     path,
@@ -257,11 +256,11 @@ impl Project {
                 }
                 config::Repo::Local(repo) => {
                     let repo = Repo::local(repo.hooks.clone());
-                    repos.push(Rc::new(repo));
+                    repos.push(Arc::new(repo));
                 }
                 config::Repo::Meta(repo) => {
                     let repo = Repo::meta(repo.hooks.clone());
-                    repos.push(Rc::new(repo));
+                    repos.push(Arc::new(repo));
                 }
             }
         }
@@ -293,7 +292,7 @@ impl Project {
                             });
                         };
 
-                        let repo = Rc::clone(repo);
+                        let repo = Arc::clone(repo);
                         let mut builder = HookBuilder::new(repo, hook.clone(), hooks.len());
                         builder.update(hook_config);
                         builder.combine(&self.config);
@@ -304,7 +303,7 @@ impl Project {
                 }
                 config::Repo::Local(repo_config) => {
                     for hook_config in &repo_config.hooks {
-                        let repo = Rc::clone(repo);
+                        let repo = Arc::clone(repo);
                         let mut builder = HookBuilder::new(repo, hook_config.clone(), hooks.len());
                         builder.combine(&self.config);
 
@@ -314,7 +313,7 @@ impl Project {
                 }
                 config::Repo::Meta(repo_config) => {
                     for hook_config in &repo_config.hooks {
-                        let repo = Rc::clone(repo);
+                        let repo = Arc::clone(repo);
                         let hook_config = ManifestHook::from(hook_config.clone());
                         let mut builder = HookBuilder::new(repo, hook_config, hooks.len());
                         builder.combine(&self.config);
@@ -339,13 +338,13 @@ pub(crate) trait HookInitReporter {
 }
 
 struct HookBuilder {
-    repo: Rc<Repo>,
+    repo: Arc<Repo>,
     config: ManifestHook,
     idx: usize,
 }
 
 impl HookBuilder {
-    fn new(repo: Rc<Repo>, config: ManifestHook, idx: usize) -> Self {
+    fn new(repo: Arc<Repo>, config: ManifestHook, idx: usize) -> Self {
         Self { repo, config, idx }
     }
 
@@ -480,7 +479,7 @@ impl HookBuilder {
             entry,
             language_request,
             additional_dependencies,
-            dependencies: OnceCell::new(),
+            dependencies: OnceLock::new(),
             repo: self.repo,
             idx: self.idx,
             id: self.config.id,
@@ -532,9 +531,9 @@ impl Entry {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct Hook {
-    repo: Rc<Repo>,
+    repo: Arc<Repo>,
     // Cached computed dependencies.
-    dependencies: OnceCell<HashSet<String>>,
+    dependencies: OnceLock<HashSet<String>>,
 
     /// The index of the hook defined in the configuration file.
     pub idx: usize,
@@ -611,10 +610,10 @@ impl Hook {
 #[derive(Debug, Clone)]
 pub(crate) enum InstalledHook {
     Installed {
-        hook: Box<Hook>,
-        info: Box<InstallInfo>,
+        hook: Arc<Hook>,
+        info: Arc<InstallInfo>,
     },
-    NoNeedInstall(Box<Hook>),
+    NoNeedInstall(Arc<Hook>),
 }
 
 impl Deref for InstalledHook {
@@ -658,8 +657,8 @@ impl InstalledHook {
             return Ok(());
         };
 
-        let content =
-            serde_json::to_string_pretty(info).context("Failed to serialize install info")?;
+        let content = serde_json::to_string_pretty(info.as_ref())
+            .context("Failed to serialize install info")?;
 
         fs_err::tokio::write(info.env_path.join(".prefligit-hook.json"), content)
             .await

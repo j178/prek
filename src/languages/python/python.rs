@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use tracing::debug;
@@ -45,7 +46,7 @@ fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
 }
 
 impl LanguageImpl for Python {
-    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
+    async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
         let uv = Uv::install(store).await?;
 
         let mut info = InstallInfo::new(hook.language, hook.dependencies().clone(), store);
@@ -113,8 +114,8 @@ impl LanguageImpl for Python {
             .with_toolchain(python_exec);
 
         Ok(InstalledHook::Installed {
-            hook: Box::new(hook.clone()),
-            info: Box::new(info),
+            hook,
+            info: Arc::new(info),
         })
     }
 

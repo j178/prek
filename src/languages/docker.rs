@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use anstream::ColorChoice;
 use anyhow::{Context, Result};
@@ -170,11 +171,11 @@ impl Docker {
 }
 
 impl LanguageImpl for Docker {
-    async fn install(&self, hook: &Hook, store: &Store) -> Result<InstalledHook> {
+    async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
         let info = InstallInfo::new(hook.language, hook.dependencies().clone(), store);
         let installed_hook = InstalledHook::Installed {
-            hook: Box::new(hook.clone()),
-            info: Box::new(info),
+            hook,
+            info: Arc::new(info),
         };
 
         Docker::build_docker_image(&installed_hook, true)
