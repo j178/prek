@@ -10,6 +10,7 @@ use tracing::{debug, trace};
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::LanguageImpl;
+use crate::languages::node::NodeRequest;
 use crate::languages::node::installer::{NodeInstaller, bin_dir};
 use crate::languages::node::version::EXTRA_KEY_LTS;
 use crate::languages::version::LanguageRequest;
@@ -32,8 +33,11 @@ impl LanguageImpl for Node {
         // 1. Install node
         let node_dir = store.tools_path(ToolBucket::Node);
         let installer = NodeInstaller::new(node_dir);
-        let LanguageRequest::Node(node_request) = &hook.language_request else {
-            unreachable!()
+
+        let node_request = match &hook.language_request {
+            LanguageRequest::Any => &NodeRequest::Any,
+            LanguageRequest::Node(node_request) => node_request,
+            _ => unreachable!(),
         };
         let node = installer.install(node_request).await?;
 
