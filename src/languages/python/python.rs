@@ -6,19 +6,18 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use tracing::debug;
 
+use constants::env_vars::EnvVars;
+
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::LanguageImpl;
+use crate::languages::python::PythonRequest;
 use crate::languages::python::uv::Uv;
+use crate::languages::version::LanguageRequest;
+use crate::process;
 use crate::process::Cmd;
 use crate::run::{prepend_path, run_by_batch};
 use crate::store::{Store, ToolBucket};
-
-use crate::languages::python::PythonRequest;
-use crate::languages::version::LanguageRequest;
-
-use crate::process;
-use constants::env_vars::EnvVars;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Python;
@@ -67,7 +66,7 @@ impl LanguageImpl for Python {
 
         // Install dependencies
         if let Some(repo_path) = hook.repo_path() {
-            uv.cmd("uv pip install")
+            uv.cmd("uv pip install", store)
                 .arg("pip")
                 .arg("install")
                 .arg(".")
@@ -78,7 +77,7 @@ impl LanguageImpl for Python {
                 .output()
                 .await?;
         } else if !hook.additional_dependencies.is_empty() {
-            uv.cmd("uv pip install")
+            uv.cmd("uv pip install", store)
                 .arg("pip")
                 .arg("install")
                 .args(&hook.additional_dependencies)
@@ -217,7 +216,7 @@ impl Python {
         set_install_dir: bool,
         allow_downloads: bool,
     ) -> Cmd {
-        let mut cmd = uv.cmd("create venv");
+        let mut cmd = uv.cmd("create venv", store);
         cmd.arg("venv")
             .arg(&info.env_path)
             .arg("--python-preference")

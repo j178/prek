@@ -8,9 +8,11 @@ use axoupdater::{AxoUpdater, ReleaseSource, ReleaseSourceType, UpdateRequest};
 use tokio::task::JoinSet;
 use tracing::{debug, enabled, trace, warn};
 
+use constants::env_vars::EnvVars;
+
 use crate::fs::LockedFile;
 use crate::process::Cmd;
-use crate::store::{Store, ToolBucket};
+use crate::store::{CacheBucket, Store, ToolBucket};
 
 // The version of `uv` to install. Should update periodically.
 const UV_VERSION: &str = "0.8.3";
@@ -155,8 +157,10 @@ impl Uv {
         Self { path }
     }
 
-    pub(crate) fn cmd(&self, summary: &str) -> Cmd {
-        Cmd::new(&self.path, summary)
+    pub(crate) fn cmd(&self, summary: &str, store: &Store) -> Cmd {
+        let mut cmd = Cmd::new(&self.path, summary);
+        cmd.env(EnvVars::UV_CACHE_DIR, store.cache_path(CacheBucket::Uv));
+        cmd
     }
 
     async fn select_source() -> Result<InstallSource> {

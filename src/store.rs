@@ -52,22 +52,22 @@ pub struct Store {
 }
 
 impl Store {
-    pub fn from_settings() -> Result<Self, Error> {
+    pub(crate) fn from_settings() -> Result<Self, Error> {
         Ok(Self::from_path(
             STORE_HOME.as_ref().ok_or(Error::HomeNotFound)?,
         ))
     }
 
-    pub fn from_path(path: impl Into<PathBuf>) -> Self {
+    pub(crate) fn from_path(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
     }
 
-    pub fn path(&self) -> &Path {
+    pub(crate) fn path(&self) -> &Path {
         self.path.as_ref()
     }
 
     /// Initialize the store.
-    pub fn init(self) -> Result<Self, Error> {
+    pub(crate) fn init(self) -> Result<Self, Error> {
         fs_err::create_dir_all(&self.path)?;
 
         match fs_err::OpenOptions::new()
@@ -82,7 +82,7 @@ impl Store {
     }
 
     /// Clone a remote repo into the store.
-    pub async fn clone_repo(&self, repo: &RemoteRepo) -> Result<PathBuf, Error> {
+    pub(crate) async fn clone_repo(&self, repo: &RemoteRepo) -> Result<PathBuf, Error> {
         // Check if the repo is already cloned.
         let target = self.repo_path(repo);
         if target.join(".prefligit-repo.json").try_exists()? {
@@ -110,7 +110,8 @@ impl Store {
         Ok(target)
     }
 
-    pub fn installed_hooks(&self) -> impl Iterator<Item = InstallInfo> {
+    /// Returns installed hooks in the store.
+    pub(crate) fn installed_hooks(&self) -> impl Iterator<Item = InstallInfo> {
         fs_err::read_dir(self.hooks_dir())
             .ok()
             .into_iter()
@@ -124,11 +125,11 @@ impl Store {
     }
 
     /// Lock the store.
-    pub fn lock(&self) -> Result<LockedFile, std::io::Error> {
+    pub(crate) fn lock(&self) -> Result<LockedFile, std::io::Error> {
         LockedFile::acquire_blocking(self.path.join(".lock"), "store")
     }
 
-    pub async fn lock_async(&self) -> Result<LockedFile, std::io::Error> {
+    pub(crate) async fn lock_async(&self) -> Result<LockedFile, std::io::Error> {
         LockedFile::acquire(self.path.join(".lock"), "store").await
     }
 
@@ -140,37 +141,54 @@ impl Store {
         self.repos_dir().join(digest)
     }
 
-    pub fn repos_dir(&self) -> PathBuf {
+    pub(crate) fn repos_dir(&self) -> PathBuf {
         self.path.join("repos")
     }
 
-    pub fn hooks_dir(&self) -> PathBuf {
+    pub(crate) fn hooks_dir(&self) -> PathBuf {
         self.path.join("hooks")
     }
 
-    pub fn patches_dir(&self) -> PathBuf {
+    pub(crate) fn patches_dir(&self) -> PathBuf {
         self.path.join("patches")
     }
 
     /// The path to the tool directory in the store.
-    pub fn tools_path(&self, tool: ToolBucket) -> PathBuf {
+    pub(crate) fn tools_path(&self, tool: ToolBucket) -> PathBuf {
         self.path.join("tools").join(tool.as_str())
+    }
+
+    pub(crate) fn cache_path(&self, tool: CacheBucket) -> PathBuf {
+        self.path.join("cache").join(tool.as_str())
     }
 }
 
 #[derive(Copy, Clone)]
-pub enum ToolBucket {
+pub(crate) enum ToolBucket {
     Uv,
     Python,
     Node,
 }
 
 impl ToolBucket {
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         match self {
             ToolBucket::Uv => "uv",
             ToolBucket::Python => "python",
             ToolBucket::Node => "node",
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+pub(crate) enum CacheBucket {
+    Uv,
+}
+
+impl CacheBucket {
+    pub(crate) fn as_str(&self) -> &str {
+        match self {
+            CacheBucket::Uv => "uv",
         }
     }
 }

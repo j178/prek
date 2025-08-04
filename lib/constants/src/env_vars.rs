@@ -24,7 +24,7 @@ impl EnvVars {
         "PREFLIGIT_INTERNAL__SKIP_POST_CHECKOUT";
 
     // Other environment variables
-    pub const UV_NO_CACHE: &'static str = "UV_NO_CACHE";
+    pub const UV_CACHE_DIR: &'static str = "UV_CACHE_DIR";
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
 }
 
