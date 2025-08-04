@@ -23,9 +23,14 @@ impl EnvVars {
     pub const PREFLIGIT_INTERNAL__SKIP_POST_CHECKOUT: &'static str =
         "PREFLIGIT_INTERNAL__SKIP_POST_CHECKOUT";
 
-    // Other environment variables
+    // UV related
     pub const UV_CACHE_DIR: &'static str = "UV_CACHE_DIR";
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
+
+    // Node/Npm related
+    pub const NPM_CONFIG_USERCONFIG: &'static str = "NPM_CONFIG_USERCONFIG";
+    pub const NPM_CONFIG_PREFIX: &'static str = "NPM_CONFIG_PREFIX";
+    pub const NODE_PATH: &'static str = "NODE_PATH";
 }
 
 impl EnvVars {

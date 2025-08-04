@@ -309,14 +309,20 @@ impl NodeInstaller {
     }
 }
 
-#[cfg(not(windows))]
-pub(crate) fn bin_dir(root: &Path) -> PathBuf {
-    root.join("bin")
+pub(crate) fn bin_dir(prefix: &Path) -> PathBuf {
+    if cfg!(windows) {
+        prefix.to_path_buf()
+    } else {
+        prefix.join("bin")
+    }
 }
 
-#[cfg(windows)]
-pub(crate) fn bin_dir(root: &Path) -> PathBuf {
-    root.to_path_buf()
+pub(crate) fn lib_dir(prefix: &Path) -> PathBuf {
+    if cfg!(windows) {
+        prefix.join("node_modules")
+    } else {
+        prefix.join("lib").join("node_modules")
+    }
 }
 
 fn is_executable(path: &Path) -> bool {

@@ -7,11 +7,13 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use tracing::{debug, trace};
 
+use constants::env_vars::EnvVars;
+
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::LanguageImpl;
 use crate::languages::node::NodeRequest;
-use crate::languages::node::installer::{NodeInstaller, bin_dir};
+use crate::languages::node::installer::{NodeInstaller, bin_dir, lib_dir};
 use crate::languages::node::version::EXTRA_KEY_LTS;
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
@@ -54,16 +56,19 @@ impl LanguageImpl for Node {
 
         // 2. Create env
         let bin_dir = bin_dir(&info.env_path);
+        let lib_dir = lib_dir(&info.env_path);
         fs_err::tokio::create_dir_all(&bin_dir).await?;
-        if cfg!(windows) {
-            fs_err::tokio::create_dir_all(info.env_path.join("node_modules")).await?;
-        } else {
-            fs_err::tokio::create_dir_all(info.env_path.join("lib/node_modules")).await?;
-        }
+        fs_err::tokio::create_dir_all(&lib_dir).await?;
+
         // Create symlink or copy on Windows
         Self::create_symlink_or_copy(
             node.node(),
             &bin_dir.join("node").with_extension(EXE_EXTENSION),
+        )
+        .await?;
+        Self::create_symlink_or_copy(
+            node.npm(),
+            &bin_dir.join("npm").with_extension(EXE_EXTENSION),
         )
         .await?;
 
@@ -86,7 +91,9 @@ impl LanguageImpl for Node {
                 .arg("--no-fund")
                 .arg("--no-audit")
                 .args(&*deps)
-                .env("npm_config_prefix", &info.env_path)
+                .env(EnvVars::NPM_CONFIG_PREFIX, &info.env_path)
+                .env_remove(EnvVars::NPM_CONFIG_USERCONFIG)
+                .env(EnvVars::NODE_PATH, &lib_dir)
                 .check(true)
                 .output()
                 .await?;
@@ -131,6 +138,9 @@ impl LanguageImpl for Node {
             let mut output = cmd
                 .args(&entry[1..])
                 .env("PATH", &new_path)
+                .env(EnvVars::NPM_CONFIG_PREFIX, env_dir)
+                .env_remove(EnvVars::NPM_CONFIG_USERCONFIG)
+                .env(EnvVars::NODE_PATH, lib_dir(env_dir))
                 .envs(env_vars)
                 .args(&hook.args)
                 .args(batch)
