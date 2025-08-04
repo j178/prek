@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize};
@@ -24,7 +24,7 @@ impl Lts {
 }
 
 impl<'de> Deserialize<'de> for Lts {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -160,7 +160,14 @@ impl FromStr for NodeRequest {
             }
             Self::parse_version_numbers(version_part, request)
         } else if let Some(code_name) = request.strip_prefix("lts/") {
-            Ok(NodeRequest::CodeName(code_name.to_string()))
+            if code_name
+                .chars()
+                .all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9'))
+            {
+                Ok(NodeRequest::CodeName(code_name.to_string()))
+            } else {
+                Err(Error::InvalidVersion(request.to_string()))
+            }
         } else {
             Self::parse_version_numbers(request, request)
                 .or_else(|_| {
@@ -205,13 +212,16 @@ impl NodeRequest {
             .and_then(|s| serde_json::from_str(s).ok())
             .unwrap_or(Lts::NotLts);
 
-        self.matches(&NodeVersion {
-            version: version.clone(),
-            lts: tls,
-        })
+        self.matches(
+            &NodeVersion {
+                version: version.clone(),
+                lts: tls,
+            },
+            Some(install_info.toolchain.as_ref()),
+        )
     }
 
-    pub(crate) fn matches(&self, version: &NodeVersion) -> bool {
+    pub(crate) fn matches(&self, version: &NodeVersion, toolchain: Option<&Path>) -> bool {
         match self {
             NodeRequest::Any => true,
             NodeRequest::Major(major) => version.major() == *major,
@@ -221,12 +231,106 @@ impl NodeRequest {
             NodeRequest::MajorMinorPatch(major, minor, patch) => {
                 version.major() == *major && version.minor() == *minor && version.patch() == *patch
             }
-            NodeRequest::Path(path) => path.exists(),
+            NodeRequest::Path(path) => toolchain.is_some_and(|t| t == path),
             NodeRequest::Range(req) => req.matches(version.version()),
             NodeRequest::CodeName(name) => version
                 .lts
                 .code_name()
                 .is_some_and(|n| n.eq_ignore_ascii_case(name)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EXTRA_KEY_LTS, NodeRequest};
+    use crate::config::Language;
+    use crate::hook::InstallInfo;
+    use std::collections::HashSet;
+    use std::path::{Path, PathBuf};
+    use std::str::FromStr;
+
+    #[test]
+    fn test_node_request_from_str() {
+        assert_eq!(NodeRequest::from_str("node").unwrap(), NodeRequest::Any);
+        assert_eq!(
+            NodeRequest::from_str("node12").unwrap(),
+            NodeRequest::Major(12)
+        );
+        assert_eq!(
+            NodeRequest::from_str("node12.18").unwrap(),
+            NodeRequest::MajorMinor(12, 18)
+        );
+        assert_eq!(
+            NodeRequest::from_str("node12.18.3").unwrap(),
+            NodeRequest::MajorMinorPatch(12, 18, 3)
+        );
+        assert_eq!(
+            NodeRequest::from_str("lts/Argon").unwrap(),
+            NodeRequest::CodeName("Argon".to_string())
+        );
+        assert_eq!(NodeRequest::from_str("").unwrap(), NodeRequest::Any);
+        assert_eq!(NodeRequest::from_str("12").unwrap(), NodeRequest::Major(12));
+        assert_eq!(
+            NodeRequest::from_str("12.18").unwrap(),
+            NodeRequest::MajorMinor(12, 18)
+        );
+        assert_eq!(
+            NodeRequest::from_str("12.18.3").unwrap(),
+            NodeRequest::MajorMinorPatch(12, 18, 3)
+        );
+        assert_eq!(
+            NodeRequest::from_str(">=12.18").unwrap(),
+            NodeRequest::Range(semver::VersionReq::parse(">=12.18").unwrap())
+        );
+    }
+
+    #[test]
+    fn test_node_request_invalid() {
+        assert!(NodeRequest::from_str("node12.18.3.4").is_err());
+        assert!(NodeRequest::from_str("node12.18.3a").is_err());
+        assert!(NodeRequest::from_str("node12.18.x").is_err());
+        assert!(NodeRequest::from_str("node^12.18.3").is_err(),);
+        assert!(NodeRequest::from_str("invalid").is_err());
+        assert!(NodeRequest::from_str("lts/$$$").is_err());
+    }
+
+    #[test]
+    fn test_node_request_satisfied_by() {
+        let mut install_info = InstallInfo::new(Language::Node, HashSet::default(), Path::new("."));
+        install_info
+            .with_language_version(semver::Version::new(12, 18, 3))
+            .with_toolchain(PathBuf::from("/usr/bin/node"))
+            .with_extra(EXTRA_KEY_LTS, "\"Argon\"");
+
+        let request = NodeRequest::Major(12);
+        assert!(request.satisfied_by(&install_info));
+
+        let request = NodeRequest::MajorMinor(12, 18);
+        assert!(request.satisfied_by(&install_info));
+
+        let request = NodeRequest::MajorMinorPatch(12, 18, 3);
+        assert!(request.satisfied_by(&install_info));
+
+        let request = NodeRequest::CodeName("Argon".to_string());
+        assert!(request.satisfied_by(&install_info));
+
+        let request = NodeRequest::CodeName("argon".to_string());
+        assert!(request.satisfied_by(&install_info));
+
+        let request = NodeRequest::CodeName("Boron".to_string());
+        assert!(!request.satisfied_by(&install_info));
+
+        let request = NodeRequest::Path(PathBuf::from("/usr/bin/node"));
+        assert!(request.satisfied_by(&install_info));
+
+        let request = NodeRequest::Path(PathBuf::from("/usr/bin/nodejs"));
+        assert!(!request.satisfied_by(&install_info));
+
+        let request = NodeRequest::Range(semver::VersionReq::parse(">=12.18").unwrap());
+        assert!(request.satisfied_by(&install_info));
+
+        let request = NodeRequest::Range(semver::VersionReq::parse(">=13.0").unwrap());
+        assert!(!request.satisfied_by(&install_info));
     }
 }

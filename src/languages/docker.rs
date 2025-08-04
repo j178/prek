@@ -172,7 +172,11 @@ impl Docker {
 
 impl LanguageImpl for Docker {
     async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
-        let info = InstallInfo::new(hook.language, hook.dependencies().clone(), store);
+        let info = InstallInfo::new(
+            hook.language,
+            hook.dependencies().clone(),
+            &store.hooks_dir(),
+        );
         let installed_hook = InstalledHook::Installed {
             hook,
             info: Arc::new(info),

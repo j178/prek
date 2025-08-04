@@ -699,13 +699,13 @@ fn random_directory() -> String {
 }
 
 impl InstallInfo {
-    pub fn new(language: Language, dependencies: HashSet<String>, store: &Store) -> Self {
+    pub fn new(language: Language, dependencies: HashSet<String>, hooks_dir: &Path) -> Self {
         let env = random_directory();
 
         Self {
             language,
             dependencies,
-            env_path: store.hooks_dir().join(env),
+            env_path: hooks_dir.join(env),
             language_version: semver::Version::new(0, 0, 0),
             toolchain: PathBuf::new(),
             extra: HashMap::new(),

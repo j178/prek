@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use crate::hook::InstallInfo;
 use crate::languages::version;
 use crate::languages::version::try_into_u64_slice;
 
@@ -86,7 +87,7 @@ impl PythonRequest {
         }
     }
 
-    pub(crate) fn satisfied_by(&self, install_info: &crate::hook::InstallInfo) -> bool {
+    pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
         let version = &install_info.language_version;
         match self {
             PythonRequest::Any => true,
@@ -132,6 +133,9 @@ fn split_wheel_tag_version(mut version: Vec<u64>) -> Vec<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Language;
+    use std::collections::HashSet;
+    use std::path::Path;
 
     #[test]
     fn test_parse_python_request() {
@@ -207,5 +211,35 @@ mod tests {
         assert!(PythonRequest::from_str("python3.13.2t1").is_err());
         assert!(PythonRequest::from_str("python3.13.2-64").is_err());
         assert!(PythonRequest::from_str("python3.13.2-64").is_err());
+    }
+
+    #[test]
+    fn test_satisfied_by() {
+        let mut install_info =
+            InstallInfo::new(Language::Python, HashSet::default(), Path::new("."));
+        install_info
+            .with_language_version(semver::Version::new(3, 12, 1))
+            .with_toolchain(PathBuf::from("/usr/bin/python3.12"));
+
+        assert!(PythonRequest::Any.satisfied_by(&install_info));
+        assert!(PythonRequest::Major(3).satisfied_by(&install_info));
+        assert!(PythonRequest::MajorMinor(3, 12).satisfied_by(&install_info));
+        assert!(PythonRequest::MajorMinorPatch(3, 12, 1).satisfied_by(&install_info));
+        assert!(!PythonRequest::MajorMinorPatch(3, 12, 2).satisfied_by(&install_info));
+        assert!(
+            PythonRequest::Path(PathBuf::from("/usr/bin/python3.12")).satisfied_by(&install_info)
+        );
+        assert!(
+            !PythonRequest::Path(PathBuf::from("/usr/bin/python3.11")).satisfied_by(&install_info)
+        );
+
+        let range_req = semver::VersionReq::parse(">=3.12").unwrap();
+        assert!(
+            PythonRequest::Range(range_req.clone(), ">=3.12".to_string())
+                .satisfied_by(&install_info)
+        );
+
+        let range_req = semver::VersionReq::parse(">=4.0").unwrap();
+        assert!(!PythonRequest::Range(range_req, ">=4.0".to_string()).satisfied_by(&install_info));
     }
 }

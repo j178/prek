@@ -143,7 +143,7 @@ impl NodeInstaller {
 
         installed
             .find_map(|(v, path)| {
-                if req.matches(&v) {
+                if req.matches(&v, Some(&path)) {
                     Some(NodeResult::from_dir(&path).with_version(v))
                 } else {
                     None
@@ -156,7 +156,7 @@ impl NodeInstaller {
         let versions = self.list_remote_versions().await?;
         let version = versions
             .into_iter()
-            .find(|version| req.matches(version))
+            .find(|version| req.matches(version, None))
             .context("Version not found on remote")?;
         Ok(version)
     }
@@ -255,13 +255,8 @@ impl NodeInstaller {
                     .await
                 {
                     Ok(node_result) => {
-                        trace!(
-                            %node_result,
-                            "Successfully created NodeResult from system executables"
-                        );
-
                         // Check if this version matches the request
-                        if node_request.matches(node_result.version()) {
+                        if node_request.matches(node_result.version(), Some(&node_result.node)) {
                             trace!(
                                 %node_result,
                                 "Found matching system Node.js installation"

@@ -50,7 +50,11 @@ impl LanguageImpl for Python {
     async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
         let uv = Uv::install(store).await?;
 
-        let mut info = InstallInfo::new(hook.language, hook.dependencies().clone(), store);
+        let mut info = InstallInfo::new(
+            hook.language,
+            hook.dependencies().clone(),
+            &store.hooks_dir(),
+        );
         info.clear_env_path().await?;
 
         debug!(%hook, target = %info.env_path.display(), "Installing environment");
