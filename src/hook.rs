@@ -340,6 +340,7 @@ pub(crate) trait HookInitReporter {
 struct HookBuilder {
     repo: Arc<Repo>,
     config: ManifestHook,
+    // The index of the hook in the project configuration.
     idx: usize,
 }
 

@@ -28,7 +28,7 @@ use crate::config::{Language, Stage};
 use crate::fs::Simplified;
 use crate::git;
 use crate::hook::{Hook, InstalledHook, Project};
-use crate::printer::Printer;
+use crate::printer::{Printer, Stdout};
 use crate::store::Store;
 
 enum HookToRun {
@@ -364,36 +364,76 @@ pub async fn install_hooks(
     Ok(new_installed)
 }
 
-const PASSED: &str = "Passed";
-const FAILED: &str = "Failed";
-const SKIPPED: &str = "Skipped";
-const NO_FILES: &str = "(no files to check)";
-const UNIMPLEMENTED: &str = "(unimplemented yet)";
-
-fn status_line(start: &str, cols: usize, end_msg: &str, end_color: Style, postfix: &str) -> String {
-    let dots = cols - start.width_cjk() - end_msg.len() - postfix.len() - 1;
-    format!(
-        "{}{}{}{}",
-        start,
-        ".".repeat(dots),
-        postfix,
-        end_msg.style(end_color)
-    )
+struct StatusPrinter {
+    printer: Printer,
+    columns: usize,
 }
 
-fn calculate_columns(hooks: &[HookToRun]) -> usize {
-    let name_len = hooks
-        .iter()
-        .filter_map(|hook| {
-            if let HookToRun::ToRun(hook) = hook {
-                Some(hook.name.width_cjk())
-            } else {
-                None
-            }
-        })
-        .max()
-        .unwrap_or(0);
-    max(80, name_len + 3 + NO_FILES.len() + 1 + SKIPPED.len())
+impl StatusPrinter {
+    const PASSED: &'static str = "Passed";
+    const FAILED: &'static str = "Failed";
+    const SKIPPED: &'static str = "Skipped";
+    const NO_FILES: &'static str = "(no files to check)";
+    const UNIMPLEMENTED: &'static str = "(unimplemented yet)";
+
+    fn for_hooks(hooks: &[HookToRun], printer: Printer) -> Self {
+        let columns = Self::calculate_columns(hooks);
+        Self { printer, columns }
+    }
+
+    fn calculate_columns(hooks: &[HookToRun]) -> usize {
+        let name_len = hooks
+            .iter()
+            .filter_map(|hook| {
+                if let HookToRun::ToRun(hook) = hook {
+                    Some(hook.name.width_cjk())
+                } else {
+                    None
+                }
+            })
+            .max()
+            .unwrap_or(0);
+        max(
+            80,
+            name_len + 3 + Self::NO_FILES.len() + 1 + Self::SKIPPED.len(),
+        )
+    }
+
+    fn write_skipped(&self, hook_name: &str, reason: &str, style: Style) -> Result<()> {
+        let dots = self.columns - hook_name.width_cjk() - Self::SKIPPED.len() - reason.len() - 1;
+        let line = format!(
+            "{hook_name}{}{}{}",
+            ".".repeat(dots),
+            reason,
+            Self::SKIPPED.style(style)
+        );
+        writeln!(self.printer.stdout(), "{line}")?;
+        Ok(())
+    }
+
+    fn write_running(&self, hook_name: &str) -> Result<()> {
+        write!(
+            self.printer.stdout(),
+            "{}{}",
+            hook_name,
+            ".".repeat(self.columns - hook_name.width_cjk() - Self::PASSED.len() - 1)
+        )?;
+        Ok(())
+    }
+
+    fn write_passed(&self) -> Result<()> {
+        writeln!(self.printer.stdout(), "{}", Self::PASSED.on_green())?;
+        Ok(())
+    }
+
+    fn write_failed(&self) -> Result<()> {
+        writeln!(self.printer.stdout(), "{}", Self::FAILED.on_red())?;
+        Ok(())
+    }
+
+    fn stdout(&self) -> Stdout {
+        self.printer.stdout()
+    }
 }
 
 /// Run all hooks.
@@ -407,16 +447,14 @@ async fn run_hooks(
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let columns = calculate_columns(hooks);
+    let printer = StatusPrinter::for_hooks(hooks, printer);
     let mut success = true;
 
     let mut diff = git::get_diff().await?;
     // Hooks might modify the files, so they must be run sequentially.
     for hook in hooks {
-        let (hook_success, new_diff) = run_hook(
-            hook, filter, &env_vars, store, diff, columns, verbose, printer,
-        )
-        .await?;
+        let (hook_success, new_diff) =
+            run_hook(hook, filter, &env_vars, store, diff, verbose, &printer).await?;
 
         success &= hook_success;
         diff = new_diff;
@@ -469,23 +507,12 @@ async fn run_hook(
     env_vars: &HashMap<&'static str, String>,
     store: &Store,
     diff: Vec<u8>,
-    columns: usize,
     verbose: bool,
-    printer: Printer,
+    printer: &StatusPrinter,
 ) -> Result<(bool, Vec<u8>)> {
     let hook = match hook {
         HookToRun::Skipped(hook) => {
-            writeln!(
-                printer.stdout(),
-                "{}",
-                status_line(
-                    &hook.name,
-                    columns,
-                    SKIPPED,
-                    Style::new().black().on_yellow(),
-                    "",
-                )
-            )?;
+            printer.write_skipped(&hook.name, "", Style::new().on_yellow())?;
             return Ok((true, diff));
         }
         HookToRun::ToRun(hook) => hook,
@@ -494,41 +521,24 @@ async fn run_hook(
     let mut filenames = filter.for_hook(hook)?;
 
     if filenames.is_empty() && !hook.always_run {
-        writeln!(
-            printer.stdout(),
-            "{}",
-            status_line(
-                &hook.name,
-                columns,
-                SKIPPED,
-                Style::new().black().on_cyan(),
-                NO_FILES,
-            )
+        printer.write_skipped(
+            &hook.name,
+            StatusPrinter::NO_FILES,
+            Style::new().black().on_cyan(),
         )?;
         return Ok((true, diff));
     }
 
     if !Language::supported(hook.language) {
-        writeln!(
-            printer.stdout(),
-            "{}",
-            status_line(
-                &hook.name,
-                columns,
-                SKIPPED,
-                Style::new().black().on_cyan(),
-                UNIMPLEMENTED,
-            )
+        printer.write_skipped(
+            &hook.name,
+            StatusPrinter::UNIMPLEMENTED,
+            Style::new().black().on_cyan(),
         )?;
         return Ok((true, diff));
     }
 
-    write!(
-        printer.stdout(),
-        "{}{}",
-        &hook.name,
-        ".".repeat(columns - hook.name.width_cjk() - PASSED.len() - 1)
-    )?;
+    printer.write_running(&hook.name)?;
     std::io::stdout().flush()?;
 
     let start = std::time::Instant::now();
@@ -552,9 +562,9 @@ async fn run_hook(
     let file_modified = diff != new_diff;
     let success = status == 0 && !file_modified;
     if success {
-        writeln!(printer.stdout(), "{}", PASSED.on_green())?;
+        printer.write_passed()?;
     } else {
-        writeln!(printer.stdout(), "{}", FAILED.on_red())?;
+        printer.write_failed()?;
     }
 
     if verbose || hook.verbose || !success {
