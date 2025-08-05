@@ -49,7 +49,7 @@ impl GoResult {
         let output = self.cmd("version").check(true).output().await?;
         // e.g. "go version go1.24.5 darwin/arm64"
         let version_str = String::from_utf8(output.stdout)?;
-        let version_str = version_str.split(' ').nth(2).ok_or_else(|| {
+        let version_str = version_str.split_ascii_whitespace().nth(2).ok_or_else(|| {
             anyhow::anyhow!("Failed to parse Go version from output: {}", version_str)
         })?;
 
