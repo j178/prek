@@ -1108,3 +1108,55 @@ fn init_nonexistent_repo() {
     fatal: unable to access 'https://notexistentatallnevergonnahappen.com/nonexistent/repo/': Could not resolve host: notexistentatallnevergonnahappen.com
     ");
 }
+
+/// Test hooks that specifies `types: [directory]`.
+#[test]
+fn types_directory() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: directory
+                name: directory
+                language: system
+                entry: echo
+                types: [directory]
+        "});
+    context.work_dir().child("dir").create_dir_all()?;
+    context
+        .work_dir()
+        .child("dir/file.txt")
+        .write_str("Hello, world!")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory............................................(no files to check)Skipped
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context.filters(), context.run().arg("--files").arg("dir"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory................................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context.filters(), context.run().arg("--files").arg("non-exist-files"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory............................................(no files to check)Skipped
+
+    ----- stderr -----
+    warning: This file does not exist, it will be ignored: `non-exist-files`
+    "#);
+    Ok(())
+}
