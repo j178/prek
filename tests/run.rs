@@ -1108,3 +1108,53 @@ fn init_nonexistent_repo() {
     fatal: unable to access 'https://notexistentatallnevergonnahappen.com/nonexistent/repo/': Could not resolve host: notexistentatallnevergonnahappen.com
     ");
 }
+
+#[test]
+fn run_last_commit() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: trailing-whitespace
+              - id: end-of-file-fixer
+    "});
+
+    // Create initial files and make first commit
+    cwd.child("file1.txt").write_str("Hello, world!\n")?;
+    cwd.child("file2.txt").write_str("Initial content\n")?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    // Modify files and make second commit with trailing whitespace
+    cwd.child("file1.txt").write_str("Hello, world!   \n")?; // trailing whitespace
+    cwd.child("file3.txt").write_str("New file")?; // missing newline
+    context.git_add(".");
+    context.git_commit("Second commit with issues");
+
+    // Run with --last-commit should only check files from the last commit
+    cmd_snapshot!(context.filters(), context.run().arg("--last-commit"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    trim trailing whitespace.................................................Failed
+    - hook id: trailing-whitespace
+    - exit code: 1
+    - files were modified by this hook
+      Fixing file1.txt
+    fix end of files.........................................................Failed
+    - hook id: end-of-file-fixer
+    - exit code: 1
+    - files were modified by this hook
+      Fixing file3.txt
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
