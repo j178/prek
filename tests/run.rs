@@ -1189,7 +1189,8 @@ fn run_last_commit() -> Result<()> {
 
     // Create initial files and make first commit
     cwd.child("file1.txt").write_str("Hello, world!\n")?;
-    cwd.child("file2.txt").write_str("Initial content with trailing spaces   \n")?; // This has issues but won't be in last commit
+    cwd.child("file2.txt")
+        .write_str("Initial content with trailing spaces   \n")?; // This has issues but won't be in last commit
     context.git_add(".");
     context.git_commit("Initial commit");
 
@@ -1223,7 +1224,7 @@ fn run_last_commit() -> Result<()> {
     // Now reset the files to their problematic state for comparison
     cwd.child("file1.txt").write_str("Hello, world!   \n")?; // trailing whitespace
     cwd.child("file3.txt").write_str("New file")?; // missing newline
-    
+
     // Run with --all-files should check ALL files including file2.txt
     // This demonstrates that file2.txt was indeed filtered out in the previous test
     cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r#"
