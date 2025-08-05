@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use fancy_regex as regex;
 use fancy_regex::Regex;
+use itertools::{Either, Itertools};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use tracing::{debug, error};
 
@@ -10,9 +11,9 @@ use constants::env_vars::EnvVars;
 
 use crate::config::Stage;
 use crate::fs::normalize_path;
-use crate::git;
 use crate::hook::Hook;
 use crate::identify::tags_from_path;
+use crate::{git, warn_user};
 
 /// Filter filenames by include/exclude patterns.
 pub struct FilenameFilter {
@@ -100,13 +101,6 @@ impl<'a> FileFilter<'a> {
         let filenames = filenames
             .into_par_iter()
             .filter(|filename| filter.filter(filename))
-            .filter(|filename| {
-                // TODO: does this check really necessary?
-                // Ignore not existing files.
-                std::fs::symlink_metadata(filename)
-                    .map(|m| m.file_type().is_file())
-                    .unwrap_or(false)
-            })
             .collect::<Vec<_>>();
 
         Ok(Self { filenames })
@@ -248,12 +242,39 @@ async fn collect_files_from_args(
     }
 
     if !files.is_empty() {
-        let files: Vec<_> = files
-            .into_iter()
-            .map(|f| f.to_string_lossy().to_string())
-            .collect();
-        debug!("Files passed as arguments: {}", files.len());
-        return Ok(files);
+        // By default, `pre-commit` add `types: [file]` for all hooks,
+        // so `pre-commit` will ignore user provided directories.
+        // We do the same here for compatibility.
+        // For `types: [directory]`, `pre-commit` passes the directory names to the hook directly.
+
+        // Fun fact: if a hook specified `types: [directory]`, it won't run in `--all-files` mode.
+
+        // TODO: It will be convenient to add a `--directory` flag to `prefligit run`,
+        // we expand the directories to files and pass them to the hook.
+        // See: https://github.com/pre-commit/pre-commit/issues/1173
+
+        let (exists, non_exists): (Vec<_>, Vec<_>) = files.into_iter().partition_map(|filename| {
+            if filename.exists() {
+                Either::Left(filename.to_string_lossy().to_string())
+            } else {
+                Either::Right(filename.to_string_lossy().to_string())
+            }
+        });
+        if !non_exists.is_empty() {
+            if non_exists.len() == 1 {
+                warn_user!(
+                    "This file does not exist, it will be ignored: `{}`",
+                    non_exists[0]
+                );
+            } else if non_exists.len() == 2 {
+                warn_user!(
+                    "These files do not exist, they will be ignored: `{}`",
+                    non_exists.join(", ")
+                );
+            }
+        }
+        debug!("Files passed as arguments: {}", exists.len());
+        return Ok(exists);
     }
     if all_files {
         let files = git::get_all_files().await?;
