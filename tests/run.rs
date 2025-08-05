@@ -696,17 +696,18 @@ fn subdirectory() -> Result<()> {
     let cwd = context.work_dir();
     let child = cwd.child("foo/bar/baz");
     child.create_dir_all()?;
+    child.child("file.txt").write_str("Hello, world!\n")?;
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
               - id: trailing-whitespace
                 name: trailing-whitespace
                 language: system
-                entry: python3 -c 'print("Hello"); exit(1)'
+                entry: python3 -c 'import sys; print(sys.argv[1]); exit(1)'
                 always_run: true
-    "#});
+    "});
 
     context.git_add(".");
 
@@ -717,7 +718,7 @@ fn subdirectory() -> Result<()> {
     trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
-      Hello
+      foo/bar/baz/file.txt
 
     ----- stderr -----
     "#);
