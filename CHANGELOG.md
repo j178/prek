@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.0.20
+
+### Enhancements
+
+- Support golang hooks and golang toolchain management ([#355](https://github.com/j178/prefligit/pull/355))
+- Add `--last-commit` flag to `prefligit run` ([#351](https://github.com/j178/prefligit/pull/351))
+
+### Bug fixes
+
+- Fix bug that directories are ignored ([#350](https://github.com/j178/prefligit/pull/350))
+- Use `git ls-remote` to fetch go releases ([#356](https://github.com/j178/prefligit/pull/356))
+
+### Documentation
+
+- Add migration section to README ([#354](https://github.com/j178/prefligit/pull/354))
+
 ## 0.0.19
 
 ### Enhancements
