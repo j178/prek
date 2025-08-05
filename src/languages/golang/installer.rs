@@ -10,6 +10,7 @@ use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
 use crate::fs::LockedFile;
+use crate::git;
 use crate::languages::download_and_extract;
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::golang::bin_dir;
@@ -155,9 +156,23 @@ impl GoInstaller {
     }
 
     async fn resolve_version(&self, req: &GoRequest) -> Result<GoVersion> {
-        let url = "https://go.dev/dl/?mode=json";
-        let response = self.client.get(url).send().await?;
-        let versions: Vec<GoVersion> = response.json().await?;
+        let output = git::git_cmd("list go tags")?
+            .arg("ls-remote")
+            .arg("--tags")
+            .arg("https://github.com/golang/go")
+            .output()
+            .await?
+            .stdout;
+        let output_str = String::from_utf8(output)?;
+        let versions: Vec<GoVersion> = output_str
+            .lines()
+            .filter_map(|line| {
+                let tag = line.split('\t').nth(1)?;
+                let tag = tag.strip_prefix("refs/tags/go")?;
+                GoVersion::from_str(tag).ok()
+            })
+            .sorted_unstable_by(|a, b| b.cmp(a))
+            .collect();
 
         let version = versions
             .into_iter()
