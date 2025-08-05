@@ -70,7 +70,7 @@ pub(crate) async fn run(
     } else {
         (from_ref, to_ref)
     };
-    
+
     // Prevent recursive post-checkout hooks.
     if matches!(hook_stage, Some(Stage::PostCheckout))
         && EnvVars::is_set(EnvVars::PREFLIGIT_INTERNAL__SKIP_POST_CHECKOUT)
