@@ -55,6 +55,7 @@ pub(crate) async fn hook_impl(
         run_args.to_ref,
         run_args.all_files,
         vec![],
+        vec![],
         false, // last_commit is always false in hook implementation context
         false,
         run_args.extra,

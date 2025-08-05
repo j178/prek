@@ -265,6 +265,11 @@ pub(crate) struct RunArgs {
     /// Specific filenames to run hooks on.
     #[arg(long, conflicts_with_all = ["all_files", "from_ref", "to_ref"])]
     pub(crate) files: Vec<PathBuf>,
+    /// Run hooks on all files in the specified directories.
+    ///
+    /// You can specify multiple directories. It can be used in conjunction with `--files`.
+    #[arg(short, long, value_name = "DIR", conflicts_with_all = ["all_files", "from_ref", "to_ref"])]
+    pub(crate) directory: Vec<PathBuf>,
     /// The original ref in a `from_ref...to_ref` diff expression.
     /// Files changed in this diff will be run through the hooks.
     #[arg(short = 's', long, alias = "source", requires = "to_ref")]
@@ -274,7 +279,7 @@ pub(crate) struct RunArgs {
     #[arg(short = 'o', long, alias = "origin", requires = "from_ref")]
     pub(crate) to_ref: Option<String>,
     /// Run hooks against the last commit (HEAD~1..HEAD).
-    #[arg(long, conflicts_with_all = ["all_files", "files", "from_ref", "to_ref"])]
+    #[arg(long, conflicts_with_all = ["all_files", "files", "directory", "from_ref", "to_ref"])]
     pub(crate) last_commit: bool,
     /// The stage during which the hook is fired.
     #[arg(long)]

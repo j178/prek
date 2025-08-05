@@ -97,13 +97,14 @@ pub async fn get_changed_files(old: &str, new: &str) -> Result<Vec<String>, Erro
     Ok(zsplit(&output.stdout))
 }
 
-pub async fn get_all_files() -> Result<Vec<String>, Error> {
-    let output = git_cmd("get git all files")?
-        .arg("ls-files")
-        .arg("-z")
-        .check(true)
-        .output()
-        .await?;
+pub async fn git_ls_files(path: Option<&Path>) -> Result<Vec<String>, Error> {
+    let mut cmd = git_cmd("get git all files")?;
+    cmd.arg("ls-files").arg("-z").check(true);
+
+    if let Some(p) = path {
+        cmd.arg("--").arg(p);
+    }
+    let output = cmd.output().await?;
     Ok(zsplit(&output.stdout))
 }
 
