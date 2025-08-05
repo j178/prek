@@ -696,17 +696,18 @@ fn subdirectory() -> Result<()> {
     let cwd = context.work_dir();
     let child = cwd.child("foo/bar/baz");
     child.create_dir_all()?;
+    child.child("file.txt").write_str("Hello, world!\n")?;
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
               - id: trailing-whitespace
                 name: trailing-whitespace
                 language: system
-                entry: python3 -c 'print("Hello"); exit(1)'
+                entry: python3 -c 'import sys; print(sys.argv[1]); exit(1)'
                 always_run: true
-    "#});
+    "});
 
     context.git_add(".");
 
@@ -717,7 +718,7 @@ fn subdirectory() -> Result<()> {
     trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
-      Hello
+      foo/bar/baz/file.txt
 
     ----- stderr -----
     "#);
@@ -1107,6 +1108,67 @@ fn init_nonexistent_repo() {
     [stderr]
     fatal: unable to access 'https://notexistentatallnevergonnahappen.com/nonexistent/repo/': Could not resolve host: notexistentatallnevergonnahappen.com
     ");
+}
+
+/// Test hooks that specifies `types: [directory]`.
+#[test]
+fn types_directory() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: directory
+                name: directory
+                language: system
+                entry: echo
+                types: [directory]
+        "});
+    context.work_dir().child("dir").create_dir_all()?;
+    context
+        .work_dir()
+        .child("dir/file.txt")
+        .write_str("Hello, world!")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory............................................(no files to check)Skipped
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context.filters(), context.run().arg("--files").arg("dir"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory................................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory............................................(no files to check)Skipped
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context.filters(), context.run().arg("--files").arg("non-exist-files"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory............................................(no files to check)Skipped
+
+    ----- stderr -----
+    warning: This file does not exist, it will be ignored: `non-exist-files`
+    "#);
+    Ok(())
 }
 
 #[test]
