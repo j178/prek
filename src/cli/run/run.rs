@@ -49,7 +49,7 @@ impl Deref for HookToRun {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     config: Option<PathBuf>,
     hook_id: Option<String>,
