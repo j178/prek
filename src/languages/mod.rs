@@ -1,16 +1,17 @@
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
+
+use anyhow::{Context, Result};
+use futures::TryStreamExt;
+use rustc_hash::FxHashMap;
+use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tracing::trace;
 
 use crate::archive::ArchiveExtension;
 use crate::config::Language;
 use crate::hook::{Hook, InstalledHook};
 use crate::store::Store;
 use crate::{archive, builtin};
-use anyhow::{Context, Result};
-use futures::TryStreamExt;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::trace;
 
 mod docker;
 mod docker_image;
@@ -39,7 +40,7 @@ trait LanguageImpl {
         &self,
         hook: &InstalledHook,
         filenames: &[&String],
-        env_vars: &HashMap<&'static str, String>,
+        env_vars: &FxHashMap<&'static str, String>,
         store: &Store,
     ) -> Result<(i32, Vec<u8>)>;
 }
@@ -63,7 +64,7 @@ impl LanguageImpl for Unimplemented {
         &self,
         hook: &InstalledHook,
         _filenames: &[&String],
-        _env_vars: &HashMap<&'static str, String>,
+        _env_vars: &FxHashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         anyhow::bail!(UnimplementedError(format!("{}", hook.language)))
@@ -174,7 +175,7 @@ impl Language {
         &self,
         hook: &InstalledHook,
         filenames: &[&String],
-        env_vars: &HashMap<&'static str, String>,
+        env_vars: &FxHashMap<&'static str, String>,
         store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         // fast path for hooks implemented in Rust

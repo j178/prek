@@ -1,7 +1,6 @@
-use std::collections::HashMap;
-
 use anyhow::Result;
 use futures::StreamExt;
+use rustc_hash::FxHashMap;
 
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
@@ -9,7 +8,7 @@ use crate::run::CONCURRENCY;
 pub(crate) async fn fix_end_of_file(
     _hook: &Hook,
     filenames: &[&String],
-    _env_vars: &HashMap<&'static str, String>,
+    _env_vars: &FxHashMap<&'static str, String>,
 ) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
         .map(async |filename| {

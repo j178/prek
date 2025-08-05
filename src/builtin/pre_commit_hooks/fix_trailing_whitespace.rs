@@ -1,10 +1,10 @@
-use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
 use bstr::ByteSlice;
 use clap::Parser;
 use futures::StreamExt;
+use rustc_hash::FxHashMap;
 
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
@@ -20,7 +20,7 @@ struct Args {
 pub(crate) async fn fix_trailing_whitespace(
     hook: &Hook,
     filenames: &[&String],
-    _env_vars: &HashMap<&'static str, String>,
+    _env_vars: &FxHashMap<&'static str, String>,
 ) -> Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.parsed()?.iter().chain(&hook.args))?;
 

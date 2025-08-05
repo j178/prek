@@ -1,9 +1,9 @@
-use std::collections::HashMap;
 use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use rustc_hash::FxHashMap;
 use tracing::debug;
 
 use constants::env_vars::EnvVars;
@@ -131,7 +131,7 @@ impl LanguageImpl for Python {
         &self,
         hook: &InstalledHook,
         filenames: &[&String],
-        env_vars: &HashMap<&'static str, String>,
+        env_vars: &FxHashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Python must have env path");

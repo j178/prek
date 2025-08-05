@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
+use rustc_hash::FxHashMap;
 
 use crate::hook::{Hook, InstalledHook};
 use crate::languages::LanguageImpl;
@@ -25,7 +25,7 @@ impl LanguageImpl for DockerImage {
         &self,
         hook: &InstalledHook,
         filenames: &[&String],
-        env_vars: &HashMap<&'static str, String>,
+        env_vars: &FxHashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let entry = hook.entry.parsed()?;

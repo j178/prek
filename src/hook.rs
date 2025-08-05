@@ -11,6 +11,7 @@ use clap::ValueEnum;
 use futures::StreamExt;
 use itertools::zip_eq;
 use rand::Rng;
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, error};
@@ -474,7 +475,7 @@ impl HookBuilder {
             .additional_dependencies
             .expect("additional_dependencies should not be None")
             .into_iter()
-            .collect::<HashSet<_>>();
+            .collect::<FxHashSet<_>>();
 
         Ok(Hook {
             entry,
@@ -534,7 +535,7 @@ impl Entry {
 pub(crate) struct Hook {
     repo: Arc<Repo>,
     // Cached computed dependencies.
-    dependencies: OnceLock<HashSet<String>>,
+    dependencies: OnceLock<FxHashSet<String>>,
 
     /// The index of the hook defined in the configuration file.
     pub idx: usize,
@@ -548,7 +549,7 @@ pub(crate) struct Hook {
     pub types: Vec<String>,
     pub types_or: Vec<String>,
     pub exclude_types: Vec<String>,
-    pub additional_dependencies: HashSet<String>,
+    pub additional_dependencies: FxHashSet<String>,
     pub args: Vec<String>,
     pub always_run: bool,
     pub fail_fast: bool,
@@ -594,13 +595,16 @@ impl Hook {
         matches!(&*self.repo, Repo::Meta { .. })
     }
 
-    pub(crate) fn dependencies(&self) -> &HashSet<String> {
+    pub(crate) fn dependencies(&self) -> &FxHashSet<String> {
         if !self.is_remote() {
             return &self.additional_dependencies;
         }
         self.dependencies.get_or_init(|| {
             // For remote hooks, itself is an implicit dependency of the hook.
-            let mut deps = HashSet::with_capacity(self.additional_dependencies.len() + 1);
+            let mut deps = FxHashSet::with_capacity_and_hasher(
+                self.additional_dependencies.len() + 1,
+                FxBuildHasher,
+            );
             deps.extend(self.additional_dependencies.clone());
             deps.insert(self.repo.to_string());
             deps
@@ -673,10 +677,10 @@ impl InstalledHook {
 pub(crate) struct InstallInfo {
     pub language: Language,
     pub language_version: semver::Version,
-    pub dependencies: HashSet<String>,
+    pub dependencies: FxHashSet<String>,
     pub env_path: PathBuf,
     pub toolchain: PathBuf,
-    extra: HashMap<String, String>,
+    extra: FxHashMap<String, String>,
 }
 
 impl Hash for InstallInfo {
@@ -699,7 +703,7 @@ fn random_directory() -> String {
 }
 
 impl InstallInfo {
-    pub fn new(language: Language, dependencies: HashSet<String>, hooks_dir: &Path) -> Self {
+    pub fn new(language: Language, dependencies: FxHashSet<String>, hooks_dir: &Path) -> Self {
         let env = random_directory();
 
         Self {
@@ -708,7 +712,7 @@ impl InstallInfo {
             env_path: hooks_dir.join(format!("{}-{env}", language.as_str())),
             language_version: semver::Version::new(0, 0, 0),
             toolchain: PathBuf::new(),
-            extra: HashMap::new(),
+            extra: FxHashMap::default(),
         }
     }
 

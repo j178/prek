@@ -1712,6 +1712,7 @@ dependencies = [
  "rayon",
  "regex",
  "reqwest",
+ "rustc-hash",
  "same-file",
  "semver",
  "serde",

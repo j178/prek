@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::BTreeSet;
 use std::io::{BufRead, Read};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
@@ -9,6 +9,7 @@ use std::sync::OnceLock;
 use std::vec;
 
 use anyhow::Result;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 mod tags {
     pub const DIRECTORY: &str = "directory";
@@ -24,10 +25,10 @@ mod tags {
     pub const BINARY: &str = "binary";
 }
 
-fn by_extension() -> &'static HashMap<&'static str, Vec<&'static str>> {
-    static EXTENSIONS: OnceLock<HashMap<&'static str, Vec<&'static str>>> = OnceLock::new();
+fn by_extension() -> &'static FxHashMap<&'static str, Vec<&'static str>> {
+    static EXTENSIONS: OnceLock<FxHashMap<&'static str, Vec<&'static str>>> = OnceLock::new();
     EXTENSIONS.get_or_init(|| {
-        let mut map = HashMap::new();
+        let mut map = FxHashMap::default();
         map.insert("adoc", vec!["text", "asciidoc"]);
         map.insert("ai", vec!["binary", "adobe-illustrator"]);
         map.insert("aj", vec!["text", "aspectj"]);
@@ -329,10 +330,10 @@ fn by_extension() -> &'static HashMap<&'static str, Vec<&'static str>> {
     })
 }
 
-fn by_filename() -> &'static HashMap<&'static str, &'static [&'static str]> {
-    static FILENAMES: OnceLock<HashMap<&'static str, &'static [&'static str]>> = OnceLock::new();
+fn by_filename() -> &'static FxHashMap<&'static str, &'static [&'static str]> {
+    static FILENAMES: OnceLock<FxHashMap<&'static str, &'static [&'static str]>> = OnceLock::new();
     FILENAMES.get_or_init(|| {
-        let mut map = HashMap::<_, &'static [&'static str]>::new();
+        let mut map = FxHashMap::<_, &'static [&'static str]>::default();
         let extensions = by_extension();
 
         map.insert(".ansible-lint", &extensions["yaml"]);
@@ -655,10 +656,10 @@ fn by_filename() -> &'static HashMap<&'static str, &'static [&'static str]> {
     })
 }
 
-fn by_interpreter() -> &'static HashMap<&'static str, Vec<&'static str>> {
-    static INTERPRETERS: OnceLock<HashMap<&'static str, Vec<&'static str>>> = OnceLock::new();
+fn by_interpreter() -> &'static FxHashMap<&'static str, Vec<&'static str>> {
+    static INTERPRETERS: OnceLock<FxHashMap<&'static str, Vec<&'static str>>> = OnceLock::new();
     INTERPRETERS.get_or_init(|| {
-        let mut map = HashMap::new();
+        let mut map = FxHashMap::default();
         map.insert("ash", vec!["shell", "ash"]);
         map.insert("awk", vec!["awk"]);
         map.insert("bash", vec!["shell", "bash"]);
@@ -721,7 +722,7 @@ pub fn tags_from_path(path: &Path) -> Result<Vec<&str>> {
         }
     };
 
-    let mut tags = HashSet::new();
+    let mut tags = FxHashSet::default();
     tags.insert(tags::FILE);
 
     #[cfg(unix)]

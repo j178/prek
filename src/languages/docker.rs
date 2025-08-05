@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -8,6 +7,7 @@ use std::sync::Arc;
 use anstream::ColorChoice;
 use anyhow::{Context, Result};
 use fancy_regex::Regex;
+use rustc_hash::FxHashMap;
 use tracing::trace;
 
 use crate::fs::CWD;
@@ -204,7 +204,7 @@ impl LanguageImpl for Docker {
         &self,
         hook: &InstalledHook,
         filenames: &[&String],
-        env_vars: &HashMap<&'static str, String>,
+        env_vars: &FxHashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         Docker::build_docker_image(hook, false)

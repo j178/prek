@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use std::str::FromStr;
 
 use anyhow::Result;
+use rustc_hash::FxHashMap;
 use url::Url;
 
 use crate::hook::Hook;
@@ -34,7 +34,7 @@ impl Implemented {
         self,
         hook: &Hook,
         filenames: &[&String],
-        env_vars: &HashMap<&'static str, String>,
+        env_vars: &FxHashMap<&'static str, String>,
     ) -> Result<(i32, Vec<u8>)> {
         match self {
             Self::TrailingWhitespace => {

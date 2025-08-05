@@ -1,7 +1,6 @@
-use std::collections::{HashMap, HashSet};
-
 use clap::Parser;
 use futures::StreamExt;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::git::{get_staged_files, lfs_files};
 use crate::hook::Hook;
@@ -9,7 +8,7 @@ use crate::run::CONCURRENCY;
 
 enum FileFilter {
     NoFilter,
-    Files(HashSet<String>),
+    Files(FxHashSet<String>),
 }
 
 impl FileFilter {
@@ -32,18 +31,18 @@ struct Args {
 pub(crate) async fn check_added_large_files(
     hook: &Hook,
     filenames: &[&String],
-    _env_vars: &HashMap<&'static str, String>,
+    _env_vars: &FxHashMap<&'static str, String>,
 ) -> anyhow::Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.parsed()?.iter().chain(&hook.args))?;
 
     let filter = if args.enforce_all {
         FileFilter::NoFilter
     } else {
-        let add_files: HashSet<_> = get_staged_files().await?.into_iter().collect();
+        let add_files: FxHashSet<_> = get_staged_files().await?.into_iter().collect();
         FileFilter::Files(add_files)
     };
 
-    let lfs_files = lfs_files::<HashSet<String>>(filenames).await?;
+    let lfs_files = lfs_files::<FxHashSet<String>>(filenames).await?;
     let mut tasks = futures::stream::iter(
         filenames
             .iter()

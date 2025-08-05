@@ -16,6 +16,7 @@ use indoc::indoc;
 use owo_colors::{OwoColorize, Style};
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
+use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, trace};
 use unicode_width::UnicodeWidthStr;
@@ -217,9 +218,9 @@ fn fill_envs(
     from_ref: Option<&String>,
     to_ref: Option<&String>,
     args: &RunExtraArgs,
-) -> HashMap<&'static str, String> {
+) -> FxHashMap<&'static str, String> {
     // TODO: how to change these env vars?
-    let mut env = HashMap::new();
+    let mut env = FxHashMap::default();
     env.insert("PRE_COMMIT", "1".into());
 
     if let Some(ref source) = args.prepare_commit_message_source {
@@ -383,7 +384,7 @@ pub async fn install_hooks(
     Ok(new_installed)
 }
 
-fn sets_disjoint<T>(set1: &HashSet<T>, set2: &HashSet<T>) -> bool
+fn sets_disjoint<T>(set1: &FxHashSet<T>, set2: &FxHashSet<T>) -> bool
 where
     T: Eq + Hash,
 {
@@ -507,7 +508,7 @@ impl StatusPrinter {
 async fn run_hooks(
     hooks: &[HookToRun],
     filter: &FileFilter<'_>,
-    env_vars: HashMap<&'static str, String>,
+    env_vars: FxHashMap<&'static str, String>,
     store: &Store,
     fail_fast: bool,
     show_diff_on_failure: bool,
@@ -571,7 +572,7 @@ fn shuffle<T>(filenames: &mut [T]) {
 async fn run_hook(
     hook: &HookToRun,
     filter: &FileFilter<'_>,
-    env_vars: &HashMap<&'static str, String>,
+    env_vars: &FxHashMap<&'static str, String>,
     store: &Store,
     diff: Vec<u8>,
     verbose: bool,

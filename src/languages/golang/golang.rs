@@ -1,9 +1,10 @@
-use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Context;
+use rustc_hash::FxHashMap;
+
 use constants::env_vars::EnvVars;
 
 use crate::hook::{Hook, InstallInfo, InstalledHook};
@@ -81,7 +82,7 @@ impl LanguageImpl for Golang {
         &self,
         hook: &InstalledHook,
         filenames: &[&String],
-        env_vars: &HashMap<&'static str, String>,
+        env_vars: &FxHashMap<&'static str, String>,
         _store: &Store,
     ) -> anyhow::Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Node must have env path");

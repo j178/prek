@@ -1,10 +1,10 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashMap;
 
 use crate::hook;
 use crate::hook::Hook;
@@ -13,7 +13,7 @@ use crate::printer::Printer;
 #[derive(Default, Debug)]
 struct BarState {
     /// A map of progress bars, by ID.
-    bars: HashMap<usize, ProgressBar>,
+    bars: FxHashMap<usize, ProgressBar>,
     /// A monotonic counter for bar IDs.
     id: usize,
 }
