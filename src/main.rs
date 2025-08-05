@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::ExitCode;
 use std::str::FromStr;
 
@@ -94,18 +94,27 @@ fn adjust_relative_paths(cli: &mut Cli, new_cwd: &Path) -> Result<()> {
         args.files = args
             .files
             .iter()
-            .map(|path| fs::relative_to(std::path::absolute(path)?, new_cwd))
-            .collect::<Result<Vec<PathBuf>, std::io::Error>>()?;
+            .map(|path| {
+                fs::relative_to(std::path::absolute(path)?, new_cwd)
+                    .map(|p| p.to_string_lossy().to_string())
+            })
+            .collect::<Result<Vec<String>, std::io::Error>>()?;
         args.directory = args
             .directory
             .iter()
-            .map(|path| fs::relative_to(std::path::absolute(path)?, new_cwd))
-            .collect::<Result<Vec<PathBuf>, std::io::Error>>()?;
+            .map(|path| {
+                fs::relative_to(std::path::absolute(path)?, new_cwd)
+                    .map(|p| p.to_string_lossy().to_string())
+            })
+            .collect::<Result<Vec<String>, std::io::Error>>()?;
         args.extra.commit_msg_filename = args
             .extra
             .commit_msg_filename
             .as_ref()
-            .map(|path| fs::relative_to(std::path::absolute(path)?, new_cwd))
+            .map(|path| {
+                fs::relative_to(std::path::absolute(path)?, new_cwd)
+                    .map(|p| p.to_string_lossy().to_string())
+            })
             .transpose()?;
     }
 

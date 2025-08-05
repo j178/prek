@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::Result;
 use fancy_regex as regex;
@@ -167,9 +167,9 @@ pub(crate) struct CollectOptions {
     pub(crate) from_ref: Option<String>,
     pub(crate) to_ref: Option<String>,
     pub(crate) all_files: bool,
-    pub(crate) files: Vec<PathBuf>,
-    pub(crate) directories: Vec<PathBuf>,
-    pub(crate) commit_msg_filename: Option<PathBuf>,
+    pub(crate) files: Vec<String>,
+    pub(crate) directories: Vec<String>,
+    pub(crate) commit_msg_filename: Option<String>,
 }
 
 impl CollectOptions {
@@ -220,9 +220,9 @@ async fn collect_files_from_args(
     from_ref: Option<String>,
     to_ref: Option<String>,
     all_files: bool,
-    files: Vec<PathBuf>,
-    directories: Vec<PathBuf>,
-    commit_msg_filename: Option<PathBuf>,
+    mut files: Vec<String>,
+    mut directories: Vec<String>,
+    commit_msg_filename: Option<String>,
 ) -> Result<Vec<String>> {
     if let Some(hook_stage) = hook_stage {
         if !hook_stage.operate_on_files() {
@@ -230,10 +230,7 @@ async fn collect_files_from_args(
         }
         if hook_stage == Stage::PrepareCommitMsg || hook_stage == Stage::CommitMsg {
             return Ok(vec![
-                commit_msg_filename
-                    .expect("commit message filename is required")
-                    .to_string_lossy()
-                    .to_string(),
+                commit_msg_filename.expect("commit message filename is required"),
             ]);
         }
     }
@@ -261,12 +258,19 @@ async fn collect_files_from_args(
         // we expand the directories to files and pass them to the hook.
         // See: https://github.com/pre-commit/pre-commit/issues/1173
 
+        for filename in &mut files {
+            normalize_path(filename);
+        }
+        for dir in &mut directories {
+            normalize_path(dir);
+        }
+
         let (mut exists, non_exists): (HashSet<_>, Vec<_>) =
             files.into_iter().partition_map(|filename| {
-                if filename.exists() {
-                    Either::Left(filename.to_string_lossy().to_string())
+                if Path::new(&filename).exists() {
+                    Either::Left(filename)
                 } else {
-                    Either::Right(filename.to_string_lossy().to_string())
+                    Either::Right(filename)
                 }
             });
         if !non_exists.is_empty() {
@@ -284,7 +288,7 @@ async fn collect_files_from_args(
         }
 
         for dir in directories {
-            let dir_files = git::git_ls_files(Some(&dir)).await?;
+            let dir_files = git::git_ls_files(Some(Path::new(&dir))).await?;
             for file in dir_files {
                 exists.insert(file);
             }
