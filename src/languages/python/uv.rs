@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use axoupdater::{AxoUpdater, ReleaseSource, ReleaseSourceType, UpdateRequest};
+use semver::Version;
 use tokio::task::JoinSet;
 use tracing::{debug, enabled, trace, warn};
 
@@ -222,30 +223,53 @@ impl Uv {
     }
 
     pub async fn install(uv_dir: &Path) -> Result<Self> {
-        // 1) Check if `uv` is installed already.
-        // TODO: check minimum supported uv version
-        if let Ok(uv) = UV_EXE.as_ref() {
-            return Ok(Self::new(uv.clone()));
+        // 1) Check if system `uv` meets minimum version requirement
+        if let Ok(uv_path) = UV_EXE.as_ref() {
+            if let Ok(output) = Cmd::new(uv_path, "Checking uv version")
+                .arg("--version")
+                .check(false)
+                .output()
+                .await
+            {
+                if output.status.success() {
+                    let version_output = String::from_utf8_lossy(&output.stdout);
+                    if let Some(version_str) = version_output.split_whitespace().nth(1) {
+                        if let Ok(system_version) = Version::parse(version_str) {
+                            let min_version = Version::parse(UV_VERSION)?;
+                            if system_version >= min_version {
+                                return Ok(Self::new(uv_path.clone()));
+                            }
+                            warn!(
+                                "System uv version {} is older than minimum required version {}, \
+                             pre-commit-hooks will install its own version.",
+                                system_version, min_version
+                            );
+                        }
+                    }
+                }
+            }
         }
 
-        // 2) Check if `uv` is installed by `prefligit`
-        let uv = uv_dir.join("uv").with_extension(env::consts::EXE_EXTENSION);
-        if uv.is_file() {
-            trace!(uv = %uv.display(), "Found managed uv");
-            return Ok(Self::new(uv));
+        // 2) Use or install managed `uv`
+        let uv_path = uv_dir.join("uv").with_extension(env::consts::EXE_EXTENSION);
+
+        if uv_path.is_file() {
+            trace!(uv = %uv_path.display(), "Found managed uv");
+            return Ok(Self::new(uv_path));
         }
 
+        // Install new managed uv with proper locking
         fs_err::tokio::create_dir_all(&uv_dir).await?;
         let _lock = LockedFile::acquire(uv_dir.join(".lock"), "uv").await?;
 
-        if uv.is_file() {
-            trace!(uv = %uv.display(), "Found managed uv");
-            return Ok(Self::new(uv));
+        if uv_path.is_file() {
+            trace!(uv = %uv_path.display(), "Found managed uv");
+            return Ok(Self::new(uv_path));
         }
 
         let source = Self::select_source().await?;
         source.install(uv_dir).await?;
 
-        Ok(Self::new(uv))
+        Ok(Self::new(uv_path))
     }
 }
