@@ -283,12 +283,10 @@ async fn collect_files_from_args(
             }
         }
 
-        if !directories.is_empty() {
-            for dir in directories {
-                let dir_files = git::git_ls_files(Some(&dir)).await?;
-                for file in dir_files {
-                    exists.insert(file);
-                }
+        for dir in directories {
+            let dir_files = git::git_ls_files(Some(&dir)).await?;
+            for file in dir_files {
+                exists.insert(file);
             }
         }
 

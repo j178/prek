@@ -1248,3 +1248,115 @@ fn run_last_commit() -> Result<()> {
 
     Ok(())
 }
+
+/// Test `prefligit run --directory` flags.
+#[test]
+fn run_directory() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: directory
+                name: directory
+                language: system
+                entry: echo
+                verbose: true
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("dir1").create_dir_all()?;
+    cwd.child("dir1/file.txt").write_str("Hello, world!")?;
+    cwd.child("dir2").create_dir_all()?;
+    cwd.child("dir2/file.txt").write_str("Hello, world!")?;
+    context.git_add(".");
+
+    // one `--directory`
+    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory................................................................Passed
+    - hook id: directory
+    - duration: [TIME]
+      dir1/file.txt
+
+    ----- stderr -----
+    "#);
+
+    // repeated `--directory`
+    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--directory").arg("dir1"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory................................................................Passed
+    - hook id: directory
+    - duration: [TIME]
+      dir1/file.txt
+
+    ----- stderr -----
+    "#);
+
+    // multiple `--directory`
+    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--directory").arg("dir2"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory................................................................Passed
+    - hook id: directory
+    - duration: [TIME]
+      dir2/file.txt dir1/file.txt
+
+    ----- stderr -----
+    "#);
+
+    // non-existing directory
+    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("non-existing-dir"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory............................................(no files to check)Skipped
+
+    ----- stderr -----
+    "#);
+
+    // `--directory` with `--files`
+    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--files").arg("dir1/file.txt"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory................................................................Passed
+    - hook id: directory
+    - duration: [TIME]
+      dir1/file.txt
+
+    ----- stderr -----
+    "#);
+    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--files").arg("dir2/file.txt"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory................................................................Passed
+    - hook id: directory
+    - duration: [TIME]
+      dir2/file.txt dir1/file.txt
+
+    ----- stderr -----
+    "#);
+
+    // run `--directory` inside a subdirectory
+    cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("dir1")).arg("--directory").arg("."), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory................................................................Passed
+    - hook id: directory
+    - duration: [TIME]
+      dir1/file.txt
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
