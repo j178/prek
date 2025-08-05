@@ -1149,6 +1149,15 @@ fn types_directory() -> Result<()> {
     ----- stderr -----
     "#);
 
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory............................................(no files to check)Skipped
+
+    ----- stderr -----
+    "#);
+
     cmd_snapshot!(context.filters(), context.run().arg("--files").arg("non-exist-files"), @r#"
     success: true
     exit_code: 0
