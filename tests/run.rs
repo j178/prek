@@ -1189,17 +1189,19 @@ fn run_last_commit() -> Result<()> {
 
     // Create initial files and make first commit
     cwd.child("file1.txt").write_str("Hello, world!\n")?;
-    cwd.child("file2.txt").write_str("Initial content\n")?;
+    cwd.child("file2.txt").write_str("Initial content with trailing spaces   \n")?; // This has issues but won't be in last commit
     context.git_add(".");
     context.git_commit("Initial commit");
 
     // Modify files and make second commit with trailing whitespace
     cwd.child("file1.txt").write_str("Hello, world!   \n")?; // trailing whitespace
     cwd.child("file3.txt").write_str("New file")?; // missing newline
+    // Note: file2.txt is NOT modified in this commit, so it should be filtered out by --last-commit
     context.git_add(".");
     context.git_commit("Second commit with issues");
 
     // Run with --last-commit should only check files from the last commit
+    // This should only process file1.txt and file3.txt, NOT file2.txt
     cmd_snapshot!(context.filters(), context.run().arg("--last-commit"), @r#"
     success: false
     exit_code: 1
@@ -1209,6 +1211,31 @@ fn run_last_commit() -> Result<()> {
     - exit code: 1
     - files were modified by this hook
       Fixing file1.txt
+    fix end of files.........................................................Failed
+    - hook id: end-of-file-fixer
+    - exit code: 1
+    - files were modified by this hook
+      Fixing file3.txt
+
+    ----- stderr -----
+    "#);
+
+    // Now reset the files to their problematic state for comparison
+    cwd.child("file1.txt").write_str("Hello, world!   \n")?; // trailing whitespace
+    cwd.child("file3.txt").write_str("New file")?; // missing newline
+    
+    // Run with --all-files should check ALL files including file2.txt
+    // This demonstrates that file2.txt was indeed filtered out in the previous test
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    trim trailing whitespace.................................................Failed
+    - hook id: trailing-whitespace
+    - exit code: 1
+    - files were modified by this hook
+      Fixing file1.txt
+      Fixing file2.txt
     fix end of files.........................................................Failed
     - hook id: end-of-file-fixer
     - exit code: 1
