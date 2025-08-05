@@ -8,7 +8,7 @@ fn docker() {
 
     context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
-          - repo: https://github.com/j178/pre-commit-docker-hooks
+          - repo: https://github.com/prefligit-test-repos/docker-hooks
             rev: master
             hooks:
               - id: hello-world
