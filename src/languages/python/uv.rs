@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use axoupdater::{AxoUpdater, ReleaseSource, ReleaseSourceType, UpdateRequest};
 use semver::Version;
 use tokio::task::JoinSet;
@@ -222,31 +222,40 @@ impl Uv {
         Ok(source)
     }
 
+    async fn get_uv_version(uv_path: &Path) -> Result<Version> {
+        let output = Cmd::new(uv_path, "Checking uv version")
+            .arg("--version")
+            .check(false)
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            bail!("Failed to get uv version");
+        }
+
+        let version_output = String::from_utf8_lossy(&output.stdout);
+        let version_str = version_output
+            .split_whitespace()
+            .nth(1)
+            .ok_or_else(|| anyhow::anyhow!("Invalid version output format"))?;
+
+        Version::parse(version_str).map_err(Into::into)
+    }
+
     pub async fn install(uv_dir: &Path) -> Result<Self> {
         // 1) Check if system `uv` meets minimum version requirement
         if let Ok(uv_path) = UV_EXE.as_ref() {
-            if let Ok(output) = Cmd::new(uv_path, "Checking uv version")
-                .arg("--version")
-                .check(false)
-                .output()
-                .await
-            {
-                if output.status.success() {
-                    let version_output = String::from_utf8_lossy(&output.stdout);
-                    if let Some(version_str) = version_output.split_whitespace().nth(1) {
-                        if let Ok(system_version) = Version::parse(version_str) {
-                            let min_version = Version::parse(UV_VERSION)?;
-                            if system_version >= min_version {
-                                return Ok(Self::new(uv_path.clone()));
-                            }
-                            warn!(
-                                "System uv version {} is older than minimum required version {}, \
-                             pre-commit-hooks will install its own version.",
-                                system_version, min_version
-                            );
-                        }
-                    }
+            if let Ok(version) = Self::get_uv_version(uv_path).await {
+                let min_version = Version::parse(UV_VERSION)?;
+
+                if version < min_version {
+                    warn!(
+                        "System uv version {} is older than minimum required version {}, \
+                     pre-commit-hooks will install its own version.",
+                        version, min_version
+                    );
                 }
+                return Ok(Self::new(uv_path.clone()));
             }
         }
 
