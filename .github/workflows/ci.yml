@@ -137,6 +137,11 @@ jobs:
         with:
           node-version: '19.9.0'
 
+      - name: "Install Go"
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.5'
+
       - name: "Cargo test"
         run: |
           cargo nextest show-config test-groups

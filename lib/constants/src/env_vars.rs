@@ -33,9 +33,9 @@ impl EnvVars {
     pub const NODE_PATH: &'static str = "NODE_PATH";
 
     // Go related
-    pub const GOCACHE: &'static str = "GOCACHE";
-    pub const GOMODCACHE: &'static str = "GOMODCACHE";
     pub const GOROOT: &'static str = "GOROOT";
+    pub const GOTOOLCHAIN: &'static str = "GOTOOLCHAIN";
+    pub const GOPATH: &'static str = "GOPATH";
 }
 
 impl EnvVars {

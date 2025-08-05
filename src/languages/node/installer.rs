@@ -5,16 +5,13 @@ use std::str::FromStr;
 use std::string::ToString;
 
 use anyhow::{Context, Result};
-use futures::TryStreamExt;
 use itertools::Itertools;
 use reqwest::Client;
-use target_lexicon::{Architecture, HOST, OperatingSystem, X86_32Architecture};
-use tokio_util::compat::FuturesAsyncReadCompatExt;
+use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
-use crate::archive;
-use crate::archive::ArchiveExtension;
 use crate::fs::LockedFile;
+use crate::languages::download_and_extract;
 use crate::languages::node::NodeRequest;
 use crate::languages::node::version::NodeVersion;
 use crate::process::Cmd;
@@ -175,7 +172,7 @@ impl NodeInstaller {
     /// Install a specific version of Node.js.
     async fn download(&self, version: &NodeVersion) -> Result<NodeResult> {
         let mut arch = match HOST.architecture {
-            Architecture::X86_32(X86_32Architecture::I686) => "x86",
+            Architecture::X86_32(_) => "x86",
             Architecture::X86_64 => "x64",
             Architecture::Aarch64(_) => "arm64",
             Architecture::Arm(_) => "armv7l",
@@ -201,54 +198,22 @@ impl NodeInstaller {
         let url = format!("https://nodejs.org/dist/v{}/{filename}", version.version());
         let target = self.root.join(version.to_string());
 
-        let tarball = self
-            .client
-            .get(&url)
-            .send()
-            .await?
-            .bytes_stream()
-            .map_err(std::io::Error::other)
-            .into_async_read()
-            .compat();
-
-        let temp_dir = tempfile::tempdir_in(&self.root)?;
-        trace!(url = %url, temp_dir = ?temp_dir.path(), "Downloading node");
-
-        let ext = ArchiveExtension::from_path(&filename)?;
-        archive::unpack(tarball, ext, temp_dir.path()).await?;
-
-        let extracted = match archive::strip_component(temp_dir.path()) {
-            Ok(top_level) => top_level,
-            Err(archive::Error::NonSingularArchive(_)) => temp_dir.keep(),
-            Err(err) => return Err(err.into()),
-        };
-
-        if target.is_dir() {
-            trace!(target = %target.display(), "Removing existing target");
-            fs_err::tokio::remove_dir_all(&target).await?;
-        }
-
-        trace!(temp_dir = ?extracted, target = %target.display(), "Moving node to target");
-        // TODO: retry on Windows
-        fs_err::tokio::rename(extracted, &target).await?;
+        download_and_extract(&self.client, &url, &target, &filename, &self.root)
+            .await
+            .context("Failed to download and extract Node.js")?;
 
         Ok(NodeResult::from_dir(&target).with_version(version.clone()))
     }
 
     /// Find a suitable system Node.js installation that matches the request.
     async fn find_system_node(&self, node_request: &NodeRequest) -> Result<Option<NodeResult>> {
-        let node_paths: Vec<_> = match which::which_all("node") {
-            Ok(paths) => paths.collect(),
+        let node_paths = match which::which_all("node") {
+            Ok(paths) => paths,
             Err(e) => {
                 debug!("No node executables found in PATH: {}", e);
                 return Ok(None);
             }
         };
-
-        trace!(
-            node_count = node_paths.len(),
-            "Found node executables in PATH"
-        );
 
         // Check each node executable for a matching version, stop early if found
         for node_path in node_paths {
@@ -259,7 +224,7 @@ impl NodeInstaller {
                 {
                     Ok(node_result) => {
                         // Check if this version matches the request
-                        if node_request.matches(node_result.version(), Some(&node_result.node)) {
+                        if node_request.matches(&node_result.version, Some(&node_result.node)) {
                             trace!(
                                 %node_result,
                                 "Found a matching system node"

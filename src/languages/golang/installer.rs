@@ -1,19 +1,29 @@
-use crate::fs::LockedFile;
-use crate::languages::golang::GoRequest;
-use crate::languages::golang::version::GoVersion;
-use crate::languages::node::NodeRequest;
-use crate::process::Cmd;
+use std::fmt::Display;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use reqwest::Client;
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use target_lexicon::{Architecture, OperatingSystem, X86_32Architecture, HOST};
+use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
+
+use crate::fs::LockedFile;
+use crate::languages::download_and_extract;
+use crate::languages::golang::GoRequest;
+use crate::languages::golang::version::GoVersion;
+use crate::process::Cmd;
 
 pub(crate) struct GoResult {
     path: PathBuf,
     version: GoVersion,
+}
+
+impl Display for GoResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.path.display())?;
+        Ok(())
+    }
 }
 
 impl GoResult {
@@ -46,14 +56,14 @@ impl GoResult {
     }
 
     pub(crate) async fn fill_version(mut self) -> Result<Self> {
-        let output = self.cmd("version").check(true).output().await?;
+        let output = self.cmd("go version").arg("version").check(true).output().await?;
         // e.g. "go version go1.24.5 darwin/arm64"
         let version_str = String::from_utf8(output.stdout)?;
         let version_str = version_str.split_ascii_whitespace().nth(2).ok_or_else(|| {
             anyhow::anyhow!("Failed to parse Go version from output: {}", version_str)
         })?;
 
-        let version = GoVersion::from_str(&version_str)?;
+        let version = GoVersion::from_str(version_str)?;
 
         self.version = version;
 
@@ -121,7 +131,7 @@ impl GoInstaller {
 
         installed
             .find_map(|(version, path)| {
-                if request.matches(&version) {
+                if request.matches(&version, Some(&path)) {
                     trace!(%version, "Found matching installed go");
                     Some(GoResult::new(path, version))
                 } else {
@@ -139,17 +149,16 @@ impl GoInstaller {
 
         let version = versions
             .into_iter()
-            .find(|version| req.matches(version))
+            .find(|version| req.matches(version, None))
             .context("Version not found on remote")?;
         Ok(version)
     }
 
     async fn download(&self, version: &GoVersion) -> Result<GoResult> {
         let arch = match HOST.architecture {
-            Architecture::X86_32(X86_32Architecture::I686) => "x86",
-            Architecture::X86_64 => "x64",
+            Architecture::X86_32(_) => "386",
+            Architecture::X86_64 => "amd64",
             Architecture::Aarch64(_) => "arm64",
-            Architecture::Arm(_) => "armv7l",
             Architecture::S390x => "s390x",
             Architecture::Powerpc => "ppc64",
             Architecture::Powerpc64le => "ppc64le",
@@ -158,65 +167,50 @@ impl GoInstaller {
         let os = match HOST.operating_system {
             OperatingSystem::Darwin(_) => "darwin",
             OperatingSystem::Linux => "linux",
-            OperatingSystem::Windows => "win",
+            OperatingSystem::Windows => "windows",
             OperatingSystem::Aix => "aix",
+            OperatingSystem::Netbsd => "netbsd",
+            OperatingSystem::Openbsd => "openbsd",
+            OperatingSystem::Solaris => "solaris",
+            OperatingSystem::Dragonfly => "dragonfly",
+            OperatingSystem::Illumos => "illumos",
             _ => return Err(anyhow::anyhow!("Unsupported OS")),
         };
 
         let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
-        let filename = format!("go{version}.{os}-{arch}.tar.gz");
-        let url = format!("https://go.dev/dl/go{}.tar.gz", version);
+        let filename = format!("go{version}.{os}-{arch}.{ext}");
+        let url = format!("https://go.dev/dl/{filename}");
+        let target = self.root.join(version.to_string());
 
-        let response = self.client.get(&url).send().await?;
-        if !response.status().is_success() {
-            return Err(anyhow::anyhow!(
-                "Failed to download Go version {}: {}",
-                version,
-                response.status()
-            ));
-        }
+        download_and_extract(&self.client, &url, &target, &filename, &self.root)
+            .await
+            .context("Failed to download and extract Go")?;
 
-        let tarball = response.bytes().await?;
-        let tarball_path = self.root.join(format!("go{}.tar.gz", version));
-        fs_err::tokio::write(&tarball_path, &tarball).await?;
-
-        // Extract the tarball
-        let tar_gz = fs_err::File::open(&tarball_path).await?;
-        let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(tar_gz));
-        archive.unpack(&self.root).await?;
-
-        // Clean up the tarball
-        fs_err::tokio::remove_file(tarball_path).await?;
-
-        let go_path = self.root.join(format!("go{}", version));
-        Ok(GoResult::new(go_path, version.clone()))
+        Ok(GoResult::from_executable(target).with_version(version.clone()))
     }
 
-    async fn find_system_node(&self, go_request: &GoRequest) -> Result<Option<GoResult>> {
-        let go_paths: Vec<_> = match which::which_all("go") {
-            Ok(paths) => paths.collect(),
+    async fn find_system_go(&self, go_request: &GoRequest) -> Result<Option<GoResult>> {
+        let go_paths = match which::which_all("go") {
+            Ok(paths) => paths,
             Err(e) => {
                 debug!("No go executables found in PATH: {}", e);
                 return Ok(None);
             }
         };
 
-        trace!(go_count = go_paths.len(), "Found go executables in PATH");
-
-        // Check each go executable for a matching version, stop early if found
         for go_path in go_paths {
             match GoResult::from_executable(go_path).fill_version().await {
                 Ok(go) => {
                     // Check if this version matches the request
-                    if go_request.matches(go.version()) {
+                    if go_request.matches(&go.version, Some(&go.path)) {
                         trace!(
                             %go,
                             "Found matching system go"
                         );
-                        return Ok(Some(go_request));
+                        return Ok(Some(go));
                     }
                     trace!(
-                        %go_request,
+                        %go,
                         "System go does not match requested version"
                     );
                 }

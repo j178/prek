@@ -2,12 +2,15 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
-use tracing::trace;
-use crate::builtin;
+use crate::archive::ArchiveExtension;
 use crate::config::Language;
 use crate::hook::{Hook, InstalledHook};
 use crate::store::Store;
+use crate::{archive, builtin};
+use anyhow::{Context, Result};
+use futures::TryStreamExt;
+use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tracing::trace;
 
 mod docker;
 mod docker_image;
@@ -206,19 +209,19 @@ async fn create_symlink_or_copy(source: &Path, target: &Path) -> Result<()> {
         match fs_err::tokio::symlink(source, target).await {
             Ok(()) => {
                 trace!(
-                        "Created symlink from {} to {}",
-                        source.display(),
-                        target.display()
-                    );
+                    "Created symlink from {} to {}",
+                    source.display(),
+                    target.display()
+                );
                 return Ok(());
             }
             Err(e) => {
                 trace!(
-                        "Failed to create symlink from {} to {}: {}",
-                        source.display(),
-                        target.display(),
-                        e
-                    );
+                    "Failed to create symlink from {} to {}: {}",
+                    source.display(),
+                    target.display(),
+                    e
+                );
             }
         }
     }
@@ -230,29 +233,29 @@ async fn create_symlink_or_copy(source: &Path, target: &Path) -> Result<()> {
         match symlink_file(source, target) {
             Ok(()) => {
                 trace!(
-                        "Created Windows symlink from {} to {}",
-                        source.display(),
-                        target.display()
-                    );
+                    "Created Windows symlink from {} to {}",
+                    source.display(),
+                    target.display()
+                );
                 return Ok(());
             }
             Err(e) => {
                 trace!(
-                        "Failed to create Windows symlink from {} to {}: {}",
-                        source.display(),
-                        target.display(),
-                        e
-                    );
+                    "Failed to create Windows symlink from {} to {}: {}",
+                    source.display(),
+                    target.display(),
+                    e
+                );
             }
         }
     }
 
     // Fallback to copy
     trace!(
-            "Falling back to copy from {} to {}",
-            source.display(),
-            target.display()
-        );
+        "Falling back to copy from {} to {}",
+        source.display(),
+        target.display()
+    );
     fs_err::tokio::copy(source, target).await.with_context(|| {
         format!(
             "Failed to copy file from {} to {}",
@@ -260,6 +263,56 @@ async fn create_symlink_or_copy(source: &Path, target: &Path) -> Result<()> {
             target.display(),
         )
     })?;
+
+    Ok(())
+}
+
+async fn download_and_extract(
+    client: &reqwest::Client,
+    url: &str,
+    target: &Path,
+    filename: &str,
+    scratch: &Path,
+) -> Result<()> {
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .with_context(|| format!("Failed to download file from {url}"))?;
+    if !response.status().is_success() {
+        anyhow::bail!(
+            "Failed to download file from {}: {}",
+            url,
+            response.status()
+        );
+    }
+
+    let tarball = response
+        .bytes_stream()
+        .map_err(std::io::Error::other)
+        .into_async_read()
+        .compat();
+
+    let temp_dir = tempfile::tempdir_in(scratch)?;
+    trace!(url = %url, temp_dir = ?temp_dir.path(), "Downloading");
+
+    let ext = ArchiveExtension::from_path(filename)?;
+    archive::unpack(tarball, ext, temp_dir.path()).await?;
+
+    let extracted = match archive::strip_component(temp_dir.path()) {
+        Ok(top_level) => top_level,
+        Err(archive::Error::NonSingularArchive(_)) => temp_dir.keep(),
+        Err(err) => return Err(err.into()),
+    };
+
+    if target.is_dir() {
+        trace!(target = %target.display(), "Removing existing target");
+        fs_err::tokio::remove_dir_all(&target).await?;
+    }
+
+    trace!(temp_dir = ?extracted, target = %target.display(), "Moving to target");
+    // TODO: retry on Windows
+    fs_err::tokio::rename(extracted, target).await?;
 
     Ok(())
 }

@@ -12,7 +12,7 @@ use constants::env_vars::EnvVars;
 
 use crate::fs::LockedFile;
 use crate::process::Cmd;
-use crate::store::{CacheBucket, Store, ToolBucket};
+use crate::store::{CacheBucket, Store};
 
 // The version of `uv` to install. Should update periodically.
 const UV_VERSION: &str = "0.8.3";
@@ -244,7 +244,7 @@ impl Uv {
         }
 
         let source = Self::select_source().await?;
-        source.install(&uv_dir).await?;
+        source.install(uv_dir).await?;
 
         Ok(Self::new(uv))
     }

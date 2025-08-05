@@ -3,8 +3,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild};
 
 use crate::common::{TestContext, cmd_snapshot};
 
-// GitHub Actions ubuntu-latest (24.04) has node 20.19.4 installed at the moment.
-// And we use `setup-node` action to install node 19.9.0
+// We use `setup-node` action to install node 19.9.0 in CI, so 18.20.8 should be downloaded by prefligit.
 #[test]
 fn language_version() -> anyhow::Result<()> {
     let context = TestContext::new();

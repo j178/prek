@@ -1,23 +1,22 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::env::consts::EXE_EXTENSION;
-use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use tracing::{debug, trace};
+use tracing::debug;
 
 use constants::env_vars::EnvVars;
 
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
-use crate::languages::{create_symlink_or_copy, LanguageImpl};
 use crate::languages::node::NodeRequest;
 use crate::languages::node::installer::{NodeInstaller, bin_dir, lib_dir};
 use crate::languages::node::version::EXTRA_KEY_LTS;
 use crate::languages::version::LanguageRequest;
+use crate::languages::{LanguageImpl, create_symlink_or_copy};
 use crate::process::Cmd;
-use crate::run::{prepend_path, run_by_batch};
+use crate::run::{prepend_paths, run_by_batch};
 use crate::store::{Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone)]
@@ -60,13 +59,15 @@ impl LanguageImpl for Node {
         fs_err::tokio::create_dir_all(&bin_dir).await?;
         fs_err::tokio::create_dir_all(&lib_dir).await?;
 
+        // TODO: do we really need to create a symlink for `node` and `npm`?
+        //   What about adding them to PATH directly?
         // Create symlink or copy on Windows
         create_symlink_or_copy(
             node.node(),
             &bin_dir.join("node").with_extension(EXE_EXTENSION),
         )
         .await?;
-        Self::create_symlink_or_copy(
+        create_symlink_or_copy(
             node.npm(),
             &bin_dir.join("npm").with_extension(EXE_EXTENSION),
         )
@@ -126,7 +127,7 @@ impl LanguageImpl for Node {
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Node must have env path");
-        let new_path = prepend_path(&bin_dir(env_dir)).context("Failed to join PATH")?;
+        let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
 
         let entry = hook.entry.parsed()?;
         let run = async move |batch: Vec<String>| {
@@ -144,7 +145,6 @@ impl LanguageImpl for Node {
                 Cmd::new(&entry[0], "node hook")
             };
 
-            // TODO: set NODE_PATH? npm_config_prefix?
             let mut output = cmd
                 .args(&entry[1..])
                 .env("PATH", &new_path)

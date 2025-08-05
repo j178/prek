@@ -138,9 +138,9 @@ where
     Ok(results)
 }
 
-pub(crate) fn prepend_path(path: &Path) -> Result<OsString, std::env::JoinPathsError> {
+pub(crate) fn prepend_paths(paths: &[&Path]) -> Result<OsString, std::env::JoinPathsError> {
     std::env::join_paths(
-        std::iter::once(path.to_path_buf()).chain(
+        paths.iter().map(|p| p.to_path_buf()).chain(
             EnvVars::var_os(EnvVars::PATH)
                 .as_ref()
                 .iter()

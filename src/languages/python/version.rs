@@ -74,7 +74,6 @@ impl PythonRequest {
         version_str: &str,
         original_request: &str,
     ) -> Result<PythonRequest, version::Error> {
-        // Check if all parts are valid u8 numbers
         let parts = try_into_u64_slice(version_str)
             .map_err(|_| version::Error::InvalidVersion(original_request.to_string()))?;
         let parts = split_wheel_tag_version(parts);
