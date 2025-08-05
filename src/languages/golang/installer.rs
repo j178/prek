@@ -1,3 +1,4 @@
+use std::env::consts::EXE_EXTENSION;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -11,6 +12,7 @@ use tracing::{debug, trace, warn};
 use crate::fs::LockedFile;
 use crate::languages::download_and_extract;
 use crate::languages::golang::GoRequest;
+use crate::languages::golang::golang::bin_dir;
 use crate::languages::golang::version::GoVersion;
 use crate::process::Cmd;
 
@@ -38,6 +40,11 @@ impl GoResult {
         }
     }
 
+    pub(crate) fn from_dir(dir: &Path) -> Self {
+        let go = bin_dir(dir).join("go").with_extension(EXE_EXTENSION);
+        Self::from_executable(go)
+    }
+
     pub(crate) fn bin(&self) -> &Path {
         &self.path
     }
@@ -56,7 +63,12 @@ impl GoResult {
     }
 
     pub(crate) async fn fill_version(mut self) -> Result<Self> {
-        let output = self.cmd("go version").arg("version").check(true).output().await?;
+        let output = self
+            .cmd("go version")
+            .arg("version")
+            .check(true)
+            .output()
+            .await?;
         // e.g. "go version go1.24.5 darwin/arm64"
         let version_str = String::from_utf8(output.stdout)?;
         let version_str = version_str.split_ascii_whitespace().nth(2).ok_or_else(|| {
@@ -133,7 +145,7 @@ impl GoInstaller {
             .find_map(|(version, path)| {
                 if request.matches(&version, Some(&path)) {
                     trace!(%version, "Found matching installed go");
-                    Some(GoResult::new(path, version))
+                    Some(GoResult::from_dir(&path).with_version(version))
                 } else {
                     trace!(%version, "Installed go does not match request");
                     None
@@ -186,7 +198,7 @@ impl GoInstaller {
             .await
             .context("Failed to download and extract Go")?;
 
-        Ok(GoResult::from_executable(target).with_version(version.clone()))
+        Ok(GoResult::from_dir(&target).with_version(version.clone()))
     }
 
     async fn find_system_go(&self, go_request: &GoRequest) -> Result<Option<GoResult>> {
@@ -220,7 +232,7 @@ impl GoInstaller {
             }
         }
 
-        debug!("No system go matches the requested version");
+        debug!(?go_request, "No system go matches the requested version");
         Ok(None)
     }
 }

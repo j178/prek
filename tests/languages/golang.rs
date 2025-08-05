@@ -1,7 +1,7 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
 
-use crate::common::{cmd_snapshot, TestContext};
+use crate::common::{TestContext, cmd_snapshot};
 
 // We use `setup-go` action to install go1.24.5 in CI, so 1.23.11 should be downloaded by prefligit.
 #[test]
@@ -17,6 +17,7 @@ fn language_version() -> anyhow::Result<()> {
                 language: golang
                 entry: go version
                 language_version: '1.24.5'
+                pass_filenames: false
                 always_run: true
               - id: golang
                 name: golang
@@ -24,30 +25,35 @@ fn language_version() -> anyhow::Result<()> {
                 entry: go version
                 language_version: go1.24.5
                 always_run: true
+                pass_filenames: false
               - id: golang
                 name: golang
                 language: golang
                 entry: go version
                 language_version: '1.23.11' # will auto download
                 always_run: true
+                pass_filenames: false
               - id: golang
                 name: golang
                 language: golang
                 entry: go version
                 language_version: go1.23.11
                 always_run: true
+                pass_filenames: false
               - id: golang
                 name: golang
                 language: golang
                 entry: go version
                 language_version: go1.23
                 always_run: true
+                pass_filenames: false
               - id: golang
                 name: golang
                 language: golang
                 entry: go version
                 language_version: '<1.25'
                 always_run: true
+                pass_filenames: false
     "});
     context.git_add(".");
 
@@ -57,28 +63,41 @@ fn language_version() -> anyhow::Result<()> {
         .child("go")
         .assert(predicates::path::missing());
 
-    cmd_snapshot!(context.filters(), context.run().arg("-v"), @r#"
+    let filters = [(
+        r"(go version go1\.\d{1,2}\.\d{1,2}) ([\w]+/[\w]+)",
+        "$1 [OS]/[ARCH]",
+    )]
+    .into_iter()
+    .chain(context.filters())
+    .collect::<Vec<_>>();
+    cmd_snapshot!(filters, context.run().arg("-v"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
+      go version go1.24.5 [OS]/[ARCH]
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
+      go version go1.24.5 [OS]/[ARCH]
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
+      go version go1.23.11 [OS]/[ARCH]
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
+      go version go1.23.11 [OS]/[ARCH]
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
+      go version go1.23.11 [OS]/[ARCH]
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
+      go version go1.24.5 [OS]/[ARCH]
 
     ----- stderr -----
     "#);

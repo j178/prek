@@ -126,6 +126,6 @@ impl LanguageImpl for Golang {
     }
 }
 
-fn bin_dir(env_path: &Path) -> PathBuf {
+pub(crate) fn bin_dir(env_path: &Path) -> PathBuf {
     env_path.join("bin")
 }

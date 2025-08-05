@@ -248,7 +248,10 @@ impl NodeInstaller {
             }
         }
 
-        debug!("No system node matches the requested version");
+        debug!(
+            ?node_request,
+            "No system node matches the requested version"
+        );
         Ok(None)
     }
 
