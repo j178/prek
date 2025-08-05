@@ -273,6 +273,9 @@ pub(crate) struct RunArgs {
     /// Files changed in this diff will be run through the hooks.
     #[arg(short = 'o', long, alias = "origin", requires = "from_ref")]
     pub(crate) to_ref: Option<String>,
+    /// Run hooks against the last commit (HEAD~1..HEAD).
+    #[arg(long, conflicts_with_all = ["all_files", "files", "from_ref", "to_ref"])]
+    pub(crate) last_commit: bool,
     /// The stage during which the hook is fired.
     #[arg(long)]
     pub(crate) hook_stage: Option<Stage>,
