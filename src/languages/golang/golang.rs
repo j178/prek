@@ -88,9 +88,9 @@ impl LanguageImpl for Golang {
         let InstalledHook::Installed { hook, info } = hook else {
             unreachable!()
         };
-        let go_root = info.toolchain.parent().expect("Go root should exist");
+        let go_bin = info.toolchain.parent().expect("Go root should exist");
         let new_path =
-            prepend_paths(&[&bin_dir(env_dir), go_root]).context("Failed to join PATH")?;
+            prepend_paths(&[&bin_dir(env_dir), go_bin]).context("Failed to join PATH")?;
 
         let entry = hook.entry.parsed()?;
         let run = async move |batch: Vec<String>| {
@@ -99,7 +99,6 @@ impl LanguageImpl for Golang {
                 .env("PATH", &new_path)
                 .env(EnvVars::GOTOOLCHAIN, "local")
                 .env(EnvVars::GOPATH, &info.env_path)
-                .env(EnvVars::GOROOT, go_root)
                 .envs(env_vars)
                 .args(&hook.args)
                 .args(batch)
