@@ -1,7 +1,11 @@
 use std::fmt::Write;
+use std::fs;
+use std::io;
+use std::path::Path;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
+use tracing::error;
 
 use crate::cli::ExitStatus;
 use crate::fs::Simplified;
@@ -16,6 +20,10 @@ pub(crate) fn clean(printer: Printer) -> Result<ExitStatus> {
         return Ok(ExitStatus::Success);
     }
 
+    if let Err(e) = fix_permissions(store.path()) {
+        error!("Failed to fix permissions: {}", e);
+    }
+
     fs_err::remove_dir_all(store.path())?;
     writeln!(
         printer.stdout(),
@@ -24,4 +32,32 @@ pub(crate) fn clean(printer: Printer) -> Result<ExitStatus> {
     )?;
 
     Ok(ExitStatus::Success)
+}
+
+/// Add write permission to GOMODCACHE directory recursively.
+/// Go sets the permissions to read-only by default.
+pub fn fix_permissions<P: AsRef<Path>>(path: P) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let path = path.as_ref();
+    let metadata = fs::metadata(path)?;
+
+    let mut permissions = metadata.permissions();
+    let current_mode = permissions.mode();
+
+    // Add write permissions for owner, group, and others
+    let new_mode = current_mode | 0o222;
+    permissions.set_mode(new_mode);
+    fs::set_permissions(path, permissions)?;
+
+    // If it's a directory, recursively process its contents
+    if metadata.is_dir() {
+        let entries = fs::read_dir(path)?;
+        for entry in entries {
+            let entry = entry?;
+            fix_permissions(entry.path())?;
+        }
+    }
+
+    Ok(())
 }
