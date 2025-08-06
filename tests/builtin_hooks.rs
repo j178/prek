@@ -6,25 +6,6 @@ use crate::common::{TestContext, cmd_snapshot};
 
 mod common;
 
-/// A helper function to normalize the command output for snapshot testing.
-/// It sorts the lines that start with "Fixing " to make the output deterministic.
-fn normalize_output(output: &std::process::Output) -> String {
-    let stdout_str = String::from_utf8_lossy(&output.stdout);
-    let mut lines: Vec<&str> = stdout_str.lines().collect();
-
-    // Separate and sort the "Fixing..." lines from the rest of the output
-    let (mut fixing_lines, other_lines): (Vec<_>, Vec<_>) = lines
-        .drain(..)
-        .partition(|&line| line.trim().starts_with("Fixing "));
-    fixing_lines.sort_unstable();
-
-    // Reconstruct the output with the sorted lines at the end
-    let mut normalized_lines = other_lines;
-    normalized_lines.extend(fixing_lines);
-
-    normalized_lines.join("\n")
-}
-
 #[test]
 fn end_of_file_fixer_hook() -> Result<()> {
     let context = TestContext::new();
