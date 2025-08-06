@@ -124,7 +124,7 @@ where
     let mut tasks = futures::stream::iter(partitions)
         .map(|batch| {
             // TODO: avoid this allocation
-            let batch: Vec<_> = batch.into_iter().map(ToString::to_string).collect();
+            let batch: Vec<_> = batch.iter().map(ToString::to_string).collect();
             run(batch)
         })
         .buffered(concurrency);
