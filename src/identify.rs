@@ -1,4 +1,23 @@
-use std::collections::BTreeSet;
+// Copyright (c) 2017 Chris Kuehl, Anthony Sottile
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 use std::io::{BufRead, Read};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
@@ -742,7 +761,7 @@ pub fn tags_from_path(path: &Path) -> Result<Vec<&str>> {
     tags.extend(tags_from_filename(path));
     if executable {
         if let Ok(shebang) = parse_shebang(path) {
-            tags.extend(tags_from_interpreter(&shebang));
+            tags.extend(tags_from_interpreter(&shebang[0]));
         }
     }
 
@@ -764,7 +783,7 @@ fn tags_from_filename(filename: &Path) -> Vec<&str> {
         .and_then(|name| name.to_str())
         .expect("Invalid filename");
 
-    let mut result = BTreeSet::new();
+    let mut result = FxHashSet::default();
 
     if let Some(tags) = by_filename().get(filename) {
         tags.iter().for_each(|&tag| {
@@ -787,8 +806,23 @@ fn tags_from_filename(filename: &Path) -> Vec<&str> {
     result.into_iter().collect()
 }
 
-fn tags_from_interpreter(_interpreter: &[String]) -> Vec<&'static str> {
-    todo!()
+fn tags_from_interpreter(interpreter: &str) -> Vec<&'static str> {
+    let Some(pos) = interpreter.rfind('/') else {
+        return Vec::new();
+    };
+    let mut name = &interpreter[pos + 1..];
+    // python3.12.3 should match python3.12.3, python3.12, python3, python
+    loop {
+        if let Some(tags) = by_interpreter().get(name) {
+            return tags.clone();
+        }
+        if let Some(pos) = name.rfind('.') {
+            name = &name[..pos];
+        } else {
+            break;
+        }
+    }
+    vec![]
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -805,6 +839,10 @@ enum ShebangError {
     IoError(#[from] std::io::Error),
 }
 
+fn starts_with(slice: &[String], prefix: &[&str]) -> bool {
+    slice.len() >= prefix.len() && slice.iter().zip(prefix.iter()).all(|(s, p)| s == p)
+}
+
 fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
     let file = std::fs::File::open(path)?;
     let mut reader = std::io::BufReader::new(file);
@@ -819,17 +857,20 @@ fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
         return Err(ShebangError::NonPrintableChars);
     }
 
-    let tokens = shlex::split(line[2..].trim()).ok_or(ShebangError::ParseFailed)?;
-    let cmd = if tokens.starts_with(&[String::from("/usr/bin/env"), String::from("-S")]) {
-        tokens[2..].to_vec()
-    } else if tokens.starts_with(&[String::from("/usr/bin/env")]) {
-        tokens[1..].to_vec()
+    let mut tokens = shlex::split(line[2..].trim()).ok_or(ShebangError::ParseFailed)?;
+    let cmd = if starts_with(&tokens, &["/usr/bin/env", "-S"]) {
+        tokens.drain(0..2);
+        tokens
+    } else if starts_with(&tokens, &["/usr/bin/env"]) {
+        tokens.drain(0..1);
+        tokens
     } else {
         tokens
     };
     if cmd.is_empty() {
         return Err(ShebangError::NoCommand);
     }
+    // TODO
     if cmd[0] == "nix-shell" {
         return Ok(vec![]);
     }

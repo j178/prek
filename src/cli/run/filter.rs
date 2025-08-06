@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::Result;
@@ -6,6 +5,7 @@ use fancy_regex as regex;
 use fancy_regex::Regex;
 use itertools::{Either, Itertools};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rustc_hash::FxHashSet;
 use tracing::{debug, error};
 
 use constants::env_vars::EnvVars;
@@ -47,7 +47,7 @@ impl FilenameFilter {
         true
     }
 
-    pub(crate) fn from_hook(hook: &Hook) -> Result<Self, Box<regex::Error>> {
+    pub(crate) fn for_hook(hook: &Hook) -> Result<Self, Box<regex::Error>> {
         Self::new(hook.files.as_deref(), hook.exclude.as_deref())
     }
 }
@@ -85,7 +85,7 @@ impl<'a> FileTagFilter<'a> {
         true
     }
 
-    fn from_hook(hook: &'a Hook) -> Self {
+    fn for_hook(hook: &'a Hook) -> Self {
         Self::new(&hook.types, &hook.types_or, &hook.exclude_types)
     }
 }
@@ -114,8 +114,9 @@ impl<'a> FileFilter<'a> {
         self.filenames.len()
     }
 
+    /// Filter filenames by tags for a specific hook.
     pub(crate) fn by_tag(&self, hook: &Hook) -> Vec<&String> {
-        let filter = FileTagFilter::from_hook(hook);
+        let filter = FileTagFilter::for_hook(hook);
         let filenames: Vec<_> = self
             .filenames
             .par_iter()
@@ -135,14 +136,15 @@ impl<'a> FileFilter<'a> {
         filenames
     }
 
+    /// Filter filenames by file patterns and tags for a specific hook.
     pub(crate) fn for_hook(&self, hook: &Hook) -> Result<Vec<&String>, Box<regex::Error>> {
-        let filter = FilenameFilter::from_hook(hook)?;
+        let filter = FilenameFilter::for_hook(hook)?;
         let filenames = self
             .filenames
             .par_iter()
             .filter(|filename| filter.filter(filename));
 
-        let filter = FileTagFilter::from_hook(hook);
+        let filter = FileTagFilter::for_hook(hook);
         let filenames: Vec<_> = filenames
             .filter(|filename| {
                 let path = Path::new(filename);
@@ -258,6 +260,7 @@ async fn collect_files_from_args(
         // we expand the directories to files and pass them to the hook.
         // See: https://github.com/pre-commit/pre-commit/issues/1173
 
+        // Normalize paths for HashSet to work correctly.
         for filename in &mut files {
             normalize_path(filename);
         }
@@ -265,7 +268,7 @@ async fn collect_files_from_args(
             normalize_path(dir);
         }
 
-        let (mut exists, non_exists): (HashSet<_>, Vec<_>) =
+        let (mut exists, non_exists): (FxHashSet<_>, Vec<_>) =
             files.into_iter().partition_map(|filename| {
                 if Path::new(&filename).exists() {
                     Either::Left(filename)
@@ -297,11 +300,13 @@ async fn collect_files_from_args(
         debug!("Files passed as arguments: {}", exists.len());
         return Ok(exists.into_iter().collect());
     }
+
     if all_files {
         let files = git::git_ls_files(None).await?;
         debug!("All files in the repo: {}", files.len());
         return Ok(files);
     }
+
     if git::is_in_merge_conflict().await? {
         let files = git::get_conflicted_files().await?;
         debug!("Conflicted files: {}", files.len());
@@ -310,5 +315,6 @@ async fn collect_files_from_args(
 
     let files = git::get_staged_files().await?;
     debug!("Staged files: {}", files.len());
+
     Ok(files)
 }
