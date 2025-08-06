@@ -165,7 +165,7 @@ impl<'a> FileFilter<'a> {
 
 #[derive(Default)]
 pub(crate) struct CollectOptions {
-    pub(crate) hook_stage: Option<Stage>,
+    pub(crate) hook_stage: Stage,
     pub(crate) from_ref: Option<String>,
     pub(crate) to_ref: Option<String>,
     pub(crate) all_files: bool,
@@ -218,7 +218,7 @@ pub(crate) async fn collect_files(opts: CollectOptions) -> Result<Vec<String>> {
 
 #[allow(clippy::too_many_arguments)]
 async fn collect_files_from_args(
-    hook_stage: Option<Stage>,
+    hook_stage: Stage,
     from_ref: Option<String>,
     to_ref: Option<String>,
     all_files: bool,
@@ -226,15 +226,13 @@ async fn collect_files_from_args(
     mut directories: Vec<String>,
     commit_msg_filename: Option<String>,
 ) -> Result<Vec<String>> {
-    if let Some(hook_stage) = hook_stage {
-        if !hook_stage.operate_on_files() {
-            return Ok(vec![]);
-        }
-        if hook_stage == Stage::PrepareCommitMsg || hook_stage == Stage::CommitMsg {
-            return Ok(vec![
-                commit_msg_filename.expect("commit message filename is required"),
-            ]);
-        }
+    if !hook_stage.operate_on_files() {
+        return Ok(vec![]);
+    }
+    if hook_stage == Stage::PrepareCommitMsg || hook_stage == Stage::CommitMsg {
+        return Ok(vec![
+            commit_msg_filename.expect("commit message filename is required"),
+        ]);
     }
 
     if let (Some(from_ref), Some(to_ref)) = (from_ref, to_ref) {

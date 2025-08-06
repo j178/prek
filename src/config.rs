@@ -128,7 +128,7 @@ impl Display for HookType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum Stage {
     Manual,
@@ -137,6 +137,7 @@ pub enum Stage {
     PostCommit,
     PostMerge,
     PostRewrite,
+    #[default]
     #[serde(alias = "commit")]
     PreCommit,
     #[serde(alias = "merge-commit")]

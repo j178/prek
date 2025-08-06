@@ -55,7 +55,7 @@ impl Deref for HookToRun {
 pub(crate) async fn run(
     config: Option<PathBuf>,
     hook_id: Option<String>,
-    hook_stage: Option<Stage>,
+    hook_stage: Stage,
     from_ref: Option<String>,
     to_ref: Option<String>,
     all_files: bool,
@@ -75,7 +75,7 @@ pub(crate) async fn run(
     };
 
     // Prevent recursive post-checkout hooks.
-    if matches!(hook_stage, Some(Stage::PostCheckout))
+    if hook_stage == Stage::PostCheckout
         && EnvVars::is_set(EnvVars::PREFLIGIT_INTERNAL__SKIP_POST_CHECKOUT)
     {
         return Ok(ExitStatus::Success);
@@ -120,24 +120,16 @@ pub(crate) async fn run(
                 .as_deref()
                 .is_none_or(|hook_id| h.id == hook_id || h.alias == hook_id)
         })
-        .filter(|h| hook_stage.is_none_or(|stage| h.stages.contains(&stage)))
+        .filter(|h| h.stages.contains(&hook_stage))
         .collect();
 
     if hooks.is_empty() && hook_id.is_some() {
-        if let Some(hook_stage) = hook_stage {
-            writeln!(
-                printer.stderr(),
-                "No hook found for id `{}` and stage `{}`",
-                hook_id.unwrap().cyan(),
-                hook_stage.cyan()
-            )?;
-        } else {
-            writeln!(
-                printer.stderr(),
-                "No hook found for id `{}`",
-                hook_id.unwrap().cyan()
-            )?;
-        }
+        writeln!(
+            printer.stderr(),
+            "No hook found for id `{}` and stage `{}`",
+            hook_id.unwrap().cyan(),
+            hook_stage.cyan()
+        )?;
         return Ok(ExitStatus::Failure);
     }
 

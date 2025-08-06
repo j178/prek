@@ -282,8 +282,8 @@ pub(crate) struct RunArgs {
     #[arg(long, conflicts_with_all = ["all_files", "files", "directory", "from_ref", "to_ref"])]
     pub(crate) last_commit: bool,
     /// The stage during which the hook is fired.
-    #[arg(long)]
-    pub(crate) hook_stage: Option<Stage>,
+    #[arg(long, default_value_t = Stage::PreCommit, value_enum)]
+    pub(crate) hook_stage: Stage,
     /// When hooks fail, run `git diff` directly afterward.
     #[arg(long)]
     pub(crate) show_diff_on_failure: bool,
