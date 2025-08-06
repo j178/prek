@@ -1,5 +1,4 @@
 use std::fmt::Write;
-use std::fs;
 use std::io;
 use std::path::Path;
 
@@ -38,6 +37,7 @@ pub(crate) fn clean(printer: Printer) -> Result<ExitStatus> {
 /// Go sets the permissions to read-only by default.
 #[cfg(not(windows))]
 pub fn fix_permissions<P: AsRef<Path>>(path: P) -> io::Result<()> {
+    use std::fs;
     use std::os::unix::fs::PermissionsExt;
 
     let path = path.as_ref();
@@ -64,6 +64,7 @@ pub fn fix_permissions<P: AsRef<Path>>(path: P) -> io::Result<()> {
 }
 
 #[cfg(windows)]
+#[allow(clippy::unnecessary_wraps)]
 pub fn fix_permissions<P: AsRef<Path>>(_path: P) -> io::Result<()> {
     // On Windows, permissions are handled differently and this function does nothing.
     Ok(())
