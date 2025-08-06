@@ -41,7 +41,7 @@ pub(crate) trait HookInitReporter {
     fn on_complete(&self);
 }
 
-pub struct Project {
+pub(crate) struct Project {
     config_path: PathBuf,
     config: Config,
     repos: Vec<Arc<Repo>>,
@@ -49,7 +49,7 @@ pub struct Project {
 
 impl Project {
     /// Find the configuration file in the given path or the current working directory.
-    pub fn find_config_file(config: Option<PathBuf>) -> Result<PathBuf, Error> {
+    pub(crate) fn find_config_file(config: Option<PathBuf>) -> Result<PathBuf, Error> {
         if let Some(config) = config {
             if config.exists() {
                 return Ok(config);
@@ -81,13 +81,13 @@ impl Project {
     }
 
     /// Initialize a new project from the configuration file or the file in the current working directory.
-    pub fn from_config_file(config: Option<PathBuf>) -> Result<Self, Error> {
+    pub(crate) fn from_config_file(config: Option<PathBuf>) -> Result<Self, Error> {
         let config_path = Self::find_config_file(config)?;
         Self::new(config_path)
     }
 
     /// Initialize a new project from the configuration file.
-    pub fn new(config_path: PathBuf) -> Result<Self, Error> {
+    pub(crate) fn new(config_path: PathBuf) -> Result<Self, Error> {
         debug!(
             path = %config_path.display(),
             "Loading project configuration"
@@ -101,11 +101,11 @@ impl Project {
         })
     }
 
-    pub fn config(&self) -> &Config {
+    pub(crate) fn config(&self) -> &Config {
         &self.config
     }
 
-    pub fn config_file(&self) -> &Path {
+    pub(crate) fn config_file(&self) -> &Path {
         &self.config_path
     }
 
@@ -185,7 +185,7 @@ impl Project {
     }
 
     /// Load and prepare hooks for the project.
-    pub async fn init_hooks(
+    pub(crate) async fn init_hooks(
         &mut self,
         store: &Store,
         reporter: Option<&dyn HookInitReporter>,
