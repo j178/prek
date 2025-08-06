@@ -30,16 +30,16 @@ pub(crate) async fn check_hooks_apply(
 
         let filter = FileFilter::new(
             &input,
-            project.config().files.as_deref(),
-            project.config().exclude.as_deref(),
-        )?;
+            project.config().files.as_ref(),
+            project.config().exclude.as_ref(),
+        );
 
         for hook in hooks {
             if hook.always_run || matches!(hook.language, Language::Fail) {
                 continue;
             }
 
-            let filenames = filter.for_hook(&hook)?;
+            let filenames = filter.for_hook(&hook);
 
             if filenames.is_empty() {
                 code = 1;
@@ -57,7 +57,7 @@ fn excludes_any<T: AsRef<str> + Sync>(
     include: Option<&str>,
     exclude: Option<&str>,
 ) -> Result<bool> {
-    if exclude.is_none_or(|s| s == "^$") {
+    if exclude.is_none() || exclude == Some("^$") {
         return Ok(true);
     }
 
@@ -94,12 +94,16 @@ pub(crate) async fn check_useless_excludes(
     for filename in filenames {
         let mut project = Project::from_config_file(Some(PathBuf::from(filename)))?;
 
-        if !excludes_any(&input, None, project.config().exclude.as_deref())? {
+        if !excludes_any(
+            &input,
+            None,
+            project.config().exclude.as_ref().map(|r| r.as_str()),
+        )? {
             code = 1;
             writeln!(
                 &mut output,
                 "The global exclude pattern {:?} does not match any files",
-                project.config().exclude.as_deref().unwrap_or("")
+                project.config().exclude.as_ref().map_or("", |r| r.as_str())
             )?;
         }
 
@@ -107,22 +111,22 @@ pub(crate) async fn check_useless_excludes(
 
         let filter = FileFilter::new(
             &input,
-            project.config().files.as_deref(),
-            project.config().exclude.as_deref(),
-        )?;
+            project.config().files.as_ref(),
+            project.config().exclude.as_ref(),
+        );
 
         for hook in hooks {
             let filtered_files = filter.by_tag(&hook);
             if !excludes_any(
                 &filtered_files,
-                hook.files.as_deref(),
-                hook.exclude.as_deref(),
+                hook.files.as_ref().map(|r| r.as_str()),
+                hook.exclude.as_ref().map(|r| r.as_str()),
             )? {
                 code = 1;
                 writeln!(
                     &mut output,
                     "The exclude pattern {:?} for {} does not match any files",
-                    hook.exclude.as_deref().unwrap_or(""),
+                    hook.exclude.as_ref().map_or("", |r| r.as_str()),
                     hook.id
                 )?;
             }

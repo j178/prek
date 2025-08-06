@@ -15,7 +15,7 @@ use url::Url;
 
 use crate::config::{
     self, Config, HookOptions, Language, LocalHook, MANIFEST_FILE, ManifestHook, MetaHook,
-    RemoteHook, Stage, read_manifest,
+    RemoteHook, SerdeRegex, Stage, read_manifest,
 };
 use crate::languages::version::LanguageRequest;
 use crate::store::Store;
@@ -311,8 +311,8 @@ pub(crate) struct Hook {
     pub entry: Entry,
     pub language: Language,
     pub alias: String,
-    pub files: Option<String>,
-    pub exclude: Option<String>,
+    pub files: Option<SerdeRegex>,
+    pub exclude: Option<SerdeRegex>,
     pub types: Vec<String>,
     pub types_or: Vec<String>,
     pub exclude_types: Vec<String>,

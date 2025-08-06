@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use std::fmt::Display;
-use std::ops::RangeInclusive;
+use std::fmt::{self, Display};
+use std::ops::{Deref, RangeInclusive};
 use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
-use fancy_regex as regex;
-use serde::{Deserialize, Deserializer, Serialize};
+use fancy_regex::{self as regex, Regex};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use url::Url;
 
 use crate::fs::Simplified;
@@ -14,6 +14,43 @@ use crate::fs::Simplified;
 pub const CONFIG_FILE: &str = ".pre-commit-config.yaml";
 pub const ALTER_CONFIG_FILE: &str = ".pre-commit-config.yml";
 pub const MANIFEST_FILE: &str = ".pre-commit-hooks.yaml";
+
+#[derive(Clone)]
+pub struct SerdeRegex(Regex);
+
+impl Deref for SerdeRegex {
+    type Target = Regex;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl fmt::Debug for SerdeRegex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("SerdeRegex").field(&self.0.as_str()).finish()
+    }
+}
+
+impl<'de> Deserialize<'de> for SerdeRegex {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Regex::new(&s)
+            .map(SerdeRegex)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+impl Serialize for SerdeRegex {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.0.as_str())
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -220,9 +257,9 @@ pub struct Config {
     /// Default to all stages.
     pub default_stages: Option<Vec<Stage>>,
     /// Global file include pattern.
-    pub files: Option<String>,
+    pub files: Option<SerdeRegex>,
     /// Global file exclude pattern.
-    pub exclude: Option<String>,
+    pub exclude: Option<SerdeRegex>,
     /// Set to true to have pre-commit stop running hooks after the first failure.
     /// Default is false.
     pub fail_fast: Option<bool>,
@@ -283,10 +320,10 @@ pub struct HookOptions {
     /// Not documented in the official docs.
     pub alias: Option<String>,
     /// The pattern of files to run on.
-    pub files: Option<String>,
+    pub files: Option<SerdeRegex>,
     /// Exclude files that were matched by `files`.
     /// Default is `$^`, which matches nothing.
-    pub exclude: Option<String>,
+    pub exclude: Option<SerdeRegex>,
     /// List of file types to run on (AND).
     /// Default is `[file]`, which matches all files.
     pub types: Option<Vec<String>>,
@@ -453,11 +490,15 @@ impl<'de> Deserialize<'de> for MetaHook {
                 language: Language::System,
                 entry: String::new(),
                 options: HookOptions {
-                    files: Some(format!(
-                        "^{}|{}$",
-                        regex::escape(CONFIG_FILE),
-                        regex::escape(ALTER_CONFIG_FILE)
-                    )),
+                    files: Some(
+                        Regex::new(&format!(
+                            "^{}|{}$",
+                            regex::escape(CONFIG_FILE),
+                            regex::escape(ALTER_CONFIG_FILE)
+                        ))
+                        .map(SerdeRegex)
+                        .unwrap(),
+                    ),
                     ..Default::default()
                 },
             },
@@ -467,11 +508,15 @@ impl<'de> Deserialize<'de> for MetaHook {
                 language: Language::System,
                 entry: String::new(),
                 options: HookOptions {
-                    files: Some(format!(
-                        "^{}|{}$",
-                        regex::escape(CONFIG_FILE),
-                        regex::escape(ALTER_CONFIG_FILE)
-                    )),
+                    files: Some(
+                        Regex::new(&format!(
+                            "^{}|{}$",
+                            regex::escape(CONFIG_FILE),
+                            regex::escape(ALTER_CONFIG_FILE)
+                        ))
+                        .map(SerdeRegex)
+                        .unwrap(),
+                    ),
                     ..Default::default()
                 },
             },
@@ -1025,7 +1070,9 @@ mod tests {
                                         options: HookOptions {
                                             alias: None,
                                             files: Some(
-                                                "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
+                                                SerdeRegex(
+                                                    "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
+                                                ),
                                             ),
                                             exclude: None,
                                             types: None,
@@ -1055,7 +1102,9 @@ mod tests {
                                         options: HookOptions {
                                             alias: None,
                                             files: Some(
-                                                "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
+                                                SerdeRegex(
+                                                    "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
+                                                ),
                                             ),
                                             exclude: None,
                                             types: None,

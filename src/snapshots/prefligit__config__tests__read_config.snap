@@ -149,7 +149,9 @@ Config {
                         options: HookOptions {
                             alias: None,
                             files: Some(
-                                "^crates/(uv-cli|uv-settings)/",
+                                SerdeRegex(
+                                    "^crates/(uv-cli|uv-settings)/",
+                                ),
                             ),
                             exclude: None,
                             types: Some(
@@ -316,7 +318,9 @@ Config {
     default_stages: None,
     files: None,
     exclude: Some(
-        "(?x)^(\n  .*/(snapshots)/.*|\n)$\n",
+        SerdeRegex(
+            "^(.*/(snapshots)/.*|)$",
+        ),
     ),
     fail_fast: Some(
         true,

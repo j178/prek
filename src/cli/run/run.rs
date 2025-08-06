@@ -10,8 +10,7 @@ use std::sync::Arc;
 
 use anstream::ColorChoice;
 use anyhow::{Context, Result};
-use futures::StreamExt;
-use futures::stream::FuturesUnordered;
+use futures::stream::{FuturesUnordered, StreamExt};
 use indoc::indoc;
 use owo_colors::{OwoColorize, Style};
 use rand::SeedableRng;
@@ -190,9 +189,9 @@ pub(crate) async fn run(
 
     let filter = FileFilter::new(
         &filenames,
-        project.config().files.as_deref(),
-        project.config().exclude.as_deref(),
-    )?;
+        project.config().files.as_ref(),
+        project.config().exclude.as_ref(),
+    );
     trace!("Files after filtered: {}", filter.len());
 
     run_hooks(
@@ -572,7 +571,7 @@ async fn run_hook(
         HookToRun::ToRun(hook) => hook,
     };
 
-    let mut filenames = filter.for_hook(hook)?;
+    let mut filenames = filter.for_hook(hook);
 
     if filenames.is_empty() && !hook.always_run {
         printer.write_skipped(

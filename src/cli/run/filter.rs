@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use anyhow::Result;
-use fancy_regex as regex;
 use fancy_regex::Regex;
 use itertools::{Either, Itertools};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
@@ -10,26 +9,21 @@ use tracing::{debug, error};
 
 use constants::env_vars::EnvVars;
 
-use crate::config::Stage;
+use crate::config::{SerdeRegex, Stage};
 use crate::fs::normalize_path;
 use crate::hook::Hook;
 use crate::identify::tags_from_path;
 use crate::{git, warn_user};
 
 /// Filter filenames by include/exclude patterns.
-pub(crate) struct FilenameFilter {
-    include: Option<Regex>,
-    exclude: Option<Regex>,
+pub(crate) struct FilenameFilter<'a> {
+    include: Option<&'a Regex>,
+    exclude: Option<&'a Regex>,
 }
 
-impl FilenameFilter {
-    pub(crate) fn new(
-        include: Option<&str>,
-        exclude: Option<&str>,
-    ) -> Result<Self, Box<regex::Error>> {
-        let include = include.map(Regex::new).transpose()?;
-        let exclude = exclude.map(Regex::new).transpose()?;
-        Ok(Self { include, exclude })
+impl<'a> FilenameFilter<'a> {
+    pub(crate) fn new(include: Option<&'a Regex>, exclude: Option<&'a Regex>) -> Self {
+        Self { include, exclude }
     }
 
     pub(crate) fn filter(&self, filename: impl AsRef<str>) -> bool {
@@ -47,7 +41,7 @@ impl FilenameFilter {
         true
     }
 
-    pub(crate) fn for_hook(hook: &Hook) -> Result<Self, Box<regex::Error>> {
+    pub(crate) fn for_hook(hook: &'a Hook) -> Self {
         Self::new(hook.files.as_deref(), hook.exclude.as_deref())
     }
 }
@@ -97,17 +91,17 @@ pub(crate) struct FileFilter<'a> {
 impl<'a> FileFilter<'a> {
     pub(crate) fn new(
         filenames: &'a [String],
-        include: Option<&str>,
-        exclude: Option<&str>,
-    ) -> Result<Self, Box<regex::Error>> {
-        let filter = FilenameFilter::new(include, exclude)?;
+        include: Option<&'a SerdeRegex>,
+        exclude: Option<&'a SerdeRegex>,
+    ) -> Self {
+        let filter = FilenameFilter::new(include.map(|r| &**r), exclude.map(|r| &**r));
 
         let filenames = filenames
             .into_par_iter()
             .filter(|filename| filter.filter(filename))
             .collect::<Vec<_>>();
 
-        Ok(Self { filenames })
+        Self { filenames }
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -137,8 +131,8 @@ impl<'a> FileFilter<'a> {
     }
 
     /// Filter filenames by file patterns and tags for a specific hook.
-    pub(crate) fn for_hook(&self, hook: &Hook) -> Result<Vec<&String>, Box<regex::Error>> {
-        let filter = FilenameFilter::for_hook(hook)?;
+    pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&'a String> {
+        let filter = FilenameFilter::for_hook(hook);
         let filenames = self
             .filenames
             .par_iter()
@@ -159,7 +153,7 @@ impl<'a> FileFilter<'a> {
             .copied()
             .collect();
 
-        Ok(filenames)
+        filenames
     }
 }
 

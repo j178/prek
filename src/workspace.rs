@@ -109,6 +109,7 @@ impl Project {
         &self.config_path
     }
 
+    #[allow(clippy::mutable_key_type)]
     async fn init_repos(
         &mut self,
         store: &Store,
