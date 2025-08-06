@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.0.21
+
+### Enhancements
+
+- Add `--directory` to `prefligit run` ([#358](https://github.com/j178/prefligit/pull/358))
+- Implement `tags_from_interpreter` ([#362](https://github.com/j178/prefligit/pull/362))
+- Set GOBIN to `<hook-env>/bin`, set GOPATH to `$PREGLIGIT_HOME/cache/go` ([#369](https://github.com/j178/prefligit/pull/369))
+
+### Performance
+
+- Make Partitions iterator produce slice instead of Vec ([#361](https://github.com/j178/prefligit/pull/361))
+- Use `rustc_hash` ([#359](https://github.com/j178/prefligit/pull/359))
+
+### Bug fixes
+
+- Add `node` to PATH when running `npm` ([#371](https://github.com/j178/prefligit/pull/371))
+- Fix bug that default hook stage should be pre-commit ([#367](https://github.com/j178/prefligit/pull/367))
+- Fix cache dir permission before clean ([#368](https://github.com/j178/prefligit/pull/368))
+
+### Other changes
+
+- Move `Project` into `workspace` module ([#364](https://github.com/j178/prefligit/pull/364))
+
 ## 0.0.20
 
 ### Enhancements
