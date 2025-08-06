@@ -168,7 +168,9 @@ fn doctoc() {
         .unwrap();
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    // Set PATH to . to mask the system installed node,
+    // ensure that `npm` runs correctly.
+    cmd_snapshot!(context.filters(), context.run().env("PATH", "."), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
