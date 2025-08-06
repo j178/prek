@@ -36,6 +36,7 @@ pub(crate) fn clean(printer: Printer) -> Result<ExitStatus> {
 
 /// Add write permission to GOMODCACHE directory recursively.
 /// Go sets the permissions to read-only by default.
+#[cfg(not(windows))]
 pub fn fix_permissions<P: AsRef<Path>>(path: P) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
@@ -59,5 +60,11 @@ pub fn fix_permissions<P: AsRef<Path>>(path: P) -> io::Result<()> {
         }
     }
 
+    Ok(())
+}
+
+#[cfg(windows)]
+pub fn fix_permissions<P: AsRef<Path>>(_path: P) -> io::Result<()> {
+    // On Windows, permissions are handled differently and this function does nothing.
     Ok(())
 }
