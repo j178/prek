@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 
@@ -147,6 +149,21 @@ fn additional_dependencies() {
     "###);
 }
 
+fn remove_node_from_path() -> anyhow::Result<PathBuf> {
+    let node_dirs: std::collections::HashSet<_> = which::which_all("node")
+        .unwrap_or_else(|_| Vec::new().into_iter())
+        .filter_map(|path| path.parent())
+        .collect();
+
+    let current_path = std::env::var("PATH").unwrap_or_default();
+
+    let new_path_entries: Vec<_> = std::env::split_paths(&current_path)
+        .filter(|path| !node_dirs.contains(path.as_path()))
+        .collect();
+
+    Ok(std::env::join_paths(new_path_entries)?)
+}
+
 /// Test `https://github.com/thlorenz/doctoc` works correctly with prefligit.
 /// Previously, prefligit did not install its dependencies correctly.
 #[test]
@@ -168,9 +185,11 @@ fn doctoc() {
         .unwrap();
     context.git_add(".");
 
+    let path = remove_node_from_path().unwrap();
+
     // Set PATH to . to mask the system installed node,
     // ensure that `npm` runs correctly.
-    cmd_snapshot!(context.filters(), context.run().env("PATH", "."), @r#"
+    cmd_snapshot!(context.filters(), context.run().env("PATH", path), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
