@@ -6,6 +6,7 @@ use std::time::Duration;
 use anyhow::{Result, bail};
 use axoupdater::{AxoUpdater, ReleaseSource, ReleaseSourceType, UpdateRequest};
 use semver::Version;
+use std::process::Command;
 use tokio::task::JoinSet;
 use tracing::{debug, enabled, trace, warn};
 
@@ -18,10 +19,39 @@ use crate::store::{CacheBucket, Store};
 // The version of `uv` to install. Should update periodically.
 const UV_VERSION: &str = "0.8.3";
 
-static UV_EXE: LazyLock<Result<PathBuf, which::Error>> = LazyLock::new(|| {
-    which::which("uv").inspect(|uv| {
-        debug!("Found uv in PATH: {}", uv.display());
-    })
+fn get_uv_version(uv_path: &Path) -> Result<Version> {
+    let output = Command::new(uv_path)
+        .arg("--version")
+        .output()
+        .map_err(|e| anyhow::anyhow!("Failed to execute uv: {}", e))?;
+
+    if !output.status.success() {
+        bail!("Failed to get uv version");
+    }
+
+    let version_output = String::from_utf8_lossy(&output.stdout);
+    let version_str = version_output
+        .split_whitespace()
+        .nth(1)
+        .ok_or_else(|| anyhow::anyhow!("Invalid version output format"))?;
+
+    Version::parse(version_str).map_err(Into::into)
+}
+
+static UV_EXE: LazyLock<Option<(PathBuf, Version)>> = LazyLock::new(|| {
+    let min_version = Version::parse(UV_VERSION).ok()?;
+
+    for uv_path in which::which_all("uv").ok()? {
+        debug!("Found uv in PATH: {}", uv_path.display());
+
+        if let Ok(version) = get_uv_version(&uv_path) {
+            if version >= min_version {
+                return Some((uv_path, version));
+            }
+        }
+    }
+
+    None
 });
 
 #[derive(Debug)]
@@ -222,41 +252,15 @@ impl Uv {
         Ok(source)
     }
 
-    async fn get_uv_version(uv_path: &Path) -> Result<Version> {
-        let output = Cmd::new(uv_path, "Checking uv version")
-            .arg("--version")
-            .check(false)
-            .output()
-            .await?;
-
-        if !output.status.success() {
-            bail!("Failed to get uv version");
-        }
-
-        let version_output = String::from_utf8_lossy(&output.stdout);
-        let version_str = version_output
-            .split_whitespace()
-            .nth(1)
-            .ok_or_else(|| anyhow::anyhow!("Invalid version output format"))?;
-
-        Version::parse(version_str).map_err(Into::into)
-    }
-
     pub async fn install(uv_dir: &Path) -> Result<Self> {
         // 1) Check if system `uv` meets minimum version requirement
-        if let Ok(uv_path) = UV_EXE.as_ref() {
-            if let Ok(version) = Self::get_uv_version(uv_path).await {
-                let min_version = Version::parse(UV_VERSION)?;
-
-                if version < min_version {
-                    warn!(
-                        "System uv version {} is older than minimum required version {}, \
-                     pre-commit-hooks will install its own version.",
-                        version, min_version
-                    );
-                }
-                return Ok(Self::new(uv_path.clone()));
-            }
+        if let Some((uv_path, version)) = UV_EXE.as_ref() {
+            trace!(
+                "Using system uv version {} at {}",
+                version,
+                uv_path.display()
+            );
+            return Ok(Self::new(uv_path.clone()));
         }
 
         // 2) Use or install managed `uv`
