@@ -9,7 +9,7 @@ use tracing::error;
 use crate::cli::ExitStatus;
 use crate::fs::Simplified;
 use crate::printer::Printer;
-use crate::store::Store;
+use crate::store::{CacheBucket, Store};
 
 pub(crate) fn clean(printer: Printer) -> Result<ExitStatus> {
     let store = Store::from_settings()?;
@@ -19,7 +19,7 @@ pub(crate) fn clean(printer: Printer) -> Result<ExitStatus> {
         return Ok(ExitStatus::Success);
     }
 
-    if let Err(e) = fix_permissions(store.path()) {
+    if let Err(e) = fix_permissions(store.cache_path(CacheBucket::Go)) {
         error!("Failed to fix permissions: {}", e);
     }
 
