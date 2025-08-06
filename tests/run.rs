@@ -302,7 +302,7 @@ fn invalid_hook_id() {
     ----- stdout -----
 
     ----- stderr -----
-    No hook found for id `invalid-hook-id`
+    No hook found for id `invalid-hook-id` and stage `pre-commit`
     "#);
 }
 
