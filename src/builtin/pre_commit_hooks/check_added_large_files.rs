@@ -1,6 +1,6 @@
 use clap::Parser;
 use futures::StreamExt;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 
 use crate::git::{get_staged_files, lfs_files};
 use crate::hook::Hook;
@@ -31,7 +31,6 @@ struct Args {
 pub(crate) async fn check_added_large_files(
     hook: &Hook,
     filenames: &[&String],
-    _env_vars: &FxHashMap<&'static str, String>,
 ) -> anyhow::Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.parsed()?.iter().chain(&hook.args))?;
 

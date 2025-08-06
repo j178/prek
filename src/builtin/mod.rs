@@ -1,8 +1,6 @@
 use std::str::FromStr;
 use std::sync::LazyLock;
 
-use rustc_hash::FxHashMap;
-
 use constants::env_vars::EnvVars;
 
 use crate::builtin::pre_commit_hooks::{Implemented, is_pre_commit_hooks};
@@ -28,34 +26,24 @@ pub fn check_fast_path(hook: &Hook) -> bool {
     }
 }
 
-pub async fn run_fast_path(
-    hook: &Hook,
-    filenames: &[&String],
-    env_vars: &FxHashMap<&'static str, String>,
-) -> anyhow::Result<(i32, Vec<u8>)> {
+pub async fn run_fast_path(hook: &Hook, filenames: &[&String]) -> anyhow::Result<(i32, Vec<u8>)> {
     match hook.repo() {
-        Repo::Meta { .. } => run_meta_hook(hook, filenames, env_vars).await,
+        Repo::Meta { .. } => run_meta_hook(hook, filenames).await,
         Repo::Remote { url, .. } if is_pre_commit_hooks(url) => {
             Implemented::from_str(hook.id.as_str())
                 .unwrap()
-                .run(hook, filenames, env_vars)
+                .run(hook, filenames)
                 .await
         }
         _ => unreachable!(),
     }
 }
 
-async fn run_meta_hook(
-    hook: &Hook,
-    filenames: &[&String],
-    env_vars: &FxHashMap<&'static str, String>,
-) -> anyhow::Result<(i32, Vec<u8>)> {
+async fn run_meta_hook(hook: &Hook, filenames: &[&String]) -> anyhow::Result<(i32, Vec<u8>)> {
     match hook.id.as_str() {
-        "check-hooks-apply" => meta_hooks::check_hooks_apply(hook, filenames, env_vars).await,
-        "check-useless-excludes" => {
-            meta_hooks::check_useless_excludes(hook, filenames, env_vars).await
-        }
-        "identity" => Ok(meta_hooks::identity(hook, filenames, env_vars)),
+        "check-hooks-apply" => meta_hooks::check_hooks_apply(hook, filenames).await,
+        "check-useless-excludes" => meta_hooks::check_useless_excludes(hook, filenames).await,
+        "identity" => Ok(meta_hooks::identity(hook, filenames)),
         _ => unreachable!(),
     }
 }

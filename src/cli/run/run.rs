@@ -16,7 +16,7 @@ use indoc::indoc;
 use owo_colors::{OwoColorize, Style};
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, trace};
 use unicode_width::UnicodeWidthStr;
@@ -104,9 +104,6 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Failure);
     }
 
-    // Set env vars for hooks.
-    let env_vars = fill_envs(from_ref.as_ref(), to_ref.as_ref(), &extra_args);
-
     let mut project = Project::new(config_file)?;
     let store = Store::from_settings()?.init()?;
 
@@ -185,6 +182,8 @@ pub(crate) async fn run(
         _guard = Some(WorkTreeKeeper::clean(&store).await?);
     }
 
+    set_env_vars(from_ref.as_ref(), to_ref.as_ref(), &extra_args);
+
     let filenames = collect_files(CollectOptions {
         hook_stage,
         from_ref,
@@ -206,7 +205,6 @@ pub(crate) async fn run(
     run_hooks(
         &hooks,
         &filter,
-        env_vars,
         &store,
         project.config().fail_fast.unwrap_or(false),
         show_diff_on_failure,
@@ -216,58 +214,53 @@ pub(crate) async fn run(
     .await
 }
 
-fn fill_envs(
-    from_ref: Option<&String>,
-    to_ref: Option<&String>,
-    args: &RunExtraArgs,
-) -> FxHashMap<&'static str, String> {
-    // TODO: how to change these env vars?
-    let mut env = FxHashMap::default();
-    env.insert("PRE_COMMIT", "1".into());
+// `pre-commit` sets these environment variables for other git hooks.
+fn set_env_vars(from_ref: Option<&String>, to_ref: Option<&String>, args: &RunExtraArgs) {
+    unsafe {
+        std::env::set_var("PRE_COMMIT", "1");
 
-    if let Some(ref source) = args.prepare_commit_message_source {
-        env.insert("PRE_COMMIT_COMMIT_MSG_SOURCE", source.clone());
+        if let Some(ref source) = args.prepare_commit_message_source {
+            std::env::set_var("PRE_COMMIT_COMMIT_MSG_SOURCE", source.clone());
+        }
+        if let Some(ref object) = args.commit_object_name {
+            std::env::set_var("PRE_COMMIT_COMMIT_OBJECT_NAME", object.clone());
+        }
+        if let Some(from_ref) = from_ref {
+            std::env::set_var("PRE_COMMIT_ORIGIN", from_ref.clone());
+            std::env::set_var("PRE_COMMIT_FROM_REF", from_ref.clone());
+        }
+        if let Some(to_ref) = to_ref {
+            std::env::set_var("PRE_COMMIT_SOURCE", to_ref.clone());
+            std::env::set_var("PRE_COMMIT_TO_REF", to_ref.clone());
+        }
+        if let Some(ref upstream) = args.pre_rebase_upstream {
+            std::env::set_var("PRE_COMMIT_PRE_REBASE_UPSTREAM", upstream.clone());
+        }
+        if let Some(ref branch) = args.pre_rebase_branch {
+            std::env::set_var("PRE_COMMIT_PRE_REBASE_BRANCH", branch.clone());
+        }
+        if let Some(ref branch) = args.local_branch {
+            std::env::set_var("PRE_COMMIT_LOCAL_BRANCH", branch.clone());
+        }
+        if let Some(ref branch) = args.remote_branch {
+            std::env::set_var("PRE_COMMIT_REMOTE_BRANCH", branch.clone());
+        }
+        if let Some(ref name) = args.remote_name {
+            std::env::set_var("PRE_COMMIT_REMOTE_NAME", name.clone());
+        }
+        if let Some(ref url) = args.remote_url {
+            std::env::set_var("PRE_COMMIT_REMOTE_URL", url.clone());
+        }
+        if let Some(ref checkout) = args.checkout_type {
+            std::env::set_var("PRE_COMMIT_CHECKOUT_TYPE", checkout.clone());
+        }
+        if args.is_squash_merge {
+            std::env::set_var("PRE_COMMIT_SQUASH_MERGE", "1");
+        }
+        if let Some(ref command) = args.rewrite_command {
+            std::env::set_var("PRE_COMMIT_REWRITE_COMMAND", command.clone());
+        }
     }
-    if let Some(ref object) = args.commit_object_name {
-        env.insert("PRE_COMMIT_COMMIT_OBJECT_NAME", object.clone());
-    }
-    if let Some(from_ref) = from_ref {
-        env.insert("PRE_COMMIT_ORIGIN", from_ref.clone());
-        env.insert("PRE_COMMIT_FROM_REF", from_ref.clone());
-    }
-    if let Some(to_ref) = to_ref {
-        env.insert("PRE_COMMIT_SOURCE", to_ref.clone());
-        env.insert("PRE_COMMIT_TO_REF", to_ref.clone());
-    }
-    if let Some(ref upstream) = args.pre_rebase_upstream {
-        env.insert("PRE_COMMIT_PRE_REBASE_UPSTREAM", upstream.clone());
-    }
-    if let Some(ref branch) = args.pre_rebase_branch {
-        env.insert("PRE_COMMIT_PRE_REBASE_BRANCH", branch.clone());
-    }
-    if let Some(ref branch) = args.local_branch {
-        env.insert("PRE_COMMIT_LOCAL_BRANCH", branch.clone());
-    }
-    if let Some(ref branch) = args.remote_branch {
-        env.insert("PRE_COMMIT_REMOTE_BRANCH", branch.clone());
-    }
-    if let Some(ref name) = args.remote_name {
-        env.insert("PRE_COMMIT_REMOTE_NAME", name.clone());
-    }
-    if let Some(ref url) = args.remote_url {
-        env.insert("PRE_COMMIT_REMOTE_URL", url.clone());
-    }
-    if let Some(ref checkout) = args.checkout_type {
-        env.insert("PRE_COMMIT_CHECKOUT_TYPE", checkout.clone());
-    }
-    if args.is_squash_merge {
-        env.insert("PRE_COMMIT_SQUASH_MERGE", "1".into());
-    }
-    if let Some(ref command) = args.rewrite_command {
-        env.insert("PRE_COMMIT_REWRITE_COMMAND", command.clone());
-    }
-
-    env
 }
 
 fn get_skips() -> Vec<String> {
@@ -510,7 +503,6 @@ impl StatusPrinter {
 async fn run_hooks(
     hooks: &[HookToRun],
     filter: &FileFilter<'_>,
-    env_vars: FxHashMap<&'static str, String>,
     store: &Store,
     fail_fast: bool,
     show_diff_on_failure: bool,
@@ -524,7 +516,7 @@ async fn run_hooks(
     // Hooks might modify the files, so they must be run sequentially.
     for hook in hooks {
         let (hook_success, new_diff) =
-            run_hook(hook, filter, &env_vars, store, diff, verbose, &printer).await?;
+            run_hook(hook, filter, store, diff, verbose, &printer).await?;
 
         success &= hook_success;
         diff = new_diff;
@@ -574,7 +566,6 @@ fn shuffle<T>(filenames: &mut [T]) {
 async fn run_hook(
     hook: &HookToRun,
     filter: &FileFilter<'_>,
-    env_vars: &FxHashMap<&'static str, String>,
     store: &Store,
     diff: Vec<u8>,
     verbose: bool,
@@ -622,7 +613,7 @@ async fn run_hook(
 
     let (status, output) = hook
         .language
-        .run(hook, &filenames, env_vars, store)
+        .run(hook, &filenames, store)
         .await
         .context(format!("Failed to run hook `{hook}`"))?;
 

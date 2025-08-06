@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use rustc_hash::FxHashMap;
 use tracing::debug;
 
 use constants::env_vars::EnvVars;
@@ -131,7 +130,6 @@ impl LanguageImpl for Python {
         &self,
         hook: &InstalledHook,
         filenames: &[&String],
-        env_vars: &FxHashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Python must have env path");
@@ -145,7 +143,6 @@ impl LanguageImpl for Python {
                 .env("VIRTUAL_ENV", env_dir)
                 .env("PATH", &new_path)
                 .env_remove("PYTHONHOME")
-                .envs(env_vars)
                 .args(&hook.args)
                 .args(batch)
                 .check(false)

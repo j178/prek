@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use anyhow::Result;
-use rustc_hash::FxHashMap;
 use url::Url;
 
 use crate::hook::Hook;
@@ -30,22 +29,15 @@ impl FromStr for Implemented {
 }
 
 impl Implemented {
-    pub(crate) async fn run(
-        self,
-        hook: &Hook,
-        filenames: &[&String],
-        env_vars: &FxHashMap<&'static str, String>,
-    ) -> Result<(i32, Vec<u8>)> {
+    pub(crate) async fn run(self, hook: &Hook, filenames: &[&String]) -> Result<(i32, Vec<u8>)> {
         match self {
             Self::TrailingWhitespace => {
-                fix_trailing_whitespace::fix_trailing_whitespace(hook, filenames, env_vars).await
+                fix_trailing_whitespace::fix_trailing_whitespace(hook, filenames).await
             }
             Self::CheckAddedLargeFiles => {
-                check_added_large_files::check_added_large_files(hook, filenames, env_vars).await
+                check_added_large_files::check_added_large_files(hook, filenames).await
             }
-            Self::EndOfFileFixer => {
-                fix_end_of_file::fix_end_of_file(hook, filenames, env_vars).await
-            }
+            Self::EndOfFileFixer => fix_end_of_file::fix_end_of_file(hook, filenames).await,
         }
     }
 }

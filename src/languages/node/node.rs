@@ -3,7 +3,7 @@ use std::env::consts::EXE_EXTENSION;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use constants::env_vars::EnvVars;
@@ -123,7 +123,6 @@ impl LanguageImpl for Node {
         &self,
         hook: &InstalledHook,
         filenames: &[&String],
-        env_vars: &FxHashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Node must have env path");
@@ -151,7 +150,6 @@ impl LanguageImpl for Node {
                 .env(EnvVars::NPM_CONFIG_PREFIX, env_dir)
                 .env_remove(EnvVars::NPM_CONFIG_USERCONFIG)
                 .env(EnvVars::NODE_PATH, lib_dir(env_dir))
-                .envs(env_vars)
                 .args(&hook.args)
                 .args(batch)
                 .check(false)

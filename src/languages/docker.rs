@@ -7,7 +7,6 @@ use std::sync::Arc;
 use anstream::ColorChoice;
 use anyhow::{Context, Result};
 use fancy_regex::Regex;
-use rustc_hash::FxHashMap;
 use tracing::trace;
 
 use crate::fs::CWD;
@@ -204,7 +203,6 @@ impl LanguageImpl for Docker {
         &self,
         hook: &InstalledHook,
         filenames: &[&String],
-        env_vars: &FxHashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         Docker::build_docker_image(hook, false)
@@ -224,8 +222,7 @@ impl LanguageImpl for Docker {
                 .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)
-                .check(false)
-                .envs(env_vars);
+                .check(false);
 
             let mut output = cmd.output().await?;
             output.stdout.extend(output.stderr);

@@ -5,7 +5,6 @@ use anyhow::Result;
 use fancy_regex::Regex;
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use rustc_hash::FxHashMap;
 
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
 use crate::config::Language;
@@ -16,7 +15,6 @@ use crate::store::Store;
 pub(crate) async fn check_hooks_apply(
     _hook: &Hook,
     filenames: &[&String],
-    _env_vars: &FxHashMap<&'static str, String>,
 ) -> Result<(i32, Vec<u8>)> {
     let store = Store::from_settings()?.init()?;
 
@@ -84,7 +82,6 @@ fn excludes_any<T: AsRef<str> + Sync>(
 pub(crate) async fn check_useless_excludes(
     _hook: &Hook,
     filenames: &[&String],
-    _env_vars: &FxHashMap<&'static str, String>,
 ) -> Result<(i32, Vec<u8>)> {
     let store = Store::from_settings()?.init()?;
 
@@ -135,10 +132,6 @@ pub(crate) async fn check_useless_excludes(
 }
 
 /// Prints all arguments passed to the hook. Useful for debugging.
-pub fn identity(
-    _hook: &Hook,
-    filenames: &[&String],
-    _env_vars: &FxHashMap<&'static str, String>,
-) -> (i32, Vec<u8>) {
+pub fn identity(_hook: &Hook, filenames: &[&String]) -> (i32, Vec<u8>) {
     (0, filenames.iter().join("\n").into_bytes())
 }

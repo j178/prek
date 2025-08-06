@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use futures::TryStreamExt;
-use rustc_hash::FxHashMap;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::trace;
 
@@ -40,7 +39,6 @@ trait LanguageImpl {
         &self,
         hook: &InstalledHook,
         filenames: &[&String],
-        env_vars: &FxHashMap<&'static str, String>,
         store: &Store,
     ) -> Result<(i32, Vec<u8>)>;
 }
@@ -64,7 +62,6 @@ impl LanguageImpl for Unimplemented {
         &self,
         hook: &InstalledHook,
         _filenames: &[&String],
-        _env_vars: &FxHashMap<&'static str, String>,
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         anyhow::bail!(UnimplementedError(format!("{}", hook.language)))
@@ -175,24 +172,23 @@ impl Language {
         &self,
         hook: &InstalledHook,
         filenames: &[&String],
-        env_vars: &FxHashMap<&'static str, String>,
         store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         // fast path for hooks implemented in Rust
         if builtin::check_fast_path(hook) {
-            return builtin::run_fast_path(hook, filenames, env_vars).await;
+            return builtin::run_fast_path(hook, filenames).await;
         }
 
         match self {
-            Self::Golang => GOLANG.run(hook, filenames, env_vars, store).await,
-            Self::Python => PYTHON.run(hook, filenames, env_vars, store).await,
-            Self::Node => NODE.run(hook, filenames, env_vars, store).await,
-            Self::System => SYSTEM.run(hook, filenames, env_vars, store).await,
-            Self::Fail => FAIL.run(hook, filenames, env_vars, store).await,
-            Self::Docker => DOCKER.run(hook, filenames, env_vars, store).await,
-            Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, env_vars, store).await,
-            Self::Script => SCRIPT.run(hook, filenames, env_vars, store).await,
-            _ => UNIMPLEMENTED.run(hook, filenames, env_vars, store).await,
+            Self::Golang => GOLANG.run(hook, filenames, store).await,
+            Self::Python => PYTHON.run(hook, filenames, store).await,
+            Self::Node => NODE.run(hook, filenames, store).await,
+            Self::System => SYSTEM.run(hook, filenames, store).await,
+            Self::Fail => FAIL.run(hook, filenames, store).await,
+            Self::Docker => DOCKER.run(hook, filenames, store).await,
+            Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, store).await,
+            Self::Script => SCRIPT.run(hook, filenames, store).await,
+            _ => UNIMPLEMENTED.run(hook, filenames, store).await,
         }
     }
 }
