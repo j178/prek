@@ -67,11 +67,6 @@ impl LanguageImpl for Node {
             &bin_dir.join("node").with_extension(EXE_EXTENSION),
         )
         .await?;
-        create_symlink_or_copy(
-            node.npm(),
-            &bin_dir.join("npm").with_extension(EXE_EXTENSION),
-        )
-        .await?;
 
         // 3. Install dependencies
         let deps = if let Some(repo) = hook.repo_path() {
