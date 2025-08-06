@@ -78,22 +78,22 @@ impl<'a> Iterator for Partitions<'a> {
 
         let start_index = self.current_index;
         let mut current_length = self.command_length + 1;
-        let mut batch_size = 0;
 
         while self.current_index < self.filenames.len() {
             let filename = self.filenames[self.current_index];
             let length = filename.len() + 1;
 
-            if current_length + length > self.max_cli_length || batch_size >= self.max_per_batch {
+            if current_length + length > self.max_cli_length
+                || self.current_index - start_index >= self.max_per_batch
+            {
                 break;
             }
 
             current_length += length;
-            batch_size += 1;
             self.current_index += 1;
         }
 
-        if batch_size == 0 {
+        if self.current_index == start_index {
             None
         } else {
             Some(&self.filenames[start_index..self.current_index])
