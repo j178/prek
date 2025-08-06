@@ -34,6 +34,7 @@ mod run;
 mod store;
 mod version;
 mod warnings;
+mod workspace;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Level {

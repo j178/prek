@@ -30,9 +30,10 @@ use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, Stage};
 use crate::fs::Simplified;
 use crate::git;
-use crate::hook::{Hook, InstalledHook, Project};
+use crate::hook::{Hook, InstalledHook};
 use crate::printer::{Printer, Stdout};
 use crate::store::Store;
+use crate::workspace::Project;
 
 enum HookToRun {
     Skipped(Arc<Hook>),

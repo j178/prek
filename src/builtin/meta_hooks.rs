@@ -8,8 +8,9 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
 use crate::config::Language;
-use crate::hook::{Hook, Project};
+use crate::hook::Hook;
 use crate::store::Store;
+use crate::workspace::Project;
 
 /// Ensures that the configured hooks apply to at least one file in the repository.
 pub(crate) async fn check_hooks_apply(

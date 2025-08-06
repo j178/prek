@@ -6,9 +6,9 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 
-use crate::hook;
 use crate::hook::Hook;
 use crate::printer::Printer;
+use crate::workspace;
 
 #[derive(Default, Debug)]
 struct BarState {
@@ -96,7 +96,7 @@ impl From<Printer> for HookInitReporter {
     }
 }
 
-impl hook::HookInitReporter for HookInitReporter {
+impl workspace::HookInitReporter for HookInitReporter {
     fn on_clone_start(&self, repo: &str) -> usize {
         self.reporter
             .on_start(format!("{} {}", "Cloning".bold().cyan(), repo.dimmed()))

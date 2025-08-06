@@ -13,9 +13,9 @@ use crate::cli::{ExitStatus, HookType};
 use crate::fs::Simplified;
 use crate::git;
 use crate::git::git_cmd;
-use crate::hook::Project;
 use crate::printer::Printer;
 use crate::store::Store;
+use crate::workspace::Project;
 
 pub(crate) async fn install(
     config: Option<PathBuf>,
