@@ -44,15 +44,25 @@ impl LanguageImpl for Golang {
         fs_err::tokio::create_dir_all(bin_dir(&info.env_path)).await?;
 
         // 3. Install dependencies
-        let go_path = store.cache_path(CacheBucket::Go);
+        // go: ~/.cache/prefligit/tools/go/1.24.0/bin/go
+        // go_root: ~/.cache/prefligit/tools/go/1.24.0
+        // go_cache: ~/.cache/prefligit/cache/go
+        // go_bin: ~/.cache/prefligit/hooks/envs/<hook_id>/bin
+        let go_root = go
+            .bin()
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("Go root should exist");
+        let go_cache = store.cache_path(CacheBucket::Go);
         // GOPATH used to store downloaded source code (in $GOPATH/pkg/mod)
         if let Some(repo) = hook.repo_path() {
             go.cmd("go install")
                 .arg("install")
                 .arg("./...")
                 .env(EnvVars::GOTOOLCHAIN, "local")
+                .env(EnvVars::GOROOT, go_root)
                 .env(EnvVars::GOBIN, bin_dir(&info.env_path))
-                .env(EnvVars::GOPATH, &go_path)
+                .env(EnvVars::GOPATH, &go_cache)
                 .current_dir(repo)
                 .check(true)
                 .output()
@@ -63,8 +73,9 @@ impl LanguageImpl for Golang {
                 .arg("install")
                 .arg(dep)
                 .env(EnvVars::GOTOOLCHAIN, "local")
+                .env(EnvVars::GOROOT, go_root)
                 .env(EnvVars::GOBIN, bin_dir(&info.env_path))
-                .env(EnvVars::GOPATH, &go_path)
+                .env(EnvVars::GOPATH, &go_cache)
                 .check(true)
                 .output()
                 .await?;
@@ -91,8 +102,9 @@ impl LanguageImpl for Golang {
             unreachable!()
         };
 
-        let go_path = store.cache_path(CacheBucket::Go);
+        let go_cache = store.cache_path(CacheBucket::Go);
         let go_root_bin = info.toolchain.parent().expect("Go root should exist");
+        let go_root = go_root_bin.parent().expect("Go root should exist");
         let go_bin = bin_dir(env_dir);
         let new_path = prepend_paths(&[&go_bin, go_root_bin]).context("Failed to join PATH")?;
 
@@ -102,8 +114,9 @@ impl LanguageImpl for Golang {
                 .args(&entry[1..])
                 .env("PATH", &new_path)
                 .env(EnvVars::GOTOOLCHAIN, "local")
+                .env(EnvVars::GOROOT, go_root)
                 .env(EnvVars::GOBIN, &go_bin)
-                .env(EnvVars::GOPATH, &go_path)
+                .env(EnvVars::GOPATH, &go_cache)
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
