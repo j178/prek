@@ -16,8 +16,9 @@ use crate::fs::LockedFile;
 use crate::process::Cmd;
 use crate::store::{CacheBucket, Store};
 
-// The version of `uv` to install. Should update periodically.
-const UV_VERSION: &str = "0.8.3";
+// The version range of `uv` to check. Should update periodically.
+const MIN_UV_VERSION: &str = "0.7.0";
+const MAX_UV_VERSION: &str = "0.8.5";
 
 fn get_uv_version(uv_path: &Path) -> Result<Version> {
     let output = Command::new(uv_path)
@@ -39,15 +40,20 @@ fn get_uv_version(uv_path: &Path) -> Result<Version> {
 }
 
 static UV_EXE: LazyLock<Option<(PathBuf, Version)>> = LazyLock::new(|| {
-    let min_version = Version::parse(UV_VERSION).ok()?;
+    let min_version = Version::parse(MIN_UV_VERSION).ok()?;
+    let max_version = Version::parse(MAX_UV_VERSION).ok()?;
 
     for uv_path in which::which_all("uv").ok()? {
         debug!("Found uv in PATH: {}", uv_path.display());
 
         if let Ok(version) = get_uv_version(&uv_path) {
-            if version >= min_version {
+            if max_version >= version && version >= min_version {
                 return Some((uv_path, version));
             }
+            warn!(
+                "Detected system uv version {} — expected a version between {} and {}.",
+                version, min_version, max_version
+            );
         }
     }
 
@@ -103,7 +109,8 @@ impl InstallSource {
 
     async fn install_from_github(&self, target: &Path) -> Result<()> {
         let mut installer = AxoUpdater::new_for("uv");
-        installer.configure_version_specifier(UpdateRequest::SpecificTag(UV_VERSION.to_string()));
+        installer
+            .configure_version_specifier(UpdateRequest::SpecificTag(MAX_UV_VERSION.to_string()));
         installer.always_update(true);
         installer.set_install_dir(&target.to_string_lossy());
         installer.set_release_source(ReleaseSource {
@@ -155,7 +162,7 @@ impl InstallSource {
             .arg("install")
             .arg("--prefix")
             .arg(target)
-            .arg(format!("uv=={UV_VERSION}"))
+            .arg(format!("uv=={MAX_UV_VERSION}"))
             .check(true)
             .output()
             .await?;
@@ -197,7 +204,7 @@ impl Uv {
     async fn select_source() -> Result<InstallSource> {
         async fn check_github(client: &reqwest::Client) -> Result<bool> {
             let url = format!(
-                "https://github.com/astral-sh/uv/releases/download/{UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz"
+                "https://github.com/astral-sh/uv/releases/download/{MAX_UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz"
             );
             let response = client
                 .head(url)
