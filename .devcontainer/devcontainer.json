@@ -1,0 +1,17 @@
+{
+  "name": "prefligit",
+  "image": "mcr.microsoft.com/devcontainers/rust:bullseye",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "files.exclude": {
+          "**/LICENSE": true
+        }
+      }
+    }
+  }
+}
