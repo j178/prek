@@ -1,16 +1,12 @@
-use anyhow::Result;
-use futures::StreamExt;
-
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
+use anyhow::Result;
+use futures::StreamExt;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 
 pub(crate) async fn fix_end_of_file(_hook: &Hook, filenames: &[&String]) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
-        .map(async |filename| {
-            // TODO: avoid reading the whole file into memory
-            let content = fs_err::tokio::read(filename).await?;
-            fix_file(filename, &content).await
-        })
+        .map(async |filename| fix_file(filename).await)
         .buffered(*CONCURRENCY);
 
     let mut code = 0;
@@ -25,94 +21,194 @@ pub(crate) async fn fix_end_of_file(_hook: &Hook, filenames: &[&String]) -> Resu
     Ok((code, output))
 }
 
-async fn fix_file(filename: &str, content: &[u8]) -> Result<(i32, Vec<u8>)> {
+#[derive(Default)]
+struct LineEndingDetector {
+    final_pos: u64,
+    crlf_count: usize,
+    lf_count: usize,
+    cr_count: usize,
+}
+
+impl LineEndingDetector {
+    pub async fn from_reader<T, F>(reader: &mut T, scan_stop_strategy: F) -> Result<Self>
+    where
+        T: AsyncRead + AsyncSeek + Unpin,
+        F: ScanStopStrategy,
+    {
+        const MAX_SCAN_SIZE: usize = 8 * 1024;
+
+        Self::from_reader_with_block_size(reader, scan_stop_strategy, MAX_SCAN_SIZE).await
+    }
+
+    async fn from_reader_with_block_size<T, F>(
+        reader: &mut T,
+        scan_stop_strategy: F,
+        max_scan_size: usize,
+    ) -> Result<Self>
+    where
+        T: AsyncRead + AsyncSeek + Unpin,
+        F: ScanStopStrategy,
+    {
+        const MAX_ALLOWED_SCAN_SIZE: usize = 4 * 1024 * 1024; // 4MB
+
+        if max_scan_size == 0 || max_scan_size > MAX_ALLOWED_SCAN_SIZE {
+            return Err(anyhow::anyhow!(format!(
+                "max_scan_size must be between 1 and {} bytes",
+                MAX_ALLOWED_SCAN_SIZE
+            )));
+        }
+
+        let mut line_ending_detector = Self::default();
+        let data_len = reader.seek(SeekFrom::End(0)).await?;
+        if data_len == 0 {
+            return Ok(line_ending_detector);
+        }
+
+        let mut pre_tail_buf = [0u8; 1];
+        let mut readed_len = 0;
+        let mut buf = vec![0u8; max_scan_size];
+
+        while readed_len < data_len {
+            let block_size = max_scan_size.min(usize::try_from(data_len - readed_len)?);
+            line_ending_detector
+                .read_bytes_backward(reader, &mut buf[..block_size], false)
+                .await?;
+            readed_len += block_size as u64;
+
+            // Cache last byte of previous block to avoid splitting `b"\r\n"`.
+            if readed_len != data_len {
+                line_ending_detector
+                    .read_bytes_backward(reader, &mut pre_tail_buf, true)
+                    .await?;
+            }
+
+            let mut pos = block_size;
+            while pos > 0 {
+                pos -= 1;
+                if scan_stop_strategy.should_stop(buf[pos], pos) {
+                    line_ending_detector.final_pos = data_len - readed_len + pos as u64;
+                    return Ok(line_ending_detector);
+                }
+
+                if buf[pos] == b'\n' {
+                    if pos > 0 && buf[pos - 1] == b'\r' {
+                        line_ending_detector.crlf_count += 1;
+
+                        pos -= 1;
+                    } else if pos == 0 && pre_tail_buf[0] == b'\r' {
+                        line_ending_detector.crlf_count += 1;
+                        reader.seek(SeekFrom::Current(-1)).await?;
+                        readed_len += 1;
+                    } else {
+                        line_ending_detector.lf_count += 1;
+                    }
+                } else if buf[pos] == b'\r' {
+                    line_ending_detector.cr_count += 1;
+                }
+            }
+        }
+        Ok(line_ending_detector)
+    }
+}
+
+impl LineEndingDetector {
+    pub fn dominant_line_ending(&self) -> &'static [u8] {
+        if self.crlf_count > self.cr_count && self.crlf_count > self.lf_count {
+            return b"\r\n";
+        }
+
+        if self.cr_count > self.lf_count {
+            return b"\r";
+        }
+
+        b"\n"
+    }
+
+    async fn read_bytes_backward<T>(
+        &mut self,
+        reader: &mut T,
+        buf: &mut [u8],
+        rewind_after_read: bool,
+    ) -> Result<u64>
+    where
+        T: AsyncRead + AsyncSeek + Unpin,
+    {
+        let read_len: i64 = buf
+            .len()
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("buffer too large for i64"))?;
+        let mut pos = reader.seek(SeekFrom::Current(-read_len)).await?;
+        reader.read_exact(buf).await?;
+        if !rewind_after_read {
+            pos = reader.seek(SeekFrom::Current(-read_len)).await?;
+        }
+        Ok(pos)
+    }
+
+    pub fn final_pos(&self) -> u64 {
+        self.final_pos
+    }
+}
+
+trait ScanStopStrategy {
+    fn should_stop(&self, byte: u8, position: usize) -> bool;
+}
+
+struct StopAtNonLineEnding;
+
+impl ScanStopStrategy for StopAtNonLineEnding {
+    fn should_stop(&self, byte: u8, _: usize) -> bool {
+        byte != b'\n' && byte != b'\r'
+    }
+}
+
+struct StopAtStartOfFile;
+impl ScanStopStrategy for StopAtStartOfFile {
+    fn should_stop(&self, _: u8, position: usize) -> bool {
+        position == 0
+    }
+}
+
+async fn fix_file(filename: &str) -> Result<(i32, Vec<u8>)> {
+    let mut file = fs_err::tokio::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(filename)
+        .await?;
+
     // If the file is empty, do nothing.
-    if content.is_empty() {
+    let file_size = file.metadata().await?.len();
+    if file_size == 0 {
         return Ok((0, Vec::new()));
     }
 
-    // Find the last character that is not a newline
-    let last_non_newline_pos = content.iter().rposition(|&c| c != b'\n' && c != b'\r');
+    let mut line_ending_stats =
+        LineEndingDetector::from_reader(&mut file, StopAtNonLineEnding).await?;
 
-    if let Some(pos) = last_non_newline_pos {
-        // File has content other than newlines
-        if pos == content.len() - 1 {
-            // Last character is not a newline, add one
-            let line_ending = detect_line_ending(&content[..=pos]);
-            let new_content = [&content[..=pos], line_ending].concat();
-            fs_err::tokio::write(filename, &new_content).await?;
-            return Ok((1, format!("Fixing {filename}\n").into_bytes()));
-        }
-        // Last character is a newline, check for excess newlines
-        let after_content = &content[pos + 1..];
-        let trimmed_after = trim_excess_newlines(after_content);
-        if trimmed_after != after_content {
-            let new_content = [&content[..=pos], trimmed_after].concat();
-            fs_err::tokio::write(filename, &new_content).await?;
-            return Ok((1, format!("Fixing {filename}\n").into_bytes()));
-        }
+    file.seek(tokio::io::SeekFrom::End(0)).await?;
+    let pos = line_ending_stats.final_pos();
+    if pos == file_size - 1 {
+        file.seek(SeekFrom::End(0)).await?;
+        line_ending_stats = LineEndingDetector::from_reader(&mut file, StopAtStartOfFile).await?;
+        let line_ending = line_ending_stats.dominant_line_ending();
+        file.seek(SeekFrom::End(0)).await?;
+        file.write_all(line_ending).await?;
+    } else if pos == 0 {
+        file.set_len(0).await?;
     } else {
-        // File consists only of newlines - make it empty
-        fs_err::tokio::write(filename, b"").await?;
-        return Ok((1, format!("Fixing {filename}\n").into_bytes()));
-    }
-
-    Ok((0, Vec::new()))
-}
-
-/// Trim excess newlines at the end, keeping only one.
-fn trim_excess_newlines(content: &[u8]) -> &[u8] {
-    if content.is_empty() {
-        return content;
-    }
-
-    // Since content only contains newlines, just keep the first one
-    if content.starts_with(b"\r\n") {
-        b"\r\n"
-    } else if content.starts_with(b"\n") {
-        b"\n"
-    } else if content.starts_with(b"\r") {
-        b"\r"
-    } else {
-        // No newlines found (shouldn't happen given the context)
-        &content[..0]
-    }
-}
-
-/// Detect the line ending type used in the file content.
-/// Returns the most common line ending, or Unix (\n) as default.
-fn detect_line_ending(content: &[u8]) -> &'static [u8] {
-    let mut crlf_count = 0;
-    let mut lf_count = 0;
-    let mut cr_count = 0;
-
-    let mut i = 0;
-    while i < content.len() {
-        if i + 1 < content.len() && content[i] == b'\r' && content[i + 1] == b'\n' {
-            crlf_count += 1;
-            i += 2;
-        } else if content[i] == b'\n' {
-            lf_count += 1;
-            i += 1;
-        } else if content[i] == b'\r' {
-            cr_count += 1;
-            i += 1;
-        } else {
-            i += 1;
+        let line_ending = line_ending_stats.dominant_line_ending();
+        // Only one line_ending at the end of the file.
+        let final_cursor_pos = pos + 1 + line_ending.len() as u64;
+        if final_cursor_pos == file_size {
+            return Ok((0, Vec::new()));
         }
-    }
 
-    // Return the most common line ending, with preference for CRLF > LF > CR
-    if crlf_count > 0 {
-        b"\r\n"
-    } else if lf_count > 0 {
-        b"\n"
-    } else if cr_count > 0 {
-        b"\r"
-    } else {
-        // Default to Unix line endings
-        b"\n"
+        file.seek(SeekFrom::Current(1)).await?;
+        file.write_all(line_ending).await?;
+        file.set_len(pos + 1 + line_ending.len() as u64).await?;
     }
+    file.flush().await?;
+    Ok((1, format!("Fixing {filename}\n").into_bytes()))
 }
 
 #[cfg(test)]
@@ -120,8 +216,10 @@ mod tests {
     use super::*;
 
     use bstr::ByteSlice;
-    use std::path::PathBuf;
+    use std::io::Cursor;
+    use std::path::{Path, PathBuf};
     use tempfile::tempdir;
+    use tokio::io::BufReader;
 
     async fn create_test_file(dir: &tempfile::TempDir, name: &str, content: &[u8]) -> PathBuf {
         let file_path = dir.path().join(name);
@@ -129,10 +227,9 @@ mod tests {
         file_path
     }
 
-    async fn run_fix_on_file(file_path: &PathBuf) -> (i32, Vec<u8>) {
+    async fn run_fix_on_file(file_path: &Path) -> (i32, Vec<u8>) {
         let filename = file_path.to_string_lossy().to_string();
-        let content = fs_err::tokio::read(file_path).await.unwrap();
-        fix_file(&filename, &content).await.unwrap()
+        fix_file(&filename).await.unwrap()
     }
 
     #[tokio::test]
@@ -249,14 +346,40 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_detect_line_ending_function() {
-        assert_eq!(detect_line_ending(b"line1\r\nline2\r\n"), b"\r\n");
-        assert_eq!(detect_line_ending(b"line1\nline2\n"), b"\n");
-        assert_eq!(detect_line_ending(b"line1\rline2\r"), b"\r");
-        assert_eq!(detect_line_ending(b"line1\r\nline2\nline3\r\n"), b"\r\n");
-        assert_eq!(detect_line_ending(b"no line endings"), b"\n");
-        // Test empty content (default to LF)
-        assert_eq!(detect_line_ending(b""), b"\n");
+    async fn test_line_ending_stats_with_various_block_sizes() {
+        let cases: &[(&[u8], &[u8])] = &[
+            (b"line1\r\nline2\r\n", b"\r\n"),
+            (b"line1\nline2\n", b"\n"),
+            (b"line1\rline2\r", b"\r"),
+            (b"line1\r\nline2\nline3\r\n", b"\r\n"),
+            (b"no line endings", b"\n"),
+            (b"", b"\n"),
+        ];
+
+        let block_sizes = [1, 2, 4, 8, 16, 1024, 4096];
+
+        for &(input, expected) in cases {
+            for &block_size in &block_sizes {
+                let cursor = Cursor::new(input);
+                let mut reader = BufReader::new(cursor);
+
+                let line_ending_detector = LineEndingDetector::from_reader_with_block_size(
+                    &mut reader,
+                    StopAtNonLineEnding,
+                    block_size,
+                )
+                .await
+                .unwrap();
+
+                assert_eq!(
+                    line_ending_detector.dominant_line_ending(),
+                    expected,
+                    "Failed for input {:?} with block size {}",
+                    String::from_utf8_lossy(input),
+                    block_size
+                );
+            }
+        }
     }
 
     #[tokio::test]
