@@ -70,7 +70,7 @@ fn language_version() -> anyhow::Result<()> {
         .child("python")
         .assert(predicates::path::missing());
 
-    cmd_snapshot!(context.filters(), context.run().arg("-v"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("-vvv"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
