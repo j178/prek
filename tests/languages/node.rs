@@ -1,10 +1,7 @@
-use std::collections::HashSet;
-use std::ffi::OsString;
-
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, remove_bin_from_path};
 
 // We use `setup-node` action to install node 19.9.0 in CI, so 18.20.8 should be downloaded by prefligit.
 #[test]
@@ -150,25 +147,6 @@ fn additional_dependencies() {
     "###);
 }
 
-fn remove_node_from_path() -> anyhow::Result<Option<OsString>> {
-    let Ok(node_dirs) = which::which_all("node") else {
-        return Ok(None);
-    };
-
-    let node_dirs: HashSet<_> = node_dirs
-        .filter_map(|path| path.parent().map(std::path::Path::to_path_buf))
-        .collect();
-
-    #[allow(clippy::disallowed_methods)]
-    let current_path = std::env::var("PATH").unwrap_or_default();
-
-    let new_path_entries: Vec<_> = std::env::split_paths(&current_path)
-        .filter(|path| !node_dirs.contains(path.as_path()))
-        .collect();
-
-    Ok(Some(std::env::join_paths(new_path_entries)?))
-}
-
 /// Test `https://github.com/thlorenz/doctoc` works correctly with prefligit.
 /// Previously, prefligit did not install its dependencies correctly.
 #[test]
@@ -189,11 +167,11 @@ fn doctoc() -> anyhow::Result<()> {
     context.git_add(".");
 
     #[allow(clippy::disallowed_methods)]
-    let path = remove_node_from_path()?.unwrap_or_else(|| std::env::var_os("PATH").unwrap());
+    let new_path = remove_bin_from_path("node")?;
 
     // Set PATH to . to mask the system installed node,
     // ensure that `npm` runs correctly.
-    cmd_snapshot!(context.filters(), context.run().env("PATH", path), @r#"
+    cmd_snapshot!(context.filters(), context.run().env("PATH", new_path), @r#"
     success: false
     exit_code: 1
     ----- stdout -----

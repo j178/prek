@@ -1,7 +1,7 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, remove_bin_from_path};
 
 // We use `setup-go` action to install go1.24.5 in CI, so 1.23.11 should be downloaded by prefligit.
 #[test]
@@ -120,7 +120,7 @@ fn language_version() -> anyhow::Result<()> {
 
 /// Test that `additional_dependencies` are installed correctly.
 #[test]
-fn additional_dependencies() {
+fn additional_dependencies() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -140,7 +140,8 @@ fn additional_dependencies() {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    let new_path = remove_bin_from_path("go")?;
+    cmd_snapshot!(context.filters(), context.run().env("PATH", new_path), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -161,11 +162,13 @@ fn additional_dependencies() {
 
     ----- stderr -----
     "#);
+
+    Ok(())
 }
 
 /// Test a remote go hook.
 #[test]
-fn remote_hook() {
+fn remote_hook() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -178,7 +181,8 @@ fn remote_hook() {
         "});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    let new_path = remove_bin_from_path("go")?;
+    cmd_snapshot!(context.filters(), context.run().env("PATH", new_path), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -189,4 +193,6 @@ fn remote_hook() {
 
     ----- stderr -----
     "#);
+
+    Ok(())
 }
