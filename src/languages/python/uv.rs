@@ -18,7 +18,7 @@ use crate::store::{CacheBucket, Store};
 
 // The version range of `uv` to check. Should update periodically.
 const MIN_UV_VERSION: &str = "0.7.0";
-const MAX_UV_VERSION: &str = "0.8.6";
+const MAX_UV_VERSION: &str = "0.8.0";
 
 fn get_uv_version(uv_path: &Path) -> Result<Version> {
     let output = Command::new(uv_path)
@@ -51,7 +51,7 @@ static UV_EXE: LazyLock<Option<(PathBuf, Version)>> = LazyLock::new(|| {
                 return Some((uv_path, version));
             }
             warn!(
-                "Detected system uv version {} — expected a version between {} and {}.",
+                "Detected system uv version `{}` — expected a version between `{}` and `{}`.",
                 version, min_version, max_version
             );
         }
@@ -164,7 +164,7 @@ impl InstallSource {
             .arg(target)
             .arg(format!("uv=={MAX_UV_VERSION}"))
             .check(true)
-            .output()
+            .status()
             .await?;
 
         let bin_dir = target.join(if cfg!(windows) { "Scripts" } else { "bin" });
