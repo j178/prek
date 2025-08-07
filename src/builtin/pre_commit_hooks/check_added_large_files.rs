@@ -24,7 +24,7 @@ impl FileFilter {
 struct Args {
     #[arg(long)]
     enforce_all: bool,
-    #[arg(default_value = "500")]
+    #[arg(long = "maxkb", default_value = "500")]
     max_kb: u64,
 }
 

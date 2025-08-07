@@ -98,7 +98,7 @@ fn check_added_large_files_hook() -> Result<()> {
             rev: v5.0.0
             hooks:
               - id: check-added-large-files
-                args: ['1']
+                args: ['--maxkb', '1']
     "});
 
     // Create test files
@@ -136,7 +136,7 @@ fn check_added_large_files_hook() -> Result<()> {
             rev: v5.0.0
             hooks:
               - id: check-added-large-files
-                args: ['1', '--enforce-all']
+                args: ['--maxkb=1', '--enforce-all']
     "});
 
     // Second run: the hook should check all files even if not staged
@@ -163,14 +163,14 @@ fn check_added_large_files_hook() -> Result<()> {
             rev: v5.0.0
             hooks:
               - id: check-added-large-files
-                args: ['1']
+                args: ['--maxkb=1']
     "});
     cwd.child(".gitattributes")
         .write_str("*.dat filter=lfs diff=lfs merge=lfs -text")?;
     context.git_add(".gitattributes");
     let lfs_file = cwd.child("lfs_file.dat");
     lfs_file.write_binary(&[0; 2048])?; // 2KB file
-    context.git_add("lfs_file.dat");
+    context.git_add(".");
 
     // Third run: hook should pass because the large file is tracked by git-lfs
     cmd_snapshot!(context.filters(), context.run(), @r#"
