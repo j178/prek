@@ -31,9 +31,19 @@ pub(crate) use validate::{validate_configs, validate_manifest};
 
 // Parses hook ids from .pre-commit-config.yaml
 fn hook_id_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
-    let Ok(project) = Project::from_config_file(None) else {
-        return vec![];
-    };
+    get_hook_id_candidates(current).unwrap_or_default()
+}
+
+fn get_hook_id_candidates(current: &std::ffi::OsStr) -> anyhow::Result<Vec<CompletionCandidate>> {
+    let output = std::process::Command::new("git")
+        .arg("rev-parse")
+        .arg("--show-toplevel")
+        .output()?;
+
+    let root = String::from_utf8(output.stdout)?.trim().to_string();
+    std::env::set_current_dir(&root).ok();
+
+    let project = Project::from_config_file(None)?;
 
     let hook_ids = project
         .config()
@@ -60,12 +70,12 @@ fn hook_id_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
         });
 
     let Some(current) = current.to_str() else {
-        return hook_ids.collect();
+        return Ok(hook_ids.collect());
     };
 
-    hook_ids
+    Ok(hook_ids
         .filter(|h| h.get_value().to_str().unwrap_or_default().contains(current))
-        .collect()
+        .collect())
 }
 
 #[derive(Copy, Clone)]
