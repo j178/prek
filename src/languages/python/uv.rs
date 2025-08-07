@@ -5,9 +5,9 @@ use std::time::Duration;
 
 use anyhow::{Result, bail};
 use axoupdater::{AxoUpdater, ReleaseSource, ReleaseSourceType, UpdateRequest};
+use itertools::Itertools;
 use semver::Version;
 use std::process::Command;
-use itertools::Itertools;
 use tokio::task::JoinSet;
 use tracing::{debug, enabled, trace, warn};
 
@@ -168,7 +168,11 @@ impl InstallSource {
             .status()
             .await?;
 
-        let files = target.read_dir()?.flatten().map(|d| d.path().to_string_lossy()).join(", ");
+        let files = target
+            .read_dir()?
+            .flatten()
+            .map(|d| d.path().to_string_lossy().to_string())
+            .join(", ");
         println!("Files in target: {files}");
 
         let bin_dir = target.join(if cfg!(windows) { "Scripts" } else { "bin" });
