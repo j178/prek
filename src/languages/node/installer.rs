@@ -25,7 +25,7 @@ pub(crate) struct NodeResult {
 
 impl Display for NodeResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.node.display())?;
+        write!(f, "{}@{}", self.node.display(), self.version)?;
         Ok(())
     }
 }

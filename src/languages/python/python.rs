@@ -184,7 +184,7 @@ impl Python {
         {
             Ok(_) => {
                 debug!(
-                    "Venv `{}` created successfully with no downloads",
+                    "Venv created successfully with no downloads: `{}`",
                     info.env_path.display()
                 );
                 Ok(())
@@ -193,7 +193,7 @@ impl Python {
                 // Check if we can retry with downloads
                 if Self::can_retry_with_downloads(&e) {
                     debug!(
-                        "Retrying venv `{}` creation with managed Python downloads",
+                        "Retrying venv creation with managed Python downloads: `{}`",
                         info.env_path.display()
                     );
                     Self::create_venv_command(uv, store, info, python_request, true, true)
