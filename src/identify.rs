@@ -721,7 +721,7 @@ fn is_encoding_tag(tag: &str) -> bool {
 }
 
 pub fn tags_from_path(path: &Path) -> Result<Vec<&str>> {
-    let metadata = std::fs::metadata(path)?;
+    let metadata = std::fs::symlink_metadata(path)?;
     if metadata.is_dir() {
         return Ok(vec![tags::DIRECTORY]);
     } else if metadata.is_symlink() {
@@ -910,6 +910,25 @@ fn is_text_file(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use std::path::Path;
+    #[cfg(unix)]
+    use tempfile::tempdir;
+
+    #[test]
+    #[cfg(unix)]
+    fn tags_from_path() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("source.txt");
+        let dest = dir.path().join("link.txt");
+        fs_err::File::create(&src).unwrap();
+        std::os::unix::fs::symlink(&src, &dest).unwrap();
+
+        let tags = super::tags_from_path(dir.path()).unwrap();
+        assert_eq!(tags, vec!["directory"]);
+        let tags = super::tags_from_path(&src).unwrap();
+        assert_eq!(tags, vec!["plain-text", "non-executable", "file", "text"]);
+        let tags = super::tags_from_path(&dest).unwrap();
+        assert_eq!(tags, vec!["symlink"]);
+    }
 
     #[test]
     fn tags_from_filename() {
