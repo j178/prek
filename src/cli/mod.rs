@@ -2,8 +2,8 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use clap::builder::Styles;
 use clap::builder::styling::{AnsiColor, Effects};
+use clap::builder::{StyledStr, Styles};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
@@ -39,14 +39,25 @@ fn hook_id_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
         .config()
         .repos
         .iter()
-        .flat_map(|repo| -> Box<dyn Iterator<Item = &String>> {
-            match repo {
-                config::Repo::Remote(cfg) => Box::new(cfg.hooks.iter().map(|h| &h.id)),
-                config::Repo::Local(cfg) => Box::new(cfg.hooks.iter().map(|h| &h.id)),
-                config::Repo::Meta(cfg) => Box::new(cfg.hooks.iter().map(|h| &h.0.id)),
-            }
-        })
-        .map(|id| CompletionCandidate::new(id.clone()));
+        .flat_map(
+            |repo| -> Box<dyn Iterator<Item = (&String, Option<&str>)>> {
+                match repo {
+                    config::Repo::Remote(cfg) => {
+                        Box::new(cfg.hooks.iter().map(|h| (&h.id, h.name.as_deref())))
+                    }
+                    config::Repo::Local(cfg) => {
+                        Box::new(cfg.hooks.iter().map(|h| (&h.id, Some(&*h.name))))
+                    }
+                    config::Repo::Meta(cfg) => {
+                        Box::new(cfg.hooks.iter().map(|h| (&h.0.id, Some(&*h.0.name))))
+                    }
+                }
+            },
+        )
+        .map(|(id, name)| {
+            CompletionCandidate::new(id.clone())
+                .help(name.map(|name| StyledStr::from(name.to_string())))
+        });
 
     let Some(current) = current.to_str() else {
         return hook_ids.collect();
