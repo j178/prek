@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use anyhow::{Result, bail};
 use axoupdater::{AxoUpdater, ReleaseSource, ReleaseSourceType, UpdateRequest};
-use itertools::Itertools;
 use semver::Version;
 use std::process::Command;
 use tokio::task::JoinSet;
@@ -19,7 +18,7 @@ use crate::store::{CacheBucket, Store};
 
 // The version range of `uv` to check. Should update periodically.
 const MIN_UV_VERSION: &str = "0.7.0";
-const MAX_UV_VERSION: &str = "0.8.0";
+const MAX_UV_VERSION: &str = "0.8.6";
 
 fn get_uv_version(uv_path: &Path) -> Result<Version> {
     let output = Command::new(uv_path)
@@ -157,6 +156,8 @@ impl InstallSource {
     }
 
     async fn install_from_pip(&self, target: &Path) -> Result<()> {
+        // When running `pip install` in multiple threads, it can fail
+        // without extracting files properly.
         Cmd::new("python3", "pip install uv")
             .arg("-m")
             .arg("pip")
@@ -167,13 +168,6 @@ impl InstallSource {
             .check(true)
             .status()
             .await?;
-
-        let files = target
-            .read_dir()?
-            .flatten()
-            .map(|d| d.path().to_string_lossy().to_string())
-            .join(", ");
-        println!("Files in target: {files}");
 
         let bin_dir = target.join(if cfg!(windows) { "Scripts" } else { "bin" });
         let lib_dir = target.join(if cfg!(windows) { "Lib" } else { "lib" });
