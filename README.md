@@ -21,7 +21,7 @@ while also providing some additional long-requested features.
 > This project is still in early stage of development, some features are still not implemented.
 > It is not production-ready yet, but feel free to try it out and provide feedback.
 >
-> Current supported languages are `python`, `node`, `go`, `docker`, `docker-image`, `system`, `script` and `fail`.
+> Current supported languages are `python`, `node`, `go`, `docker`, `docker-image`, `pygrep`, `system`, `script` and `fail`.
 
 ## Features
 
