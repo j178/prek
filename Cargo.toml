@@ -42,7 +42,6 @@ dunce = { version = "1.0.5" }
 etcetera = { version = "0.10.0" }
 fancy-regex = { version = "0.16.0" }
 fs-err = { version = "3.1.0", features = ["tokio"] }
-fs2 = { version = "0.4.3" }
 futures = { version = "0.3.31" }
 hex = { version = "0.4.3" }
 http = { version = "1.1.0" }
