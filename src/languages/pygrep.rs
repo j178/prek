@@ -3,7 +3,6 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use clap::Parser;
 use fancy_regex::Regex;
 use futures::StreamExt;
 use tokio::io::AsyncBufReadExt;
@@ -13,17 +12,34 @@ use crate::languages::LanguageImpl;
 use crate::run::CONCURRENCY;
 use crate::store::Store;
 
-#[derive(Parser)]
+#[derive(Debug, Default)]
 struct Args {
-    #[arg(short, long)]
     ignore_case: bool,
-    #[arg(long)]
     multiline: bool,
-    #[arg(long)]
     negate: bool,
 }
 
+impl Args {
+    fn parse(args: &[String]) -> Result<Self> {
+        let mut parsed = Args::default();
+
+        for arg in args {
+            match arg.as_str() {
+                "--ignore-case" | "-i" => parsed.ignore_case = true,
+                "--multiline" => parsed.multiline = true,
+                "--negate" => parsed.negate = true,
+                _ => anyhow::bail!("Unknown argument: {}", arg),
+            }
+        }
+
+        Ok(parsed)
+    }
+}
+
 pub(crate) struct Pygrep;
+
+// In Python, the $ anchor matches before a trailing newline by default.
+// So $ can match either at the absolute end of the string OR just before a final \n.
 
 impl LanguageImpl for Pygrep {
     async fn install(&self, hook: Arc<Hook>, _store: &Store) -> Result<InstalledHook> {
@@ -40,7 +56,8 @@ impl LanguageImpl for Pygrep {
         filenames: &[&String],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
-        let args = Args::try_parse_from(&hook.args).context("Failed to parse `args`")?;
+        let args = Args::parse(&hook.args).context("Failed to parse `args`")?;
+
         // For `pygrep`, its entry is a Python regex pattern.
         let pattern = if args.ignore_case {
             Regex::new(&format!("(?i){}", hook.entry.entry()))
@@ -84,13 +101,7 @@ async fn process_file_by_line(filename: &Path, pattern: &Regex) -> Result<String
     let mut line_no = 1;
     while reader.read_line(&mut line).await? > 0 {
         if pattern.is_match(&line)? {
-            writeln!(
-                &mut output,
-                "{}:{}:{}",
-                filename.display(),
-                line_no,
-                line.trim_end()
-            )?;
+            writeln!(&mut output, "{}:{}:{}", filename.display(), line_no, line,)?;
         }
         line_no += 1;
         line.clear();
@@ -126,22 +137,14 @@ async fn process_file_by_line_negated(filename: &Path, pattern: &Regex) -> Resul
     let mut output = String::new();
     let mut line = String::new();
 
-    let mut line_no = 1;
     while reader.read_line(&mut line).await? > 0 {
-        if !pattern.is_match(&line)? {
-            writeln!(
-                &mut output,
-                "{}:{}:{}",
-                filename.display(),
-                line_no,
-                line.trim_end()
-            )?;
+        if pattern.is_match(&line)? {
             return Ok(output);
         }
-        line_no += 1;
         line.clear();
     }
 
+    writeln!(&mut output, "{}", filename.display())?;
     Ok(output)
 }
 
