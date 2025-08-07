@@ -64,12 +64,7 @@ fn hook_id_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
     };
 
     hook_ids
-        .filter(|h| {
-            h.get_value()
-                .to_str()
-                .unwrap_or_default()
-                .starts_with(current)
-        })
+        .filter(|h| h.get_value().to_str().unwrap_or_default().contains(current))
         .collect()
 }
 
