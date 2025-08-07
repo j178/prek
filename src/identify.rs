@@ -786,14 +786,16 @@ fn tags_from_filename(filename: &Path) -> Vec<&str> {
     let mut result = FxHashSet::default();
 
     if let Some(tags) = by_filename().get(filename) {
-        tags.iter().for_each(|&tag| {
-            result.insert(tag);
-        });
+        for tag in *tags {
+            result.insert(*tag);
+        }
     }
-    // # Allow e.g. "Dockerfile.xenial" to match "Dockerfile".
-    if let Some(name) = filename.split('.').next() {
-        if let Some(tags) = by_filename().get(name) {
-            result.extend(&**tags);
+    if result.is_empty() {
+        // # Allow e.g. "Dockerfile.xenial" to match "Dockerfile".
+        if let Some(name) = filename.split('.').next() {
+            if let Some(tags) = by_filename().get(name) {
+                result.extend(&**tags);
+            }
         }
     }
 
@@ -934,7 +936,14 @@ mod tests {
     fn tags_from_filename() {
         let tags = super::tags_from_filename(Path::new("test.py"));
         assert_eq!(tags, vec!["python", "text"]);
+
         let tags = super::tags_from_filename(Path::new("data.json"));
+        assert_eq!(tags, vec!["json", "text"]);
+
+        let tags = super::tags_from_filename(Path::new("Pipfile"));
+        assert_eq!(tags, vec!["toml", "text"]);
+
+        let tags = super::tags_from_filename(Path::new("Pipfile.lock"));
         assert_eq!(tags, vec!["json", "text"]);
     }
 }
