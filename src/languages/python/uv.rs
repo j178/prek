@@ -18,7 +18,7 @@ use crate::store::{CacheBucket, Store};
 
 // The version range of `uv` to check. Should update periodically.
 const MIN_UV_VERSION: &str = "0.7.0";
-const MAX_UV_VERSION: &str = "0.8.5";
+const MAX_UV_VERSION: &str = "0.8.6";
 
 fn get_uv_version(uv_path: &Path) -> Result<Version> {
     let output = Command::new(uv_path)
