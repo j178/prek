@@ -6,6 +6,7 @@ use std::str::FromStr;
 use anstream::{ColorChoice, eprintln};
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
+use clap_complete::CompleteEnv;
 use owo_colors::OwoColorize;
 use tracing::{debug, error};
 use tracing_subscriber::EnvFilter;
@@ -288,6 +289,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 }
 
 fn main() -> ExitCode {
+    CompleteEnv::with_factory(Cli::command).complete();
+
     ctrlc::set_handler(move || {
         cleanup();
 

@@ -5,10 +5,12 @@ use std::process::ExitCode;
 use clap::builder::Styles;
 use clap::builder::styling::{AnsiColor, Effects};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
+use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
 use constants::env_vars::EnvVars;
 
-use crate::config::{CONFIG_FILE, HookType, Stage};
+use crate::config::{self, CONFIG_FILE, HookType, Stage};
+use crate::workspace::Project;
 
 mod clean;
 mod hook_impl;
@@ -26,6 +28,39 @@ pub(crate) use run::run;
 pub(crate) use sample_config::sample_config;
 pub(crate) use self_update::self_update;
 pub(crate) use validate::{validate_configs, validate_manifest};
+
+// Parses hook ids from .pre-commit-config.yaml
+fn hook_id_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
+    let Ok(project) = Project::from_config_file(None) else {
+        return vec![];
+    };
+
+    let hook_ids = project
+        .config()
+        .repos
+        .iter()
+        .flat_map(|repo| -> Box<dyn Iterator<Item = &String>> {
+            match repo {
+                config::Repo::Remote(cfg) => Box::new(cfg.hooks.iter().map(|h| &h.id)),
+                config::Repo::Local(cfg) => Box::new(cfg.hooks.iter().map(|h| &h.id)),
+                config::Repo::Meta(cfg) => Box::new(cfg.hooks.iter().map(|h| &h.0.id)),
+            }
+        })
+        .map(|id| CompletionCandidate::new(id.clone()));
+
+    let Some(current) = current.to_str() else {
+        return hook_ids.collect();
+    };
+
+    hook_ids
+        .filter(|h| {
+            h.get_value()
+                .to_str()
+                .unwrap_or_default()
+                .starts_with(current)
+        })
+        .collect()
+}
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {
@@ -257,7 +292,7 @@ pub(crate) struct RunExtraArgs {
 #[derive(Debug, Clone, Default, Args)]
 pub(crate) struct RunArgs {
     /// The hook ID to run.
-    #[arg(value_name = "HOOK", value_hint = ValueHint::Other)]
+    #[arg(value_name = "HOOK", value_hint = ValueHint::Other, add = ArgValueCompleter::new(hook_id_completer))]
     pub(crate) hook_id: Option<String>,
     /// Run on all files in the repo.
     #[arg(short, long, conflicts_with_all = ["files", "from_ref", "to_ref"])]
