@@ -118,6 +118,7 @@ fn additional_dependencies() {
               - id: node
                 name: node
                 language: node
+                language_version: '18.20.8' # will auto download
                 entry: cowsay Hello World!
                 additional_dependencies: ["cowsay"]
                 always_run: true

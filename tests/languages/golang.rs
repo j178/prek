@@ -1,7 +1,7 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
 
-use crate::common::{TestContext, cmd_snapshot, remove_bin_from_path};
+use crate::common::{TestContext, cmd_snapshot};
 
 // We use `setup-go` action to install go1.24.5 in CI, so 1.23.11 should be downloaded by prefligit.
 #[test]
@@ -120,7 +120,7 @@ fn language_version() -> anyhow::Result<()> {
 
 /// Test that `additional_dependencies` are installed correctly.
 #[test]
-fn additional_dependencies() -> anyhow::Result<()> {
+fn additional_dependencies() {
     let context = TestContext::new();
     context.init_project();
 
@@ -135,13 +135,13 @@ fn additional_dependencies() -> anyhow::Result<()> {
                 additional_dependencies: ["mvdan.cc/gofumpt@v0.8.0"]
                 always_run: true
                 verbose: true
+                language_version: '1.23.11' # will auto download
                 pass_filenames: false
     "#});
 
     context.git_add(".");
 
-    let new_path = remove_bin_from_path("go")?;
-    cmd_snapshot!(context.filters(), context.run().env("PATH", new_path), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -162,13 +162,11 @@ fn additional_dependencies() -> anyhow::Result<()> {
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }
 
 /// Test a remote go hook.
 #[test]
-fn remote_hook() -> anyhow::Result<()> {
+fn remote_hook() {
     let context = TestContext::new();
     context.init_project();
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -178,11 +176,11 @@ fn remote_hook() -> anyhow::Result<()> {
             hooks:
               - id: echo
                 verbose: true
+                language_version: '1.23.11' # will auto download
         "});
     context.git_add(".");
 
-    let new_path = remove_bin_from_path("go")?;
-    cmd_snapshot!(context.filters(), context.run().env("PATH", new_path), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -193,6 +191,4 @@ fn remote_hook() -> anyhow::Result<()> {
 
     ----- stderr -----
     "#);
-
-    Ok(())
 }
