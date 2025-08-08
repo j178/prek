@@ -114,9 +114,14 @@ impl<'a> FileFilter<'a> {
         self.filenames.len()
     }
 
-    /// Filter filenames by tags for a specific hook.
-    pub(crate) fn by_tag(&self, hook: &Hook) -> Vec<&String> {
-        let filter = FileTagFilter::for_hook(hook);
+    /// Filter filenames by type tags for a specific hook.
+    pub(crate) fn by_type(
+        &self,
+        types: &[String],
+        types_or: &[String],
+        exclude_types: &[String],
+    ) -> Vec<&String> {
+        let filter = FileTagFilter::new(types, types_or, exclude_types);
         let filenames: Vec<_> = self
             .filenames
             .par_iter()
