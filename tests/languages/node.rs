@@ -1,7 +1,7 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, remove_bin_from_path};
 
 // We use `setup-node` action to install node 19.9.0 in CI, so 18.20.8 should be downloaded by prefligit.
 #[test]
@@ -118,6 +118,7 @@ fn additional_dependencies() {
               - id: node
                 name: node
                 language: node
+                language_version: '18.20.8' # will auto download
                 entry: cowsay Hello World!
                 additional_dependencies: ["cowsay"]
                 always_run: true
@@ -150,7 +151,7 @@ fn additional_dependencies() {
 /// Test `https://github.com/thlorenz/doctoc` works correctly with prefligit.
 /// Previously, prefligit did not install its dependencies correctly.
 #[test]
-fn doctoc() {
+fn doctoc() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -161,14 +162,17 @@ fn doctoc() {
               - id: doctoc
                 name: Add TOC for Markdown
     "});
-    context
-        .work_dir()
-        .child("README.md")
-        .write_str("# Hello World\n\nThis is a test file.\n\n## Subsection\n\nMore content here.\n")
-        .unwrap();
+    context.work_dir().child("README.md").write_str(
+        "# Hello World\n\nThis is a test file.\n\n## Subsection\n\nMore content here.\n",
+    )?;
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    #[allow(clippy::disallowed_methods)]
+    let new_path = remove_bin_from_path("node")?;
+
+    // Set PATH to . to mask the system installed node,
+    // ensure that `npm` runs correctly.
+    cmd_snapshot!(context.filters(), context.run().env("PATH", new_path), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -185,4 +189,6 @@ fn doctoc() {
 
     ----- stderr -----
     "#);
+
+    Ok(())
 }

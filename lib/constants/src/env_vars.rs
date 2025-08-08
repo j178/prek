@@ -34,7 +34,9 @@ impl EnvVars {
 
     // Go related
     pub const GOTOOLCHAIN: &'static str = "GOTOOLCHAIN";
+    pub const GOROOT: &'static str = "GOROOT";
     pub const GOPATH: &'static str = "GOPATH";
+    pub const GOBIN: &'static str = "GOBIN";
 }
 
 impl EnvVars {

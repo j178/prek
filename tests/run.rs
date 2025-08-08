@@ -302,7 +302,7 @@ fn invalid_hook_id() {
     ----- stdout -----
 
     ----- stderr -----
-    No hook found for id `invalid-hook-id`
+    No hook found for id `invalid-hook-id` and stage `pre-commit`
     "#);
 }
 
@@ -463,6 +463,66 @@ fn skips() {
     check json...............................................................Failed
     - hook id: check-json
     - exit code: 1
+
+    ----- stderr -----
+    "#);
+}
+
+/// Run hooks with matched `stage`.
+#[test]
+fn stage() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: manual-stage
+                name: manual-stage
+                language: system
+                entry: echo manual-stage
+                stages: [ manual ]
+              # Defaults to all stages.
+              - id: default-stage
+                name: default-stage
+                language: system
+                entry: echo default-stage
+              - id: post-commit-stage
+                name: post-commit-stage
+                language: system
+                entry: echo post-commit-stage
+                stages: [ post-commit ]
+    "});
+    context.git_add(".");
+
+    // By default, run hooks with `pre-commit` stage.
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    default-stage............................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    // Run hooks with `manual` stage.
+    cmd_snapshot!(context.filters(), context.run().arg("--hook-stage").arg("manual"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    manual-stage.............................................................Passed
+    default-stage............................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    // Run hooks with `post-commit` stage.
+    cmd_snapshot!(context.filters(), context.run().arg("--hook-stage").arg("post-commit"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    default-stage........................................(no files to check)Skipped
+    post-commit-stage....................................(no files to check)Skipped
 
     ----- stderr -----
     "#);

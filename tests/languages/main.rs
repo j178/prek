@@ -10,4 +10,5 @@ mod golang;
 mod node;
 mod pygrep;
 mod python;
+mod script;
 mod unimplemented;

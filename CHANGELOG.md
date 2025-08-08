@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.0.22
+
+### Enhancements
+
+- Add value hint to `prefligit run` flags ([#373](https://github.com/j178/prefligit/pull/373))
+- Check minimum supported version for uv found from system ([#352](https://github.com/j178/prefligit/pull/352))
+
+### Bug fixes
+
+- Fix `check_added_large_files` parameter name ([#389](https://github.com/j178/prefligit/pull/389))
+- Fix `npm install` on Windows ([#374](https://github.com/j178/prefligit/pull/374))
+- Fix docker mount options ([#377](https://github.com/j178/prefligit/pull/377))
+- Fix identify tags for `Pipfile.lock` ([#391](https://github.com/j178/prefligit/pull/391))
+- Fix identifying symlinks ([#378](https://github.com/j178/prefligit/pull/378))
+- Set `GOROOT` when installing golang hook ([#381](https://github.com/j178/prefligit/pull/381))
+
+### Other changes
+- Add devcontainer config ([#379](https://github.com/j178/prefligit/pull/379))
+- Bump rust toolchain to 1.89 ([#386](https://github.com/j178/prefligit/pull/386))
+
+## 0.0.21
+
+### Enhancements
+
+- Add `--directory` to `prefligit run` ([#358](https://github.com/j178/prefligit/pull/358))
+- Implement `tags_from_interpreter` ([#362](https://github.com/j178/prefligit/pull/362))
+- Set GOBIN to `<hook-env>/bin`, set GOPATH to `$PREGLIGIT_HOME/cache/go` ([#369](https://github.com/j178/prefligit/pull/369))
+
+### Performance
+
+- Make Partitions iterator produce slice instead of Vec ([#361](https://github.com/j178/prefligit/pull/361))
+- Use `rustc_hash` ([#359](https://github.com/j178/prefligit/pull/359))
+
+### Bug fixes
+
+- Add `node` to PATH when running `npm` ([#371](https://github.com/j178/prefligit/pull/371))
+- Fix bug that default hook stage should be pre-commit ([#367](https://github.com/j178/prefligit/pull/367))
+- Fix cache dir permission before clean ([#368](https://github.com/j178/prefligit/pull/368))
+
+### Other changes
+
+- Move `Project` into `workspace` module ([#364](https://github.com/j178/prefligit/pull/364))
+
 ## 0.0.20
 
 ### Enhancements

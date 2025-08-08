@@ -13,3 +13,6 @@
 
 # profiling flamegraphs
 *.flamegraph.svg
+
+# vscode
+.vscode

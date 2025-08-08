@@ -13,6 +13,6 @@ repos:
         name: golang
         language: golang
         entry: go version
-        language_version: '1.24.5'
+        language_version: '1.23.5'
         always_run: true
         pass_filenames: false

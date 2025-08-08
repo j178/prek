@@ -3,8 +3,10 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use axoupdater::{AxoUpdater, ReleaseSource, ReleaseSourceType, UpdateRequest};
+use semver::Version;
+use std::process::Command;
 use tokio::task::JoinSet;
 use tracing::{debug, enabled, trace, warn};
 
@@ -14,13 +16,47 @@ use crate::fs::LockedFile;
 use crate::process::Cmd;
 use crate::store::{CacheBucket, Store};
 
-// The version of `uv` to install. Should update periodically.
-const UV_VERSION: &str = "0.8.3";
+// The version range of `uv` we will install. Should update periodically.
+const CUR_UV_VERSION: &str = "0.8.6";
+const UV_VERSION_RANGE: &str = ">=0.7.0, <0.9.0";
 
-static UV_EXE: LazyLock<Result<PathBuf, which::Error>> = LazyLock::new(|| {
-    which::which("uv").inspect(|uv| {
-        debug!("Found uv in PATH: {}", uv.display());
-    })
+fn get_uv_version(uv_path: &Path) -> Result<Version> {
+    let output = Command::new(uv_path)
+        .arg("--version")
+        .output()
+        .map_err(|e| anyhow::anyhow!("Failed to execute uv: {}", e))?;
+
+    if !output.status.success() {
+        bail!("Failed to get uv version");
+    }
+
+    let version_output = String::from_utf8_lossy(&output.stdout);
+    let version_str = version_output
+        .split_whitespace()
+        .nth(1)
+        .ok_or_else(|| anyhow::anyhow!("Invalid version output format"))?;
+
+    Version::parse(version_str).map_err(Into::into)
+}
+
+static UV_EXE: LazyLock<Option<(PathBuf, Version)>> = LazyLock::new(|| {
+    let version_range = semver::VersionReq::parse(UV_VERSION_RANGE).ok()?;
+
+    for uv_path in which::which_all("uv").ok()? {
+        debug!("Found uv in PATH: {}", uv_path.display());
+
+        if let Ok(version) = get_uv_version(&uv_path) {
+            if version_range.matches(&version) {
+                return Some((uv_path, version));
+            }
+            warn!(
+                "Detected system uv version `{}` — expected a version range: `{}`.",
+                version, version_range
+            );
+        }
+    }
+
+    None
 });
 
 #[derive(Debug)]
@@ -72,7 +108,8 @@ impl InstallSource {
 
     async fn install_from_github(&self, target: &Path) -> Result<()> {
         let mut installer = AxoUpdater::new_for("uv");
-        installer.configure_version_specifier(UpdateRequest::SpecificTag(UV_VERSION.to_string()));
+        installer
+            .configure_version_specifier(UpdateRequest::SpecificTag(CUR_UV_VERSION.to_string()));
         installer.always_update(true);
         installer.set_install_dir(&target.to_string_lossy());
         installer.set_release_source(ReleaseSource {
@@ -118,15 +155,17 @@ impl InstallSource {
     }
 
     async fn install_from_pip(&self, target: &Path) -> Result<()> {
+        // When running `pip install` in multiple threads, it can fail
+        // without extracting files properly.
         Cmd::new("python3", "pip install uv")
             .arg("-m")
             .arg("pip")
             .arg("install")
             .arg("--prefix")
             .arg(target)
-            .arg(format!("uv=={UV_VERSION}"))
+            .arg(format!("uv=={CUR_UV_VERSION}"))
             .check(true)
-            .output()
+            .status()
             .await?;
 
         let bin_dir = target.join(if cfg!(windows) { "Scripts" } else { "bin" });
@@ -166,7 +205,7 @@ impl Uv {
     async fn select_source() -> Result<InstallSource> {
         async fn check_github(client: &reqwest::Client) -> Result<bool> {
             let url = format!(
-                "https://github.com/astral-sh/uv/releases/download/{UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz"
+                "https://github.com/astral-sh/uv/releases/download/{CUR_UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz"
             );
             let response = client
                 .head(url)
@@ -222,30 +261,36 @@ impl Uv {
     }
 
     pub async fn install(uv_dir: &Path) -> Result<Self> {
-        // 1) Check if `uv` is installed already.
-        // TODO: check minimum supported uv version
-        if let Ok(uv) = UV_EXE.as_ref() {
-            return Ok(Self::new(uv.clone()));
+        // 1) Check if system `uv` meets minimum version requirement
+        if let Some((uv_path, version)) = UV_EXE.as_ref() {
+            trace!(
+                "Using system uv version {} at {}",
+                version,
+                uv_path.display()
+            );
+            return Ok(Self::new(uv_path.clone()));
         }
 
-        // 2) Check if `uv` is installed by `prefligit`
-        let uv = uv_dir.join("uv").with_extension(env::consts::EXE_EXTENSION);
-        if uv.is_file() {
-            trace!(uv = %uv.display(), "Found managed uv");
-            return Ok(Self::new(uv));
+        // 2) Use or install managed `uv`
+        let uv_path = uv_dir.join("uv").with_extension(env::consts::EXE_EXTENSION);
+
+        if uv_path.is_file() {
+            trace!(uv = %uv_path.display(), "Found managed uv");
+            return Ok(Self::new(uv_path));
         }
 
+        // Install new managed uv with proper locking
         fs_err::tokio::create_dir_all(&uv_dir).await?;
         let _lock = LockedFile::acquire(uv_dir.join(".lock"), "uv").await?;
 
-        if uv.is_file() {
-            trace!(uv = %uv.display(), "Found managed uv");
-            return Ok(Self::new(uv));
+        if uv_path.is_file() {
+            trace!(uv = %uv_path.display(), "Found managed uv");
+            return Ok(Self::new(uv_path));
         }
 
         let source = Self::select_source().await?;
         source.install(uv_dir).await?;
 
-        Ok(Self::new(uv))
+        Ok(Self::new(uv_path))
     }
 }

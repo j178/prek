@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
+use crate::fs::CWD;
 use crate::hook::Hook;
 use crate::hook::InstalledHook;
 use crate::languages::LanguageImpl;
@@ -28,9 +29,11 @@ impl LanguageImpl for Script {
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let entry = hook.entry.parsed()?;
+        let repo_path = hook.repo_path().unwrap_or_else(|| CWD.as_path());
+        let cmd = repo_path.join(&entry[0]);
 
         let run = async move |batch: Vec<String>| {
-            let mut command = Cmd::new(&entry[0], "run script command")
+            let mut command = Cmd::new(&cmd, "run script command")
                 .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)

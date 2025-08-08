@@ -721,7 +721,7 @@ fn is_encoding_tag(tag: &str) -> bool {
 }
 
 pub fn tags_from_path(path: &Path) -> Result<Vec<&str>> {
-    let metadata = std::fs::metadata(path)?;
+    let metadata = std::fs::symlink_metadata(path)?;
     if metadata.is_dir() {
         return Ok(vec![tags::DIRECTORY]);
     } else if metadata.is_symlink() {
@@ -786,14 +786,16 @@ fn tags_from_filename(filename: &Path) -> Vec<&str> {
     let mut result = FxHashSet::default();
 
     if let Some(tags) = by_filename().get(filename) {
-        tags.iter().for_each(|&tag| {
-            result.insert(tag);
-        });
+        for tag in *tags {
+            result.insert(*tag);
+        }
     }
-    // # Allow e.g. "Dockerfile.xenial" to match "Dockerfile".
-    if let Some(name) = filename.split('.').next() {
-        if let Some(tags) = by_filename().get(name) {
-            result.extend(&**tags);
+    if result.is_empty() {
+        // # Allow e.g. "Dockerfile.xenial" to match "Dockerfile".
+        if let Some(name) = filename.split('.').next() {
+            if let Some(tags) = by_filename().get(name) {
+                result.extend(&**tags);
+            }
         }
     }
 
@@ -910,12 +912,38 @@ fn is_text_file(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use std::path::Path;
+    #[cfg(unix)]
+    use tempfile::tempdir;
+
+    #[test]
+    #[cfg(unix)]
+    fn tags_from_path() {
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("source.txt");
+        let dest = dir.path().join("link.txt");
+        fs_err::File::create(&src).unwrap();
+        std::os::unix::fs::symlink(&src, &dest).unwrap();
+
+        let tags = super::tags_from_path(dir.path()).unwrap();
+        assert_eq!(tags, vec!["directory"]);
+        let tags = super::tags_from_path(&src).unwrap();
+        assert_eq!(tags, vec!["plain-text", "non-executable", "file", "text"]);
+        let tags = super::tags_from_path(&dest).unwrap();
+        assert_eq!(tags, vec!["symlink"]);
+    }
 
     #[test]
     fn tags_from_filename() {
         let tags = super::tags_from_filename(Path::new("test.py"));
         assert_eq!(tags, vec!["python", "text"]);
+
         let tags = super::tags_from_filename(Path::new("data.json"));
+        assert_eq!(tags, vec!["json", "text"]);
+
+        let tags = super::tags_from_filename(Path::new("Pipfile"));
+        assert_eq!(tags, vec!["toml", "text"]);
+
+        let tags = super::tags_from_filename(Path::new("Pipfile.lock"));
         assert_eq!(tags, vec!["json", "text"]);
     }
 }

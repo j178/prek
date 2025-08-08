@@ -1,12 +1,13 @@
 #![allow(dead_code, unreachable_pub)]
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
 use etcetera::BaseStrategy;
+use rustc_hash::FxHashSet;
 
 use constants::env_vars::EnvVars;
 
@@ -316,3 +317,22 @@ macro_rules! cmd_snapshot {
 
 #[allow(unused_imports)]
 pub(crate) use cmd_snapshot;
+
+#[allow(clippy::disallowed_methods)]
+pub(crate) fn remove_bin_from_path(bin: &str) -> anyhow::Result<OsString> {
+    let Ok(dirs) = which::which_all(bin) else {
+        return Ok(std::env::var_os("PATH").expect("PATH environment variable is not set"));
+    };
+
+    let dirs: FxHashSet<_> = dirs
+        .filter_map(|path| path.parent().map(Path::to_path_buf))
+        .collect();
+
+    let current_path = std::env::var("PATH").unwrap_or_default();
+
+    let new_path_entries: Vec<_> = std::env::split_paths(&current_path)
+        .filter(|path| !dirs.contains(path.as_path()))
+        .collect();
+
+    Ok(std::env::join_paths(new_path_entries)?)
+}

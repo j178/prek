@@ -218,6 +218,7 @@ fn additional_dependencies() {
               - id: local
                 name: local
                 language: python
+                language_version: '3.11' # will auto download
                 entry: pyecho Hello, world!
                 additional_dependencies: ["pyecho-cli"]
                 always_run: true

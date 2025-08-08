@@ -135,6 +135,7 @@ fn additional_dependencies() {
                 additional_dependencies: ["mvdan.cc/gofumpt@v0.8.0"]
                 always_run: true
                 verbose: true
+                language_version: '1.23.11' # will auto download
                 pass_filenames: false
     "#});
 
@@ -175,6 +176,7 @@ fn remote_hook() {
             hooks:
               - id: echo
                 verbose: true
+                language_version: '1.23.11' # will auto download
         "});
     context.git_add(".");
 

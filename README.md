@@ -1,14 +1,18 @@
-# prefligit
+<img width="183" height="62" alt="image" src="https://github.com/user-attachments/assets/67002ee5-41ca-4e42-a1bd-833a47872fc6" />
+
 
 ![Development Status](https://img.shields.io/badge/Development-Early_Stage-yellowgreen)
 [![CI](https://github.com/j178/prefligit/actions/workflows/ci.yml/badge.svg)](https://github.com/j178/prefligit/actions/workflows/ci.yml)
 [![GitHub downloads](https://img.shields.io/github/downloads/j178/prefligit/total)](https://github.com/j178/prefligit/releases)
 
-<img width="250" alt="prefligit" src="https://github.com/user-attachments/assets/49080cb0-f528-4aa5-acb7-5a88eb9eff4a">
+<img width="250" alt="prefligit" src="https://github.com/user-attachments/assets/49080cb0-f528-4aa5-acb7-5a88eb9eff4a" />
 
-[pre-commit](https://pre-commit.com/) is a framework to run hooks written in many languages, and it manages the language toolchain and dependencies for running the hooks.
+[pre-commit](https://pre-commit.com/) is a framework to run hooks written in many languages, and it manages the
+language toolchain and dependencies for running the hooks.
 
-prefligit is a reimagined version of pre-commit, built in Rust. It is designed to be a faster, dependency-free and drop-in alternative for it, while also providing some additional long-requested features.
+prefli**git** is a reimagined version of pre-commit, built in Rust.
+It is designed to be a faster, dependency-free and drop-in alternative for it,
+while also providing some additional long-requested features.
 
 > [!WARNING]
 > This project is still in early stage of development, some features are still not implemented.
@@ -63,7 +67,7 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 - `prefligit run` has some improvements over `pre-commit run`, such as:
     - `prefligit run --directory <dir>` runs hooks for files in the specified directory, no need to use `git ls-files -- <dir> | xargs pre-commit run --files` anymore.
     - `prefligit run --last-commit` runs hooks for files changed in the last commit.
-- prefligit provides shell completions for `bash`, `zsh`, `fish` and `powershell`.
+- (TODO): prefligit provides shell completions for `prefligit run <hook_id>` command, so you can easily find the available hooks.
 
 ## Installation
 
@@ -74,10 +78,10 @@ prefligit provides a standalone installer script to download and install the too
 
 ```console
 # On Linux and macOS
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prefligit/releases/download/v0.0.20/prefligit-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prefligit/releases/download/v0.0.22/prefligit-installer.sh | sh
 
 # On Windows
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prefligit/releases/download/v0.0.20/prefligit-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prefligit/releases/download/v0.0.22/prefligit-installer.ps1 | iex"
 ```
 </details>
 
