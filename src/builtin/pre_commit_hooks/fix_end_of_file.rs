@@ -65,18 +65,18 @@ impl LineEndingDetector {
         }
 
         let mut pre_tail_buf = [0u8; 1];
-        let mut readed_len = 0;
+        let mut read_len = 0;
         let mut buf = vec![0u8; max_scan_size];
 
-        while readed_len < data_len {
-            let block_size = max_scan_size.min(usize::try_from(data_len - readed_len)?);
+        while read_len < data_len {
+            let block_size = max_scan_size.min(usize::try_from(data_len - read_len)?);
             line_ending_detector
                 .read_bytes_backward(reader, &mut buf[..block_size], false)
                 .await?;
-            readed_len += block_size as u64;
+            read_len += block_size as u64;
 
             // Cache last byte of previous block to avoid splitting `b"\r\n"`.
-            if readed_len != data_len {
+            if read_len != data_len {
                 line_ending_detector
                     .read_bytes_backward(reader, &mut pre_tail_buf, true)
                     .await?;
@@ -86,7 +86,7 @@ impl LineEndingDetector {
             while pos > 0 {
                 pos -= 1;
                 if scan_stop_strategy.should_stop(buf[pos], pos) {
-                    line_ending_detector.final_pos = data_len - readed_len + pos as u64;
+                    line_ending_detector.final_pos = data_len - read_len + pos as u64;
                     return Ok(line_ending_detector);
                 }
 
@@ -98,7 +98,7 @@ impl LineEndingDetector {
                     } else if pos == 0 && pre_tail_buf[0] == b'\r' {
                         line_ending_detector.crlf_count += 1;
                         reader.seek(SeekFrom::Current(-1)).await?;
-                        readed_len += 1;
+                        read_len += 1;
                     } else {
                         line_ending_detector.lf_count += 1;
                     }
@@ -208,6 +208,7 @@ async fn fix_file(filename: &str) -> Result<(i32, Vec<u8>)> {
         file.set_len(pos + 1 + line_ending.len() as u64).await?;
     }
     file.flush().await?;
+    file.shutdown().await?;
     Ok((1, format!("Fixing {filename}\n").into_bytes()))
 }
 
