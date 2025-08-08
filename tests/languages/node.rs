@@ -99,7 +99,7 @@ fn language_version() -> anyhow::Result<()> {
             .filter(|d| !d.file_name().to_string_lossy().starts_with('.'))
             .map(|d| d.file_name().to_string_lossy().to_string())
             .collect::<Vec<_>>(),
-        vec!["18.20.8-Hydrogen"],
+        vec!["19.9.0", "18.20.8-Hydrogen"],
     );
 
     Ok(())
