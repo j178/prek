@@ -50,3 +50,6 @@ version_files = [
   "README.md",
   "Cargo.toml",
 ]
+
+[tool.uv]
+managed = false

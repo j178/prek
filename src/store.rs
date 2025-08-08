@@ -186,6 +186,7 @@ impl ToolBucket {
 pub(crate) enum CacheBucket {
     Uv,
     Go,
+    Python,
 }
 
 impl CacheBucket {
@@ -193,6 +194,7 @@ impl CacheBucket {
         match self {
             CacheBucket::Uv => "uv",
             CacheBucket::Go => "go",
+            CacheBucket::Python => "python",
         }
     }
 }

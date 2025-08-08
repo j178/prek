@@ -50,7 +50,7 @@ static UV_EXE: LazyLock<Option<(PathBuf, Version)>> = LazyLock::new(|| {
                 return Some((uv_path, version));
             }
             warn!(
-                "Detected system uv version `{}` — expected a version range: `{}`.",
+                "Skip system uv version `{}` — expected a version range: `{}`.",
                 version, version_range
             );
         }
