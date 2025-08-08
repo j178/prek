@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.0.23
+
+### Breaking changes
+
+In this release, we've renamed the project to `prek` from `prefligit`. It's shorter so easier to type, and it avoids typosquatting with `preflight`.
+
+This means that the command-line name is now `prek`, and the PyPI package is now listed as [`prek`](https://pypi.org/project/prek/).
+And the Homebrew will be updated to `prek` as well.
+
+And previously, the cache directory was `~/.cache/prefligit`, now it is `~/.cache/prek`.
+You'd have to delete the old cache directory manually, or run `prefligit clean` to clean it up.
+
+Then uninstall the old `prefligit` and install the new `prek` from scratch.
+
+### Enhancements
+
+- Relax uv version check range ([#396](https://github.com/j178/prefligit/pull/396))
+
+### Bug fixes
+
+- Fix `script` command path ([#398](https://github.com/j178/prefligit/pull/398))
+- Fix meta hook `check_useless_excludes` ([#401](https://github.com/j178/prefligit/pull/401))
+
+### Other changes
+
+- Rename to `prek` from `prefligit` ([#402](https://github.com/j178/prefligit/pull/402))
+
 ## 0.0.22
 
 ### Enhancements
