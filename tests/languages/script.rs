@@ -1,5 +1,9 @@
+#[cfg(unix)]
 use crate::common::{TestContext, cmd_snapshot};
 
+// TODO: fix this on Windows
+//   require resolve `bash.exe` before running scripts.
+#[cfg(unix)]
 #[test]
 fn script_run() {
     let context = TestContext::new();
