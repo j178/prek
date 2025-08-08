@@ -1,7 +1,7 @@
 use crate::common::{TestContext, cmd_snapshot};
 
 #[test]
-fn terraform_hooks() {
+fn script_run() {
     let context = TestContext::new();
     context.init_project();
     context.write_pre_commit_config(indoc::indoc! {r"
