@@ -272,7 +272,7 @@ fn config_not_staged() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Your prefligit configuration file is not staged.
+    Your pre-commit configuration file is not staged.
     Run `git add .pre-commit-config.yaml` to fix this.
     "#);
 
@@ -958,7 +958,7 @@ fn merge_conflicts() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    You have unmerged paths. Resolve them before running prefligit.
+    You have unmerged paths. Resolve them before running prek.
     "#);
 
     // Fix the conflict and run again.
@@ -1247,7 +1247,7 @@ fn run_last_commit() -> Result<()> {
     Ok(())
 }
 
-/// Test `prefligit run --directory` flags.
+/// Test `prek run --directory` flags.
 #[test]
 fn run_directory() -> Result<()> {
     let context = TestContext::new();

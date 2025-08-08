@@ -87,7 +87,7 @@ const STYLES: Styles = Styles::styled()
 
 #[derive(Parser)]
 #[command(
-    name = "prefligit",
+    name = "prek",
     author,
     long_version = crate::version::version(),
     about = "pre-commit reimplemented in Rust"
@@ -124,7 +124,7 @@ pub(crate) struct GlobalArgs {
         global = true,
         long,
         value_enum,
-        env = EnvVars::PREFLIGIT_COLOR,
+        env = EnvVars::PREK_COLOR,
         default_value_t = ColorChoice::Auto,
     )]
     pub(crate) color: ColorChoice,
@@ -147,7 +147,7 @@ pub(crate) struct GlobalArgs {
     #[arg(global = true, short, long, action = ArgAction::Count)]
     pub(crate) verbose: u8,
 
-    /// Display the prefligit version.
+    /// Display the prek version.
     #[arg(global = true, short = 'V', long, action = clap::ArgAction::Version)]
     version: Option<bool>,
 
@@ -160,15 +160,15 @@ pub(crate) struct GlobalArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Install the prefligit git hook.
+    /// Install the prek git hook.
     Install(InstallArgs),
     /// Create hook environments for all hooks used in the config file.
     ///
-    /// This command does not install the git hook. To install the git hook along with the hook environments in one command, use `prefligit install --install-hooks`.
+    /// This command does not install the git hook. To install the git hook along with the hook environments in one command, use `prek install --install-hooks`.
     InstallHooks,
     /// Run hooks.
     Run(Box<RunArgs>),
-    /// Uninstall the prefligit git hook.
+    /// Uninstall the prek git hook.
     Uninstall(UninstallArgs),
     /// Validate `.pre-commit-config.yaml` files.
     ValidateConfig(ValidateConfigArgs),
@@ -193,7 +193,7 @@ pub(crate) enum Command {
     #[command(hide = true)]
     HookImpl(HookImplArgs),
 
-    /// `prefligit` self management.
+    /// `prek` self management.
     #[command(name = "self")]
     Self_(SelfNamespace),
 
@@ -350,14 +350,14 @@ pub struct SelfNamespace {
 
 #[derive(Debug, Subcommand)]
 pub enum SelfCommand {
-    /// Update prefligit.
+    /// Update prek.
     Update(SelfUpdateArgs),
 }
 
 #[derive(Debug, Args)]
 pub struct SelfUpdateArgs {
     /// Update to the specified version.
-    /// If not provided, prefligit will update to the latest version.
+    /// If not provided, prek will update to the latest version.
     pub target_version: Option<String>,
 
     /// A GitHub token for authentication.

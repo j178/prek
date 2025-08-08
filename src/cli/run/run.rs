@@ -76,7 +76,7 @@ pub(crate) async fn run(
 
     // Prevent recursive post-checkout hooks.
     if hook_stage == Stage::PostCheckout
-        && EnvVars::is_set(EnvVars::PREFLIGIT_INTERNAL__SKIP_POST_CHECKOUT)
+        && EnvVars::is_set(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT)
     {
         return Ok(ExitStatus::Success);
     }
@@ -87,7 +87,7 @@ pub(crate) async fn run(
     if should_stash && git::has_unmerged_paths().await? {
         writeln!(
             printer.stderr(),
-            "You have unmerged paths. Resolve them before running prefligit."
+            "You have unmerged paths. Resolve them before running prek."
         )?;
         return Ok(ExitStatus::Failure);
     }
@@ -97,7 +97,7 @@ pub(crate) async fn run(
         writeln!(
             printer.stderr(),
             indoc!(
-                "Your prefligit configuration file is not staged.
+                "Your pre-commit configuration file is not staged.
                 Run `git add {}` to fix this."
             ),
             &config_file.user_display()

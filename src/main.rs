@@ -54,8 +54,8 @@ pub(crate) enum Level {
 fn setup_logging(level: Level) -> Result<()> {
     let directive = match level {
         Level::Default | Level::Verbose => tracing::level_filters::LevelFilter::OFF.into(),
-        Level::Debug => Directive::from_str("prefligit=debug")?,
-        Level::Trace => Directive::from_str("prefligit=trace")?,
+        Level::Debug => Directive::from_str("prek=debug")?,
+        Level::Trace => Directive::from_str("prek=trace")?,
         Level::TraceAll => Directive::from_str("trace")?,
     };
 
@@ -153,7 +153,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         cli.command = Some(Command::Run(Box::new(cli.run_args.clone())));
     }
 
-    debug!("prefligit: {}", version::version());
+    debug!("prek: {}", version::version());
 
     match get_root().await {
         Ok(root) => {

@@ -44,10 +44,10 @@ impl LanguageImpl for Golang {
         fs_err::tokio::create_dir_all(bin_dir(&info.env_path)).await?;
 
         // 3. Install dependencies
-        // go: ~/.cache/prefligit/tools/go/1.24.0/bin/go
-        // go_root: ~/.cache/prefligit/tools/go/1.24.0
-        // go_cache: ~/.cache/prefligit/cache/go
-        // go_bin: ~/.cache/prefligit/hooks/envs/<hook_id>/bin
+        // go: ~/.cache/prek/tools/go/1.24.0/bin/go
+        // go_root: ~/.cache/prek/tools/go/1.24.0
+        // go_cache: ~/.cache/prek/cache/go
+        // go_bin: ~/.cache/prek/hooks/envs/<hook_id>/bin
         let go_root = go
             .bin()
             .parent()

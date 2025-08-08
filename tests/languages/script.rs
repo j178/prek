@@ -10,7 +10,7 @@ fn script_run() {
     context.init_project();
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/prefligit-test-repos/script-hooks
+          - repo: https://github.com/prek-test-repos/script-hooks
             rev: main
             hooks:
               - id: echo

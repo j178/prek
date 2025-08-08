@@ -9,8 +9,7 @@ use crate::hook::{Hook, Repo};
 mod meta_hooks;
 mod pre_commit_hooks;
 
-static NO_FAST_PATH: LazyLock<bool> =
-    LazyLock::new(|| EnvVars::is_set(EnvVars::PREFLIGIT_NO_FAST_PATH));
+static NO_FAST_PATH: LazyLock<bool> = LazyLock::new(|| EnvVars::is_set(EnvVars::PREK_NO_FAST_PATH));
 
 /// Returns true if the hook has a builtin Rust implementation.
 pub fn check_fast_path(hook: &Hook) -> bool {

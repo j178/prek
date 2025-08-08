@@ -211,7 +211,7 @@ pub(crate) async fn collect_files(opts: CollectOptions) -> Result<Vec<String>> {
     .await?;
 
     // Sort filenames if in tests to make the order consistent.
-    if EnvVars::is_set(EnvVars::PREFLIGIT_INTERNAL__SORT_FILENAMES) {
+    if EnvVars::is_set(EnvVars::PREK_INTERNAL__SORT_FILENAMES) {
         filenames.sort_unstable();
     }
 
@@ -259,7 +259,7 @@ async fn collect_files_from_args(
 
         // Fun fact: if a hook specified `types: [directory]`, it won't run in `--all-files` mode.
 
-        // TODO: It will be convenient to add a `--directory` flag to `prefligit run`,
+        // TODO: It will be convenient to add a `--directory` flag to `prek run`,
         // we expand the directories to files and pass them to the hook.
         // See: https://github.com/pre-commit/pre-commit/issues/1173
 

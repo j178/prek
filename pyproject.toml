@@ -1,5 +1,5 @@
 [project]
-name = "prefligit"
+name = "PREK"
 version = "0.0.22"
 description = "Better `pre-commit`, re-engineered in Rust"
 authors = [{ name = "j178", email = "hi@j178.dev" }]
@@ -18,9 +18,9 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/j178/prefligit"
-Changelog = "https://github.com/j178/prefligit/blob/main/CHANGELOG.md"
-Releases = "https://github.com/j178/prefligit/releases"
+Repository = "https://github.com/j178/prek"
+Changelog = "https://github.com/j178/prek/blob/main/CHANGELOG.md"
+Releases = "https://github.com/j178/prek/releases"
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]

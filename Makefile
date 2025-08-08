@@ -3,7 +3,7 @@ lint:
 	cargo clippy --all-targets --all-features --workspace -- -D warnings
 
 test-unit:
-	cargo insta test --review --bin prefligit -- $F
+	cargo insta test --review --bin prek -- $F
 
 test-all-unit:
 	cargo insta test --review --workspace --lib --bins

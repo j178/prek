@@ -31,13 +31,13 @@ use tracing::{debug, enabled};
 use crate::cli::ExitStatus;
 use crate::printer::Printer;
 
-/// Attempt to update the prefligit binary.
+/// Attempt to update the prek binary.
 pub(crate) async fn self_update(
     version: Option<String>,
     token: Option<String>,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let mut updater = AxoUpdater::new_for("prefligit");
+    let mut updater = AxoUpdater::new_for("prek");
     if enabled!(tracing::Level::DEBUG) {
         unsafe { env::set_var("INSTALLER_PRINT_VERBOSE", "1") };
         updater.enable_installer_output();
@@ -50,18 +50,18 @@ pub(crate) async fn self_update(
     }
 
     // Load the "install receipt" for the current binary. If the receipt is not found, then
-    // prefligit was likely installed via a package manager.
+    // prek was likely installed via a package manager.
     let Ok(updater) = updater.load_receipt() else {
-        debug!("no receipt found; assuming prefligit was installed via a package manager");
+        debug!("no receipt found; assuming prek was installed via a package manager");
         writeln!(
             printer.stderr(),
             "{}",
             format_args!(
                 concat!(
-                    "{}{} Self-update is only available for prefligit binaries installed via the standalone installation scripts.",
+                    "{}{} Self-update is only available for prek binaries installed via the standalone installation scripts.",
                     "\n",
                     "\n",
-                    "If you installed prefligit with pip, brew, or another package manager, update prefligit with `pip install --upgrade`, `brew upgrade`, or similar."
+                    "If you installed prek with pip, brew, or another package manager, update prek with `pip install --upgrade`, `brew upgrade`, or similar."
                 ),
                 "warning".yellow().bold(),
                 ":".bold()
@@ -71,21 +71,21 @@ pub(crate) async fn self_update(
     };
 
     // Ensure the receipt is for the current binary. If it's not, then the user likely has multiple
-    // prefligit binaries installed, and the current binary was _not_ installed via the standalone
+    // prek binaries installed, and the current binary was _not_ installed via the standalone
     // installation scripts.
     if !updater.check_receipt_is_for_this_executable()? {
         debug!(
-            "receipt is not for this executable; assuming prefligit was installed via a package manager"
+            "receipt is not for this executable; assuming prek was installed via a package manager"
         );
         writeln!(
             printer.stderr(),
             "{}",
             format_args!(
                 concat!(
-                    "{}{} Self-update is only available for prefligit binaries installed via the standalone installation scripts.",
+                    "{}{} Self-update is only available for prek binaries installed via the standalone installation scripts.",
                     "\n",
                     "\n",
-                    "If you installed prefligit with pip, brew, or another package manager, update prefligit with `pip install --upgrade`, `brew upgrade`, or similar."
+                    "If you installed prek with pip, brew, or another package manager, update prek with `pip install --upgrade`, `brew upgrade`, or similar."
                 ),
                 "warning".yellow().bold(),
                 ":".bold()
@@ -113,7 +113,7 @@ pub(crate) async fn self_update(
     updater.configure_version_specifier(update_request);
 
     // Run the updater. This involves a network request, since we need to determine the latest
-    // available version of prefligit.
+    // available version of prek.
     match updater.run().await {
         Ok(Some(result)) => {
             let version_information = if let Some(old_version) = result.old_version {
@@ -130,12 +130,12 @@ pub(crate) async fn self_update(
                 printer.stderr(),
                 "{}",
                 format_args!(
-                    "{}{} Upgraded prefligit {}! {}",
+                    "{}{} Upgraded prek {}! {}",
                     "success".green().bold(),
                     ":".bold(),
                     version_information,
                     format!(
-                        "https://github.com/j178/prefligit/releases/tag/{}",
+                        "https://github.com/j178/prek/releases/tag/{}",
                         result.new_version_tag
                     )
                     .cyan()
@@ -147,7 +147,7 @@ pub(crate) async fn self_update(
                 printer.stderr(),
                 "{}",
                 format_args!(
-                    "{}{} You're on the latest version of prefligit ({})",
+                    "{}{} You're on the latest version of prek ({})",
                     "success".green().bold(),
                     ":".bold(),
                     format!("v{}", env!("CARGO_PKG_VERSION")).bold().white()

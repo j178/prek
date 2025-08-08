@@ -29,7 +29,7 @@ impl Docker {
         let mut hasher = DefaultHasher::new();
         info.hash(&mut hasher);
         let digest = hex::encode(hasher.finish().to_le_bytes());
-        format!("prefligit-{digest}")
+        format!("prek-{digest}")
     }
 
     async fn build_docker_image(hook: &InstalledHook, pull: bool) -> Result<()> {

@@ -3,7 +3,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild};
 
 use crate::common::{TestContext, cmd_snapshot, remove_bin_from_path};
 
-// We use `setup-node` action to install node 19.9.0 in CI, so 18.20.8 should be downloaded by prefligit.
+// We use `setup-node` action to install node 19.9.0 in CI, so 18.20.8 should be downloaded by prek.
 #[test]
 fn language_version() -> anyhow::Result<()> {
     let context = TestContext::new();
@@ -148,8 +148,8 @@ fn additional_dependencies() {
     "###);
 }
 
-/// Test `https://github.com/thlorenz/doctoc` works correctly with prefligit.
-/// Previously, prefligit did not install its dependencies correctly.
+/// Test `https://github.com/thlorenz/doctoc` works correctly with prek.
+/// Previously, prek did not install its dependencies correctly.
 #[test]
 fn doctoc() -> anyhow::Result<()> {
     let context = TestContext::new();

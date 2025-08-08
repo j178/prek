@@ -32,15 +32,15 @@ pub enum Error {
 }
 
 static STORE_HOME: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
-    if let Some(path) = EnvVars::var_os(EnvVars::PREFLIGIT_HOME) {
+    if let Some(path) = EnvVars::var_os(EnvVars::PREK_HOME) {
         debug!(
             path = %path.to_string_lossy(),
-            "Loading store from PREFLIGIT_HOME env var",
+            "Loading store from PREK_HOME env var",
         );
         Some(path.into())
     } else {
         etcetera::choose_base_strategy()
-            .map(|path| path.cache_dir().join("prefligit"))
+            .map(|path| path.cache_dir().join("prek"))
             .ok()
     }
 });
@@ -74,7 +74,7 @@ impl Store {
             .write(true)
             .create_new(true)
             .open(self.path.join("README")) {
-            Ok(mut f) => f.write_all(b"This directory is maintained by the prefligit project.\nLearn more: https://github.com/j178/prefligit\n")?,
+            Ok(mut f) => f.write_all(b"This directory is maintained by the prek project.\nLearn more: https://github.com/j178/prek\n")?,
             Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => (),
             Err(err) => return Err(err.into()),
         }
@@ -85,7 +85,7 @@ impl Store {
     pub(crate) async fn clone_repo(&self, repo: &RemoteRepo) -> Result<PathBuf, Error> {
         // Check if the repo is already cloned.
         let target = self.repo_path(repo);
-        if target.join(".prefligit-repo.json").try_exists()? {
+        if target.join(".prek-repo.json").try_exists()? {
             return Ok(target);
         }
 
@@ -105,7 +105,7 @@ impl Store {
         fs_err::tokio::rename(temp, &target).await?;
 
         let content = serde_json::to_string_pretty(&repo)?;
-        fs_err::tokio::write(target.join(".prefligit-repo.json"), content).await?;
+        fs_err::tokio::write(target.join(".prek-repo.json"), content).await?;
 
         Ok(target)
     }
@@ -119,7 +119,7 @@ impl Store {
             .flatten()
             .filter_map(|entry| {
                 let path = entry.path();
-                let mut file = fs_err::File::open(path.join(".prefligit-hook.json")).ok()?;
+                let mut file = fs_err::File::open(path.join(".prek-hook.json")).ok()?;
                 serde_json::from_reader(&mut file).ok()
             })
     }

@@ -135,7 +135,7 @@ impl WorkingTreeKeeper {
             .arg("--")
             .arg(".")
             // prevent recursive post-checkout hooks
-            .env(EnvVars::PREFLIGIT_INTERNAL__SKIP_POST_CHECKOUT, "1")
+            .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status()?;
