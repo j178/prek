@@ -70,7 +70,7 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 - `prek run` has some improvements over `pre-commit run`, such as:
     - `prek run --directory <dir>` runs hooks for files in the specified directory, no need to use `git ls-files -- <dir> | xargs pre-commit run --files` anymore.
     - `prek run --last-commit` runs hooks for files changed in the last commit.
-- (TODO): prek provides shell completions for `prek run <hook_id>` command, so you can easily find the available hooks.
+- prek provides shell completions for `prek run <hook_id>` command, so you can easily find the available hooks.
 
 ## Installation
 
