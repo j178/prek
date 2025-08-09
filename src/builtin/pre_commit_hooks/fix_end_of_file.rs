@@ -1,8 +1,9 @@
-use crate::hook::Hook;
-use crate::run::CONCURRENCY;
 use anyhow::Result;
 use futures::StreamExt;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, AsyncWriteExt, SeekFrom};
+
+use crate::hook::Hook;
+use crate::run::CONCURRENCY;
 
 pub(crate) async fn fix_end_of_file(_hook: &Hook, filenames: &[&String]) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
@@ -95,7 +96,11 @@ where
 
     while read_len < data_len {
         let block_size = MAX_SCAN_SIZE.min(usize::try_from(data_len - read_len)?);
-        read_bytes_backward(reader, &mut buf[..block_size], false).await?;
+        // SAFETY: block_size is guaranteed to be less than or equal to MAX_SCAN_SIZE
+        reader
+            .seek(SeekFrom::Current(-i64::try_from(block_size).unwrap()))
+            .await?;
+        reader.read_exact(&mut buf[..block_size]).await?;
         read_len += block_size as u64;
 
         let mut pos = block_size;
@@ -117,23 +122,6 @@ where
     }
 
     Ok((None, line_ending))
-}
-
-async fn read_bytes_backward<T>(
-    reader: &mut T,
-    buf: &mut [u8],
-    rewind_after_read: bool,
-) -> Result<u64>
-where
-    T: AsyncRead + AsyncSeek + Unpin,
-{
-    let read_len: i64 = buf.len().try_into().expect("buf len is too large for i64");
-    let mut pos = reader.seek(SeekFrom::Current(-read_len)).await?;
-    reader.read_exact(buf).await?;
-    if !rewind_after_read {
-        pos = reader.seek(SeekFrom::Current(-read_len)).await?;
-    }
-    Ok(pos)
 }
 
 #[cfg(test)]
