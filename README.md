@@ -3,7 +3,7 @@
 ![Development Status](https://img.shields.io/badge/Development-Early_Stage-yellowgreen)
 [![CI](https://github.com/j178/prek/actions/workflows/ci.yml/badge.svg)](https://github.com/j178/prek/actions/workflows/ci.yml)
 [![GitHub downloads](https://img.shields.io/github/downloads/j178/prek/total?&logo=github)](https://github.com/j178/prek/releases)
-[![Discord](https://img.shields.io/discord/1403581202102878289?label=discord&logo=discord)](https://discord.gg/3NRJUqJz86)
+[![Discord](https://img.shields.io/discord/1403581202102878289?logo=discord)](https://discord.gg/3NRJUqJz86)
 
 <img width="250" alt="prek" src="https://github.com/user-attachments/assets/3a87815a-9f3c-48e7-8c1d-384b07ad3b35" />
 
