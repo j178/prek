@@ -4,7 +4,7 @@
 [![CI](https://github.com/j178/prek/actions/workflows/ci.yml/badge.svg)](https://github.com/j178/prek/actions/workflows/ci.yml)
 [![GitHub downloads](https://img.shields.io/github/downloads/j178/prek/total)](https://github.com/j178/prek/releases)
 
-<img width="250" alt="prek" src="https://github.com/user-attachments/assets/49080cb0-f528-4aa5-acb7-5a88eb9eff4a" />
+<img width="250" alt="prek" src="https://github.com/user-attachments/assets/3a87815a-9f3c-48e7-8c1d-384b07ad3b35" />
 
 [pre-commit](https://pre-commit.com/) is a framework to run hooks written in many languages, and it manages the
 language toolchain and dependencies for running the hooks.
