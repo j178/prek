@@ -4,7 +4,7 @@ use assert_fs::prelude::*;
 
 use crate::common::{TestContext, cmd_snapshot};
 
-/// Test basic pygrep functionality - case sensitive matching
+/// Test basic pygrep functionality - case-sensitive matching
 #[test]
 fn basic_case_sensitive() -> Result<()> {
     let context = TestContext::new();
@@ -43,7 +43,7 @@ fn basic_case_sensitive() -> Result<()> {
     Ok(())
 }
 
-/// Test case insensitive matching
+/// Test case-insensitive matching
 #[test]
 fn case_insensitive() -> Result<()> {
     let context = TestContext::new();
@@ -115,8 +115,7 @@ fn multiline_mode() -> Result<()> {
     check-multiline-docstring................................................Failed
     - hook id: check-multiline-docstring
     - exit code: 1
-      test.py:3:
-          """
+      test.py:2:    """A function
           with multiline docstring
           """
 
@@ -236,8 +235,7 @@ fn invalid_regex() {
     invalid-regex............................................................
     ----- stderr -----
     error: Failed to run hook `invalid-regex`
-      caused by: Failed to parse `entry` as regex
-      caused by: Parsing error at position 9: Invalid character class
+      caused by: Failed to parse regex: unterminated character set at position 0
     "#);
 }
 
@@ -340,14 +338,19 @@ fn case_insensitive_multiline() -> Result<()> {
         "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
-    success: true
-    exit_code: 0
+    cmd_snapshot!(context.filters(), context.run(), @r##"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    check-todos..............................................................Passed
+    check-todos..............................................................Failed
+    - hook id: check-todos
+    - exit code: 1
+      test.py:1:# TODO: fix this
+      def function():
+          # todo: implement
 
     ----- stderr -----
-    "#);
+    "##);
 
     Ok(())
 }

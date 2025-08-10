@@ -1,9 +1,8 @@
-use std::fmt::Write;
 use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 
 use crate::hook::{Hook, InstalledHook};
 use crate::languages::LanguageImpl;
@@ -46,32 +45,41 @@ impl Args {
     }
 }
 
-pub(crate) struct Pygrep;
+#[derive(serde::Deserialize, thiserror::Error, Debug)]
+#[serde(tag = "type")]
+enum Error {
+    #[error("Failed to parse regex: {message}")]
+    Regex { message: String },
+    #[error("IO error: {message}")]
+    IO{ message: String },
+    #[error("Unknown error: {message}")]
+    Unknown{ message: String },
+}
 
 // We have to implement `pygrep` in Python, because Python `re` module has many differences
 // from Rust `regex` crate.
 static SCRIPT: &str = indoc::indoc! {r#"
+import json
 import sys
 import re
 from re import Pattern
 from concurrent.futures import ThreadPoolExecutor
-
-output = sys.stdout.buffer
+from queue import Queue
 
 def process_file(
-    filename: str, pattern: Pattern[bytes], multiline: bool, negate: bool
+    filename: str, pattern: Pattern[bytes], multiline: bool, negate: bool, queue: Queue
 ) -> int:
     if multiline:
         if negate:
-            return _process_filename_at_once_negated(pattern, filename)
+            ret, output = _process_filename_at_once_negated(pattern, filename)
         else:
-            return _process_filename_at_once(pattern, filename)
+            ret, output = _process_filename_at_once(pattern, filename)
     else:
         if negate:
-            return _process_filename_by_line_negated(pattern, filename)
+            ret, output = _process_filename_by_line_negated(pattern, filename)
         else:
-            return _process_filename_by_line(pattern, filename)
-
+            ret, output = _process_filename_by_line(pattern, filename)
+    queue.put((ret, output))
 
 def _process_filename_by_line(pattern: Pattern[bytes], filename: str) -> int:
     retv = 0
@@ -132,6 +140,46 @@ def _process_filename_at_once_negated(
         return 1
 
 
+def run(ignore_case: bool, multiline: bool, negate: bool, concurrency: int, pattern: bytes):
+    flags = re.IGNORECASE if ignore_case else 0
+    if multiline:
+        flags |= re.MULTILINE | re.DOTALL
+    pattern = re.compile(pattern, flags)
+
+    queue = Queue()
+    pool = ThreadPoolExecutor(max_workers=concurrency)
+
+    def producer():
+        for line in sys.stdin:
+            pool.submit(process_file, line.strip(), pattern, multiline, negate)
+
+
+    def consumer():
+        while True:
+            try:
+                ret, output = queue.get()
+                if ret != 0 or output:
+                    sys.stdout.buffer.write(output)
+            except Exception:
+                break
+
+    t1 = Thread(target=producer)
+    t2 = Thread(target=consumer)
+    t1.start()
+    t2.start()
+
+    pool.shutdown(wait=True)
+
+    retv = 0
+    while not queue.empty():
+        ret, output = queue.get()
+        retv |= ret
+        if output:
+            sys.stdout.buffer.write(output)
+
+    sys.stderr.buffer.write('{"code": retv}'.encode())
+
+
 def main():
     ignore_case = sys.argv[1] == "1"
     multiline = sys.argv[2] == "1"
@@ -139,36 +187,31 @@ def main():
     concurrency = int(sys.argv[4])
     pattern = sys.argv[5].encode()
 
-    flags = re.IGNORECASE if ignore_case else 0
-    if multiline:
-        flags |= re.MULTILINE | re.DOTALL
-
-    pattern = re.compile(pattern, flags)
-
-    pool = ThreadPoolExecutor(max_workers=concurrency)
-    futures = []
-
-    for filename in sys.stdin.readlines():
-        filename = filename.strip()
-        futures.append(pool.submit(process_file, filename, pattern, multiline, negate))
-
-    pool.shutdown(wait=True)
-
-    ret = 0
-    for future in futures:
-        ret |= future.result()
-
-    sys.exit(ret)
-
+    try:
+        run(ignore_case, multiline, negate, concurrency, pattern)
+    except re.error as e:
+        error = {"type": "Regex", "message": str(e)}
+        sys.stderr.buffer.write(json.dumps(error).encode())
+        sys.exit(1)
+    except OSError as e:
+        error = {"type": "IO", "message": str(e)}
+        sys.stderr.buffer.write(json.dumps(error).encode())
+        sys.exit(1)
+    except Exception as e:
+        error = {"type": "Unknown", "message": str(e)}
+        sys.stderr.buffer.write(json.dumps(error).encode())
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
 "#};
 
+pub(crate) struct Pygrep;
+
 impl LanguageImpl for Pygrep {
     async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
         let uv_dir = store.tools_path(ToolBucket::Uv);
-        let uv = Uv::install(&uv_dir).await?;
+        let _uv = Uv::install(&uv_dir).await?;
 
         // Find or download a Python interpreter.
 
@@ -188,12 +231,15 @@ impl LanguageImpl for Pygrep {
         let uv_dir = store.tools_path(ToolBucket::Uv);
         let uv = Uv::install(&uv_dir).await?;
 
-        let py_script = tempfile::NamedTempFile::new_in(store.cache_path(CacheBucket::Python))?;
+        let cache = store.cache_path(CacheBucket::Python);
+        fs_err::tokio::create_dir_all(&cache).await?;
+
+        let py_script = tempfile::NamedTempFile::new_in(cache)?;
         fs_err::tokio::write(&py_script, SCRIPT)
             .await
             .context("Failed to write Python script")?;
 
-        let args = Args::parse(&hook.args).context("Failed to parse arguments")?;
+        let args = Args::parse(&hook.args).context("Failed to parse `args`")?;
         let mut cmd = uv
             .cmd("uv run", store)
             .arg("run")
@@ -211,25 +257,30 @@ impl LanguageImpl for Pygrep {
             .spawn()?;
 
         let mut stdin = cmd.stdin.take().context("Failed to take stdin")?;
+        // TODO: avoid this clone if possible.
+        let filenames: Vec<_> = filenames.iter().map(ToString::to_string).collect();
 
         let write_task = tokio::spawn(async move {
-            let mut stdin = stdin;
             for filename in filenames {
-                if let Err(e) = stdin.write_all(format!("{}\n", filename).as_bytes()).await {
-                    break;
-                }
+                stdin.write_all(format!("{filename}\n").as_bytes()).await?;
             }
             let _ = stdin.shutdown().await;
+            anyhow::Ok(())
         });
 
-        let mut output = cmd
+        let output = cmd
             .wait_with_output()
             .await
             .context("Failed to wait for command output")?;
-        write_task.await.context("Failed to write stdin")?;
+        write_task.await.context("Failed to write stdin")??;
 
-        output.stdout.extend(output.stderr);
         let code = output.status.code().unwrap_or(1);
+        if code == 2 {
+            // println!("Error output: {}", String::from_utf8_lossy(&output.stdout));
+            let err: Error = serde_json::from_slice(output.stdout.as_slice())
+                .context("Failed to parse error output")?;
+            return Err(err.into());
+        }
 
         Ok((code, output.stdout))
     }
