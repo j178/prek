@@ -273,6 +273,6 @@ fn bin_dir(venv: &Path) -> PathBuf {
     }
 }
 
-fn python_exec(venv: &Path) -> PathBuf {
+pub(crate) fn python_exec(venv: &Path) -> PathBuf {
     bin_dir(venv).join("python").with_extension(EXE_EXTENSION)
 }
