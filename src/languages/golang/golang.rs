@@ -54,31 +54,36 @@ impl LanguageImpl for Golang {
             .and_then(|p| p.parent())
             .expect("Go root should exist");
         let go_cache = store.cache_path(CacheBucket::Go);
+
+        let go_install_cmd = || {
+            if go.is_from_system() {
+                let mut cmd = go.cmd("go install");
+                cmd.arg("install")
+                    .env(EnvVars::GOTOOLCHAIN, "local")
+                    .env(EnvVars::GOBIN, bin_dir(&info.env_path));
+                cmd
+            } else {
+                let mut cmd = go.cmd("go install");
+                cmd.arg("install")
+                    .env(EnvVars::GOTOOLCHAIN, "local")
+                    .env(EnvVars::GOROOT, go_root)
+                    .env(EnvVars::GOBIN, bin_dir(&info.env_path))
+                    .env(EnvVars::GOPATH, &go_cache);
+                cmd
+            }
+        };
+
         // GOPATH used to store downloaded source code (in $GOPATH/pkg/mod)
         if let Some(repo) = hook.repo_path() {
-            go.cmd("go install")
-                .arg("install")
+            go_install_cmd()
                 .arg("./...")
-                .env(EnvVars::GOTOOLCHAIN, "local")
-                .env(EnvVars::GOROOT, go_root)
-                .env(EnvVars::GOBIN, bin_dir(&info.env_path))
-                .env(EnvVars::GOPATH, &go_cache)
                 .current_dir(repo)
                 .check(true)
                 .output()
                 .await?;
         }
         for dep in &hook.additional_dependencies {
-            go.cmd("go install")
-                .arg("install")
-                .arg(dep)
-                .env(EnvVars::GOTOOLCHAIN, "local")
-                .env(EnvVars::GOROOT, go_root)
-                .env(EnvVars::GOBIN, bin_dir(&info.env_path))
-                .env(EnvVars::GOPATH, &go_cache)
-                .check(true)
-                .output()
-                .await?;
+            go_install_cmd().arg(dep).check(true).output().await?;
         }
 
         Ok(InstalledHook::Installed {
