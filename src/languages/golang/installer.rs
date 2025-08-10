@@ -20,7 +20,6 @@ use crate::process::Cmd;
 pub(crate) struct GoResult {
     path: PathBuf,
     version: GoVersion,
-    from_system: bool,
 }
 
 impl Display for GoResult {
@@ -31,25 +30,20 @@ impl Display for GoResult {
 }
 
 impl GoResult {
-    fn new(path: PathBuf, version: GoVersion, from_system: bool) -> Self {
-        Self {
-            path,
-            version,
-            from_system,
-        }
+    fn new(path: PathBuf, version: GoVersion) -> Self {
+        Self { path, version }
     }
 
-    fn from_executable(path: PathBuf, from_system: bool) -> Self {
+    fn from_executable(path: PathBuf) -> Self {
         Self {
             path,
-            from_system,
             version: GoVersion::default(),
         }
     }
 
-    pub(crate) fn from_dir(dir: &Path, from_system: bool) -> Self {
+    pub(crate) fn from_dir(dir: &Path) -> Self {
         let go = bin_dir(dir).join("go").with_extension(EXE_EXTENSION);
-        Self::from_executable(go, from_system)
+        Self::from_executable(go)
     }
 
     pub(crate) fn bin(&self) -> &Path {
@@ -58,10 +52,6 @@ impl GoResult {
 
     pub(crate) fn version(&self) -> &GoVersion {
         &self.version
-    }
-
-    pub(crate) fn is_from_system(&self) -> bool {
-        self.from_system
     }
 
     pub(crate) fn cmd(&self, summary: &str) -> Cmd {
@@ -156,7 +146,7 @@ impl GoInstaller {
             .find_map(|(version, path)| {
                 if request.matches(&version, Some(&path)) {
                     trace!(%version, "Found matching installed go");
-                    Some(GoResult::from_dir(&path, false).with_version(version))
+                    Some(GoResult::from_dir(&path).with_version(version))
                 } else {
                     trace!(%version, "Installed go does not match request");
                     None
@@ -223,7 +213,7 @@ impl GoInstaller {
             .await
             .context("Failed to download and extract Go")?;
 
-        Ok(GoResult::from_dir(&target, false).with_version(version.clone()))
+        Ok(GoResult::from_dir(&target).with_version(version.clone()))
     }
 
     async fn find_system_go(&self, go_request: &GoRequest) -> Result<Option<GoResult>> {
@@ -236,10 +226,7 @@ impl GoInstaller {
         };
 
         for go_path in go_paths {
-            match GoResult::from_executable(go_path, true)
-                .fill_version()
-                .await
-            {
+            match GoResult::from_executable(go_path).fill_version().await {
                 Ok(go) => {
                     // Check if this version matches the request
                     if go_request.matches(&go.version, Some(&go.path)) {
