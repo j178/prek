@@ -36,8 +36,8 @@ struct Args {
     markdown_linebreak_ext: Vec<String>,
     // **clap** can not parse `--chars= \t` into vec<char> correctly.
     // so, we use Chars to achieve it.
-    #[arg(long, default_value = " \t\n\r\x0b\x0c")]
-    chars: Chars,
+    #[arg(long)]
+    chars: Option<Chars>,
 }
 
 impl Args {
@@ -76,7 +76,11 @@ pub(crate) async fn fix_trailing_whitespace(
 
     let force_markdown = args.force_markdown();
     let markdown_exts = args.markdown_exts()?;
-    let chars = args.chars;
+    let chars = if let Some(chars) = args.chars {
+        chars.deref().to_owned()
+    } else {
+        Vec::new()
+    };
 
     let mut tasks = futures::stream::iter(filenames)
         .map(async |filename| fix_file(filename, &chars, force_markdown, &markdown_exts).await)
