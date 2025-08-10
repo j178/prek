@@ -9,19 +9,17 @@ impl EnvVars {
 
     pub const SKIP: &'static str = "SKIP";
 
-    // Prefligit specific environment variables, public for users
-    pub const PREFLIGIT_HOME: &'static str = "PREFLIGIT_HOME";
-    pub const PREFLIGIT_COLOR: &'static str = "PREFLIGIT_COLOR";
-    pub const PREFLIGIT_ALLOW_NO_CONFIG: &'static str = "PREFLIGIT_ALLOW_NO_CONFIG";
-    pub const PREFLIGIT_NO_CONCURRENCY: &'static str = "PREFLIGIT_NO_CONCURRENCY";
-    pub const PREFLIGIT_NO_FAST_PATH: &'static str = "PREFLIGIT_NO_FAST_PATH";
+    // PREK specific environment variables, public for users
+    pub const PREK_HOME: &'static str = "PREK_HOME";
+    pub const PREK_COLOR: &'static str = "PREK_COLOR";
+    pub const PREK_ALLOW_NO_CONFIG: &'static str = "PREK_ALLOW_NO_CONFIG";
+    pub const PREK_NO_CONCURRENCY: &'static str = "PREK_NO_CONCURRENCY";
+    pub const PREK_NO_FAST_PATH: &'static str = "PREK_NO_FAST_PATH";
 
-    // Prefligit internal environment variables
-    pub const PREFLIGIT_INTERNAL__TEST_DIR: &'static str = "PREFLIGIT_INTERNAL__TEST_DIR";
-    pub const PREFLIGIT_INTERNAL__SORT_FILENAMES: &'static str =
-        "PREFLIGIT_INTERNAL__SORT_FILENAMES";
-    pub const PREFLIGIT_INTERNAL__SKIP_POST_CHECKOUT: &'static str =
-        "PREFLIGIT_INTERNAL__SKIP_POST_CHECKOUT";
+    // PREK internal environment variables
+    pub const PREK_INTERNAL__TEST_DIR: &'static str = "PREK_INTERNAL__TEST_DIR";
+    pub const PREK_INTERNAL__SORT_FILENAMES: &'static str = "PREK_INTERNAL__SORT_FILENAMES";
+    pub const PREK_INTERNAL__SKIP_POST_CHECKOUT: &'static str = "PREK_INTERNAL__SKIP_POST_CHECKOUT";
 
     // UV related
     pub const UV_CACHE_DIR: &'static str = "UV_CACHE_DIR";
@@ -34,6 +32,7 @@ impl EnvVars {
 
     // Go related
     pub const GOTOOLCHAIN: &'static str = "GOTOOLCHAIN";
+    pub const GOROOT: &'static str = "GOROOT";
     pub const GOPATH: &'static str = "GOPATH";
     pub const GOBIN: &'static str = "GOBIN";
 }
@@ -70,8 +69,8 @@ impl EnvVars {
 
     fn pre_commit_name(name: &str) -> Option<&str> {
         match name {
-            Self::PREFLIGIT_ALLOW_NO_CONFIG => Some(Self::PRE_COMMIT_ALLOW_NO_CONFIG),
-            Self::PREFLIGIT_NO_CONCURRENCY => Some(Self::PRE_COMMIT_NO_CONCURRENCY),
+            Self::PREK_ALLOW_NO_CONFIG => Some(Self::PRE_COMMIT_ALLOW_NO_CONFIG),
+            Self::PREK_NO_CONCURRENCY => Some(Self::PRE_COMMIT_NO_CONCURRENCY),
             _ => None,
         }
     }

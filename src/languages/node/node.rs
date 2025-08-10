@@ -25,7 +25,7 @@ pub(crate) struct Node;
 impl LanguageImpl for Node {
     async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
         // 1. Install node
-        //   1) Find from `$PREFLIGIT_HOME/tools/node`
+        //   1) Find from `$PREK_HOME/tools/node`
         //   2) Find from system
         //   3) Download from remote
         // 2. Create env

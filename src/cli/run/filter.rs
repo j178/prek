@@ -108,9 +108,14 @@ impl<'a> FileFilter<'a> {
         self.filenames.len()
     }
 
-    /// Filter filenames by tags for a specific hook.
-    pub(crate) fn by_tag(&self, hook: &Hook) -> Vec<&String> {
-        let filter = FileTagFilter::for_hook(hook);
+    /// Filter filenames by type tags for a specific hook.
+    pub(crate) fn by_type(
+        &self,
+        types: &[String],
+        types_or: &[String],
+        exclude_types: &[String],
+    ) -> Vec<&String> {
+        let filter = FileTagFilter::new(types, types_or, exclude_types);
         let filenames: Vec<_> = self
             .filenames
             .par_iter()
@@ -200,7 +205,7 @@ pub(crate) async fn collect_files(opts: CollectOptions) -> Result<Vec<String>> {
     .await?;
 
     // Sort filenames if in tests to make the order consistent.
-    if EnvVars::is_set(EnvVars::PREFLIGIT_INTERNAL__SORT_FILENAMES) {
+    if EnvVars::is_set(EnvVars::PREK_INTERNAL__SORT_FILENAMES) {
         filenames.sort_unstable();
     }
 
@@ -248,7 +253,7 @@ async fn collect_files_from_args(
 
         // Fun fact: if a hook specified `types: [directory]`, it won't run in `--all-files` mode.
 
-        // TODO: It will be convenient to add a `--directory` flag to `prefligit run`,
+        // TODO: It will be convenient to add a `--directory` flag to `prek run`,
         // we expand the directories to files and pass them to the hook.
         // See: https://github.com/pre-commit/pre-commit/issues/1173
 

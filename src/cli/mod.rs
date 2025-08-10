@@ -2,13 +2,15 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use clap::builder::Styles;
 use clap::builder::styling::{AnsiColor, Effects};
-use clap::{ArgAction, Args, Parser, Subcommand};
+use clap::builder::{StyledStr, Styles};
+use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
+use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
 use constants::env_vars::EnvVars;
 
-use crate::config::{CONFIG_FILE, HookType, Stage};
+use crate::config::{self, CONFIG_FILE, HookType, Stage};
+use crate::workspace::Project;
 
 mod clean;
 mod hook_impl;
@@ -26,6 +28,55 @@ pub(crate) use run::run;
 pub(crate) use sample_config::sample_config;
 pub(crate) use self_update::self_update;
 pub(crate) use validate::{validate_configs, validate_manifest};
+
+// Parses hook ids from .pre-commit-config.yaml
+fn hook_id_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
+    get_hook_id_candidates(current).unwrap_or_default()
+}
+
+fn get_hook_id_candidates(current: &std::ffi::OsStr) -> anyhow::Result<Vec<CompletionCandidate>> {
+    let output = std::process::Command::new("git")
+        .arg("rev-parse")
+        .arg("--show-toplevel")
+        .output()?;
+
+    let root = String::from_utf8(output.stdout)?.trim().to_string();
+    std::env::set_current_dir(&root).ok();
+
+    let project = Project::from_config_file(None)?;
+
+    let hook_ids = project
+        .config()
+        .repos
+        .iter()
+        .flat_map(
+            |repo| -> Box<dyn Iterator<Item = (&String, Option<&str>)>> {
+                match repo {
+                    config::Repo::Remote(cfg) => {
+                        Box::new(cfg.hooks.iter().map(|h| (&h.id, h.name.as_deref())))
+                    }
+                    config::Repo::Local(cfg) => {
+                        Box::new(cfg.hooks.iter().map(|h| (&h.id, Some(&*h.name))))
+                    }
+                    config::Repo::Meta(cfg) => {
+                        Box::new(cfg.hooks.iter().map(|h| (&h.0.id, Some(&*h.0.name))))
+                    }
+                }
+            },
+        )
+        .map(|(id, name)| {
+            CompletionCandidate::new(id.clone())
+                .help(name.map(|name| StyledStr::from(name.to_string())))
+        });
+
+    let Some(current) = current.to_str() else {
+        return Ok(hook_ids.collect());
+    };
+
+    Ok(hook_ids
+        .filter(|h| h.get_value().to_str().unwrap_or_default().contains(current))
+        .collect())
+}
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {
@@ -87,7 +138,7 @@ const STYLES: Styles = Styles::styled()
 
 #[derive(Parser)]
 #[command(
-    name = "prefligit",
+    name = "prek",
     author,
     long_version = crate::version::version(),
     about = "pre-commit reimplemented in Rust"
@@ -124,7 +175,7 @@ pub(crate) struct GlobalArgs {
         global = true,
         long,
         value_enum,
-        env = EnvVars::PREFLIGIT_COLOR,
+        env = EnvVars::PREK_COLOR,
         default_value_t = ColorChoice::Auto,
     )]
     pub(crate) color: ColorChoice,
@@ -147,7 +198,7 @@ pub(crate) struct GlobalArgs {
     #[arg(global = true, short, long, action = ArgAction::Count)]
     pub(crate) verbose: u8,
 
-    /// Display the prefligit version.
+    /// Display the prek version.
     #[arg(global = true, short = 'V', long, action = clap::ArgAction::Version)]
     version: Option<bool>,
 
@@ -160,15 +211,15 @@ pub(crate) struct GlobalArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Install the prefligit git hook.
+    /// Install the prek git hook.
     Install(InstallArgs),
     /// Create hook environments for all hooks used in the config file.
     ///
-    /// This command does not install the git hook. To install the git hook along with the hook environments in one command, use `prefligit install --install-hooks`.
+    /// This command does not install the git hook. To install the git hook along with the hook environments in one command, use `prek install --install-hooks`.
     InstallHooks,
     /// Run hooks.
     Run(Box<RunArgs>),
-    /// Uninstall the prefligit git hook.
+    /// Uninstall the prek git hook.
     Uninstall(UninstallArgs),
     /// Validate `.pre-commit-config.yaml` files.
     ValidateConfig(ValidateConfigArgs),
@@ -193,7 +244,7 @@ pub(crate) enum Command {
     #[command(hide = true)]
     HookImpl(HookImplArgs),
 
-    /// `prefligit` self management.
+    /// `prek` self management.
     #[command(name = "self")]
     Self_(SelfNamespace),
 
@@ -257,26 +308,26 @@ pub(crate) struct RunExtraArgs {
 #[derive(Debug, Clone, Default, Args)]
 pub(crate) struct RunArgs {
     /// The hook ID to run.
-    #[arg(value_name = "HOOK")]
+    #[arg(value_name = "HOOK", value_hint = ValueHint::Other, add = ArgValueCompleter::new(hook_id_completer))]
     pub(crate) hook_id: Option<String>,
     /// Run on all files in the repo.
     #[arg(short, long, conflicts_with_all = ["files", "from_ref", "to_ref"])]
     pub(crate) all_files: bool,
     /// Specific filenames to run hooks on.
-    #[arg(long, conflicts_with_all = ["all_files", "from_ref", "to_ref"])]
+    #[arg(long, conflicts_with_all = ["all_files", "from_ref", "to_ref"], value_hint = ValueHint::AnyPath)]
     pub(crate) files: Vec<String>,
     /// Run hooks on all files in the specified directories.
     ///
     /// You can specify multiple directories. It can be used in conjunction with `--files`.
-    #[arg(short, long, value_name = "DIR", conflicts_with_all = ["all_files", "from_ref", "to_ref"])]
+    #[arg(short, long, value_name = "DIR", conflicts_with_all = ["all_files", "from_ref", "to_ref"], value_hint = ValueHint::DirPath)]
     pub(crate) directory: Vec<String>,
     /// The original ref in a `from_ref...to_ref` diff expression.
     /// Files changed in this diff will be run through the hooks.
-    #[arg(short = 's', long, alias = "source", requires = "to_ref")]
+    #[arg(short = 's', long, alias = "source", requires = "to_ref", value_hint = ValueHint::Other)]
     pub(crate) from_ref: Option<String>,
     /// The destination ref in a `from_ref...to_ref` diff expression.
     /// Files changed in this diff will be run through the hooks.
-    #[arg(short = 'o', long, alias = "origin", requires = "from_ref")]
+    #[arg(short = 'o', long, alias = "origin", requires = "from_ref", value_hint = ValueHint::Other)]
     pub(crate) to_ref: Option<String>,
     /// Run hooks against the last commit (HEAD~1..HEAD).
     #[arg(long, conflicts_with_all = ["all_files", "files", "directory", "from_ref", "to_ref"])]
@@ -350,14 +401,14 @@ pub struct SelfNamespace {
 
 #[derive(Debug, Subcommand)]
 pub enum SelfCommand {
-    /// Update prefligit.
+    /// Update prek.
     Update(SelfUpdateArgs),
 }
 
 #[derive(Debug, Args)]
 pub struct SelfUpdateArgs {
     /// Update to the specified version.
-    /// If not provided, prefligit will update to the latest version.
+    /// If not provided, prek will update to the latest version.
     pub target_version: Option<String>,
 
     /// A GitHub token for authentication.

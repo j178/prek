@@ -54,11 +54,11 @@ jobs:
           set -euo pipefail
 
           TARGET=${{ matrix.platform.target }}
-          ARCHIVE_NAME=prefligit-$TARGET
+          ARCHIVE_NAME=prek-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/prefligit $ARCHIVE_NAME/prefligit
+          cp target/$TARGET/release/prek $ARCHIVE_NAME/prek
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
@@ -92,8 +92,8 @@ jobs:
       - name: "Archive binary"
         shell: bash
         run: |
-          ARCHIVE_FILE=prefligit-${{ matrix.platform.target }}.zip
-          7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/prefligit.exe
+          ARCHIVE_FILE=prek-${{ matrix.platform.target }}.zip
+          7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/prek.exe
           sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
@@ -128,11 +128,11 @@ jobs:
       - name: "Archive binary"
         run: |
           TARGET=${{ matrix.platform.target }}
-          ARCHIVE_NAME=prefligit-$TARGET
+          ARCHIVE_NAME=prek-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
 
           mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/prefligit $ARCHIVE_NAME/prefligit
+          cp target/$TARGET/release/prek $ARCHIVE_NAME/prek
           tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
           shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"

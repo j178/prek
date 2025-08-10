@@ -1,25 +1,32 @@
-# prefligit
+# prek
 
 ![Development Status](https://img.shields.io/badge/Development-Early_Stage-yellowgreen)
-[![CI](https://github.com/j178/prefligit/actions/workflows/ci.yml/badge.svg)](https://github.com/j178/prefligit/actions/workflows/ci.yml)
-[![GitHub downloads](https://img.shields.io/github/downloads/j178/prefligit/total)](https://github.com/j178/prefligit/releases)
+[![CI](https://github.com/j178/prek/actions/workflows/ci.yml/badge.svg)](https://github.com/j178/prek/actions/workflows/ci.yml)
+[![GitHub downloads](https://img.shields.io/github/downloads/j178/prek/total?&logo=github)](https://github.com/j178/prek/releases)
+[![Discord](https://img.shields.io/discord/1403581202102878289?logo=discord)](https://discord.gg/3NRJUqJz86)
 
-<img width="250" alt="prefligit" src="https://github.com/user-attachments/assets/49080cb0-f528-4aa5-acb7-5a88eb9eff4a">
+<img width="250" alt="prek" src="https://github.com/user-attachments/assets/3a87815a-9f3c-48e7-8c1d-384b07ad3b35" />
 
-[pre-commit](https://pre-commit.com/) is a framework to run hooks written in many languages, and it manages the language toolchain and dependencies for running the hooks.
+[pre-commit](https://pre-commit.com/) is a framework to run hooks written in many languages, and it manages the
+language toolchain and dependencies for running the hooks.
 
-prefligit is a reimagined version of pre-commit, built in Rust. It is designed to be a faster, dependency-free and drop-in alternative for it, while also providing some additional long-requested features.
+prek is a reimagined version of pre-commit, built in Rust.
+It is designed to be a faster, dependency-free and drop-in alternative for it,
+while also providing some additional long-requested features.
+
+> [!WARNING]
+> This project was previously named `prefligit`, but it has been renamed to `prek` to avoid typosquatting issues.
 
 > [!WARNING]
 > This project is still in early stage of development, some features are still not implemented.
 > It is not production-ready yet, but feel free to try it out and provide feedback.
 >
-> Current supported languages are `python`, `node`, `go`, `docker`, `docker-image`, `system`, `script` and `fail`.
+> Current supported languages are `python`, `node`, `go`, `docker`, `docker-image`, `pygrep`, `system`, `script` and `fail`.
 
 ## Features
 
 - 🚀 A single binary with no dependencies, does not require Python or any other runtime.
-- ⚡ About [10x faster](https://github.com/j178/prefligit/blob/master/BENCHMARK.md) than `pre-commit` and uses only a third of disk space.
+- ⚡ About [10x faster](https://github.com/j178/prek/blob/master/BENCHMARK.md) than `pre-commit` and uses only a third of disk space.
 - 🔄 Fully compatible with the original pre-commit configurations and hooks.
 - 🐍 Integration with [`uv`](https://github.com/astral-sh/uv) for managing Python virtual environments and dependencies.
 - 🛠️ Improved toolchain installations for Python, Node.js, Go, Rust and Ruby, shared between hooks.
@@ -28,14 +35,14 @@ prefligit is a reimagined version of pre-commit, built in Rust. It is designed t
 
 ## How to migrate
 
-prefligit is designed as a drop-in replacement:
+prek is designed as a drop-in replacement:
 
-- [Install prefligit](#installation).
-- Replace `pre-commit` with `prefligit` in your commands
+- [Install prek](#installation).
+- Replace `pre-commit` with `prek` in your commands
 - Your existing `.pre-commit-config.yaml` works unchanged
 
 ```console
-$ prefligit run
+$ prek run
 trim trailing whitespace.................................................Passed
 fix end of files.........................................................Passed
 typos....................................................................Passed
@@ -43,59 +50,59 @@ cargo fmt................................................................Passed
 cargo clippy.............................................................Passed
 ```
 
-For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to the [pre-commit documentation](https://pre-commit.com/) as prefligit is fully compatible with it.
+For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to the [pre-commit documentation](https://pre-commit.com/) as prek is fully compatible with it.
 
-## Why prefligit?
+## Why prek?
 
-### prefligit is way faster
+### prek is way faster
 
-- It is about [10x faster](https://github.com/j178/prefligit/blob/master/BENCHMARK.md) than `pre-commit` and uses only a third of disk space.
+- It is about [10x faster](https://github.com/j178/prek/blob/master/BENCHMARK.md) than `pre-commit` and uses only a third of disk space.
 - It redesigned how hook environments and toolchains are managed, they are all shared between hooks, which reduces the disk space usage and speeds up the installation process.
 - Repositories are cloned in parallel, and hooks are installed in parallel if their dependencies are disjoint.
 - It uses [`uv`](https://github.com/astral-sh/uv) for creating Python virtualenvs and installing dependencies, which is known for its speed and efficiency.
-- It implements some common hooks in Rust, built in prefligit, which are faster than their Python counterparts.
+- It implements some common hooks in Rust, built in prek, which are faster than their Python counterparts.
 
-### prefligit provides a better user experience
+### prek provides a better user experience
 
 - No need to install Python or any other runtime, just download a single binary.
-- No hassle with your Python version or virtual environments, prefligit automatically installs the required Python version and creates a virtual environment for you.
+- No hassle with your Python version or virtual environments, prek automatically installs the required Python version and creates a virtual environment for you.
 - (TODO): Built-in support for workspaces (or monorepos), each sub-project can have its own `.pre-commit-config.yaml` file.
-- `prefligit run` has some improvements over `pre-commit run`, such as:
-    - `prefligit run --directory <dir>` runs hooks for files in the specified directory, no need to use `git ls-files -- <dir> | xargs pre-commit run --files` anymore.
-    - `prefligit run --last-commit` runs hooks for files changed in the last commit.
-- (TODO): prefligit provides shell completions for `prefligit run <hook_id>` command, so you can easily find the available hooks.
+- `prek run` has some improvements over `pre-commit run`, such as:
+    - `prek run --directory <dir>` runs hooks for files in the specified directory, no need to use `git ls-files -- <dir> | xargs pre-commit run --files` anymore.
+    - `prek run --last-commit` runs hooks for files changed in the last commit.
+- prek provides shell completions for `prek run <hook_id>` command, so you can easily find the available hooks.
 
 ## Installation
 
 <details>
 <summary>Standalone installer</summary>
 
-prefligit provides a standalone installer script to download and install the tool:
+prek provides a standalone installer script to download and install the tool:
 
 ```console
 # On Linux and macOS
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prefligit/releases/download/v0.0.21/prefligit-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.0.23/prek-installer.sh | sh
 
 # On Windows
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prefligit/releases/download/v0.0.21/prefligit-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.0.23/prek-installer.ps1 | iex"
 ```
 </details>
 
 <details>
 <summary>PyPI</summary>
 
-prefligit is published as Python binary wheel to PyPI, you can install it using `pip`, `uv` (recommended), or `pipx`:
+prek is published as Python binary wheel to PyPI, you can install it using `pip`, `uv` (recommended), or `pipx`:
 
 ```console
-pip install prefligit
+pip install prek
 
 # or
 
-uv tool install prefligit
+uv tool install prek
 
 # or
 
-pipx install prefligit
+pipx install prek
 ```
 </details>
 
@@ -103,7 +110,7 @@ pipx install prefligit
 <summary>Homebrew</summary>
 
 ```console
-brew install prefligit
+brew install prek
 ```
 </details>
 
@@ -113,20 +120,20 @@ brew install prefligit
 Build from source using Cargo:
 
 ```console
-cargo install --locked --git https://github.com/j178/prefligit
+cargo install --locked --git https://github.com/j178/prek
 ```
 </details>
 
 <details>
 <summary>GitHub Releases</summary>
 
-prefligit release artifacts can be downloaded directly from the [GitHub releases](https://github.com/j178/prefligit/releases).
+prek release artifacts can be downloaded directly from the [GitHub releases](https://github.com/j178/prekprek/releases).
 </details>
 
-If installed via the standalone installer, prefligit can update itself to the latest version:
+If installed via the standalone installer, prek can update itself to the latest version:
 
 ```console
-$ prefligit self update
+$ prek self update
 ```
 
 ## Acknowledgements

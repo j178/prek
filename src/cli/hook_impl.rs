@@ -22,19 +22,18 @@ pub(crate) async fn hook_impl(
 
     if let Some(ref config_file) = config {
         if !config_file.try_exists()? {
-            return if skip_on_missing_config || EnvVars::is_set(EnvVars::PREFLIGIT_ALLOW_NO_CONFIG)
-            {
+            return if skip_on_missing_config || EnvVars::is_set(EnvVars::PREK_ALLOW_NO_CONFIG) {
                 Ok(ExitStatus::Success)
             } else {
                 eprintln!("Config file not found: {}", config_file.display());
                 eprintln!(
                     "- To temporarily silence this, run `{}=1 git ...`",
-                    EnvVars::PREFLIGIT_ALLOW_NO_CONFIG
+                    EnvVars::PREK_ALLOW_NO_CONFIG
                 );
                 eprintln!(
                     "- To permanently silence this, install hooks with the `--allow-missing-config` flag"
                 );
-                eprintln!("- To uninstall hooks, run `prefligit uninstall`");
+                eprintln!("- To uninstall hooks, run `PREK uninstall`");
                 Ok(ExitStatus::Failure)
             };
         }

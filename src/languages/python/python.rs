@@ -183,13 +183,19 @@ impl Python {
             .await
         {
             Ok(_) => {
-                debug!("Venv created successfully with no downloads");
+                debug!(
+                    "Venv created successfully with no downloads: `{}`",
+                    info.env_path.display()
+                );
                 Ok(())
             }
             Err(e @ process::Error::Status { .. }) => {
                 // Check if we can retry with downloads
                 if Self::can_retry_with_downloads(&e) {
-                    debug!("Retrying venv creation with managed Python downloads");
+                    debug!(
+                        "Retrying venv creation with managed Python downloads: `{}`",
+                        info.env_path.display()
+                    );
                     Self::create_venv_command(uv, store, info, python_request, true, true)
                         .check(true)
                         .output()
@@ -200,7 +206,7 @@ impl Python {
                 Err(e.into())
             }
             Err(e) => {
-                debug!("Failed to create venv: {}", e);
+                debug!("Failed to create venv `{}`: {e}", info.env_path.display());
                 Err(e.into())
             }
         }
@@ -267,6 +273,6 @@ fn bin_dir(venv: &Path) -> PathBuf {
     }
 }
 
-fn python_exec(venv: &Path) -> PathBuf {
+pub(crate) fn python_exec(venv: &Path) -> PathBuf {
     bin_dir(venv).join("python").with_extension(EXE_EXTENSION)
 }

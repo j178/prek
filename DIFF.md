@@ -1,12 +1,15 @@
 ## Difference from pre-commit
 
-- `prefligit` supports both `.pre-commit-config.yaml` and `.pre-commit-config.yml` configuration files.
-- `prefligit` implements some common hooks from `pre-commit-hooks` in Rust for better performance.
-- `prefligit` uses `~/.prefligit` as the default cache directory for repos, environments and toolchains.
-- `prefligit` decoupled hook environment from their repositories, allowing shared toolchains and environments across hooks.
-- `prefligit` supports Python toolchain management, it delegates to `uv`, and uses `uv` for virtual environments and dependencies.
-- `prefligit` supports `language-version` as a semver specifier and automatically installs the required toolchains.
-- `prefligit sample-config` command has a `--file` option to write the sample configuration to a specific file.
+- `prek` supports both `.pre-commit-config.yaml` and `.pre-commit-config.yml` configuration files.
+- `prek` implements some common hooks from `pre-commit-hooks` in Rust for better performance.
+- `prek` uses `~/.prek` as the default cache directory for repos, environments and toolchains.
+- `prek` decoupled hook environment from their repositories, allowing shared toolchains and environments across hooks.
+- `prek` supports Python toolchain management, it delegates to `uv`, and uses `uv` for virtual environments and dependencies.
+- `prek` supports `language-version` as a semver specifier and automatically installs the required toolchains.
+- `prek run --last-commit` to run hooks on files changed by the last commit.
+- `prek run --directory <DIR>` to run hooks on a specified directory.
+- `prek sample-config` command has a `--file` option to write the sample configuration to a specific file.
+- `prek` provides dynamic completions of hook id.
 
 ### Future plans
 

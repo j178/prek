@@ -44,30 +44,46 @@ impl LanguageImpl for Golang {
         fs_err::tokio::create_dir_all(bin_dir(&info.env_path)).await?;
 
         // 3. Install dependencies
-        let go_path = store.cache_path(CacheBucket::Go);
+        // go: ~/.cache/prek/tools/go/1.24.0/bin/go
+        // go_root: ~/.cache/prek/tools/go/1.24.0
+        // go_cache: ~/.cache/prek/cache/go
+        // go_bin: ~/.cache/prek/hooks/envs/<hook_id>/bin
+        let go_root = go
+            .bin()
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("Go root should exist");
+        let go_cache = store.cache_path(CacheBucket::Go);
+
+        let go_install_cmd = || {
+            if go.is_from_system() {
+                let mut cmd = go.cmd("go install");
+                cmd.arg("install")
+                    .env(EnvVars::GOTOOLCHAIN, "local")
+                    .env(EnvVars::GOBIN, bin_dir(&info.env_path));
+                cmd
+            } else {
+                let mut cmd = go.cmd("go install");
+                cmd.arg("install")
+                    .env(EnvVars::GOTOOLCHAIN, "local")
+                    .env(EnvVars::GOROOT, go_root)
+                    .env(EnvVars::GOBIN, bin_dir(&info.env_path))
+                    .env(EnvVars::GOPATH, &go_cache);
+                cmd
+            }
+        };
+
         // GOPATH used to store downloaded source code (in $GOPATH/pkg/mod)
         if let Some(repo) = hook.repo_path() {
-            go.cmd("go install")
-                .arg("install")
+            go_install_cmd()
                 .arg("./...")
-                .env(EnvVars::GOTOOLCHAIN, "local")
-                .env(EnvVars::GOBIN, bin_dir(&info.env_path))
-                .env(EnvVars::GOPATH, &go_path)
                 .current_dir(repo)
                 .check(true)
                 .output()
                 .await?;
         }
         for dep in &hook.additional_dependencies {
-            go.cmd("go install")
-                .arg("install")
-                .arg(dep)
-                .env(EnvVars::GOTOOLCHAIN, "local")
-                .env(EnvVars::GOBIN, bin_dir(&info.env_path))
-                .env(EnvVars::GOPATH, &go_path)
-                .check(true)
-                .output()
-                .await?;
+            go_install_cmd().arg(dep).check(true).output().await?;
         }
 
         Ok(InstalledHook::Installed {
@@ -91,8 +107,9 @@ impl LanguageImpl for Golang {
             unreachable!()
         };
 
-        let go_path = store.cache_path(CacheBucket::Go);
+        let go_cache = store.cache_path(CacheBucket::Go);
         let go_root_bin = info.toolchain.parent().expect("Go root should exist");
+        let go_root = go_root_bin.parent().expect("Go root should exist");
         let go_bin = bin_dir(env_dir);
         let new_path = prepend_paths(&[&go_bin, go_root_bin]).context("Failed to join PATH")?;
 
@@ -102,8 +119,9 @@ impl LanguageImpl for Golang {
                 .args(&entry[1..])
                 .env("PATH", &new_path)
                 .env(EnvVars::GOTOOLCHAIN, "local")
+                .env(EnvVars::GOROOT, go_root)
                 .env(EnvVars::GOBIN, &go_bin)
-                .env(EnvVars::GOPATH, &go_path)
+                .env(EnvVars::GOPATH, &go_cache)
                 .args(&hook.args)
                 .args(batch)
                 .check(false)

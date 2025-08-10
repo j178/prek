@@ -26,7 +26,7 @@ use std::fmt;
 
 use serde::Serialize;
 
-/// Information about the git repository where prefligit was built from.
+/// Information about the git repository where prek was built from.
 #[derive(Serialize)]
 pub(crate) struct CommitInfo {
     short_commit_hash: String,
@@ -36,10 +36,10 @@ pub(crate) struct CommitInfo {
     commits_since_last_tag: u32,
 }
 
-/// prefligit's version.
+/// prek's version.
 #[derive(Serialize)]
 pub struct VersionInfo {
-    /// prefligit's version, such as "0.0.6"
+    /// prek's version, such as "0.0.6"
     version: String,
     /// Information about the git commit we may have been built from.
     ///
@@ -69,7 +69,7 @@ impl From<VersionInfo> for clap::builder::Str {
     }
 }
 
-/// Returns information about prefligit's version.
+/// Returns information about prek's version.
 pub fn version() -> VersionInfo {
     // Environment variables are only read at compile-time
     macro_rules! option_env_str {
@@ -82,12 +82,12 @@ pub fn version() -> VersionInfo {
     let version = env!("CARGO_PKG_VERSION").to_string();
 
     // Commit info is pulled from git and set by `build.rs`
-    let commit_info = option_env_str!("PREFLIGIT_COMMIT_HASH").map(|commit_hash| CommitInfo {
-        short_commit_hash: option_env_str!("PREFLIGIT_COMMIT_SHORT_HASH").unwrap(),
+    let commit_info = option_env_str!("PREK_COMMIT_HASH").map(|commit_hash| CommitInfo {
+        short_commit_hash: option_env_str!("PREK_COMMIT_SHORT_HASH").unwrap(),
         commit_hash,
-        commit_date: option_env_str!("PREFLIGIT_COMMIT_DATE").unwrap(),
-        last_tag: option_env_str!("PREFLIGIT_LAST_TAG"),
-        commits_since_last_tag: option_env_str!("PREFLIGIT_LAST_TAG_DISTANCE")
+        commit_date: option_env_str!("PREK_COMMIT_DATE").unwrap(),
+        last_tag: option_env_str!("PREK_LAST_TAG"),
+        commits_since_last_tag: option_env_str!("PREK_LAST_TAG_DISTANCE")
             .as_deref()
             .map_or(0, |value| value.parse::<u32>().unwrap_or(0)),
     });

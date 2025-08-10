@@ -1,5 +1,5 @@
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use fancy_regex::Regex;
@@ -7,7 +7,7 @@ use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
-use crate::config::Language;
+use crate::config::{HookOptions, Language, Repo, read_config};
 use crate::hook::Hook;
 use crate::store::Store;
 use crate::workspace::Project;
@@ -60,7 +60,6 @@ fn excludes_any<T: AsRef<str> + Sync>(
     if exclude.is_none() || exclude == Some("^$") {
         return Ok(true);
     }
-
     let include = include.map(Regex::new).transpose()?;
     let exclude = exclude.map(Regex::new).transpose()?;
     Ok(files.into_par_iter().any(|f| {
@@ -84,15 +83,13 @@ pub(crate) async fn check_useless_excludes(
     _hook: &Hook,
     filenames: &[&String],
 ) -> Result<(i32, Vec<u8>)> {
-    let store = Store::from_settings()?.init()?;
-
     let input = collect_files(CollectOptions::default().with_all_files(true)).await?;
 
     let mut code = 0;
     let mut output = Vec::new();
 
     for filename in filenames {
-        let mut project = Project::from_config_file(Some(PathBuf::from(filename)))?;
+        let config = read_config(Path::new(filename))?;
 
         if !excludes_any(
             &input,
@@ -107,7 +104,7 @@ pub(crate) async fn check_useless_excludes(
             )?;
         }
 
-        let hooks = project.init_hooks(&store, None).await?;
+        let filter = FileFilter::new(&input, config.files.as_deref(), config.exclude.as_deref())?;
 
         let filter = FileFilter::new(
             &input,
@@ -139,4 +136,21 @@ pub(crate) async fn check_useless_excludes(
 /// Prints all arguments passed to the hook. Useful for debugging.
 pub fn identity(_hook: &Hook, filenames: &[&String]) -> (i32, Vec<u8>) {
     (0, filenames.iter().join("\n").into_bytes())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_excludes_any() -> Result<()> {
+        let files = vec!["file1.txt", "file2.txt", "file3.txt"];
+        assert!(excludes_any(&files, Some("file.*"), Some("file2.txt"))?);
+        assert!(!excludes_any(&files, Some("file.*"), Some("file4.txt"))?);
+        assert!(excludes_any(&files, None, None)?);
+
+        let files = vec!["html/file1.html", "html/file2.html"];
+        assert!(excludes_any(&files, None, Some("^html/"))?);
+        Ok(())
+    }
 }

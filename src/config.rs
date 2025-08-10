@@ -461,7 +461,7 @@ impl FromStr for MetaHookID {
 ///
 /// It's the same as the manifest hook definition but with only a few predefined id allowed.
 #[derive(Debug, Clone)]
-pub struct MetaHook(ManifestHook);
+pub struct MetaHook(pub(crate) ManifestHook);
 
 impl<'de> Deserialize<'de> for MetaHook {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>

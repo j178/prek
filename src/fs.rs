@@ -24,7 +24,6 @@ use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
-use fs2::FileExt;
 use tempfile::NamedTempFile;
 use tracing::{debug, error, info, trace};
 
@@ -43,14 +42,14 @@ impl LockedFile {
             path = %file.path().display(),
             "Checking lock",
         );
-        match file.file().try_lock_exclusive() {
+        match file.file().try_lock() {
             Ok(()) => {
                 debug!(resource, "Acquired lock");
                 Ok(Self(file))
             }
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures
-                if err.kind() != std::io::ErrorKind::WouldBlock {
+                if !matches!(err, std::fs::TryLockError::WouldBlock) {
                     trace!(error = ?err, "Try lock error");
                 }
                 info!(
@@ -58,7 +57,7 @@ impl LockedFile {
                     path = %file.path().display(),
                     "Waiting to acquire lock",
                 );
-                file.file().lock_exclusive().map_err(|err| {
+                file.file().lock().map_err(|err| {
                     // Not a fs_err method, we need to build our own path context
                     std::io::Error::other(format!(
                         "Could not acquire lock for `{resource}` at `{}`: {}",
@@ -98,7 +97,7 @@ impl LockedFile {
 
 impl Drop for LockedFile {
     fn drop(&mut self) {
-        if let Err(err) = FileExt::unlock(self.0.file()) {
+        if let Err(err) = self.0.file().unlock() {
             error!(
                 "Failed to unlock {}; program may be stuck: {}",
                 self.0.path().display(),

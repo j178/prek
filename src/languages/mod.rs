@@ -17,6 +17,7 @@ mod docker_image;
 mod fail;
 mod golang;
 mod node;
+mod pygrep;
 mod python;
 mod script;
 mod system;
@@ -30,6 +31,7 @@ static FAIL: fail::Fail = fail::Fail;
 static DOCKER: docker::Docker = docker::Docker;
 static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
 static SCRIPT: script::Script = script::Script;
+static PYGREP: pygrep::Pygrep = pygrep::Pygrep;
 static UNIMPLEMENTED: Unimplemented = Unimplemented;
 
 trait LanguageImpl {
@@ -102,6 +104,7 @@ impl Language {
                 | Self::Docker
                 | Self::DockerImage
                 | Self::Script
+                | Self::Pygrep
         )
     }
 
@@ -150,6 +153,7 @@ impl Language {
             Self::Docker => DOCKER.install(hook, store).await,
             Self::DockerImage => DOCKER_IMAGE.install(hook, store).await,
             Self::Script => SCRIPT.install(hook, store).await,
+            Self::Pygrep => PYGREP.install(hook, store).await,
             _ => UNIMPLEMENTED.install(hook, store).await,
         }
     }
@@ -164,6 +168,7 @@ impl Language {
             Self::Docker => DOCKER.check_health().await,
             Self::DockerImage => DOCKER_IMAGE.check_health().await,
             Self::Script => SCRIPT.check_health().await,
+            Self::Pygrep => PYGREP.check_health().await,
             _ => UNIMPLEMENTED.check_health().await,
         }
     }
@@ -188,6 +193,7 @@ impl Language {
             Self::Docker => DOCKER.run(hook, filenames, store).await,
             Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, store).await,
             Self::Script => SCRIPT.run(hook, filenames, store).await,
+            Self::Pygrep => PYGREP.run(hook, filenames, store).await,
             _ => UNIMPLEMENTED.run(hook, filenames, store).await,
         }
     }

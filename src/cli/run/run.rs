@@ -66,7 +66,7 @@ pub(crate) async fn run(
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    // Handle --last-commit flag by converting it to HEAD~1..HEAD range
+    // Convert `--last-commit` to `HEAD~1..HEAD`
     let (from_ref, to_ref) = if last_commit {
         (Some("HEAD~1".to_string()), Some("HEAD".to_string()))
     } else {
@@ -75,7 +75,7 @@ pub(crate) async fn run(
 
     // Prevent recursive post-checkout hooks.
     if hook_stage == Stage::PostCheckout
-        && EnvVars::is_set(EnvVars::PREFLIGIT_INTERNAL__SKIP_POST_CHECKOUT)
+        && EnvVars::is_set(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT)
     {
         return Ok(ExitStatus::Success);
     }
@@ -86,7 +86,7 @@ pub(crate) async fn run(
     if should_stash && git::has_unmerged_paths().await? {
         writeln!(
             printer.stderr(),
-            "You have unmerged paths. Resolve them before running prefligit."
+            "You have unmerged paths. Resolve them before running prek."
         )?;
         return Ok(ExitStatus::Failure);
     }
@@ -96,7 +96,7 @@ pub(crate) async fn run(
         writeln!(
             printer.stderr(),
             indoc!(
-                "Your prefligit configuration file is not staged.
+                "Your pre-commit configuration file is not staged.
                 Run `git add {}` to fix this."
             ),
             &config_file.user_display()
@@ -150,6 +150,8 @@ pub(crate) async fn run(
     );
     let reporter = HookInstallReporter::from(printer);
     let mut installed_hooks = install_hooks(to_run, &store, &reporter).await?;
+
+    // Release the store lock.
     drop(lock);
 
     let hooks = hooks
@@ -344,6 +346,15 @@ pub async fn install_hooks(
                         .mark_as_installed(store)
                         .await
                         .context(format!("Failed to mark hook `{hook}` as installed"))?;
+
+                    match &installed_hook {
+                        InstalledHook::Installed { info, .. } => {
+                            debug!("Installed hook `{hook}` in `{}`", info.env_path.display());
+                        }
+                        InstalledHook::NoNeedInstall { .. } => {
+                            debug!("Hook `{hook}` does not need installation");
+                        }
+                    }
 
                     newly_installed.push(installed_hook);
 
