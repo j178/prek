@@ -36,7 +36,7 @@ struct Args {
     markdown_linebreak_ext: Vec<String>,
     // **clap** can not parse `--chars= \t` into vec<char> correctly.
     // so, we use Chars to achieve it.
-    #[arg(long)]
+    #[arg(long, default_value = " \t\n\r\x0b\x0c")]
     chars: Chars,
 }
 
