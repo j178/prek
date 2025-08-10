@@ -47,7 +47,7 @@ impl<'a> FilenameFilter<'a> {
 }
 
 /// Filter files by tags.
-struct FileTagFilter<'a> {
+pub(crate) struct FileTagFilter<'a> {
     all: &'a [String],
     any: &'a [String],
     exclude: &'a [String],
@@ -62,7 +62,7 @@ impl<'a> FileTagFilter<'a> {
         }
     }
 
-    fn filter(&self, file_types: &[&str]) -> bool {
+    pub(crate) fn filter(&self, file_types: &[&str]) -> bool {
         if !self.all.is_empty() && !self.all.iter().all(|t| file_types.contains(&t.as_str())) {
             return false;
         }
@@ -79,13 +79,13 @@ impl<'a> FileTagFilter<'a> {
         true
     }
 
-    fn for_hook(hook: &'a Hook) -> Self {
+    pub(crate) fn for_hook(hook: &'a Hook) -> Self {
         Self::new(&hook.types, &hook.types_or, &hook.exclude_types)
     }
 }
 
 pub(crate) struct FileFilter<'a> {
-    filenames: Vec<&'a String>,
+    pub(crate) filenames: Vec<&'a String>,
 }
 
 impl<'a> FileFilter<'a> {
