@@ -10,7 +10,6 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
-        args: ["--markdown-linebreak-ext=md", "--chars= \t"]
       - id: end-of-file-fixer
 
   - repo: https://github.com/crate-ci/typos
