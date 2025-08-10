@@ -29,7 +29,7 @@ impl Docker {
         let mut hasher = DefaultHasher::new();
         info.hash(&mut hasher);
         let digest = hex::encode(hasher.finish().to_le_bytes());
-        format!("prefligit-{digest}")
+        format!("prek-{digest}")
     }
 
     async fn build_docker_image(hook: &InstalledHook, pull: bool) -> Result<()> {
@@ -88,6 +88,7 @@ impl Docker {
     /// Get the path of the current directory in the host.
     async fn get_docker_path(path: &str) -> Result<Cow<'_, str>> {
         if !Self::is_in_docker() {
+            trace!("Not in Docker, returning original path");
             return Ok(Cow::Borrowed(path));
         }
 
@@ -155,13 +156,14 @@ impl Docker {
             }));
         }
 
+        let cwd = &CWD.to_string_lossy();
+        let work_dir = Self::get_docker_path(cwd).await?;
         command
             .arg("-v")
             // https://docs.docker.com/engine/reference/commandline/run/#mount-volumes-from-container-volumes-from
-            .arg(format!(
-                "{}:/src:ro,Z",
-                Self::get_docker_path(&CWD.to_string_lossy()).await?
-            ))
+            // The `Z` option tells Docker to label the content with a private
+            // unshared label. Only the current container can use a private volume.
+            .arg(format!("{work_dir}:/src:rw,Z",))
             .arg("--workdir")
             .arg("/src");
 

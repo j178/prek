@@ -1,12 +1,13 @@
 #![allow(dead_code, unreachable_pub)]
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
 use etcetera::BaseStrategy;
+use rustc_hash::FxHashSet;
 
 use constants::env_vars::EnvVars;
 
@@ -48,7 +49,7 @@ impl TestContext {
                 .map(|pattern| (pattern, "[HOME]/".to_string())),
         );
 
-        let current_exe = assert_cmd::cargo::cargo_bin("prefligit");
+        let current_exe = assert_cmd::cargo::cargo_bin("prek");
         filters.extend(
             Self::path_patterns(&current_exe)
                 .into_iter()
@@ -64,13 +65,13 @@ impl TestContext {
     }
 
     pub fn test_bucket_dir() -> PathBuf {
-        EnvVars::var(EnvVars::PREFLIGIT_INTERNAL__TEST_DIR)
+        EnvVars::var(EnvVars::PREK_INTERNAL__TEST_DIR)
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
                 etcetera::base_strategy::choose_base_strategy()
                     .expect("Failed to find base strategy")
                     .data_dir()
-                    .join("prefligit")
+                    .join("prek")
                     .join("tests")
             })
     }
@@ -113,11 +114,11 @@ impl TestContext {
     }
 
     pub fn command(&self) -> Command {
-        let bin = assert_cmd::cargo::cargo_bin("prefligit");
+        let bin = assert_cmd::cargo::cargo_bin("prek");
         let mut cmd = Command::new(bin);
         cmd.current_dir(self.work_dir());
-        cmd.env(EnvVars::PREFLIGIT_HOME, &**self.home_dir());
-        cmd.env(EnvVars::PREFLIGIT_INTERNAL__SORT_FILENAMES, "1");
+        cmd.env(EnvVars::PREK_HOME, &**self.home_dir());
+        cmd.env(EnvVars::PREK_INTERNAL__SORT_FILENAMES, "1");
         cmd
     }
 
@@ -190,7 +191,7 @@ impl TestContext {
         &self.home_dir
     }
 
-    /// Initialize a sample project for prefligit.
+    /// Initialize a sample project for prek.
     pub fn init_project(&self) {
         Command::new("git")
             .arg("init")
@@ -205,14 +206,14 @@ impl TestContext {
         Command::new("git")
             .arg("config")
             .arg("user.name")
-            .arg("Prefligit Test")
+            .arg("Prek Test")
             .current_dir(&self.temp_dir)
             .assert()
             .success();
         Command::new("git")
             .arg("config")
             .arg("user.email")
-            .arg("test@prefligit.dev")
+            .arg("test@prek.dev")
             .current_dir(&self.temp_dir)
             .assert()
             .success();
@@ -289,7 +290,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d]|\.\.)", "/$1"),
-    (r"prefligit.exe", "prefligit"),
+    (r"prek.exe", "prek"),
     // The exact message is host language dependent
     (
         r"Caused by: .* \(os error 2\)",
@@ -316,3 +317,22 @@ macro_rules! cmd_snapshot {
 
 #[allow(unused_imports)]
 pub(crate) use cmd_snapshot;
+
+#[allow(clippy::disallowed_methods)]
+pub(crate) fn remove_bin_from_path(bin: &str) -> anyhow::Result<OsString> {
+    let Ok(dirs) = which::which_all(bin) else {
+        return Ok(std::env::var_os("PATH").expect("PATH environment variable is not set"));
+    };
+
+    let dirs: FxHashSet<_> = dirs
+        .filter_map(|path| path.parent().map(Path::to_path_buf))
+        .collect();
+
+    let current_path = std::env::var("PATH").unwrap_or_default();
+
+    let new_path_entries: Vec<_> = std::env::split_paths(&current_path)
+        .filter(|path| !dirs.contains(path.as_path()))
+        .collect();
+
+    Ok(std::env::join_paths(new_path_entries)?)
+}

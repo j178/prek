@@ -12,7 +12,7 @@ fn clean() -> anyhow::Result<()> {
     let home = context.work_dir().child("home");
     home.create_dir_all()?;
 
-    cmd_snapshot!(context.filters(), context.clean().env("PREFLIGIT_HOME", &*home), @r#"
+    cmd_snapshot!(context.filters(), context.clean().env("PREK_HOME", &*home), @r#"
     success: true
     exit_code: 0
     ----- stdout -----

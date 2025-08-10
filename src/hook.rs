@@ -420,7 +420,7 @@ impl InstalledHook {
             return true;
         };
         // Check if the environment path exists.
-        info.env_path.join(".prefligit-hook.json").is_file()
+        info.env_path.join(".prek-hook.json").is_file()
     }
 
     /// Mark the hook as installed in the environment.
@@ -432,7 +432,7 @@ impl InstalledHook {
         let content = serde_json::to_string_pretty(info.as_ref())
             .context("Failed to serialize install info")?;
 
-        fs_err::tokio::write(info.env_path.join(".prefligit-hook.json"), content)
+        fs_err::tokio::write(info.env_path.join(".prek-hook.json"), content)
             .await
             .context("Failed to write install info")?;
 

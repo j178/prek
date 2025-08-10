@@ -12,6 +12,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
+env:
+  # UV_VERSION should not greater than MAX_UV_VERSION in `languages/python/uv`.
+  # Otherwise, tests jobs will install their own uv, and now it has concurrent issue.
+  UV_VERSION: '0.8.6'
+  NODE_VERSION: '19.9.0'
+  GO_VERSION: '1.24.5'
+
 jobs:
   typos:
     runs-on: ubuntu-latest
@@ -91,6 +98,8 @@ jobs:
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
 
       - name: "Install Python"
         run: uv python install --no-bin
@@ -98,12 +107,12 @@ jobs:
       - name: "Install Node.js"
         uses: actions/setup-node@v4
         with:
-          node-version: '19.9.0'
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: "Install Go"
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.5'
+          go-version: ${{ env.GO_VERSION }}
 
       - name: "Cargo test"
         run: |
@@ -133,6 +142,8 @@ jobs:
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
 
       - name: "Install Python"
         run: uv python install --no-bin
@@ -140,12 +151,12 @@ jobs:
       - name: "Install Node.js"
         uses: actions/setup-node@v4
         with:
-          node-version: '19.9.0'
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: "Install Go"
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.5'
+          go-version: ${{ env.GO_VERSION }}
 
       - name: "Cargo test"
         run: |
@@ -177,6 +188,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@v6
         with:
+          version: ${{ env.UV_VERSION }}
           cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
 
       - name: "Install Python"
@@ -185,12 +197,12 @@ jobs:
       - name: "Install Node.js"
         uses: actions/setup-node@v4
         with:
-          node-version: '19.9.0'
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: "Install Go"
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.5'
+          go-version: ${{ env.GO_VERSION }}
 
       - name: "Find node and npm versions"
         run: |

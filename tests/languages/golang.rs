@@ -3,7 +3,7 @@ use assert_fs::fixture::PathChild;
 
 use crate::common::{TestContext, cmd_snapshot};
 
-// We use `setup-go` action to install go1.24.5 in CI, so 1.23.11 should be downloaded by prefligit.
+// We use `setup-go` action to install go1.24.5 in CI, so 1.23.11 should be downloaded by prek.
 #[test]
 fn language_version() -> anyhow::Result<()> {
     let context = TestContext::new();
@@ -135,6 +135,7 @@ fn additional_dependencies() {
                 additional_dependencies: ["mvdan.cc/gofumpt@v0.8.0"]
                 always_run: true
                 verbose: true
+                language_version: '1.23.11' # will auto download
                 pass_filenames: false
     "#});
 
@@ -170,11 +171,12 @@ fn remote_hook() {
     context.init_project();
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/prefligit-test-repos/golang-hooks
+          - repo: https://github.com/prek-test-repos/golang-hooks
             rev: main
             hooks:
               - id: echo
                 verbose: true
+                language_version: '1.23.11' # will auto download
         "});
     context.git_add(".");
 

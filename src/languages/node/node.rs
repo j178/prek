@@ -25,7 +25,7 @@ pub(crate) struct Node;
 impl LanguageImpl for Node {
     async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
         // 1. Install node
-        //   1) Find from `$PREFLIGIT_HOME/tools/node`
+        //   1) Find from `$PREK_HOME/tools/node`
         //   2) Find from system
         //   3) Download from remote
         // 2. Create env
@@ -67,11 +67,6 @@ impl LanguageImpl for Node {
             &bin_dir.join("node").with_extension(EXE_EXTENSION),
         )
         .await?;
-        create_symlink_or_copy(
-            node.npm(),
-            &bin_dir.join("npm").with_extension(EXE_EXTENSION),
-        )
-        .await?;
 
         // 3. Install dependencies
         let deps = if let Some(repo) = hook.repo_path() {
@@ -92,6 +87,11 @@ impl LanguageImpl for Node {
             //
             // NOTE: If you want to install the content of a directory like a package from the registry
             // instead of creating a link, you would need to use the --install-links option.
+
+            // `npm` is a script uses `/usr/bin/env node`, we need add `bin_dir` to PATH
+            // so that `npm` can find `node`.
+            let new_path = prepend_paths(&[&bin_dir]).context("Failed to join PATH")?;
+
             Cmd::new(node.npm(), "npm install")
                 .arg("install")
                 .arg("-g")
@@ -101,6 +101,7 @@ impl LanguageImpl for Node {
                 .arg("--no-audit")
                 .arg("--install-links")
                 .args(&*deps)
+                .env("PATH", new_path)
                 .env(EnvVars::NPM_CONFIG_PREFIX, &info.env_path)
                 .env_remove(EnvVars::NPM_CONFIG_USERCONFIG)
                 .env(EnvVars::NODE_PATH, &lib_dir)

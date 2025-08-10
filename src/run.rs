@@ -11,7 +11,7 @@ use constants::env_vars::EnvVars;
 use crate::hook::Hook;
 
 pub(crate) static CONCURRENCY: LazyLock<usize> = LazyLock::new(|| {
-    if EnvVars::is_set(EnvVars::PREFLIGIT_NO_CONCURRENCY) {
+    if EnvVars::is_set(EnvVars::PREK_NO_CONCURRENCY) {
         1
     } else {
         std::thread::available_parallelism()

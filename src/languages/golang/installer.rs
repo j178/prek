@@ -24,7 +24,7 @@ pub(crate) struct GoResult {
 
 impl Display for GoResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.path.display())?;
+        write!(f, "{}@{}", self.path.display(), self.version)?;
         Ok(())
     }
 }

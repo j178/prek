@@ -37,7 +37,7 @@ fn hook_impl() {
     success: true
     exit_code: 0
     ----- stdout -----
-    prefligit installed at .git/hooks/pre-commit
+    prek installed at .git/hooks/pre-commit
 
     ----- stderr -----
     "#);

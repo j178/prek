@@ -78,21 +78,21 @@ fn commit_info(workspace_root: &Path) {
     let stdout = String::from_utf8(output.stdout).unwrap();
     let mut parts = stdout.split_whitespace();
     let mut next = || parts.next().unwrap();
-    println!("cargo:rustc-env=PREFLIGIT_COMMIT_HASH={}", next());
-    println!("cargo:rustc-env=PREFLIGIT_COMMIT_SHORT_HASH={}", next());
-    println!("cargo:rustc-env=PREFLIGIT_COMMIT_DATE={}", next());
+    println!("cargo:rustc-env=PREK_COMMIT_HASH={}", next());
+    println!("cargo:rustc-env=PREK_COMMIT_SHORT_HASH={}", next());
+    println!("cargo:rustc-env=PREK_COMMIT_DATE={}", next());
 
     // Describe can fail for some commits
     // https://git-scm.com/docs/pretty-formats#Documentation/pretty-formats.txt-emdescribeoptionsem
     if let Some(describe) = parts.next() {
         let mut describe_parts = describe.split('-');
         println!(
-            "cargo:rustc-env=PREFLIGIT_LAST_TAG={}",
+            "cargo:rustc-env=PREK_LAST_TAG={}",
             describe_parts.next().unwrap()
         );
         // If this is the tagged commit, this component will be missing
         println!(
-            "cargo:rustc-env=PREFLIGIT_LAST_TAG_DISTANCE={}",
+            "cargo:rustc-env=PREK_LAST_TAG_DISTANCE={}",
             describe_parts.next().unwrap_or("0")
         );
     }
