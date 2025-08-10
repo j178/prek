@@ -6,6 +6,7 @@ use url::Url;
 use crate::hook::Hook;
 
 mod check_added_large_files;
+mod check_json;
 mod fix_end_of_file;
 mod fix_trailing_whitespace;
 
@@ -13,6 +14,7 @@ pub(crate) enum Implemented {
     TrailingWhitespace,
     CheckAddedLargeFiles,
     EndOfFileFixer,
+    CheckJson,
 }
 
 impl FromStr for Implemented {
@@ -23,6 +25,7 @@ impl FromStr for Implemented {
             "trailing-whitespace" => Ok(Self::TrailingWhitespace),
             "check-added-large-files" => Ok(Self::CheckAddedLargeFiles),
             "end-of-file-fixer" => Ok(Self::EndOfFileFixer),
+            "check-json" => Ok(Self::CheckJson),
             _ => Err(()),
         }
     }
@@ -38,6 +41,7 @@ impl Implemented {
                 check_added_large_files::check_added_large_files(hook, filenames).await
             }
             Self::EndOfFileFixer => fix_end_of_file::fix_end_of_file(hook, filenames).await,
+            Self::CheckJson => check_json::check_json(hook, filenames).await,
         }
     }
 }
