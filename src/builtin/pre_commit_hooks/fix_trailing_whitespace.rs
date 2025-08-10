@@ -34,7 +34,7 @@ impl Deref for Chars {
 struct Args {
     #[arg(long)]
     markdown_linebreak_ext: Vec<String>,
-    // **clap** can not parse `--chars= \t` into vec<char> correctly.
+    // `clap` cannot parse `--chars= \t` into vec<char> correctly.
     // so, we use Chars to achieve it.
     #[arg(long)]
     chars: Option<Chars>,
@@ -56,7 +56,7 @@ impl Args {
                 .any(|c| matches!(c, '.' | '/' | '\\' | ':'))
             {
                 return Err(anyhow::anyhow!(
-                    "bad --markdown-linebreak-ext extension '{ext}' (has . / \\ :)"
+                    "bad `--markdown-linebreak-ext` argument '{ext}' (has . / \\ :)"
                 ));
             }
         }
