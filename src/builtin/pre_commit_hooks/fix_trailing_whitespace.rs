@@ -1,19 +1,71 @@
+use std::ops::Deref;
 use std::path::Path;
+use std::str::FromStr;
 
 use anyhow::Result;
-use bstr::ByteSlice;
 use clap::Parser;
 use futures::StreamExt;
+use tempfile::NamedTempFile;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
+
+const MARKDOWN_LINE_BREAK: &str = "  ";
+
+#[derive(Clone)]
+struct Chars(Vec<char>);
+
+impl FromStr for Chars {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Chars(s.chars().collect()))
+    }
+}
+
+impl Deref for Chars {
+    type Target = Vec<char>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Parser)]
 struct Args {
     #[arg(long)]
     markdown_linebreak_ext: Vec<String>,
+    // **clap** can not parse `--chars= \t` into vec<char> correctly.
+    // so, we use Chars to achieve it.
     #[arg(long)]
-    chars: Vec<char>,
+    chars: Chars,
+}
+
+impl Args {
+    fn markdown_exts(&self) -> Result<Vec<String>> {
+        let markdown_exts = self
+            .markdown_linebreak_ext
+            .iter()
+            .flat_map(|ext| ext.split(','))
+            .map(|ext| format!(".{}", ext.trim_start_matches('.')).to_ascii_lowercase())
+            .collect::<Vec<_>>();
+
+        // Validate extensions don't contain path separators
+        for ext in &markdown_exts {
+            if ext[1..]
+                .chars()
+                .any(|c| matches!(c, '.' | '/' | '\\' | ':'))
+            {
+                return Err(anyhow::anyhow!(
+                    "bad --markdown-linebreak-ext extension '{ext}' (has . / \\ :)"
+                ));
+            }
+        }
+        Ok(markdown_exts)
+    }
+
+    fn force_markdown(&self) -> bool {
+        self.markdown_linebreak_ext.iter().any(|ext| ext == "*")
+    }
 }
 
 pub(crate) async fn fix_trailing_whitespace(
@@ -22,99 +74,12 @@ pub(crate) async fn fix_trailing_whitespace(
 ) -> Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.parsed()?.iter().chain(&hook.args))?;
 
-    let force_markdown = args.markdown_linebreak_ext.iter().any(|ext| ext == "*");
-    let markdown_exts = args
-        .markdown_linebreak_ext
-        .iter()
-        .flat_map(|ext| ext.split(','))
-        .map(|ext| format!(".{}", ext.trim_start_matches('.')).to_ascii_lowercase())
-        .collect::<Vec<_>>();
-    let chars = if args.chars.is_empty() {
-        None
-    } else {
-        Some(args.chars)
-    };
-
-    // Validate extensions don't contain path separators
-    for ext in &markdown_exts {
-        if ext[1..]
-            .chars()
-            .any(|c| matches!(c, '.' | '/' | '\\' | ':'))
-        {
-            return Err(anyhow::anyhow!(
-                "bad --markdown-linebreak-ext extension '{ext}' (has . / \\ :)"
-            ));
-        }
-    }
+    let force_markdown = args.force_markdown();
+    let markdown_exts = args.markdown_exts()?;
+    let chars = args.chars;
 
     let mut tasks = futures::stream::iter(filenames)
-        .map(async |filename| {
-            let ext = Path::new(filename)
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .map(|ext| format!(".{}", ext.to_ascii_lowercase()));
-            let is_markdown = force_markdown || ext.is_some_and(|ext| markdown_exts.contains(&ext));
-
-            // TODO: read file in chunks
-            let content = fs_err::tokio::read(filename).await?;
-
-            let mut modified = false;
-            let mut output = Vec::new();
-
-            for mut line in content.split_inclusive(|&b| b == b'\n') {
-                let eol = if line.ends_with(b"\r\n") {
-                    line = &line[..line.len() - 2];
-                    b"\r\n".as_slice()
-                } else if line.ends_with(b"\n") {
-                    line = &line[..line.len() - 1];
-                    b"\n".as_slice()
-                } else {
-                    b"".as_slice()
-                };
-
-                if line.is_empty() {
-                    output.extend_from_slice(eol);
-                    continue;
-                }
-
-                let output_len = output.len();
-
-                if is_markdown
-                    && !line.iter().all(|&b| b.is_ascii_whitespace())
-                    && line.ends_with(b"  ")
-                {
-                    // Preserve trailing two spaces for markdown, but trim any additional whitespace
-                    let trimmed = if let Some(chars) = chars.as_deref() {
-                        line[..line.len() - 2].trim_end_with(|b| chars.contains(&b))
-                    } else {
-                        line[..line.len() - 2].trim_ascii_end()
-                    };
-                    output.extend_from_slice(trimmed);
-                    output.extend_from_slice(b"  ");
-                    output.extend_from_slice(eol);
-                } else {
-                    // Normal whitespace trimming
-                    let trimmed = if let Some(chars) = chars.as_deref() {
-                        line.trim_end_with(|b| chars.contains(&b))
-                    } else {
-                        line.trim_ascii_end()
-                    };
-                    output.extend_from_slice(trimmed);
-                    output.extend_from_slice(eol);
-                }
-
-                if line.len() + eol.len() != output.len() - output_len {
-                    modified = true;
-                }
-            }
-
-            if modified {
-                fs_err::tokio::write(filename, &output).await?;
-                anyhow::Ok((1, format!("Fixing {filename}\n").into_bytes()))
-            } else {
-                anyhow::Ok((0, Vec::new()))
-            }
-        })
+        .map(async |filename| fix_file(filename, &chars, force_markdown, &markdown_exts).await)
         .buffered(*CONCURRENCY);
 
     let mut code = 0;
@@ -127,4 +92,362 @@ pub(crate) async fn fix_trailing_whitespace(
     }
 
     Ok((code, output))
+}
+
+async fn fix_file(
+    filename: &str,
+    chars: &[char],
+    force_markdown: bool,
+    markdown_exts: &[String],
+) -> Result<(i32, Vec<u8>)> {
+    let ext = Path::new(filename)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| format!(".{}", e.to_ascii_lowercase()));
+    let is_markdown = force_markdown || ext.is_some_and(|e| markdown_exts.contains(&e));
+
+    let named_temp_file = NamedTempFile::new()?;
+    let temp_file = tokio::fs::File::from_std(named_temp_file.reopen()?);
+    let mut buf_writer = BufWriter::new(temp_file);
+
+    let file = fs_err::tokio::File::open(filename).await?;
+    let mut buf_reader = BufReader::new(file);
+    let mut line = String::new();
+    let mut modified = false;
+
+    while buf_reader.read_line(&mut line).await? != 0 {
+        let line_ending = detect_line_ending(&line);
+        let mut trimmed = line.trim_end_matches(line_ending);
+
+        let markdown_end_flag = needs_markdown_break(is_markdown, trimmed);
+
+        if chars.is_empty() {
+            trimmed = trimmed.trim_ascii_end();
+        } else {
+            trimmed = trimmed.trim_end_matches(|c| chars.contains(&c));
+        }
+
+        buf_writer.write_all(trimmed.as_bytes()).await?;
+        if markdown_end_flag {
+            buf_writer.write_all(MARKDOWN_LINE_BREAK.as_bytes()).await?;
+            modified |= trimmed.len() + MARKDOWN_LINE_BREAK.len() + line_ending.len() != line.len();
+        } else {
+            modified |= trimmed.len() + line_ending.len() != line.len();
+        }
+        buf_writer.write_all(line_ending.as_bytes()).await?;
+        line.clear();
+    }
+
+    drop(buf_reader);
+
+    if modified {
+        buf_writer.flush().await?;
+        drop(buf_writer);
+        fs_err::tokio::rename(named_temp_file, Path::new(filename)).await?;
+        Ok((1, format!("Fixing {filename}\n").into_bytes()))
+    } else {
+        drop(buf_writer);
+        Ok((0, Vec::new()))
+    }
+}
+
+fn detect_line_ending(line: &str) -> &str {
+    if line.ends_with("\r\n") {
+        "\r\n"
+    } else if line.ends_with('\n') {
+        "\n"
+    } else if line.ends_with('\r') {
+        "\r"
+    } else {
+        ""
+    }
+}
+
+fn needs_markdown_break(is_markdown: bool, trimmed: &str) -> bool {
+    is_markdown
+        && !trimmed.chars().all(|b| b.is_ascii_whitespace())
+        && trimmed.ends_with(MARKDOWN_LINE_BREAK)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    async fn create_test_file(dir: &TempDir, name: &str, content: &[u8]) -> PathBuf {
+        let file_path = dir.path().join(name);
+        fs_err::tokio::write(&file_path, content).await.unwrap();
+        file_path
+    }
+
+    async fn run_fix_on_file(
+        file_path: &Path,
+        chars: &[char],
+        force_markdown: bool,
+        markdown_exts: &[String],
+    ) -> (i32, Vec<u8>) {
+        let filename = file_path.to_string_lossy().to_string();
+        fix_file(&filename, chars, force_markdown, markdown_exts)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_trim_non_markdown_trims_spaces() {
+        let dir = TempDir::new().unwrap();
+        let file_path =
+            create_test_file(&dir, "file.txt", b"keep this line\ntrim trailing    \n").await;
+
+        let chars = vec![' ', '\t'];
+        let md_exts = vec![".md".to_string()];
+
+        let (code, msg) = run_fix_on_file(&file_path, &chars, false, &md_exts).await;
+
+        // modified
+        assert_eq!(code, 1);
+        let msg_str = String::from_utf8_lossy(&msg);
+        assert!(msg_str.contains("file.txt"));
+
+        // file content updated: trailing spaces removed
+        let content = fs_err::tokio::read_to_string(&file_path).await.unwrap();
+        let expected = "keep this line\ntrim trailing\n";
+        assert_eq!(content, expected);
+    }
+
+    #[tokio::test]
+    async fn test_markdown_preserve_two_spaces_and_reduce_extra() {
+        let dir = TempDir::new().unwrap();
+        let file_path = create_test_file(
+            &dir,
+            "doc.md",
+            b"line_keep_two  \nline_reduce_three   \nother_line\n",
+        )
+        .await;
+
+        let chars = vec![' ', '\t'];
+        let md_exts = vec![".md".to_string()];
+
+        let (code, _msg) = run_fix_on_file(&file_path, &chars, false, &md_exts).await;
+
+        // second line changed 3 -> 2 spaces, so modified
+        assert_eq!(code, 1);
+
+        let content = fs_err::tokio::read_to_string(&file_path).await.unwrap();
+        let expected = "line_keep_two  \nline_reduce_three  \nother_line\n";
+        assert_eq!(content, expected);
+    }
+
+    #[tokio::test]
+    async fn test_force_markdown_obeys_markdown_rules() {
+        let dir = TempDir::new().unwrap();
+        // .txt normally not markdown, but we force markdown=true
+        let file_path = create_test_file(
+            &dir,
+            "forced.txt",
+            b"keep_two_spaces  \nthree_spaces_line   \n",
+        )
+        .await;
+
+        let chars = vec![' ', '\t'];
+        let md_exts: Vec<String> = vec![]; // irrelevant because force_markdown = true
+
+        let (code, _msg) = run_fix_on_file(&file_path, &chars, true, &md_exts).await;
+
+        // modified because one line had 3 spaces -> reduced to 2
+        assert_eq!(code, 1);
+
+        let content = fs_err::tokio::read_to_string(&file_path).await.unwrap();
+        let expected = "keep_two_spaces  \nthree_spaces_line  \n";
+        assert_eq!(content, expected);
+    }
+
+    #[tokio::test]
+    async fn test_no_changes_returns_zero_and_no_write() {
+        let dir = TempDir::new().unwrap();
+        let path = create_test_file(&dir, "ok.txt", b"already_trimmed\nline_two\n").await;
+        let chars = vec![' ', '\t'];
+        let md_exts = vec![".md".to_string()];
+
+        // file already trimmed -> no changes
+        let (code, msg) = run_fix_on_file(&path, &chars, false, &md_exts).await;
+        assert_eq!(code, 0);
+        assert!(msg.is_empty());
+
+        let content = fs_err::tokio::read_to_string(&path).await.unwrap();
+        assert_eq!(content, "already_trimmed\nline_two\n");
+    }
+
+    #[tokio::test]
+    async fn test_empty_file_no_change() {
+        let dir = TempDir::new().unwrap();
+        let path = create_test_file(&dir, "empty.txt", b"").await;
+        let chars = vec![' ', '\t'];
+        let md_exts = vec![];
+
+        let (code, msg) = run_fix_on_file(&path, &chars, false, &md_exts).await;
+        assert_eq!(code, 0);
+        assert!(msg.is_empty());
+        let content = fs_err::tokio::read_to_string(&path).await.unwrap();
+        assert_eq!(content, "");
+    }
+
+    #[tokio::test]
+    async fn test_only_whitespace_lines_are_handled_not_markdown_end() {
+        let dir = TempDir::new().unwrap();
+        // lines are only whitespace; markdown_end_flag should NOT trigger
+        let path = create_test_file(&dir, "ws.txt", b"   \n\t\n  \n").await;
+        let chars = vec![' ', '\t'];
+        let md_exts = vec![".md".to_string()];
+
+        let (code, _msg) = run_fix_on_file(&path, &chars, false, &md_exts).await;
+        // trimming whitespace-only lines will change them to empty lines -> modified true
+        assert_eq!(code, 1);
+
+        let content = fs_err::tokio::read_to_string(&path).await.unwrap();
+        // Expect empty lines (newline preserved per implementation)
+        assert_eq!(content, "\n\n\n");
+    }
+
+    #[tokio::test]
+    async fn test_chars_empty_uses_trim_ascii_end() {
+        let dir = TempDir::new().unwrap();
+        // trailing ascii spaces should be removed by trim_ascii_end when chars is empty
+        let path = create_test_file(&dir, "ascii.txt", b"foo   \nbar \t\n").await;
+        let chars: Vec<char> = vec![]; // will hit trim_ascii_end()
+        let md_exts: Vec<String> = vec![];
+
+        let (code, _msg) = run_fix_on_file(&path, &chars, false, &md_exts).await;
+        assert_eq!(code, 1);
+
+        let content = fs_err::tokio::read_to_string(&path).await.unwrap();
+        let expected = "foo\nbar\n";
+        assert_eq!(content, expected);
+    }
+
+    #[tokio::test]
+    async fn test_crlf_lines_handling() {
+        let dir = TempDir::new().unwrap();
+        // CRLF content (use \r\n). Ensure trimming still works.
+        let path = create_test_file(&dir, "crlf.txt", b"one  \r\ntwo   \r\n").await;
+        let chars = vec![' ', '\t'];
+        let md_exts = vec![".txt".to_string()]; // treat as markdown for this test
+
+        let (code, _msg) = run_fix_on_file(&path, &chars, false, &md_exts).await;
+        assert_eq!(code, 1);
+
+        // read file and check logical lines presence (line endings may be normalized by lines())
+        let content = fs_err::tokio::read_to_string(&path).await.unwrap();
+        assert!(content.contains("one"));
+        assert!(content.contains("two"));
+    }
+
+    #[tokio::test]
+    async fn test_no_newline_at_eof() {
+        let dir = TempDir::new().unwrap();
+        // no trailing newline on last line
+        let path = create_test_file(&dir, "no_nl.txt", b"lastline   ").await;
+        let chars = vec![' ', '\t'];
+        let md_exts = vec![];
+
+        let (code, _msg) = run_fix_on_file(&path, &chars, false, &md_exts).await;
+        assert_eq!(code, 1);
+
+        let content = fs_err::tokio::read_to_string(&path).await.unwrap();
+        // Expect trailing spaces removed
+        assert_eq!(content, "lastline");
+    }
+
+    #[tokio::test]
+    async fn test_unicode_trim_char() {
+        let dir = TempDir::new().unwrap();
+        // use a unicode char '。' and ideographic space '　' to trim
+        let path = create_test_file(&dir, "uni.txt", "hello。　\n".as_bytes()).await;
+        let chars = vec!['。', '　'];
+        let md_exts: Vec<String> = vec![];
+
+        let (code, _msg) = run_fix_on_file(&path, &chars, false, &md_exts).await;
+        assert_eq!(code, 1);
+
+        let content = fs_err::tokio::read_to_string(&path).await.unwrap();
+        assert_eq!(content, "hello\n");
+    }
+
+    #[tokio::test]
+    async fn test_extension_case_insensitive_matching() {
+        let dir = TempDir::new().unwrap();
+        // capital extension .MD should match .md in markdown_exts
+        let path = create_test_file(&dir, "Doc.MD", b"hi   \n").await;
+        let chars = vec![' ', '\t'];
+        let md_exts = vec![".md".to_string()];
+
+        let (code, _msg) = run_fix_on_file(&path, &chars, false, &md_exts).await;
+        assert_eq!(code, 1);
+
+        let content = fs_err::tokio::read_to_string(&path).await.unwrap();
+        // markdown rules: trailing >2 -> reduce to two spaces
+        assert!(content.contains("hi"));
+    }
+
+    #[tokio::test]
+    async fn test_mixed_lines_modified_flag_true_if_any_changed() {
+        let dir = TempDir::new().unwrap();
+        let path = create_test_file(&dir, "mix.txt", b"ok\nneedtrim   \nalso_ok\n").await;
+        let chars = vec![' ', '\t'];
+        let md_exts: Vec<String> = vec![];
+
+        let (code, _msg) = run_fix_on_file(&path, &chars, false, &md_exts).await;
+        assert_eq!(code, 1);
+
+        let content = fs_err::tokio::read_to_string(&path).await.unwrap();
+        let expected = "ok\nneedtrim\nalso_ok\n";
+        assert_eq!(content, expected);
+    }
+
+    #[tokio::test]
+    async fn test_no_change_no_newline_at_eof() {
+        let dir = TempDir::new().unwrap();
+        let path = create_test_file(&dir, "ok_no_nl.txt", b"foo\nbar").await;
+        let chars = vec![' ', '\t'];
+        let md_exts: Vec<String> = vec![];
+
+        let (code, msg) = run_fix_on_file(&path, &chars, false, &md_exts).await;
+        assert_eq!(code, 0);
+        assert!(msg.is_empty());
+
+        let content = fs_err::tokio::read_to_string(&path).await.unwrap();
+        assert_eq!(content, "foo\nbar");
+    }
+
+    #[tokio::test]
+    async fn test_markdown_wildcard_ext_and_eof_whitespace_removed() {
+        let dir = TempDir::new().unwrap();
+        let content = b"foo  \nbar \nbaz    \n\t\n\n  ";
+        let path = create_test_file(&dir, "wild.md", content).await;
+        let chars = vec![' ', '\t'];
+        let md_exts = vec!["*".to_string()];
+
+        let (code, _msg) = run_fix_on_file(&path, &chars, true, &md_exts).await;
+        assert_eq!(code, 1);
+
+        let expected = "foo  \nbar\nbaz  \n\n\n";
+        let new_content = fs_err::tokio::read_to_string(&path).await.unwrap();
+        assert_eq!(new_content, expected);
+    }
+
+    #[tokio::test]
+    async fn test_markdown_with_custom_charset() {
+        let dir = TempDir::new().unwrap();
+        let path = create_test_file(&dir, "custom_charset.md", b"\ta \t   \n").await;
+        let chars = vec![' '];
+        let md_exts = vec!["*".to_string()];
+
+        let (code, _msg) = run_fix_on_file(&path, &chars, true, &md_exts).await;
+        assert_eq!(code, 1);
+
+        let expected = "\ta \t  \n";
+        let content = fs_err::tokio::read_to_string(&path).await.unwrap();
+        assert_eq!(content, expected);
+    }
 }

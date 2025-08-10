@@ -8,8 +8,12 @@
 # JetBrains IDE
 .idea
 
+# Vscode IDE
+.vscode
+
 # macOS
 **/.DS_Store
 
 # profiling flamegraphs
 *.flamegraph.svg
+
