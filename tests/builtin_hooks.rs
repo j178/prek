@@ -106,17 +106,18 @@ fn check_json_hook() -> Result<()> {
     context.git_add(".");
 
     // First run: hooks should fail
-    cmd_snapshot!(context.filters(), context.run(), @r###"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     check json...............................................................Failed
     - hook id: check-json
     - exit code: 1
+      duplicate.json: Failed to json decode (data did not match any variant of untagged enum JsonValue)
       invalid.json: Failed to json decode (trailing comma at line 1 column 9)
-    
+
     ----- stderr -----
-    "###);
+    ");
 
     // Fix the files
     cwd.child("invalid.json").write_str(r#"{"a": 1}"#)?;
