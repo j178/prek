@@ -52,7 +52,6 @@ impl Serialize for SerdeRegex {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum Language {
