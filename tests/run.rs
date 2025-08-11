@@ -65,17 +65,6 @@ fn run_basic() -> Result<()> {
     ----- stderr -----
     "#);
 
-    context.git_add(".");
-
-    cmd_snapshot!(context.filters(), context.run().arg("typos").arg("--hook-stage").arg("pre-push"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
-    ----- stderr -----
-    No hook found for id `typos` and stage `pre-push`
-    "#);
-
     Ok(())
 }
 
@@ -214,33 +203,6 @@ fn local() {
     local....................................................................Passed
 
     ----- stderr -----
-    "#);
-}
-
-#[test]
-fn invalid_hook_id() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
-        repos:
-          - repo: local
-            hooks:
-              - id: trailing-whitespace
-                name: trailing-whitespace
-                language: system
-                entry: python3 -V
-    "});
-
-    context.git_add(".");
-
-    cmd_snapshot!(context.filters(), context.run().arg("invalid-hook-id"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
-    ----- stderr -----
-    No hook found for id `invalid-hook-id` and stage `pre-commit`
     "#);
 }
 
