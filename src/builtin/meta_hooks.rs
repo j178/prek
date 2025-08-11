@@ -92,7 +92,11 @@ pub(crate) async fn check_useless_excludes(
     for filename in filenames {
         let config = config::read_config(Path::new(filename))?;
 
-        if !excludes_any(&input, None, config.exclude.as_deref().map(fancy_regex::Regex::as_str))? {
+        if !excludes_any(
+            &input,
+            None,
+            config.exclude.as_deref().map(fancy_regex::Regex::as_str),
+        )? {
             code = 1;
             writeln!(
                 &mut output,
