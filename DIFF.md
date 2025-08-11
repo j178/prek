@@ -14,6 +14,10 @@
 - `prek run --directory <DIR>` to run hooks on a specified directory.
 - `prek run [HOOK_ID] [HOOK_ID] ...` to run multiple hooks.
 
+### `prek list`
+
+`prek list` command lists all available hooks, their ids, and descriptions. This provides a better overview of the configured hooks.
+
 ### `prek sample-config`
 
 - `prek sample-config` command has a `--file` option to write the sample configuration to a specific file.

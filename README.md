@@ -66,11 +66,12 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 
 - No need to install Python or any other runtime, just download a single binary.
 - No hassle with your Python version or virtual environments, prek automatically installs the required Python version and creates a virtual environment for you.
-- (TODO): Built-in support for workspaces (or monorepos), each sub-project can have its own `.pre-commit-config.yaml` file.
+- (TODO): Built-in support for workspaces (or monorepos), each subproject can have its own `.pre-commit-config.yaml` file.
 - `prek run` has some improvements over `pre-commit run`, such as:
     - `prek run --directory <dir>` runs hooks for files in the specified directory, no need to use `git ls-files -- <dir> | xargs pre-commit run --files` anymore.
     - `prek run --last-commit` runs hooks for files changed in the last commit.
-- prek provides shell completions for `prek run <hook_id>` command, so you can easily find the available hooks.
+- `prek list` command lists all available hooks, their ids, and descriptions, providing a better overview of the configured hooks.
+- prek provides shell completions for `prek run <hook_id>` command, making it easier to run specific hooks without remembering their ids.
 
 ## Installation
 
@@ -81,10 +82,10 @@ prek provides a standalone installer script to download and install the tool:
 
 ```console
 # On Linux and macOS
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.0.23/prek-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.0.24/prek-installer.sh | sh
 
 # On Windows
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.0.23/prek-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.0.24/prek-installer.ps1 | iex"
 ```
 </details>
 

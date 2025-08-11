@@ -15,6 +15,7 @@ use crate::workspace::Project;
 mod clean;
 mod hook_impl;
 mod install;
+mod list;
 mod reporter;
 pub mod run;
 mod sample_config;
@@ -24,6 +25,7 @@ mod validate;
 pub(crate) use clean::clean;
 pub(crate) use hook_impl::hook_impl;
 pub(crate) use install::{init_template_dir, install, install_hooks, uninstall};
+pub(crate) use list::list;
 pub(crate) use run::run;
 pub(crate) use sample_config::sample_config;
 pub(crate) use self_update::self_update;
@@ -219,6 +221,8 @@ pub(crate) enum Command {
     InstallHooks,
     /// Run hooks.
     Run(Box<RunArgs>),
+    /// List available hooks.
+    List(ListArgs),
     /// Uninstall the prek git hook.
     Uninstall(UninstallArgs),
     /// Validate `.pre-commit-config.yaml` files.
@@ -338,6 +342,18 @@ pub(crate) struct RunArgs {
 
     #[command(flatten)]
     pub(crate) extra: RunExtraArgs,
+}
+
+#[derive(Debug, Clone, Default, Args)]
+pub(crate) struct ListArgs {
+    #[arg(value_name = "HOOK", value_hint = ValueHint::Other, add = ArgValueCompleter::new(hook_id_completer))]
+    pub(crate) hook_ids: Vec<String>,
+    /// Show only hooks that has the specified stage.
+    #[arg(long, value_enum)]
+    pub(crate) hook_stage: Option<Stage>,
+    /// Show only hooks that are implemented in the specified language.
+    #[arg(long, value_enum)]
+    pub(crate) language: Option<config::Language>,
 }
 
 #[derive(Debug, Args)]

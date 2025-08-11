@@ -178,6 +178,12 @@ impl TestContext {
         command
     }
 
+    pub fn list(&self) -> Command {
+        let mut command = self.command();
+        command.arg("list");
+        command
+    }
+
     /// Standard snapshot filters _plus_ those for this test context.
     pub fn filters(&self) -> Vec<(&str, &str)> {
         // Put test context snapshots before the default filters
