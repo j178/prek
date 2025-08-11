@@ -113,7 +113,7 @@ fn check_json_hook() -> Result<()> {
     check json...............................................................Failed
     - hook id: check-json
     - exit code: 1
-      duplicate.json: Failed to json decode (data did not match any variant of untagged enum JsonValue)
+      duplicate.json: Failed to json decode (duplicate key `a` at line 1 column 12)
       invalid.json: Failed to json decode (trailing comma at line 1 column 9)
 
     ----- stderr -----

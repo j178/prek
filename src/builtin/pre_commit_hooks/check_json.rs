@@ -1,17 +1,14 @@
 use anyhow::Result;
 use futures::StreamExt;
-use serde::Deserialize;
-use serde_with::{MapPreventDuplicates, serde_as};
+use serde::{Deserialize, Deserializer};
 use std::collections::HashMap;
 
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
-#[serde_as]
-#[derive(Deserialize)]
-#[serde(untagged)]
+#[derive(Debug)]
 enum JsonValue {
-    Object(#[serde_as(as = "MapPreventDuplicates<_, _>")] HashMap<String, JsonValue>),
+    Object(HashMap<String, JsonValue>),
     Array(Vec<JsonValue>),
     String(String),
     Number(serde_json::Number),
@@ -42,18 +39,92 @@ async fn check_file(filename: &str) -> Result<(i32, Vec<u8>)> {
         return Ok((0, Vec::new()));
     }
 
-    // Parse JSON with duplicate key detection using serde_with
-    let result: Result<JsonValue, _> = serde_json::from_slice(&content);
-    match result {
+    let content_str =
+        std::str::from_utf8(&content).map_err(|_| anyhow::anyhow!("Invalid UTF-8"))?;
+
+    // Try to parse with duplicate key detection
+    match serde_json::from_str::<JsonValue>(content_str) {
         Ok(_) => Ok((0, Vec::new())),
         Err(e) => {
-            let error_message = if e.to_string().contains("duplicate") {
-                format!("{filename}: {e}\n")
-            } else {
-                format!("{filename}: Failed to json decode ({e})\n")
-            };
+            let error_message = format!("{filename}: Failed to json decode ({e})\n");
             Ok((1, error_message.into_bytes()))
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for JsonValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::{self, MapAccess, SeqAccess, Visitor};
+        use std::fmt;
+
+        struct JsonValueVisitor;
+
+        impl<'de> Visitor<'de> for JsonValueVisitor {
+            type Value = JsonValue;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a JSON value")
+            }
+
+            fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E> {
+                Ok(JsonValue::Bool(v))
+            }
+
+            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E> {
+                Ok(JsonValue::Number(v.into()))
+            }
+
+            fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E> {
+                Ok(JsonValue::Number(v.into()))
+            }
+
+            fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E> {
+                Ok(JsonValue::Number(serde_json::Number::from_f64(v).unwrap()))
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> {
+                Ok(JsonValue::String(v.to_string()))
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E> {
+                Ok(JsonValue::String(v))
+            }
+
+            fn visit_unit<E>(self) -> Result<Self::Value, E> {
+                Ok(JsonValue::Null)
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let mut vec = Vec::new();
+                while let Some(element) = seq.next_element()? {
+                    vec.push(element);
+                }
+                Ok(JsonValue::Array(vec))
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let mut object = HashMap::new();
+                while let Some(key) = map.next_key::<String>()? {
+                    if object.contains_key(&key) {
+                        return Err(de::Error::custom(format!("duplicate key `{key}`")));
+                    }
+                    let value = map.next_value()?;
+                    object.insert(key, value);
+                }
+                Ok(JsonValue::Object(object))
+            }
+        }
+
+        deserializer.deserialize_any(JsonValueVisitor)
     }
 }
 
