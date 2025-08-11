@@ -12,6 +12,7 @@ use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
 const MARKDOWN_LINE_BREAK: &str = "  ";
+const BUFFER_SIZE_THRESHOLD: usize = 16 * 1024; // 16KB
 
 #[derive(Clone)]
 struct Chars(Vec<char>);
@@ -110,15 +111,13 @@ async fn fix_file(
         .map(|e| format!(".{}", e.to_ascii_lowercase()));
     let is_markdown = force_markdown || ext.is_some_and(|e| markdown_exts.contains(&e));
 
-    let named_temp_file = NamedTempFile::new()?;
-    let temp_file = tokio::fs::File::from_std(named_temp_file.reopen()?);
-    let mut buf_writer = BufWriter::new(temp_file);
-
     let file = fs_err::tokio::File::open(filename).await?;
+    let file_len = file.metadata().await?.len();
+    let mut buf_writer = create_buffer(usize::try_from(file_len)?)?;
     let mut buf_reader = BufReader::new(file);
+
     let mut line = String::new();
     let mut modified = false;
-
     while buf_reader.read_line(&mut line).await? != 0 {
         let line_ending = detect_line_ending(&line);
         let mut trimmed = line.trim_end_matches(line_ending);
@@ -131,27 +130,112 @@ async fn fix_file(
             trimmed = trimmed.trim_end_matches(|c| chars.contains(&c));
         }
 
-        buf_writer.write_all(trimmed.as_bytes()).await?;
+        buf_writer.write(trimmed).await?;
         if markdown_end_flag {
-            buf_writer.write_all(MARKDOWN_LINE_BREAK.as_bytes()).await?;
+            buf_writer.write(MARKDOWN_LINE_BREAK).await?;
             modified |= trimmed.len() + MARKDOWN_LINE_BREAK.len() + line_ending.len() != line.len();
         } else {
             modified |= trimmed.len() + line_ending.len() != line.len();
         }
-        buf_writer.write_all(line_ending.as_bytes()).await?;
+        buf_writer.write(line_ending).await?;
         line.clear();
     }
 
     drop(buf_reader);
-
     if modified {
-        buf_writer.flush().await?;
-        drop(buf_writer);
-        fs_err::tokio::rename(named_temp_file, Path::new(filename)).await?;
+        buf_writer.flush_to_file(filename).await?;
         Ok((1, format!("Fixing {filename}\n").into_bytes()))
     } else {
         drop(buf_writer);
         Ok((0, Vec::new()))
+    }
+}
+
+trait AsyncWriteBuffer {
+    async fn write(&mut self, data: &str) -> Result<()>;
+    async fn flush_to_file(&mut self, filename: &str) -> Result<()>;
+}
+
+struct MemoryBuffer(Vec<u8>);
+
+impl MemoryBuffer {
+    pub fn new(mut file_len: usize) -> Self {
+        if file_len > BUFFER_SIZE_THRESHOLD {
+            file_len = BUFFER_SIZE_THRESHOLD;
+        }
+        Self(Vec::with_capacity(file_len))
+    }
+}
+
+impl AsyncWriteBuffer for MemoryBuffer {
+    async fn write(&mut self, data: &str) -> Result<()> {
+        self.0.extend_from_slice(data.as_bytes());
+        Ok(())
+    }
+
+    async fn flush_to_file(&mut self, filename: &str) -> Result<()> {
+        fs_err::tokio::write(filename, &self.0).await?;
+        Ok(())
+    }
+}
+
+struct TempFileBuffer {
+    buf_writer: BufWriter<tokio::fs::File>,
+    named_temp_file: NamedTempFile,
+}
+
+impl TempFileBuffer {
+    pub fn new() -> Result<Self> {
+        let named_temp_file = NamedTempFile::new()?;
+        let temp_file = tokio::fs::File::from_std(named_temp_file.reopen()?);
+        let buf_writer = BufWriter::new(temp_file);
+
+        Ok(Self {
+            buf_writer,
+            named_temp_file,
+        })
+    }
+}
+
+impl AsyncWriteBuffer for TempFileBuffer {
+    async fn write(&mut self, data: &str) -> Result<()> {
+        self.buf_writer.write_all(data.as_bytes()).await?;
+        Ok(())
+    }
+
+    async fn flush_to_file(&mut self, filename: &str) -> Result<()> {
+        self.buf_writer.flush().await?;
+        fs_err::tokio::rename(self.named_temp_file.path(), Path::new(filename)).await?;
+        Ok(())
+    }
+}
+
+enum Buffer {
+    Memory(MemoryBuffer),
+    Temp(TempFileBuffer),
+}
+
+impl AsyncWriteBuffer for Buffer {
+    async fn write(&mut self, data: &str) -> Result<()> {
+        match self {
+            Buffer::Memory(b) => b.write(data).await,
+            Buffer::Temp(b) => b.write(data).await,
+        }
+    }
+
+    async fn flush_to_file(&mut self, filename: &str) -> Result<()> {
+        match self {
+            Buffer::Memory(b) => b.flush_to_file(filename).await,
+            Buffer::Temp(b) => b.flush_to_file(filename).await,
+        }
+    }
+}
+
+fn create_buffer(file_len: usize) -> Result<Buffer> {
+    if file_len <= BUFFER_SIZE_THRESHOLD {
+        Ok(Buffer::Memory(MemoryBuffer::new(file_len)))
+    } else {
+        Ok(Buffer::Temp(TempFileBuffer::new()?))
     }
 }
 
