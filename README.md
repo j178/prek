@@ -110,7 +110,7 @@ pipx install prek
 <summary>Homebrew</summary>
 
 ```console
-brew install prek
+brew install j178/tap/prek
 ```
 </details>
 
