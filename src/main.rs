@@ -226,6 +226,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
+        Command::List(args) => {
+            show_settings!(args);
+
+            cli::list(
+                cli.globals.config,
+                cli.globals.verbose > 0,
+                args.hook_ids,
+                args.hook_stage,
+                args.language,
+                printer,
+            )
+            .await
+        }
         Command::HookImpl(args) => {
             show_settings!(args);
 
