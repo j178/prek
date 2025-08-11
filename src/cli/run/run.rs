@@ -1,5 +1,5 @@
 use std::cmp::{Reverse, max};
-use std::collections::{HashMap, HashSet};
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::hash::Hash;
 use std::io::Write;
@@ -16,7 +16,7 @@ use indoc::indoc;
 use owo_colors::{OwoColorize, Style};
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, trace};
 use unicode_width::UnicodeWidthStr;
@@ -54,7 +54,7 @@ impl Deref for HookToRun {
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     config: Option<PathBuf>,
-    hook_id: Option<String>,
+    hook_ids: Vec<String>,
     hook_stage: Stage,
     from_ref: Option<String>,
     to_ref: Option<String>,
@@ -113,23 +113,39 @@ pub(crate) async fn run(
     let lock = store.lock_async().await?;
     let hooks = project.init_hooks(&store, Some(&reporter)).await?;
 
+    let hook_ids = hook_ids.into_iter().collect::<BTreeSet<_>>();
     let hooks: Vec<_> = hooks
         .into_iter()
-        .filter(|h| {
-            hook_id
-                .as_deref()
-                .is_none_or(|hook_id| h.id == hook_id || h.alias == hook_id)
-        })
+        .filter(|h| hook_ids.is_empty() || hook_ids.contains(&h.id) || hook_ids.contains(&h.alias))
         .filter(|h| h.stages.contains(&hook_stage))
         .collect();
 
-    if hooks.is_empty() && hook_id.is_some() {
-        writeln!(
-            printer.stderr(),
-            "No hook found for id `{}` and stage `{}`",
-            hook_id.unwrap().cyan(),
-            hook_stage.cyan()
-        )?;
+    if hooks.is_empty() {
+        if hook_ids.is_empty() {
+            writeln!(
+                printer.stderr(),
+                "No hooks found for stage `{}`",
+                hook_stage.cyan()
+            )?;
+        } else if hook_ids.len() == 1 {
+            writeln!(
+                printer.stderr(),
+                "No hook found with id `{}` in stage `{}`",
+                hook_ids.iter().next().unwrap().cyan(),
+                hook_stage.cyan()
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "No hooks found with ids {} in stage `{}`",
+                hook_ids
+                    .iter()
+                    .map(|id| format!("`{}`", id.cyan()))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                hook_stage.cyan()
+            )?;
+        }
         return Ok(ExitStatus::Failure);
     }
 
@@ -138,7 +154,7 @@ pub(crate) async fn run(
         .iter()
         .filter(|h| skips.contains(&h.id) || skips.contains(&h.alias))
         .map(|h| h.idx)
-        .collect::<HashSet<_>>();
+        .collect::<FxHashSet<_>>();
     let to_run = hooks
         .iter()
         .filter(|h| !skips.contains(&h.idx))
@@ -281,7 +297,7 @@ pub async fn install_hooks(
     // TODO: how to eliminate the Rc?
     let installed_hooks = Rc::new(store.installed_hooks().collect::<Vec<_>>());
 
-    let mut hooks_by_language = HashMap::new();
+    let mut hooks_by_language = FxHashMap::default();
     for hook in hooks {
         hooks_by_language
             .entry(hook.language)

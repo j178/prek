@@ -306,7 +306,7 @@ pub(crate) struct RunExtraArgs {
 pub(crate) struct RunArgs {
     /// The hook ID to run.
     #[arg(value_name = "HOOK", value_hint = ValueHint::Other, add = ArgValueCompleter::new(hook_id_completer))]
-    pub(crate) hook_id: Option<String>,
+    pub(crate) hook_ids: Vec<String>,
     /// Run on all files in the repo.
     #[arg(short, long, conflicts_with_all = ["files", "from_ref", "to_ref"])]
     pub(crate) all_files: bool,

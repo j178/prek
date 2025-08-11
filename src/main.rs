@@ -211,7 +211,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             cli::run(
                 cli.globals.config,
-                args.hook_id,
+                args.hook_ids,
                 args.hook_stage,
                 args.from_ref,
                 args.to_ref,
