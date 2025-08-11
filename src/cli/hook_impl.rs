@@ -48,7 +48,7 @@ pub(crate) async fn hook_impl(
 
     cli::run(
         config,
-        run_args.hook_id,
+        run_args.hook_ids,
         hook_type.into(),
         run_args.from_ref,
         run_args.to_ref,

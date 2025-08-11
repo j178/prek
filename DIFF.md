@@ -6,10 +6,18 @@
 - `prek` decoupled hook environment from their repositories, allowing shared toolchains and environments across hooks.
 - `prek` supports Python toolchain management, it delegates to `uv`, and uses `uv` for virtual environments and dependencies.
 - `prek` supports `language-version` as a semver specifier and automatically installs the required toolchains.
+- `prek` provides dynamic completions of hook id.
+
+### `prek run`
+
 - `prek run --last-commit` to run hooks on files changed by the last commit.
 - `prek run --directory <DIR>` to run hooks on a specified directory.
+- `prek run [HOOK_ID] [HOOK_ID] ...` to run multiple hooks.
+
+### `prek sample-config`
+
 - `prek sample-config` command has a `--file` option to write the sample configuration to a specific file.
-- `prek` provides dynamic completions of hook id.
+
 
 ### Future plans
 

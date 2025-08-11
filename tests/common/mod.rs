@@ -114,12 +114,20 @@ impl TestContext {
     }
 
     pub fn command(&self) -> Command {
-        let bin = assert_cmd::cargo::cargo_bin("prek");
-        let mut cmd = Command::new(bin);
-        cmd.current_dir(self.work_dir());
-        cmd.env(EnvVars::PREK_HOME, &**self.home_dir());
-        cmd.env(EnvVars::PREK_INTERNAL__SORT_FILENAMES, "1");
-        cmd
+        if EnvVars::is_set(EnvVars::PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT) {
+            // Run the original pre-commit to check compatibility.
+            let mut cmd = Command::new("pre-commit");
+            cmd.current_dir(self.work_dir());
+            cmd.env(EnvVars::PRE_COMMIT_HOME, &**self.home_dir());
+            cmd
+        } else {
+            let bin = assert_cmd::cargo::cargo_bin("prek");
+            let mut cmd = Command::new(bin);
+            cmd.current_dir(self.work_dir());
+            cmd.env(EnvVars::PREK_HOME, &**self.home_dir());
+            cmd.env(EnvVars::PREK_INTERNAL__SORT_FILENAMES, "1");
+            cmd
+        }
     }
 
     pub fn run(&self) -> Command {

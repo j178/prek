@@ -169,6 +169,8 @@ fn additional_dependencies() {
 fn remote_hook() {
     let context = TestContext::new();
     context.init_project();
+
+    // Run hooks with newly downloaded go.
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-test-repos/golang-hooks
@@ -177,6 +179,30 @@ fn remote_hook() {
               - id: echo
                 verbose: true
                 language_version: '1.23.11' # will auto download
+        "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo.....................................................................Passed
+    - hook id: echo
+    - duration: [TIME]
+      .pre-commit-config.yaml
+
+    ----- stderr -----
+    "#);
+
+    // Run hooks with system found go.
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/prek-test-repos/golang-hooks
+            rev: main
+            hooks:
+              - id: echo
+                verbose: true
+                language_version: '1.24.5'
         "});
     context.git_add(".");
 

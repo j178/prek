@@ -65,17 +65,6 @@ fn run_basic() -> Result<()> {
     ----- stderr -----
     "#);
 
-    context.git_add(".");
-
-    cmd_snapshot!(context.filters(), context.run().arg("typos").arg("--hook-stage").arg("pre-push"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
-    ----- stderr -----
-    No hook found for id `typos` and stage `pre-push`
-    "#);
-
     Ok(())
 }
 
@@ -217,8 +206,9 @@ fn local() {
     "#);
 }
 
+/// Test multiple hook IDs scenarios.
 #[test]
-fn invalid_hook_id() {
+fn multiple_hook_ids() {
     let context = TestContext::new();
     context.init_project();
 
@@ -226,21 +216,110 @@ fn invalid_hook_id() {
         repos:
           - repo: local
             hooks:
-              - id: trailing-whitespace
-                name: trailing-whitespace
+              - id: hook1
+                name: First Hook
                 language: system
-                entry: python3 -V
+                entry: echo hook1
+              - id: hook2
+                name: Second Hook
+                language: system
+                entry: echo hook2
+              - id: shared-name
+                name: Shared Hook A
+                language: system
+                entry: echo shared-a
+              - id: shared-name-2
+                name: Shared Hook B
+                language: system
+                entry: echo shared-b
+                alias: shared-name
     "});
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run().arg("invalid-hook-id"), @r#"
+    // Multiple repeated hook-id (should deduplicate)
+    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("hook1").arg("hook1"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    First Hook...............................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    // Hook-id that matches multiple hooks (by alias)
+    cmd_snapshot!(context.filters(), context.run().arg("shared-name"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Shared Hook A............................................................Passed
+    Shared Hook B............................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    // Hook-id matches nothing
+    cmd_snapshot!(context.filters(), context.run().arg("nonexistent-hook"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    No hook found for id `invalid-hook-id` and stage `pre-commit`
+    No hook found with id `nonexistent-hook` in stage `pre-commit`
+    "#);
+
+    // Multiple hook_ids match nothing
+    cmd_snapshot!(context.filters(), context.run().arg("nonexistent-hook").arg("nonexistent-hook").arg("nonexistent-hook-2"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    No hooks found with ids `nonexistent-hook`, `nonexistent-hook-2` in stage `pre-commit`
+    "#);
+
+    // Hook-id matches one hook
+    cmd_snapshot!(context.filters(), context.run().arg("hook2"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Second Hook..............................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    // Multiple hook-ids with mixed results (some exist, some don't)
+    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("nonexistent").arg("hook2"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    First Hook...............................................................Passed
+    Second Hook..............................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    // Multiple valid hook-ids
+    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("hook2"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    First Hook...............................................................Passed
+    Second Hook..............................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    // Multiple hook-ids with some duplicates and aliases
+    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("shared-name").arg("hook1"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    First Hook...............................................................Passed
+    Shared Hook A............................................................Passed
+    Shared Hook B............................................................Passed
+
+    ----- stderr -----
     "#);
 }
 

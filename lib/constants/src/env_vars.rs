@@ -20,6 +20,8 @@ impl EnvVars {
     pub const PREK_INTERNAL__TEST_DIR: &'static str = "PREK_INTERNAL__TEST_DIR";
     pub const PREK_INTERNAL__SORT_FILENAMES: &'static str = "PREK_INTERNAL__SORT_FILENAMES";
     pub const PREK_INTERNAL__SKIP_POST_CHECKOUT: &'static str = "PREK_INTERNAL__SKIP_POST_CHECKOUT";
+    pub const PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT: &'static str =
+        "PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT";
 
     // UV related
     pub const UV_CACHE_DIR: &'static str = "UV_CACHE_DIR";
@@ -39,6 +41,7 @@ impl EnvVars {
 
 impl EnvVars {
     // Pre-commit environment variables that we support for compatibility
+    pub const PRE_COMMIT_HOME: &'static str = "PRE_COMMIT_HOME";
     const PRE_COMMIT_ALLOW_NO_CONFIG: &'static str = "PRE_COMMIT_ALLOW_NO_CONFIG";
     const PRE_COMMIT_NO_CONCURRENCY: &'static str = "PRE_COMMIT_NO_CONCURRENCY";
 }

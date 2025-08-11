@@ -81,6 +81,65 @@ fn end_of_file_fixer_hook() -> Result<()> {
 }
 
 #[test]
+fn check_json_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-json
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files
+    cwd.child("valid.json").write_str(r#"{"a": 1}"#)?;
+    cwd.child("invalid.json").write_str(r#"{"a": 1,}"#)?;
+    cwd.child("duplicate.json")
+        .write_str(r#"{"a": 1, "a": 2}"#)?;
+    cwd.child("empty.json").touch()?;
+
+    context.git_add(".");
+
+    // First run: hooks should fail
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check json...............................................................Failed
+    - hook id: check-json
+    - exit code: 1
+      duplicate.json: Failed to json decode (duplicate key `a` at line 1 column 12)
+      invalid.json: Failed to json decode (trailing comma at line 1 column 9)
+
+    ----- stderr -----
+    ");
+
+    // Fix the files
+    cwd.child("invalid.json").write_str(r#"{"a": 1}"#)?;
+    cwd.child("duplicate.json")
+        .write_str(r#"{"a": 1, "b": 2}"#)?;
+
+    context.git_add(".");
+
+    // Second run: hooks should now pass
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check json...............................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn check_added_large_files_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();

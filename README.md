@@ -37,7 +37,7 @@ while also providing some additional long-requested features.
 
 prek is designed as a drop-in replacement:
 
-- [Install prek](#installation).
+- [Install prek](#installation)
 - Replace `pre-commit` with `prek` in your commands
 - Your existing `.pre-commit-config.yaml` works unchanged
 
@@ -110,7 +110,7 @@ pipx install prek
 <summary>Homebrew</summary>
 
 ```console
-brew install prek
+brew install j178/tap/prek
 ```
 </details>
 
