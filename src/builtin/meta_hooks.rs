@@ -4,13 +4,11 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use fancy_regex::Regex;
 use itertools::Itertools;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use tracing::error;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use crate::cli::run::{CollectOptions, FileFilter, FileTagFilter, FilenameFilter, collect_files};
-use crate::config::Language;
+use crate::cli::run::{CollectOptions, FileFilter, collect_files};
+use crate::config::{self, HookOptions, Language};
 use crate::hook::Hook;
-use crate::identify::tags_from_path;
 use crate::store::Store;
 use crate::workspace::Project;
 
@@ -53,36 +51,31 @@ pub(crate) async fn check_hooks_apply(
     Ok((code, output))
 }
 
-// Returns true if the exclude patter matches any files matching the include pattern.
+// Returns true if the exclude pattern matches any files matching the include pattern.
 fn excludes_any<T: AsRef<str> + Sync>(
     files: &[T],
     include: Option<&str>,
     exclude: Option<&str>,
 ) -> Result<bool> {
-    let Some(exclude_s) = exclude else {
-        // An empty/None exclude pattern is always "useful" according to pre-commit.
-        return Ok(true);
-    };
-    if exclude_s == "^$" {
-        // This is the default exclude pattern, which is also considered "useful".
+    if exclude.is_none() || exclude == Some("^$") {
         return Ok(true);
     }
-
     let include_re = include.map(Regex::new).transpose()?;
-    let exclude_re = Regex::new(exclude_s)?;
+    let exclude_re = exclude.map(Regex::new).transpose()?;
 
     Ok(files.into_par_iter().any(|f| {
         let f = f.as_ref();
-
-        // Check if included
         if let Some(re) = &include_re {
             if !re.is_match(f).unwrap_or(false) {
-                return false; // Not included, so exclude pattern is irrelevant for this file
+                return false;
             }
         }
-
-        // Check if excluded
-        exclude_re.is_match(f).unwrap_or(false)
+        if let Some(re) = &exclude_re {
+            if !re.is_match(f).unwrap_or(false) {
+                return false;
+            }
+        }
+        true
     }))
 }
 
@@ -92,66 +85,51 @@ pub(crate) async fn check_useless_excludes(
     filenames: &[&String],
 ) -> Result<(i32, Vec<u8>)> {
     let input = collect_files(CollectOptions::default().with_all_files(true)).await?;
-    let store = Store::from_settings()?.init()?;
 
     let mut code = 0;
     let mut output = Vec::new();
 
     for filename in filenames {
-        let mut project = Project::from_config_file(Some(PathBuf::from(filename)))?;
-        let hooks = project.init_hooks(&store, None).await?;
-        let config = project.config();
+        let config = config::read_config(Path::new(filename))?;
 
-        if !excludes_any(&input, None, config.exclude.as_ref().map(|r| r.as_str()))? {
+        if !excludes_any(&input, None, config.exclude.as_deref().map(fancy_regex::Regex::as_str))? {
             code = 1;
             writeln!(
                 &mut output,
-                "The global exclude pattern {:?} does not match any files",
-                config.exclude.as_ref().map_or("", |r| r.as_str())
+                "The global exclude pattern `{}` does not match any files",
+                config.exclude.as_deref().map_or("", |r| r.as_str())
             )?;
         }
 
         let filter = FileFilter::new(&input, config.files.as_ref(), config.exclude.as_ref());
 
-        for hook in &hooks {
-            // Get files that pass the hook's `files` regex, from the globally-filtered list.
-            let filename_filter = FilenameFilter::new(hook.files.as_deref(), None);
-            let files_after_pattern_filter: Vec<_> = filter
-                .filenames
-                .par_iter()
-                .filter(|f| filename_filter.filter(f))
-                .copied()
-                .collect();
+        for repo in &config.repos {
+            let hooks_iter: Box<dyn Iterator<Item = (&String, &HookOptions)>> = match repo {
+                config::Repo::Remote(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
+                config::Repo::Local(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
+                config::Repo::Meta(r) => Box::new(r.hooks.iter().map(|h| (&h.0.id, &h.0.options))),
+            };
 
-            // Then, get files that pass the hook's `types` filter.
-            let tag_filter = FileTagFilter::for_hook(hook);
-            let applicable_files: Vec<_> = files_after_pattern_filter
-                .par_iter()
-                .filter(|filename| {
-                    let path = Path::new(filename);
-                    match tags_from_path(path) {
-                        Ok(tags) => tag_filter.filter(&tags),
-                        Err(err) => {
-                            error!(filename = %filename, error = %err, "Failed to get tags");
-                            false
-                        }
-                    }
-                })
-                .map(|f| f.as_str())
-                .collect();
+            for (hook_id, opts) in hooks_iter {
+                let filtered_files = filter.by_type(
+                    opts.types.as_deref().unwrap_or(&[]),
+                    opts.types_or.as_deref().unwrap_or(&[]),
+                    opts.exclude_types.as_deref().unwrap_or(&[]),
+                );
 
-            if !excludes_any(
-                &applicable_files,
-                None, // Already filtered by hook's include pattern.
-                hook.exclude.as_ref().map(|r| r.as_str()),
-            )? {
-                code = 1;
-                writeln!(
-                    &mut output,
-                    "The exclude pattern {:?} for {} does not match any files",
-                    hook.exclude.as_ref().map_or("", |r| r.as_str()),
-                    hook.id
-                )?;
+                if !excludes_any(
+                    &filtered_files,
+                    opts.files.as_deref().map(fancy_regex::Regex::as_str),
+                    opts.exclude.as_deref().map(fancy_regex::Regex::as_str),
+                )? {
+                    code = 1;
+                    writeln!(
+                        &mut output,
+                        "The exclude pattern `{}` for `{}` does not match any files",
+                        opts.exclude.as_deref().map_or("", |r| r.as_str()),
+                        hook_id
+                    )?;
+                }
             }
         }
     }
