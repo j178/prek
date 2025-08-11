@@ -164,9 +164,6 @@ impl HookBuilder {
         options.pass_filenames.get_or_insert(true);
         options.require_serial.get_or_insert(false);
         options.verbose.get_or_insert(false);
-        options
-            .stages
-            .get_or_insert(Stage::value_variants().to_vec());
         options.additional_dependencies.get_or_insert_default();
     }
 
@@ -244,6 +241,18 @@ impl HookBuilder {
             .into_iter()
             .collect::<FxHashSet<_>>();
 
+        let stages = match options.stages {
+            Some(stages) => {
+                let stages: FxHashSet<_> = stages.into_iter().collect();
+                if stages.is_empty() || stages.len() == Stage::value_variants().len() {
+                    Stages::All
+                } else {
+                    Stages::Some(stages)
+                }
+            }
+            None => Stages::All,
+        };
+
         Ok(Hook {
             entry,
             language_request,
@@ -267,10 +276,41 @@ impl HookBuilder {
             description: options.description,
             log_file: options.log_file,
             require_serial: options.require_serial.expect("require_serial not set"),
-            stages: options.stages.expect("stages not set"),
+            stages,
             verbose: options.verbose.expect("verbose not set"),
             minimum_pre_commit_version: options.minimum_pre_commit_version,
         })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum Stages {
+    All,
+    Some(FxHashSet<Stage>),
+}
+
+impl Stages {
+    pub(crate) fn contains(&self, stage: Stage) -> bool {
+        match self {
+            Stages::All => true,
+            Stages::Some(stages) => stages.contains(&stage),
+        }
+    }
+}
+
+impl Display for Stages {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Stages::All => write!(f, "all"),
+            Stages::Some(stages) => {
+                let stages_str = stages
+                    .iter()
+                    .map(Stage::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "{stages_str}")
+            }
+        }
     }
 }
 
@@ -325,7 +365,7 @@ pub(crate) struct Hook {
     pub language_request: LanguageRequest,
     pub log_file: Option<String>,
     pub require_serial: bool,
-    pub stages: Vec<Stage>,
+    pub stages: Stages,
     pub verbose: bool,
     pub minimum_pre_commit_version: Option<String>,
 }

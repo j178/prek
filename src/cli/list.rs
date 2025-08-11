@@ -31,7 +31,7 @@ pub(crate) async fn list(
     let hooks: Vec<_> = hooks
         .into_iter()
         .filter(|h| hook_ids.is_empty() || hook_ids.contains(&h.id) || hook_ids.contains(&h.alias))
-        .filter(|h| hook_stage.is_none_or(|hook_stage| h.stages.contains(&hook_stage)))
+        .filter(|h| hook_stage.is_none_or(|hook_stage| h.stages.contains(hook_stage)))
         .filter(|h| language.is_none_or(|lang| h.language == lang))
         .collect();
 
@@ -68,17 +68,11 @@ pub(crate) async fn list(
                 "Language:".bold().cyan(),
                 hook.language.as_str()
             )?;
-            let stages_str = hook
-                .stages
-                .iter()
-                .map(|s| s.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
             writeln!(
                 printer.stdout(),
                 "  {} {}",
                 "Stages:".bold().cyan(),
-                stages_str
+                hook.stages
             )?;
 
             writeln!(printer.stdout())?;

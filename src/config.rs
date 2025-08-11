@@ -128,7 +128,7 @@ impl Display for HookType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default, Deserialize, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum Stage {
     Manual,

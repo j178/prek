@@ -117,7 +117,7 @@ pub(crate) async fn run(
     let hooks: Vec<_> = hooks
         .into_iter()
         .filter(|h| hook_ids.is_empty() || hook_ids.contains(&h.id) || hook_ids.contains(&h.alias))
-        .filter(|h| h.stages.contains(&hook_stage))
+        .filter(|h| h.stages.contains(hook_stage))
         .collect();
 
     if hooks.is_empty() {
