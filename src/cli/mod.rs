@@ -330,9 +330,14 @@ pub(crate) struct RunArgs {
     /// Files changed in this diff will be run through the hooks.
     #[arg(short = 'o', long, alias = "origin", requires = "from_ref", value_hint = ValueHint::Other)]
     pub(crate) to_ref: Option<String>,
-    /// Run hooks against the last commit (HEAD~1..HEAD).
+    /// Run hooks against the last commit. Equivalent to `git diff HEAD^`.
     #[arg(long, conflicts_with_all = ["all_files", "files", "directory", "from_ref", "to_ref"])]
     pub(crate) last_commit: bool,
+    /// Run hooks against all commits since the specified base branch (e.g., `main`).
+    ///
+    /// Equivalent to `git diff <base>...HEAD`.
+    #[arg(long, value_name = "BASE", conflicts_with_all = ["all_files", "files", "directory", "from_ref", "to_ref", "last_commit"])]
+    pub(crate) since_base: Option<String>,
     /// The stage during which the hook is fired.
     #[arg(long, default_value_t = Stage::PreCommit, value_enum)]
     pub(crate) hook_stage: Stage,

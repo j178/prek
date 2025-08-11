@@ -62,6 +62,7 @@ pub(crate) async fn run(
     files: Vec<String>,
     directories: Vec<String>,
     last_commit: bool,
+    since_base: Option<String>,
     show_diff_on_failure: bool,
     extra_args: RunExtraArgs,
     verbose: bool,
