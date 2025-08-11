@@ -141,10 +141,10 @@ const STYLES: Styles = Styles::styled()
     name = "prek",
     author,
     long_version = crate::version::version(),
-    about = "pre-commit reimplemented in Rust"
+    about = "Better pre-commit, re-engineered in Rust"
 )]
-#[command(propagate_version = true)]
 #[command(
+    propagate_version = true,
     disable_help_flag = true,
     disable_help_subcommand = true,
     disable_version_flag = true
@@ -228,26 +228,23 @@ pub(crate) enum Command {
     /// Produce a sample `.pre-commit-config.yaml` file.
     SampleConfig(SampleConfigArgs),
     /// Auto-update pre-commit config to the latest repos' versions.
-    #[command(name = "auto-update", alias = "autoupdate")]
+    #[command(alias = "autoupdate")]
     AutoUpdate(AutoUpdateArgs),
     /// Clean unused cached repos.
     GC,
     /// Clean out pre-commit files.
     Clean,
     /// Install hook script in a directory intended for use with `git config init.templateDir`.
-    #[command(name = "init-template-dir", alias = "init-templatedir")]
+    #[command(alias = "init-templatedir")]
     InitTemplateDir(InitTemplateDirArgs),
     /// Try the pre-commit hooks in the current repo.
     TryRepo(Box<RunArgs>),
-
     /// The implementation of the `pre-commit` hook.
     #[command(hide = true)]
     HookImpl(HookImplArgs),
-
     /// `prek` self management.
     #[command(name = "self")]
     Self_(SelfNamespace),
-
     /// Generate shell completion scripts.
     #[command(hide = true)]
     GenerateShellCompletion(GenerateShellCompletionArgs),

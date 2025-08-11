@@ -37,7 +37,7 @@ while also providing some additional long-requested features.
 
 prek is designed as a drop-in replacement:
 
-- [Install prek](#installation).
+- [Install prek](#installation)
 - Replace `pre-commit` with `prek` in your commands
 - Your existing `.pre-commit-config.yaml` works unchanged
 
