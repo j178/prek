@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.0.24
+
+### Enhancements
+
+- Add dynamic completion of hook ids ([#380](https://github.com/j178/prek/pull/380))
+- Implement `prek list` to list available hooks ([#424](https://github.com/j178/prek/pull/424))
+- Implement `pygrep` language support ([#383](https://github.com/j178/prek/pull/383))
+- Support `prek run` multiple hooks ([#423](https://github.com/j178/prek/pull/423))
+- Implement `check_json` as builtin hook ([#416](https://github.com/j178/prek/pull/416))
+
+### Performance
+
+- Avoid reading whole file into memory in `fix_end_of_file` and make it consistent with `pre-commit-hooks` ([#399](https://github.com/j178/prek/pull/399))
+
+### Bug fixes
+
+- Do not set `GOROOT` and `GOPATH` for system found go ([#415](https://github.com/j178/prek/pull/415))
+
+### Documentation
+
+- Use `brew install j178/tap/prek` for now ([#420](https://github.com/j178/prek/pull/420))
+- chore: logo rebranded, Update README.md ([#408](https://github.com/j178/prek/pull/408))
+
 ## 0.0.23
 
 ### Breaking changes
