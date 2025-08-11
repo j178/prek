@@ -71,6 +71,8 @@ pub(crate) async fn run(
     // Convert `--last-commit` to `HEAD~1..HEAD`
     let (from_ref, to_ref) = if last_commit {
         (Some("HEAD~1".to_string()), Some("HEAD".to_string()))
+    } else if let Some(since_base) = since_base {
+        (Some(since_base), Some("HEAD".to_string()))
     } else {
         (from_ref, to_ref)
     };

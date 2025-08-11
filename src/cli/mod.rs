@@ -322,7 +322,7 @@ pub(crate) struct RunArgs {
     /// You can specify multiple directories. It can be used in conjunction with `--files`.
     #[arg(short, long, value_name = "DIR", conflicts_with_all = ["all_files", "from_ref", "to_ref"], value_hint = ValueHint::DirPath)]
     pub(crate) directory: Vec<String>,
-    /// The original ref in a `from_ref...to_ref` diff expression.
+    /// The original ref in a `<from_ref>...<to_ref>` diff expression.
     /// Files changed in this diff will be run through the hooks.
     #[arg(short = 's', long, alias = "source", requires = "to_ref", value_hint = ValueHint::Other)]
     pub(crate) from_ref: Option<String>,
@@ -330,12 +330,12 @@ pub(crate) struct RunArgs {
     /// Files changed in this diff will be run through the hooks.
     #[arg(short = 'o', long, alias = "origin", requires = "from_ref", value_hint = ValueHint::Other)]
     pub(crate) to_ref: Option<String>,
-    /// Run hooks against the last commit. Equivalent to `git diff HEAD^`.
+    /// Run hooks against the last commit. Equivalent to `--from-ref HEAD~1 --to-ref HEAD`.
     #[arg(long, conflicts_with_all = ["all_files", "files", "directory", "from_ref", "to_ref"])]
     pub(crate) last_commit: bool,
     /// Run hooks against all commits since the specified base branch (e.g., `main`).
     ///
-    /// Equivalent to `git diff <base>...HEAD`.
+    /// Equivalent to `--from-ref <base> --to-ref HEAD`.
     #[arg(long, value_name = "BASE", conflicts_with_all = ["all_files", "files", "directory", "from_ref", "to_ref", "last_commit"])]
     pub(crate) since_base: Option<String>,
     /// The stage during which the hook is fired.
