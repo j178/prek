@@ -10,7 +10,7 @@ use thiserror::Error;
 use tracing::{debug, error};
 
 use crate::config::{self, ALTER_CONFIG_FILE, CONFIG_FILE, Config, ManifestHook, read_config};
-use crate::fs::{CWD, Simplified};
+use crate::fs::Simplified;
 use crate::hook::{self, Hook, HookBuilder, Repo};
 use crate::store::Store;
 use crate::{store, warn_user};
@@ -47,46 +47,8 @@ pub(crate) struct Project {
 }
 
 impl Project {
-    /// Find the configuration file in the given path or the current working directory.
-    pub(crate) fn find_config_file(config: Option<PathBuf>) -> Result<PathBuf, Error> {
-        if let Some(config) = config {
-            if config.exists() {
-                return Ok(config);
-            }
-            return Err(Error::InvalidConfig(config::Error::NotFound(
-                config.user_display().to_string(),
-            )));
-        }
-
-        let main = CWD.join(CONFIG_FILE);
-        let alternate = CWD.join(ALTER_CONFIG_FILE);
-        if main.exists() && alternate.exists() {
-            warn_user!(
-                "Both {main} and {alternate} exist, using {main}",
-                main = main.display(),
-                alternate = alternate.display()
-            );
-        }
-        if main.exists() {
-            return Ok(main);
-        }
-        if alternate.exists() {
-            return Ok(alternate);
-        }
-
-        Err(Error::InvalidConfig(config::Error::NotFound(
-            CONFIG_FILE.into(),
-        )))
-    }
-
     /// Initialize a new project from the configuration file or the file in the current working directory.
-    pub(crate) fn from_config_file(config: Option<PathBuf>) -> Result<Self, Error> {
-        let config_path = Self::find_config_file(config)?;
-        Self::new(config_path)
-    }
-
-    /// Initialize a new project from the configuration file.
-    pub(crate) fn new(config_path: PathBuf) -> Result<Self, Error> {
+    pub(crate) fn from_config_file(config_path: PathBuf) -> Result<Self, Error> {
         debug!(
             path = %config_path.display(),
             "Loading project configuration"
@@ -98,6 +60,63 @@ impl Project {
             config_path,
             repos: Vec::with_capacity(size),
         })
+    }
+
+    /// Find the configuration file in the given path.
+    pub(crate) fn from_directory(path: &Path) -> Result<Self, Error> {
+        let main = path.join(CONFIG_FILE);
+        let alternate = path.join(ALTER_CONFIG_FILE);
+        if main.exists() && alternate.exists() {
+            warn_user!(
+                "Both {main} and {alternate} exist, using {main}",
+                main = main.display(),
+                alternate = alternate.display()
+            );
+        }
+        if main.exists() {
+            return Self::from_config_file(main);
+        }
+        if alternate.exists() {
+            return Self::from_config_file(alternate);
+        }
+
+        Err(Error::InvalidConfig(config::Error::NotFound(
+            main.user_display().to_string(),
+        )))
+    }
+
+    // Find the project configuration file in the current working directory or its ancestors.
+    //
+    // This function will traverse up the directory tree from the given path until the git root.
+    // pub(crate) fn from_directory_ancestors(path: &Path) -> Result<Self, Error> {
+    //     let mut current = path.to_path_buf();
+    //     loop {
+    //         match Self::from_directory(&current) {
+    //             Ok(project) => return Ok(project),
+    //             Err(Error::InvalidConfig(config::Error::NotFound(_))) => {
+    //                 if let Some(parent) = current.parent() {
+    //                     current = parent.to_path_buf();
+    //                 } else {
+    //                     break;
+    //                 }
+    //             }
+    //             Err(e) => return Err(e),
+    //         }
+    //     }
+    //     Err(Error::InvalidConfig(config::Error::NotFound(
+    //         CWD.user_display().to_string(),
+    //     )))
+    // }
+
+    /// Initialize a new project from the configuration file or find it in the given path.
+    pub(crate) fn from_config_file_or_directory(
+        config: Option<PathBuf>,
+        path: &Path,
+    ) -> Result<Self, Error> {
+        if let Some(config) = config {
+            return Self::from_config_file(config);
+        }
+        Self::from_directory(path)
     }
 
     pub(crate) fn config(&self) -> &Config {
@@ -244,3 +263,41 @@ impl Project {
         Ok(hooks)
     }
 }
+
+pub(crate) struct Workspace {
+    projects: Vec<Project>,
+}
+
+// impl Workspace {
+//     pub(crate) fn discover(path: &Path) -> Result<Self, Error> {
+//         let mut projects = Vec::new();
+//
+//         ignore::WalkBuilder::new(path)
+//             .build_parallel()
+//             .run(|| |entry|{
+//                 match entry {
+//                     Ok(entry) => {
+//                         if entry.file_type().is_file() && entry.file_name() == CONFIG_FILE {
+//                             let config_path = entry.into_path();
+//                             match Project::from_directory(Some(config_path)) {
+//                                 Ok(project) => Some(project),
+//                                 Err(e) => {
+//                                     error!("Failed to load project: {}", e);
+//                                     None
+//                                 }
+//                             }
+//                         } else {
+//                             None
+//                         }
+//                     }
+//                     Err(e) => {
+//                         error!("Error walking path: {}", e);
+//                         None
+//                     }
+//                 }
+//             });
+//
+//
+//         Ok(Self { projects })
+//     }
+// }

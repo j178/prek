@@ -10,7 +10,6 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
-use indoc::indoc;
 use owo_colors::{OwoColorize, Style};
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
@@ -26,7 +25,7 @@ use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, Stage};
-use crate::fs::Simplified;
+use crate::fs::{CWD, Simplified};
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::{Printer, Stdout};
 use crate::run::USE_COLOR;
@@ -86,27 +85,24 @@ pub(crate) async fn run(
     if should_stash && git::has_unmerged_paths().await? {
         writeln!(
             printer.stderr(),
-            "You have unmerged paths. Resolve them before running prek."
+            "{}: You have unmerged paths. Resolve them before running prek",
+            "error".red().bold(),
         )?;
         return Ok(ExitStatus::Failure);
     }
 
-    let config_file = Project::find_config_file(config)?;
-    if should_stash && git::file_not_staged(&config_file).await? {
+    let mut project = Project::from_config_file_or_directory(config, &CWD)?;
+    if should_stash && git::file_not_staged(project.config_file()).await? {
         writeln!(
             printer.stderr(),
-            indoc!(
-                "Your pre-commit configuration file is not staged.
-                Run `git add {}` to fix this."
-            ),
-            &config_file.user_display()
+            "{}: prek configuration file is not staged, run `{}` to stage it",
+            "error".red().bold(),
+            format!("git add {}", project.config_file().user_display()).cyan(),
         )?;
         return Ok(ExitStatus::Failure);
     }
 
-    let mut project = Project::new(config_file)?;
     let store = STORE.as_ref()?;
-
     let reporter = HookInitReporter::from(printer);
 
     let lock = store.lock_async().await?;
@@ -124,20 +120,23 @@ pub(crate) async fn run(
         if hook_ids.is_empty() {
             writeln!(
                 printer.stderr(),
-                "No hooks found for stage `{}`",
+                "{}: No hooks found for stage `{}`",
+                "error".red().bold(),
                 hook_stage.cyan()
             )?;
         } else if hook_ids.len() == 1 {
             writeln!(
                 printer.stderr(),
-                "No hook found with id `{}` in stage `{}`",
+                "{}: No hook found with id `{}` in stage `{}`",
+                "error".red().bold(),
                 hook_ids.iter().next().unwrap().cyan(),
                 hook_stage.cyan()
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "No hooks found with ids {} in stage `{}`",
+                "{}: No hooks found with ids {} in stage `{}`",
+                "error".red().bold(),
                 hook_ids
                     .iter()
                     .map(|id| format!("`{}`", id.cyan()))

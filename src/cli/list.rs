@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use crate::cli::reporter::HookInitReporter;
 use crate::cli::{ExitStatus, ListOutputFormat};
 use crate::config::{Language, Stage};
+use crate::fs::CWD;
 use crate::hook;
 use crate::printer::Printer;
 use crate::store::STORE;
@@ -32,7 +33,7 @@ pub(crate) async fn list(
     output_format: ListOutputFormat,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    let mut project = Project::from_config_file(config)?;
+    let mut project = Project::from_config_file_or_directory(config, &CWD)?;
     let store = STORE.as_ref()?;
 
     let reporter = HookInitReporter::from(printer);

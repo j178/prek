@@ -25,7 +25,7 @@ pub(crate) async fn check_hooks_apply(
     let mut output = Vec::new();
 
     for filename in filenames {
-        let mut project = Project::from_config_file(Some(PathBuf::from(filename)))?;
+        let mut project = Project::from_config_file(PathBuf::from(filename))?;
         let hooks = project.init_hooks(store, None).await?;
 
         let filter = FileFilter::new(

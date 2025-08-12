@@ -1,5 +1,5 @@
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::builder::styling::{AnsiColor, Effects};
@@ -45,10 +45,10 @@ fn get_hook_id_candidates(current: &std::ffi::OsStr) -> anyhow::Result<Vec<Compl
         .arg("--show-toplevel")
         .output()?;
 
-    let root = String::from_utf8(output.stdout)?.trim().to_string();
-    std::env::set_current_dir(&root).ok();
-
-    let project = Project::from_config_file(None)?;
+    let root = String::from_utf8(output.stdout)?;
+    let root = root.trim();
+    // TODO: find from ancestor directories up to the root of the git repository
+    let project = Project::from_directory(Path::new(root))?;
 
     let hook_ids = project
         .config()

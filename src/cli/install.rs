@@ -10,7 +10,7 @@ use same_file::is_same_file;
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run;
 use crate::cli::{ExitStatus, HookType};
-use crate::fs::Simplified;
+use crate::fs::{CWD, Simplified};
 use crate::git;
 use crate::git::git_cmd;
 use crate::printer::Printer;
@@ -37,7 +37,7 @@ pub(crate) async fn install(
         return Ok(ExitStatus::Failure);
     }
 
-    let project = Project::from_config_file(config.clone()).ok();
+    let project = Project::from_config_file_or_directory(config.clone(), &CWD).ok();
     let hook_types = get_hook_types(project.as_ref(), hook_types);
 
     let hooks_path = if let Some(dir) = git_dir {
@@ -66,7 +66,7 @@ pub(crate) async fn install(
 }
 
 pub(crate) async fn install_hooks(config: Option<PathBuf>, printer: Printer) -> Result<ExitStatus> {
-    let mut project = Project::from_config_file(config)?;
+    let mut project = Project::from_config_file_or_directory(config, &CWD)?;
     let store = STORE.as_ref()?;
     let _lock = store.lock_async().await?;
 
@@ -208,7 +208,7 @@ pub(crate) async fn uninstall(
     hook_types: Vec<HookType>,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let project = Project::from_config_file(config).ok();
+    let project = Project::from_config_file_or_directory(config, &CWD).ok();
     for hook_type in get_hook_types(project.as_ref(), hook_types) {
         let hooks_path = git::get_git_common_dir().await?.join("hooks");
         let hook_path = hooks_path.join(hook_type.as_str());
