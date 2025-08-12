@@ -238,3 +238,41 @@ impl Project {
         Ok(hooks)
     }
 }
+
+pub(crate) struct Workspace {
+    projects: Vec<Project>,
+}
+
+// impl Workspace {
+//     pub(crate) fn discover(path: &Path) -> Result<Self, Error> {
+//         let mut projects = Vec::new();
+//
+//         ignore::WalkBuilder::new(path)
+//             .build_parallel()
+//             .run(|| |entry|{
+//                 match entry {
+//                     Ok(entry) => {
+//                         if entry.file_type().is_file() && entry.file_name() == CONFIG_FILE {
+//                             let config_path = entry.into_path();
+//                             match Project::from_directory(Some(config_path)) {
+//                                 Ok(project) => Some(project),
+//                                 Err(e) => {
+//                                     error!("Failed to load project: {}", e);
+//                                     None
+//                                 }
+//                             }
+//                         } else {
+//                             None
+//                         }
+//                     }
+//                     Err(e) => {
+//                         error!("Error walking path: {}", e);
+//                         None
+//                     }
+//                 }
+//             });
+//
+//
+//         Ok(Self { projects })
+//     }
+// }
