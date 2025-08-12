@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -6,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use futures::StreamExt;
 use itertools::zip_eq;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use tracing::{debug, error};
 
@@ -109,14 +108,14 @@ impl Project {
         &self.config_path
     }
 
-    #[allow(clippy::mutable_key_type)]
     async fn init_repos(
         &mut self,
         store: &Store,
         reporter: Option<&dyn HookInitReporter>,
     ) -> Result<(), Error> {
         let remote_repos = Rc::new(Mutex::new(FxHashMap::default()));
-        let mut seen = HashSet::new();
+        #[allow(clippy::mutable_key_type)]
+        let mut seen = FxHashSet::default();
 
         // Prepare remote repos in parallel.
         let remotes_iter = self.config.repos.iter().filter_map(|repo| match repo {
