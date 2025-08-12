@@ -44,14 +44,19 @@ static ENVIRON_SIZE: LazyLock<usize> = LazyLock::new(|| {
 });
 
 fn platform_max_cli_length() -> usize {
-    if cfg!(unix) {
+    #[cfg(unix)]
+    {
         let maximum = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
         let maximum =
             usize::try_from(maximum).expect("SC_ARG_MAX too large") - 2048 - *ENVIRON_SIZE;
         maximum.clamp(1 << 12, 1 << 17)
-    } else if cfg!(windows) {
+    }
+    #[cfg(windows)]
+    {
         (1 << 15) - 2048 // UNICODE_STRING max - headroom
-    } else {
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
         1 << 12
     }
 }
