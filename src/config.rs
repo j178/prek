@@ -289,7 +289,7 @@ pub struct Config {
     /// Default is false.
     pub fail_fast: Option<bool>,
     /// The minimum version of prek required to run this configuration.
-    #[serde(deserialize_with = "deserialize_minimum_version")]
+    #[serde(deserialize_with = "deserialize_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
     /// Configuration for pre-commit.ci service.
     pub ci: Option<HashMap<String, serde_yaml::Value>>,
@@ -392,7 +392,7 @@ pub struct HookOptions {
     /// Default is false.
     pub verbose: Option<bool>,
     /// The minimum version of prek required to run this hook.
-    #[serde(deserialize_with = "deserialize_minimum_version")]
+    #[serde(deserialize_with = "deserialize_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
 }
 
@@ -1344,5 +1344,67 @@ mod tests {
         let manifest = read_manifest(Path::new("tests/fixtures/uv-pre-commit-hooks.yaml"))?;
         insta::assert_debug_snapshot!(manifest);
         Ok(())
+    }
+
+    #[test]
+    fn test_minimum_prek_version() {
+        // Test that missing minimum_prek_version field doesn't cause an error
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: test-hook
+                    name: Test Hook
+                    entry: echo test
+                    language: system
+        "};
+        let result = serde_yaml::from_str::<Config>(yaml);
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert!(config.minimum_prek_version.is_none());
+
+        // Test that empty minimum_prek_version field is treated as None
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: test-hook
+                    name: Test Hook
+                    entry: echo test
+                    language: system
+            minimum_prek_version: ''
+        "};
+        let result = serde_yaml::from_str::<Config>(yaml);
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert!(config.minimum_prek_version.is_none());
+
+        // Test that valid minimum_prek_version field works in top-level config
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: test-hook
+                    name: Test Hook
+                    entry: echo test
+                    language: system
+            minimum_prek_version: '10.0.0'
+        "};
+        let result = serde_yaml::from_str::<Config>(yaml);
+        assert!(result.is_err());
+
+        // Test that valid minimum_prek_version field works in hook config
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: test-hook
+                    name: Test Hook
+                    entry: echo test
+                    language: system
+                    minimum_prek_version: '10.0.0'
+        "};
+        let result = serde_yaml::from_str::<Config>(yaml);
+        assert!(result.is_err());
     }
 }
