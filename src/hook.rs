@@ -278,7 +278,7 @@ impl HookBuilder {
             require_serial: options.require_serial.expect("require_serial not set"),
             stages,
             verbose: options.verbose.expect("verbose not set"),
-            minimum_pre_commit_version: options.minimum_pre_commit_version,
+            minimum_prek_version: options.minimum_prek_version,
         })
     }
 }
@@ -367,7 +367,7 @@ pub(crate) struct Hook {
     pub require_serial: bool,
     pub stages: Stages,
     pub verbose: bool,
-    pub minimum_pre_commit_version: Option<String>,
+    pub minimum_prek_version: Option<String>,
 }
 
 impl Display for Hook {

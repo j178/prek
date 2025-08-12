@@ -29,22 +29,22 @@ use serde::Serialize;
 /// Information about the git repository where prek was built from.
 #[derive(Serialize)]
 pub(crate) struct CommitInfo {
-    short_commit_hash: String,
-    commit_hash: String,
-    commit_date: String,
-    last_tag: Option<String>,
-    commits_since_last_tag: u32,
+    pub(crate) short_commit_hash: String,
+    pub(crate) commit_hash: String,
+    pub(crate) commit_date: String,
+    pub(crate) last_tag: Option<String>,
+    pub(crate) commits_since_last_tag: u32,
 }
 
 /// prek's version.
 #[derive(Serialize)]
-pub struct VersionInfo {
+pub(crate) struct VersionInfo {
     /// prek's version, such as "0.0.6"
-    version: String,
+    pub(crate) version: String,
     /// Information about the git commit we may have been built from.
     ///
     /// `None` if not built from a git repo or if retrieval failed.
-    commit_info: Option<CommitInfo>,
+    pub(crate) commit_info: Option<CommitInfo>,
 }
 
 impl fmt::Display for VersionInfo {

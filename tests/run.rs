@@ -1443,3 +1443,32 @@ fn run_directory() -> Result<()> {
 
     Ok(())
 }
+
+/// Test `minimum_prek_version` option.
+#[test]
+fn minimum_prek_version() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        minimum_prek_version: 10.0.0
+        repos:
+          - repo: local
+            hooks:
+              - id: directory
+                name: directory
+                language: system
+                entry: echo
+                verbose: true
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: Required minimum prek version `10.0.0` is greater than current version `0.0.24`. Please consider updating prek.
+    "#);
+}
