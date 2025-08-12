@@ -39,9 +39,7 @@ Manifest {
                 require_serial: None,
                 stages: None,
                 verbose: None,
-                minimum_pre_commit_version: Some(
-                    "2.9.2",
-                ),
+                minimum_prek_version: None,
             },
         },
         ManifestHook {
@@ -79,9 +77,7 @@ Manifest {
                 require_serial: None,
                 stages: None,
                 verbose: None,
-                minimum_pre_commit_version: Some(
-                    "2.9.2",
-                ),
+                minimum_prek_version: None,
             },
         },
         ManifestHook {
@@ -122,9 +118,7 @@ Manifest {
                 require_serial: None,
                 stages: None,
                 verbose: None,
-                minimum_pre_commit_version: Some(
-                    "2.9.2",
-                ),
+                minimum_prek_version: None,
             },
         },
     ],
