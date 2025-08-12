@@ -35,16 +35,31 @@ struct Partitions<'a> {
     max_cli_length: usize,
 }
 
-// TODO: do a more accurate calculation
+static ENVIRON_SIZE: LazyLock<usize> = LazyLock::new(|| {
+    std::env::vars_os()
+        .map(|(key, value)| {
+            key.len() + value.len() + 2 // key=value\0
+        })
+        .sum()
+});
+
+fn platform_max_cli_length() -> usize {
+    if cfg!(unix) {
+        let maximum = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
+        let maximum =
+            usize::try_from(maximum).expect("SC_ARG_MAX too large") - 2048 - *ENVIRON_SIZE;
+        maximum.clamp(1 << 12, 1 << 17)
+    } else if cfg!(windows) {
+        (1 << 15) - 2048 // UNICODE_STRING max - headroom
+    } else {
+        1 << 12
+    }
+}
+
 impl<'a> Partitions<'a> {
     fn new(hook: &'a Hook, filenames: &'a [&'a String], concurrency: usize) -> Self {
         let max_per_batch = max(4, filenames.len().div_ceil(concurrency));
-        // TODO: subtract the env size
-        let max_cli_length = if cfg!(unix) {
-            1 << 12
-        } else {
-            (1 << 15) - 2048 // UNICODE_STRING max - headroom
-        };
+        let max_cli_length = platform_max_cli_length();
 
         let command_length = hook.entry.entry().len()
             + hook.args.iter().map(String::len).sum::<usize>()
