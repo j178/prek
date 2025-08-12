@@ -54,29 +54,27 @@ pub(crate) async fn check_hooks_apply(
 // Returns true if the exclude pattern matches any files matching the include pattern.
 fn excludes_any<T: AsRef<str> + Sync>(
     files: &[T],
-    include: Option<&str>,
-    exclude: Option<&str>,
-) -> Result<bool> {
-    if exclude.is_none() || exclude == Some("^$") {
-        return Ok(true);
+    include: Option<&Regex>,
+    exclude: Option<&Regex>,
+) -> bool {
+    if exclude.is_none() {
+        return true;
     }
-    let include_re = include.map(Regex::new).transpose()?;
-    let exclude_re = exclude.map(Regex::new).transpose()?;
 
-    Ok(files.into_par_iter().any(|f| {
+    files.into_par_iter().any(|f| {
         let f = f.as_ref();
-        if let Some(re) = &include_re {
+        if let Some(re) = &include {
             if !re.is_match(f).unwrap_or(false) {
                 return false;
             }
         }
-        if let Some(re) = &exclude_re {
+        if let Some(re) = &exclude {
             if !re.is_match(f).unwrap_or(false) {
                 return false;
             }
         }
         true
-    }))
+    })
 }
 
 /// Ensures that exclude directives apply to any file in the repository.
@@ -92,11 +90,7 @@ pub(crate) async fn check_useless_excludes(
     for filename in filenames {
         let config = config::read_config(Path::new(filename))?;
 
-        if !excludes_any(
-            &input,
-            None,
-            config.exclude.as_deref().map(fancy_regex::Regex::as_str),
-        )? {
+        if !excludes_any(&input, None, config.exclude.as_deref()) {
             code = 1;
             writeln!(
                 &mut output,
@@ -123,15 +117,14 @@ pub(crate) async fn check_useless_excludes(
 
                 if !excludes_any(
                     &filtered_files,
-                    opts.files.as_deref().map(fancy_regex::Regex::as_str),
-                    opts.exclude.as_deref().map(fancy_regex::Regex::as_str),
-                )? {
+                    opts.files.as_deref(),
+                    opts.exclude.as_deref(),
+                ) {
                     code = 1;
                     writeln!(
                         &mut output,
-                        "The exclude pattern `{}` for `{}` does not match any files",
-                        opts.exclude.as_deref().map_or("", |r| r.as_str()),
-                        hook_id
+                        "The exclude pattern `{}` for `{hook_id}` does not match any files",
+                        opts.exclude.as_deref().map_or("", |r| r.as_str())
                     )?;
                 }
             }
@@ -151,14 +144,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_excludes_any() -> Result<()> {
+    fn test_excludes_any() {
         let files = vec!["file1.txt", "file2.txt", "file3.txt"];
-        assert!(excludes_any(&files, Some(r"file.*"), Some(r"file2\.txt"))?);
-        assert!(!excludes_any(&files, Some(r"file.*"), Some(r"file4\.txt"))?);
-        assert!(excludes_any(&files, None, None)?);
+        assert!(excludes_any(
+            &files,
+            Regex::new(r"file.*").ok().as_ref(),
+            Regex::new(r"file2\.txt").ok().as_ref()
+        ));
+        assert!(!excludes_any(
+            &files,
+            Regex::new(r"file.*").ok().as_ref(),
+            Regex::new(r"file4\.txt").ok().as_ref()
+        ));
+        assert!(excludes_any(&files, None, None));
 
         let files = vec!["html/file1.html", "html/file2.html"];
-        assert!(excludes_any(&files, None, Some(r"^html/"))?);
-        Ok(())
+        assert!(excludes_any(
+            &files,
+            None,
+            Regex::new(r"^html/").ok().as_ref()
+        ));
     }
 }

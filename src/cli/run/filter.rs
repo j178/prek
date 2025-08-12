@@ -85,7 +85,7 @@ impl<'a> FileTagFilter<'a> {
 }
 
 pub(crate) struct FileFilter<'a> {
-    pub(crate) filenames: Vec<&'a String>,
+    filenames: Vec<&'a String>,
 }
 
 impl<'a> FileFilter<'a> {
