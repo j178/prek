@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::builder::styling::{AnsiColor, Effects};
-use clap::builder::{StyledStr, Styles};
+use clap::builder::{ArgPredicate, StyledStr, Styles};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
@@ -309,35 +309,51 @@ pub(crate) struct RunExtraArgs {
 #[derive(Debug, Clone, Default, Args)]
 pub(crate) struct RunArgs {
     /// The hook ID to run.
-    #[arg(value_name = "HOOK", value_hint = ValueHint::Other, add = ArgValueCompleter::new(hook_id_completer))]
+    #[arg(
+        value_name = "HOOK",
+        value_hint = ValueHint::Other,
+        add = ArgValueCompleter::new(hook_id_completer)
+    )]
     pub(crate) hook_ids: Vec<String>,
     /// Run on all files in the repo.
     #[arg(short, long, conflicts_with_all = ["files", "from_ref", "to_ref"])]
     pub(crate) all_files: bool,
     /// Specific filenames to run hooks on.
-    #[arg(long, conflicts_with_all = ["all_files", "from_ref", "to_ref"], value_hint = ValueHint::AnyPath)]
+    #[arg(
+        long,
+        conflicts_with_all = ["all_files", "from_ref", "to_ref"],
+        value_hint = ValueHint::AnyPath)
+    ]
     pub(crate) files: Vec<String>,
     /// Run hooks on all files in the specified directories.
     ///
     /// You can specify multiple directories. It can be used in conjunction with `--files`.
-    #[arg(short, long, value_name = "DIR", conflicts_with_all = ["all_files", "from_ref", "to_ref"], value_hint = ValueHint::DirPath)]
+    #[arg(
+        short,
+        long,
+        value_name = "DIR",
+        conflicts_with_all = ["all_files", "from_ref", "to_ref"],
+        value_hint = ValueHint::DirPath
+    )]
     pub(crate) directory: Vec<String>,
     /// The original ref in a `<from_ref>...<to_ref>` diff expression.
     /// Files changed in this diff will be run through the hooks.
-    #[arg(short = 's', long, alias = "source", requires = "to_ref", value_hint = ValueHint::Other)]
+    #[arg(short = 's', long, alias = "source", value_hint = ValueHint::Other)]
     pub(crate) from_ref: Option<String>,
     /// The destination ref in a `from_ref...to_ref` diff expression.
-    /// Files changed in this diff will be run through the hooks.
-    #[arg(short = 'o', long, alias = "origin", requires = "from_ref", value_hint = ValueHint::Other)]
+    /// Defaults to `HEAD` if `from_ref` is specified.
+    #[arg(
+        short = 'o',
+        long,
+        alias = "origin",
+        requires = "from_ref",
+        value_hint = ValueHint::Other,
+        default_value_if("from_ref", ArgPredicate::IsPresent, "HEAD")
+    )]
     pub(crate) to_ref: Option<String>,
     /// Run hooks against the last commit. Equivalent to `--from-ref HEAD~1 --to-ref HEAD`.
     #[arg(long, conflicts_with_all = ["all_files", "files", "directory", "from_ref", "to_ref"])]
     pub(crate) last_commit: bool,
-    /// Run hooks against all commits since the specified base branch (e.g., `main`).
-    ///
-    /// Equivalent to `--from-ref <base> --to-ref HEAD`.
-    #[arg(long, value_name = "BASE", conflicts_with_all = ["all_files", "files", "directory", "from_ref", "to_ref", "last_commit"])]
-    pub(crate) since_base: Option<String>,
     /// The stage during which the hook is fired.
     #[arg(long, default_value_t = Stage::PreCommit, value_enum)]
     pub(crate) hook_stage: Stage,

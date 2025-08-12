@@ -62,7 +62,6 @@ pub(crate) async fn run(
     files: Vec<String>,
     directories: Vec<String>,
     last_commit: bool,
-    since_base: Option<String>,
     show_diff_on_failure: bool,
     extra_args: RunExtraArgs,
     verbose: bool,
@@ -71,8 +70,6 @@ pub(crate) async fn run(
     // Convert `--last-commit` to `HEAD~1..HEAD`
     let (from_ref, to_ref) = if last_commit {
         (Some("HEAD~1".to_string()), Some("HEAD".to_string()))
-    } else if let Some(since_base) = since_base {
-        (Some(since_base), Some("HEAD".to_string()))
     } else {
         (from_ref, to_ref)
     };

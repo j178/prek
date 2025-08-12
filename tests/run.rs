@@ -1332,62 +1332,6 @@ fn run_last_commit() -> Result<()> {
     Ok(())
 }
 
-/// Test `prek run --since-base` with branch reference.
-#[test]
-fn run_since_base_branch() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-    context.configure_git_author();
-
-    let cwd = context.work_dir();
-    context.write_pre_commit_config(indoc::indoc! {r"
-        repos:
-          - repo: local
-            hooks:
-              - id: echo
-                name: echo
-                language: system
-                entry: echo
-                verbose: true
-    "});
-
-    // Create initial files and make base commit
-    cwd.child("file1.txt").write_str("Hello, world!\n")?;
-    cwd.child("file2.txt").write_str("Base content\n")?;
-    context.git_add(".");
-    context.git_commit("Base commit");
-
-    // Create a feature branch
-    Command::new("git")
-        .arg("checkout")
-        .arg("-b")
-        .arg("feature")
-        .current_dir(context.work_dir())
-        .assert()
-        .success();
-
-    // Make changes on feature branch
-    cwd.child("file1.txt").write_str("Modified content   \n")?;
-    cwd.child("file3.txt").write_str("Feature file")?;
-    context.git_add(".");
-    context.git_commit("Feature commit with issues");
-
-    // Run with --since-base master should check files changed since master
-    cmd_snapshot!(context.filters(), context.run().arg("--since-base").arg("master"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    echo.....................................................................Passed
-    - hook id: echo
-    - duration: [TIME]
-      file3.txt file1.txt
-
-    ----- stderr -----
-    "#);
-
-    Ok(())
-}
-
 /// Test `prek run --directory` flags.
 #[test]
 fn run_directory() -> Result<()> {
