@@ -422,7 +422,9 @@ impl Uv {
             while let Some(result) = tasks.join_next().await {
                 if let Ok((source, response)) = result {
                     trace!(?source, ?response, "Checked source");
-                    if response.is_ok_and(|resp| resp.status().is_success()) {
+                    if let Ok(resp) = response
+                        && resp.status().is_success()
+                    {
                         best = source;
                         break;
                     }
