@@ -1705,6 +1705,7 @@ dependencies = [
  "insta-cmd",
  "itertools",
  "libc",
+ "liblzma-sys",
  "miette",
  "owo-colors",
  "pprof",
