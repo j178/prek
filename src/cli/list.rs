@@ -1,14 +1,27 @@
+use clap::ValueEnum;
 use owo_colors::OwoColorize;
+use serde::Serialize;
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::PathBuf;
 
-use crate::cli::ExitStatus;
 use crate::cli::reporter::HookInitReporter;
+use crate::cli::{ExitStatus, ListOutputFormat};
 use crate::config::{Language, Stage};
+use crate::hook;
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::workspace::Project;
+
+#[derive(Serialize)]
+struct SerializableHook {
+    id: String,
+    name: String,
+    alias: String,
+    language: Language,
+    description: Option<String>,
+    stages: Vec<Stage>,
+}
 
 pub(crate) async fn list(
     config: Option<PathBuf>,
@@ -16,6 +29,7 @@ pub(crate) async fn list(
     hook_ids: Vec<String>,
     hook_stage: Option<Stage>,
     language: Option<Language>,
+    output_format: ListOutputFormat,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     let mut project = Project::from_config_file(config)?;
@@ -35,51 +49,76 @@ pub(crate) async fn list(
         .filter(|h| language.is_none_or(|lang| h.language == lang))
         .collect();
 
-    if verbose {
-        // TODO: show repo path and environment path (if installed)
-        for hook in &hooks {
-            writeln!(printer.stdout(), "{}", hook.id.bold())?;
+    match output_format {
+        ListOutputFormat::Text => {
+            if verbose {
+                // TODO: show repo path and environment path (if installed)
+                for hook in &hooks {
+                    writeln!(printer.stdout(), "{}", hook.id.bold())?;
 
-            if !hook.alias.is_empty() && hook.alias != hook.id {
-                writeln!(
-                    printer.stdout(),
-                    "  {} {}",
-                    "Alias:".bold().cyan(),
-                    hook.alias
-                )?;
+                    if !hook.alias.is_empty() && hook.alias != hook.id {
+                        writeln!(
+                            printer.stdout(),
+                            "  {} {}",
+                            "Alias:".bold().cyan(),
+                            hook.alias
+                        )?;
+                    }
+                    writeln!(
+                        printer.stdout(),
+                        "  {} {}",
+                        "Name:".bold().cyan(),
+                        hook.name
+                    )?;
+                    if let Some(description) = &hook.description {
+                        writeln!(
+                            printer.stdout(),
+                            "  {} {}",
+                            "Description:".bold().cyan(),
+                            description
+                        )?;
+                    }
+                    writeln!(
+                        printer.stdout(),
+                        "  {} {}",
+                        "Language:".bold().cyan(),
+                        hook.language.as_str()
+                    )?;
+                    writeln!(
+                        printer.stdout(),
+                        "  {} {}",
+                        "Stages:".bold().cyan(),
+                        hook.stages
+                    )?;
+                    writeln!(printer.stdout())?;
+                }
+            } else {
+                for hook in &hooks {
+                    writeln!(printer.stdout(), "{}", hook.id)?;
+                }
             }
-            writeln!(
-                printer.stdout(),
-                "  {} {}",
-                "Name:".bold().cyan(),
-                hook.name
-            )?;
-            if let Some(description) = &hook.description {
-                writeln!(
-                    printer.stdout(),
-                    "  {} {}",
-                    "Description:".bold().cyan(),
-                    description
-                )?;
-            }
-            writeln!(
-                printer.stdout(),
-                "  {} {}",
-                "Language:".bold().cyan(),
-                hook.language.as_str()
-            )?;
-            writeln!(
-                printer.stdout(),
-                "  {} {}",
-                "Stages:".bold().cyan(),
-                hook.stages
-            )?;
-
-            writeln!(printer.stdout())?;
         }
-    } else {
-        for hook in &hooks {
-            writeln!(printer.stdout(), "{}", hook.id)?;
+        ListOutputFormat::Json => {
+            let serializable_hooks: Vec<_> = hooks
+                .iter()
+                .map(|h| {
+                    let stages = match &h.stages {
+                        hook::Stages::All => Stage::value_variants().to_vec(),
+                        hook::Stages::Some(s) => s.iter().copied().collect(),
+                    };
+                    SerializableHook {
+                        id: h.id.clone(),
+                        name: h.name.clone(),
+                        alias: h.alias.clone(),
+                        language: h.language,
+                        description: h.description.clone(),
+                        stages,
+                    }
+                })
+                .collect();
+
+            let json_output = serde_json::to_string_pretty(&serializable_hooks)?;
+            writeln!(printer.stdout(), "{json_output}")?;
         }
     }
 

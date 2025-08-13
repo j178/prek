@@ -8,6 +8,7 @@ use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
 use constants::env_vars::EnvVars;
+use serde::{Deserialize, Serialize};
 
 use crate::config::{self, CONFIG_FILE, HookType, Stage};
 use crate::workspace::Project;
@@ -365,6 +366,14 @@ pub(crate) struct RunArgs {
     pub(crate) extra: RunExtraArgs,
 }
 
+#[derive(Debug, Clone, Copy, clap::ValueEnum, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum ListOutputFormat {
+    #[default]
+    Text,
+    Json,
+}
+
 #[derive(Debug, Clone, Default, Args)]
 pub(crate) struct ListArgs {
     #[arg(value_name = "HOOK", value_hint = ValueHint::Other, add = ArgValueCompleter::new(hook_id_completer))]
@@ -375,6 +384,9 @@ pub(crate) struct ListArgs {
     /// Show only hooks that are implemented in the specified language.
     #[arg(long, value_enum)]
     pub(crate) language: Option<config::Language>,
+    /// The output format.
+    #[arg(long, value_enum, default_value_t = ListOutputFormat::Text)]
+    pub(crate) output_format: ListOutputFormat,
 }
 
 #[derive(Debug, Args)]

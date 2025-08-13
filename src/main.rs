@@ -235,6 +235,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.hook_ids,
                 args.hook_stage,
                 args.language,
+                args.output_format,
                 printer,
             )
             .await

@@ -352,3 +352,109 @@ fn list_no_config_file() {
     error: Config file not found: .pre-commit-config.yaml
     "#);
 }
+
+#[test]
+fn list_json_output() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: check-yaml
+                name: Check YAML
+                entry: check-yaml
+                language: system
+                types: [yaml]
+                alias: yaml-check
+              - id: check-json
+                name: Check JSON
+                entry: check-json
+                language: system
+                types: [json]
+                description: Validate JSON files
+    "});
+
+    // Test JSON output for all hooks
+    cmd_snapshot!(context.filters(), context.list().arg("--output-format=json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [
+      {
+        "id": "check-yaml",
+        "name": "Check YAML",
+        "alias": "yaml-check",
+        "language": "system",
+        "description": null,
+        "stages": [
+          "manual",
+          "commit-msg",
+          "post-checkout",
+          "post-commit",
+          "post-merge",
+          "post-rewrite",
+          "pre-commit",
+          "pre-merge-commit",
+          "pre-push",
+          "pre-rebase",
+          "prepare-commit-msg"
+        ]
+      },
+      {
+        "id": "check-json",
+        "name": "Check JSON",
+        "alias": "",
+        "language": "system",
+        "description": "Validate JSON files",
+        "stages": [
+          "manual",
+          "commit-msg",
+          "post-checkout",
+          "post-commit",
+          "post-merge",
+          "post-rewrite",
+          "pre-commit",
+          "pre-merge-commit",
+          "pre-push",
+          "pre-rebase",
+          "prepare-commit-msg"
+        ]
+      }
+    ]
+
+    ----- stderr -----
+    "#);
+
+    // Test filtered JSON output
+    cmd_snapshot!(context.filters(), context.list().arg("check-json").arg("--output-format=json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [
+      {
+        "id": "check-json",
+        "name": "Check JSON",
+        "alias": "",
+        "language": "system",
+        "description": "Validate JSON files",
+        "stages": [
+          "manual",
+          "commit-msg",
+          "post-checkout",
+          "post-commit",
+          "post-merge",
+          "post-rewrite",
+          "pre-commit",
+          "pre-merge-commit",
+          "pre-push",
+          "pre-rebase",
+          "prepare-commit-msg"
+        ]
+      }
+    ]
+
+    ----- stderr -----
+    "#);
+}
