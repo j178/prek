@@ -173,6 +173,7 @@ fn mixed_line_ending_hook() -> Result<()> {
     mixed line ending........................................................Failed
     - hook id: mixed-line-ending
     - exit code: 1
+    - files were modified by this hook
       Fixing mixed.txt
 
     ----- stderr -----
