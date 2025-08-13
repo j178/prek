@@ -9,11 +9,10 @@ use tracing::error;
 use crate::cli::ExitStatus;
 use crate::fs::Simplified;
 use crate::printer::Printer;
-use crate::store::{CacheBucket, Store};
+use crate::store::{CacheBucket, STORE};
 
 pub(crate) fn clean(printer: Printer) -> Result<ExitStatus> {
-    let store = Store::from_settings()?;
-
+    let store = STORE.as_ref()?;
     if !store.path().exists() {
         writeln!(printer.stdout(), "Nothing to clean")?;
         return Ok(ExitStatus::Success);

@@ -31,7 +31,7 @@ use crate::fs::Simplified;
 use crate::git;
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::{Printer, Stdout};
-use crate::store::Store;
+use crate::store::{STORE, Store};
 use crate::workspace::Project;
 
 enum HookToRun {
@@ -105,12 +105,12 @@ pub(crate) async fn run(
     }
 
     let mut project = Project::new(config_file)?;
-    let store = Store::from_settings()?.init()?;
+    let store = STORE.as_ref()?;
 
     let reporter = HookInitReporter::from(printer);
 
     let lock = store.lock_async().await?;
-    let hooks = project.init_hooks(&store, Some(&reporter)).await?;
+    let hooks = project.init_hooks(store, Some(&reporter)).await?;
 
     let hook_ids = hook_ids.into_iter().collect::<BTreeSet<_>>();
     let hooks: Vec<_> = hooks
@@ -165,7 +165,7 @@ pub(crate) async fn run(
         to_run.iter().map(|h| &h.id).collect::<Vec<_>>()
     );
     let reporter = HookInstallReporter::from(printer);
-    let mut installed_hooks = install_hooks(to_run, &store, &reporter).await?;
+    let mut installed_hooks = install_hooks(to_run, store, &reporter).await?;
 
     // Release the store lock.
     drop(lock);
@@ -189,7 +189,7 @@ pub(crate) async fn run(
     // Clear any unstaged changes from the git working directory.
     let mut _guard = None;
     if should_stash {
-        _guard = Some(WorkTreeKeeper::clean(&store).await?);
+        _guard = Some(WorkTreeKeeper::clean(store).await?);
     }
 
     set_env_vars(from_ref.as_ref(), to_ref.as_ref(), &extra_args);
@@ -215,7 +215,7 @@ pub(crate) async fn run(
     run_hooks(
         &hooks,
         &filter,
-        &store,
+        store,
         project.config().fail_fast.unwrap_or(false),
         show_diff_on_failure,
         verbose,

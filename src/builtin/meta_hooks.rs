@@ -9,7 +9,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
 use crate::config::{self, HookOptions, Language};
 use crate::hook::Hook;
-use crate::store::Store;
+use crate::store::STORE;
 use crate::workspace::Project;
 
 /// Ensures that the configured hooks apply to at least one file in the repository.
@@ -17,7 +17,7 @@ pub(crate) async fn check_hooks_apply(
     _hook: &Hook,
     filenames: &[&String],
 ) -> Result<(i32, Vec<u8>)> {
-    let store = Store::from_settings()?.init()?;
+    let store = STORE.as_ref()?;
 
     let input = collect_files(CollectOptions::default().with_all_files(true)).await?;
 
@@ -26,7 +26,7 @@ pub(crate) async fn check_hooks_apply(
 
     for filename in filenames {
         let mut project = Project::from_config_file(Some(PathBuf::from(filename)))?;
-        let hooks = project.init_hooks(&store, None).await?;
+        let hooks = project.init_hooks(store, None).await?;
 
         let filter = FileFilter::new(
             &input,

@@ -2,20 +2,25 @@ use std::fmt::Write;
 use std::path::Path;
 use std::process::ExitCode;
 use std::str::FromStr;
+use std::sync::Mutex;
 
-use anstream::{ColorChoice, eprintln};
+use anstream::{ColorChoice, StripStream, eprintln};
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use clap_complete::CompleteEnv;
 use owo_colors::OwoColorize;
+use tracing::level_filters::LevelFilter;
 use tracing::{debug, error};
-use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::Directive;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer};
 
 use crate::cleanup::cleanup;
 use crate::cli::{Cli, Command, ExitStatus, SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::git::get_root;
 use crate::printer::Printer;
+use crate::store::STORE;
 
 mod archive;
 mod builtin;
@@ -53,18 +58,6 @@ pub(crate) enum Level {
 }
 
 fn setup_logging(level: Level) -> Result<()> {
-    let directive = match level {
-        Level::Default | Level::Verbose => tracing::level_filters::LevelFilter::OFF.into(),
-        Level::Debug => Directive::from_str("prek=debug")?,
-        Level::Trace => Directive::from_str("prek=trace")?,
-        Level::TraceAll => Directive::from_str("trace")?,
-    };
-
-    let filter = EnvFilter::builder()
-        .with_default_directive(directive)
-        .from_env()
-        .context("Invalid RUST_LOG directive")?;
-
     let ansi = match anstream::Stderr::choice(&std::io::stderr()) {
         ColorChoice::Always | ColorChoice::AlwaysAnsi => true,
         ColorChoice::Never => false,
@@ -72,15 +65,47 @@ fn setup_logging(level: Level) -> Result<()> {
         ColorChoice::Auto => unreachable!(),
     };
 
-    let format = tracing_subscriber::fmt::format()
+    let directive = match level {
+        Level::Default | Level::Verbose => LevelFilter::OFF.into(),
+        Level::Debug => Directive::from_str("prek=debug")?,
+        Level::Trace => Directive::from_str("prek=trace")?,
+        Level::TraceAll => Directive::from_str("trace")?,
+    };
+
+    let stderr_filter = EnvFilter::builder()
+        .with_default_directive(directive)
+        .from_env()
+        .context("Invalid RUST_LOG directive")?;
+    let stderr_format = tracing_subscriber::fmt::format()
         .with_target(false)
         .without_time()
         .with_ansi(ansi);
-    tracing_subscriber::fmt::fmt()
-        .with_env_filter(filter)
-        .event_format(format)
+    let stderr_layer = tracing_subscriber::fmt::layer()
+        .event_format(stderr_format)
         .with_writer(anstream::stderr)
+        .with_filter(stderr_filter);
+
+    let log_file_path = STORE.as_ref()?.log_file();
+    let log_file = fs_err::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(log_file_path)
+        .context("Failed to open log file")?;
+    let log_file = Mutex::new(StripStream::new(log_file.into_file()));
+
+    let file_format = tracing_subscriber::fmt::format()
+        .with_target(false)
+        .with_ansi(false);
+    let file_layer = tracing_subscriber::fmt::layer()
+        .event_format(file_format)
+        .with_writer(log_file)
+        .with_filter(EnvFilter::new("prek=trace"));
+
+    tracing_subscriber::registry()
+        .with(stderr_layer)
+        .with(file_layer)
         .init();
+
     Ok(())
 }
 

@@ -14,7 +14,7 @@ use crate::fs::Simplified;
 use crate::git;
 use crate::git::git_cmd;
 use crate::printer::Printer;
-use crate::store::Store;
+use crate::store::STORE;
 use crate::workspace::Project;
 
 pub(crate) async fn install(
@@ -67,13 +67,13 @@ pub(crate) async fn install(
 
 pub(crate) async fn install_hooks(config: Option<PathBuf>, printer: Printer) -> Result<ExitStatus> {
     let mut project = Project::from_config_file(config)?;
-    let store = Store::from_settings()?.init()?;
+    let store = STORE.as_ref()?;
     let _lock = store.lock_async().await?;
 
     let reporter = HookInitReporter::from(printer);
-    let hooks = project.init_hooks(&store, Some(&reporter)).await?;
+    let hooks = project.init_hooks(store, Some(&reporter)).await?;
     let reporter = HookInstallReporter::from(printer);
-    run::install_hooks(hooks, &store, &reporter).await?;
+    run::install_hooks(hooks, store, &reporter).await?;
 
     Ok(ExitStatus::Success)
 }

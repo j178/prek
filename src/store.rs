@@ -31,8 +31,8 @@ pub enum Error {
     Serde(#[from] serde_json::Error),
 }
 
-static STORE_HOME: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
-    if let Some(path) = EnvVars::var_os(EnvVars::PREK_HOME) {
+pub(crate) static STORE: LazyLock<Result<Store, Error>> = LazyLock::new(|| {
+    let path = if let Some(path) = EnvVars::var_os(EnvVars::PREK_HOME) {
         debug!(
             path = %path.to_string_lossy(),
             "Loading store from PREK_HOME env var",
@@ -42,7 +42,12 @@ static STORE_HOME: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
         etcetera::choose_base_strategy()
             .map(|path| path.cache_dir().join("prek"))
             .ok()
-    }
+    };
+
+    let path = path.ok_or(Error::HomeNotFound)?;
+    let store = Store::from_path(path).init()?;
+
+    Ok(store)
 });
 
 /// A store for managing repos.
@@ -52,12 +57,6 @@ pub struct Store {
 }
 
 impl Store {
-    pub(crate) fn from_settings() -> Result<Self, Error> {
-        Ok(Self::from_path(
-            STORE_HOME.as_ref().ok_or(Error::HomeNotFound)?,
-        ))
-    }
-
     pub(crate) fn from_path(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
     }
@@ -160,6 +159,10 @@ impl Store {
 
     pub(crate) fn cache_path(&self, tool: CacheBucket) -> PathBuf {
         self.path.join("cache").join(tool.as_str())
+    }
+
+    pub(crate) fn log_file(&self) -> PathBuf {
+        self.path.join("prek.log")
     }
 }
 

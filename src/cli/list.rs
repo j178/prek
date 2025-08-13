@@ -7,7 +7,7 @@ use crate::cli::ExitStatus;
 use crate::cli::reporter::HookInitReporter;
 use crate::config::{Language, Stage};
 use crate::printer::Printer;
-use crate::store::Store;
+use crate::store::STORE;
 use crate::workspace::Project;
 
 pub(crate) async fn list(
@@ -19,12 +19,12 @@ pub(crate) async fn list(
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     let mut project = Project::from_config_file(config)?;
-    let store = Store::from_settings()?.init()?;
+    let store = STORE.as_ref()?;
 
     let reporter = HookInitReporter::from(printer);
 
     let lock = store.lock_async().await?;
-    let hooks = project.init_hooks(&store, Some(&reporter)).await?;
+    let hooks = project.init_hooks(store, Some(&reporter)).await?;
     drop(lock);
 
     let hook_ids = hook_ids.into_iter().collect::<BTreeSet<_>>();
