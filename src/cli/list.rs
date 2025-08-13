@@ -100,18 +100,18 @@ pub(crate) async fn list(
         }
         ListOutputFormat::Json => {
             let serializable_hooks: Vec<_> = hooks
-                .iter()
+                .into_iter()
                 .map(|h| {
-                    let stages = match &h.stages {
+                    let stages = match h.stages {
                         hook::Stages::All => Stage::value_variants().to_vec(),
-                        hook::Stages::Some(s) => s.iter().copied().collect(),
+                        hook::Stages::Some(s) => s.into_iter().collect(),
                     };
                     SerializableHook {
-                        id: h.id.clone(),
-                        name: h.name.clone(),
-                        alias: h.alias.clone(),
+                        id: h.id,
+                        name: h.name,
+                        alias: h.alias,
                         language: h.language,
-                        description: h.description.clone(),
+                        description: h.description,
                         stages,
                     }
                 })
