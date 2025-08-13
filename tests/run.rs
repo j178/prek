@@ -297,7 +297,7 @@ fn multiple_hook_ids() {
     Second Hook..............................................................Passed
 
     ----- stderr -----
-    warning: Ignoring non-existent hook IDs: `nonexistent`
+    warning: Ignoring non-existent hook ID: `nonexistent`
     "#);
 
     // Multiple valid hook-ids
@@ -309,7 +309,7 @@ fn multiple_hook_ids() {
     Second Hook..............................................................Passed
 
     ----- stderr -----
-    warning: Ignoring non-existent hook IDs: `nonexistent-hook`
+    warning: Ignoring non-existent hook ID: `nonexistent-hook`
     "#);
 
     // Multiple hook-ids with some duplicates and aliases
