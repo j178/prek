@@ -28,11 +28,11 @@ use crate::cli::run::{CollectOptions, FileFilter, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, Stage};
 use crate::fs::Simplified;
-use crate::git;
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::{Printer, Stdout};
 use crate::store::{STORE, Store};
 use crate::workspace::Project;
+use crate::{git, warn_user};
 
 enum HookToRun {
     Skipped(Arc<Hook>),
@@ -110,16 +110,17 @@ pub(crate) async fn run(
     let reporter = HookInitReporter::from(printer);
 
     let lock = store.lock_async().await?;
-    let hooks = project.init_hooks(store, Some(&reporter)).await?;
 
     let hook_ids = hook_ids.into_iter().collect::<BTreeSet<_>>();
-    let hooks: Vec<_> = hooks
+
+    let hooks = project.init_hooks(store, Some(&reporter)).await?;
+    let filtered_hooks: Vec<_> = hooks
         .into_iter()
         .filter(|h| hook_ids.is_empty() || hook_ids.contains(&h.id) || hook_ids.contains(&h.alias))
         .filter(|h| h.stages.contains(hook_stage))
         .collect();
 
-    if hooks.is_empty() {
+    if filtered_hooks.is_empty() {
         if hook_ids.is_empty() {
             writeln!(
                 printer.stderr(),
@@ -146,15 +147,37 @@ pub(crate) async fn run(
             )?;
         }
         return Ok(ExitStatus::Failure);
+    } else if !hook_ids.is_empty() {
+        // Warn about hook IDs that don't match any hooks
+        let matched_ids: BTreeSet<String> = filtered_hooks
+            .iter()
+            .flat_map(|h| [h.id.clone(), h.alias.clone()])
+            .collect();
+
+        let unmatched_ids: Vec<&String> = hook_ids
+            .iter()
+            .filter(|id| !matched_ids.contains(*id))
+            .collect();
+
+        if !unmatched_ids.is_empty() {
+            warn_user!(
+                "Ignoring non-existent hook IDs: {}",
+                unmatched_ids
+                    .iter()
+                    .map(|id| format!("`{}`", id.yellow()))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
     }
 
     let skips = get_skips();
-    let skips = hooks
+    let skips = filtered_hooks
         .iter()
         .filter(|h| skips.contains(&h.id) || skips.contains(&h.alias))
         .map(|h| h.idx)
         .collect::<FxHashSet<_>>();
-    let to_run = hooks
+    let to_run = filtered_hooks
         .iter()
         .filter(|h| !skips.contains(&h.idx))
         .cloned()
@@ -170,7 +193,7 @@ pub(crate) async fn run(
     // Release the store lock.
     drop(lock);
 
-    let hooks = hooks
+    let hooks = filtered_hooks
         .into_iter()
         .map(|h| {
             if skips.contains(&h.idx) {

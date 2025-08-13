@@ -297,10 +297,11 @@ fn multiple_hook_ids() {
     Second Hook..............................................................Passed
 
     ----- stderr -----
+    warning: Ignoring non-existent hook IDs: `nonexistent`
     "#);
 
     // Multiple valid hook-ids
-    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("hook2"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("hook2").arg("nonexistent-hook"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -308,6 +309,7 @@ fn multiple_hook_ids() {
     Second Hook..............................................................Passed
 
     ----- stderr -----
+    warning: Ignoring non-existent hook IDs: `nonexistent-hook`
     "#);
 
     // Multiple hook-ids with some duplicates and aliases
