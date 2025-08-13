@@ -55,7 +55,7 @@ miette = { version = "7.5.0", features = ["fancy-no-backtrace"] }
 owo-colors = { version = "4.1.0" }
 rand = { version = "0.9.0" }
 rayon = { version = "1.10.0" }
-reqwest = { version = "0.12.9", default-features = false, features = ["stream"] }
+reqwest = { version = "0.12.9", default-features = false, features = ["http2", "stream"] }
 rustc-hash = { version = "2.1.1" }
 same-file = { version = "1.0.6" }
 semver = { version = "1.0.24", features = ["serde"] }
