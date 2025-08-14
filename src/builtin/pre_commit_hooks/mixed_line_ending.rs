@@ -27,21 +27,18 @@ pub(crate) async fn mixed_line_ending(
 ) -> Result<(i32, Vec<u8>)> {
     let fix_mode = parse_fix_mode(&hook.args);
 
-    let results = futures::stream::iter(filenames)
+    let mut results = futures::stream::iter(filenames)
         .map(|filename| fix_file(filename, &fix_mode))
-        .buffered(*CONCURRENCY)
-        .collect::<Vec<_>>()
-        .await;
+        .buffered(*CONCURRENCY);
 
-    let (exit_code, output) =
-        results
-            .into_iter()
-            .try_fold((0, Vec::new()), |(mut code, mut output), result| {
-                let (file_code, file_output) = result?;
-                code |= file_code;
-                output.extend(file_output);
-                Ok::<_, anyhow::Error>((code, output))
-            })?;
+    let mut exit_code = 0;
+    let mut output = Vec::new();
+
+    while let Some(result) = results.next().await {
+        let (c, o) = result?;
+        exit_code |= c;
+        output.extend(o);
+    }
 
     Ok((exit_code, output))
 }

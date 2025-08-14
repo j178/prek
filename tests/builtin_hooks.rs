@@ -244,6 +244,7 @@ fn mixed_line_ending_hook() -> Result<()> {
     mixed line ending........................................................Failed
     - hook id: mixed-line-ending
     - exit code: 1
+    - files were modified by this hook
       Fixing .pre-commit-config.yaml
       Fixing mixed.txt
       Fixing only_lf.txt

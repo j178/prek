@@ -231,6 +231,13 @@ impl TestContext {
             .current_dir(&self.temp_dir)
             .assert()
             .success();
+        Command::new("git")
+            .arg("config")
+            .arg("core.autocrlf")
+            .arg("false")
+            .current_dir(&self.temp_dir)
+            .assert()
+            .success();
     }
 
     /// Run `git add`.
