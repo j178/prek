@@ -1,3 +1,4 @@
+use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -311,15 +312,15 @@ impl InstallSource {
         archive::unzip(reader, temp_extract_dir).await?;
 
         // Find the uv binary in the extracted contents
-        let uv_binary_name = format!("uv{}", std::env::consts::EXE_EXTENSION);
         let data_dir = format!("uv-{CUR_UV_VERSION}.data");
         let extracted_uv = temp_extract_dir
             .join(data_dir)
             .join("scripts")
-            .join(&uv_binary_name);
+            .join("uv")
+            .with_extension(EXE_EXTENSION);
 
         // Copy the binary to the target location
-        let target_path = target.join(&uv_binary_name);
+        let target_path = target.join("uv").with_extension(EXE_EXTENSION);
         fs_err::tokio::copy(&extracted_uv, &target_path).await?;
 
         // Set executable permissions on Unix
