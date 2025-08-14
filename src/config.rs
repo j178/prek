@@ -11,6 +11,7 @@ use url::Url;
 
 use crate::fs::Simplified;
 use crate::version;
+use crate::warn_user;
 
 pub const CONFIG_FILE: &str = ".pre-commit-config.yaml";
 pub const ALTER_CONFIG_FILE: &str = ".pre-commit-config.yml";
@@ -268,7 +269,6 @@ where
     Ok(Some(s))
 }
 
-// TODO: warn unexpected keys (ignoring `minimum_pre_commit_version`)
 // TODO: warn deprecated stage
 // TODO: warn sensible regex
 #[derive(Debug, Clone, Deserialize)]
@@ -733,8 +733,20 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
         }
         Err(e) => return Err(e.into()),
     };
-    let config = serde_yaml::from_str(&content)
-        .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
+
+    let deserializer = serde_yaml::Deserializer::from_str(&content);
+    let mut unused = Vec::new();
+    let config: Config = serde_ignored::deserialize(deserializer, |path| {
+        if path.to_string() != "minimum_pre_commit_version" {
+            unused.push(path.to_string());
+        }
+    })
+    .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
+
+    for key in unused {
+        warn_user!("unexpected key '{}' in {}", key, path.display());
+    }
+
     Ok(config)
 }
 

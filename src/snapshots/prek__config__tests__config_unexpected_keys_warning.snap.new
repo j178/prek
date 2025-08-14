@@ -1,0 +1,49 @@
+---
+source: src/config.rs
+assertion_line: 1455
+expression: config
+---
+Config {
+    repos: [
+        Local(
+            LocalRepo {
+                hooks: [
+                    ManifestHook {
+                        id: "test-hook",
+                        name: "Test Hook",
+                        entry: "echo test",
+                        language: System,
+                        options: HookOptions {
+                            alias: None,
+                            files: None,
+                            exclude: None,
+                            types: None,
+                            types_or: None,
+                            exclude_types: None,
+                            additional_dependencies: None,
+                            args: None,
+                            always_run: None,
+                            fail_fast: None,
+                            pass_filenames: None,
+                            description: None,
+                            language_version: None,
+                            log_file: None,
+                            require_serial: None,
+                            stages: None,
+                            verbose: None,
+                            minimum_prek_version: None,
+                        },
+                    },
+                ],
+            },
+        ),
+    ],
+    default_install_hook_types: None,
+    default_language_version: None,
+    default_stages: None,
+    files: None,
+    exclude: None,
+    fail_fast: None,
+    minimum_prek_version: None,
+    ci: None,
+}

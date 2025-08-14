@@ -116,3 +116,31 @@ fn validate_manifest() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_config_unexpected_keys_warning() {
+    let context = TestContext::new();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: test-hook
+                name: Test Hook
+                entry: echo test
+                language: system
+        unexpected_key: some_value
+        another_unknown: test
+        minimum_pre_commit_version: 1.0.0
+    "});
+
+    cmd_snapshot!(context.filters(), context.validate_config().arg(".pre-commit-config.yaml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: unexpected key 'unexpected_key' in .pre-commit-config.yaml
+    warning: unexpected key 'another_unknown' in .pre-commit-config.yaml
+    "#);
+}
