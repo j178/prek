@@ -118,12 +118,13 @@ fn language_version() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Test that `additional_dependencies` are installed correctly.
+/// Test a remote go hook.
 #[test]
-fn additional_dependencies() {
+fn remote_hook() {
     let context = TestContext::new();
     context.init_project();
 
+    // Test that `additional_dependencies` are installed correctly.
     context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -138,7 +139,6 @@ fn additional_dependencies() {
                 language_version: '1.23.11' # will auto download
                 pass_filenames: false
     "#});
-
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
@@ -162,13 +162,6 @@ fn additional_dependencies() {
 
     ----- stderr -----
     "#);
-}
-
-/// Test a remote go hook.
-#[test]
-fn remote_hook() {
-    let context = TestContext::new();
-    context.init_project();
 
     // Run hooks with newly downloaded go.
     context.write_pre_commit_config(indoc::indoc! {r"
