@@ -231,6 +231,10 @@ impl TestContext {
             .current_dir(&self.temp_dir)
             .assert()
             .success();
+    }
+
+    /// Configure git autocrlf.
+    pub fn configure_git_autocrlf(&self) {
         Command::new("git")
             .arg("config")
             .arg("core.autocrlf")

@@ -45,16 +45,31 @@ pub(crate) async fn mixed_line_ending(
 
 // Parse the fix mode from command line arguments
 fn parse_fix_mode(args: &[String]) -> FixMode {
-    args.iter()
-        .find_map(|arg| arg.strip_prefix("--fix="))
-        .map(|value| match value {
+    // Handle --fix=value format
+    if let Some(value) = args.iter().find_map(|arg| arg.strip_prefix("--fix=")) {
+        return match value {
             "no" => FixMode::No,
             "lf" => FixMode::Value(LF),
             "crlf" => FixMode::Value(CRLF),
             "cr" => FixMode::Value(CR),
             _ => FixMode::Auto,
-        })
-        .unwrap_or(FixMode::Auto)
+        };
+    }
+
+    // Handle --fix value format
+    for i in 0..args.len() {
+        if args[i] == "--fix" && i + 1 < args.len() {
+            return match args[i + 1].as_str() {
+                "no" => FixMode::No,
+                "lf" => FixMode::Value(LF),
+                "crlf" => FixMode::Value(CRLF),
+                "cr" => FixMode::Value(CR),
+                _ => FixMode::Auto,
+            };
+        }
+    }
+
+    FixMode::Auto
 }
 
 // Process a single file for mixed line endings
