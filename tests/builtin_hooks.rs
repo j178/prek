@@ -1,4 +1,7 @@
+use std::process::Command;
+
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
@@ -144,7 +147,14 @@ fn mixed_line_ending_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
-    context.configure_git_autocrlf();
+    // Disable autocrlf
+    Command::new("git")
+        .arg("config")
+        .arg("core.autocrlf")
+        .arg("false")
+        .current_dir(context.work_dir())
+        .assert()
+        .success();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -282,6 +292,30 @@ fn mixed_line_ending_hook() -> Result<()> {
     ----- stderr -----
     ");
     assert_snapshot!(context.read("mixed.txt"), @"line1\r\nline2\r\nline3\r\n");
+
+    // Test mixed args with --fix crlf
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: mixed-line-ending
+                args: ['--verbose', '--fix']
+    "});
+    context
+        .work_dir()
+        .child("mixed.txt")
+        .write_str("line1\nline2\r\nline3\n")?;
+    context.git_add(".");
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+    mixed line ending........................................................
+    ----- stderr -----
+    error: Failed to run hook `mixed-line-ending`
+      caused by: Missing value for `--fix` argument
+    ");
 
     Ok(())
 }

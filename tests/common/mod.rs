@@ -233,17 +233,6 @@ impl TestContext {
             .success();
     }
 
-    /// Configure git autocrlf.
-    pub fn configure_git_autocrlf(&self) {
-        Command::new("git")
-            .arg("config")
-            .arg("core.autocrlf")
-            .arg("false")
-            .current_dir(&self.temp_dir)
-            .assert()
-            .success();
-    }
-
     /// Run `git add`.
     pub fn git_add(&self, path: impl AsRef<OsStr>) {
         Command::new("git")

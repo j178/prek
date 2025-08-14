@@ -25,7 +25,7 @@ pub(crate) async fn mixed_line_ending(
     hook: &Hook,
     filenames: &[&String],
 ) -> Result<(i32, Vec<u8>)> {
-    let fix_mode = parse_fix_mode(&hook.args);
+    let fix_mode = parse_fix_mode(&hook.args)?;
 
     let mut results = futures::stream::iter(filenames)
         .map(|filename| fix_file(filename, &fix_mode))
@@ -44,32 +44,41 @@ pub(crate) async fn mixed_line_ending(
 }
 
 // Parse the fix mode from command line arguments
-fn parse_fix_mode(args: &[String]) -> FixMode {
-    // Handle --fix=value format
-    if let Some(value) = args.iter().find_map(|arg| arg.strip_prefix("--fix=")) {
-        return match value {
+fn parse_fix_mode(args: &[String]) -> Result<FixMode> {
+    fn parse_fix_value(value: &str) -> Result<FixMode> {
+        Ok(match value {
             "no" => FixMode::No,
             "lf" => FixMode::Value(LF),
             "crlf" => FixMode::Value(CRLF),
             "cr" => FixMode::Value(CR),
-            _ => FixMode::Auto,
-        };
+            _ => anyhow::bail!("Invalid value for `--fix`: {value}"),
+        })
     }
 
-    // Handle --fix value format
-    for i in 0..args.len() {
-        if args[i] == "--fix" && i + 1 < args.len() {
-            return match args[i + 1].as_str() {
-                "no" => FixMode::No,
-                "lf" => FixMode::Value(LF),
-                "crlf" => FixMode::Value(CRLF),
-                "cr" => FixMode::Value(CR),
-                _ => FixMode::Auto,
-            };
+    let mut i = 0;
+    while i < args.len() {
+        let arg = &args[i];
+
+        // Handle `--fix=value` and `-f=value` format
+        if let Some(value) = arg
+            .strip_prefix("--fix=")
+            .or_else(|| arg.strip_prefix("-f="))
+        {
+            return parse_fix_value(value);
         }
+
+        // Handle `--fix value` and `-f value` format
+        if arg == "--fix" || arg == "-f" {
+            if i + 1 < args.len() {
+                return parse_fix_value(&args[i + 1]);
+            }
+            anyhow::bail!("Missing value for `{arg}` argument");
+        }
+
+        i += 1;
     }
 
-    FixMode::Auto
+    Ok(FixMode::Auto)
 }
 
 // Process a single file for mixed line endings
