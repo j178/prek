@@ -73,6 +73,14 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 - `prek list` command lists all available hooks, their ids, and descriptions, providing a better overview of the configured hooks.
 - prek provides shell completions for `prek run <hook_id>` command, making it easier to run specific hooks without remembering their ids.
 
+## Who are using prek?
+
+prek is pretty new, but it is already being used or recommend by some projects and organizations:
+
+- [Airflow](https://github.com/apache/airflow/issues/44995)
+- [PDM](https://github.com/pdm-project/pdm/pull/3593)
+- [basedpyright](https://github.com/DetachHead/basedpyright/pull/1413)
+
 ## Installation
 
 <details>
