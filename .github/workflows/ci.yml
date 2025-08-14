@@ -250,7 +250,7 @@ jobs:
           EOF
           git add .
           git commit -m "Initial commit"
-          ${{ github.workspace }}/target/debug/prek run -f test.py -vvv
+          ${{ github.workspace }}/target/debug/prek run --files test.py -vvv
 
   test-python-setup-windows:
     timeout-minutes: 15
@@ -291,4 +291,4 @@ jobs:
           "@ > .pre-commit-config.yaml
           git add .
           git commit -m "Initial commit"
-          & "${{ github.workspace }}/target/debug/prek" run -f test.py -vvv
+          & "${{ github.workspace }}/target/debug/prek" run --files test.py -vvv
