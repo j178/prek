@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.0.25
+
+### Enhancements
+
+- Add check for `minimum_prek_version` ([#437](https://github.com/j178/prefligit/pull/437))
+- Make `--to-ref` default to HEAD if `--from-ref` is specified ([#426](https://github.com/j178/prefligit/pull/426))
+- Support downloading uv from pypi and mirrors ([#449](https://github.com/j178/prefligit/pull/449))
+- Write trace log to `$PREK_HOME/prek.log` ([#447](https://github.com/j178/prefligit/pull/447))
+- Implement `mixed_line_ending` as builtin hook ([#444](https://github.com/j178/prefligit/pull/444))
+- Support `--output-format=json` in `prek list` ([#446](https://github.com/j178/prefligit/pull/446))
+- Add context message to install error ([#455](https://github.com/j178/prefligit/pull/455))
+- Add warning for non-existent hook id ([#450](https://github.com/j178/prefligit/pull/450))
+
+### Performance
+
+- Refactor `fix_trailing_whitespace` ([#411](https://github.com/j178/prefligit/pull/411))
+
+### Bug fixes
+
+- Calculate more accurate max cli length ([#442](https://github.com/j178/prefligit/pull/442))
+- Fix uv install on Windows ([#453](https://github.com/j178/prefligit/pull/453))
+- Static link `liblzma` ([#445](https://github.com/j178/prefligit/pull/445))
+
 ## 0.0.24
 
 ### Enhancements
