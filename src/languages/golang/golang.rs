@@ -29,7 +29,10 @@ impl LanguageImpl for Golang {
             LanguageRequest::Golang(version) => version,
             _ => unreachable!(),
         };
-        let go = installer.install(version).await?;
+        let go = installer
+            .install(version)
+            .await
+            .context("Failed to install go")?;
 
         let mut info = InstallInfo::new(
             hook.language,

@@ -40,7 +40,10 @@ impl LanguageImpl for Node {
             LanguageRequest::Node(node_request) => node_request,
             _ => unreachable!(),
         };
-        let node = installer.install(node_request).await?;
+        let node = installer
+            .install(node_request)
+            .await
+            .context("Failed to install node")?;
 
         let mut info = InstallInfo::new(
             hook.language,
