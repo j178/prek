@@ -220,51 +220,75 @@ jobs:
   test-python-setup-linux:
     timeout-minutes: 10
     runs-on: ubuntu-latest
-    name: "Test Python setup | linux"
+    name: "test python setup | linux"
     steps:
       - uses: actions/checkout@v4
       - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
       - name: "Install Rust toolchain"
         run: rustup show
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
+      - name: "Build prek"
+        run: cargo build
       - name: "Run test"
         run: |
-          mkdir -p python-setup
+          cd /tmp
+          mkdir python-setup
           cd python-setup
-          echo "print('Hello from Python!')" >> test.py
+          git init
+          git config user.name "Test User"
+          git config user.email "test@example.com"
+          echo "print('Hello from Python!')" > test.py
+          cat > .pre-commit-config.yaml << 'EOF'
+          repos:
+            - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+              rev: v5.0.0
+              hooks:
+                - id: trailing-whitespace
+                - id: end-of-file-fixer
+                - id: check-yaml
+                - id: check-added-large-files
+          EOF
           git add .
-          cargo run -- sample-config -f
-          cargo run -- run -f test.py -vvv
+          git commit -m "Initial commit"
+          ${{ github.workspace }}/target/debug/prek run -f test.py -vvv
 
   test-python-setup-windows:
     timeout-minutes: 15
     runs-on: windows-latest
-    name: "Test Python setup | windows"
+    name: "test python setup | windows"
     steps:
       - uses: actions/checkout@v4
 
       - name: Create Dev Drive
-        run: ${{ github.workspace }}/.github\workflows\setup-dev-drive.ps1
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       - uses: Swatinem/rust-cache@v2
 
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
+      - name: "Build prek"
+        run: cargo build
 
       - name: "Run test"
         run: |
+          cd $env:TEMP
           mkdir python-setup
           cd python-setup
-          echo "print('Hello from Python!')" >> test.py
+          git init
+          git config user.name "Test User"
+          git config user.email "test@example.com"
+          echo "print('Hello from Python!')" > test.py
+          @"
+          repos:
+            - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+              rev: v5.0.0
+              hooks:
+                - id: trailing-whitespace
+                - id: end-of-file-fixer
+                - id: check-yaml
+                - id: check-added-large-files
+          "@ > .pre-commit-config.yaml
           git add .
-          cargo run -- sample-config -f
-          cargo run -- run -f test.py -vvv
+          git commit -m "Initial commit"
+          & "${{ github.workspace }}/target/debug/prek" run -f test.py -vvv
