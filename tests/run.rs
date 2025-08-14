@@ -1464,13 +1464,22 @@ fn minimum_prek_version() {
     "});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(
+            r"current version `\d+\.\d+\.\d+`",
+            "current version `[CURRENT_VERSION]`",
+        )])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, context.run(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to parse `.pre-commit-config.yaml`
-      caused by: Required minimum prek version `10.0.0` is greater than current version `0.0.24`. Please consider updating prek.
+      caused by: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek.
     "#);
 }
