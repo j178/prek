@@ -8,6 +8,7 @@ use axoupdater::{AxoUpdater, ReleaseSource, ReleaseSourceType, UpdateRequest};
 use futures::StreamExt;
 use semver::Version;
 use std::process::Command;
+use target_lexicon::{Architecture, ArmArchitecture, HOST, OperatingSystem};
 use tokio::task::JoinSet;
 use tracing::{debug, enabled, trace, warn};
 
@@ -23,34 +24,41 @@ const CUR_UV_VERSION: &str = "0.8.6";
 const UV_VERSION_RANGE: &str = ">=0.7.0, <0.9.0";
 
 fn get_platform_tag() -> Result<String> {
-    let os = std::env::consts::OS;
-    let arch = std::env::consts::ARCH;
-
-    let platform_tag = match (os, arch) {
+    let platform_tag = match (HOST.operating_system, HOST.architecture) {
         // Linux platforms
         // TODO: support musllinux?
-        ("linux", "x86_64") => "manylinux_2_17_x86_64.manylinux2014_x86_64",
-        ("linux", "aarch64") => {
+        (OperatingSystem::Linux, Architecture::X86_64) => {
+            "manylinux_2_17_x86_64.manylinux2014_x86_64"
+        }
+        (OperatingSystem::Linux, Architecture::Aarch64(_)) => {
             "manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64"
         }
-        ("linux", "arm") => "manylinux_2_17_armv7l.manylinux2014_armv7l", // ARMv7
-        ("linux", "armv6l") => "linux_armv6l",                            // Raspberry Pi Zero/1
-        ("linux", "x86") => "manylinux_2_17_i686.manylinux2014_i686",
-        ("linux", "powerpc64") => "manylinux_2_17_ppc64.manylinux2014_ppc64",
-        ("linux", "powerpc64le") => "manylinux_2_17_ppc64le.manylinux2014_ppc64le",
-        ("linux", "s390x") => "manylinux_2_17_s390x.manylinux2014_s390x",
-        ("linux", "riscv64") => "manylinux_2_31_riscv64",
+        (OperatingSystem::Linux, Architecture::Arm(ArmArchitecture::Armv7)) => {
+            "manylinux_2_17_armv7l.manylinux2014_armv7l"
+        } // ARMv7
+        (OperatingSystem::Linux, Architecture::Arm(ArmArchitecture::Armv6)) => "linux_armv6l", // Raspberry Pi Zero/1
+        (OperatingSystem::Linux, Architecture::X86_32(_)) => {
+            "manylinux_2_17_i686.manylinux2014_i686"
+        }
+        (OperatingSystem::Linux, Architecture::Powerpc64) => {
+            "manylinux_2_17_ppc64.manylinux2014_ppc64"
+        }
+        (OperatingSystem::Linux, Architecture::Powerpc64le) => {
+            "manylinux_2_17_ppc64le.manylinux2014_ppc64le"
+        }
+        (OperatingSystem::Linux, Architecture::S390x) => "manylinux_2_17_s390x.manylinux2014_s390x",
+        (OperatingSystem::Linux, Architecture::Riscv64(_)) => "manylinux_2_31_riscv64",
 
         // macOS platforms
-        ("macos", "x86_64") => "macosx_10_12_x86_64",
-        ("macos", "aarch64") => "macosx_11_0_arm64",
+        (OperatingSystem::Darwin(_), Architecture::X86_64) => "macosx_10_12_x86_64",
+        (OperatingSystem::Darwin(_), Architecture::Aarch64(_)) => "macosx_11_0_arm64",
 
         // Windows platforms
-        ("windows", "x86_64") => "win_amd64",
-        ("windows", "x86") => "win32",
-        ("windows", "aarch64") => "win_arm64",
+        (OperatingSystem::Windows, Architecture::X86_64) => "win_amd64",
+        (OperatingSystem::Windows, Architecture::X86_32(_)) => "win32",
+        (OperatingSystem::Windows, Architecture::Aarch64(_)) => "win_arm64",
 
-        _ => bail!("Unsupported platform: {}-{}", os, arch),
+        _ => bail!("Unsupported platform: {HOST}"),
     };
 
     Ok(platform_tag.to_string())

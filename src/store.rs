@@ -22,10 +22,6 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
-    Fmt(#[from] std::fmt::Error),
-    #[error(transparent)]
-    Repo(#[from] crate::hook::Error),
-    #[error(transparent)]
     Git(#[from] crate::git::Error),
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
@@ -33,10 +29,6 @@ pub enum Error {
 
 pub(crate) static STORE: LazyLock<Result<Store, Error>> = LazyLock::new(|| {
     let path = if let Some(path) = EnvVars::var_os(EnvVars::PREK_HOME) {
-        debug!(
-            path = %path.to_string_lossy(),
-            "Loading store from PREK_HOME env var",
-        );
         Some(path.into())
     } else {
         etcetera::choose_base_strategy()
@@ -44,7 +36,9 @@ pub(crate) static STORE: LazyLock<Result<Store, Error>> = LazyLock::new(|| {
             .ok()
     };
 
-    let path = path.ok_or(Error::HomeNotFound)?;
+    let Some(path) = path else {
+        return Err(Error::HomeNotFound);
+    };
     let store = Store::from_path(path).init()?;
 
     Ok(store)
