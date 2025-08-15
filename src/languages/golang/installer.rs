@@ -65,7 +65,9 @@ impl GoResult {
     }
 
     pub(crate) fn cmd(&self, summary: &str) -> Cmd {
-        Cmd::new(&self.path, summary)
+        let mut cmd = Cmd::new(&self.path, summary);
+        cmd.set_color_env();
+        cmd
     }
 
     pub(crate) fn with_version(mut self, version: GoVersion) -> Self {

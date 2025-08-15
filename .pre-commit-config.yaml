@@ -25,12 +25,19 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false # This makes it a lot faster
-
-  - repo: local
-    hooks:
       - id: cargo-clippy
         name: cargo clippy
         language: system
         types: [rust]
         pass_filenames: false
         entry: cargo clippy --all-targets --all-features -- -D warnings
+      - id: pty-check
+        stages: [manual]
+        name: Run 'pty-check'
+        entry: ./scripts/pty_check.py
+        language: python
+        require_serial: true
+        always_run: true
+        pass_filenames: false
+        verbose: true
+        additional_dependencies: ['rich>=12.4.4']

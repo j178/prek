@@ -55,6 +55,7 @@ impl NodeResult {
     pub(crate) async fn fill_version(mut self) -> Result<Self> {
         // https://nodejs.org/api/process.html#processrelease
         let output = Cmd::new(&self.node, "node -p")
+            .set_color_env()
             .arg("-p")
             .arg("JSON.stringify({version: process.version, lts: process.release.lts || false})")
             .check(true)

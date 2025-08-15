@@ -92,6 +92,7 @@ impl LanguageImpl for Python {
         let python = python_exec(&info.env_path);
         // Get Python version and executable
         let stdout = Cmd::new(&python, "python -c")
+            .set_color_env()
             .arg("-I")
             .arg("-c")
             .arg(QUERY_PYTHON_INFO)
@@ -138,6 +139,7 @@ impl LanguageImpl for Python {
 
         let run = async move |batch: Vec<String>| {
             let output = Cmd::new(&entry[0], "python hook")
+                .set_color_env()
                 .args(&entry[1..])
                 .env("VIRTUAL_ENV", env_dir)
                 .env("PATH", &new_path)

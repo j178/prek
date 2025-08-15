@@ -50,6 +50,7 @@ static GIT_ENV_REMOVE: LazyLock<()> = LazyLock::new(|| {
 
 pub fn git_cmd(summary: &str) -> Result<Cmd, Error> {
     let mut cmd = Cmd::new(GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?, summary);
+    cmd.set_color_env();
     cmd.arg("-c").arg("core.useBuiltinFSMonitor=false");
 
     LazyLock::force(&GIT_ENV_REMOVE);

@@ -212,8 +212,14 @@ impl LanguageImpl for Docker {
 
         let run = async move |batch: Vec<String>| {
             // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
+<<<<<<< HEAD
             let mut cmd = Docker::docker_run_cmd().await?;
             let mut output = cmd
+=======
+            let mut base_cmd = Docker::docker_run_cmd().await?;
+            let cmd = base_cmd.with_pty(true);
+            let cmd = cmd
+>>>>>>> 5ff9778 (Add PTY allocation when running processes)
                 .arg("--entrypoint")
                 .arg(&entry[0])
                 .arg(&docker_tag)

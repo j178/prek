@@ -328,6 +328,7 @@ impl InstallSource {
         // When running `pip install` in multiple threads, it can fail
         // without extracting files properly.
         Cmd::new("python3", "pip install uv")
+            .set_color_env()
             .arg("-m")
             .arg("pip")
             .arg("install")
@@ -364,6 +365,7 @@ impl Uv {
 
     pub(crate) fn cmd(&self, summary: &str, store: &Store) -> Cmd {
         let mut cmd = Cmd::new(&self.path, summary);
+        cmd.set_color_env();
         cmd.env(EnvVars::UV_CACHE_DIR, store.cache_path(CacheBucket::Uv));
         cmd
     }

@@ -119,6 +119,7 @@ impl LanguageImpl for Golang {
         let entry = hook.entry.parsed()?;
         let run = async move |batch: Vec<String>| {
             let mut output = Cmd::new(&entry[0], "go hook")
+                .set_color_env()
                 .args(&entry[1..])
                 .env("PATH", &new_path)
                 .env(EnvVars::GOTOOLCHAIN, "local")

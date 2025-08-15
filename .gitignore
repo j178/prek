@@ -16,3 +16,4 @@
 
 # profiling flamegraphs
 *.flamegraph.svg
+/prek.iml

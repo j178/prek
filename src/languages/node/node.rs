@@ -96,6 +96,7 @@ impl LanguageImpl for Node {
             let new_path = prepend_paths(&[&bin_dir]).context("Failed to join PATH")?;
 
             Cmd::new(node.npm(), "npm install")
+                .set_color_env()
                 .arg("install")
                 .arg("-g")
                 .arg("--no-progress")
@@ -147,6 +148,7 @@ impl LanguageImpl for Node {
             } else {
                 Cmd::new(&entry[0], "node hook")
             };
+            cmd.set_color_env();
 
             let mut output = cmd
                 .args(&entry[1..])

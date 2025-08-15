@@ -33,6 +33,8 @@ use std::{
     process::{CommandArgs, CommandEnvs, ExitStatus, Stdio},
 };
 
+use anstream::ColorChoice;
+use miette::Diagnostic;
 use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::trace;
@@ -148,6 +150,28 @@ impl Cmd {
     pub fn check(&mut self, checked: bool) -> &mut Self {
         self.check_status = checked;
         self
+    }
+    /// Sets color-related environment variables based on the provided `ColorChoice`.
+    pub fn set_color_env_with_choice(&mut self, color_choice: ColorChoice) -> &mut Self {
+        match color_choice {
+            ColorChoice::Always | ColorChoice::AlwaysAnsi => {
+                self.env("FORCE_COLOR", "1");
+                self.env("CLICOLOR_FORCE", "1");
+                self.env("CLICOLOR", "1");
+            }
+            ColorChoice::Never => {
+                self.env("NO_COLOR", "1");
+            }
+            ColorChoice::Auto => {
+                self.env("CLICOLOR", "1");
+            }
+        }
+        self
+    }
+    /// Sets color-related environment variables based on the globally stored `ColorChoice` flag.
+    pub fn set_color_env(&mut self) -> &mut Self {
+        let color_choice = ColorChoice::global();
+        self.set_color_env_with_choice(color_choice)
     }
 }
 
@@ -483,5 +507,90 @@ impl std::fmt::Display for Cmd {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anstream::ColorChoice;
+    use std::collections::HashMap;
+    use std::process::Command;
+
+    fn get_env_map_std(cmd: &Command) -> HashMap<String, String> {
+        cmd.get_envs()
+            .map(|(k, v)| {
+                let key = k.to_string_lossy().to_string();
+                let val = v
+                    .as_ref()
+                    .map(|v| v.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                (key, val)
+            })
+            .collect()
+    }
+
+    #[track_caller]
+    fn assert_env_var(envs: &HashMap<String, String>, key: &str, expected: Option<&str>) {
+        let actual = envs.get(key).map(String::as_str);
+        assert_eq!(actual, expected);
+    }
+
+    fn set_color_env_with_choice_std(cmd: &mut Command, color_choice: ColorChoice) {
+        match color_choice {
+            ColorChoice::Always | ColorChoice::AlwaysAnsi => {
+                cmd.env("FORCE_COLOR", "1");
+                cmd.env("CLICOLOR_FORCE", "1");
+                cmd.env("CLICOLOR", "1");
+            }
+            ColorChoice::Never => {
+                cmd.env("NO_COLOR", "1");
+            }
+            ColorChoice::Auto => {
+                cmd.env("CLICOLOR", "1");
+            }
+        }
+    }
+
+    #[test]
+    fn test_set_color_env_always() {
+        let mut cmd = Command::new("echo");
+        set_color_env_with_choice_std(&mut cmd, ColorChoice::Always);
+        let envs = get_env_map_std(&cmd);
+        assert_env_var(&envs, "FORCE_COLOR", Some("1"));
+        assert_env_var(&envs, "CLICOLOR_FORCE", Some("1"));
+        assert_env_var(&envs, "CLICOLOR", Some("1"));
+        assert_env_var(&envs, "NO_COLOR", None);
+    }
+
+    #[test]
+    fn test_set_color_env_always_ansi() {
+        let mut cmd = Command::new("echo");
+        set_color_env_with_choice_std(&mut cmd, ColorChoice::AlwaysAnsi);
+        let envs = get_env_map_std(&cmd);
+        assert_env_var(&envs, "FORCE_COLOR", Some("1"));
+        assert_env_var(&envs, "CLICOLOR_FORCE", Some("1"));
+        assert_env_var(&envs, "CLICOLOR", Some("1"));
+        assert_env_var(&envs, "NO_COLOR", None);
+    }
+
+    #[test]
+    fn test_set_color_env_never() {
+        let mut cmd = Command::new("echo");
+        set_color_env_with_choice_std(&mut cmd, ColorChoice::Never);
+        let envs = get_env_map_std(&cmd);
+        assert_env_var(&envs, "NO_COLOR", Some("1"));
+        assert_env_var(&envs, "FORCE_COLOR", None);
+        assert_env_var(&envs, "CLICOLOR_FORCE", None);
+    }
+
+    #[test]
+    fn test_set_color_env_auto() {
+        let mut cmd = Command::new("echo");
+        set_color_env_with_choice_std(&mut cmd, ColorChoice::Auto);
+        let envs = get_env_map_std(&cmd);
+        assert_env_var(&envs, "CLICOLOR", Some("1"));
+        assert_env_var(&envs, "FORCE_COLOR", None);
+        assert_env_var(&envs, "CLICOLOR_FORCE", None);
+        assert_env_var(&envs, "NO_COLOR", None);
     }
 }
