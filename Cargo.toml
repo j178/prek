@@ -24,6 +24,9 @@ default = ["docker"]
 profiler = ["dep:pprof", "profiler-flamegraph"]
 profiler-flamegraph = ["pprof/flamegraph"]
 docker = []
+# For testing uv installing from GitHub and PyPI
+uv-source-github = []
+uv-source-pypi = []
 
 [dependencies]
 constants = { workspace = true }

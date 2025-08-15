@@ -65,25 +65,6 @@ fn get_wheel_platform_tag() -> Result<String> {
     Ok(platform_tag.to_string())
 }
 
-/// Get the GitHub platform string and archive extension for the current host.
-fn get_github_platform_info() -> Result<(&'static str, &'static str)> {
-    let os = std::env::consts::OS;
-    let arch = std::env::consts::ARCH;
-
-    // Returns (platform_string, archive_extension)
-    let (platform, extension) = match (os, arch) {
-        ("linux", "x86_64") => ("x86_64-unknown-linux-gnu", "tar.gz"),
-        ("linux", "aarch64") => ("aarch64-unknown-linux-gnu", "tar.gz"),
-        ("macos", "x86_64") => ("x86_64-apple-darwin", "tar.gz"),
-        ("macos", "aarch64") => ("aarch64-apple-darwin", "tar.gz"),
-        ("windows", "x86_64") => ("x86_64-pc-windows-msvc", "zip"),
-        ("windows", "x86") => ("i686-pc-windows-msvc", "zip"),
-        _ => bail!("Unsupported platform for GitHub releases: {}-{}", os, arch),
-    };
-
-    Ok((platform, extension))
-}
-
 fn get_uv_version(uv_path: &Path) -> Result<Version> {
     let output = Command::new(uv_path)
         .arg("--version")
@@ -170,9 +151,8 @@ impl InstallSource {
     }
 
     async fn install_from_github(&self, target: &Path) -> Result<()> {
-        let (triple, ext) = get_github_platform_info()?;
-
-        let archive_name = format!("uv-{triple}.{ext}");
+        let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
+        let archive_name = format!("uv-{HOST}.{ext}");
         let download_url = format!(
             "https://github.com/astral-sh/uv/releases/download/{CUR_UV_VERSION}/{archive_name}"
         );
@@ -232,7 +212,7 @@ impl InstallSource {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing download URL in PyPI response"))?;
 
-        self.download_and_extract_wheel(target, &wheel_name, download_url)
+        self.download_and_extract_wheel(&client, target, &wheel_name, download_url)
             .await
     }
 
@@ -282,17 +262,17 @@ impl InstallSource {
             format!("{simple_url}{download_path}")
         };
 
-        self.download_and_extract_wheel(target, &wheel_name, &download_url)
+        self.download_and_extract_wheel(&client, target, &wheel_name, &download_url)
             .await
     }
 
     async fn download_and_extract_wheel(
         &self,
+        client: &reqwest::Client,
         target: &Path,
         filename: &str,
         download_url: &str,
     ) -> Result<()> {
-        let client = reqwest::Client::new();
         let wheel_path = target.join("whl");
         download_and_extract(&client, download_url, &wheel_path, filename, target)
             .await
@@ -418,13 +398,19 @@ impl Uv {
             Ok(best)
         }
 
-        let client = reqwest::Client::new();
-        let source = tokio::select! {
-            Ok(true) = check_github(&client) => InstallSource::GitHub,
-            Ok(source) = select_best_pypi(&client) => InstallSource::PyPi(source),
-            else => {
-                warn!("Failed to check uv source availability, falling back to pip install");
-                InstallSource::Pip
+        let source = if cfg!(feature = "uv-source-github") {
+            InstallSource::GitHub
+        } else if cfg!(feature = "uv-source-pypi") {
+            InstallSource::PyPi(PyPiMirror::Pypi)
+        } else {
+            let client = reqwest::Client::new();
+            tokio::select! {
+                Ok(true) = check_github(&client) => InstallSource::GitHub,
+                Ok(source) = select_best_pypi(&client) => InstallSource::PyPi(source),
+                else => {
+                    warn!("Failed to check uv source availability, falling back to pip install");
+                    InstallSource::Pip
+                }
             }
         };
 

@@ -221,19 +221,29 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     name: "test python setup | linux"
+    strategy:
+      matrix:
+        uv-source: ["github", "pypi", "default"]
     steps:
       - uses: actions/checkout@v4
       - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
       - name: "Install Rust toolchain"
         run: rustup show
-      - name: "Build prek"
+      - name: "Build prek with GitHub source"
+        if: matrix.uv-source == 'github'
+        run: cargo build --features uv-source-github
+      - name: "Build prek with PyPI source"
+        if: matrix.uv-source == 'pypi'
+        run: cargo build --features uv-source-pypi
+      - name: "Build prek with default source"
+        if: matrix.uv-source == 'default'
         run: cargo build
       - name: "Run test"
         run: |
           cd /tmp
-          mkdir python-setup
-          cd python-setup
+          mkdir python-setup-${{ matrix.uv-source }}
+          cd python-setup-${{ matrix.uv-source }}
           git init
           git config user.name "Test User"
           git config user.email "test@example.com"
@@ -250,12 +260,16 @@ jobs:
           EOF
           git add .
           git commit -m "Initial commit"
+          echo "Testing with uv source: ${{ matrix.uv-source }}"
           ${{ github.workspace }}/target/debug/prek run --files test.py -vvv
 
   test-python-setup-windows:
     timeout-minutes: 15
     runs-on: windows-latest
     name: "test python setup | windows"
+    strategy:
+      matrix:
+        uv-source: ["github", "pypi", "default"]
     steps:
       - uses: actions/checkout@v4
 
@@ -267,14 +281,23 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - name: "Build prek"
+      - name: "Build prek with GitHub source"
+        if: matrix.uv-source == 'github'
+        run: cargo build --features uv-source-github
+
+      - name: "Build prek with PyPI source"
+        if: matrix.uv-source == 'pypi'
+        run: cargo build --features uv-source-pypi
+
+      - name: "Build prek with default source"
+        if: matrix.uv-source == 'default'
         run: cargo build
 
       - name: "Run test"
         run: |
           cd $env:TEMP
-          mkdir python-setup
-          cd python-setup
+          mkdir python-setup-${{ matrix.uv-source }}
+          cd python-setup-${{ matrix.uv-source }}
           git init
           git config user.name "Test User"
           git config user.email "test@example.com"
@@ -291,4 +314,5 @@ jobs:
           "@ > .pre-commit-config.yaml
           git add .
           git commit -m "Initial commit"
+          echo "Testing with uv source: ${{ matrix.uv-source }}"
           & "${{ github.workspace }}/target/debug/prek" run --files test.py -vvv
