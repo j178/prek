@@ -274,7 +274,7 @@ impl InstallSource {
         download_url: &str,
     ) -> Result<()> {
         let wheel_path = target.join("whl");
-        download_and_extract(&client, download_url, &wheel_path, filename, target)
+        download_and_extract(client, download_url, &wheel_path, filename, target)
             .await
             .context("Failed to download and extract uv wheel")?;
 
