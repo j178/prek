@@ -438,7 +438,7 @@ impl Uv {
 
     pub(crate) async fn install(uv_dir: &Path) -> Result<Self> {
         // 1) Check `uv` alongside `prek` binary (e.g. `uv tool install prek --with uv`)
-        let prek_exe = std::env::current_exe()?;
+        let prek_exe = std::env::current_exe()?.canonicalize()?;
         if let Some(prek_dir) = prek_exe.parent() {
             let uv_path = prek_dir.join("uv").with_extension(EXE_EXTENSION);
             if uv_path.is_file() {
