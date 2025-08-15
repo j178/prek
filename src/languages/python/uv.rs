@@ -159,13 +159,14 @@ impl InstallSource {
 
         let client = reqwest::Client::new();
         download_and_extract(&client, &download_url, &archive_name, async |extracted| {
+            let source = extracted.join("uv").with_extension(EXE_EXTENSION);
+            let target = target.join("uv").with_extension(EXE_EXTENSION);
+
             if target.exists() {
                 debug!(target = %target.display(), "Removing existing uv");
                 fs_err::tokio::remove_dir_all(&target).await?;
             }
 
-            let source = extracted.join("uv").with_extension(EXE_EXTENSION);
-            let target = target.join("uv").with_extension(EXE_EXTENSION);
             debug!(?source, target = %target.display(), "Moving uv to target");
             // TODO: retry on Windows
             fs_err::tokio::rename(source, target).await?;
