@@ -39,6 +39,7 @@ mod printer;
 mod process;
 #[cfg(all(unix, feature = "profiler"))]
 mod profiler;
+#[cfg(not(windows))]
 mod pty;
 mod run;
 mod store;

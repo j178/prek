@@ -184,6 +184,12 @@ impl Cmd {
         Ok(output)
     }
 
+    #[cfg(windows)]
+    pub async fn pty_output(&mut self) -> Result<Output> {
+        return self.output();
+    }
+
+    #[cfg(not(windows))]
     pub async fn pty_output(&mut self) -> Result<Output> {
         async fn read_to_end(pty: &mut crate::pty::Pty) -> std::io::Result<Vec<u8>> {
             let mut buf = Vec::new();
