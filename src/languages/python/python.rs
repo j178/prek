@@ -137,6 +137,8 @@ impl LanguageImpl for Python {
         let entry = hook.entry.parsed()?;
 
         let run = async move |batch: Vec<String>| {
+            let (pty, pts) = pty_process::open()?;
+
             // TODO: combine stdout and stderr
             let mut output = Cmd::new(&entry[0], "python hook")
                 .args(&entry[1..])

@@ -61,6 +61,7 @@ itertools = { version = "0.14.0" }
 liblzma = { version = "*", features = ["static"]}
 miette = { version = "7.5.0", features = ["fancy-no-backtrace"] }
 owo-colors = { version = "4.1.0" }
+pty-process = { version = "0.5.3", features = ["async"] }
 rand = { version = "0.9.0" }
 rayon = { version = "1.10.0" }
 reqwest = { version = "0.12.9", default-features = false, features = ["http2", "stream", "json", "rustls-tls-webpki-roots"] }
@@ -82,7 +83,6 @@ tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 unicode-width = { version = "0.2.0" }
 url = { version = "2.5.2", features = ["serde"] }
 which = { version = "8.0.0" }
-ptyprocess = "0.4.1"
 
 [target.'cfg(unix)'.dependencies]
 libc = { version = "0.2.164" }
