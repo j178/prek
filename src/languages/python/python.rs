@@ -1,8 +1,11 @@
 use std::env::consts::EXE_EXTENSION;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::{join, select};
 use tracing::debug;
 
 use constants::env_vars::EnvVars;
@@ -136,24 +139,49 @@ impl LanguageImpl for Python {
         let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
         let entry = hook.entry.parsed()?;
 
-        let run = async move |batch: Vec<String>| {
-            let (pty, pts) = pty_process::open()?;
+        // TODO: use pty only when color is enabled
 
-            // TODO: combine stdout and stderr
-            let mut output = Cmd::new(&entry[0], "python hook")
+        let run = async move |batch: Vec<String>| {
+            let (mut pty, pts) = pty_process::open()?;
+            let cmd = pty_process::Command::new(&entry[0])
                 .args(&entry[1..])
                 .env("VIRTUAL_ENV", env_dir)
                 .env("PATH", &new_path)
                 .env_remove("PYTHONHOME")
                 .args(&hook.args)
-                .args(batch)
-                .check(false)
-                .output()
-                .await?;
+                .args(batch);
+            let mut child = cmd.spawn(pts)?;
 
-            output.stdout.extend(output.stderr);
-            let code = output.status.code().unwrap_or(1);
-            anyhow::Ok((code, output.stdout))
+            let mut stdout = Vec::<u8>::new();
+
+            let (status) = join!(child.wait(), pty.read_to_end())?;
+            let mut buf = vec![0; 1024];
+            loop {
+                select! {
+                    biased;
+                    status = child.wait() => {
+                        if let Err(e) = status {
+                            debug!("Child process exited with error: {e}");
+                            return Err(e.into());
+                        }
+                        break;
+                    },
+                    n = pty.read(&mut buf) => {
+                        let Ok(n) = n else {
+                            break;
+                        };
+                        if n == 0 {
+                            break; // EOF
+                        }
+                        println!("{}", String::from_utf8_lossy(&buf[..n]));
+                    },
+                }
+            }
+
+            // let status = child.wait().await?;
+            // let code = status.code().unwrap_or(1);
+
+            anyhow::Ok((0, stdout))
         };
 
         let results = run_by_batch(hook, filenames, run).await?;
