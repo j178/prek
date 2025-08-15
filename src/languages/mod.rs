@@ -298,7 +298,10 @@ async fn download_and_extract(
         .into_async_read()
         .compat();
 
-    let temp_dir = tempfile::tempdir_in(STORE.as_ref()?.scratch_path())?;
+    let scratch = STORE.as_ref()?.scratch_path();
+    fs_err::tokio::create_dir_all(scratch).await?;
+
+    let temp_dir = tempfile::tempdir_in(&scratch)?;
     debug!(url = %url, temp_dir = ?temp_dir.path(), "Downloading");
 
     let ext = ArchiveExtension::from_path(filename)?;
