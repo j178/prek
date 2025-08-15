@@ -315,5 +315,7 @@ async fn download_and_extract(
 
     callback(&extracted).await?;
 
+    fs_err::tokio::remove_dir_all(temp_dir.path()).await?;
+
     Ok(())
 }
