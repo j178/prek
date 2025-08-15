@@ -34,7 +34,7 @@ impl LanguageImpl for DockerImage {
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
-                .pty_output()
+                .output()
                 .await?;
 
             output.stdout.extend(output.stderr);
