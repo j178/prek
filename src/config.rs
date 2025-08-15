@@ -650,6 +650,7 @@ impl<'de> Deserialize<'de> for Repo {
         match repo {
             RepoLocation::Remote(url) => {
                 #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
                 struct _RemoteRepo {
                     rev: String,
                     hooks: Vec<RemoteHook>,
@@ -734,17 +735,28 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
         Err(e) => return Err(e.into()),
     };
 
+    let expected_unused = ["minimum_pre_commit_version"];
+
     let deserializer = serde_yaml::Deserializer::from_str(&content);
     let mut unused = Vec::new();
     let config: Config = serde_ignored::deserialize(deserializer, |path| {
-        if path.to_string() != "minimum_pre_commit_version" {
-            unused.push(path.to_string());
+        let key = path.to_string();
+        if !expected_unused.contains(&key.as_str()) {
+            unused.push(key);
         }
     })
     .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
 
-    for key in unused {
-        warn_user!("unexpected key '{}' in {}", key, path.display());
+    if !unused.is_empty() {
+        warn_user!(
+            "Ignored unexpected keys in `{}`: {}",
+            path.display().cyan(),
+            unused
+                .into_iter()
+                .map(|key| format!("`{}`", key.yellow()))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
 
     Ok(config)

@@ -161,7 +161,7 @@ pub(crate) async fn run(
 
         if !unmatched_ids.is_empty() {
             warn_user!(
-                "Ignoring non-existent hook ID{}: {}",
+                "Ignored non-existent hook ID{}: {}",
                 if unmatched_ids.len() > 1 { "s" } else { "" },
                 unmatched_ids
                     .iter()
