@@ -160,16 +160,16 @@ impl InstallSource {
         let client = reqwest::Client::new();
         download_and_extract(&client, &download_url, &archive_name, async |extracted| {
             let source = extracted.join("uv").with_extension(EXE_EXTENSION);
-            let target = target.join("uv").with_extension(EXE_EXTENSION);
+            let target_path = target.join("uv").with_extension(EXE_EXTENSION);
 
-            if target.exists() {
+            if target_path.exists() {
                 debug!(target = %target.display(), "Removing existing uv");
                 fs_err::tokio::remove_dir_all(&target).await?;
             }
 
-            debug!(?source, target = %target.display(), "Moving uv to target");
+            debug!(?source, target = %target_path.display(), "Moving uv to target");
             // TODO: retry on Windows
-            fs_err::tokio::rename(source, target).await?;
+            fs_err::tokio::rename(source, target_path).await?;
 
             anyhow::Ok(())
         })
@@ -298,6 +298,12 @@ impl InstallSource {
 
             // Copy the binary to the target location
             let target_path = target.join("uv").with_extension(EXE_EXTENSION);
+            if target_path.exists() {
+                debug!(target = %target.display(), "Removing existing uv");
+                fs_err::tokio::remove_dir_all(&target).await?;
+            }
+
+            debug!(?extracted_uv, target = %target_path.display(), "Moving uv to target");
             fs_err::tokio::rename(&extracted_uv, &target_path).await?;
 
             // Set executable permissions on Unix
