@@ -299,7 +299,7 @@ async fn download_and_extract(
         .compat();
 
     let scratch = STORE.as_ref()?.scratch_path();
-    fs_err::tokio::create_dir_all(scratch).await?;
+    fs_err::tokio::create_dir_all(&scratch).await?;
 
     let temp_dir = tempfile::tempdir_in(&scratch)?;
     debug!(url = %url, temp_dir = ?temp_dir.path(), "Downloading");
