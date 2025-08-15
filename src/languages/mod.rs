@@ -309,7 +309,7 @@ async fn download_and_extract(
 
     let extracted = match archive::strip_component(temp_dir.path()) {
         Ok(top_level) => top_level,
-        Err(archive::Error::NonSingularArchive(_)) => temp_dir.keep(),
+        Err(archive::Error::NonSingularArchive(_)) => temp_dir.path().to_path_buf(),
         Err(err) => return Err(err.into()),
     };
 
