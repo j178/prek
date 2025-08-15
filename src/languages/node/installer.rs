@@ -113,7 +113,7 @@ impl NodeInstaller {
         }
 
         let resolved_version = self.resolve_version(request).await?;
-        trace!(version = %resolved_version, "Installing node");
+        trace!(version = %resolved_version, "Downloading node");
 
         self.download(&resolved_version).await
     }
@@ -202,7 +202,7 @@ impl NodeInstaller {
 
         download_and_extract(&self.client, &url, &target, &filename, &self.root)
             .await
-            .context("Failed to download and extract Node.js")?;
+            .context("Failed to download and extract node")?;
 
         Ok(NodeResult::from_dir(&target).with_version(version.clone()))
     }

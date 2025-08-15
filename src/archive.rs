@@ -78,6 +78,7 @@ impl ArchiveExtension {
 
         match extension {
             "zip" => Ok(Self::Zip),
+            "whl" => Ok(Self::Zip), // Wheel files are zip files
             "tar" => Ok(Self::Tar),
             "tgz" => Ok(Self::TarGz),
             "tbz" => Ok(Self::TarBz2),

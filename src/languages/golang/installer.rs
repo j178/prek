@@ -221,7 +221,7 @@ impl GoInstaller {
 
         download_and_extract(&self.client, &url, &target, &filename, &self.root)
             .await
-            .context("Failed to download and extract Go")?;
+            .context("Failed to download and extract go")?;
 
         Ok(GoResult::from_dir(&target, false).with_version(version.clone()))
     }

@@ -3,13 +3,15 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use futures::TryStreamExt;
+use http::header::USER_AGENT;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::trace;
+use tracing::{debug, trace};
 
 use crate::archive::ArchiveExtension;
 use crate::config::Language;
 use crate::hook::{Hook, InstalledHook};
 use crate::store::Store;
+use crate::version::version;
 use crate::{archive, builtin};
 
 mod docker;
@@ -279,6 +281,7 @@ async fn download_and_extract(
 ) -> Result<()> {
     let response = client
         .get(url)
+        .header(USER_AGENT, format!("prek/{}", version()))
         .send()
         .await
         .with_context(|| format!("Failed to download file from {url}"))?;
@@ -297,7 +300,7 @@ async fn download_and_extract(
         .compat();
 
     let temp_dir = tempfile::tempdir_in(scratch)?;
-    trace!(url = %url, temp_dir = ?temp_dir.path(), "Downloading");
+    debug!(url = %url, temp_dir = ?temp_dir.path(), "Downloading");
 
     let ext = ArchiveExtension::from_path(filename)?;
     archive::unpack(tarball, ext, temp_dir.path()).await?;
@@ -309,11 +312,11 @@ async fn download_and_extract(
     };
 
     if target.is_dir() {
-        trace!(target = %target.display(), "Removing existing target");
+        debug!(target = %target.display(), "Removing existing target");
         fs_err::tokio::remove_dir_all(&target).await?;
     }
 
-    trace!(temp_dir = ?extracted, target = %target.display(), "Moving to target");
+    debug!(temp_dir = ?extracted, target = %target.display(), "Moving to target");
     // TODO: retry on Windows
     fs_err::tokio::rename(extracted, target).await?;
 
