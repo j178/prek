@@ -189,15 +189,7 @@ impl Cmd {
 
     #[cfg(not(windows))]
     pub async fn pty_output(&mut self) -> Result<Output, Error> {
-        async fn read_to_end(pty: &mut crate::pty::Pty) -> std::io::Result<Vec<u8>> {
-            use futures::io::AsyncReadExt;
-            use tokio_util::compat::TokioAsyncReadCompatExt;
-
-            let mut buf = Vec::new();
-            pty.compat().read_to_end(&mut buf).await?;
-
-            Ok(buf)
-        }
+        use tokio::io::AsyncReadExt;
 
         // If color is not used, fallback to piped output.
         if !*crate::run::USE_COLOR {
@@ -216,8 +208,44 @@ impl Cmd {
 
         let mut child = self.spawn()?;
 
-        let (status, stdout) = tokio::try_join!(child.wait(), read_to_end(&mut pty))?;
+        let mut stdout = Vec::new();
+        let mut buffer = [0u8; 4096];
 
+        let status = loop {
+            tokio::select! {
+                read_result = pty.read(&mut buffer) => {
+                    match read_result {
+                        Ok(0) => {
+                            // EOF from PTY, child should be done
+                            break child.wait().await?;
+                        }
+                        Ok(n) => {
+                            stdout.extend_from_slice(&buffer[..n]);
+                        }
+                        Err(e) => {
+                            // PTY error, try to get child status
+                            if let Ok(Some(status)) = child.try_wait() {
+                                break status;
+                            }
+                            return Err(Error::PtySetup(e));
+                        }
+                    }
+                }
+                status = child.wait() => {
+                    let status = status?;
+                    // Child finished, do one final read to get any remaining output
+                    loop {
+                        match pty.read(&mut buffer).await {
+                            Ok(0) => break, // EOF
+                            Ok(n) => stdout.extend_from_slice(&buffer[..n]),
+                            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                            Err(_) => break, // Other errors, stop reading
+                        }
+                    }
+                    break status;
+                }
+            }
+        };
         child.stdin.take();
         child.stdout.take();
         child.stderr.take();
