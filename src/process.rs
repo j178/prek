@@ -38,9 +38,6 @@ use thiserror::Error;
 use tracing::trace;
 
 use crate::git::GIT;
-use crate::run::USE_COLOR;
-
-pub type Result<T> = std::result::Result<T, Error>;
 
 /// An error from executing a Command
 #[derive(Debug, Error)]
@@ -157,14 +154,14 @@ impl Cmd {
 impl Cmd {
     /// Equivalent to [`Cmd::status`][],
     /// but doesn't bother returning the actual status code (because it's captured in the Result)
-    pub async fn run(&mut self) -> Result<()> {
+    pub async fn run(&mut self) -> Result<(), Error> {
         self.status().await?;
         Ok(())
     }
 
     /// Equivalent to [`std::process::Command::spawn`][],
     /// but logged and with the error wrapped.
-    pub fn spawn(&mut self) -> Result<tokio::process::Child> {
+    pub fn spawn(&mut self) -> Result<tokio::process::Child, Error> {
         self.log_command();
         self.inner.spawn().map_err(|cause| Error::Exec {
             summary: self.summary.clone(),
@@ -174,7 +171,7 @@ impl Cmd {
 
     /// Equivalent to [`std::process::Command::output`][],
     /// but logged, with the error wrapped, and status checked (by default)
-    pub async fn output(&mut self) -> Result<Output> {
+    pub async fn output(&mut self) -> Result<Output, Error> {
         self.log_command();
         let output = self.inner.output().await.map_err(|cause| Error::Exec {
             summary: self.summary.clone(),
@@ -185,12 +182,12 @@ impl Cmd {
     }
 
     #[cfg(windows)]
-    pub async fn pty_output(&mut self) -> Result<Output> {
-        return self.output();
+    pub async fn pty_output(&mut self) -> Result<Output, Error> {
+        return self.output().await;
     }
 
     #[cfg(not(windows))]
-    pub async fn pty_output(&mut self) -> Result<Output> {
+    pub async fn pty_output(&mut self) -> Result<Output, Error> {
         async fn read_to_end(pty: &mut crate::pty::Pty) -> std::io::Result<Vec<u8>> {
             let mut buf = Vec::new();
             tokio::io::copy(pty, &mut buf).await?;
@@ -198,7 +195,7 @@ impl Cmd {
         }
 
         // If color is not used, fallback to piped output.
-        if !*USE_COLOR {
+        if !*crate::run::USE_COLOR {
             return self.output().await;
         }
 
@@ -227,7 +224,7 @@ impl Cmd {
 
     /// Equivalent to [`std::process::Command::status`][]
     /// but logged, with the error wrapped, and status checked (by default)
-    pub async fn status(&mut self) -> Result<ExitStatus> {
+    pub async fn status(&mut self) -> Result<ExitStatus, Error> {
         self.log_command();
         let status = self.inner.status().await.map_err(|cause| Error::Exec {
             summary: self.summary.clone(),
@@ -337,7 +334,7 @@ impl Cmd {
 /// Diagnostic APIs (used internally, but available for yourself)
 impl Cmd {
     /// Check `Status::success`, producing a contextual Error if it's `false`.
-    pub fn check_status(&self, status: ExitStatus) -> Result<()> {
+    pub fn check_status(&self, status: ExitStatus) -> Result<(), Error> {
         if status.success() {
             Ok(())
         } else {
@@ -351,7 +348,7 @@ impl Cmd {
         }
     }
 
-    pub fn check_output(&self, output: &Output) -> Result<()> {
+    pub fn check_output(&self, output: &Output) -> Result<(), Error> {
         if output.status.success() {
             Ok(())
         } else {
@@ -367,7 +364,7 @@ impl Cmd {
 
     /// Invoke [`Cmd::check_status`][] if [`Cmd::check`][] is `true`
     /// (defaults to `true`).
-    pub fn maybe_check_status(&self, status: ExitStatus) -> Result<()> {
+    pub fn maybe_check_status(&self, status: ExitStatus) -> Result<(), Error> {
         if self.check_status {
             self.check_status(status)?;
         }
@@ -376,7 +373,7 @@ impl Cmd {
 
     /// Invoke [`Cmd::check_status`][] if [`Cmd::check`][] is `true`
     /// (defaults to `true`).
-    pub fn maybe_check_output(&self, output: &Output) -> Result<()> {
+    pub fn maybe_check_output(&self, output: &Output) -> Result<(), Error> {
         if self.check_status {
             self.check_output(output)?;
         }
