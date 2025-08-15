@@ -1483,3 +1483,62 @@ fn minimum_prek_version() {
       caused by: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek.
     "#);
 }
+
+/// Run hooks that would echo color.
+#[test]
+#[cfg(not(windows))]
+fn color() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+      repos:
+        - repo: local
+          hooks:
+            - id: color
+              name: color
+              language: python
+              entry: python ./color.py
+              verbose: true
+              pass_filenames: false
+  "});
+
+    let script = indoc::indoc! {r"
+      import sys
+      if sys.stdout.isatty():
+          print('\033[1;32mHello, world!\033[0m')
+      else:
+          print('Hello, world!')
+  "};
+    context.work_dir().child("color.py").write_str(script)?;
+
+    context.git_add(".");
+
+    // Run default. In integration tests, we don't have a TTY.
+    // So this prints without color.
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+  success: true
+  exit_code: 0
+  ----- stdout -----
+  color....................................................................Passed
+  - hook id: color
+  - duration: [TIME]
+    Hello, world!
+
+  ----- stderr -----
+  "#);
+
+    // Force color output
+    cmd_snapshot!(context.filters(), context.run().arg("--color=always"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    color....................................................................[42mPassed[49m
+    [2m- hook id: color[0m
+    [2m- duration: [TIME][0m
+    [2m  [1;32mHello, world![0m[0m
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
