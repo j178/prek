@@ -33,16 +33,16 @@ impl LanguageImpl for Script {
         let cmd = repo_path.join(&entry[0]);
 
         let run = async move |batch: Vec<String>| {
-            let mut command = Cmd::new(&cmd, "run script command")
+            let mut output = Cmd::new(&cmd, "run script command")
                 .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)
-                .output()
+                .pty_output()
                 .await?;
 
-            command.stdout.extend(command.stderr);
-            let code = command.status.code().unwrap_or(1);
-            anyhow::Ok((code, command.stdout))
+            output.stdout.extend(output.stderr);
+            let code = output.status.code().unwrap_or(1);
+            anyhow::Ok((code, output.stdout))
         };
 
         let results = run_by_batch(hook, filenames, run).await?;

@@ -33,17 +33,17 @@ use std::{
     process::{CommandArgs, CommandEnvs, ExitStatus, Stdio},
 };
 
-use miette::Diagnostic;
 use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::trace;
 
 use crate::git::GIT;
+use crate::run::USE_COLOR;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// An error from executing a Command
-#[derive(Debug, Error, Diagnostic)]
+#[derive(Debug, Error)]
 pub enum Error {
     /// The command fundamentally failed to execute (usually means it didn't exist)
     #[error("run command `{summary}` failed")]
@@ -56,6 +56,10 @@ pub enum Error {
     },
     #[error("command `{summary}` exited with an error:\n{error}")]
     Status { summary: String, error: StatusError },
+    #[error("failed to open pty")]
+    Pty(#[from] crate::pty::Error),
+    #[error("failed to setup subprocess for pty")]
+    PtySetup(#[from] std::io::Error),
 }
 
 /// The command ran but signaled some kind of error condition
@@ -176,6 +180,41 @@ impl Cmd {
             summary: self.summary.clone(),
             cause,
         })?;
+        self.maybe_check_output(&output)?;
+        Ok(output)
+    }
+
+    pub async fn pty_output(&mut self) -> Result<Output> {
+        async fn read_to_end(pty: &mut crate::pty::Pty) -> std::io::Result<Vec<u8>> {
+            let mut buf = Vec::new();
+            tokio::io::copy(pty, &mut buf).await?;
+            Ok(buf)
+        }
+
+        // If color is not used, fallback to piped output.
+        if !*USE_COLOR {
+            return self.output().await;
+        }
+
+        let (mut pty, pts) = crate::pty::open()?;
+        let (stdin, stdout, stderr) = pts.0.setup_subprocess()?;
+
+        self.inner.stdin(stdin);
+        self.inner.stdout(stdout);
+        self.inner.stderr(stderr);
+
+        let session_leader = pts.0.session_leader();
+        unsafe { self.inner.pre_exec(session_leader) };
+
+        let mut child = self.spawn()?;
+
+        let (status, stdout) = tokio::try_join!(child.wait(), read_to_end(&mut pty),)?;
+        let output = Output {
+            status,
+            stdout,
+            stderr: Vec::new(),
+        };
+
         self.maybe_check_output(&output)?;
         Ok(output)
     }

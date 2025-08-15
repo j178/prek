@@ -4,7 +4,6 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use anstream::ColorChoice;
 use anyhow::{Context, Result};
 use fancy_regex::Regex;
 use tracing::trace;
@@ -13,7 +12,7 @@ use crate::fs::CWD;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
-use crate::run::run_by_batch;
+use crate::run::{USE_COLOR, run_by_batch};
 use crate::store::Store;
 
 const PRE_COMMIT_LABEL: &str = "PRE_COMMIT";
@@ -140,11 +139,8 @@ impl Docker {
         let mut command = Cmd::new("docker", "run container");
         command.arg("run").arg("--rm");
 
-        match ColorChoice::global() {
-            ColorChoice::Always | ColorChoice::AlwaysAnsi => {
-                command.arg("--tty");
-            }
-            _ => {}
+        if *USE_COLOR {
+            command.arg("--tty");
         }
 
         // Run as a non-root user
@@ -217,16 +213,17 @@ impl LanguageImpl for Docker {
         let run = async move |batch: Vec<String>| {
             // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
             let mut cmd = Docker::docker_run_cmd().await?;
-            let cmd = cmd
+            let mut output = cmd
                 .arg("--entrypoint")
                 .arg(&entry[0])
                 .arg(&docker_tag)
                 .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)
-                .check(false);
+                .check(false)
+                .pty_output()
+                .await?;
 
-            let mut output = cmd.output().await?;
             output.stdout.extend(output.stderr);
             let code = output.status.code().unwrap_or(1);
             anyhow::Ok((code, output.stdout))

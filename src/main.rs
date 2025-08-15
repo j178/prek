@@ -22,6 +22,7 @@ use crate::cli::{Cli, Command, ExitStatus};
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::git::get_root;
 use crate::printer::Printer;
+use crate::run::USE_COLOR;
 use crate::store::STORE;
 
 mod archive;
@@ -38,6 +39,7 @@ mod printer;
 mod process;
 #[cfg(all(unix, feature = "profiler"))]
 mod profiler;
+mod pty;
 mod run;
 mod store;
 mod version;
@@ -60,13 +62,6 @@ pub(crate) enum Level {
 }
 
 fn setup_logging(level: Level) -> Result<()> {
-    let ansi = match anstream::Stderr::choice(&std::io::stderr()) {
-        ColorChoice::Always | ColorChoice::AlwaysAnsi => true,
-        ColorChoice::Never => false,
-        // We just asked anstream for a choice, that can't be auto
-        ColorChoice::Auto => unreachable!(),
-    };
-
     let directive = match level {
         Level::Default | Level::Verbose => LevelFilter::OFF.into(),
         Level::Debug => Directive::from_str("prek=debug")?,
@@ -81,7 +76,7 @@ fn setup_logging(level: Level) -> Result<()> {
     let stderr_format = tracing_subscriber::fmt::format()
         .with_target(false)
         .without_time()
-        .with_ansi(ansi);
+        .with_ansi(*USE_COLOR);
     let stderr_layer = tracing_subscriber::fmt::layer()
         .event_format(stderr_format)
         .with_writer(anstream::stderr)

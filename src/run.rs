@@ -3,12 +3,22 @@ use std::ffi::OsString;
 use std::path::Path;
 use std::sync::LazyLock;
 
+use anstream::ColorChoice;
 use futures::StreamExt;
 use tracing::trace;
 
 use constants::env_vars::EnvVars;
 
 use crate::hook::Hook;
+
+pub(crate) static USE_COLOR: LazyLock<bool> = LazyLock::new(|| {
+    match anstream::Stderr::choice(&std::io::stderr()) {
+        ColorChoice::Always | ColorChoice::AlwaysAnsi => true,
+        ColorChoice::Never => false,
+        // We just asked anstream for a choice, that can't be auto
+        ColorChoice::Auto => unreachable!(),
+    }
+});
 
 pub(crate) static CONCURRENCY: LazyLock<usize> = LazyLock::new(|| {
     if EnvVars::is_set(EnvVars::PREK_NO_CONCURRENCY) {

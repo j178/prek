@@ -8,7 +8,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use anstream::ColorChoice;
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
 use indoc::indoc;
@@ -30,6 +29,7 @@ use crate::config::{Language, Stage};
 use crate::fs::Simplified;
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::{Printer, Stdout};
+use crate::run::USE_COLOR;
 use crate::store::{STORE, Store};
 use crate::workspace::Project;
 use crate::{git, warn_user};
@@ -575,10 +575,10 @@ async fn run_hooks(
 
     if !success && show_diff_on_failure {
         writeln!(printer.stdout(), "All changes made by hooks:")?;
-        let color = match ColorChoice::global() {
-            ColorChoice::Auto => "--color=auto",
-            ColorChoice::Always | ColorChoice::AlwaysAnsi => "--color=always",
-            ColorChoice::Never => "--color=never",
+        let color = if *USE_COLOR {
+            "--color=always"
+        } else {
+            "--color=never"
         };
         git::git_cmd("git diff")?
             .arg("--no-pager")

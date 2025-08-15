@@ -29,13 +29,14 @@ impl LanguageImpl for DockerImage {
         let entry = hook.entry.parsed()?;
         let run = async move |batch: Vec<String>| {
             let mut cmd = Docker::docker_run_cmd().await?;
-            let cmd = cmd
+            let mut output = cmd
                 .args(&entry[..])
                 .args(&hook.args)
                 .args(batch)
-                .check(false);
+                .check(false)
+                .pty_output()
+                .await?;
 
-            let mut output = cmd.output().await?;
             output.stdout.extend(output.stderr);
             let code = output.status.code().unwrap_or(1);
             anyhow::Ok((code, output.stdout))

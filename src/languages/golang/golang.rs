@@ -128,7 +128,7 @@ impl LanguageImpl for Golang {
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
-                .output()
+                .pty_output()
                 .await?;
 
             output.stdout.extend(output.stderr);
