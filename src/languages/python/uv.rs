@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use http::header::{ACCEPT, USER_AGENT};
-use semver::Version;
+use semver::{Version, VersionReq};
 use target_lexicon::{Architecture, ArmArchitecture, HOST, OperatingSystem};
 use tokio::task::JoinSet;
 use tracing::{debug, trace, warn};
@@ -21,7 +21,8 @@ use crate::version;
 
 // The version range of `uv` we will install. Should update periodically.
 const CUR_UV_VERSION: &str = "0.8.6";
-const UV_VERSION_RANGE: &str = ">=0.7.0, <0.9.0";
+static UV_VERSION_RANGE: LazyLock<VersionReq> =
+    LazyLock::new(|| VersionReq::parse(">=0.7.0, <0.9.0").unwrap());
 
 // Get the uv wheel platform tag for the current host.
 fn get_wheel_platform_tag() -> Result<String> {
@@ -85,17 +86,16 @@ fn get_uv_version(uv_path: &Path) -> Result<Version> {
 }
 
 static UV_EXE: LazyLock<Option<(PathBuf, Version)>> = LazyLock::new(|| {
-    let version_range = semver::VersionReq::parse(UV_VERSION_RANGE).ok()?;
-
     for uv_path in which::which_all("uv").ok()? {
         debug!("Found uv in PATH: {}", uv_path.display());
 
         if let Ok(version) = get_uv_version(&uv_path) {
-            if version_range.matches(&version) {
+            if UV_VERSION_RANGE.matches(&version) {
                 return Some((uv_path, version));
             }
             warn!(
-                "Skip system uv version `{version}` — expected a version range: `{version_range}`."
+                "Skip system uv version `{version}` — expected a version range: `{}`",
+                &*UV_VERSION_RANGE
             );
         }
     }
@@ -442,8 +442,16 @@ impl Uv {
         if let Some(prek_dir) = prek_exe.parent() {
             let uv_path = prek_dir.join("uv").with_extension(EXE_EXTENSION);
             if uv_path.is_file() {
-                trace!(uv = %uv_path.display(), "Found uv alongside prek binary");
-                return Ok(Self::new(uv_path));
+                if let Ok(version) = get_uv_version(&uv_path) {
+                    if UV_VERSION_RANGE.matches(&version) {
+                        trace!(uv = %uv_path.display(), "Found compatible uv alongside prek binary");
+                        return Ok(Self::new(uv_path));
+                    }
+                    warn!(
+                        "Skip uv version `{version}` alongside prek binary — expected a version range: `{}`",
+                        &*UV_VERSION_RANGE
+                    );
+                }
             }
         }
 
