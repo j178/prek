@@ -234,15 +234,14 @@ impl Cmd {
                 status = child.wait() => {
                     let status = status?;
                     // Child finished, do one final read to get any remaining output
-                    // The `read` below would block on Linux, I don't know why.
-                    // loop {
-                    //     match pty.read(&mut buffer).await {
-                    //         Ok(0) => break, // EOF
-                    //         Ok(n) => stdout.extend_from_slice(&buffer[..n]),
-                    //         Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
-                    //         Err(_) => break, // Other errors, stop reading
-                    //     }
-                    // }
+                    loop {
+                        match pty.read(&mut buffer).await {
+                            Ok(0) => break, // EOF
+                            Ok(n) => stdout.extend_from_slice(&buffer[..n]),
+                            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                            Err(_) => break, // Other errors, stop reading
+                        }
+                    }
                     break status;
                 }
             }

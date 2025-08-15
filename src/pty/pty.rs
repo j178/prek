@@ -290,6 +290,10 @@ fn poll_read(
         match guard.try_io(|inner| inner.get_ref().read_buf(b)) {
             Ok(Ok((filled, _unfilled))) => {
                 let bytes = filled.len();
+                // Check for EOF
+                if bytes == 0 {
+                    return std::task::Poll::Ready(Ok(()));
+                }
                 // SAFETY: read_buf is given a buffer that starts at the end
                 // of the filled section, and then both initializes and fills
                 // some amount of the buffer after that (and never
@@ -303,7 +307,14 @@ fn poll_read(
                 return std::task::Poll::Ready(Ok(()));
             }
             Ok(Err(e)) => return std::task::Poll::Ready(Err(e)),
-            Err(_would_block) => {}
+            Err(_would_block) => {
+                // Add a check to prevent infinite loops
+                // If the buffer is empty and we get WouldBlock repeatedly,
+                // it might indicate the PTY is closed
+                if buf.remaining() == 0 {
+                    return std::task::Poll::Ready(Ok(()));
+                }
+            }
         }
     }
 }
