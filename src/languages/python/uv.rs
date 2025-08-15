@@ -437,7 +437,17 @@ impl Uv {
     }
 
     pub(crate) async fn install(uv_dir: &Path) -> Result<Self> {
-        // 1) Check if system `uv` meets minimum version requirement
+        // 1) Check `uv` alongside `prek` binary (e.g. `uv tool install prek --with uv`)
+        let prek_exe = std::env::current_exe()?;
+        if let Some(prek_dir) = prek_exe.parent() {
+            let uv_path = prek_dir.join("uv").with_extension(EXE_EXTENSION);
+            if uv_path.is_file() {
+                trace!(uv = %uv_path.display(), "Found uv alongside prek binary");
+                return Ok(Self::new(uv_path));
+            }
+        }
+
+        // 2) Check if system `uv` meets minimum version requirement
         if let Some((uv_path, version)) = UV_EXE.as_ref() {
             trace!(
                 "Using system uv version {} at {}",
@@ -447,7 +457,7 @@ impl Uv {
             return Ok(Self::new(uv_path.clone()));
         }
 
-        // 2) Use or install managed `uv`
+        // 3) Use or install managed `uv`
         let uv_path = uv_dir.join("uv").with_extension(EXE_EXTENSION);
 
         if uv_path.is_file() {
