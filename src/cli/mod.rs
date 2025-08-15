@@ -20,6 +20,7 @@ mod list;
 mod reporter;
 pub mod run;
 mod sample_config;
+#[cfg(feature = "self-update")]
 mod self_update;
 mod validate;
 
@@ -29,6 +30,7 @@ pub(crate) use install::{init_template_dir, install, install_hooks, uninstall};
 pub(crate) use list::list;
 pub(crate) use run::run;
 pub(crate) use sample_config::sample_config;
+#[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use validate::{validate_configs, validate_manifest};
 

@@ -17,7 +17,9 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
 use crate::cleanup::cleanup;
-use crate::cli::{Cli, Command, ExitStatus, SelfCommand, SelfNamespace, SelfUpdateArgs};
+use crate::cli::{Cli, Command, ExitStatus};
+#[cfg(feature = "self-update")]
+use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::git::get_root;
 use crate::printer::Printer;
 use crate::store::STORE;
@@ -290,6 +292,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             Ok(cli::validate_manifest(args.manifests))
         }
         Command::SampleConfig(args) => cli::sample_config(args.file, printer),
+        #[cfg(feature = "self-update")]
         Command::Self_(SelfNamespace {
             command:
                 SelfCommand::Update(SelfUpdateArgs {
@@ -297,6 +300,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     token,
                 }),
         }) => cli::self_update(target_version, token, printer).await,
+        #[cfg(not(feature = "self-update"))]
+        Command::Self_(_) => {
+            anyhow::bail!(
+                "prek was installed through an external package manager, and self-update \
+                is not available. Please use your package manager to update prek."
+            );
+        }
+
         Command::GenerateShellCompletion(args) => {
             show_settings!(args);
 
