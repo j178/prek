@@ -53,6 +53,7 @@ pub enum Error {
     },
     #[error("command `{summary}` exited with an error:\n{error}")]
     Status { summary: String, error: StatusError },
+    #[cfg(not(windows))]
     #[error("failed to open pty")]
     Pty(#[from] crate::pty::Error),
     #[error("failed to setup subprocess for pty")]
