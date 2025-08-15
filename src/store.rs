@@ -155,6 +155,11 @@ impl Store {
         self.path.join("cache").join(tool.as_str())
     }
 
+    /// Scratch path for temporary files.
+    pub(crate) fn scratch_path(&self) -> PathBuf {
+        self.path.join("scratch")
+    }
+
     pub(crate) fn log_file(&self) -> PathBuf {
         self.path.join("prek.log")
     }

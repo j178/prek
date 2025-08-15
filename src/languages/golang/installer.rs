@@ -219,9 +219,20 @@ impl GoInstaller {
         let url = format!("https://go.dev/dl/{filename}");
         let target = self.root.join(version.to_string());
 
-        download_and_extract(&self.client, &url, &target, &filename, &self.root)
-            .await
-            .context("Failed to download and extract go")?;
+        download_and_extract(&self.client, &url, &filename, async |extracted| {
+            if target.exists() {
+                debug!(target = %target.display(), "Removing existing go");
+                fs_err::tokio::remove_dir_all(&target).await?;
+            }
+
+            debug!(?extracted, target = %target.display(), "Moving go to target");
+            // TODO: retry on Windows
+            fs_err::tokio::rename(extracted, &target).await?;
+
+            anyhow::Ok(())
+        })
+        .await
+        .context("Failed to download and extract go")?;
 
         Ok(GoResult::from_dir(&target, false).with_version(version.clone()))
     }

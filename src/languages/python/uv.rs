@@ -158,9 +158,22 @@ impl InstallSource {
         );
 
         let client = reqwest::Client::new();
-        download_and_extract(&client, &download_url, target, &archive_name, target)
-            .await
-            .context("Failed to download and extra uv")?;
+        download_and_extract(&client, &download_url, &archive_name, async |extracted| {
+            if target.exists() {
+                debug!(target = %target.display(), "Removing existing uv");
+                fs_err::tokio::remove_dir_all(&target).await?;
+            }
+
+            let source = extracted.join("uv").with_extension(EXE_EXTENSION);
+            let target = target.join("uv").with_extension(EXE_EXTENSION);
+            debug!(?source, target = %target.display(), "Moving uv to target");
+            // TODO: retry on Windows
+            fs_err::tokio::rename(source, target).await?;
+
+            anyhow::Ok(())
+        })
+        .await
+        .context("Failed to download and extra uv")?;
 
         Ok(())
     }
@@ -273,35 +286,33 @@ impl InstallSource {
         filename: &str,
         download_url: &str,
     ) -> Result<()> {
-        let wheel_path = target.join("whl");
-        download_and_extract(client, download_url, &wheel_path, filename, target)
-            .await
-            .context("Failed to download and extract uv wheel")?;
+        download_and_extract(client, download_url, filename, async |extracted| {
+            // Find the uv binary in the extracted contents
+            let data_dir = format!("uv-{CUR_UV_VERSION}.data");
+            let extracted_uv = extracted
+                .join(data_dir)
+                .join("scripts")
+                .join("uv")
+                .with_extension(EXE_EXTENSION);
 
-        // Find the uv binary in the extracted contents
-        let data_dir = format!("uv-{CUR_UV_VERSION}.data");
-        let extracted_uv = wheel_path
-            .join(data_dir)
-            .join("scripts")
-            .join("uv")
-            .with_extension(EXE_EXTENSION);
+            // Copy the binary to the target location
+            let target_path = target.join("uv").with_extension(EXE_EXTENSION);
+            fs_err::tokio::rename(&extracted_uv, &target_path).await?;
 
-        // Copy the binary to the target location
-        let target_path = target.join("uv").with_extension(EXE_EXTENSION);
-        fs_err::tokio::rename(&extracted_uv, &target_path).await?;
+            // Set executable permissions on Unix
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let metadata = fs_err::tokio::metadata(&target_path).await?;
+                let mut perms = metadata.permissions();
+                perms.set_mode(0o755);
+                fs_err::tokio::set_permissions(&target_path, perms).await?;
+            }
 
-        // Remove the wheel directory
-        fs_err::tokio::remove_dir_all(wheel_path).await?;
-
-        // Set executable permissions on Unix
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let metadata = fs_err::tokio::metadata(&target_path).await?;
-            let mut perms = metadata.permissions();
-            perms.set_mode(0o755);
-            fs_err::tokio::set_permissions(&target_path, perms).await?;
-        }
+            Ok(())
+        })
+        .await
+        .context("Failed to download and extract uv wheel")?;
 
         Ok(())
     }

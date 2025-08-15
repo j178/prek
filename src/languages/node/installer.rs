@@ -200,9 +200,20 @@ impl NodeInstaller {
         let url = format!("https://nodejs.org/dist/v{}/{filename}", version.version());
         let target = self.root.join(version.to_string());
 
-        download_and_extract(&self.client, &url, &target, &filename, &self.root)
-            .await
-            .context("Failed to download and extract node")?;
+        download_and_extract(&self.client, &url, &filename, async |extracted| {
+            if target.exists() {
+                debug!(target = %target.display(), "Removing existing node");
+                fs_err::tokio::remove_dir_all(&target).await?;
+            }
+
+            debug!(?extracted, target = %target.display(), "Moving node to target");
+            // TODO: retry on Windows
+            fs_err::tokio::rename(extracted, &target).await?;
+
+            anyhow::Ok(())
+        })
+        .await
+        .context("Failed to download and extract node")?;
 
         Ok(NodeResult::from_dir(&target).with_version(version.clone()))
     }

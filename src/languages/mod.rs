@@ -10,7 +10,7 @@ use tracing::{debug, trace};
 use crate::archive::ArchiveExtension;
 use crate::config::Language;
 use crate::hook::{Hook, InstalledHook};
-use crate::store::Store;
+use crate::store::{STORE, Store};
 use crate::version::version;
 use crate::{archive, builtin};
 
@@ -275,9 +275,8 @@ async fn create_symlink_or_copy(source: &Path, target: &Path) -> Result<()> {
 async fn download_and_extract(
     client: &reqwest::Client,
     url: &str,
-    target: &Path,
     filename: &str,
-    scratch: &Path,
+    callback: impl AsyncFn(&Path) -> Result<()>,
 ) -> Result<()> {
     let response = client
         .get(url)
@@ -299,7 +298,7 @@ async fn download_and_extract(
         .into_async_read()
         .compat();
 
-    let temp_dir = tempfile::tempdir_in(scratch)?;
+    let temp_dir = tempfile::tempdir_in(STORE.as_ref()?.scratch_path())?;
     debug!(url = %url, temp_dir = ?temp_dir.path(), "Downloading");
 
     let ext = ArchiveExtension::from_path(filename)?;
@@ -311,14 +310,7 @@ async fn download_and_extract(
         Err(err) => return Err(err.into()),
     };
 
-    if target.is_dir() {
-        debug!(target = %target.display(), "Removing existing target");
-        fs_err::tokio::remove_dir_all(&target).await?;
-    }
-
-    debug!(temp_dir = ?extracted, target = %target.display(), "Moving to target");
-    // TODO: retry on Windows
-    fs_err::tokio::rename(extracted, target).await?;
+    callback(&extracted).await?;
 
     Ok(())
 }
