@@ -190,8 +190,12 @@ impl Cmd {
     #[cfg(not(windows))]
     pub async fn pty_output(&mut self) -> Result<Output, Error> {
         async fn read_to_end(pty: &mut crate::pty::Pty) -> std::io::Result<Vec<u8>> {
+            use futures::io::AsyncReadExt;
+            use tokio_util::compat::TokioAsyncReadCompatExt;
+
             let mut buf = Vec::new();
-            tokio::io::copy(pty, &mut buf).await?;
+            pty.compat().read_to_end(&mut buf).await?;
+
             Ok(buf)
         }
 
@@ -212,7 +216,12 @@ impl Cmd {
 
         let mut child = self.spawn()?;
 
-        let (status, stdout) = tokio::try_join!(child.wait(), read_to_end(&mut pty),)?;
+        let (status, stdout) = tokio::try_join!(child.wait(), read_to_end(&mut pty))?;
+
+        child.stdin.take();
+        child.stdout.take();
+        child.stderr.take();
+
         let output = Output {
             status,
             stdout,
