@@ -26,7 +26,7 @@ impl LanguageImpl for System {
         filenames: &[&String],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
-        let entry = hook.entry.parsed()?;
+        let entry = hook.entry.resolve(None)?;
 
         let run = async move |batch: Vec<String>| {
             let mut output = Cmd::new(&entry[0], "run system command")

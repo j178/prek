@@ -73,7 +73,7 @@ pub(crate) async fn fix_trailing_whitespace(
     hook: &Hook,
     filenames: &[&String],
 ) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.parsed()?.iter().chain(&hook.args))?;
+    let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
 
     let force_markdown = args.force_markdown();
     let markdown_exts = args.markdown_exts()?;

@@ -28,7 +28,7 @@ impl LanguageImpl for Script {
         filenames: &[&String],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
-        let entry = hook.entry.parsed()?;
+        let entry = hook.entry.resolve(None)?;
         let repo_path = hook.repo_path().unwrap_or_else(|| CWD.as_path());
         let cmd = repo_path.join(&entry[0]);
 

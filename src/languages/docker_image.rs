@@ -26,7 +26,7 @@ impl LanguageImpl for DockerImage {
         filenames: &[&String],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
-        let entry = hook.entry.parsed()?;
+        let entry = hook.entry.resolve(None)?;
         let run = async move |batch: Vec<String>| {
             let mut cmd = Docker::docker_run_cmd().await?;
             let mut output = cmd

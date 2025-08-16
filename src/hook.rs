@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
@@ -17,6 +18,7 @@ use crate::config::{
     self, Config, HookOptions, Language, LocalHook, MANIFEST_FILE, ManifestHook, MetaHook,
     RemoteHook, SerdeRegex, Stage, read_manifest,
 };
+use crate::languages::resolve_command;
 use crate::languages::version::LanguageRequest;
 use crate::store::Store;
 
@@ -325,11 +327,13 @@ impl Entry {
         Self { hook, entry }
     }
 
-    pub(crate) fn parsed(&self) -> Result<Vec<String>, Error> {
-        shlex::split(&self.entry).ok_or_else(|| Error::InvalidHook {
+    pub(crate) fn resolve(&self, env_path: Option<&OsStr>) -> Result<Vec<String>, Error> {
+        let split = shlex::split(&self.entry).ok_or_else(|| Error::InvalidHook {
             hook: self.hook.clone(),
             error: anyhow::anyhow!("Failed to parse entry `{}` as commands", &self.entry),
-        })
+        })?;
+
+        Ok(resolve_command(&split, env_path))
     }
 
     pub(crate) fn entry(&self) -> &str {

@@ -132,7 +132,7 @@ impl LanguageImpl for Node {
         let env_dir = hook.env_path().expect("Node must have env path");
         let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
 
-        let entry = hook.entry.parsed()?;
+        let entry = hook.entry.resolve(Some(&new_path))?;
         let run = async move |batch: Vec<String>| {
             // Npm install scripts as `xxx.cmd` on Windows, we use `which::which` find the
             // real command name `xxx.cmd` from `xxx`.

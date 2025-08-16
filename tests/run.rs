@@ -1542,3 +1542,46 @@ fn color() -> Result<()> {
 
     Ok(())
 }
+
+/// Test running hook whose `entry` is script with shebang on Windows.
+#[test]
+fn shebang_script() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Create a script with shebang.
+    let script = indoc::indoc! {r"
+        #!/usr/bin/env python
+        import sys
+        print('Hello, world!')
+        sys.exit(0)
+    "};
+    context.work_dir().child("script.py").write_str(script)?;
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+      repos:
+        - repo: local
+          hooks:
+            - id: shebang-script
+              name: shebang-script
+              language: python
+              entry: script.py
+              verbose: true
+              pass_filenames: false
+              always_run: true
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+    shebang-script...........................................................
+    ----- stderr -----
+    error: Failed to run hook `shebang-script`
+      caused by: run command `python hook` failed
+      caused by: No such file or directory (os error 2)
+    "#);
+
+    Ok(())
+}

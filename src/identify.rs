@@ -828,7 +828,7 @@ fn tags_from_interpreter(interpreter: &str) -> Vec<&'static str> {
 }
 
 #[derive(thiserror::Error, Debug)]
-enum ShebangError {
+pub(crate) enum ShebangError {
     #[error("No shebang found")]
     NoShebang,
     #[error("Shebang contains non-printable characters")]
@@ -845,7 +845,7 @@ fn starts_with(slice: &[String], prefix: &[&str]) -> bool {
     slice.len() >= prefix.len() && slice.iter().zip(prefix.iter()).all(|(s, p)| s == p)
 }
 
-fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
+pub(crate) fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
     let file = std::fs::File::open(path)?;
     let mut reader = std::io::BufReader::new(file);
     let mut line = String::new();
@@ -855,20 +855,24 @@ fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
     }
 
     // Require only printable ASCII
-    if line.bytes().any(|b| !(0x20..=0x7E).contains(&b)) {
+    if line
+        .bytes()
+        .any(|b| !(0x20..=0x7E).contains(&b) && !(0x09..=0x0D).contains(&b))
+    {
         return Err(ShebangError::NonPrintableChars);
     }
 
     let mut tokens = shlex::split(line[2..].trim()).ok_or(ShebangError::ParseFailed)?;
-    let cmd = if starts_with(&tokens, &["/usr/bin/env", "-S"]) {
-        tokens.drain(0..2);
-        tokens
-    } else if starts_with(&tokens, &["/usr/bin/env"]) {
-        tokens.drain(0..1);
-        tokens
-    } else {
-        tokens
-    };
+    let cmd =
+        if starts_with(&tokens, &["/usr/bin/env", "-S"]) || starts_with(&tokens, &["env", "-S"]) {
+            tokens.drain(0..2);
+            tokens
+        } else if starts_with(&tokens, &["/usr/bin/env"]) || starts_with(&tokens, &["env"]) {
+            tokens.drain(0..1);
+            tokens
+        } else {
+            tokens
+        };
     if cmd.is_empty() {
         return Err(ShebangError::NoCommand);
     }

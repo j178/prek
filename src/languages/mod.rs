@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -9,7 +10,9 @@ use tracing::{debug, trace};
 
 use crate::archive::ArchiveExtension;
 use crate::config::Language;
+use crate::fs::CWD;
 use crate::hook::{Hook, InstalledHook};
+use crate::identify::parse_shebang;
 use crate::store::{STORE, Store};
 use crate::version::version;
 use crate::{archive, builtin};
@@ -199,6 +202,31 @@ impl Language {
             _ => UNIMPLEMENTED.run(hook, filenames, store).await,
         }
     }
+}
+
+pub(crate) fn resolve_command(cmds: &[String], env_path: Option<&OsStr>) -> Vec<String> {
+    let entry = &cmds[0];
+    let exe_path = match which::which_in(entry, env_path, &*CWD) {
+        Ok(p) => p,
+        Err(_) => PathBuf::from(entry),
+    };
+
+    let mut new_entry = match parse_shebang(&exe_path) {
+        Ok(mut interpreter) => {
+            // Resolve the interpreter path, convert "python3" to "python3.exe" on Windows
+            if let Ok(p) = which::which_in(&interpreter[0], env_path, &*CWD) {
+                interpreter[0] = p.to_string_lossy().to_string();
+            }
+            interpreter.push(exe_path.to_string_lossy().to_string());
+            interpreter
+        }
+        Err(_) => {
+            vec![exe_path.to_string_lossy().to_string()]
+        }
+    };
+
+    new_entry.extend_from_slice(&cmds[1..]);
+    new_entry
 }
 
 /// Create a symlink or copy the file on Windows.

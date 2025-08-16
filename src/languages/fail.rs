@@ -24,7 +24,7 @@ impl LanguageImpl for Fail {
         filenames: &[&String],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
-        let mut out = shlex::try_join(hook.entry.parsed()?.iter().map(std::ops::Deref::deref))
+        let mut out = shlex::try_join(hook.entry.resolve(None)?.iter().map(std::ops::Deref::deref))
             .expect("Failed to join `entry` as command")
             .into_bytes();
         out.extend(b"\n\n");
