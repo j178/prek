@@ -265,7 +265,7 @@ fn multiple_hook_ids() {
     ----- stdout -----
 
     ----- stderr -----
-    No hook found with id `nonexistent-hook` in stage `pre-commit`
+    error: No hook found with id `nonexistent-hook` in stage `pre-commit`
     "#);
 
     // Multiple hook_ids match nothing
@@ -275,7 +275,7 @@ fn multiple_hook_ids() {
     ----- stdout -----
 
     ----- stderr -----
-    No hooks found with ids `nonexistent-hook`, `nonexistent-hook-2` in stage `pre-commit`
+    error: No hooks found with ids `nonexistent-hook`, `nonexistent-hook-2` in stage `pre-commit`
     "#);
 
     // Hook-id matches one hook
@@ -353,8 +353,7 @@ fn config_not_staged() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Your pre-commit configuration file is not staged.
-    Run `git add .pre-commit-config.yaml` to fix this.
+    error: prek configuration file is not staged, run `git add .pre-commit-config.yaml` to stage it
     "#);
 
     Ok(())
@@ -1039,7 +1038,7 @@ fn merge_conflicts() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    You have unmerged paths. Resolve them before running prek.
+    error: You have unmerged paths. Resolve them before running prek
     "#);
 
     // Fix the conflict and run again.
