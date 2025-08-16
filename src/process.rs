@@ -233,8 +233,10 @@ impl Cmd {
                 }
                 status = child.wait() => {
                     let status = status?;
+                    // On linux, after child exited, the pty `AsyncFd.poll_read_ready` will hang immediately.
+                    // Don't know why, so commenting this out for now.
+
                     // Child finished, do one final read to get any remaining output
-                    // The `read` below would block on Linux, I don't know why.
                     // loop {
                     //     match pty.read(&mut buffer).await {
                     //         Ok(0) => break, // EOF
