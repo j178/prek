@@ -333,7 +333,7 @@ impl Entry {
             error: anyhow::anyhow!("Failed to parse entry `{}` as commands", &self.entry),
         })?;
 
-        Ok(resolve_command(&split, env_path))
+        Ok(resolve_command(split, env_path))
     }
 
     pub(crate) fn entry(&self) -> &str {

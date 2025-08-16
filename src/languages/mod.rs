@@ -204,29 +204,25 @@ impl Language {
     }
 }
 
-pub(crate) fn resolve_command(cmds: &[String], env_path: Option<&OsStr>) -> Vec<String> {
+pub(crate) fn resolve_command(mut cmds: Vec<String>, env_path: Option<&OsStr>) -> Vec<String> {
     let entry = &cmds[0];
     let exe_path = match which::which_in(entry, env_path, &*CWD) {
         Ok(p) => p,
         Err(_) => PathBuf::from(entry),
     };
 
-    let mut new_entry = match parse_shebang(&exe_path) {
-        Ok(mut interpreter) => {
-            // Resolve the interpreter path, convert "python3" to "python3.exe" on Windows
-            if let Ok(p) = which::which_in(&interpreter[0], env_path, &*CWD) {
-                interpreter[0] = p.to_string_lossy().to_string();
-            }
-            interpreter.push(exe_path.to_string_lossy().to_string());
-            interpreter
+    if let Ok(mut interpreter) = parse_shebang(&exe_path) {
+        // Resolve the interpreter path, convert "python3" to "python3.exe" on Windows
+        if let Ok(p) = which::which_in(&interpreter[0], env_path, &*CWD) {
+            interpreter[0] = p.to_string_lossy().to_string();
         }
-        Err(_) => {
-            vec![exe_path.to_string_lossy().to_string()]
-        }
-    };
-
-    new_entry.extend_from_slice(&cmds[1..]);
-    new_entry
+        interpreter.push(exe_path.to_string_lossy().to_string());
+        interpreter.extend_from_slice(&cmds[1..]);
+        interpreter
+    } else {
+        cmds[0] = exe_path.to_string_lossy().to_string();
+        cmds
+    }
 }
 
 /// Create a symlink or copy the file on Windows.
