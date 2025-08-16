@@ -134,21 +134,7 @@ impl LanguageImpl for Node {
 
         let entry = hook.entry.resolve(Some(&new_path))?;
         let run = async move |batch: Vec<String>| {
-            // Npm install scripts as `xxx.cmd` on Windows, we use `which::which` find the
-            // real command name `xxx.cmd` from `xxx`.
-            let mut cmd = if cfg!(windows) {
-                if let Some(path) = which::which_in_global(&entry[0], Some(&new_path))
-                    .map_or(None, |mut p| p.next())
-                {
-                    Cmd::new(path, "node hook")
-                } else {
-                    Cmd::new(&entry[0], "node hook")
-                }
-            } else {
-                Cmd::new(&entry[0], "node hook")
-            };
-
-            let mut output = cmd
+            let mut output = Cmd::new(&entry[0], "node hook")
                 .args(&entry[1..])
                 .env("PATH", &new_path)
                 .env(EnvVars::NPM_CONFIG_PREFIX, env_dir)
