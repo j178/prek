@@ -53,7 +53,6 @@ fs-err = { version = "3.1.0", features = ["tokio"] }
 futures = { version = "0.3.31" }
 hex = { version = "0.4.3" }
 http = { version = "1.1.0" }
-ignore = { version = "0.4.23" }
 indicatif = { version = "0.18.0" }
 indoc = { version = "2.0.5" }
 itertools = { version = "0.14.0" }
