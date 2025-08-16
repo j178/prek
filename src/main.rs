@@ -115,6 +115,7 @@ fn adjust_relative_paths(cli: &mut Cli, new_cwd: &Path) -> Result<()> {
         }
     }
 
+    // Adjust path arguments for `run` and `try-repo` commands.
     if let Some(Command::Run(ref mut args) | Command::TryRepo(ref mut args)) = cli.command {
         args.files = args
             .files
@@ -141,6 +142,13 @@ fn adjust_relative_paths(cli: &mut Cli, new_cwd: &Path) -> Result<()> {
                     .map(|p| p.to_string_lossy().to_string())
             })
             .transpose()?;
+    }
+
+    // Adjust path arguments for `sample-config` command.
+    if let Some(Command::SampleConfig(ref mut args)) = cli.command {
+        if let Some(path) = &mut args.file {
+            *path = fs::relative_to(std::path::absolute(&path)?, new_cwd)?;
+        }
     }
 
     Ok(())

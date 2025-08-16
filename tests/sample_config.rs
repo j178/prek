@@ -3,7 +3,7 @@ use crate::common::{TestContext, cmd_snapshot};
 mod common;
 
 #[test]
-fn sample_config() {
+fn sample_config() -> anyhow::Result<()> {
     let context = TestContext::new();
 
     cmd_snapshot!(context.filters(), context.sample_config(), @r##"
@@ -67,4 +67,30 @@ fn sample_config() {
           - id: check-yaml
           - id: check-added-large-files
     "##);
+
+    let child = context.work_dir().join("child");
+    std::fs::create_dir(&child)?;
+
+    cmd_snapshot!(context.filters(), context.sample_config().current_dir(&*child).arg("-f").arg("sample.yaml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Written to `sample.yaml`
+
+    ----- stderr -----
+    "#);
+    insta::assert_snapshot!(context.read("child/sample.yaml"), @r##"
+    # See https://pre-commit.com for more information
+    # See https://pre-commit.com/hooks.html for more hooks
+    repos:
+      - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+        rev: v5.0.0
+        hooks:
+          - id: trailing-whitespace
+          - id: end-of-file-fixer
+          - id: check-yaml
+          - id: check-added-large-files
+    "##);
+
+    Ok(())
 }
