@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.0.26
+
+### Enhancements
+
+- Disable `prek self update` for package managers ([#468](https://github.com/j178/prek/pull/468))
+- Download uv from github releases directly ([#464](https://github.com/j178/prek/pull/464))
+- Find `uv` alongside the `prek` binary ([#466](https://github.com/j178/prek/pull/466))
+- Run hooks with pty if color enabled ([#471](https://github.com/j178/prek/pull/471))
+- Warn unexpected keys in config ([#463](https://github.com/j178/prek/pull/463))
+
+### Bug fixes
+
+- Canonicalize prek executable path ([#467](https://github.com/j178/prek/pull/467))
+
+### Documentation
+
+- Add "Who are using prek" to README ([#458](https://github.com/j178/prek/pull/458))
+
 ## 0.0.25
 
 ### Enhancements
