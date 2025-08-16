@@ -1573,14 +1573,15 @@ fn shebang_script() -> Result<()> {
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
-    shebang-script...........................................................
+    shebang-script...........................................................Passed
+    - hook id: shebang-script
+    - duration: [TIME]
+      Hello, world!
+
     ----- stderr -----
-    error: Failed to run hook `shebang-script`
-      caused by: run command `python hook` failed
-      caused by: No such file or directory (os error 2)
     "#);
 
     Ok(())
