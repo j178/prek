@@ -152,6 +152,7 @@ impl NodeInstaller {
     }
 
     async fn resolve_version(&self, req: &NodeRequest) -> Result<NodeVersion> {
+        // Latest versions come first, so we can find the latest matching version.
         let versions = self
             .list_remote_versions()
             .await

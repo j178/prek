@@ -143,6 +143,9 @@ pub enum NodeRequest {
     MajorMinorPatch(u64, u64, u64),
     Path(PathBuf),
     Range(semver::VersionReq),
+    // A bare `lts` request is interpreted as the latest LTS version.
+    Lts,
+    // A request like `lts/Argon` is interpreted as the LTS version with the code name "Argon".
     CodeName(String),
 }
 
@@ -159,6 +162,8 @@ impl FromStr for NodeRequest {
                 return Ok(Self::Any);
             }
             Self::parse_version_numbers(version_part, request)
+        } else if request.eq_ignore_ascii_case("lts") {
+            Ok(NodeRequest::Lts)
         } else if let Some(code_name) = request.strip_prefix("lts/") {
             if code_name
                 .chars()
@@ -233,6 +238,7 @@ impl NodeRequest {
             }
             NodeRequest::Path(path) => toolchain.is_some_and(|t| t == path),
             NodeRequest::Range(req) => req.matches(version.version()),
+            NodeRequest::Lts => version.lts.code_name().is_some(),
             NodeRequest::CodeName(name) => version
                 .lts
                 .code_name()
@@ -265,6 +271,7 @@ mod tests {
             NodeRequest::from_str("node12.18.3").unwrap(),
             NodeRequest::MajorMinorPatch(12, 18, 3)
         );
+        assert_eq!(NodeRequest::from_str("lts").unwrap(), NodeRequest::Lts);
         assert_eq!(
             NodeRequest::from_str("lts/Argon").unwrap(),
             NodeRequest::CodeName("Argon".to_string())
@@ -310,6 +317,9 @@ mod tests {
         assert!(request.satisfied_by(&install_info));
 
         let request = NodeRequest::MajorMinorPatch(12, 18, 3);
+        assert!(request.satisfied_by(&install_info));
+
+        let request = NodeRequest::Lts;
         assert!(request.satisfied_by(&install_info));
 
         let request = NodeRequest::CodeName("Argon".to_string());
