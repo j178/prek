@@ -304,6 +304,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             Ok(cli::validate_manifest(args.manifests))
         }
         Command::SampleConfig(args) => cli::sample_config(args.file, printer),
+        Command::AutoUpdate(args) => cli::auto_update(
+            cli.globals.config,
+            args.repo,
+            args.bleeding_edge,
+            args.freeze,
+            args.jobs,
+            printer
+        ),
         #[cfg(feature = "self-update")]
         Command::Self_(SelfNamespace {
             command:
