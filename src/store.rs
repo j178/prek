@@ -85,7 +85,9 @@ impl Store {
         fs_err::tokio::create_dir_all(self.repos_dir()).await?;
 
         // Clone and checkout the repo.
-        let temp = tempfile::tempdir_in(self.repos_dir())?;
+        fs_err::tokio::create_dir_all(self.scratch_path()).await?;
+        let temp = tempfile::tempdir_in(self.scratch_path())?;
+
         debug!(
             target = %temp.path().display(),
             %repo,
