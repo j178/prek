@@ -149,13 +149,15 @@ impl Project {
 
     /// Initialize the project, cloning the repository and preparing hooks.
     pub(crate) async fn init(
-        self,
+        &mut self,
         store: &Store,
         reporter: Option<&dyn HookInitReporter>,
     ) -> Result<Vec<Hook>, Error> {
-        Arc::new(self).init_repos(store, reporter).await?;
+        self.init_repos(store, reporter).await?;
+        // TODO: avoid clone
+        let project = Arc::new(self.clone());
 
-        let hooks = self.init_hooks().await?;
+        let hooks = project.init_hooks().await?;
 
         Ok(hooks)
     }
@@ -423,6 +425,8 @@ impl Workspace {
         while let Some(result) = tasks.next().await {
             result?;
         }
+
+        drop(tasks);
 
         let remote_repos = remote_repos.lock().unwrap();
         for project in &mut self.projects {

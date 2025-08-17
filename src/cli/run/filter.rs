@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::path::Path;
 
 use anyhow::Result;
@@ -5,6 +6,7 @@ use fancy_regex::Regex;
 use itertools::{Either, Itertools};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::FxHashSet;
+use rustix::path::Arg;
 use tracing::{debug, error};
 
 use constants::env_vars::EnvVars;
@@ -136,7 +138,7 @@ impl<'a> FileFilter<'a> {
     }
 
     /// Filter filenames by file patterns and tags for a specific hook.
-    pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&'a String> {
+    pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<Cow<'_, str>> {
         // Collect files that are inside the hook project directory.
         // And strip the prefix to get relative paths.
         // TODO: support orphaned project, which does not share files with its parent project.
@@ -151,22 +153,19 @@ impl<'a> FileFilter<'a> {
 
         // Filter by hook `files` and `exclude` patterns.
         let filter = FilenameFilter::for_hook(hook);
-        let filenames = filenames.filter(|filename| filter.filter(filename));
+        let filenames = filenames.filter(|filename| filter.filter(filename.to_string_lossy()));
 
         // Filter by hook `types`, `types_or` and `exclude_types`.
         let filter = FileTagFilter::for_hook(hook);
         let filenames: Vec<_> = filenames
-            .filter(|filename| {
-                let path = Path::new(filename);
-                match tags_from_path(path) {
-                    Ok(tags) => filter.filter(&tags),
-                    Err(err) => {
-                        error!(filename, error = %err, "Failed to get tags");
-                        false
-                    }
+            .filter(|filename| match tags_from_path(filename) {
+                Ok(tags) => filter.filter(&tags),
+                Err(err) => {
+                    error!(filename = ?filename.display(), error = %err, "Failed to get tags");
+                    false
                 }
             })
-            .copied()
+            .map(|filename| filename.to_string_lossy())
             .collect();
 
         filenames
