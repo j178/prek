@@ -2,6 +2,7 @@ use anyhow::Result;
 use bstr::ByteSlice;
 use futures::StreamExt;
 use rustc_hash::FxHashMap;
+use std::path::Path;
 
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
@@ -21,10 +22,7 @@ enum FixMode {
     Value(&'static [u8]),
 }
 
-pub(crate) async fn mixed_line_ending(
-    hook: &Hook,
-    filenames: &[&String],
-) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn mixed_line_ending(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     let fix_mode = parse_fix_mode(&hook.args)?;
 
     let mut results = futures::stream::iter(filenames)
@@ -82,7 +80,7 @@ fn parse_fix_mode(args: &[String]) -> Result<FixMode> {
 }
 
 // Process a single file for mixed line endings
-async fn fix_file(filename: &str, fix_mode: &FixMode) -> Result<(i32, Vec<u8>)> {
+async fn fix_file(filename: &Path, fix_mode: &FixMode) -> Result<(i32, Vec<u8>)> {
     let contents = fs_err::tokio::read(filename).await?;
 
     // Skip empty files or binary files
@@ -96,7 +94,10 @@ async fn fix_file(filename: &str, fix_mode: &FixMode) -> Result<(i32, Vec<u8>)> 
     match fix_mode {
         FixMode::No => {
             if has_mixed_endings {
-                Ok((1, format!("{filename}: mixed line endings\n").into_bytes()))
+                Ok((
+                    1,
+                    format!("{}: mixed line endings\n", filename.display()).into_bytes(),
+                ))
             } else {
                 Ok((0, Vec::new()))
             }
@@ -108,14 +109,14 @@ async fn fix_file(filename: &str, fix_mode: &FixMode) -> Result<(i32, Vec<u8>)> 
 
             let target_ending = find_most_common_ending(&counts);
             apply_line_ending(filename, &contents, target_ending).await?;
-            Ok((1, format!("Fixing {filename}\n").into_bytes()))
+            Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
         }
         FixMode::Value(target_ending) => {
             let needs_fixing = counts.keys().any(|&ending| ending != *target_ending);
 
             if needs_fixing {
                 apply_line_ending(filename, &contents, target_ending).await?;
-                Ok((1, format!("Fixing {filename}\n").into_bytes()))
+                Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
             } else {
                 Ok((0, Vec::new()))
             }
@@ -150,7 +151,7 @@ fn find_most_common_ending(counts: &FxHashMap<&'static [u8], usize>) -> &'static
         .unwrap_or(LF)
 }
 
-async fn apply_line_ending(filename: &str, contents: &[u8], ending: &[u8]) -> Result<()> {
+async fn apply_line_ending(filename: &Path, contents: &[u8], ending: &[u8]) -> Result<()> {
     let lines = split_lines_with_endings(contents);
     let mut new_contents = Vec::with_capacity(contents.len());
 
@@ -229,8 +230,7 @@ mod tests {
     }
 
     async fn run_fix_on_file(file_path: &Path, fix_mode: &FixMode) -> (i32, Vec<u8>) {
-        let filename = file_path.to_string_lossy().to_string();
-        fix_file(&filename, fix_mode).await.unwrap()
+        fix_file(file_path, fix_mode).await.unwrap()
     }
 
     #[tokio::test]

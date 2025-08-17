@@ -71,7 +71,7 @@ impl Args {
 
 pub(crate) async fn fix_trailing_whitespace(
     hook: &Hook,
-    filenames: &[&String],
+    filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
 
@@ -100,7 +100,7 @@ pub(crate) async fn fix_trailing_whitespace(
 }
 
 async fn fix_file(
-    filename: &str,
+    filename: &Path,
     chars: &[char],
     force_markdown: bool,
     markdown_exts: &[String],
@@ -144,7 +144,7 @@ async fn fix_file(
     drop(buf_reader);
     if modified {
         buf_writer.flush_to_file(filename).await?;
-        Ok((1, format!("Fixing {filename}\n").into_bytes()))
+        Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
     } else {
         drop(buf_writer);
         Ok((0, Vec::new()))
@@ -153,7 +153,7 @@ async fn fix_file(
 
 trait AsyncWriteBuffer {
     async fn write(&mut self, data: &str) -> Result<()>;
-    async fn flush_to_file(&mut self, filename: &str) -> Result<()>;
+    async fn flush_to_file(&mut self, filename: &Path) -> Result<()>;
 }
 
 struct MemoryBuffer(Vec<u8>);
@@ -173,7 +173,7 @@ impl AsyncWriteBuffer for MemoryBuffer {
         Ok(())
     }
 
-    async fn flush_to_file(&mut self, filename: &str) -> Result<()> {
+    async fn flush_to_file(&mut self, filename: &Path) -> Result<()> {
         fs_err::tokio::write(filename, &self.0).await?;
         Ok(())
     }
@@ -203,7 +203,7 @@ impl AsyncWriteBuffer for TempFileBuffer {
         Ok(())
     }
 
-    async fn flush_to_file(&mut self, filename: &str) -> Result<()> {
+    async fn flush_to_file(&mut self, filename: &Path) -> Result<()> {
         self.buf_writer.flush().await?;
         fs_err::tokio::rename(self.named_temp_file.path(), Path::new(filename)).await?;
         Ok(())
@@ -223,7 +223,7 @@ impl AsyncWriteBuffer for Buffer {
         }
     }
 
-    async fn flush_to_file(&mut self, filename: &str) -> Result<()> {
+    async fn flush_to_file(&mut self, filename: &Path) -> Result<()> {
         match self {
             Buffer::Memory(b) => b.flush_to_file(filename).await,
             Buffer::Temp(b) => b.flush_to_file(filename).await,
@@ -276,8 +276,7 @@ mod tests {
         force_markdown: bool,
         markdown_exts: &[String],
     ) -> (i32, Vec<u8>) {
-        let filename = file_path.to_string_lossy().to_string();
-        fix_file(&filename, chars, force_markdown, markdown_exts)
+        fix_file(file_path, chars, force_markdown, markdown_exts)
             .await
             .unwrap()
     }

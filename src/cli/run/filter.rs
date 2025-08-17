@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::path::Path;
 
 use anyhow::Result;
@@ -138,7 +137,7 @@ impl<'a> FileFilter<'a> {
     }
 
     /// Filter filenames by file patterns and tags for a specific hook.
-    pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<Cow<'_, str>> {
+    pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&Path> {
         // Collect files that are inside the hook project directory.
         // And strip the prefix to get relative paths.
         // TODO: support orphaned project, which does not share files with its parent project.
@@ -165,7 +164,6 @@ impl<'a> FileFilter<'a> {
                     false
                 }
             })
-            .map(|filename| filename.to_string_lossy())
             .collect();
 
         filenames

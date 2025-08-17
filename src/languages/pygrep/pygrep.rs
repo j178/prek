@@ -165,7 +165,7 @@ impl LanguageImpl for Pygrep {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&String],
+        filenames: &[&Path],
         store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let InstalledHook::Installed { info, .. } = hook else {

@@ -1,7 +1,6 @@
 use std::cmp::Reverse;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
@@ -168,7 +167,8 @@ impl Project {
         store: &Store,
         reporter: Option<&dyn HookInitReporter>,
     ) -> Result<(), Error> {
-        let remote_repos = Rc::new(Mutex::new(FxHashMap::default()));
+        let remote_repos = Mutex::new(FxHashMap::default());
+
         #[allow(clippy::mutable_key_type)]
         let mut seen = FxHashSet::default();
 
@@ -182,8 +182,6 @@ impl Project {
         let mut tasks =
             futures::stream::iter(remotes_iter)
                 .map(async |repo_config| {
-                    let remote_repos = remote_repos.clone();
-
                     let path = store.clone_repo(repo_config, reporter).await.map_err(|e| {
                         Error::Store {
                             repo: format!("{}", repo_config.repo),
@@ -209,8 +207,11 @@ impl Project {
             result?;
         }
 
+        drop(tasks);
+
+        let remote_repos = remote_repos.into_inner().unwrap();
         let mut repos = Vec::with_capacity(self.config.repos.len());
-        let remote_repos = remote_repos.lock().unwrap();
+
         for repo in &self.config.repos {
             match repo {
                 config::Repo::Remote(repo) => {
@@ -379,34 +380,34 @@ impl Workspace {
         store: &Store,
         reporter: Option<&dyn HookInitReporter>,
     ) -> Result<(), Error> {
-        let remote_repos = Rc::new(Mutex::new(FxHashMap::default()));
+        let remote_repos = {
+            let remote_repos = Mutex::new(FxHashMap::default());
 
-        #[allow(clippy::mutable_key_type)]
-        let mut seen = FxHashSet::default();
+            #[allow(clippy::mutable_key_type)]
+            let mut seen = FxHashSet::default();
 
-        // Prepare remote repos in parallel.
-        let remotes_iter = self
-            .projects
-            .iter()
-            .map(|proj| proj.config.repos.iter())
-            .flatten()
-            .filter_map(|repo| match repo {
-                // Deduplicate remote repos.
-                config::Repo::Remote(repo) if seen.insert(repo) => Some(repo),
-                _ => None,
-            });
+            // Prepare remote repos in parallel.
+            let remotes_iter = self
+                .projects
+                .iter()
+                .map(|proj| proj.config.repos.iter())
+                .flatten()
+                .filter_map(|repo| match repo {
+                    // Deduplicate remote repos.
+                    config::Repo::Remote(repo) if seen.insert(repo) => Some(repo),
+                    _ => None,
+                })
+                .cloned(); // TODO: avoid clone
 
-        let mut tasks =
-            futures::stream::iter(remotes_iter)
+            let mut tasks = futures::stream::iter(remotes_iter)
                 .map(async |repo_config| {
-                    let remote_repos = remote_repos.clone();
-
-                    let path = store.clone_repo(repo_config, reporter).await.map_err(|e| {
-                        Error::Store {
+                    let path = store
+                        .clone_repo(&repo_config, reporter)
+                        .await
+                        .map_err(|e| Error::Store {
                             repo: format!("{}", repo_config.repo),
                             error: Box::new(e),
-                        }
-                    })?;
+                        })?;
 
                     let repo = Arc::new(Repo::remote(
                         repo_config.repo.clone(),
@@ -422,13 +423,15 @@ impl Workspace {
                 })
                 .buffer_unordered(5);
 
-        while let Some(result) = tasks.next().await {
-            result?;
-        }
+            while let Some(result) = tasks.next().await {
+                result?;
+            }
 
-        drop(tasks);
+            drop(tasks);
 
-        let remote_repos = remote_repos.lock().unwrap();
+            remote_repos.into_inner().unwrap()
+        };
+
         for mut project in &mut self.projects {
             let mut repos = Vec::with_capacity(project.config.repos.len());
 

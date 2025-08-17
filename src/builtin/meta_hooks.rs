@@ -13,10 +13,7 @@ use crate::store::STORE;
 use crate::workspace::Project;
 
 /// Ensures that the configured hooks apply to at least one file in the repository.
-pub(crate) async fn check_hooks_apply(
-    _hook: &Hook,
-    filenames: &[&String],
-) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn check_hooks_apply(_hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     let store = STORE.as_ref()?;
 
     let input = collect_files(CollectOptions::default().with_all_files(true)).await?;
@@ -80,7 +77,7 @@ fn excludes_any<T: AsRef<str> + Sync>(
 /// Ensures that exclude directives apply to any file in the repository.
 pub(crate) async fn check_useless_excludes(
     _hook: &Hook,
-    filenames: &[&String],
+    filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
     let input = collect_files(CollectOptions::default().with_all_files(true)).await?;
 
@@ -135,8 +132,15 @@ pub(crate) async fn check_useless_excludes(
 }
 
 /// Prints all arguments passed to the hook. Useful for debugging.
-pub fn identity(_hook: &Hook, filenames: &[&String]) -> (i32, Vec<u8>) {
-    (0, filenames.iter().join("\n").into_bytes())
+pub fn identity(_hook: &Hook, filenames: &[&Path]) -> (i32, Vec<u8>) {
+    (
+        0,
+        filenames
+            .iter()
+            .map(|f| f.to_string_lossy())
+            .join("\n")
+            .into_bytes(),
+    )
 }
 
 #[cfg(test)]

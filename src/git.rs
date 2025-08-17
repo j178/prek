@@ -154,7 +154,7 @@ pub(crate) async fn get_staged_files() -> Result<Vec<String>, Error> {
     Ok(zsplit(&output.stdout))
 }
 
-pub async fn files_not_staged(files: &[&Path]) -> Result<Vec<String>> {
+pub(crate) async fn files_not_staged(files: &[&Path]) -> Result<Vec<String>> {
     let output = git_cmd("git diff")?
         .arg("diff")
         .arg("--exit-code")
@@ -399,7 +399,7 @@ pub(crate) async fn has_hooks_path_set() -> Result<bool> {
     }
 }
 
-pub(crate) async fn lfs_files<T: FromIterator<String>>(paths: &[&String]) -> Result<T, Error> {
+pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<Vec<String>, Error> {
     let mut job = git_cmd("git check-attr")?
         .arg("check-attr")
         .arg("filter")
@@ -408,12 +408,19 @@ pub(crate) async fn lfs_files<T: FromIterator<String>>(paths: &[&String]) -> Res
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .check(true)
-        // .output()
         .spawn()?;
 
     {
         let mut stdin = job.stdin.take().expect("Failed to open stdin");
-        stdin.write_all(paths.iter().join("\0").as_ref()).await?;
+        stdin
+            .write_all(
+                paths
+                    .iter()
+                    .map(|f| f.to_string_lossy())
+                    .join("\0")
+                    .as_ref(),
+            )
+            .await?;
     }
 
     Ok(

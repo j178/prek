@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -35,7 +36,7 @@ impl FromStr for Implemented {
 }
 
 impl Implemented {
-    pub(crate) async fn run(self, hook: &Hook, filenames: &[&String]) -> Result<(i32, Vec<u8>)> {
+    pub(crate) async fn run(self, hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
         match self {
             Self::TrailingWhitespace => {
                 fix_trailing_whitespace::fix_trailing_whitespace(hook, filenames).await

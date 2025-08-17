@@ -1,10 +1,10 @@
+use crate::hook::Hook;
+use crate::run::CONCURRENCY;
 use anyhow::Result;
 use futures::StreamExt;
 use serde::{Deserialize, Deserializer};
 use std::collections::HashMap;
-
-use crate::hook::Hook;
-use crate::run::CONCURRENCY;
+use std::path::Path;
 
 #[derive(Debug)]
 enum JsonValue {
@@ -16,7 +16,7 @@ enum JsonValue {
     Null,
 }
 
-pub(crate) async fn check_json(_hook: &Hook, filenames: &[&String]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn check_json(_hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
         .map(async |filename| check_file(filename).await)
         .buffered(*CONCURRENCY);
@@ -33,7 +33,7 @@ pub(crate) async fn check_json(_hook: &Hook, filenames: &[&String]) -> Result<(i
     Ok((code, output))
 }
 
-async fn check_file(filename: &str) -> Result<(i32, Vec<u8>)> {
+async fn check_file(filename: &Path) -> Result<(i32, Vec<u8>)> {
     let content = fs_err::tokio::read(filename).await?;
     if content.is_empty() {
         return Ok((0, Vec::new()));
@@ -46,7 +46,7 @@ async fn check_file(filename: &str) -> Result<(i32, Vec<u8>)> {
     match serde_json::from_str::<JsonValue>(content_str) {
         Ok(_) => Ok((0, Vec::new())),
         Err(e) => {
-            let error_message = format!("{filename}: Failed to json decode ({e})\n");
+            let error_message = format!("{}: Failed to json decode ({e})\n", filename.display());
             Ok((1, error_message.into_bytes()))
         }
     }
@@ -141,8 +141,7 @@ mod tests {
     }
 
     async fn run_check_on_file(file_path: &Path) -> (i32, Vec<u8>) {
-        let filename = file_path.to_string_lossy().to_string();
-        check_file(&filename).await.unwrap()
+        check_file(file_path).await.unwrap()
     }
 
     #[tokio::test]

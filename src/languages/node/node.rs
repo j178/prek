@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 use std::env::consts::EXE_EXTENSION;
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use constants::env_vars::EnvVars;
 use rustc_hash::FxHashSet;
 use tracing::debug;
-
-use constants::env_vars::EnvVars;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::hook::InstalledHook;
@@ -136,7 +136,7 @@ impl LanguageImpl for Node {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&String],
+        filenames: &[&Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Node must have env path");

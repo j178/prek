@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use anyhow::Result;
 use futures::StreamExt;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, AsyncWriteExt, SeekFrom};
@@ -5,7 +7,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, AsyncWriteExt,
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
-pub(crate) async fn fix_end_of_file(_hook: &Hook, filenames: &[&String]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn fix_end_of_file(_hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
         .map(async |filename| fix_file(filename).await)
         .buffered(*CONCURRENCY);
@@ -22,7 +24,7 @@ pub(crate) async fn fix_end_of_file(_hook: &Hook, filenames: &[&String]) -> Resu
     Ok((code, output))
 }
 
-async fn fix_file(filename: &str) -> Result<(i32, Vec<u8>)> {
+async fn fix_file(filename: &Path) -> Result<(i32, Vec<u8>)> {
     let mut file = fs_err::tokio::OpenOptions::new()
         .read(true)
         .write(true)
@@ -41,7 +43,7 @@ async fn fix_file(filename: &str) -> Result<(i32, Vec<u8>)> {
             file.set_len(0).await?;
             file.flush().await?;
             file.shutdown().await?;
-            Ok((1, format!("Fixing {filename}\n").into_bytes()))
+            Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
         }
         (Some(pos), None) => {
             // File has some content, but no line ending at the end.
@@ -49,7 +51,7 @@ async fn fix_file(filename: &str) -> Result<(i32, Vec<u8>)> {
             file.write_all(b"\n").await?;
             file.flush().await?;
             file.shutdown().await?;
-            Ok((1, format!("Fixing {filename}\n").into_bytes()))
+            Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
         }
         (Some(pos), Some(line_ending)) => {
             // File has some content and at least one line ending.
@@ -59,7 +61,7 @@ async fn fix_file(filename: &str) -> Result<(i32, Vec<u8>)> {
                 return Ok((0, Vec::new()));
             }
             file.set_len(new_size).await?;
-            Ok((1, format!("Fixing {filename}\n").into_bytes()))
+            Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
         }
     }
 }
@@ -139,8 +141,7 @@ mod tests {
     }
 
     async fn run_fix_on_file(file_path: &Path) -> (i32, Vec<u8>) {
-        let filename = file_path.to_string_lossy().to_string();
-        fix_file(&filename).await.unwrap()
+        fix_file(file_path).await.unwrap()
     }
 
     #[tokio::test]
