@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use fancy_regex::Regex;
 use tracing::trace;
 
+use crate::cli::reporter::HookInstallReporter;
 use crate::fs::CWD;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
@@ -168,7 +169,14 @@ impl Docker {
 }
 
 impl LanguageImpl for Docker {
-    async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
+    async fn install(
+        &self,
+        hook: Arc<Hook>,
+        store: &Store,
+        reporter: &HookInstallReporter,
+    ) -> Result<InstalledHook> {
+        let progress = reporter.on_install_start(&hook);
+
         let info = InstallInfo::new(
             hook.language,
             hook.dependencies().clone(),
@@ -189,6 +197,8 @@ impl LanguageImpl for Docker {
         fs_err::tokio::create_dir_all(env)
             .await
             .context("Failed to create docker env dir")?;
+
+        reporter.on_install_complete(progress);
 
         Ok(installed_hook)
     }

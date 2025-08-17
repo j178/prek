@@ -17,7 +17,7 @@ mod clean;
 mod hook_impl;
 mod install;
 mod list;
-mod reporter;
+pub mod reporter;
 pub mod run;
 mod sample_config;
 #[cfg(feature = "self-update")]

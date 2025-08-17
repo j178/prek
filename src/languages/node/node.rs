@@ -8,6 +8,7 @@ use tracing::debug;
 
 use constants::env_vars::EnvVars;
 
+use crate::cli::reporter::HookInstallReporter;
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::node::NodeRequest;
@@ -23,7 +24,14 @@ use crate::store::{Store, ToolBucket};
 pub(crate) struct Node;
 
 impl LanguageImpl for Node {
-    async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
+    async fn install(
+        &self,
+        hook: Arc<Hook>,
+        store: &Store,
+        reporter: &HookInstallReporter,
+    ) -> Result<InstalledHook> {
+        let progress = reporter.on_install_start(&hook);
+
         // 1. Install node
         //   1) Find from `$PREK_HOME/tools/node`
         //   2) Find from system
@@ -112,6 +120,8 @@ impl LanguageImpl for Node {
                 .output()
                 .await?;
         }
+
+        reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,

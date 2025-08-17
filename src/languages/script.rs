@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
+use crate::cli::reporter::HookInstallReporter;
 use crate::fs::CWD;
 use crate::hook::Hook;
 use crate::hook::InstalledHook;
@@ -14,7 +15,12 @@ use crate::store::Store;
 pub(crate) struct Script;
 
 impl LanguageImpl for Script {
-    async fn install(&self, hook: Arc<Hook>, _store: &Store) -> Result<InstalledHook> {
+    async fn install(
+        &self,
+        hook: Arc<Hook>,
+        _store: &Store,
+        _reporter: &HookInstallReporter,
+    ) -> Result<InstalledHook> {
         Ok(InstalledHook::NoNeedInstall(hook))
     }
 

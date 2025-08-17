@@ -89,7 +89,6 @@ impl From<Printer> for HookInitReporter {
                 .unwrap()
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
-        root.set_message("Initializing hooks...");
 
         let reporter = ProgressReporter::new(root, multi, printer);
         Self { reporter }
@@ -98,6 +97,10 @@ impl From<Printer> for HookInitReporter {
 
 impl workspace::HookInitReporter for HookInitReporter {
     fn on_clone_start(&self, repo: &str) -> usize {
+        self.reporter
+            .root
+            .set_message(format!("{}", "Initializing hooks...".bold().cyan()));
+
         self.reporter
             .on_start(format!("{} {}", "Cloning".bold().cyan(), repo.dimmed()))
     }
@@ -125,7 +128,6 @@ impl From<Printer> for HookInstallReporter {
                 .unwrap()
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
-        root.set_message("Installing hooks...");
 
         let reporter = ProgressReporter::new(root, multi, printer);
         Self { reporter }
@@ -134,6 +136,10 @@ impl From<Printer> for HookInstallReporter {
 
 impl HookInstallReporter {
     pub fn on_install_start(&self, hook: &Hook) -> usize {
+        self.reporter
+            .root
+            .set_message(format!("{}", "Installing hooks...".bold().cyan()));
+
         self.reporter.on_start(format!(
             "{} {}",
             "Installing".bold().cyan(),

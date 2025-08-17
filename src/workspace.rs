@@ -142,38 +142,31 @@ impl Project {
             config::Repo::Remote(repo) if seen.insert(repo) => Some(repo),
             _ => None,
         });
-        let mut tasks = futures::stream::iter(remotes_iter)
-            .map(async |repo_config| {
-                let remote_repos = remote_repos.clone();
+        let mut tasks =
+            futures::stream::iter(remotes_iter)
+                .map(async |repo_config| {
+                    let remote_repos = remote_repos.clone();
 
-                let progress = reporter
-                    .map(|reporter| (reporter, reporter.on_clone_start(&format!("{repo_config}"))));
-
-                let path = store
-                    .clone_repo(repo_config)
-                    .await
-                    .map_err(|e| Error::Store {
-                        repo: format!("{}", repo_config.repo),
-                        error: Box::new(e),
+                    let path = store.clone_repo(repo_config, reporter).await.map_err(|e| {
+                        Error::Store {
+                            repo: format!("{}", repo_config.repo),
+                            error: Box::new(e),
+                        }
                     })?;
 
-                if let Some((reporter, progress)) = progress {
-                    reporter.on_clone_complete(progress);
-                }
+                    let repo = Arc::new(Repo::remote(
+                        repo_config.repo.clone(),
+                        repo_config.rev.clone(),
+                        path,
+                    )?);
+                    remote_repos
+                        .lock()
+                        .unwrap()
+                        .insert(repo_config, repo.clone());
 
-                let repo = Arc::new(Repo::remote(
-                    repo_config.repo.clone(),
-                    repo_config.rev.clone(),
-                    path,
-                )?);
-                remote_repos
-                    .lock()
-                    .unwrap()
-                    .insert(repo_config, repo.clone());
-
-                Ok::<(), Error>(())
-            })
-            .buffer_unordered(5);
+                    Ok::<(), Error>(())
+                })
+                .buffer_unordered(5);
 
         while let Some(result) = tasks.next().await {
             result?;

@@ -373,11 +373,9 @@ pub async fn install_hooks(
                     let hook = Arc::new(hook);
                     debug!("No matching environment found for hook `{hook}`, installing...");
 
-                    let progress = reporter.on_install_start(&hook);
-
                     let installed_hook = hook
                         .language
-                        .install(hook.clone(), store)
+                        .install(hook.clone(), store, reporter)
                         .await
                         .context(format!("Failed to install hook `{hook}`"))?;
 
@@ -396,8 +394,6 @@ pub async fn install_hooks(
                     }
 
                     newly_installed.push(installed_hook);
-
-                    reporter.on_install_complete(progress);
                 }
 
                 // Add newly installed hooks to the list.

@@ -7,6 +7,7 @@ use tracing::debug;
 
 use constants::env_vars::EnvVars;
 
+use crate::cli::reporter::HookInstallReporter;
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::LanguageImpl;
@@ -45,7 +46,14 @@ fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
 }
 
 impl LanguageImpl for Python {
-    async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
+    async fn install(
+        &self,
+        hook: Arc<Hook>,
+        store: &Store,
+        reporter: &HookInstallReporter,
+    ) -> Result<InstalledHook> {
+        let progress = reporter.on_install_start(&hook);
+
         let uv_dir = store.tools_path(ToolBucket::Uv);
         let uv = Uv::install(&uv_dir).await.context("Failed to install uv")?;
 
@@ -115,6 +123,8 @@ impl LanguageImpl for Python {
 
         info.with_language_version(version)
             .with_toolchain(python_exec);
+
+        reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,

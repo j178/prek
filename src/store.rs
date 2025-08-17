@@ -14,6 +14,7 @@ use crate::config::RemoteRepo;
 use crate::fs::LockedFile;
 use crate::git::clone_repo;
 use crate::hook::InstallInfo;
+use crate::workspace::HookInitReporter;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -75,12 +76,19 @@ impl Store {
     }
 
     /// Clone a remote repo into the store.
-    pub(crate) async fn clone_repo(&self, repo: &RemoteRepo) -> Result<PathBuf, Error> {
+    pub(crate) async fn clone_repo(
+        &self,
+        repo: &RemoteRepo,
+        reporter: Option<&dyn HookInitReporter>,
+    ) -> Result<PathBuf, Error> {
         // Check if the repo is already cloned.
         let target = self.repo_path(repo);
         if target.join(".prek-repo.json").try_exists()? {
             return Ok(target);
         }
+
+        let progress =
+            reporter.map(|reporter| (reporter, reporter.on_clone_start(&format!("{repo}"))));
 
         fs_err::tokio::create_dir_all(self.repos_dir()).await?;
 
@@ -99,6 +107,10 @@ impl Store {
 
         let content = serde_json::to_string_pretty(&repo)?;
         fs_err::tokio::write(target.join(".prek-repo.json"), content).await?;
+
+        if let Some((reporter, progress)) = progress {
+            reporter.on_clone_complete(progress);
+        }
 
         Ok(target)
     }

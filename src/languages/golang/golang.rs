@@ -6,6 +6,7 @@ use anyhow::Context;
 
 use constants::env_vars::EnvVars;
 
+use crate::cli::reporter::HookInstallReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::golang::GoRequest;
@@ -19,7 +20,14 @@ use crate::store::{CacheBucket, Store};
 pub(crate) struct Golang;
 
 impl LanguageImpl for Golang {
-    async fn install(&self, hook: Arc<Hook>, store: &Store) -> anyhow::Result<InstalledHook> {
+    async fn install(
+        &self,
+        hook: Arc<Hook>,
+        store: &Store,
+        reporter: &HookInstallReporter,
+    ) -> anyhow::Result<InstalledHook> {
+        let progress = reporter.on_install_start(&hook);
+
         // 1. Install Go
         let go_dir = store.tools_path(crate::store::ToolBucket::Go);
         let installer = GoInstaller::new(go_dir);
@@ -88,6 +96,8 @@ impl LanguageImpl for Golang {
         for dep in &hook.additional_dependencies {
             go_install_cmd().arg(dep).check(true).output().await?;
         }
+
+        reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
+use crate::cli::reporter::HookInstallReporter;
 use crate::hook::{Hook, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::store::Store;
@@ -10,7 +11,12 @@ use crate::store::Store;
 pub(crate) struct Fail;
 
 impl LanguageImpl for Fail {
-    async fn install(&self, hook: Arc<Hook>, _store: &Store) -> Result<InstalledHook> {
+    async fn install(
+        &self,
+        hook: Arc<Hook>,
+        _store: &Store,
+        _reporter: &HookInstallReporter,
+    ) -> Result<InstalledHook> {
         Ok(InstalledHook::NoNeedInstall(hook))
     }
 

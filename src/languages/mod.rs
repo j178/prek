@@ -9,6 +9,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, trace};
 
 use crate::archive::ArchiveExtension;
+use crate::cli::reporter::HookInstallReporter;
 use crate::config::Language;
 use crate::fs::CWD;
 use crate::hook::{Hook, InstalledHook};
@@ -40,7 +41,12 @@ static PYGREP: pygrep::Pygrep = pygrep::Pygrep;
 static UNIMPLEMENTED: Unimplemented = Unimplemented;
 
 trait LanguageImpl {
-    async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook>;
+    async fn install(
+        &self,
+        hook: Arc<Hook>,
+        store: &Store,
+        reporter: &HookInstallReporter,
+    ) -> Result<InstalledHook>;
     async fn check_health(&self) -> Result<()>;
     async fn run(
         &self,
@@ -57,7 +63,12 @@ struct UnimplementedError(String);
 struct Unimplemented;
 
 impl LanguageImpl for Unimplemented {
-    async fn install(&self, hook: Arc<Hook>, _store: &Store) -> Result<InstalledHook> {
+    async fn install(
+        &self,
+        hook: Arc<Hook>,
+        _store: &Store,
+        _reporter: &HookInstallReporter,
+    ) -> Result<InstalledHook> {
         Ok(InstalledHook::NoNeedInstall(hook))
     }
 
@@ -148,18 +159,23 @@ impl Language {
         )
     }
 
-    pub async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
+    pub async fn install(
+        &self,
+        hook: Arc<Hook>,
+        store: &Store,
+        reporter: &HookInstallReporter,
+    ) -> Result<InstalledHook> {
         match self {
-            Self::Golang => GOLANG.install(hook, store).await,
-            Self::Python => PYTHON.install(hook, store).await,
-            Self::Node => NODE.install(hook, store).await,
-            Self::System => SYSTEM.install(hook, store).await,
-            Self::Fail => FAIL.install(hook, store).await,
-            Self::Docker => DOCKER.install(hook, store).await,
-            Self::DockerImage => DOCKER_IMAGE.install(hook, store).await,
-            Self::Script => SCRIPT.install(hook, store).await,
-            Self::Pygrep => PYGREP.install(hook, store).await,
-            _ => UNIMPLEMENTED.install(hook, store).await,
+            Self::Golang => GOLANG.install(hook, store, reporter).await,
+            Self::Python => PYTHON.install(hook, store, reporter).await,
+            Self::Node => NODE.install(hook, store, reporter).await,
+            Self::System => SYSTEM.install(hook, store, reporter).await,
+            Self::Fail => FAIL.install(hook, store, reporter).await,
+            Self::Docker => DOCKER.install(hook, store, reporter).await,
+            Self::DockerImage => DOCKER_IMAGE.install(hook, store, reporter).await,
+            Self::Script => SCRIPT.install(hook, store, reporter).await,
+            Self::Pygrep => PYGREP.install(hook, store, reporter).await,
+            _ => UNIMPLEMENTED.install(hook, store, reporter).await,
         }
     }
 

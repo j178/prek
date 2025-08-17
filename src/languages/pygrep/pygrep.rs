@@ -8,6 +8,7 @@ use rustc_hash::FxHashSet;
 use tokio::io::AsyncWriteExt;
 use tracing::debug;
 
+use crate::cli::reporter::HookInstallReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::python::{Uv, python_exec};
@@ -81,7 +82,14 @@ fn find_installed_python(python_dir: &Path) -> Option<PathBuf> {
 }
 
 impl LanguageImpl for Pygrep {
-    async fn install(&self, hook: Arc<Hook>, store: &Store) -> Result<InstalledHook> {
+    async fn install(
+        &self,
+        hook: Arc<Hook>,
+        store: &Store,
+        reporter: &HookInstallReporter,
+    ) -> Result<InstalledHook> {
+        let progress = reporter.on_install_start(&hook);
+
         let uv_dir = store.tools_path(ToolBucket::Uv);
         let uv = Uv::install(&uv_dir).await?;
         let python_dir = store.tools_path(ToolBucket::Python);
@@ -141,6 +149,8 @@ impl LanguageImpl for Pygrep {
         info.with_toolchain(python);
 
         fs_err::tokio::create_dir_all(&info.env_path).await?;
+
+        reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
