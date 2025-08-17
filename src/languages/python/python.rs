@@ -148,6 +148,7 @@ impl LanguageImpl for Python {
 
         let run = async move |batch: Vec<String>| {
             let output = Cmd::new(&entry[0], "python hook")
+                .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env("VIRTUAL_ENV", env_dir)
                 .env("PATH", &new_path)

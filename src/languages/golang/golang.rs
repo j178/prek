@@ -135,6 +135,7 @@ impl LanguageImpl for Golang {
         let entry = hook.entry.resolve(Some(&new_path))?;
         let run = async move |batch: Vec<String>| {
             let mut output = Cmd::new(&entry[0], "go hook")
+                .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env("PATH", &new_path)
                 .env(EnvVars::GOTOOLCHAIN, "local")

@@ -1,3 +1,5 @@
+use std::cmp::Reverse;
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -6,6 +8,7 @@ use anyhow::Result;
 use futures::StreamExt;
 use ignore::WalkState;
 use itertools::zip_eq;
+use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use tracing::{debug, error};
@@ -14,7 +17,7 @@ use crate::config::{self, ALTER_CONFIG_FILE, CONFIG_FILE, Config, ManifestHook, 
 use crate::fs::Simplified;
 use crate::hook::{self, Hook, HookBuilder, Repo};
 use crate::store::Store;
-use crate::{store, warn_user};
+use crate::{git, store, warn_user};
 
 #[derive(Error, Debug)]
 pub(crate) enum Error {
@@ -44,15 +47,23 @@ pub(crate) trait HookInitReporter {
 #[derive(Debug, Clone)]
 pub(crate) struct Project {
     config_path: PathBuf,
+    /// Depth of the project in the directory tree.
+    depth: usize,
     config: Config,
     repos: Vec<Arc<Repo>>,
+}
+
+impl Display for Project {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.config_path.user_display())
+    }
 }
 
 impl Project {
     /// Initialize a new project from the configuration file or the file in the current working directory.
     pub(crate) fn from_config_file(config_path: PathBuf) -> Result<Self, config::Error> {
         debug!(
-            path = %config_path.display(),
+            path = %config_path.user_display(),
             "Loading project configuration"
         );
         let config = read_config(&config_path)?;
@@ -60,6 +71,7 @@ impl Project {
         Ok(Self {
             config,
             config_path,
+            depth: 0,
             repos: Vec::with_capacity(size),
         })
     }
@@ -123,10 +135,32 @@ impl Project {
         &self.config
     }
 
+    /// Get the path to the configuration file.
     pub(crate) fn config_file(&self) -> &Path {
         &self.config_path
     }
 
+    /// Get the path to the project directory.
+    pub(crate) fn path(&self) -> &Path {
+        self.config_path
+            .parent()
+            .expect("Project path should have a parent")
+    }
+
+    /// Initialize the project, cloning the repository and preparing hooks.
+    pub(crate) async fn init(
+        self,
+        store: &Store,
+        reporter: Option<&dyn HookInitReporter>,
+    ) -> Result<Vec<Hook>, Error> {
+        Arc::new(self).init_repos(store, reporter).await?;
+
+        let hooks = self.init_hooks().await?;
+
+        Ok(hooks)
+    }
+
+    /// Initialize remote repositories for the project.
     async fn init_repos(
         &mut self,
         store: &Store,
@@ -198,13 +232,7 @@ impl Project {
     }
 
     /// Load and prepare hooks for the project.
-    pub(crate) async fn init_hooks(
-        &mut self,
-        store: &Store,
-        reporter: Option<&dyn HookInitReporter>,
-    ) -> Result<Vec<Hook>, Error> {
-        self.init_repos(store, reporter).await?;
-
+    async fn init_hooks(self: Arc<Self>) -> Result<Vec<Hook>, Error> {
         let mut hooks = Vec::new();
 
         for (repo_config, repo) in zip_eq(self.config.repos.iter(), self.repos.iter()) {
@@ -220,7 +248,8 @@ impl Project {
                         };
 
                         let repo = Arc::clone(repo);
-                        let mut builder = HookBuilder::new(repo, hook.clone(), hooks.len());
+                        let mut builder =
+                            HookBuilder::new(self.clone(), repo, hook.clone(), hooks.len());
                         builder.update(hook_config);
                         builder.combine(&self.config);
 
@@ -231,7 +260,8 @@ impl Project {
                 config::Repo::Local(repo_config) => {
                     for hook_config in &repo_config.hooks {
                         let repo = Arc::clone(repo);
-                        let mut builder = HookBuilder::new(repo, hook_config.clone(), hooks.len());
+                        let mut builder =
+                            HookBuilder::new(self.clone(), repo, hook_config.clone(), hooks.len());
                         builder.combine(&self.config);
 
                         let hook = builder.build()?;
@@ -242,7 +272,8 @@ impl Project {
                     for hook_config in &repo_config.hooks {
                         let repo = Arc::clone(repo);
                         let hook_config = ManifestHook::from(hook_config.clone());
-                        let mut builder = HookBuilder::new(repo, hook_config, hooks.len());
+                        let mut builder =
+                            HookBuilder::new(self.clone(), repo, hook_config, hooks.len());
                         builder.combine(&self.config);
 
                         let hook = builder.build()?;
@@ -252,18 +283,52 @@ impl Project {
             }
         }
 
-        reporter.map(HookInitReporter::on_complete);
-
         Ok(hooks)
     }
 }
 
 pub(crate) struct Workspace {
-    projects: Vec<Project>,
+    projects: Vec<Arc<Project>>,
+}
+
+#[derive(Default)]
+pub(crate) struct DiscoverOptions {
+    config: Option<PathBuf>,
+    directory: Option<PathBuf>,
+}
+
+impl DiscoverOptions {
+    pub(crate) fn new(config: Option<PathBuf>, path: &Path) -> Self {
+        Self {
+            config,
+            directory: Some(path.to_path_buf()),
+        }
+    }
+
+    pub(crate) fn config(mut self, config: PathBuf) -> Self {
+        self.config = Some(config);
+        self
+    }
+
+    pub(crate) fn directory(mut self, directory: PathBuf) -> Self {
+        self.directory = Some(directory);
+        self
+    }
 }
 
 impl Workspace {
-    pub(crate) fn discover(path: &Path) -> Result<Self, config::Error> {
+    pub(crate) fn discover(opts: DiscoverOptions) -> Result<Self, config::Error> {
+        if let Some(config) = opts.config {
+            let project = Project::from_config_file(config)?;
+            return Ok(Self {
+                projects: vec![Arc::new(project)],
+            });
+        }
+
+        let Some(path) = opts.directory else {
+            panic!("Config file or path must be provided to discover workspace");
+        };
+
         let projects = Mutex::new(Ok(Vec::new()));
 
         ignore::WalkBuilder::new(path)
@@ -274,12 +339,14 @@ impl Workspace {
                     if let Ok(entry) = result {
                         if entry.file_type().is_some_and(|t| t.is_dir()) {
                             match Project::from_directory(entry.path()) {
-                                Ok(project) => {
-                                    debug!(
-                                        path = %project.config_file().display(),
-                                        "Found project configuration"
-                                    );
-                                    projects.lock().unwrap().as_mut().unwrap().push(project);
+                                Ok(mut project) => {
+                                    project.depth = entry.depth();
+                                    projects
+                                        .lock()
+                                        .unwrap()
+                                        .as_mut()
+                                        .unwrap()
+                                        .push(Arc::new(project));
                                 }
                                 Err(config::Error::NotFound(_)) => {}
                                 Err(e) => {
@@ -294,8 +361,144 @@ impl Workspace {
                 })
             });
 
-        let projects = projects.into_inner().unwrap()?;
+        let mut projects = projects.into_inner().unwrap()?;
+
+        // Sort projects by their depth in the directory tree.
+        // The deeper the project comes first.
+        // This is useful for nested projects where we want to prefer the most specific project.
+        projects.sort_by_key(|p| Reverse(p.depth));
+
         Ok(Self { projects })
+    }
+
+    /// Initialize remote repositories for all projects.
+    async fn init_repos(
+        &mut self,
+        store: &Store,
+        reporter: Option<&dyn HookInitReporter>,
+    ) -> Result<(), Error> {
+        let remote_repos = Rc::new(Mutex::new(FxHashMap::default()));
+
+        #[allow(clippy::mutable_key_type)]
+        let mut seen = FxHashSet::default();
+
+        // Prepare remote repos in parallel.
+        let remotes_iter = self
+            .projects
+            .iter()
+            .map(|proj| proj.config.repos.iter())
+            .flatten()
+            .filter_map(|repo| match repo {
+                // Deduplicate remote repos.
+                config::Repo::Remote(repo) if seen.insert(repo) => Some(repo),
+                _ => None,
+            });
+
+        let mut tasks =
+            futures::stream::iter(remotes_iter)
+                .map(async |repo_config| {
+                    let remote_repos = remote_repos.clone();
+
+                    let path = store.clone_repo(repo_config, reporter).await.map_err(|e| {
+                        Error::Store {
+                            repo: format!("{}", repo_config.repo),
+                            error: Box::new(e),
+                        }
+                    })?;
+
+                    let repo = Arc::new(Repo::remote(
+                        repo_config.repo.clone(),
+                        repo_config.rev.clone(),
+                        path,
+                    )?);
+                    remote_repos
+                        .lock()
+                        .unwrap()
+                        .insert(repo_config, repo.clone());
+
+                    Ok::<(), Error>(())
+                })
+                .buffer_unordered(5);
+
+        while let Some(result) = tasks.next().await {
+            result?;
+        }
+
+        let remote_repos = remote_repos.lock().unwrap();
+        for project in &mut self.projects {
+            let mut repos = Vec::with_capacity(project.config.repos.len());
+
+            for repo in &project.config.repos {
+                match repo {
+                    config::Repo::Remote(repo) => {
+                        let repo = remote_repos.get(repo).expect("repo not found");
+                        repos.push(repo.clone());
+                    }
+                    config::Repo::Local(repo) => {
+                        let repo = Repo::local(repo.hooks.clone());
+                        repos.push(Arc::new(repo));
+                    }
+                    config::Repo::Meta(repo) => {
+                        let repo = Repo::meta(repo.hooks.clone());
+                        repos.push(Arc::new(repo));
+                    }
+                }
+            }
+
+            project.repos = repos;
+        }
+
+        Ok(())
+    }
+
+    /// Load and prepare hooks for all projects.
+    pub(crate) async fn init_hooks(
+        &mut self,
+        store: &Store,
+        reporter: Option<&dyn HookInitReporter>,
+    ) -> Result<Vec<Hook>, Error> {
+        self.init_repos(store, reporter).await?;
+
+        let mut hooks = Vec::new();
+        for project in &self.projects {
+            let project_hooks = Arc::clone(project).init_hooks().await?;
+            hooks.extend(project_hooks);
+        }
+
+        reporter.map(HookInitReporter::on_complete);
+
+        Ok(hooks)
+    }
+
+    pub(crate) async fn check_config_staged(&self) -> Result<()> {
+        let config_files = self
+            .projects
+            .iter()
+            .map(|project| project.config_file())
+            .collect::<Vec<_>>();
+        let non_staged = git::files_not_staged(&config_files).await?;
+
+        if !non_staged.is_empty() {
+            let s = if non_staged.len() == 1 { "" } else { "s" };
+            let git_add = if non_staged.len() == 1 {
+                format!(
+                    "`{}` first",
+                    format!("git add {}", non_staged[0].user_display().to_string()).cyan()
+                )
+            } else {
+                "`git add` them first".to_string()
+            };
+            anyhow::bail!(
+                "The following configuration file{s} are not staged, {git_add}:\n{}",
+                non_staged
+                    .iter()
+                    .map(|p| p.user_display().to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        };
+
+        Ok(())
     }
 }
 
@@ -308,7 +511,8 @@ mod tests {
     fn test_workspace_discovery_empty_directory() -> Result<()> {
         let dir = tempfile::tempdir()?;
 
-        let workspace = Workspace::discover(dir.path())?;
+        let workspace =
+            Workspace::discover(DiscoverOptions::default().directory(dir.path().to_path_buf()))?;
         assert_eq!(workspace.projects.len(), 0);
 
         Ok(())
@@ -334,7 +538,8 @@ repos:
 "#,
         )?;
 
-        let workspace = Workspace::discover(dir.path())?;
+        let workspace =
+            Workspace::discover(DiscoverOptions::default().directory(dir.path().to_path_buf()))?;
         assert_eq!(workspace.projects.len(), 1);
         assert_eq!(
             workspace.projects[0].config_file(),
@@ -366,7 +571,8 @@ repos:
             )?;
         }
 
-        let workspace = Workspace::discover(dir.path())?;
+        let workspace =
+            Workspace::discover(DiscoverOptions::default().directory(dir.path().to_path_buf()))?;
         assert_eq!(workspace.projects.len(), 3);
 
         // Verify all projects were found
@@ -421,7 +627,8 @@ repos:
 "#,
         )?;
 
-        let workspace = Workspace::discover(dir.path())?;
+        let workspace =
+            Workspace::discover(DiscoverOptions::default().directory(dir.path().to_path_buf()))?;
         assert_eq!(workspace.projects.len(), 2);
 
         Ok(())
@@ -463,7 +670,8 @@ repos:
 "#,
         )?;
 
-        let workspace = Workspace::discover(dir.path())?;
+        let workspace =
+            Workspace::discover(DiscoverOptions::default().directory(dir.path().to_path_buf()))?;
         assert_eq!(workspace.projects.len(), 2);
 
         Ok(())
@@ -482,7 +690,8 @@ repos:
         )?;
 
         // Should return an error for invalid config
-        let result = Workspace::discover(dir.path());
+        let result =
+            Workspace::discover(DiscoverOptions::default().directory(dir.path().to_path_buf()));
         assert!(result.is_err());
 
         Ok(())
@@ -522,7 +731,8 @@ repos:
 "#,
         )?;
 
-        let workspace = Workspace::discover(dir.path())?;
+        let workspace =
+            Workspace::discover(DiscoverOptions::default().directory(dir.path().to_path_buf()))?;
         assert_eq!(workspace.projects.len(), 1);
 
         // Should prefer .yaml file

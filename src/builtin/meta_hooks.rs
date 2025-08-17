@@ -26,7 +26,7 @@ pub(crate) async fn check_hooks_apply(
 
     for filename in filenames {
         let mut project = Project::from_config_file(PathBuf::from(filename))?;
-        let hooks = project.init_hooks(store, None).await?;
+        let hooks = project.init(store, None).await?;
 
         let filter = FileFilter::new(
             &input,

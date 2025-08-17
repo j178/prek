@@ -145,6 +145,7 @@ impl LanguageImpl for Node {
         let entry = hook.entry.resolve(Some(&new_path))?;
         let run = async move |batch: Vec<String>| {
             let mut output = Cmd::new(&entry[0], "node hook")
+                .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env("PATH", &new_path)
                 .env(EnvVars::NPM_CONFIG_PREFIX, env_dir)

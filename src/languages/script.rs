@@ -40,6 +40,7 @@ impl LanguageImpl for Script {
 
         let run = async move |batch: Vec<String>| {
             let mut output = Cmd::new(&cmd, "run script command")
+                .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)

@@ -69,12 +69,13 @@ pub(crate) async fn install(
 }
 
 pub(crate) async fn install_hooks(config: Option<PathBuf>, printer: Printer) -> Result<ExitStatus> {
+    // TODO: use workspace
     let mut project = Project::from_config_file_or_directory(config, &CWD)?;
     let store = STORE.as_ref()?;
     let _lock = store.lock_async().await?;
 
     let reporter = HookInitReporter::from(printer);
-    let hooks = project.init_hooks(store, Some(&reporter)).await?;
+    let hooks = project.init(store, Some(&reporter)).await?;
     let reporter = HookInstallReporter::from(printer);
     run::install_hooks(hooks, store, &reporter).await?;
 

@@ -31,7 +31,7 @@ while also providing some additional long-requested features.
 - 🐍 Integration with [`uv`](https://github.com/astral-sh/uv) for managing Python virtual environments and dependencies.
 - 🛠️ Improved toolchain installations for Python, Node.js, Go, Rust and Ruby, shared between hooks.
 - 📦 Built-in implementation of some common hooks.
-- 🏗️ (TODO) Built-in support for monorepos.
+- 🏗️ Built-in support for monorepos.
 
 ## How to migrate
 
@@ -66,7 +66,7 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 
 - No need to install Python or any other runtime, just download a single binary.
 - No hassle with your Python version or virtual environments, prek automatically installs the required Python version and creates a virtual environment for you.
-- (TODO): Built-in support for workspaces (or monorepos), each subproject can have its own `.pre-commit-config.yaml` file.
+- Built-in support for workspaces (or monorepos), each subproject can have its own `.pre-commit-config.yaml` file.
 - `prek run` has some improvements over `pre-commit run`, such as:
     - `prek run --directory <dir>` runs hooks for files in the specified directory, no need to use `git ls-files -- <dir> | xargs pre-commit run --files` anymore.
     - `prek run --last-commit` runs hooks for files changed in the last commit.

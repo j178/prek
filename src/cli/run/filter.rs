@@ -137,12 +137,23 @@ impl<'a> FileFilter<'a> {
 
     /// Filter filenames by file patterns and tags for a specific hook.
     pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&'a String> {
-        let filter = FilenameFilter::for_hook(hook);
-        let filenames = self
-            .filenames
-            .par_iter()
-            .filter(|filename| filter.filter(filename));
+        // Collect files that are inside the hook project directory.
+        // And strip the prefix to get relative paths.
+        // TODO: support orphaned project, which does not share files with its parent project.
+        let filenames = self.filenames.par_iter().filter_map(|f| {
+            let path = Path::new(f);
+            if let Ok(base) = path.strip_prefix(hook.work_dir()) {
+                Some(base)
+            } else {
+                None
+            }
+        });
 
+        // Filter by hook `files` and `exclude` patterns.
+        let filter = FilenameFilter::for_hook(hook);
+        let filenames = filenames.filter(|filename| filter.filter(filename));
+
+        // Filter by hook `types`, `types_or` and `exclude_types`.
         let filter = FileTagFilter::for_hook(hook);
         let filenames: Vec<_> = filenames
             .filter(|filename| {

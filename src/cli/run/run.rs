@@ -1,4 +1,4 @@
-use std::cmp::{Reverse, max};
+use std::cmp::{PartialEq, Reverse, max};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::hash::Hash;
@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
+use itertools::Itertools;
 use owo_colors::{OwoColorize, Style};
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
@@ -25,12 +26,12 @@ use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, Stage};
-use crate::fs::{CWD, Simplified};
+use crate::fs::CWD;
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::{Printer, Stdout};
 use crate::run::USE_COLOR;
 use crate::store::{STORE, Store};
-use crate::workspace::Project;
+use crate::workspace::{DiscoverOptions, Project, Workspace};
 use crate::{git, warn_user};
 
 enum HookToRun {
@@ -91,15 +92,9 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Failure);
     }
 
-    let mut project = Project::from_config_file_or_directory(config, &CWD)?;
-    if should_stash && git::file_not_staged(project.config_file()).await? {
-        writeln!(
-            printer.stderr(),
-            "{}: prek configuration file is not staged, run `{}` to stage it",
-            "error".red().bold(),
-            format!("git add {}", project.config_file().user_display()).cyan(),
-        )?;
-        return Ok(ExitStatus::Failure);
+    let mut workspace = Workspace::discover(DiscoverOptions::new(config, &CWD))?;
+    if should_stash {
+        workspace.check_config_staged().await?;
     }
 
     let store = STORE.as_ref()?;
@@ -109,7 +104,7 @@ pub(crate) async fn run(
 
     let hook_ids = hook_ids.into_iter().collect::<BTreeSet<_>>();
 
-    let hooks = project.init_hooks(store, Some(&reporter)).await?;
+    let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
     let filtered_hooks: Vec<_> = hooks
         .into_iter()
         .filter(|h| hook_ids.is_empty() || hook_ids.contains(&h.id) || hook_ids.contains(&h.alias))
@@ -228,18 +223,10 @@ pub(crate) async fn run(
     })
     .await?;
 
-    let filter = FileFilter::new(
-        &filenames,
-        project.config().files.as_ref(),
-        project.config().exclude.as_ref(),
-    );
-    trace!("Files after filtered: {}", filter.len());
-
     run_hooks(
         &hooks,
-        &filter,
+        filenames,
         store,
-        project.config().fail_fast.unwrap_or(false),
         show_diff_on_failure,
         verbose,
         printer,
@@ -537,34 +524,59 @@ impl StatusPrinter {
     }
 }
 
+impl PartialEq for &Project {
+    fn eq(&self, other: &Self) -> bool {
+        self.config_file() == other.config_file()
+    }
+}
+
 /// Run all hooks.
 async fn run_hooks(
     hooks: &[HookToRun],
-    filter: &FileFilter<'_>,
+    filenames: Vec<String>,
     store: &Store,
-    fail_fast: bool,
     show_diff_on_failure: bool,
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    assert!(hooks.len() > 0, "No hooks to run");
+
     let printer = StatusPrinter::for_hooks(hooks, printer);
+
     let mut success = true;
-
     let mut diff = git::get_diff().await?;
-    // Hooks might modify the files, so they must be run sequentially.
-    for hook in hooks {
-        let (hook_success, new_diff) =
-            run_hook(hook, filter, store, diff, verbose, &printer).await?;
 
-        success &= hook_success;
-        diff = new_diff;
-        let fail_fast = fail_fast
-            || match hook {
-                HookToRun::Skipped(_) => false,
-                HookToRun::ToRun(hook) => hook.fail_fast,
-            };
-        if !success && fail_fast {
-            break;
+    // Hooks might modify the files, so they must be run sequentially.
+    for (project, hooks) in hooks.iter().chunk_by(|h| h.project()).into_iter() {
+        let fail_fast = project.config().fail_fast.unwrap_or(false);
+
+        let filter = FileFilter::new(
+            &filenames,
+            project.config().files.as_ref(),
+            project.config().exclude.as_ref(),
+        );
+        trace!("Files for {project} after filtered: {}", filter.len());
+
+        writeln!(
+            printer.stdout(),
+            "\n{}:",
+            format!("Running hooks for `{}`", project.to_string().cyan()).bold()
+        )?;
+
+        for hook in hooks {
+            let (hook_success, new_diff) =
+                run_hook(hook, &filter, store, diff, verbose, &printer).await?;
+
+            success &= hook_success;
+            diff = new_diff;
+            let fail_fast = fail_fast
+                || match hook {
+                    HookToRun::Skipped(_) => false,
+                    HookToRun::ToRun(hook) => hook.fail_fast,
+                };
+            if !success && fail_fast {
+                break;
+            }
         }
     }
 

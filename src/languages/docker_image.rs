@@ -36,6 +36,7 @@ impl LanguageImpl for DockerImage {
         let run = async move |batch: Vec<String>| {
             let mut cmd = Docker::docker_run_cmd().await?;
             let mut output = cmd
+                .current_dir(hook.work_dir())
                 .args(&entry[..])
                 .args(&hook.args)
                 .args(batch)

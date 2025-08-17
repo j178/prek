@@ -39,7 +39,8 @@ pub(crate) async fn list(
     let reporter = HookInitReporter::from(printer);
 
     let lock = store.lock_async().await?;
-    let hooks = project.init_hooks(store, Some(&reporter)).await?;
+    // TODO: use workspace
+    let hooks = project.init(store, Some(&reporter)).await?;
     drop(lock);
 
     let hook_ids = hook_ids.into_iter().collect::<BTreeSet<_>>();

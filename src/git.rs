@@ -8,8 +8,8 @@ use itertools::Itertools;
 use tokio::io::AsyncWriteExt;
 use tracing::warn;
 
+use crate::process;
 use crate::process::{Cmd, StatusError};
-use crate::{git, process};
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
@@ -154,19 +154,23 @@ pub(crate) async fn get_staged_files() -> Result<Vec<String>, Error> {
     Ok(zsplit(&output.stdout))
 }
 
-pub(crate) async fn file_not_staged(file: &Path) -> Result<bool> {
-    let status = git::git_cmd("git diff")?
+pub async fn files_not_staged(files: &[&Path]) -> Result<Vec<String>> {
+    let output = git_cmd("git diff")?
         .arg("diff")
-        .arg("--quiet") // Implies --exit-code
+        .arg("--exit-code")
+        .arg("--name-only")
         .arg("--no-ext-diff")
-        .arg(file)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .arg("-z") // Use NUL as line terminator
+        .args(files)
         .check(false)
-        .status()
+        .output()
         .await?;
 
-    Ok(status.code().is_some_and(|code| code == 1))
+    if output.status.code().is_some_and(|code| code == 1) {
+        return Ok(zsplit(&output.stdout));
+    }
+
+    Ok(vec![])
 }
 
 pub(crate) async fn has_unmerged_paths() -> Result<bool, Error> {
@@ -196,7 +200,7 @@ pub(crate) async fn get_conflicted_files() -> Result<Vec<String>, Error> {
         .arg("--name-only")
         .arg("--no-ext-diff") // Disable external diff drivers
         .arg("-z") // Use NUL as line terminator
-        .arg("-m")
+        .arg("-m") // Show diffs for merge commits in the default format.
         .arg(String::from_utf8_lossy(&tree.stdout).trim())
         .arg("HEAD")
         .arg("MERGE_HEAD")
@@ -269,25 +273,6 @@ pub(crate) fn get_root() -> Result<PathBuf, Error> {
     Ok(PathBuf::from(
         String::from_utf8_lossy(&output.stdout).trim(),
     ))
-}
-
-pub(crate) async fn is_dirty(path: &Path) -> Result<bool, Error> {
-    let mut cmd = git_cmd("check git is dirty")?;
-    let output = cmd
-        .arg("diff")
-        .arg("--quiet") // Implies `--exit-code`
-        .arg("--no-ext-diff") // Disable external diff drivers
-        .arg(path)
-        .check(false)
-        .output()
-        .await?;
-    if output.status.success() {
-        Ok(false)
-    } else if output.status.code() == Some(1) {
-        Ok(true)
-    } else {
-        Err(cmd.check_status(output.status).unwrap_err().into())
-    }
 }
 
 async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
