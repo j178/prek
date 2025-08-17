@@ -24,7 +24,9 @@ pub enum Error {
 pub static GIT: LazyLock<Result<PathBuf, which::Error>> = LazyLock::new(|| which::which("git"));
 pub static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(get_root);
 
-static GIT_ENV_REMOVE: LazyLock<()> = LazyLock::new(|| {
+// Remove some `GIT_` environment variables exposed by `git`, and keep the removed value for
+// some commands that need them.
+static GIT_ENV_REMOVED: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
     let keep = &[
         "GIT_EXEC_PATH",
         "GIT_SSH",
@@ -44,16 +46,20 @@ static GIT_ENV_REMOVE: LazyLock<()> = LazyLock::new(|| {
             && !keep.contains(&k.as_str())
     });
 
-    for (k, _) in to_remove {
+    let mut removed = Vec::new();
+    for (k, v) in to_remove {
         unsafe { std::env::remove_var(&k) };
+        removed.push((k, v));
     }
+
+    removed
 });
 
 pub fn git_cmd(summary: &str) -> Result<Cmd, Error> {
     let mut cmd = Cmd::new(GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?, summary);
     cmd.arg("-c").arg("core.useBuiltinFSMonitor=false");
 
-    LazyLock::force(&GIT_ENV_REMOVE);
+    LazyLock::force(&GIT_ENV_REMOVED);
 
     Ok(cmd)
 }
@@ -157,8 +163,8 @@ pub async fn file_not_staged(file: &Path) -> Result<bool> {
         .arg("--quiet") // Implies --exit-code
         .arg("--no-ext-diff")
         .arg(file)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .check(false)
         .status()
         .await?;
@@ -184,6 +190,11 @@ pub async fn is_in_merge_conflict() -> Result<bool, Error> {
 pub async fn get_conflicted_files() -> Result<Vec<String>, Error> {
     let tree = git_cmd("git write-tree")?
         .arg("write-tree")
+        .envs(
+            GIT_ENV_REMOVED
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str())),
+        )
         .check(true)
         .output()
         .await?;
@@ -240,6 +251,15 @@ pub async fn get_diff() -> Result<Vec<u8>, Error> {
 /// The index must be in a fully merged state.
 pub async fn write_tree() -> Result<String, Error> {
     let output = git_cmd("git write-tree")?
+        // When running `git commit -a` or `git commit -p`, git creates a `.git/index.lock` file
+        // and set `GIT_INDEX_FILE` to point to it.
+        // We need to keep the `GIT_INDEX_FILE` env var to make sure `git write-tree` works correctly.
+        // https://stackoverflow.com/questions/65639403/git-pre-commit-hook-how-can-i-get-added-modified-files-when-commit-with-a-flag/65647202#65647202
+        .envs(
+            GIT_ENV_REMOVED
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str())),
+        )
         .arg("write-tree")
         .check(true)
         .output()
