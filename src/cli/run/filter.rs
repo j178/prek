@@ -1,18 +1,19 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use fancy_regex::Regex;
 use itertools::{Either, Itertools};
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::FxHashSet;
 use tracing::{debug, error};
 
 use constants::env_vars::EnvVars;
 
-use crate::config::{SerdeRegex, Stage};
+use crate::config::Stage;
 use crate::fs::normalize_path;
 use crate::hook::Hook;
 use crate::identify::tags_from_path;
+use crate::workspace::Project;
 use crate::{git, warn_user};
 
 /// Filter filenames by include/exclude patterns.
@@ -26,8 +27,10 @@ impl<'a> FilenameFilter<'a> {
         Self { include, exclude }
     }
 
-    pub(crate) fn filter(&self, filename: impl AsRef<str>) -> bool {
-        let filename = filename.as_ref();
+    pub(crate) fn filter(&self, filename: &Path) -> bool {
+        let Some(filename) = filename.to_str() else {
+            return false;
+        };
         if let Some(re) = &self.include {
             if !re.is_match(filename).unwrap_or(false) {
                 return false;
@@ -85,23 +88,34 @@ impl<'a> FileTagFilter<'a> {
 }
 
 pub(crate) struct FileFilter<'a> {
-    filenames: Vec<&'a String>,
+    filenames: Vec<&'a Path>,
+    filename_prefix: &'a Path,
 }
 
 impl<'a> FileFilter<'a> {
-    pub(crate) fn new(
-        filenames: &'a [String],
-        include: Option<&'a SerdeRegex>,
-        exclude: Option<&'a SerdeRegex>,
-    ) -> Self {
-        let filter = FilenameFilter::new(include.map(|r| &**r), exclude.map(|r| &**r));
+    pub(crate) fn for_project(filenames: &'a [&'a Path], project: &'a Project) -> Self {
+        let filter = FilenameFilter::new(
+            project.config().files.as_deref(),
+            project.config().exclude.as_deref(),
+        );
 
+        // TODO: support orphaned project, which does not share files with its parent project.
         let filenames = filenames
-            .into_par_iter()
+            .par_iter()
             .filter(|filename| filter.filter(filename))
-            .collect::<Vec<_>>();
+            // Collect files that are inside the hook project directory.
+            .filter(|filename| filename.starts_with(project.relative_path()))
+            .copied()
+            .collect();
 
-        Self { filenames }
+        Self {
+            filenames,
+            filename_prefix: project.relative_path(),
+        }
+    }
+
+    pub(crate) fn filenames(&self) -> &[&Path] {
+        &self.filenames
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -114,19 +128,16 @@ impl<'a> FileFilter<'a> {
         types: &[String],
         types_or: &[String],
         exclude_types: &[String],
-    ) -> Vec<&String> {
+    ) -> Vec<&Path> {
         let filter = FileTagFilter::new(types, types_or, exclude_types);
         let filenames: Vec<_> = self
             .filenames
             .par_iter()
-            .filter(|filename| {
-                let path = Path::new(filename);
-                match tags_from_path(path) {
-                    Ok(tags) => filter.filter(&tags),
-                    Err(err) => {
-                        error!(filename, error = %err, "Failed to get tags");
-                        false
-                    }
+            .filter(|filename| match tags_from_path(filename) {
+                Ok(tags) => filter.filter(&tags),
+                Err(err) => {
+                    error!(filename = ?filename.display(), error = %err, "Failed to get tags");
+                    false
                 }
             })
             .copied()
@@ -136,26 +147,30 @@ impl<'a> FileFilter<'a> {
     }
 
     /// Filter filenames by file patterns and tags for a specific hook.
-    pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&'a String> {
+    pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&Path> {
+        // Filter by hook `files` and `exclude` patterns.
         let filter = FilenameFilter::for_hook(hook);
         let filenames = self
             .filenames
             .par_iter()
             .filter(|filename| filter.filter(filename));
 
+        // Filter by hook `types`, `types_or` and `exclude_types`.
         let filter = FileTagFilter::for_hook(hook);
+        let filenames = filenames.filter(|filename| match tags_from_path(filename) {
+            Ok(tags) => filter.filter(&tags),
+            Err(err) => {
+                error!(filename = ?filename.display(), error = %err, "Failed to get tags");
+                false
+            }
+        });
+
+        // Strip the prefix to get relative paths.
         let filenames: Vec<_> = filenames
-            .filter(|filename| {
-                let path = Path::new(filename);
-                match tags_from_path(path) {
-                    Ok(tags) => filter.filter(&tags),
-                    Err(err) => {
-                        error!(filename, error = %err, "Failed to get tags");
-                        false
-                    }
-                }
+            .map(|p| {
+                p.strip_prefix(self.filename_prefix)
+                    .expect("Failed to strip prefix")
             })
-            .copied()
             .collect();
 
         filenames
@@ -182,7 +197,7 @@ impl CollectOptions {
 
 /// Get all filenames to run hooks on.
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn collect_files(opts: CollectOptions) -> Result<Vec<String>> {
+pub(crate) async fn collect_files(opts: CollectOptions) -> Result<Vec<PathBuf>> {
     let CollectOptions {
         hook_stage,
         from_ref,
@@ -212,7 +227,8 @@ pub(crate) async fn collect_files(opts: CollectOptions) -> Result<Vec<String>> {
     for filename in &mut filenames {
         normalize_path(filename);
     }
-    Ok(filenames)
+
+    Ok(filenames.into_iter().map(PathBuf::from).collect())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -228,6 +244,7 @@ async fn collect_files_from_args(
     if !hook_stage.operate_on_files() {
         return Ok(vec![]);
     }
+    // TODO: adjust relative path to based on the workspace root
     if hook_stage == Stage::PrepareCommitMsg || hook_stage == Stage::CommitMsg {
         return Ok(vec![
             commit_msg_filename.expect("commit message filename is required"),

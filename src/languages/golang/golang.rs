@@ -118,7 +118,7 @@ impl LanguageImpl for Golang {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&String],
+        filenames: &[&Path],
         store: &Store,
     ) -> anyhow::Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Node must have env path");
@@ -133,8 +133,9 @@ impl LanguageImpl for Golang {
         let new_path = prepend_paths(&[&go_bin, go_root_bin]).context("Failed to join PATH")?;
 
         let entry = hook.entry.resolve(Some(&new_path))?;
-        let run = async move |batch: &[&String]| {
+        let run = async move |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "go hook")
+                .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env("PATH", &new_path)
                 .env(EnvVars::GOTOOLCHAIN, "local")

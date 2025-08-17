@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -31,7 +32,7 @@ impl LanguageImpl for Script {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&String],
+        filenames: &[&Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         // For `language: script`, the `entry[0]` is a script path.
@@ -45,8 +46,9 @@ impl LanguageImpl for Script {
         split[0] = cmd.to_string_lossy().to_string();
         let entry = resolve_command(split, None);
 
-        let run = async move |batch: &[&String]| {
+        let run = async move |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "run script command")
+                .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)

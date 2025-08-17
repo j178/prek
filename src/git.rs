@@ -8,21 +8,24 @@ use itertools::Itertools;
 use tokio::io::AsyncWriteExt;
 use tracing::warn;
 
+use crate::process;
 use crate::process::{Cmd, StatusError};
-use crate::{git, process};
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error(transparent)]
     Command(#[from] process::Error),
+
     #[error("Failed to find git: {0}")]
     GitNotFound(#[from] which::Error),
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }
 
 pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
     LazyLock::new(|| which::which("git"));
+
 pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(get_root);
 
 // Remove some `GIT_` environment variables exposed by `git`.
@@ -154,19 +157,23 @@ pub(crate) async fn get_staged_files() -> Result<Vec<String>, Error> {
     Ok(zsplit(&output.stdout))
 }
 
-pub(crate) async fn file_not_staged(file: &Path) -> Result<bool> {
-    let status = git::git_cmd("git diff")?
+pub(crate) async fn files_not_staged(files: &[&Path]) -> Result<Vec<String>> {
+    let output = git_cmd("git diff")?
         .arg("diff")
-        .arg("--quiet") // Implies --exit-code
+        .arg("--exit-code")
+        .arg("--name-only")
         .arg("--no-ext-diff")
-        .arg(file)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .arg("-z") // Use NUL as line terminator
+        .args(files)
         .check(false)
-        .status()
+        .output()
         .await?;
 
-    Ok(status.code().is_some_and(|code| code == 1))
+    if output.status.code().is_some_and(|code| code == 1) {
+        return Ok(zsplit(&output.stdout));
+    }
+
+    Ok(vec![])
 }
 
 pub(crate) async fn has_unmerged_paths() -> Result<bool, Error> {
@@ -196,7 +203,7 @@ pub(crate) async fn get_conflicted_files() -> Result<Vec<String>, Error> {
         .arg("--name-only")
         .arg("--no-ext-diff") // Disable external diff drivers
         .arg("-z") // Use NUL as line terminator
-        .arg("-m")
+        .arg("-m") // Show diffs for merge commits in the default format.
         .arg(String::from_utf8_lossy(&tree.stdout).trim())
         .arg("HEAD")
         .arg("MERGE_HEAD")
@@ -252,7 +259,7 @@ pub(crate) async fn write_tree() -> Result<String, Error> {
 
 /// Get the path of the top-level directory of the working tree.
 pub(crate) fn get_root() -> Result<PathBuf, Error> {
-    let output = std::process::Command::new(GIT.clone()?)
+    let output = std::process::Command::new(GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?)
         .arg("rev-parse")
         .arg("--show-toplevel")
         .output()?;
@@ -269,25 +276,6 @@ pub(crate) fn get_root() -> Result<PathBuf, Error> {
     Ok(PathBuf::from(
         String::from_utf8_lossy(&output.stdout).trim(),
     ))
-}
-
-pub(crate) async fn is_dirty(path: &Path) -> Result<bool, Error> {
-    let mut cmd = git_cmd("check git is dirty")?;
-    let output = cmd
-        .arg("diff")
-        .arg("--quiet") // Implies `--exit-code`
-        .arg("--no-ext-diff") // Disable external diff drivers
-        .arg(path)
-        .check(false)
-        .output()
-        .await?;
-    if output.status.success() {
-        Ok(false)
-    } else if output.status.code() == Some(1) {
-        Ok(true)
-    } else {
-        Err(cmd.check_status(output.status).unwrap_err().into())
-    }
 }
 
 pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
@@ -414,7 +402,7 @@ pub(crate) async fn has_hooks_path_set() -> Result<bool> {
     }
 }
 
-pub(crate) async fn lfs_files<T: FromIterator<String>>(paths: &[&String]) -> Result<T, Error> {
+pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<Vec<String>, Error> {
     let mut job = git_cmd("git check-attr")?
         .arg("check-attr")
         .arg("filter")
@@ -423,12 +411,19 @@ pub(crate) async fn lfs_files<T: FromIterator<String>>(paths: &[&String]) -> Res
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .check(true)
-        // .output()
         .spawn()?;
 
     {
         let mut stdin = job.stdin.take().expect("Failed to open stdin");
-        stdin.write_all(paths.iter().join("\0").as_ref()).await?;
+        stdin
+            .write_all(
+                paths
+                    .iter()
+                    .map(|f| f.to_string_lossy())
+                    .join("\0")
+                    .as_ref(),
+            )
+            .await?;
     }
 
     Ok(

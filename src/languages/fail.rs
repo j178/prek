@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -27,7 +28,7 @@ impl LanguageImpl for Fail {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&String],
+        filenames: &[&Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let mut out = shlex::try_join(hook.entry.resolve(None)?.iter().map(std::ops::Deref::deref))
@@ -35,7 +36,7 @@ impl LanguageImpl for Fail {
             .into_bytes();
         out.extend(b"\n\n");
         for f in filenames {
-            out.extend(f.as_bytes());
+            out.extend(f.to_string_lossy().as_bytes());
             out.push(b'\n');
         }
         out.push(b'\n');

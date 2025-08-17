@@ -1,10 +1,12 @@
+use std::path::Path;
+
 use anyhow::Result;
 use futures::StreamExt;
 
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
-pub(crate) async fn check_yaml(_hook: &Hook, filenames: &[&String]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn check_yaml(_hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
         .map(async |filename| check_file(filename).await)
         .buffered(*CONCURRENCY);
@@ -21,7 +23,7 @@ pub(crate) async fn check_yaml(_hook: &Hook, filenames: &[&String]) -> Result<(i
     Ok((code, output))
 }
 
-async fn check_file(filename: &str) -> Result<(i32, Vec<u8>)> {
+async fn check_file(filename: &Path) -> Result<(i32, Vec<u8>)> {
     let content = fs_err::tokio::read(filename).await?;
     if content.is_empty() {
         return Ok((0, Vec::new()));
@@ -30,7 +32,7 @@ async fn check_file(filename: &str) -> Result<(i32, Vec<u8>)> {
     match serde_yaml::from_slice::<serde_yaml::Value>(&content) {
         Ok(_) => Ok((0, Vec::new())),
         Err(e) => {
-            let error_message = format!("{filename}: Failed to yaml decode ({e})\n");
+            let error_message = format!("{}: Failed to yaml decode ({e})\n", filename.display());
             Ok((1, error_message.into_bytes()))
         }
     }
@@ -39,63 +41,66 @@ async fn check_file(filename: &str) -> Result<(i32, Vec<u8>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
     use tempfile::tempdir;
 
-    async fn create_test_file(dir: &tempfile::TempDir, name: &str, content: &[u8]) -> PathBuf {
+    async fn create_test_file(
+        dir: &tempfile::TempDir,
+        name: &str,
+        content: &[u8],
+    ) -> Result<PathBuf> {
         let file_path = dir.path().join(name);
-        fs_err::tokio::write(&file_path, content).await.unwrap();
-        file_path
-    }
-
-    async fn run_check_on_file(file_path: &Path) -> (i32, Vec<u8>) {
-        let filename = file_path.to_string_lossy().to_string();
-        check_file(&filename).await.unwrap()
+        fs_err::tokio::write(&file_path, content).await?;
+        Ok(file_path)
     }
 
     #[tokio::test]
-    async fn test_valid_yaml() {
-        let dir = tempdir().unwrap();
+    async fn test_valid_yaml() -> Result<()> {
+        let dir = tempdir()?;
         let content = br"key1: value1
 key2: value2
 ";
-        let file_path = create_test_file(&dir, "valid.yaml", content).await;
-        let (code, output) = run_check_on_file(&file_path).await;
+        let file_path = create_test_file(&dir, "valid.yaml", content).await?;
+        let (code, output) = check_file(&file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_invalid_yaml() {
-        let dir = tempdir().unwrap();
+    async fn test_invalid_yaml() -> Result<()> {
+        let dir = tempdir()?;
         let content = br"key1: value1
 key2: value2: another_value
 ";
-        let file_path = create_test_file(&dir, "invalid.yaml", content).await;
-        let (code, output) = run_check_on_file(&file_path).await;
+        let file_path = create_test_file(&dir, "invalid.yaml", content).await?;
+        let (code, output) = check_file(&file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_duplicate_keys() {
-        let dir = tempdir().unwrap();
+    async fn test_duplicate_keys() -> Result<()> {
+        let dir = tempdir()?;
         let content = br"key1: value1
 key1: value2
 ";
-        let file_path = create_test_file(&dir, "duplicate.yaml", content).await;
-        let (code, output) = run_check_on_file(&file_path).await;
+        let file_path = create_test_file(&dir, "duplicate.yaml", content).await?;
+        let (code, output) = check_file(&file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_empty_yaml() {
-        let dir = tempdir().unwrap();
+    async fn test_empty_yaml() -> Result<()> {
+        let dir = tempdir()?;
         let content = b"";
-        let file_path = create_test_file(&dir, "empty.yaml", content).await;
-        let (code, output) = run_check_on_file(&file_path).await;
+        let file_path = create_test_file(&dir, "empty.yaml", content).await?;
+        let (code, output) = check_file(&file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
+        Ok(())
     }
 }

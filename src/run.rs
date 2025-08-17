@@ -37,7 +37,7 @@ fn target_concurrency(serial: bool) -> usize {
 /// Iterator that yields partitions of filenames that fit within the maximum command line length.
 struct Partitions<'a> {
     hook: &'a Hook,
-    filenames: &'a [&'a String],
+    filenames: &'a [&'a Path],
     concurrency: usize,
     current_index: usize,
     command_length: usize,
@@ -72,7 +72,7 @@ fn platform_max_cli_length() -> usize {
 }
 
 impl<'a> Partitions<'a> {
-    fn new(hook: &'a Hook, filenames: &'a [&'a String], concurrency: usize) -> Self {
+    fn new(hook: &'a Hook, filenames: &'a [&'a Path], concurrency: usize) -> Self {
         let max_per_batch = max(4, filenames.len().div_ceil(concurrency));
         let max_cli_length = platform_max_cli_length();
 
@@ -93,7 +93,7 @@ impl<'a> Partitions<'a> {
 }
 
 impl<'a> Iterator for Partitions<'a> {
-    type Item = &'a [&'a String];
+    type Item = &'a [&'a Path];
 
     fn next(&mut self) -> Option<Self::Item> {
         // Handle empty filenames case
@@ -111,7 +111,7 @@ impl<'a> Iterator for Partitions<'a> {
 
         while self.current_index < self.filenames.len() {
             let filename = self.filenames[self.current_index];
-            let length = filename.len() + 1;
+            let length = filename.to_string_lossy().len() + 1;
 
             if current_length + length > self.max_cli_length
                 || self.current_index - start_index >= self.max_per_batch
@@ -133,11 +133,11 @@ impl<'a> Iterator for Partitions<'a> {
 
 pub(crate) async fn run_by_batch<T, F>(
     hook: &Hook,
-    filenames: &[&String],
+    filenames: &[&Path],
     run: F,
 ) -> anyhow::Result<Vec<T>>
 where
-    F: for<'a> AsyncFn(&'a [&'a String]) -> anyhow::Result<T>,
+    F: for<'a> AsyncFn(&'a [&'a Path]) -> anyhow::Result<T>,
     T: Send + 'static,
 {
     let concurrency = target_concurrency(hook.require_serial);

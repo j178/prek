@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -29,13 +30,14 @@ impl LanguageImpl for System {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&String],
+        filenames: &[&Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let entry = hook.entry.resolve(None)?;
 
-        let run = async move |batch: &[&String]| {
+        let run = async move |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "run system command")
+                .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)
