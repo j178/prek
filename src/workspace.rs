@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use futures::StreamExt;
+use ignore::WalkState;
 use itertools::zip_eq;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
@@ -40,6 +41,7 @@ pub(crate) trait HookInitReporter {
     fn on_complete(&self);
 }
 
+#[derive(Debug, Clone)]
 pub(crate) struct Project {
     config_path: PathBuf,
     config: Config,
@@ -48,7 +50,7 @@ pub(crate) struct Project {
 
 impl Project {
     /// Initialize a new project from the configuration file or the file in the current working directory.
-    pub(crate) fn from_config_file(config_path: PathBuf) -> Result<Self, Error> {
+    pub(crate) fn from_config_file(config_path: PathBuf) -> Result<Self, config::Error> {
         debug!(
             path = %config_path.display(),
             "Loading project configuration"
@@ -63,14 +65,14 @@ impl Project {
     }
 
     /// Find the configuration file in the given path.
-    pub(crate) fn from_directory(path: &Path) -> Result<Self, Error> {
+    pub(crate) fn from_directory(path: &Path) -> Result<Self, config::Error> {
         let main = path.join(CONFIG_FILE);
         let alternate = path.join(ALTER_CONFIG_FILE);
         if main.exists() && alternate.exists() {
             warn_user!(
-                "Both {main} and {alternate} exist, using {main}",
-                main = main.display(),
-                alternate = alternate.display()
+                "Both `{main}` and `{alternate}` exist, using `{main}`",
+                main = main.user_display().cyan(),
+                alternate = alternate.user_display().cyan()
             );
         }
         if main.exists() {
@@ -80,9 +82,7 @@ impl Project {
             return Self::from_config_file(alternate);
         }
 
-        Err(Error::InvalidConfig(config::Error::NotFound(
-            main.user_display().to_string(),
-        )))
+        Err(config::Error::NotFound(main.user_display().to_string()))
     }
 
     // Find the project configuration file in the current working directory or its ancestors.
@@ -112,7 +112,7 @@ impl Project {
     pub(crate) fn from_config_file_or_directory(
         config: Option<PathBuf>,
         path: &Path,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, config::Error> {
         if let Some(config) = config {
             return Self::from_config_file(config);
         }
@@ -262,36 +262,275 @@ pub(crate) struct Workspace {
     projects: Vec<Project>,
 }
 
-// impl Workspace {
-//     pub(crate) fn discover(path: &Path) -> Result<Self, Error> {
-//         let mut projects = Vec::new();
-//
-//         ignore::WalkBuilder::new(path)
-//             .build_parallel()
-//             .run(|| |entry|{
-//                 match entry {
-//                     Ok(entry) => {
-//                         if entry.file_type().is_file() && entry.file_name() == CONFIG_FILE {
-//                             let config_path = entry.into_path();
-//                             match Project::from_directory(Some(config_path)) {
-//                                 Ok(project) => Some(project),
-//                                 Err(e) => {
-//                                     error!("Failed to load project: {}", e);
-//                                     None
-//                                 }
-//                             }
-//                         } else {
-//                             None
-//                         }
-//                     }
-//                     Err(e) => {
-//                         error!("Error walking path: {}", e);
-//                         None
-//                     }
-//                 }
-//             });
-//
-//
-//         Ok(Self { projects })
-//     }
-// }
+impl Workspace {
+    pub(crate) fn discover(path: &Path) -> Result<Self, config::Error> {
+        let projects = Mutex::new(Ok(Vec::new()));
+
+        ignore::WalkBuilder::new(path)
+            .follow_links(false)
+            .build_parallel()
+            .run(|| {
+                Box::new(|result| {
+                    if let Ok(entry) = result {
+                        if entry.file_type().is_some_and(|t| t.is_dir()) {
+                            match Project::from_directory(entry.path()) {
+                                Ok(project) => {
+                                    debug!(
+                                        path = %project.config_file().display(),
+                                        "Found project configuration"
+                                    );
+                                    projects.lock().unwrap().as_mut().unwrap().push(project);
+                                }
+                                Err(config::Error::NotFound(_)) => {}
+                                Err(e) => {
+                                    *projects.lock().unwrap() = Err(e);
+                                    return WalkState::Quit;
+                                }
+                            }
+                        }
+                    }
+
+                    WalkState::Continue
+                })
+            });
+
+        let projects = projects.into_inner().unwrap()?;
+        Ok(Self { projects })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn test_workspace_discovery_empty_directory() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+
+        let workspace = Workspace::discover(dir.path())?;
+        assert_eq!(workspace.projects.len(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_workspace_discovery_single_project() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+
+        // Create a project with .pre-commit-config.yaml
+        let project_dir = dir.path().join("project1");
+        fs::create_dir(&project_dir)?;
+        fs::write(
+            project_dir.join(".pre-commit-config.yaml"),
+            r#"
+repos:
+  - repo: local
+    hooks:
+      - id: test-hook
+        name: Test Hook
+        entry: echo "test"
+        language: system
+"#,
+        )?;
+
+        let workspace = Workspace::discover(dir.path())?;
+        assert_eq!(workspace.projects.len(), 1);
+        assert_eq!(
+            workspace.projects[0].config_file(),
+            project_dir.join(".pre-commit-config.yaml")
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_workspace_discovery_multiple_projects() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+
+        // Create multiple projects
+        for i in 1..=3 {
+            let project_dir = dir.path().join(format!("project{i}"));
+            fs::create_dir(&project_dir)?;
+            fs::write(
+                project_dir.join(".pre-commit-config.yaml"),
+                r#"
+repos:
+  - repo: local
+    hooks:
+      - id: test-hook
+        name: Test Hook
+        entry: echo "test"
+        language: system
+"#,
+            )?;
+        }
+
+        let workspace = Workspace::discover(dir.path())?;
+        assert_eq!(workspace.projects.len(), 3);
+
+        // Verify all projects were found
+        let config_files: Vec<_> = workspace
+            .projects
+            .iter()
+            .map(|p| p.config_file().file_name().unwrap().to_str().unwrap())
+            .collect();
+        assert!(
+            config_files
+                .iter()
+                .all(|&name| name == ".pre-commit-config.yaml")
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_workspace_discovery_nested_projects() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+
+        // Create nested project structure
+        let parent_project = dir.path().join("parent");
+        let nested_project = parent_project.join("nested");
+        fs::create_dir_all(&nested_project)?;
+
+        // Parent project
+        fs::write(
+            parent_project.join(".pre-commit-config.yaml"),
+            r#"
+repos:
+  - repo: local
+    hooks:
+      - id: parent-hook
+        name: Parent Hook
+        entry: echo "parent"
+        language: system
+"#,
+        )?;
+
+        // Nested project
+        fs::write(
+            nested_project.join(".pre-commit-config.yaml"),
+            r#"
+repos:
+  - repo: local
+    hooks:
+      - id: nested-hook
+        name: Nested Hook
+        entry: echo "nested"
+        language: system
+"#,
+        )?;
+
+        let workspace = Workspace::discover(dir.path())?;
+        assert_eq!(workspace.projects.len(), 2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_workspace_discovery_mixed_config_files() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+
+        // Create project with .pre-commit-config.yaml
+        let project1 = dir.path().join("project1");
+        fs::create_dir(&project1)?;
+        fs::write(
+            project1.join(".pre-commit-config.yaml"),
+            r#"
+repos:
+  - repo: local
+    hooks:
+      - id: test-hook1
+        name: Test Hook 1
+        entry: echo "test1"
+        language: system
+"#,
+        )?;
+
+        // Create project with .pre-commit-config.yml
+        let project2 = dir.path().join("project2");
+        fs::create_dir(&project2)?;
+        fs::write(
+            project2.join(".pre-commit-config.yml"),
+            r#"
+repos:
+  - repo: local
+    hooks:
+      - id: test-hook2
+        name: Test Hook 2
+        entry: echo "test2"
+        language: system
+"#,
+        )?;
+
+        let workspace = Workspace::discover(dir.path())?;
+        assert_eq!(workspace.projects.len(), 2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_workspace_discovery_invalid_config() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+
+        // Create a project with invalid YAML
+        let project_dir = dir.path().join("invalid_project");
+        fs::create_dir(&project_dir)?;
+        fs::write(
+            project_dir.join(".pre-commit-config.yaml"),
+            "invalid: yaml: content: [unclosed",
+        )?;
+
+        // Should return an error for invalid config
+        let result = Workspace::discover(dir.path());
+        assert!(result.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_workspace_discovery_prefers_yaml_over_yml() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+
+        // Create project with both .yaml and .yml files
+        let project_dir = dir.path().join("project");
+        fs::create_dir(&project_dir)?;
+
+        fs::write(
+            project_dir.join(".pre-commit-config.yaml"),
+            r#"
+repos:
+  - repo: local
+    hooks:
+      - id: yaml-hook
+        name: YAML Hook
+        entry: echo "yaml"
+        language: system
+"#,
+        )?;
+
+        fs::write(
+            project_dir.join(".pre-commit-config.yml"),
+            r#"
+repos:
+  - repo: local
+    hooks:
+      - id: yml-hook
+        name: YML Hook
+        entry: echo "yml"
+        language: system
+"#,
+        )?;
+
+        let workspace = Workspace::discover(dir.path())?;
+        assert_eq!(workspace.projects.len(), 1);
+
+        // Should prefer .yaml file
+        assert_eq!(
+            workspace.projects[0].config_file().file_name().unwrap(),
+            ".pre-commit-config.yaml"
+        );
+
+        Ok(())
+    }
+}
