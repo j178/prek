@@ -1,5 +1,5 @@
 use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::builder::styling::{AnsiColor, Effects};
@@ -24,6 +24,7 @@ mod sample_config;
 mod self_update;
 mod validate;
 
+use crate::git::GIT_ROOT;
 pub(crate) use clean::clean;
 pub(crate) use hook_impl::hook_impl;
 pub(crate) use install::{init_template_dir, install, install_hooks, uninstall};
@@ -40,15 +41,8 @@ fn hook_id_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
 }
 
 fn get_hook_id_candidates(current: &std::ffi::OsStr) -> anyhow::Result<Vec<CompletionCandidate>> {
-    let output = std::process::Command::new("git")
-        .arg("rev-parse")
-        .arg("--show-toplevel")
-        .output()?;
-
-    let root = String::from_utf8(output.stdout)?;
-    let root = root.trim();
     // TODO: find from ancestor directories up to the root of the git repository
-    let project = Project::from_directory(Path::new(root))?;
+    let project = Project::from_directory(GIT_ROOT.as_ref()?)?;
 
     let hook_ids = project
         .config()

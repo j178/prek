@@ -142,6 +142,7 @@ impl Project {
             config::Repo::Remote(repo) if seen.insert(repo) => Some(repo),
             _ => None,
         });
+
         let mut tasks =
             futures::stream::iter(remotes_iter)
                 .map(async |repo_config| {

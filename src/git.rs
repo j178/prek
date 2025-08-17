@@ -8,7 +8,7 @@ use itertools::Itertools;
 use tokio::io::AsyncWriteExt;
 use tracing::warn;
 
-use crate::process::Cmd;
+use crate::process::{Cmd, StatusError};
 use crate::{git, process};
 
 #[derive(Debug, thiserror::Error)]
@@ -22,6 +22,7 @@ pub enum Error {
 }
 
 pub static GIT: LazyLock<Result<PathBuf, which::Error>> = LazyLock::new(|| which::which("git"));
+pub static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(get_root);
 
 static GIT_ENV_REMOVE: LazyLock<()> = LazyLock::new(|| {
     let keep = &[
@@ -247,13 +248,21 @@ pub async fn write_tree() -> Result<String, Error> {
 }
 
 /// Get the path of the top-level directory of the working tree.
-pub async fn get_root() -> Result<PathBuf, Error> {
-    let output = git_cmd("get git root")?
+pub fn get_root() -> Result<PathBuf, Error> {
+    let output = std::process::Command::new(GIT.clone()?)
         .arg("rev-parse")
         .arg("--show-toplevel")
-        .check(true)
-        .output()
-        .await?;
+        .output()?;
+    if !output.status.success() {
+        return Err(Error::Command(process::Error::Status {
+            summary: "get git root".to_string(),
+            error: StatusError {
+                status: output.status,
+                output: None,
+            },
+        }));
+    }
+
     Ok(PathBuf::from(
         String::from_utf8_lossy(&output.stdout).trim(),
     ))

@@ -20,7 +20,7 @@ use crate::cleanup::cleanup;
 use crate::cli::{Cli, Command, ExitStatus};
 #[cfg(feature = "self-update")]
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
-use crate::git::get_root;
+use crate::git::GIT_ROOT;
 use crate::printer::Printer;
 use crate::run::USE_COLOR;
 use crate::store::STORE;
@@ -187,14 +187,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     debug!("prek: {}", version::version());
 
-    match get_root().await {
+    match GIT_ROOT.as_ref() {
         Ok(root) => {
             debug!("Git root: {}", root.display());
 
             // Adjust relative paths before changing the working directory.
-            adjust_relative_paths(&mut cli, &root)?;
+            adjust_relative_paths(&mut cli, root)?;
 
-            std::env::set_current_dir(&root)?;
+            std::env::set_current_dir(root)?;
         }
         Err(err) => {
             error!("Failed to find git root: {}", err);
