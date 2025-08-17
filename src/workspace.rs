@@ -429,7 +429,7 @@ impl Workspace {
         drop(tasks);
 
         let remote_repos = remote_repos.lock().unwrap();
-        for project in &mut self.projects {
+        for mut project in &mut self.projects {
             let mut repos = Vec::with_capacity(project.config.repos.len());
 
             for repo in &project.config.repos {
@@ -449,7 +449,7 @@ impl Workspace {
                 }
             }
 
-            project.repos = repos;
+            Arc::get_mut(&mut project).unwrap().repos = repos;
         }
 
         Ok(())
