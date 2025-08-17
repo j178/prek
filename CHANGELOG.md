@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.27
+
+### Enhancements
+
+- Clone repo temporarily into scratch directory ([#478](https://github.com/j178/prek/pull/478))
+- Don’t show the progress bar if there’s no need for cloning or installing hooks ([#477](https://github.com/j178/prek/pull/477))
+- Support `language_version: lts` for node ([#473](https://github.com/j178/prek/pull/473))
+
+### Bug fixes
+
+- Adjust `sample-config` file path before writing ([#474](https://github.com/j178/prek/pull/474))
+- Resolve script shebang before running ([#475](https://github.com/j178/prek/pull/475))
+
 ## 0.0.26
 
 ### Enhancements
