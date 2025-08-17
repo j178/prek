@@ -51,7 +51,7 @@ trait LanguageImpl {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&String],
+        filenames: &[&Path],
         store: &Store,
     ) -> Result<(i32, Vec<u8>)>;
 }
@@ -79,7 +79,7 @@ impl LanguageImpl for Unimplemented {
     async fn run(
         &self,
         hook: &InstalledHook,
-        _filenames: &[&String],
+        _filenames: &[&Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         anyhow::bail!(UnimplementedError(format!("{}", hook.language)))
@@ -197,7 +197,7 @@ impl Language {
     pub async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&String],
+        filenames: &[&Path],
         store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         // fast path for hooks implemented in Rust
