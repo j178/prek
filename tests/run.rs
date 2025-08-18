@@ -1607,18 +1607,23 @@ fn git_commit_a() -> Result<()> {
 
     // Create a file and commit it.
     let cwd = context.work_dir();
-    cwd.child("file.txt").write_str("Hello, world!\n")?;
+    let file = cwd.child("file.txt");
+    file.write_str("Hello, world!\n")?;
+
+    cmd_snapshot!(context.filters(), context.install(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at .git/hooks/pre-commit
+
+    ----- stderr -----
+    "#);
+
     context.git_add(".");
     context.git_commit("Initial commit");
 
     // Edit the file
-    cwd.child("file.txt").write_str("Hello, world again!\n")?;
-
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\[master \w{7}\]", r"[master COMMIT]")])
-        .collect::<Vec<_>>();
+    file.write_str("Hello, world again!\n")?;
 
     let mut commit = Command::new("git");
     commit
@@ -1626,7 +1631,14 @@ fn git_commit_a() -> Result<()> {
         .arg("-a")
         .arg("-m")
         .arg("Update file")
-        .current_dir(context.work_dir());
+        .current_dir(cwd);
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\[master \w{7}\]", r"[master COMMIT]")])
+        .collect::<Vec<_>>();
+
     cmd_snapshot!(filters, commit, @r#"
     success: true
     exit_code: 0
@@ -1635,6 +1647,7 @@ fn git_commit_a() -> Result<()> {
      1 file changed, 1 insertion(+), 1 deletion(-)
 
     ----- stderr -----
+    echo.....................................................................Passed
     "#);
 
     Ok(())
