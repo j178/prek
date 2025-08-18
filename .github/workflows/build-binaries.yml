@@ -264,7 +264,7 @@ jobs:
           args: --release --locked --out dist --features self-update
           # Until the llvm updates hit stable
           # https://github.com/rust-lang/rust/issues/141287
-          rust-toolchain: nightly-2025-05-25
+          rust-toolchain: nightly-2025-08-18
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
