@@ -15,7 +15,6 @@ use tracing::{debug, error};
 
 use crate::config::{self, ALTER_CONFIG_FILE, CONFIG_FILE, Config, ManifestHook, read_config};
 use crate::fs::Simplified;
-use crate::git::GIT_ROOT;
 use crate::hook::{self, Hook, HookBuilder, Repo};
 use crate::store::Store;
 use crate::{git, store, warn_user};
@@ -48,8 +47,8 @@ pub(crate) trait HookInitReporter {
 #[derive(Debug, Clone)]
 pub(crate) struct Project {
     config_path: PathBuf,
-    /// Depth of the project in the directory tree.
-    depth: usize,
+    /// The relative path of the project directory from the git root.
+    relative_path: PathBuf,
     config: Config,
     repos: Vec<Arc<Repo>>,
 }
@@ -86,7 +85,7 @@ impl Project {
         Ok(Self {
             config,
             config_path,
-            depth: 0,
+            relative_path: PathBuf::new(),
             repos: Vec::with_capacity(size),
         })
     }
@@ -146,6 +145,10 @@ impl Project {
         Self::from_directory(path)
     }
 
+    pub(crate) fn with_relative_path(&mut self, relative_path: PathBuf) {
+        self.relative_path = relative_path;
+    }
+
     pub(crate) fn config(&self) -> &Config {
         &self.config
     }
@@ -164,11 +167,11 @@ impl Project {
     }
 
     /// Get the path to the project directory relative to the git root.
+    ///
+    /// Hooks will be executed in this directory and accept only files from this directory.
+    /// In non-workspace mode (`--config <path>`), this is empty.
     pub(crate) fn relative_path(&self) -> &Path {
-        // TODO: avoid unwrap
-        self.path()
-            .strip_prefix(GIT_ROOT.as_ref().unwrap())
-            .expect("Project path should be relative to git root")
+        &self.relative_path
     }
 
     /// Initialize the project, cloning the repository and preparing hooks.
@@ -181,7 +184,7 @@ impl Project {
         // TODO: avoid clone
         let project = Arc::new(self.clone());
 
-        let hooks = project.inner_init_hooks()?;
+        let hooks = project.internal_init_hooks()?;
 
         Ok(hooks)
     }
@@ -260,7 +263,7 @@ impl Project {
     }
 
     /// Load and prepare hooks for the project.
-    fn inner_init_hooks(self: Arc<Self>) -> Result<Vec<Hook>, Error> {
+    fn internal_init_hooks(self: Arc<Self>) -> Result<Vec<Hook>, Error> {
         let mut hooks = Vec::new();
 
         for (repo_config, repo) in zip_eq(self.config.repos.iter(), self.repos.iter()) {
@@ -353,13 +356,14 @@ impl Workspace {
             });
         }
 
+        // directory should be absolute
         let Some(path) = opts.directory else {
             panic!("Config file or path must be provided to discover workspace");
         };
 
         let projects = Mutex::new(Ok(Vec::new()));
 
-        ignore::WalkBuilder::new(path)
+        ignore::WalkBuilder::new(&path)
             .follow_links(false)
             .build_parallel()
             .run(|| {
@@ -368,13 +372,20 @@ impl Workspace {
                         if entry.file_type().is_some_and(|t| t.is_dir()) {
                             match Project::from_directory(entry.path()) {
                                 Ok(mut project) => {
-                                    project.depth = entry.depth();
+                                    let depth = entry.depth();
+                                    let relative_path = entry
+                                        .into_path()
+                                        .strip_prefix(&path)
+                                        .expect("Entry path should be relative to the root")
+                                        .to_path_buf();
+                                    project.with_relative_path(relative_path);
+
                                     projects
                                         .lock()
                                         .unwrap()
                                         .as_mut()
                                         .unwrap()
-                                        .push(Arc::new(project));
+                                        .push((depth, Arc::new(project)));
                                 }
                                 Err(config::Error::NotFound(_)) => {}
                                 Err(e) => {
@@ -394,7 +405,9 @@ impl Workspace {
         // Sort projects by their depth in the directory tree.
         // The deeper the project comes first.
         // This is useful for nested projects where we want to prefer the most specific project.
-        projects.sort_by_key(|p| Reverse(p.depth));
+        projects.sort_by_key(|p| Reverse(p.0));
+
+        let projects = projects.into_iter().map(|(_, p)| p).collect();
 
         Ok(Self { projects })
     }
@@ -492,7 +505,7 @@ impl Workspace {
 
         let mut hooks = Vec::new();
         for project in &self.projects {
-            let project_hooks = Arc::clone(project).inner_init_hooks()?;
+            let project_hooks = Arc::clone(project).internal_init_hooks()?;
             hooks.extend(project_hooks);
         }
 
@@ -510,20 +523,17 @@ impl Workspace {
         let non_staged = git::files_not_staged(&config_files).await?;
 
         if !non_staged.is_empty() {
-            let s = if non_staged.len() == 1 { "" } else { "s" };
-            let git_add = if non_staged.len() == 1 {
-                format!(
-                    "`{}` first",
+            if non_staged.len() == 1 {
+                anyhow::bail!(
+                    "prek configuration file is not staged, run `{}` to stage it",
                     format!("git add {}", non_staged[0].user_display()).cyan()
                 )
-            } else {
-                "`git add` them first".to_string()
-            };
+            }
             anyhow::bail!(
-                "The following configuration file{s} are not staged, {git_add}:\n{}",
+                "The following configuration files are not staged, `git add` them first:\n{}",
                 non_staged
                     .iter()
-                    .map(|p| p.user_display().to_string())
+                    .map(|p| format!("  {}", p.user_display()))
                     .collect::<Vec<_>>()
                     .join("\n")
             )
