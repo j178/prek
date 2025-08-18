@@ -107,6 +107,20 @@ fn setup_logging(level: Level) -> Result<()> {
     Ok(())
 }
 
+fn should_change_cwd(cli: &Cli) -> bool {
+    cli.command.as_ref().is_some_and(|cmd| {
+        !matches!(
+            cmd,
+            Command::Clean
+                | Command::GC
+                | Command::InitTemplateDir(_)
+                | Command::SampleConfig(_)
+                | Command::ValidateConfig(_)
+                | Command::ValidateManifest(_)
+        )
+    })
+}
+
 /// Adjusts relative paths in the CLI arguments to be relative to the new working directory.
 fn adjust_relative_paths(cli: &mut Cli, new_cwd: &Path) -> Result<()> {
     if let Some(path) = &mut cli.globals.config {
@@ -142,13 +156,6 @@ fn adjust_relative_paths(cli: &mut Cli, new_cwd: &Path) -> Result<()> {
                     .map(|p| p.to_string_lossy().to_string())
             })
             .transpose()?;
-    }
-
-    // Adjust path arguments for `sample-config` command.
-    if let Some(Command::SampleConfig(ref mut args)) = cli.command {
-        if let Some(path) = &mut args.file {
-            *path = fs::relative_to(std::path::absolute(&path)?, new_cwd)?;
-        }
     }
 
     Ok(())
@@ -187,17 +194,18 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     debug!("prek: {}", version::version());
 
-    match GIT_ROOT.as_ref() {
-        Ok(root) => {
-            debug!("Git root: {}", root.display());
+    // Adjust relative paths before changing the working directory.
+    if should_change_cwd(&cli) {
+        match GIT_ROOT.as_ref() {
+            Ok(root) => {
+                debug!("Git root: {}", root.display());
+                adjust_relative_paths(&mut cli, root)?;
 
-            // Adjust relative paths before changing the working directory.
-            adjust_relative_paths(&mut cli, root)?;
-
-            std::env::set_current_dir(root)?;
-        }
-        Err(err) => {
-            error!("Failed to find git root: {}", err);
+                std::env::set_current_dir(root)?;
+            }
+            Err(err) => {
+                error!("Failed to find git root: {}", err);
+            }
         }
     }
 
