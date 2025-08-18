@@ -1,8 +1,9 @@
-use anyhow::Result;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
 use anstream::eprintln;
+use anyhow::Result;
+use owo_colors::OwoColorize;
 
 use constants::env_vars::EnvVars;
 
@@ -25,15 +26,20 @@ pub(crate) async fn hook_impl(
             return if skip_on_missing_config || EnvVars::is_set(EnvVars::PREK_ALLOW_NO_CONFIG) {
                 Ok(ExitStatus::Success)
             } else {
-                eprintln!("Config file not found: {}", config_file.display());
                 eprintln!(
-                    "- To temporarily silence this, run `{}=1 git ...`",
-                    EnvVars::PREK_ALLOW_NO_CONFIG
+                    "{}: config file not found: `{}`",
+                    "error".red().bold(),
+                    config_file.display().cyan()
                 );
                 eprintln!(
-                    "- To permanently silence this, install hooks with the `--allow-missing-config` flag"
+                    "- To temporarily silence this, run `{}`",
+                    format!("{}=1 git ...", EnvVars::PREK_ALLOW_NO_CONFIG).cyan()
                 );
-                eprintln!("- To uninstall hooks, run `PREK uninstall`");
+                eprintln!(
+                    "- To permanently silence this, install hooks with the `{}` flag",
+                    "--allow-missing-config".cyan()
+                );
+                eprintln!("- To uninstall hooks, run `{}`", "prek uninstall".cyan());
                 Ok(ExitStatus::Failure)
             };
         }
