@@ -18,6 +18,7 @@ use crate::config::{
     self, Config, HookOptions, Language, LocalHook, MANIFEST_FILE, ManifestHook, MetaHook,
     RemoteHook, SerdeRegex, Stage, read_manifest,
 };
+use crate::git::GIT_ROOT;
 use crate::languages::resolve_command;
 use crate::languages::version::LanguageRequest;
 use crate::store::Store;
@@ -415,6 +416,14 @@ impl Hook {
     /// Get the path where the hook should be executed.
     pub(crate) fn work_dir(&self) -> &Path {
         self.project.path()
+    }
+
+    /// Get the path relative to the git root where the hook is located.
+    pub(crate) fn relative_work_dir(&self) -> &Path {
+        self.project
+            .path()
+            .strip_prefix(GIT_ROOT.as_ref().unwrap())
+            .unwrap()
     }
 
     pub(crate) fn is_local(&self) -> bool {

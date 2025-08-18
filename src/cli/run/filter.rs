@@ -14,6 +14,7 @@ use crate::fs::normalize_path;
 use crate::hook::Hook;
 use crate::identify::tags_from_path;
 use crate::{git, warn_user};
+use crate::workspace::Project;
 
 /// Filter filenames by include/exclude patterns.
 pub(crate) struct FilenameFilter<'a> {
@@ -135,14 +136,21 @@ impl<'a> FileFilter<'a> {
         filenames
     }
 
+    pub(crate) fn for_project(&self, project: &Project) {
+
+    }
+
     /// Filter filenames by file patterns and tags for a specific hook.
     pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&Path> {
         // Collect files that are inside the hook project directory.
-        // And strip the prefix to get relative paths.
         // TODO: support orphaned project, which does not share files with its parent project.
         let filenames = self.filenames.par_iter().filter_map(|f| {
             let path = Path::new(f);
-            path.strip_prefix(hook.work_dir()).ok()
+            if path.starts_with(hook.relative_work_dir()) {
+                Some(path)
+            } else {
+                None
+            }
         });
 
         // Filter by hook `files` and `exclude` patterns.
@@ -151,13 +159,20 @@ impl<'a> FileFilter<'a> {
 
         // Filter by hook `types`, `types_or` and `exclude_types`.
         let filter = FileTagFilter::for_hook(hook);
+        let filenames = filenames.filter(|filename| match tags_from_path(filename) {
+            Ok(tags) => filter.filter(&tags),
+            Err(err) => {
+                error!(filename = ?filename.display(), error = %err, "Failed to get tags");
+                false
+            }
+        });
+
+        // Strip the prefix to get relative paths.
+        let relative_work_dir = hook.relative_work_dir();
         let filenames: Vec<_> = filenames
-            .filter(|filename| match tags_from_path(filename) {
-                Ok(tags) => filter.filter(&tags),
-                Err(err) => {
-                    error!(filename = ?filename.display(), error = %err, "Failed to get tags");
-                    false
-                }
+            .map(|p| {
+                p.strip_prefix(relative_work_dir)
+                    .expect("Failed to strip prefix")
             })
             .collect();
 

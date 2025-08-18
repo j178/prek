@@ -92,6 +92,7 @@ impl Project {
 
     /// Find the configuration file in the given path.
     pub(crate) fn from_directory(path: &Path) -> Result<Self, config::Error> {
+        dbg!(path);
         let main = path.join(CONFIG_FILE);
         let alternate = path.join(ALTER_CONFIG_FILE);
         if main.exists() && alternate.exists() {

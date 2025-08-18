@@ -545,15 +545,18 @@ async fn run_hooks(
         .map(|h| h.project())
         .collect::<FxHashSet<_>>()
         .len();
+    let mut first = true;
 
     // Hooks might modify the files, so they must be run sequentially.
     for (project, hooks) in &hooks.iter().chunk_by(|h| h.project()) {
         if projects_len > 1 {
             writeln!(
                 printer.stdout(),
-                "\n{}:",
-                format!("Running hooks for `{}`", project.to_string().cyan()).bold()
+                "{}{}:",
+                if first { "" } else { "\n" },
+                format!("Running hooks from `{}`", project.to_string().cyan()).bold()
             )?;
+            first = false;
         }
 
         let fail_fast = project.config().fail_fast.unwrap_or(false);
@@ -563,7 +566,7 @@ async fn run_hooks(
             project.config().files.as_ref(),
             project.config().exclude.as_ref(),
         );
-        trace!("Files for {project} after filtered: {}", filter.len());
+        trace!("Files for `{hook}` after filtered: {}", filenames.len());
 
         for hook in hooks {
             let (hook_success, new_diff) =
