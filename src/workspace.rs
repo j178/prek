@@ -49,6 +49,7 @@ pub(crate) struct Project {
     config_path: PathBuf,
     /// The relative path of the project directory from the git root.
     relative_path: PathBuf,
+    depth: usize,
     config: Config,
     repos: Vec<Arc<Repo>>,
 }
@@ -86,6 +87,7 @@ impl Project {
             config,
             config_path,
             relative_path: PathBuf::new(),
+            depth: 0,
             repos: Vec::with_capacity(size),
         })
     }
@@ -149,6 +151,10 @@ impl Project {
         self.relative_path = relative_path;
     }
 
+    pub(crate) fn with_depth(&mut self, depth: usize) {
+        self.depth = depth;
+    }
+
     pub(crate) fn config(&self) -> &Config {
         &self.config
     }
@@ -172,6 +178,10 @@ impl Project {
     /// In non-workspace mode (`--config <path>`), this is empty.
     pub(crate) fn relative_path(&self) -> &Path {
         &self.relative_path
+    }
+
+    pub(crate) fn depth(&self) -> usize {
+        self.depth
     }
 
     /// Initialize the project, cloning the repository and preparing hooks.
@@ -379,13 +389,14 @@ impl Workspace {
                                         .expect("Entry path should be relative to the root")
                                         .to_path_buf();
                                     project.with_relative_path(relative_path);
+                                    project.with_depth(depth);
 
                                     projects
                                         .lock()
                                         .unwrap()
                                         .as_mut()
                                         .unwrap()
-                                        .push((depth, Arc::new(project)));
+                                        .push(Arc::new(project));
                                 }
                                 Err(config::Error::NotFound(_)) => {}
                                 Err(e) => {
@@ -405,9 +416,7 @@ impl Workspace {
         // Sort projects by their depth in the directory tree.
         // The deeper the project comes first.
         // This is useful for nested projects where we want to prefer the most specific project.
-        projects.sort_by_key(|p| Reverse(p.0));
-
-        let projects = projects.into_iter().map(|(_, p)| p).collect();
+        projects.sort_by_key(|p| Reverse(p.depth));
 
         Ok(Self { projects })
     }

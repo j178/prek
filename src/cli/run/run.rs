@@ -10,7 +10,6 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
-use itertools::Itertools;
 use owo_colors::{OwoColorize, Style};
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
@@ -541,15 +540,23 @@ async fn run_hooks(
     let mut success = true;
     let mut diff = git::get_diff().await?;
 
-    let projects_len = hooks
-        .iter()
-        .map(|h| h.project())
-        .collect::<FxHashSet<_>>()
-        .len();
+    // Group hooks by project to run them in order of their depth in the workspace.
+    let mut project_to_hooks: FxHashMap<&Path, Vec<&HookToRun>> = FxHashMap::default();
+    for hook in hooks {
+        let key = hook.project().config_file();
+        project_to_hooks.entry(key).or_default().push(hook);
+    }
+
+    // Sort projects by their depth in the workspace.
+    let mut project_to_hooks: Vec<_> = project_to_hooks.into_iter().collect();
+    project_to_hooks.sort_by_key(|(_, hooks)| Reverse(hooks[0].project().depth()));
+
+    let projects_len = project_to_hooks.len();
     let mut first = true;
 
     // Hooks might modify the files, so they must be run sequentially.
-    for (project, hooks) in &hooks.iter().chunk_by(|h| h.project()) {
+    for (_, hooks) in project_to_hooks {
+        let project = hooks[0].project();
         if projects_len > 1 {
             writeln!(
                 printer.stdout(),
