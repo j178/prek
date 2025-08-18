@@ -1,4 +1,4 @@
-use std::cmp::{PartialEq, Reverse, max};
+use std::cmp::{Reverse, max};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::hash::Hash;
@@ -31,7 +31,7 @@ use crate::hook::{Hook, InstalledHook};
 use crate::printer::{Printer, Stdout};
 use crate::run::USE_COLOR;
 use crate::store::{STORE, Store};
-use crate::workspace::{DiscoverOptions, Project, Workspace};
+use crate::workspace::{DiscoverOptions, Workspace};
 use crate::{git, warn_user};
 
 enum HookToRun {
@@ -524,12 +524,6 @@ impl StatusPrinter {
     }
 }
 
-impl PartialEq for &Project {
-    fn eq(&self, other: &Self) -> bool {
-        self.config_file() == other.config_file()
-    }
-}
-
 /// Run all hooks.
 async fn run_hooks(
     hooks: &[HookToRun],
@@ -546,8 +540,22 @@ async fn run_hooks(
     let mut success = true;
     let mut diff = git::get_diff().await?;
 
+    let projects_len = hooks
+        .iter()
+        .map(|h| h.project())
+        .collect::<FxHashSet<_>>()
+        .len();
+
     // Hooks might modify the files, so they must be run sequentially.
     for (project, hooks) in &hooks.iter().chunk_by(|h| h.project()) {
+        if projects_len > 1 {
+            writeln!(
+                printer.stdout(),
+                "\n{}:",
+                format!("Running hooks for `{}`", project.to_string().cyan()).bold()
+            )?;
+        }
+
         let fail_fast = project.config().fail_fast.unwrap_or(false);
 
         let filter = FileFilter::new(
@@ -556,12 +564,6 @@ async fn run_hooks(
             project.config().exclude.as_ref(),
         );
         trace!("Files for {project} after filtered: {}", filter.len());
-
-        writeln!(
-            printer.stdout(),
-            "\n{}:",
-            format!("Running hooks for `{}`", project.to_string().cyan()).bold()
-        )?;
 
         for hook in hooks {
             let (hook_success, new_diff) =

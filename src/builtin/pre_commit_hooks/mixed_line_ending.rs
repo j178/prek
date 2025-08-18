@@ -1,8 +1,9 @@
+use std::path::Path;
+
 use anyhow::Result;
 use bstr::ByteSlice;
 use futures::StreamExt;
 use rustc_hash::FxHashMap;
-use std::path::Path;
 
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;

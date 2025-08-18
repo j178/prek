@@ -5,7 +5,6 @@ use fancy_regex::Regex;
 use itertools::{Either, Itertools};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::FxHashSet;
-use rustix::path::Arg;
 use tracing::{debug, error};
 
 use constants::env_vars::EnvVars;

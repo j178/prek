@@ -1,5 +1,6 @@
 use std::cmp::Reverse;
 use std::fmt::Display;
+use std::hash::Hash;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -55,6 +56,20 @@ pub(crate) struct Project {
 impl Display for Project {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.config_path.user_display())
+    }
+}
+
+impl PartialEq for Project {
+    fn eq(&self, other: &Self) -> bool {
+        self.config_path == other.config_path
+    }
+}
+
+impl Eq for Project {}
+
+impl Hash for Project {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.config_path.hash(state);
     }
 }
 
