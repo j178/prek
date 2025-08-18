@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -210,7 +211,7 @@ impl LanguageImpl for Docker {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&String],
+        filenames: &[&Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         Docker::build_docker_image(hook, false)
@@ -220,10 +221,11 @@ impl LanguageImpl for Docker {
         let docker_tag = Docker::docker_tag(hook);
         let entry = hook.entry.resolve(None)?;
 
-        let run = async move |batch: Vec<String>| {
+        let run = async move |batch: Vec<PathBuf>| {
             // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
             let mut cmd = Docker::docker_run_cmd().await?;
             let mut output = cmd
+                .current_dir(hook.work_dir())
                 .arg("--entrypoint")
                 .arg(&entry[0])
                 .arg(&docker_tag)
