@@ -89,12 +89,18 @@ impl LanguageImpl for Golang {
             go_install_cmd()
                 .arg("./...")
                 .current_dir(repo)
+                .remove_git_env()
                 .check(true)
                 .output()
                 .await?;
         }
         for dep in &hook.additional_dependencies {
-            go_install_cmd().arg(dep).check(true).output().await?;
+            go_install_cmd()
+                .arg(dep)
+                .remove_git_env()
+                .check(true)
+                .output()
+                .await?;
         }
 
         reporter.on_install_complete(progress);

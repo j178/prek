@@ -12,7 +12,7 @@ use crate::process::{Cmd, StatusError};
 use crate::{git, process};
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub(crate) enum Error {
     #[error(transparent)]
     Command(#[from] process::Error),
     #[error("Failed to find git: {0}")]
@@ -21,12 +21,17 @@ pub enum Error {
     Io(#[from] std::io::Error),
 }
 
-pub static GIT: LazyLock<Result<PathBuf, which::Error>> = LazyLock::new(|| which::which("git"));
-pub static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(get_root);
+pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
+    LazyLock::new(|| which::which("git"));
+pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(get_root);
 
-// Remove some `GIT_` environment variables exposed by `git`, and keep the removed value for
-// some commands that need them.
-static GIT_ENV_REMOVED: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
+// Remove some `GIT_` environment variables exposed by `git`.
+
+// For some commands, like `git commit -a` or `git commit -p`, git creates a `.git/index.lock` file
+// and set `GIT_INDEX_FILE` to point to it.
+// We need to keep the `GIT_INDEX_FILE` env var to make sure `git write-tree` works correctly.
+// https://stackoverflow.com/questions/65639403/git-pre-commit-hook-how-can-i-get-added-modified-files-when-commit-with-a-flag/65647202#65647202
+pub(crate) static GIT_ENV_TO_REMOVE: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
     let keep = &[
         "GIT_EXEC_PATH",
         "GIT_SSH",
@@ -39,27 +44,19 @@ static GIT_ENV_REMOVED: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
         "GIT_ASKPASS",
     ];
 
-    let to_remove = std::env::vars().filter(|(k, _)| {
-        k.starts_with("GIT_")
-            && !k.starts_with("GIT_CONFIG_KEY_")
-            && !k.starts_with("GIT_CONFIG_VALUE_")
-            && !keep.contains(&k.as_str())
-    });
-
-    let mut removed = Vec::new();
-    for (k, v) in to_remove {
-        unsafe { std::env::remove_var(&k) };
-        removed.push((k, v));
-    }
-
-    removed
+    std::env::vars()
+        .filter(|(k, _)| {
+            k.starts_with("GIT_")
+                && !k.starts_with("GIT_CONFIG_KEY_")
+                && !k.starts_with("GIT_CONFIG_VALUE_")
+                && !keep.contains(&k.as_str())
+        })
+        .collect()
 });
 
-pub fn git_cmd(summary: &str) -> Result<Cmd, Error> {
+pub(crate) fn git_cmd(summary: &str) -> Result<Cmd, Error> {
     let mut cmd = Cmd::new(GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?, summary);
     cmd.arg("-c").arg("core.useBuiltinFSMonitor=false");
-
-    LazyLock::force(&GIT_ENV_REMOVED);
 
     Ok(cmd)
 }
@@ -76,7 +73,7 @@ fn zsplit(s: &[u8]) -> Vec<String> {
         .collect()
 }
 
-pub async fn intent_to_add_files() -> Result<Vec<String>, Error> {
+pub(crate) async fn intent_to_add_files() -> Result<Vec<String>, Error> {
     let output = git_cmd("get intent to add files")?
         .arg("diff")
         .arg("--no-ext-diff")
@@ -90,7 +87,7 @@ pub async fn intent_to_add_files() -> Result<Vec<String>, Error> {
     Ok(zsplit(&output.stdout))
 }
 
-pub async fn get_changed_files(old: &str, new: &str) -> Result<Vec<String>, Error> {
+pub(crate) async fn get_changed_files(old: &str, new: &str) -> Result<Vec<String>, Error> {
     let output = git_cmd("get changed files")?
         .arg("diff")
         .arg("--name-only")
@@ -104,7 +101,7 @@ pub async fn get_changed_files(old: &str, new: &str) -> Result<Vec<String>, Erro
     Ok(zsplit(&output.stdout))
 }
 
-pub async fn git_ls_files(path: Option<&Path>) -> Result<Vec<String>, Error> {
+pub(crate) async fn git_ls_files(path: Option<&Path>) -> Result<Vec<String>, Error> {
     let mut cmd = git_cmd("get git all files")?;
     cmd.arg("ls-files").arg("-z").check(true);
 
@@ -115,7 +112,7 @@ pub async fn git_ls_files(path: Option<&Path>) -> Result<Vec<String>, Error> {
     Ok(zsplit(&output.stdout))
 }
 
-pub async fn get_git_dir() -> Result<PathBuf, Error> {
+pub(crate) async fn get_git_dir() -> Result<PathBuf, Error> {
     let output = git_cmd("get git dir")?
         .arg("rev-parse")
         .arg("--git-dir")
@@ -127,7 +124,7 @@ pub async fn get_git_dir() -> Result<PathBuf, Error> {
     ))
 }
 
-pub async fn get_git_common_dir() -> Result<PathBuf, Error> {
+pub(crate) async fn get_git_common_dir() -> Result<PathBuf, Error> {
     let output = git_cmd("get git common dir")?
         .arg("rev-parse")
         .arg("--git-common-dir")
@@ -143,7 +140,7 @@ pub async fn get_git_common_dir() -> Result<PathBuf, Error> {
     }
 }
 
-pub async fn get_staged_files() -> Result<Vec<String>, Error> {
+pub(crate) async fn get_staged_files() -> Result<Vec<String>, Error> {
     let output = git_cmd("get staged files")?
         .arg("diff")
         .arg("--staged")
@@ -157,7 +154,7 @@ pub async fn get_staged_files() -> Result<Vec<String>, Error> {
     Ok(zsplit(&output.stdout))
 }
 
-pub async fn file_not_staged(file: &Path) -> Result<bool> {
+pub(crate) async fn file_not_staged(file: &Path) -> Result<bool> {
     let status = git::git_cmd("git diff")?
         .arg("diff")
         .arg("--quiet") // Implies --exit-code
@@ -172,7 +169,7 @@ pub async fn file_not_staged(file: &Path) -> Result<bool> {
     Ok(status.code().is_some_and(|code| code == 1))
 }
 
-pub async fn has_unmerged_paths() -> Result<bool, Error> {
+pub(crate) async fn has_unmerged_paths() -> Result<bool, Error> {
     let output = git_cmd("check has unmerged paths")?
         .arg("ls-files")
         .arg("--unmerged")
@@ -182,19 +179,14 @@ pub async fn has_unmerged_paths() -> Result<bool, Error> {
     Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
 }
 
-pub async fn is_in_merge_conflict() -> Result<bool, Error> {
+pub(crate) async fn is_in_merge_conflict() -> Result<bool, Error> {
     let git_dir = get_git_dir().await?;
     Ok(git_dir.join("MERGE_HEAD").try_exists()? && git_dir.join("MERGE_MSG").try_exists()?)
 }
 
-pub async fn get_conflicted_files() -> Result<Vec<String>, Error> {
+pub(crate) async fn get_conflicted_files() -> Result<Vec<String>, Error> {
     let tree = git_cmd("git write-tree")?
         .arg("write-tree")
-        .envs(
-            GIT_ENV_REMOVED
-                .iter()
-                .map(|(k, v)| (k.as_str(), v.as_str())),
-        )
         .check(true)
         .output()
         .await?;
@@ -233,7 +225,7 @@ async fn parse_merge_msg_for_conflicts() -> Result<Vec<String>, Error> {
     Ok(conflicts)
 }
 
-pub async fn get_diff() -> Result<Vec<u8>, Error> {
+pub(crate) async fn get_diff() -> Result<Vec<u8>, Error> {
     let output = git_cmd("git diff")?
         .arg("diff")
         .arg("--no-ext-diff") // Disable external diff drivers
@@ -249,17 +241,8 @@ pub async fn get_diff() -> Result<Vec<u8>, Error> {
 ///
 /// The name of the new tree object is printed to standard output.
 /// The index must be in a fully merged state.
-pub async fn write_tree() -> Result<String, Error> {
+pub(crate) async fn write_tree() -> Result<String, Error> {
     let output = git_cmd("git write-tree")?
-        // When running `git commit -a` or `git commit -p`, git creates a `.git/index.lock` file
-        // and set `GIT_INDEX_FILE` to point to it.
-        // We need to keep the `GIT_INDEX_FILE` env var to make sure `git write-tree` works correctly.
-        // https://stackoverflow.com/questions/65639403/git-pre-commit-hook-how-can-i-get-added-modified-files-when-commit-with-a-flag/65647202#65647202
-        .envs(
-            GIT_ENV_REMOVED
-                .iter()
-                .map(|(k, v)| (k.as_str(), v.as_str())),
-        )
         .arg("write-tree")
         .check(true)
         .output()
@@ -268,7 +251,7 @@ pub async fn write_tree() -> Result<String, Error> {
 }
 
 /// Get the path of the top-level directory of the working tree.
-pub fn get_root() -> Result<PathBuf, Error> {
+pub(crate) fn get_root() -> Result<PathBuf, Error> {
     let output = std::process::Command::new(GIT.clone()?)
         .arg("rev-parse")
         .arg("--show-toplevel")
@@ -288,7 +271,7 @@ pub fn get_root() -> Result<PathBuf, Error> {
     ))
 }
 
-pub async fn is_dirty(path: &Path) -> Result<bool, Error> {
+pub(crate) async fn is_dirty(path: &Path) -> Result<bool, Error> {
     let mut cmd = git_cmd("check git is dirty")?;
     let output = cmd
         .arg("diff")
@@ -312,6 +295,7 @@ async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
         .arg("init")
         .arg("--template=")
         .arg(path)
+        .remove_git_env()
         .check(true)
         .output()
         .await?;
@@ -322,6 +306,7 @@ async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
         .arg("add")
         .arg("origin")
         .arg(url)
+        .remove_git_env()
         .check(true)
         .output()
         .await?;
@@ -338,6 +323,7 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .arg("origin")
         .arg(rev)
         .arg("--depth=1")
+        .remove_git_env()
         .check(true)
         .output()
         .await?;
@@ -346,6 +332,7 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .current_dir(path)
         .arg("checkout")
         .arg("FETCH_HEAD")
+        .remove_git_env()
         .check(true)
         .output()
         .await?;
@@ -359,6 +346,7 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .arg("--init")
         .arg("--recursive")
         .arg("--depth=1")
+        .remove_git_env()
         .check(true)
         .output()
         .await?;
@@ -372,6 +360,7 @@ async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .arg("fetch")
         .arg("origin")
         .arg("--tags")
+        .remove_git_env()
         .check(true)
         .output()
         .await?;
@@ -380,6 +369,7 @@ async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .current_dir(path)
         .arg("checkout")
         .arg(rev)
+        .remove_git_env()
         .check(true)
         .output()
         .await?;
@@ -390,6 +380,7 @@ async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .arg("update")
         .arg("--init")
         .arg("--recursive")
+        .remove_git_env()
         .check(true)
         .output()
         .await?;
@@ -397,7 +388,7 @@ async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-pub async fn clone_repo(url: &str, rev: &str, path: &Path) -> Result<(), Error> {
+pub(crate) async fn clone_repo(url: &str, rev: &str, path: &Path) -> Result<(), Error> {
     init_repo(url, path).await?;
 
     if let Err(err) = shallow_clone(rev, path).await {
@@ -408,7 +399,7 @@ pub async fn clone_repo(url: &str, rev: &str, path: &Path) -> Result<(), Error> 
     }
 }
 
-pub async fn has_hooks_path_set() -> Result<bool> {
+pub(crate) async fn has_hooks_path_set() -> Result<bool> {
     let output = git_cmd("get git hooks path")?
         .arg("config")
         .arg("--get")
@@ -423,7 +414,7 @@ pub async fn has_hooks_path_set() -> Result<bool> {
     }
 }
 
-pub async fn lfs_files<T: FromIterator<String>>(paths: &[&String]) -> Result<T, Error> {
+pub(crate) async fn lfs_files<T: FromIterator<String>>(paths: &[&String]) -> Result<T, Error> {
     let mut job = git_cmd("git check-attr")?
         .arg("check-attr")
         .arg("filter")

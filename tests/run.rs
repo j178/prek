@@ -1601,9 +1601,8 @@ fn git_commit_a() -> Result<()> {
               - id: echo
                 name: echo
                 language: system
-                entry: echo hello
-                pass_filenames: false
-                always_run: true
+                entry: echo
+                verbose: true
     "});
 
     // Create a file and commit it.
@@ -1649,6 +1648,9 @@ fn git_commit_a() -> Result<()> {
 
     ----- stderr -----
     echo.....................................................................Passed
+    - hook id: echo
+    - duration: [TIME]
+      file.txt
     "#);
 
     Ok(())

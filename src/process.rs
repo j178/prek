@@ -371,6 +371,13 @@ impl Cmd {
     pub fn get_current_dir(&self) -> Option<&Path> {
         self.inner.as_std().get_current_dir()
     }
+
+    pub fn remove_git_env(&mut self) -> &mut Self {
+        for (key, _) in crate::git::GIT_ENV_TO_REMOVE.iter() {
+            self.inner.env_remove(key);
+        }
+        self
+    }
 }
 
 /// Diagnostic APIs (used internally, but available for yourself)
@@ -453,7 +460,7 @@ fn skip_args(cmd: &OsStr, cur: &OsStr, next: Option<&&OsStr>) -> usize {
 }
 
 /// Simplified Command Debug output, with args truncated if they're too long.
-impl std::fmt::Display for Cmd {
+impl Display for Cmd {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(cwd) = self.get_current_dir() {
             write!(f, "cd {} && ", cwd.to_string_lossy())?;
