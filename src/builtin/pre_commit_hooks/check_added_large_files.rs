@@ -56,7 +56,7 @@ pub(crate) async fn check_added_large_files(
         filenames
             .iter()
             .filter(|f| filter.contains(f))
-            .filter(|f| !lfs_files.contains(f)),
+            .filter(|f| !lfs_files.contains(**f)),
     )
     .map(async |filename| {
         let file_path = hook.project().relative_path().join(filename);

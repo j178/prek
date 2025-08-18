@@ -54,9 +54,8 @@ fn excludes_any(files: &[&Path], include: Option<&Regex>, exclude: Option<&Regex
     }
 
     files.into_par_iter().any(|f| {
-        let f = match f.to_str() {
-            Some(f) => f,
-            None => return false, // Skip files that cannot be converted to a string
+        let Some(f) = f.to_str() else {
+            return false; // Skip files that cannot be converted to a string
         };
 
         if let Some(re) = &include {

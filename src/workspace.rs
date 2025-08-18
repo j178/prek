@@ -15,6 +15,7 @@ use tracing::{debug, error};
 
 use crate::config::{self, ALTER_CONFIG_FILE, CONFIG_FILE, Config, ManifestHook, read_config};
 use crate::fs::Simplified;
+use crate::git::GIT_ROOT;
 use crate::hook::{self, Hook, HookBuilder, Repo};
 use crate::store::Store;
 use crate::{git, store, warn_user};
@@ -92,7 +93,6 @@ impl Project {
 
     /// Find the configuration file in the given path.
     pub(crate) fn from_directory(path: &Path) -> Result<Self, config::Error> {
-        dbg!(path);
         let main = path.join(CONFIG_FILE);
         let alternate = path.join(ALTER_CONFIG_FILE);
         if main.exists() && alternate.exists() {
@@ -151,6 +151,7 @@ impl Project {
     }
 
     /// Get the path to the configuration file.
+    /// Must be an absolute path.
     pub(crate) fn config_file(&self) -> &Path {
         &self.config_path
     }
@@ -162,8 +163,12 @@ impl Project {
             .expect("Project path should have a parent")
     }
 
+    /// Get the path to the project directory relative to the git root.
     pub(crate) fn relative_path(&self) -> &Path {
-        todo!()
+        // TODO: avoid unwrap
+        self.path()
+            .strip_prefix(GIT_ROOT.as_ref().unwrap())
+            .expect("Project path should be relative to git root")
     }
 
     /// Initialize the project, cloning the repository and preparing hooks.
@@ -176,7 +181,7 @@ impl Project {
         // TODO: avoid clone
         let project = Arc::new(self.clone());
 
-        let hooks = project._init_hooks()?;
+        let hooks = project.inner_init_hooks()?;
 
         Ok(hooks)
     }
@@ -255,7 +260,7 @@ impl Project {
     }
 
     /// Load and prepare hooks for the project.
-    fn _init_hooks(self: Arc<Self>) -> Result<Vec<Hook>, Error> {
+    fn inner_init_hooks(self: Arc<Self>) -> Result<Vec<Hook>, Error> {
         let mut hooks = Vec::new();
 
         for (repo_config, repo) in zip_eq(self.config.repos.iter(), self.repos.iter()) {
@@ -487,7 +492,7 @@ impl Workspace {
 
         let mut hooks = Vec::new();
         for project in &self.projects {
-            let project_hooks = Arc::clone(project)._init_hooks()?;
+            let project_hooks = Arc::clone(project).inner_init_hooks()?;
             hooks.extend(project_hooks);
         }
 

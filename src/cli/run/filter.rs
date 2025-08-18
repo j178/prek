@@ -3,13 +3,13 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use fancy_regex::Regex;
 use itertools::{Either, Itertools};
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::FxHashSet;
 use tracing::{debug, error};
 
 use constants::env_vars::EnvVars;
 
-use crate::config::{SerdeRegex, Stage};
+use crate::config::Stage;
 use crate::fs::normalize_path;
 use crate::hook::Hook;
 use crate::identify::tags_from_path;
@@ -28,7 +28,9 @@ impl<'a> FilenameFilter<'a> {
     }
 
     pub(crate) fn filter(&self, filename: &Path) -> bool {
-        let filename = filename.as_ref();
+        let Some(filename) = filename.to_str() else {
+            return false;
+        };
         if let Some(re) = &self.include {
             if !re.is_match(filename).unwrap_or(false) {
                 return false;
@@ -91,7 +93,7 @@ pub(crate) struct FileFilter<'a> {
 }
 
 impl<'a> FileFilter<'a> {
-    pub(crate) fn for_project(filenames: &'a [&'a Path], project: &Project) -> Self {
+    pub(crate) fn for_project(filenames: &'a [&'a Path], project: &'a Project) -> Self {
         let filter = FilenameFilter::new(
             project.config().files.as_deref(),
             project.config().exclude.as_deref(),
@@ -99,10 +101,11 @@ impl<'a> FileFilter<'a> {
 
         // TODO: support orphaned project, which does not share files with its parent project.
         let filenames = filenames
-            .into_par_iter()
+            .par_iter()
             .filter(|filename| filter.filter(filename))
             // Collect files that are inside the hook project directory.
             .filter(|filename| filename.starts_with(project.relative_path()))
+            .copied()
             .collect();
 
         Self {
@@ -133,7 +136,7 @@ impl<'a> FileFilter<'a> {
             .filter(|filename| match tags_from_path(filename) {
                 Ok(tags) => filter.filter(&tags),
                 Err(err) => {
-                    error!(filename, error = %err, "Failed to get tags");
+                    error!(filename = ?filename.display(), error = %err, "Failed to get tags");
                     false
                 }
             })

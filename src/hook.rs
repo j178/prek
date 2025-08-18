@@ -18,7 +18,6 @@ use crate::config::{
     self, Config, HookOptions, Language, LocalHook, MANIFEST_FILE, ManifestHook, MetaHook,
     RemoteHook, SerdeRegex, Stage, read_manifest,
 };
-use crate::git::GIT_ROOT;
 use crate::languages::resolve_command;
 use crate::languages::version::LanguageRequest;
 use crate::store::Store;
