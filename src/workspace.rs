@@ -156,12 +156,13 @@ impl Project {
         // TODO: avoid clone
         let project = Arc::new(self.clone());
 
-        let hooks = project.init_hooks().await?;
+        let hooks = project.init_hooks()?;
 
         Ok(hooks)
     }
 
     /// Initialize remote repositories for the project.
+    #[allow(clippy::mutable_key_type)]
     async fn init_repos(
         &mut self,
         store: &Store,
@@ -169,7 +170,6 @@ impl Project {
     ) -> Result<(), Error> {
         let remote_repos = Mutex::new(FxHashMap::default());
 
-        #[allow(clippy::mutable_key_type)]
         let mut seen = FxHashSet::default();
 
         // Prepare remote repos in parallel.
@@ -235,7 +235,7 @@ impl Project {
     }
 
     /// Load and prepare hooks for the project.
-    async fn init_hooks(self: Arc<Self>) -> Result<Vec<Hook>, Error> {
+    fn init_hooks(self: Arc<Self>) -> Result<Vec<Hook>, Error> {
         let mut hooks = Vec::new();
 
         for (repo_config, repo) in zip_eq(self.config.repos.iter(), self.repos.iter()) {
@@ -380,18 +380,17 @@ impl Workspace {
         store: &Store,
         reporter: Option<&dyn HookInitReporter>,
     ) -> Result<(), Error> {
+        #[allow(clippy::mutable_key_type)]
         let remote_repos = {
             let remote_repos = Mutex::new(FxHashMap::default());
 
-            #[allow(clippy::mutable_key_type)]
             let mut seen = FxHashSet::default();
 
             // Prepare remote repos in parallel.
             let remotes_iter = self
                 .projects
                 .iter()
-                .map(|proj| proj.config.repos.iter())
-                .flatten()
+                .flat_map(|proj| proj.config.repos.iter())
                 .filter_map(|repo| match repo {
                     // Deduplicate remote repos.
                     config::Repo::Remote(repo) if seen.insert(repo) => Some(repo),
@@ -432,7 +431,7 @@ impl Workspace {
             remote_repos.into_inner().unwrap()
         };
 
-        for mut project in &mut self.projects {
+        for project in &mut self.projects {
             let mut repos = Vec::with_capacity(project.config.repos.len());
 
             for repo in &project.config.repos {
@@ -452,7 +451,7 @@ impl Workspace {
                 }
             }
 
-            Arc::get_mut(&mut project).unwrap().repos = repos;
+            Arc::get_mut(project).unwrap().repos = repos;
         }
 
         Ok(())
@@ -468,7 +467,7 @@ impl Workspace {
 
         let mut hooks = Vec::new();
         for project in &self.projects {
-            let project_hooks = Arc::clone(project).init_hooks().await?;
+            let project_hooks = Arc::clone(project).init_hooks()?;
             hooks.extend(project_hooks);
         }
 
@@ -490,7 +489,7 @@ impl Workspace {
             let git_add = if non_staged.len() == 1 {
                 format!(
                     "`{}` first",
-                    format!("git add {}", non_staged[0].user_display().to_string()).cyan()
+                    format!("git add {}", non_staged[0].user_display()).cyan()
                 )
             } else {
                 "`git add` them first".to_string()
@@ -503,7 +502,7 @@ impl Workspace {
                     .collect::<Vec<_>>()
                     .join("\n")
             )
-        };
+        }
 
         Ok(())
     }

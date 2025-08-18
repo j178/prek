@@ -133,7 +133,7 @@ impl LanguageImpl for Golang {
         let new_path = prepend_paths(&[&go_bin, go_root_bin]).context("Failed to join PATH")?;
 
         let entry = hook.entry.resolve(Some(&new_path))?;
-        let run = async move |batch: Vec<String>| {
+        let run = async move |batch: Vec<PathBuf>| {
             let mut output = Cmd::new(&entry[0], "go hook")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])

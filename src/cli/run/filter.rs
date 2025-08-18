@@ -143,11 +143,7 @@ impl<'a> FileFilter<'a> {
         // TODO: support orphaned project, which does not share files with its parent project.
         let filenames = self.filenames.par_iter().filter_map(|f| {
             let path = Path::new(f);
-            if let Ok(base) = path.strip_prefix(hook.work_dir()) {
-                Some(base)
-            } else {
-                None
-            }
+            path.strip_prefix(hook.work_dir()).ok()
         });
 
         // Filter by hook `files` and `exclude` patterns.

@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -35,7 +35,7 @@ impl LanguageImpl for System {
     ) -> Result<(i32, Vec<u8>)> {
         let entry = hook.entry.resolve(None)?;
 
-        let run = async move |batch: Vec<String>| {
+        let run = async move |batch: Vec<PathBuf>| {
             let mut output = Cmd::new(&entry[0], "run system command")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])

@@ -539,7 +539,7 @@ async fn run_hooks(
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    assert!(hooks.len() > 0, "No hooks to run");
+    assert!(!hooks.is_empty(), "No hooks to run");
 
     let printer = StatusPrinter::for_hooks(hooks, printer);
 
@@ -547,7 +547,7 @@ async fn run_hooks(
     let mut diff = git::get_diff().await?;
 
     // Hooks might modify the files, so they must be run sequentially.
-    for (project, hooks) in hooks.iter().chunk_by(|h| h.project()).into_iter() {
+    for (project, hooks) in &hooks.iter().chunk_by(|h| h.project()) {
         let fail_fast = project.config().fail_fast.unwrap_or(false);
 
         let filter = FileFilter::new(

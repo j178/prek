@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -34,7 +34,7 @@ impl LanguageImpl for DockerImage {
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let entry = hook.entry.resolve(None)?;
-        let run = async move |batch: Vec<String>| {
+        let run = async move |batch: Vec<PathBuf>| {
             let mut cmd = Docker::docker_run_cmd().await?;
             let mut output = cmd
                 .current_dir(hook.work_dir())

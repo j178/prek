@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
 use futures::StreamExt;
@@ -8,12 +8,12 @@ use crate::git::{get_staged_files, get_lfs_files};
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
-enum FileFilter<'a> {
+enum FileFilter {
     NoFilter,
-    Files(FxHashSet<&'a Path>),
+    Files(FxHashSet<PathBuf>),
 }
 
-impl FileFilter<'_> {
+impl FileFilter {
     fn contains(&self, path: &Path) -> bool {
         match self {
             FileFilter::NoFilter => true,
@@ -41,16 +41,16 @@ pub(crate) async fn check_added_large_files(
     let filter = if args.enforce_all {
         FileFilter::NoFilter
     } else {
-        let add_files: FxHashSet<_> = get_staged_files()
+        let add_files = get_staged_files()
             .await?
-            .iter()
-            .map(|f| Path::new(f))
-            .collect();
+            .into_iter()
+            .map(PathBuf::from)
+            .collect::<FxHashSet<_>>();
         FileFilter::Files(add_files)
     };
 
     let lfs_files = get_lfs_files(filenames).await?;
-    let lfs_files: FxHashSet<_> = lfs_files.iter().map(|f| Path::new(f)).collect();
+    let lfs_files: FxHashSet<_> = lfs_files.iter().map(Path::new).collect();
 
     let mut tasks = futures::stream::iter(
         filenames

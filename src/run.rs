@@ -1,6 +1,6 @@
 use std::cmp::max;
 use std::ffi::OsString;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use anstream::ColorChoice;
@@ -137,7 +137,7 @@ pub(crate) async fn run_by_batch<T, F>(
     run: F,
 ) -> anyhow::Result<Vec<T>>
 where
-    F: AsyncFn(Vec<String>) -> anyhow::Result<T>,
+    F: AsyncFn(Vec<PathBuf>) -> anyhow::Result<T>,
     T: Send + 'static,
 {
     let concurrency = target_concurrency(hook.require_serial);
@@ -154,7 +154,7 @@ where
     let mut tasks = futures::stream::iter(partitions)
         .map(|batch| {
             // TODO: avoid this allocation
-            let batch: Vec<_> = batch.iter().map(ToString::to_string).collect();
+            let batch: Vec<_> = batch.iter().map(PathBuf::from).collect();
             run(batch)
         })
         .buffered(concurrency);

@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -39,7 +39,7 @@ impl LanguageImpl for Script {
         let repo_path = hook.repo_path().unwrap_or_else(|| CWD.as_path());
         let cmd = repo_path.join(&entry[0]);
 
-        let run = async move |batch: Vec<String>| {
+        let run = async move |batch: Vec<PathBuf>| {
             let mut output = Cmd::new(&cmd, "run script command")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
