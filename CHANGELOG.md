@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.29
+
+### Enhancements
+
+- Build wheels for more platforms ([#489](https://github.com/j178/prek/pull/489))
+
+### Bug fixes
+
+- Fix `git commit -a` does not pick up staged files correctly ([#487](https://github.com/j178/prek/pull/487))
+
 ## 0.0.28
 
 ### Bug fixes

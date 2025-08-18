@@ -1691,7 +1691,7 @@ dependencies = [
 
 [[package]]
 name = "prek"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "anstream",
  "anyhow",

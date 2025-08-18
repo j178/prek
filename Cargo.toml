@@ -7,11 +7,11 @@ edition = "2024"
 [workspace.dependencies]
 constants = { path = "lib/constants" }
 
-tracing = "0.1.40"
+tracing = { version = "0.1.40" }
 
 [package]
 name = "prek"
-version = "0.0.28"
+version = "0.0.29"
 authors = ["j178 <hi@j178.dev>"]
 description = "Better `pre-commit`, re-engineered in Rust"
 repository = "https://github.com/j178/prek"
