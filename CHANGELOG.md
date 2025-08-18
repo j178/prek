@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.28
+
+### Bug fixes
+
+- Fix `inde.lock file exists` error when running `git commit -p` or `git commit -a` ([#482](https://github.com/j178/prek/pull/482))
+- Various fixes to `init-templdate-dir` and directory related bug ([#484](https://github.com/j178/prek/pull/484))
+
 ## 0.0.27
 
 ### Enhancements
