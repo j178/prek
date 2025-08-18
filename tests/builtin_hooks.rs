@@ -1,7 +1,4 @@
-use std::process::Command;
-
 use anyhow::Result;
-use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
@@ -147,14 +144,7 @@ fn mixed_line_ending_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
-    // Disable autocrlf
-    Command::new("git")
-        .arg("config")
-        .arg("core.autocrlf")
-        .arg("false")
-        .current_dir(context.work_dir())
-        .assert()
-        .success();
+    context.disable_auto_crlf();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:

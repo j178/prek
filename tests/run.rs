@@ -1592,6 +1592,7 @@ fn git_commit_a() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
+    context.disable_auto_crlf();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
