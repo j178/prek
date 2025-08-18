@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use fancy_regex::Regex;
@@ -13,8 +13,8 @@ use crate::config::{SerdeRegex, Stage};
 use crate::fs::normalize_path;
 use crate::hook::Hook;
 use crate::identify::tags_from_path;
-use crate::{git, warn_user};
 use crate::workspace::Project;
+use crate::{git, warn_user};
 
 /// Filter filenames by include/exclude patterns.
 pub(crate) struct FilenameFilter<'a> {
@@ -27,7 +27,7 @@ impl<'a> FilenameFilter<'a> {
         Self { include, exclude }
     }
 
-    pub(crate) fn filter(&self, filename: impl AsRef<str>) -> bool {
+    pub(crate) fn filter(&self, filename: &Path) -> bool {
         let filename = filename.as_ref();
         if let Some(re) = &self.include {
             if !re.is_match(filename).unwrap_or(false) {
@@ -86,23 +86,33 @@ impl<'a> FileTagFilter<'a> {
 }
 
 pub(crate) struct FileFilter<'a> {
-    filenames: Vec<&'a String>,
+    filenames: Vec<&'a Path>,
+    filename_prefix: &'a Path,
 }
 
 impl<'a> FileFilter<'a> {
-    pub(crate) fn new(
-        filenames: &'a [String],
-        include: Option<&'a SerdeRegex>,
-        exclude: Option<&'a SerdeRegex>,
-    ) -> Self {
-        let filter = FilenameFilter::new(include.map(|r| &**r), exclude.map(|r| &**r));
+    pub(crate) fn for_project(filenames: &'a [&'a Path], project: &Project) -> Self {
+        let filter = FilenameFilter::new(
+            project.config().files.as_deref(),
+            project.config().exclude.as_deref(),
+        );
 
+        // TODO: support orphaned project, which does not share files with its parent project.
         let filenames = filenames
             .into_par_iter()
             .filter(|filename| filter.filter(filename))
-            .collect::<Vec<_>>();
+            // Collect files that are inside the hook project directory.
+            .filter(|filename| filename.starts_with(project.relative_path()))
+            .collect();
 
-        Self { filenames }
+        Self {
+            filenames,
+            filename_prefix: project.relative_path(),
+        }
+    }
+
+    pub(crate) fn filenames(&self) -> &[&Path] {
+        &self.filenames
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -115,19 +125,16 @@ impl<'a> FileFilter<'a> {
         types: &[String],
         types_or: &[String],
         exclude_types: &[String],
-    ) -> Vec<&String> {
+    ) -> Vec<&Path> {
         let filter = FileTagFilter::new(types, types_or, exclude_types);
         let filenames: Vec<_> = self
             .filenames
             .par_iter()
-            .filter(|filename| {
-                let path = Path::new(filename);
-                match tags_from_path(path) {
-                    Ok(tags) => filter.filter(&tags),
-                    Err(err) => {
-                        error!(filename, error = %err, "Failed to get tags");
-                        false
-                    }
+            .filter(|filename| match tags_from_path(filename) {
+                Ok(tags) => filter.filter(&tags),
+                Err(err) => {
+                    error!(filename, error = %err, "Failed to get tags");
+                    false
                 }
             })
             .copied()
@@ -136,26 +143,14 @@ impl<'a> FileFilter<'a> {
         filenames
     }
 
-    pub(crate) fn for_project(&self, project: &Project) {
-
-    }
-
     /// Filter filenames by file patterns and tags for a specific hook.
     pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&Path> {
-        // Collect files that are inside the hook project directory.
-        // TODO: support orphaned project, which does not share files with its parent project.
-        let filenames = self.filenames.par_iter().filter_map(|f| {
-            let path = Path::new(f);
-            if path.starts_with(hook.relative_work_dir()) {
-                Some(path)
-            } else {
-                None
-            }
-        });
-
         // Filter by hook `files` and `exclude` patterns.
         let filter = FilenameFilter::for_hook(hook);
-        let filenames = filenames.filter(|filename| filter.filter(filename.to_string_lossy()));
+        let filenames = self
+            .filenames
+            .par_iter()
+            .filter(|filename| filter.filter(filename));
 
         // Filter by hook `types`, `types_or` and `exclude_types`.
         let filter = FileTagFilter::for_hook(hook);
@@ -168,10 +163,9 @@ impl<'a> FileFilter<'a> {
         });
 
         // Strip the prefix to get relative paths.
-        let relative_work_dir = hook.relative_work_dir();
         let filenames: Vec<_> = filenames
             .map(|p| {
-                p.strip_prefix(relative_work_dir)
+                p.strip_prefix(self.filename_prefix)
                     .expect("Failed to strip prefix")
             })
             .collect();
@@ -200,7 +194,7 @@ impl CollectOptions {
 
 /// Get all filenames to run hooks on.
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn collect_files(opts: CollectOptions) -> Result<Vec<String>> {
+pub(crate) async fn collect_files(opts: CollectOptions) -> Result<Vec<PathBuf>> {
     let CollectOptions {
         hook_stage,
         from_ref,
@@ -230,7 +224,8 @@ pub(crate) async fn collect_files(opts: CollectOptions) -> Result<Vec<String>> {
     for filename in &mut filenames {
         normalize_path(filename);
     }
-    Ok(filenames)
+
+    Ok(filenames.into_iter().map(PathBuf::from).collect())
 }
 
 #[allow(clippy::too_many_arguments)]

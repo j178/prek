@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 use std::hash::Hash;
 use std::io::Write;
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -222,6 +222,7 @@ pub(crate) async fn run(
         commit_msg_filename: extra_args.commit_msg_filename.clone(),
     })
     .await?;
+    let filenames = filenames.iter().map(Path::new).collect();
 
     run_hooks(
         &hooks,
@@ -527,7 +528,7 @@ impl StatusPrinter {
 /// Run all hooks.
 async fn run_hooks(
     hooks: &[HookToRun],
-    filenames: Vec<String>,
+    filenames: Vec<&Path>,
     store: &Store,
     show_diff_on_failure: bool,
     verbose: bool,
@@ -561,12 +562,8 @@ async fn run_hooks(
 
         let fail_fast = project.config().fail_fast.unwrap_or(false);
 
-        let filter = FileFilter::new(
-            &filenames,
-            project.config().files.as_ref(),
-            project.config().exclude.as_ref(),
-        );
-        trace!("Files for `{hook}` after filtered: {}", filenames.len());
+        let filter = FileFilter::for_project(&filenames, project);
+        trace!("Files for `{project}` after filtered: {}", filter.len());
 
         for hook in hooks {
             let (hook_success, new_diff) =
@@ -635,6 +632,11 @@ async fn run_hook(
     };
 
     let mut filenames = filter.for_hook(hook);
+    trace!(
+        "Files for `{}` after filtered: {}",
+        hook.id,
+        filenames.len()
+    );
 
     if filenames.is_empty() && !hook.always_run {
         printer.write_skipped(

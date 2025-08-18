@@ -162,8 +162,12 @@ impl Project {
             .expect("Project path should have a parent")
     }
 
+    pub(crate) fn relative_path(&self) -> &Path {
+        todo!()
+    }
+
     /// Initialize the project, cloning the repository and preparing hooks.
-    pub(crate) async fn init(
+    pub(crate) async fn init_hooks(
         &mut self,
         store: &Store,
         reporter: Option<&dyn HookInitReporter>,
@@ -172,7 +176,7 @@ impl Project {
         // TODO: avoid clone
         let project = Arc::new(self.clone());
 
-        let hooks = project.init_hooks()?;
+        let hooks = project._init_hooks()?;
 
         Ok(hooks)
     }
@@ -251,7 +255,7 @@ impl Project {
     }
 
     /// Load and prepare hooks for the project.
-    fn init_hooks(self: Arc<Self>) -> Result<Vec<Hook>, Error> {
+    fn _init_hooks(self: Arc<Self>) -> Result<Vec<Hook>, Error> {
         let mut hooks = Vec::new();
 
         for (repo_config, repo) in zip_eq(self.config.repos.iter(), self.repos.iter()) {
@@ -483,7 +487,7 @@ impl Workspace {
 
         let mut hooks = Vec::new();
         for project in &self.projects {
-            let project_hooks = Arc::clone(project).init_hooks()?;
+            let project_hooks = Arc::clone(project)._init_hooks()?;
             hooks.extend(project_hooks);
         }
 

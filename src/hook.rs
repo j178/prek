@@ -418,14 +418,6 @@ impl Hook {
         self.project.path()
     }
 
-    /// Get the path relative to the git root where the hook is located.
-    pub(crate) fn relative_work_dir(&self) -> &Path {
-        self.project
-            .path()
-            .strip_prefix(GIT_ROOT.as_ref().unwrap())
-            .unwrap()
-    }
-
     pub(crate) fn is_local(&self) -> bool {
         matches!(&*self.repo, Repo::Local { .. })
     }

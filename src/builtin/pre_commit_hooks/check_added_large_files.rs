@@ -4,7 +4,7 @@ use clap::Parser;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 
-use crate::git::{get_staged_files, get_lfs_files};
+use crate::git::{get_lfs_files, get_staged_files};
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
@@ -56,10 +56,11 @@ pub(crate) async fn check_added_large_files(
         filenames
             .iter()
             .filter(|f| filter.contains(f))
-            .filter(|f| !lfs_files.contains(**f)),
+            .filter(|f| !lfs_files.contains(f)),
     )
     .map(async |filename| {
-        let size = fs_err::tokio::metadata(filename).await?.len();
+        let file_path = hook.project().relative_path().join(filename);
+        let size = fs_err::tokio::metadata(file_path).await?.len();
         let size = size / 1024;
         if size > args.max_kb {
             anyhow::Ok(Some(format!(

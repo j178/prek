@@ -75,7 +75,7 @@ pub(crate) async fn install_hooks(config: Option<PathBuf>, printer: Printer) -> 
     let _lock = store.lock_async().await?;
 
     let reporter = HookInitReporter::from(printer);
-    let hooks = project.init(store, Some(&reporter)).await?;
+    let hooks = project.init_hooks(store, Some(&reporter)).await?;
     let reporter = HookInstallReporter::from(printer);
     run::install_hooks(hooks, store, &reporter).await?;
 
