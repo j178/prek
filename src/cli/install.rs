@@ -48,7 +48,7 @@ pub(crate) async fn install(
         .as_ref()
         .map(Project::config_file)
         .or(config.as_deref())
-        .or_else(|| Some(Path::new(CONFIG_FILE)));
+        .unwrap_or(Path::new(CONFIG_FILE));
 
     for hook_type in hook_types {
         install_hook_script(
@@ -103,7 +103,7 @@ fn get_hook_types(project: Option<&Project>, hook_types: Vec<HookType>) -> Vec<H
 }
 
 fn install_hook_script(
-    config_file: Option<&Path>,
+    config_file: &Path,
     hook_type: HookType,
     hooks_path: &Path,
     overwrite: bool,
@@ -137,10 +137,7 @@ fn install_hook_script(
         "hook-impl".to_string(),
         format!("--hook-type={}", hook_type.as_str()),
     ];
-    args.push(format!(
-        r#"--config="{}""#,
-        config_file.unwrap_or(Path::new(CONFIG_FILE)).display()
-    ));
+    args.push(format!(r#"--config="{}""#, config_file.display()));
     if skip_on_missing_config {
         args.push("--skip-on-missing-config".to_string());
     }

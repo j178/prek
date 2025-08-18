@@ -401,10 +401,10 @@ fn init_template_dir() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `subdir/temp-dir/hooks/pre-commit`
+    prek installed at `temp-dir/hooks/pre-commit`
 
     ----- stderr -----
-    warning: git config `init.templateDir` not set to the target directory, try `git config --global init.templateDir 'subdir/temp-dir'`
+    warning: git config `init.templateDir` not set to the target directory, try `git config --global init.templateDir 'temp-dir'`
     "#);
     insta::with_settings!(
         { filters => filters.clone() },
