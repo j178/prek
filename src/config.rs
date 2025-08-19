@@ -14,7 +14,6 @@ use crate::version;
 use crate::warn_user;
 
 pub const CONFIG_FILE: &str = ".pre-commit-config.yaml";
-pub const ALTER_CONFIG_FILE: &str = ".pre-commit-config.yml";
 pub const MANIFEST_FILE: &str = ".pre-commit-hooks.yaml";
 
 #[derive(Clone)]
@@ -522,13 +521,9 @@ impl<'de> Deserialize<'de> for MetaHook {
                 entry: String::new(),
                 options: HookOptions {
                     files: Some(
-                        Regex::new(&format!(
-                            "^{}|{}$",
-                            regex::escape(CONFIG_FILE),
-                            regex::escape(ALTER_CONFIG_FILE)
-                        ))
-                        .map(SerdeRegex)
-                        .unwrap(),
+                        Regex::new(&format!("^{}$", regex::escape(CONFIG_FILE),))
+                            .map(SerdeRegex)
+                            .unwrap(),
                     ),
                     ..Default::default()
                 },
@@ -540,13 +535,9 @@ impl<'de> Deserialize<'de> for MetaHook {
                 entry: String::new(),
                 options: HookOptions {
                     files: Some(
-                        Regex::new(&format!(
-                            "^{}|{}$",
-                            regex::escape(CONFIG_FILE),
-                            regex::escape(ALTER_CONFIG_FILE)
-                        ))
-                        .map(SerdeRegex)
-                        .unwrap(),
+                        Regex::new(&format!("^{}$", regex::escape(CONFIG_FILE),))
+                            .map(SerdeRegex)
+                            .unwrap(),
                     ),
                     ..Default::default()
                 },

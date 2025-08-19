@@ -9,11 +9,10 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use tracing::{debug, error};
 
-use crate::config::{self, ALTER_CONFIG_FILE, CONFIG_FILE, Config, ManifestHook, read_config};
-use crate::fs::Simplified;
+use crate::config::{self, CONFIG_FILE, Config, ManifestHook, read_config};
 use crate::hook::{self, Hook, HookBuilder, Repo};
+use crate::store;
 use crate::store::Store;
-use crate::{store, warn_user};
 
 #[derive(Error, Debug)]
 pub(crate) enum Error {
@@ -64,25 +63,7 @@ impl Project {
 
     /// Find the configuration file in the given path.
     pub(crate) fn from_directory(path: &Path) -> Result<Self, Error> {
-        let main = path.join(CONFIG_FILE);
-        let alternate = path.join(ALTER_CONFIG_FILE);
-        if main.exists() && alternate.exists() {
-            warn_user!(
-                "Both {main} and {alternate} exist, using {main}",
-                main = main.display(),
-                alternate = alternate.display()
-            );
-        }
-        if main.exists() {
-            return Self::from_config_file(main);
-        }
-        if alternate.exists() {
-            return Self::from_config_file(alternate);
-        }
-
-        Err(Error::InvalidConfig(config::Error::NotFound(
-            main.user_display().to_string(),
-        )))
+        Self::from_config_file(path.join(CONFIG_FILE))
     }
 
     // Find the project configuration file in the current working directory or its ancestors.
