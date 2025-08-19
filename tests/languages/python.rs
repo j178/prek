@@ -70,7 +70,7 @@ fn language_version() -> anyhow::Result<()> {
         .child("python")
         .assert(predicates::path::missing());
 
-    cmd_snapshot!(context.filters(), context.run().arg("-v"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("-v"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -81,34 +81,34 @@ fn language_version() -> anyhow::Result<()> {
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 12, 7)
+      (3, 12, 11)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 12, 7)
+      (3, 12, 11)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 12, 7)
+      (3, 12, 11)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 12, 7)
+      (3, 12, 11)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 12, 7)
+      (3, 12, 11)
     greater-than-python3.13..................................................Passed
     - hook id: greater-than-python3.13
     - duration: [TIME]
-      (3, 13, 3)
+      (3, 13, 5)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
       (3, 12, 1)
 
     ----- stderr -----
-    ");
+    "#);
 
     let tools_python_dir = context.home_dir().join("tools").join("python");
 
