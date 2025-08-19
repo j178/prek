@@ -23,7 +23,7 @@ jobs:
   typos:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       - uses: crate-ci/typos@master
 
   lint:
@@ -31,7 +31,7 @@ jobs:
     timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
       - name: "rustfmt"
@@ -42,7 +42,7 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -56,7 +56,7 @@ jobs:
     runs-on: windows-latest
     name: "cargo clippy | windows"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
 
       - name: Create Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
@@ -74,7 +74,7 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       - uses: cargo-bins/cargo-binstall@main
       - run: cargo binstall --no-confirm cargo-shear
       - run: cargo shear
@@ -84,7 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     name: "cargo test | ubuntu"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
@@ -92,7 +92,7 @@ jobs:
         run: rustup show
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@ad95d4e02e061d4390c4b66ef5ed56c7fee3d2ce # v2
         with:
           tool: cargo-nextest
 
@@ -126,7 +126,7 @@ jobs:
     runs-on: macos-latest
     name: "cargo test | macos"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
 
       - uses: rui314/setup-mold@v1
 
@@ -136,7 +136,7 @@ jobs:
         run: rustup show
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@ad95d4e02e061d4390c4b66ef5ed56c7fee3d2ce # v2
         with:
           tool: cargo-nextest
 
@@ -171,7 +171,7 @@ jobs:
     runs-on: windows-latest
     name: "cargo test | windows"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
 
       - name: Create Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
@@ -182,7 +182,7 @@ jobs:
         run: rustup show
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@ad95d4e02e061d4390c4b66ef5ed56c7fee3d2ce # v2
         with:
           tool: cargo-nextest
 
@@ -225,7 +225,7 @@ jobs:
       matrix:
         uv-source: ["github", "pypi", "default"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - name: "Install Rust toolchain"
@@ -271,7 +271,7 @@ jobs:
       matrix:
         uv-source: ["github", "pypi", "default"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
 
       - name: Create Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
