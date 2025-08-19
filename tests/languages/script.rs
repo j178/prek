@@ -28,5 +28,6 @@ fn script_run() {
       .pre-commit-config.yaml
 
     ----- stderr -----
+    warning: The `rev` field of repo `https://github.com/prek-test-repos/script-hooks` appears to be a mutable reference (moving tag / branch). Mutable references are never updated after first install and are not supported. See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details. Hint: `prek autoupdate` often fixes this.
     ");
 }
