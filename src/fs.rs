@@ -349,36 +349,31 @@ pub(crate) async fn create_symlink_or_copy(source: &Path, target: &Path) -> anyh
     Ok(())
 }
 
-pub(crate) async fn rename_or_copy(source: &Path, target: &Path) -> anyhow::Result<()> {
+pub(crate) async fn rename_or_copy(source: &Path, target: &Path) -> std::io::Result<()> {
     // Try to rename first
     match fs_err::tokio::rename(source, target).await {
         Ok(()) => {
-            trace!("Renamed {} to {}", source.display(), target.display());
-            return Ok(());
+            trace!("Renamed `{}` to `{}`", source.display(), target.display());
+            Ok(())
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::CrossesDevices => {
+            trace!(
+                "Falling back to copy from `{}` to `{}`",
+                source.display(),
+                target.display()
+            );
+            fs_err::tokio::copy(source, target).await?;
+            fs_err::tokio::remove_file(source).await?;
+            Ok(())
         }
         Err(e) => {
             trace!(
-                "Failed to rename {} to {}: {}",
+                "Failed to rename `{}` to `{}`: {}",
                 source.display(),
                 target.display(),
                 e
             );
+            Err(e)
         }
     }
-
-    // Fallback to copy
-    trace!(
-        "Falling back to copy from {} to {}",
-        source.display(),
-        target.display()
-    );
-    fs_err::tokio::copy(source, target).await.with_context(|| {
-        format!(
-            "Failed to copy file from {} to {}",
-            source.display(),
-            target.display(),
-        )
-    })?;
-
-    Ok(())
 }
