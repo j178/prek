@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use futures::TryStreamExt;
 use http::header::USER_AGENT;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, trace};
+use tracing::debug;
 
 use crate::archive::ArchiveExtension;
 use crate::cli::reporter::HookInstallReporter;
@@ -239,77 +239,6 @@ pub(crate) fn resolve_command(mut cmds: Vec<String>, env_path: Option<&OsStr>) -
         cmds[0] = exe_path.to_string_lossy().to_string();
         cmds
     }
-}
-
-/// Create a symlink or copy the file on Windows.
-/// Tries symlink first, falls back to copy if symlink fails.
-async fn create_symlink_or_copy(source: &Path, target: &Path) -> Result<()> {
-    if target.exists() {
-        fs_err::tokio::remove_file(target).await?;
-    }
-
-    #[cfg(not(windows))]
-    {
-        // Try symlink on Unix systems
-        match fs_err::tokio::symlink(source, target).await {
-            Ok(()) => {
-                trace!(
-                    "Created symlink from {} to {}",
-                    source.display(),
-                    target.display()
-                );
-                return Ok(());
-            }
-            Err(e) => {
-                trace!(
-                    "Failed to create symlink from {} to {}: {}",
-                    source.display(),
-                    target.display(),
-                    e
-                );
-            }
-        }
-    }
-
-    #[cfg(windows)]
-    {
-        // Try Windows symlink API (requires admin privileges)
-        use std::os::windows::fs::symlink_file;
-        match symlink_file(source, target) {
-            Ok(()) => {
-                trace!(
-                    "Created Windows symlink from {} to {}",
-                    source.display(),
-                    target.display()
-                );
-                return Ok(());
-            }
-            Err(e) => {
-                trace!(
-                    "Failed to create Windows symlink from {} to {}: {}",
-                    source.display(),
-                    target.display(),
-                    e
-                );
-            }
-        }
-    }
-
-    // Fallback to copy
-    trace!(
-        "Falling back to copy from {} to {}",
-        source.display(),
-        target.display()
-    );
-    fs_err::tokio::copy(source, target).await.with_context(|| {
-        format!(
-            "Failed to copy file from {} to {}",
-            source.display(),
-            target.display(),
-        )
-    })?;
-
-    Ok(())
 }
 
 async fn download_and_extract(

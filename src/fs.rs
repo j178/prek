@@ -23,9 +23,10 @@
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
-
 use tempfile::NamedTempFile;
 use tracing::{debug, error, info, trace};
+
+use anyhow::Context;
 
 pub static CWD: LazyLock<PathBuf> =
     LazyLock::new(|| std::env::current_dir().expect("The current directory must be exist"));
@@ -274,5 +275,105 @@ impl<T: AsRef<Path>> Simplified for T {
         let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
 
         path.display()
+    }
+}
+
+/// Create a symlink or copy the file on Windows.
+/// Tries symlink first, falls back to copy if symlink fails.
+pub(crate) async fn create_symlink_or_copy(source: &Path, target: &Path) -> anyhow::Result<()> {
+    if target.exists() {
+        fs_err::tokio::remove_file(target).await?;
+    }
+
+    #[cfg(not(windows))]
+    {
+        // Try symlink on Unix systems
+        match fs_err::tokio::symlink(source, target).await {
+            Ok(()) => {
+                trace!(
+                    "Created symlink from {} to {}",
+                    source.display(),
+                    target.display()
+                );
+                return Ok(());
+            }
+            Err(e) => {
+                trace!(
+                    "Failed to create symlink from {} to {}: {}",
+                    source.display(),
+                    target.display(),
+                    e
+                );
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        // Try Windows symlink API (requires admin privileges)
+        use std::os::windows::fs::symlink_file;
+        match symlink_file(source, target) {
+            Ok(()) => {
+                trace!(
+                    "Created Windows symlink from {} to {}",
+                    source.display(),
+                    target.display()
+                );
+                return Ok(());
+            }
+            Err(e) => {
+                trace!(
+                    "Failed to create Windows symlink from {} to {}: {}",
+                    source.display(),
+                    target.display(),
+                    e
+                );
+            }
+        }
+    }
+
+    // Fallback to copy
+    trace!(
+        "Falling back to copy from {} to {}",
+        source.display(),
+        target.display()
+    );
+    fs_err::tokio::copy(source, target).await.with_context(|| {
+        format!(
+            "Failed to copy file from {} to {}",
+            source.display(),
+            target.display(),
+        )
+    })?;
+
+    Ok(())
+}
+
+pub(crate) async fn rename_or_copy(source: &Path, target: &Path) -> std::io::Result<()> {
+    // Try to rename first
+    match fs_err::tokio::rename(source, target).await {
+        Ok(()) => {
+            trace!("Renamed `{}` to `{}`", source.display(), target.display());
+            Ok(())
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::CrossesDevices => {
+            trace!(
+                "Falling back to copy from `{}` to `{}`",
+                source.display(),
+                target.display()
+            );
+            fs_err::tokio::copy(source, target).await?;
+            fs_err::tokio::remove_file(source).await?;
+            Ok(())
+        }
+        Err(e) => {
+            trace!(
+                "Failed to rename `{}` to `{}`: {}",
+                source.display(),
+                target.display(),
+                e
+            );
+            Err(e)
+        }
     }
 }

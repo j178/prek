@@ -42,12 +42,32 @@ async fn check_file(filename: &str) -> Result<(i32, Vec<u8>)> {
     let content_str =
         std::str::from_utf8(&content).map_err(|_| anyhow::anyhow!("Invalid UTF-8"))?;
 
+    let mut deserializer = serde_json::Deserializer::from_str(content_str);
+    deserializer.disable_recursion_limit();
+    let deserializer = serde_stacker::Deserializer::new(&mut deserializer);
+
     // Try to parse with duplicate key detection
-    match serde_json::from_str::<JsonValue>(content_str) {
-        Ok(_) => Ok((0, Vec::new())),
+    match JsonValue::deserialize(deserializer) {
+        Ok(json) => {
+            carefully_drop_nested_json(json);
+            Ok((0, Vec::new()))
+        }
         Err(e) => {
             let error_message = format!("{filename}: Failed to json decode ({e})\n");
             Ok((1, error_message.into_bytes()))
+        }
+    }
+}
+
+// For deeply nested JSON structures, `Drop` can cause stack overflow.
+fn carefully_drop_nested_json(value: JsonValue) {
+    let mut stack = vec![value];
+    let mut map = HashMap::new();
+    while let Some(value) = stack.pop() {
+        match value {
+            JsonValue::Array(array) => stack.extend(array),
+            JsonValue::Object(object) => map.extend(object),
+            _ => {}
         }
     }
 }
@@ -203,5 +223,20 @@ mod tests {
         let (code, output) = run_check_on_file(&file_path).await;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_recursion_limit() {
+        let dir = tempdir().unwrap();
+
+        let mut json = String::new();
+        for _ in 0..10000 {
+            json = format!("[{json}]");
+        }
+
+        let file_path = create_test_file(&dir, "deeply_nested.json", json.as_bytes()).await;
+        let (code, output) = run_check_on_file(&file_path).await;
+        assert_eq!(code, 0);
+        assert!(output.is_empty());
     }
 }
