@@ -205,7 +205,7 @@ impl AsyncWriteBuffer for TempFileBuffer {
 
     async fn flush_to_file(&mut self, filename: &str) -> Result<()> {
         self.buf_writer.flush().await?;
-        fs_err::tokio::rename(self.named_temp_file.path(), Path::new(filename)).await?;
+        crate::fs::rename_or_copy(self.named_temp_file.path(), Path::new(filename)).await?;
         Ok(())
     }
 }

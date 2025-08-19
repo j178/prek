@@ -11,11 +11,11 @@ use constants::env_vars::EnvVars;
 use crate::cli::reporter::HookInstallReporter;
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
+use crate::languages::LanguageImpl;
 use crate::languages::node::NodeRequest;
 use crate::languages::node::installer::{NodeInstaller, bin_dir, lib_dir};
 use crate::languages::node::version::EXTRA_KEY_LTS;
 use crate::languages::version::LanguageRequest;
-use crate::languages::{LanguageImpl, create_symlink_or_copy};
 use crate::process::Cmd;
 use crate::run::{prepend_paths, run_by_batch};
 use crate::store::{Store, ToolBucket};
@@ -73,7 +73,7 @@ impl LanguageImpl for Node {
         // TODO: do we really need to create a symlink for `node` and `npm`?
         //   What about adding them to PATH directly?
         // Create symlink or copy on Windows
-        create_symlink_or_copy(
+        crate::fs::create_symlink_or_copy(
             node.node(),
             &bin_dir.join("node").with_extension(EXE_EXTENSION),
         )
