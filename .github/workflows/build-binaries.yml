@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Build sdist
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           command: sdist
           args: --out dist
@@ -62,7 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: "Build wheels"
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           target: ${{ matrix.platform.target }}
           args: --release --locked --out dist --features self-update
@@ -98,7 +98,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: "Build wheels"
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           target: ${{ matrix.platform.target }}
           args: --release --locked --out dist --features self-update
@@ -137,7 +137,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: "Build wheels"
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           target: ${{ matrix.target }}
           # Generally, we try to build in a target docker container. In this case however, a
@@ -213,7 +213,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: "Build wheels"
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           target: ${{ matrix.platform.target }}
           # On `aarch64`, use `manylinux: 2_28`; otherwise, use `manylinux: auto`.
@@ -257,7 +257,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: "Build wheels"
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           target: ${{ matrix.platform.target }}
           manylinux: auto
@@ -308,7 +308,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: "Build wheels"
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           target: ${{ matrix.platform.target }}
           manylinux: auto
@@ -358,7 +358,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: "Build wheels"
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           target: ${{ matrix.platform.target }}
           manylinux: auto
@@ -400,7 +400,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: "Build wheels"
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
@@ -445,7 +445,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: "Build wheels"
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
