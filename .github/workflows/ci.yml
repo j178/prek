@@ -97,7 +97,7 @@ jobs:
           tool: cargo-nextest
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@d9e0f98d3fc6adb07d1e3d37f3043649ddad06a1 # v6.5.0
         with:
           version: ${{ env.UV_VERSION }}
 
@@ -141,7 +141,7 @@ jobs:
           tool: cargo-nextest
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@d9e0f98d3fc6adb07d1e3d37f3043649ddad06a1 # v6.5.0
         with:
           version: ${{ env.UV_VERSION }}
 
@@ -187,7 +187,7 @@ jobs:
           tool: cargo-nextest
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@d9e0f98d3fc6adb07d1e3d37f3043649ddad06a1 # v6.5.0
         with:
           version: ${{ env.UV_VERSION }}
           cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
