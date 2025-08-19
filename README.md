@@ -127,6 +127,14 @@ brew install prek
 </details>
 
 <details>
+<summary>mise</summary>
+
+```console
+mise use prek
+```
+</details>
+
+<details>
 <summary>Cargo</summary>
 
 Build from source using Cargo:
