@@ -1117,7 +1117,7 @@ mod tests {
                                             alias: None,
                                             files: Some(
                                                 SerdeRegex(
-                                                    "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
+                                                    "^\\.pre-commit-config\\.yaml$",
                                                 ),
                                             ),
                                             exclude: None,
@@ -1149,7 +1149,7 @@ mod tests {
                                             alias: None,
                                             files: Some(
                                                 SerdeRegex(
-                                                    "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
+                                                    "^\\.pre-commit-config\\.yaml$",
                                                 ),
                                             ),
                                             exclude: None,
