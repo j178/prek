@@ -751,24 +751,24 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
         );
     }
 
-   // Check for mutable revs and warn the user.
-   for repo_config in &config.repos {
-       if let Repo::Remote(repo) = repo_config {
-           let rev = &repo.rev;
-           // A rev is considered mutable if it doesn't contain a '.' (like a version)
-           // and is not a hexadecimal string (like a commit SHA).
-           if !rev.contains('.') && !is_sha(rev) {
-               warn_user!(
-                   "The `rev` field of repo `{}` appears to be a mutable reference \
+    // Check for mutable revs and warn the user.
+    for repo_config in &config.repos {
+        if let Repo::Remote(repo) = repo_config {
+            let rev = &repo.rev;
+            // A rev is considered mutable if it doesn't contain a '.' (like a version)
+            // and is not a hexadecimal string (like a commit SHA).
+            if !rev.contains('.') && !is_sha(rev) {
+                warn_user!(
+                    "The `rev` field of repo `{}` appears to be a mutable reference \
                    (moving tag / branch). Mutable references are never updated after first \
                    install and are not supported. See \
                    https://pre-commit.com/#using-the-latest-version-for-a-repository \
                    for more details. Hint: `prek autoupdate` often fixes this.",
-                   repo.repo
-               );
-           }
-       }
-   }
+                    repo.repo
+                );
+            }
+        }
+    }
 
     Ok(config)
 }
