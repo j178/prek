@@ -3,6 +3,7 @@ use std::fmt::{self, Display};
 use std::ops::{Deref, RangeInclusive};
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::OnceLock;
 
 use anyhow::Result;
 use fancy_regex::{self as regex, Regex};
@@ -750,6 +751,25 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
         );
     }
 
+   // Check for mutable revs and warn the user.
+   for repo_config in &config.repos {
+       if let Repo::Remote(repo) = repo_config {
+           let rev = &repo.rev;
+           // A rev is considered mutable if it doesn't contain a '.' (like a version)
+           // and is not a hexadecimal string (like a commit SHA).
+           if !rev.contains('.') && !is_sha(rev) {
+               warn_user!(
+                   "The `rev` field of repo `{}` appears to be a mutable reference \
+                   (moving tag / branch). Mutable references are never updated after first \
+                   install and are not supported. See \
+                   https://pre-commit.com/#using-the-latest-version-for-a-repository \
+                   for more details. Hint: `prek autoupdate` often fixes this.",
+                   repo.repo
+               );
+           }
+       }
+   }
+
     Ok(config)
 }
 
@@ -759,6 +779,13 @@ pub fn read_manifest(path: &Path) -> Result<Manifest, Error> {
     let manifest = serde_yaml::from_str(&content)
         .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
     Ok(manifest)
+}
+
+/// Check if a string looks like a git SHA
+fn is_sha(s: &str) -> bool {
+    static SHA_RE: OnceLock<Regex> = OnceLock::new();
+    let re = SHA_RE.get_or_init(|| Regex::new(r"^[a-fA-F0-9]+$").unwrap());
+    re.is_match(s).unwrap_or(false)
 }
 
 #[cfg(test)]
