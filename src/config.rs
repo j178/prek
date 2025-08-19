@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::fmt::{self, Display};
+use std::fmt::Display;
 use std::ops::{Deref, RangeInclusive};
 use std::path::Path;
 use std::str::FromStr;
@@ -25,8 +25,8 @@ impl Deref for SerdeRegex {
     }
 }
 
-impl fmt::Debug for SerdeRegex {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Debug for SerdeRegex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("SerdeRegex").field(&self.0.as_str()).finish()
     }
 }

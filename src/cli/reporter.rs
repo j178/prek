@@ -114,7 +114,7 @@ impl workspace::HookInitReporter for HookInitReporter {
     }
 }
 
-pub struct HookInstallReporter {
+pub(crate) struct HookInstallReporter {
     reporter: ProgressReporter,
 }
 
@@ -148,6 +148,45 @@ impl HookInstallReporter {
     }
 
     pub fn on_install_complete(&self, id: usize) {
+        self.reporter.on_progress(id);
+    }
+
+    pub fn on_complete(&self) {
+        self.reporter.on_complete();
+    }
+}
+
+pub(crate) struct AutoUpdateReporter {
+    reporter: ProgressReporter,
+}
+
+impl From<Printer> for AutoUpdateReporter {
+    fn from(printer: Printer) -> Self {
+        let multi = MultiProgress::with_draw_target(printer.target());
+        let root = multi.add(ProgressBar::with_draw_target(None, printer.target()));
+        root.enable_steady_tick(Duration::from_millis(200));
+        root.set_style(
+            ProgressStyle::with_template("{spinner:.white} {msg:.dim}")
+                .unwrap()
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+        );
+
+        let reporter = ProgressReporter::new(root, multi, printer);
+        Self { reporter }
+    }
+}
+
+impl AutoUpdateReporter {
+    pub fn on_update_start(&self, repo: &str) -> usize {
+        self.reporter
+            .root
+            .set_message(format!("{}", "Updating repos...".bold().cyan()));
+
+        self.reporter
+            .on_start(format!("{} {}", "Updating".bold().cyan(), repo.dimmed()))
+    }
+
+    pub fn on_update_complete(&self, id: usize) {
         self.reporter.on_progress(id);
     }
 

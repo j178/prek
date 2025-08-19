@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::{self, CONFIG_FILE, HookType, Stage};
 use crate::workspace::Project;
 
+mod auto_update;
 mod clean;
 mod hook_impl;
 mod install;
@@ -23,7 +24,6 @@ mod sample_config;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod validate;
-mod auto_update;
 
 use crate::git::GIT_ROOT;
 pub(crate) use auto_update::auto_update;

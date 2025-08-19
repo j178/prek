@@ -290,7 +290,7 @@ pub(crate) async fn is_dirty(path: &Path) -> Result<bool, Error> {
     }
 }
 
-async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
+pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
     git_cmd("init git repo")?
         .arg("init")
         .arg("--template=")
