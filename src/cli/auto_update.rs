@@ -1,18 +1,36 @@
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use bstr::ByteSlice;
+use fancy_regex::Regex;
 use futures::StreamExt;
 use owo_colors::OwoColorize;
+use serde::Serializer;
+use serde::ser::SerializeMap;
+use tracing::trace;
 
 use crate::cli::ExitStatus;
 use crate::cli::reporter::AutoUpdateReporter;
 use crate::config::{MANIFEST_FILE, RemoteRepo, Repo};
-use crate::fs::CWD;
+use crate::fs::{CWD, write_atomic};
 use crate::printer::Printer;
 use crate::run::CONCURRENCY;
 use crate::workspace::Project;
 use crate::{config, git};
+
+struct Revision {
+    rev: String,
+    frozen: Option<String>,
+    hook_ids: Vec<String>,
+}
+
+enum UpdateResult {
+    Revision(Revision),
+    UpToDate,
+    Failed,
+}
 
 pub(crate) async fn auto_update(
     config: Option<PathBuf>,
@@ -64,12 +82,18 @@ pub(crate) async fn auto_update(
 
             (idx, result)
         })
-        .buffer_unordered(jobs);
+        .buffer_unordered(jobs)
+        .collect::<Vec<_>>()
+        .await;
+
+    tasks.sort_by_key(|(idx, _)| *idx);
+
+    reporter.on_complete();
 
     let mut revisions = Vec::new();
-
     let mut failure = false;
-    while let Some((idx, result)) = tasks.next().await {
+
+    for (idx, result) in tasks {
         let old = config_repos[idx];
         match result {
             Ok(new) => {
@@ -79,6 +103,7 @@ pub(crate) async fn auto_update(
                         "[{}] already up to date",
                         old.repo.as_str().yellow()
                     )?;
+                    revisions.push(UpdateResult::UpToDate);
                 } else {
                     writeln!(
                         printer.stdout(),
@@ -87,7 +112,7 @@ pub(crate) async fn auto_update(
                         old.rev,
                         new.rev
                     )?;
-                    revisions.push((idx, new));
+                    revisions.push(UpdateResult::Revision(new));
                 }
             }
             Err(e) => {
@@ -97,8 +122,13 @@ pub(crate) async fn auto_update(
                     "[{}] update failed: {e}",
                     old.repo.as_str().red()
                 )?;
+                revisions.push(UpdateResult::Failed);
             }
         }
+    }
+
+    if !revisions.is_empty() {
+        write_new_config(project.config_file(), &revisions).await?;
     }
 
     if failure {
@@ -107,15 +137,14 @@ pub(crate) async fn auto_update(
     Ok(ExitStatus::Success)
 }
 
-#[derive(Default, Clone)]
-struct Revision {
-    rev: String,
-    frozen: Option<String>,
-    hook_ids: Vec<String>,
-}
-
 async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Result<Revision> {
     let tmp_dir = tempfile::tempdir()?;
+
+    trace!(
+        "Cloning repository `{}` to `{}`",
+        repo.repo,
+        tmp_dir.path().display()
+    );
 
     git::init_repo(repo.repo.as_str(), tmp_dir.path()).await?;
     git::git_cmd("git config")?
@@ -123,6 +152,8 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
         .arg("extensions.partialClone")
         .arg("true")
         .current_dir(tmp_dir.path())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .await?;
     git::git_cmd("git fetch")?
@@ -133,6 +164,8 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
         .arg("--filter=blob:none")
         .arg("--tags")
         .current_dir(tmp_dir.path())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .await?;
 
@@ -152,6 +185,7 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
     let mut rev = if output.status.success() {
         String::from_utf8_lossy(&output.stdout).trim().to_string()
     } else {
+        trace!("Failed to describe FETCH_HEAD, using rev-parse instead");
         // "fatal: no tag exactly matches xxx"
         let stdout = git::git_cmd("git rev-parse")?
             .arg("rev-parse")
@@ -163,11 +197,13 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
             .stdout;
         String::from_utf8_lossy(&stdout).trim().to_string()
     };
+    trace!("Resolved FETCH_HEAD to `{rev}`");
 
     if !bleeding_edge {
         rev = get_best_candidate_tag(tmp_dir.path(), &rev)
             .await
             .unwrap_or(rev);
+        trace!("Using best candidate tag `{rev}` for revision");
     }
 
     let mut frozen = None;
@@ -181,6 +217,7 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
             .stdout;
         let exact = String::from_utf8_lossy(&exact).trim().to_string();
         if rev != exact {
+            trace!("Freezing revision to `{exact}`");
             frozen = Some(rev);
             rev = exact;
         }
@@ -193,10 +230,12 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
         .arg("--")
         .arg(MANIFEST_FILE)
         .current_dir(tmp_dir.path())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .await?;
 
-    let manifest = config::read_manifest(tmp_dir.path())?;
+    let manifest = config::read_manifest(&tmp_dir.path().join(MANIFEST_FILE))?;
 
     let new_revision = Revision {
         rev,
@@ -226,4 +265,66 @@ async fn get_best_candidate_tag(repo: &Path, rev: &str) -> Result<String> {
         .map(ToString::to_string)
         .next()
         .ok_or_else(|| anyhow::anyhow!("No tags found for revision {}", rev))
+}
+
+async fn write_new_config(path: &Path, revisions: &[UpdateResult]) -> Result<()> {
+    let mut lines = fs_err::tokio::read_to_string(path)
+        .await?
+        .split_inclusive('\n')
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+
+    let rev_regex = Regex::new(r#"^(\s+)rev:(\s*)(['"]?)([^\s#]+)(.*)(\r?\n)$"#)
+        .expect("Failed to compile regex");
+
+    // case 1: one already up to date
+    // case 2: to frozen
+    // case 3: to bleeding edge
+
+    let mut new_revision_iter = revisions.iter();
+    for line in &mut lines {
+        if let Some(caps) = rev_regex.captures(line)? {
+            let revision = new_revision_iter
+                .next()
+                .expect("Expected a revision for every rev line");
+
+            let UpdateResult::Revision(revision) = revision else {
+                continue;
+            };
+
+            // TODO: preserve the quote style
+            let mut new_rev = Vec::new();
+            let mut serializer = serde_yaml::Serializer::new(&mut new_rev);
+            serializer
+                .serialize_map(Some(1))?
+                .serialize_entry("rev", &revision.rev)?;
+            serializer.end()?;
+
+            let Some((_, new_rev)) = new_rev.to_str()?.split_once(':') else {
+                unreachable!()
+            };
+
+            let comment = if let Some(frozen) = &revision.frozen {
+                format!("  # frozen: {frozen}")
+            } else if caps[5].trim().starts_with("# frozen:") {
+                String::new()
+            } else {
+                caps[5].to_string()
+            };
+
+            *line = format!(
+                "{}rev:{}{}{}{}",
+                &caps[1],
+                &caps[2],
+                new_rev.trim(),
+                comment,
+                &caps[6]
+            );
+        }
+    }
+
+    write_atomic(path, lines.join("").as_bytes())
+        .with_context(|| format!("Failed to write updated config file `{}`", path.display()))?;
+
+    Ok(())
 }

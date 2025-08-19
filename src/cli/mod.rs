@@ -425,7 +425,7 @@ pub(crate) struct AutoUpdateArgs {
     #[arg(long)]
     pub(crate) repo: Vec<String>,
     /// Number of threads to use.
-    #[arg(short, long, default_value_t = 1)]
+    #[arg(short, long, default_value_t = 3)]
     pub(crate) jobs: usize,
 }
 
