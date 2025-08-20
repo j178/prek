@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.0
+
+### Breaking changes
+
+- Drop support `.yml` config file ([#493](https://github.com/j178/prek/pull/493))
+
+### Enhancements
+
+- Add moving rev warning ([#488](https://github.com/j178/prek/pull/488))
+- Implement `prek auto-update` ([#511](https://github.com/j178/prek/pull/511))
+- Support local path as a `repo` url ([#513](https://github.com/j178/prek/pull/513))
+
+### Bug fixes
+
+- Fix recursion limit when checking deeply nested json ([#507](https://github.com/j178/prek/pull/507))
+- Fix rename tempfile across device ([#508](https://github.com/j178/prek/pull/508))
+
+### Other changes
+
+- docs: install prek with mise ([#510](https://github.com/j178/prek/pull/510))
+
 ## 0.0.29
 
 ### Enhancements
