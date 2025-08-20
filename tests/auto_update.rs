@@ -2,6 +2,7 @@ use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
+use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
@@ -591,6 +592,68 @@ fn auto_update_local_repo_ignored() -> Result<()> {
             "#);
         }
     );
+
+    Ok(())
+}
+
+#[test]
+fn missing_hook_ids() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(&context, "missing-hook-repo", &["v1.0.0"])?;
+
+    // Remove the 'test-hook' from the hooks file
+    ChildPath::new(&repo_path)
+        .child(".pre-commit-hooks.yaml")
+        .write_str(indoc::indoc! {r#"
+        - id: another-hook
+          name: Another Hook
+          entry: python3 -c 'print("hello")'
+          language: python
+    "#})?;
+
+    Command::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&repo_path)
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg("Remove test-hook")
+        .current_dir(&repo_path)
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("tag")
+        .arg("v2.0.0")
+        .arg("-m")
+        .arg("v2.0.0")
+        .current_dir(&repo_path)
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    [[HOME]/test-repos/missing-hook-repo] update failed: Cannot update to rev `v2.0.0`, hook is missing: test-hook
+    "#);
 
     Ok(())
 }

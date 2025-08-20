@@ -8,6 +8,7 @@ use fancy_regex::Regex;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
 use serde::Serializer;
 use serde::ser::SerializeMap;
 use tracing::trace;
@@ -25,7 +26,6 @@ use crate::{config, git};
 struct Revision {
     rev: String,
     frozen: Option<String>,
-    hook_ids: Vec<String>,
 }
 
 pub(crate) async fn auto_update(
@@ -231,12 +231,28 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
         .await?;
 
     let manifest = config::read_manifest(&tmp_dir.path().join(MANIFEST_FILE))?;
+    let new_hook_ids = manifest
+        .hooks
+        .into_iter()
+        .map(|h| h.id)
+        .collect::<FxHashSet<_>>();
+    let hooks_missing = repo
+        .hooks
+        .iter()
+        .filter(|h| !new_hook_ids.contains(&h.id))
+        .map(|h| h.id.clone())
+        .collect::<Vec<_>>();
+    if !hooks_missing.is_empty() {
+        return Err(anyhow::anyhow!(
+            "Cannot update to rev `{}`, hook{} {} missing: {}",
+            rev,
+            if hooks_missing.len() > 1 { "s" } else { "" },
+            if hooks_missing.len() > 1 { "are" } else { "is" },
+            hooks_missing.join(", ")
+        ));
+    }
 
-    let new_revision = Revision {
-        rev,
-        frozen,
-        hook_ids: manifest.hooks.into_iter().map(|h| h.id).collect(),
-    };
+    let new_revision = Revision { rev, frozen };
 
     Ok(new_revision)
 }
