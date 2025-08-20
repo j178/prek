@@ -329,6 +329,8 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
     // Time seconds
     (r"(\d+\.)?\d+(ms|s)", "[TIME]"),
+    // File URI scheme: file:///c:/WINDOWS => file://c:/WINDOWS
+    (r"file:///", "file://"),
 ];
 
 #[allow(unused_macros)]
