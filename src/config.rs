@@ -769,7 +769,7 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
     if !repos_has_mutable_rev.is_empty() {
         let msg = repos_has_mutable_rev
             .iter()
-            .map(|repo| format!("`{}`: {}", repo.repo.cyan(), repo.rev.yellow()))
+            .map(|repo| format!("{}: {}", repo.repo.cyan(), repo.rev.yellow()))
             .collect::<Vec<_>>()
             .join("\n");
 

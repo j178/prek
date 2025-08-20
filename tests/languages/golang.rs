@@ -167,7 +167,7 @@ fn remote_hook() {
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-test-repos/golang-hooks
-            rev: main
+            rev: v1
             hooks:
               - id: echo
                 verbose: true
@@ -185,14 +185,13 @@ fn remote_hook() {
       .pre-commit-config.yaml
 
     ----- stderr -----
-    warning: The `rev` field of repo `https://github.com/prek-test-repos/golang-hooks` appears to be a mutable reference (moving tag / branch). Mutable references are never updated after first install and are not supported. See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details. Hint: `prek autoupdate` often fixes this.
     ");
 
     // Run hooks with system found go.
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-test-repos/golang-hooks
-            rev: main
+            rev: v1
             hooks:
               - id: echo
                 verbose: true
@@ -210,6 +209,5 @@ fn remote_hook() {
       .pre-commit-config.yaml
 
     ----- stderr -----
-    warning: The `rev` field of repo `https://github.com/prek-test-repos/golang-hooks` appears to be a mutable reference (moving tag / branch). Mutable references are never updated after first install and are not supported. See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details. Hint: `prek autoupdate` often fixes this.
     ");
 }

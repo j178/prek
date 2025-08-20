@@ -9,7 +9,7 @@ fn docker() {
     context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
           - repo: https://github.com/prek-test-repos/docker-hooks
-            rev: master
+            rev: v1
             hooks:
               - id: hello-world
                 entry: "echo Hello, world!"
@@ -29,6 +29,5 @@ fn docker() {
       Hello, world! .pre-commit-config.yaml
 
     ----- stderr -----
-    warning: The `rev` field of repo `https://github.com/prek-test-repos/docker-hooks` appears to be a mutable reference (moving tag / branch). Mutable references are never updated after first install and are not supported. See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details. Hint: `prek autoupdate` often fixes this.
     "#);
 }

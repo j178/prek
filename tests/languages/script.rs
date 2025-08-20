@@ -18,7 +18,7 @@ fn script_run() {
     "});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -28,6 +28,10 @@ fn script_run() {
       .pre-commit-config.yaml
 
     ----- stderr -----
-    warning: The `rev` field of repo `https://github.com/prek-test-repos/script-hooks` appears to be a mutable reference (moving tag / branch). Mutable references are never updated after first install and are not supported. See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details. Hint: `prek autoupdate` often fixes this.
-    ");
+    warning: The following repos have mutable `rev` fields (moving tag / branch):
+    https://github.com/prek-test-repos/script-hooks: main
+    Mutable references are never updated after first install and are not supported.
+    See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details.
+    Hint: `prek autoupdate` often fixes this",
+    "##);
 }
