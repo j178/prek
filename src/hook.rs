@@ -12,7 +12,6 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::error;
-use url::Url;
 
 use crate::config::{
     self, Config, HookOptions, Language, LocalHook, MANIFEST_FILE, ManifestHook, MetaHook,
@@ -40,7 +39,7 @@ pub(crate) enum Repo {
     Remote {
         /// Path to the cloned repo.
         path: PathBuf,
-        url: Url,
+        url: String,
         rev: String,
         hooks: Vec<ManifestHook>,
     },
@@ -54,7 +53,7 @@ pub(crate) enum Repo {
 
 impl Repo {
     /// Load the remote repo manifest from the path.
-    pub(crate) fn remote(url: Url, rev: String, path: PathBuf) -> Result<Self, Error> {
+    pub(crate) fn remote(url: String, rev: String, path: PathBuf) -> Result<Self, Error> {
         let manifest = read_manifest(&path.join(MANIFEST_FILE))?;
         let hooks = manifest.hooks;
 

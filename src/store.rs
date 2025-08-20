@@ -98,10 +98,10 @@ impl Store {
 
         debug!(
             target = %temp.path().display(),
-            %repo,
+            ?repo,
             "Cloning repo",
         );
-        clone_repo(repo.repo.as_str(), &repo.rev, temp.path()).await?;
+        clone_repo(&repo.repo, &repo.rev, temp.path()).await?;
 
         // TODO: add windows retry
         fs_err::tokio::remove_dir_all(&target).await.ok();
