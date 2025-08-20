@@ -9,7 +9,7 @@ fn docker() {
     context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
           - repo: https://github.com/prek-test-repos/docker-hooks
-            rev: v1
+            rev: v1.0
             hooks:
               - id: hello-world
                 entry: "echo Hello, world!"
