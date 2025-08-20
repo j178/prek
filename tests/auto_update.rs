@@ -100,8 +100,7 @@ fn create_local_git_repo(context: &TestContext, repo_name: &str, tags: &[&str]) 
         .assert()
         .success();
 
-    // TODO: remove file:// prefix when the bug is fixed
-    Ok(format!("file://{}", repo_dir.display()))
+    Ok(repo_dir.to_string_lossy().to_string())
 }
 
 #[test]
@@ -126,7 +125,7 @@ fn auto_update_basic() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [file://[HOME]/test-repos/test-repo] updating v1.0.0 -> v2.0.0
+    [[HOME]/test-repos/test-repo] updating v1.0.0 -> v2.0.0
 
     ----- stderr -----
     "#);
@@ -136,7 +135,7 @@ fn auto_update_basic() -> Result<()> {
         {
             assert_snapshot!(context.read(".pre-commit-config.yaml"), @r#"
             repos:
-              - repo: file://[HOME]/test-repos/test-repo
+              - repo: [HOME]/test-repos/test-repo
                 rev: v2.0.0
                 hooks:
                   - id: test-hook
@@ -170,7 +169,7 @@ fn auto_update_already_up_to_date() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [file://[HOME]/test-repos/up-to-date-repo] already up to date
+    [[HOME]/test-repos/up-to-date-repo] already up to date
 
     ----- stderr -----
     "#);
@@ -180,7 +179,7 @@ fn auto_update_already_up_to_date() -> Result<()> {
         {
             assert_snapshot!(context.read(".pre-commit-config.yaml"), @r#"
             repos:
-              - repo: file://[HOME]/test-repos/up-to-date-repo
+              - repo: [HOME]/test-repos/up-to-date-repo
                 rev: v1.0.0
                 hooks:
                   - id: test-hook
@@ -219,8 +218,8 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [file://[HOME]/test-repos/repo1] updating v1.0.0 -> v1.1.0
-    [file://[HOME]/test-repos/repo2] already up to date
+    [[HOME]/test-repos/repo1] updating v1.0.0 -> v1.1.0
+    [[HOME]/test-repos/repo2] already up to date
 
     ----- stderr -----
     "#);
@@ -230,11 +229,11 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
         {
             assert_snapshot!(context.read(".pre-commit-config.yaml"), @r#"
             repos:
-              - repo: file://[HOME]/test-repos/repo1
+              - repo: [HOME]/test-repos/repo1
                 rev: v1.1.0
                 hooks:
                   - id: test-hook
-              - repo: file://[HOME]/test-repos/repo2
+              - repo: [HOME]/test-repos/repo2
                 rev: v2.0.0
                 hooks:
                   - id: another-hook
@@ -274,7 +273,7 @@ fn auto_update_specific_repos() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [file://[HOME]/test-repos/repo1] updating v1.0.0 -> v1.1.0
+    [[HOME]/test-repos/repo1] updating v1.0.0 -> v1.1.0
 
     ----- stderr -----
     "#);
@@ -284,11 +283,11 @@ fn auto_update_specific_repos() -> Result<()> {
         {
             assert_snapshot!(context.read(".pre-commit-config.yaml"), @r#"
             repos:
-              - repo: file://[HOME]/test-repos/repo1
+              - repo: [HOME]/test-repos/repo1
                 rev: v1.1.0
                 hooks:
                   - id: test-hook
-              - repo: file://[HOME]/test-repos/repo2
+              - repo: [HOME]/test-repos/repo2
                 rev: v2.0.0
                 hooks:
                   - id: another-hook
@@ -301,8 +300,8 @@ fn auto_update_specific_repos() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [file://[HOME]/test-repos/repo1] already up to date
-    [file://[HOME]/test-repos/repo2] updating v2.0.0 -> v2.1.0
+    [[HOME]/test-repos/repo1] already up to date
+    [[HOME]/test-repos/repo2] updating v2.0.0 -> v2.1.0
 
     ----- stderr -----
     "#);
@@ -312,11 +311,11 @@ fn auto_update_specific_repos() -> Result<()> {
         {
             assert_snapshot!(context.read(".pre-commit-config.yaml"), @r#"
             repos:
-              - repo: file://[HOME]/test-repos/repo1
+              - repo: [HOME]/test-repos/repo1
                 rev: v1.1.0
                 hooks:
                   - id: test-hook
-              - repo: file://[HOME]/test-repos/repo2
+              - repo: [HOME]/test-repos/repo2
                 rev: v2.1.0
                 hooks:
                   - id: another-hook
@@ -354,7 +353,7 @@ fn auto_update_bleeding_edge() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [file://[HOME]/test-repos/bleeding-repo] updating v1.0.0 -> [COMMIT_SHA]
+    [[HOME]/test-repos/bleeding-repo] updating v1.0.0 -> [COMMIT_SHA]
 
     ----- stderr -----
     "#);
@@ -364,7 +363,7 @@ fn auto_update_bleeding_edge() -> Result<()> {
         {
             assert_snapshot!(context.read(".pre-commit-config.yaml"), @r#"
             repos:
-              - repo: file://[HOME]/test-repos/bleeding-repo
+              - repo: [HOME]/test-repos/bleeding-repo
                 rev: [COMMIT_SHA]
                 hooks:
                   - id: test-hook
@@ -402,7 +401,7 @@ fn auto_update_freeze() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [file://[HOME]/test-repos/freeze-repo] updating v1.0.0 -> [COMMIT_SHA]
+    [[HOME]/test-repos/freeze-repo] updating v1.0.0 -> [COMMIT_SHA]
 
     ----- stderr -----
     "#);
@@ -413,7 +412,7 @@ fn auto_update_freeze() -> Result<()> {
         {
             assert_snapshot!(context.read(".pre-commit-config.yaml"), @r##"
             repos:
-              - repo: file://[HOME]/test-repos/freeze-repo
+              - repo: [HOME]/test-repos/freeze-repo
                 rev: [COMMIT_SHA]  # frozen: v1.1.0
                 hooks:
                   - id: test-hook
@@ -458,8 +457,8 @@ fn auto_update_preserve_formatting() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [file://[HOME]/test-repos/repo1] updating v1.0.0 -> v1.1.0
-    [file://[HOME]/test-repos/repo2] updating v1.0.0 -> v1.1.0
+    [[HOME]/test-repos/repo1] updating v1.0.0 -> v1.1.0
+    [[HOME]/test-repos/repo2] updating v1.0.0 -> v1.1.0
 
     ----- stderr -----
     "#);
@@ -470,13 +469,13 @@ fn auto_update_preserve_formatting() -> Result<()> {
             assert_snapshot!(context.read(".pre-commit-config.yaml"), @r##"
             # Pre-commit configuration
             repos:
-              - repo: file://[HOME]/test-repos/repo1  # Test repository
+              - repo: [HOME]/test-repos/repo1  # Test repository
                 rev: 'v1.1.0'  # Current version
                 hooks:
                   - id: test-hook
                     # Hook configuration
                     name: Test Hook
-              - repo: file://[HOME]/test-repos/repo2
+              - repo: [HOME]/test-repos/repo2
                 rev: "v1.1.0"  # Current version
                 hooks:
                   - id: test-hook
@@ -519,7 +518,7 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [file://[HOME]/test-repos/frozen-repo] updating [COMMIT_SHA] -> v1.2.0
+    [[HOME]/test-repos/frozen-repo] updating [COMMIT_SHA] -> v1.2.0
 
     ----- stderr -----
     "#);
@@ -529,7 +528,7 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
         {
             assert_snapshot!(context.read(".pre-commit-config.yaml"), @r#"
             repos:
-              - repo: file://[HOME]/test-repos/frozen-repo
+              - repo: [HOME]/test-repos/frozen-repo
                 rev: v1.2.0
                 hooks:
                   - id: test-hook
@@ -569,7 +568,7 @@ fn auto_update_local_repo_ignored() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [file://[HOME]/test-repos/remote-repo] updating v1.0.0 -> v1.1.0
+    [[HOME]/test-repos/remote-repo] updating v1.0.0 -> v1.1.0
 
     ----- stderr -----
     "#);
@@ -585,7 +584,7 @@ fn auto_update_local_repo_ignored() -> Result<()> {
                     name: Local Hook
                     language: system
                     entry: echo
-              - repo: file://[HOME]/test-repos/remote-repo
+              - repo: [HOME]/test-repos/remote-repo
                 rev: v1.1.0
                 hooks:
                   - id: test-hook
