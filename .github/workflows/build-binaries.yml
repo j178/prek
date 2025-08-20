@@ -246,51 +246,52 @@ jobs:
             *.tar.gz
             *.sha256
 
-# `psm` cannot compile on s390x, disable for now.
-#  linux-s390x:
-#    runs-on: ubuntu-latest
-#    timeout-minutes: 30
-#    strategy:
-#      matrix:
-#        platform:
-#          - target: s390x-unknown-linux-gnu
-#            arch: s390x
-#    steps:
-#      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-#      - name: "Build wheels"
-#        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
-#        with:
-#          target: ${{ matrix.platform.target }}
-#          manylinux: auto
-#          args: --release --locked --out dist --features self-update
-#          # Until the llvm updates hit stable
-#          # https://github.com/rust-lang/rust/issues/141287
-#          rust-toolchain: nightly-2025-08-18
-#      - name: "Upload wheels"
-#        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-#        with:
-#          name: wheels-linux-${{ matrix.platform.target }}
-#          path: dist
-#      - name: "Archive binary"
-#        shell: bash
-#        run: |
-#          set -euo pipefail
-#
-#          TARGET=${{ matrix.platform.target }}
-#          ARCHIVE_NAME=prek-$TARGET
-#          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
-#
-#          mkdir -p $ARCHIVE_NAME
-#          cp target/$TARGET/release/prek $ARCHIVE_NAME/prek
-#          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
-#          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
-#      - name: "Upload binary"
-#        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-#        with:
-#          name: artifacts-${{ matrix.platform.target }}
-#          path: |
-#            *.tar.gz
-#            *.sha256
+  linux-s390x:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        platform:
+          - target: s390x-unknown-linux-gnu
+            arch: s390x
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        with:
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+          args: --release --locked --out dist --features self-update
+          # Until the llvm updates hit stable
+          # https://github.com/rust-lang/rust/issues/141287
+          rust-toolchain: nightly-2025-08-18
+        env:
+          CFLAGS_s390x_unknown_linux_gnu: -march=z10
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: wheels-linux-${{ matrix.platform.target }}
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET=${{ matrix.platform.target }}
+          ARCHIVE_NAME=prek-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/release/prek $ARCHIVE_NAME/prek
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: artifacts-${{ matrix.platform.target }}
+          path: |
+            *.tar.gz
+            *.sha256
 
   linux-powerpc:
     runs-on: ubuntu-latest
