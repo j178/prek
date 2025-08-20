@@ -184,6 +184,12 @@ impl TestContext {
         command
     }
 
+    pub fn auto_update(&self) -> Command {
+        let mut cmd = self.command();
+        cmd.arg("auto-update");
+        cmd
+    }
+
     /// Standard snapshot filters _plus_ those for this test context.
     pub fn filters(&self) -> Vec<(&str, &str)> {
         // Put test context snapshots before the default filters
