@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0
+## 0.1.1
 
 ### Breaking changes
 
@@ -16,6 +16,7 @@
 
 - Fix recursion limit when checking deeply nested json ([#507](https://github.com/j178/prek/pull/507))
 - Fix rename tempfile across device ([#508](https://github.com/j178/prek/pull/508))
+- Fix build on s390x ([#518](https://github.com/j178/prek/pull/518))
 
 ### Other changes
 
