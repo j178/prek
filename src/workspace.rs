@@ -131,7 +131,7 @@ impl Project {
 
                     let path = store.clone_repo(repo_config, reporter).await.map_err(|e| {
                         Error::Store {
-                            repo: format!("{}", repo_config.repo),
+                            repo: repo_config.repo.to_string(),
                             error: Box::new(e),
                         }
                     })?;

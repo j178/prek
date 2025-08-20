@@ -7,7 +7,6 @@ use std::str::FromStr;
 use anyhow::Result;
 use fancy_regex::{self as regex, Regex};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use url::Url;
 
 use crate::fs::Simplified;
 use crate::version;
@@ -301,7 +300,7 @@ pub struct Config {
 pub enum RepoLocation {
     Local,
     Meta,
-    Remote(Url),
+    Remote(String),
 }
 
 impl FromStr for RepoLocation {
@@ -311,7 +310,7 @@ impl FromStr for RepoLocation {
         match s {
             "local" => Ok(RepoLocation::Local),
             "meta" => Ok(RepoLocation::Meta),
-            _ => Url::parse(s).map(RepoLocation::Remote),
+            _ => Ok(RepoLocation::Remote(s.to_string())),
         }
     }
 }
@@ -568,7 +567,7 @@ impl From<MetaHook> for ManifestHook {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct RemoteRepo {
-    pub repo: Url,
+    pub repo: String,
     pub rev: String,
     #[serde(skip)]
     pub hooks: Vec<RemoteHook>,
@@ -859,21 +858,7 @@ mod tests {
                 repos: [
                     Remote(
                         RemoteRepo {
-                            repo: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "github.com",
-                                    ),
-                                ),
-                                port: None,
-                                path: "/crate-ci/typos",
-                                query: None,
-                                fragment: None,
-                            },
+                            repo: "https://github.com/crate-ci/typos",
                             rev: "v1.0.0",
                             hooks: [
                                 RemoteHook {

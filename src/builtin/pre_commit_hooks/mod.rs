@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
 use anyhow::Result;
-use url::Url;
 
 use crate::hook::Hook;
 
@@ -51,6 +50,6 @@ impl Implemented {
 }
 
 // TODO: compare rev
-pub(crate) fn is_pre_commit_hooks(url: &Url) -> bool {
-    url.host_str() == Some("github.com") && url.path() == "/pre-commit/pre-commit-hooks"
+pub(crate) fn is_pre_commit_hooks(url: &str) -> bool {
+    url == "https://github.com/pre-commit/pre-commit-hooks"
 }
