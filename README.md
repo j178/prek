@@ -147,7 +147,7 @@ cargo install --locked --git https://github.com/j178/prek
 <details>
 <summary>GitHub Releases</summary>
 
-prek release artifacts can be downloaded directly from the [GitHub releases](https://github.com/j178/prekprek/releases).
+prek release artifacts can be downloaded directly from the [GitHub releases](https://github.com/j178/prek/releases).
 </details>
 
 If installed via the standalone installer, prek can update itself to the latest version:
