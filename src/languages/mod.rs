@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use futures::TryStreamExt;
 use http::header::USER_AGENT;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::debug;
+use tracing::{debug, trace};
 
 use crate::archive::ArchiveExtension;
 use crate::cli::reporter::HookInstallReporter;
@@ -221,16 +221,19 @@ impl Language {
 }
 
 pub(crate) fn resolve_command(mut cmds: Vec<String>, env_path: Option<&OsStr>) -> Vec<String> {
-    let entry = &cmds[0];
-    let exe_path = match which::which_in(entry, env_path, &*CWD) {
+    let cmd = &cmds[0];
+    let exe_path = match which::which_in(cmd, env_path, &*CWD) {
         Ok(p) => p,
-        Err(_) => PathBuf::from(entry),
+        Err(_) => PathBuf::from(cmd),
     };
+    trace!("Resolved command: {}", exe_path.display());
 
     if let Ok(mut interpreter) = parse_shebang(&exe_path) {
+        trace!("Found shebang: {:?}", interpreter);
         // Resolve the interpreter path, convert "python3" to "python3.exe" on Windows
         if let Ok(p) = which::which_in(&interpreter[0], env_path, &*CWD) {
             interpreter[0] = p.to_string_lossy().to_string();
+            trace!("Resolved interpreter: {}", &interpreter[0]);
         }
         interpreter.push(exe_path.to_string_lossy().to_string());
         interpreter.extend_from_slice(&cmds[1..]);

@@ -4,9 +4,9 @@ use anyhow::Result;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::fs::CWD;
-use crate::hook::Hook;
 use crate::hook::InstalledHook;
-use crate::languages::LanguageImpl;
+use crate::hook::{Error, Hook};
+use crate::languages::{LanguageImpl, resolve_command};
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::Store;
@@ -34,12 +34,23 @@ impl LanguageImpl for Script {
         filenames: &[&String],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
-        let entry = hook.entry.resolve(None)?;
+        // For `language: script`, the entry must be resolved from the repo path, all other languages
+        // are resolved from the current working directory.
         let repo_path = hook.repo_path().unwrap_or_else(|| CWD.as_path());
-        let cmd = repo_path.join(&entry[0]);
+        let mut split = shlex::split(hook.entry.entry()).ok_or_else(|| Error::InvalidHook {
+            hook: hook.to_string(),
+            error: anyhow::anyhow!(
+                "Failed to parse entry `{}` as commands",
+                &hook.entry.entry()
+            ),
+        })?;
+
+        let cmd = repo_path.join(&split[0]);
+        split[0] = cmd.to_string_lossy().to_string();
+        let entry = resolve_command(split, None);
 
         let run = async move |batch: Vec<String>| {
-            let mut output = Cmd::new(&cmd, "run script command")
+            let mut output = Cmd::new(&entry[0], "run script command")
                 .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)
