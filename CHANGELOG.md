@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.2
+
+### Enhancements
+
+- Add check for missing hooks in new revision ([#521](https://github.com/j178/prek/pull/521))
+
+### Bug fixes
+
+- Fix `language: script` entry join issue ([#525](https://github.com/j178/prek/pull/525))
+
+### Other changes
+
+- Add OpenLineage to prek users ([#523](https://github.com/j178/prek/pull/523))
+
 ## 0.1.1
 
 ### Breaking changes
