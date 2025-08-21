@@ -33,8 +33,12 @@ pub(crate) enum Error {
         error: anyhow::Error,
     },
 
-    #[error("Failed to read manifest file: {0}")]
-    Manifest(#[source] config::Error),
+    #[error("Failed to read manifest of `{repo}`")]
+    Manifest {
+        repo: String,
+        #[source]
+        error: config::Error,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -57,7 +61,10 @@ pub(crate) enum Repo {
 impl Repo {
     /// Load the remote repo manifest from the path.
     pub(crate) fn remote(url: String, rev: String, path: PathBuf) -> Result<Self, Error> {
-        let manifest = read_manifest(&path.join(MANIFEST_FILE)).map_err(Error::Manifest)?;
+        let manifest = read_manifest(&path.join(MANIFEST_FILE)).map_err(|e| Error::Manifest {
+            repo: url.to_string(),
+            error: e,
+        })?;
         let hooks = manifest.hooks;
 
         Ok(Self::Remote {
