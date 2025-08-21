@@ -711,9 +711,6 @@ pub enum Error {
 
     #[error("Failed to parse `{0}`")]
     Yaml(String, #[source] serde_yaml::Error),
-
-    #[error("Invalid repo URL: {0}")]
-    RepoUrl(#[from] url::ParseError),
 }
 
 /// Read the configuration file from the given path.

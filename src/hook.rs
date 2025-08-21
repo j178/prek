@@ -24,14 +24,17 @@ use crate::store::Store;
 #[derive(Error, Debug)]
 pub(crate) enum Error {
     #[error(transparent)]
-    InvalidConfig(#[from] config::Error),
+    Config(#[from] config::Error),
 
     #[error("Hook `{hook}` is invalid")]
-    InvalidHook {
+    Hook {
         hook: String,
         #[source]
         error: anyhow::Error,
     },
+
+    #[error("Failed to read manifest file: {0}")]
+    Manifest(#[source] config::Error),
 }
 
 #[derive(Debug, Clone)]
@@ -54,7 +57,7 @@ pub(crate) enum Repo {
 impl Repo {
     /// Load the remote repo manifest from the path.
     pub(crate) fn remote(url: String, rev: String, path: PathBuf) -> Result<Self, Error> {
-        let manifest = read_manifest(&path.join(MANIFEST_FILE))?;
+        let manifest = read_manifest(&path.join(MANIFEST_FILE)).map_err(Error::Manifest)?;
         let hooks = manifest.hooks;
 
         Ok(Self::Remote {
@@ -182,7 +185,7 @@ impl HookBuilder {
             .map_or(&[][..], |deps| deps.as_slice());
 
         if !language.supports_dependency() && !additional_dependencies.is_empty() {
-            return Err(Error::InvalidHook {
+            return Err(Error::Hook {
                 hook: self.config.id.clone(),
                 error: anyhow::anyhow!(
                     "Hook specified `additional_dependencies` `{}` but the language `{}` does not support installing dependencies for now",
@@ -196,7 +199,7 @@ impl HookBuilder {
             if let Some(language_version) = language_version
                 && language_version != "default"
             {
-                return Err(Error::InvalidHook {
+                return Err(Error::Hook {
                     hook: self.config.id.clone(),
                     error: anyhow::anyhow!(
                         "Hook specified `language_version` `{}` but the language `{}` does not install an environment",
@@ -207,7 +210,7 @@ impl HookBuilder {
             }
 
             if !additional_dependencies.is_empty() {
-                return Err(Error::InvalidHook {
+                return Err(Error::Hook {
                     hook: self.config.id.clone(),
                     error: anyhow::anyhow!(
                         "Hook specified `additional_dependencies` `{}` but the language `{}` does not install an environment",
@@ -229,7 +232,7 @@ impl HookBuilder {
         let options = self.config.options;
         let language_version = options.language_version.expect("language_version not set");
         let language_request = LanguageRequest::parse(self.config.language, &language_version)
-            .map_err(|e| Error::InvalidHook {
+            .map_err(|e| Error::Hook {
                 hook: self.config.id.clone(),
                 error: anyhow::anyhow!(e),
             })?;
@@ -327,7 +330,7 @@ impl Entry {
     }
 
     pub(crate) fn resolve(&self, env_path: Option<&OsStr>) -> Result<Vec<String>, Error> {
-        let split = shlex::split(&self.entry).ok_or_else(|| Error::InvalidHook {
+        let split = shlex::split(&self.entry).ok_or_else(|| Error::Hook {
             hook: self.hook.clone(),
             error: anyhow::anyhow!("Failed to parse entry `{}` as commands", &self.entry),
         })?;

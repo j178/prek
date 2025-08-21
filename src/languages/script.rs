@@ -37,7 +37,7 @@ impl LanguageImpl for Script {
         // For `language: script`, the entry must be resolved from the repo path, all other languages
         // are resolved from the current working directory.
         let repo_path = hook.repo_path().unwrap_or_else(|| CWD.as_path());
-        let mut split = shlex::split(hook.entry.entry()).ok_or_else(|| Error::InvalidHook {
+        let mut split = shlex::split(hook.entry.entry()).ok_or_else(|| Error::Hook {
             hook: hook.to_string(),
             error: anyhow::anyhow!(
                 "Failed to parse entry `{}` as commands",
