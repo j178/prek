@@ -33,6 +33,15 @@
       matchDatasources: ["github-runners"],
       description: "Disable PRs updating GitHub runners (e.g. 'runs-on: macos-14')",
       enabled: false,
+    },
+    {
+      description: "Bump uv version in bundled `uv.rs`",
+      matchManagers: ["regex"],
+      matchDatasources: ["pypi"],
+      matchPackageNames: ["uv"],
+      matchPaths: ["src/languages/python/uv.rs"],
+      extractVersion: "CUR_UV_VERSION\\s*:\\s*&str\\s*=\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\"",
+      versioning: "semver"
     }
   ]
 }
