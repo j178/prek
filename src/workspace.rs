@@ -205,7 +205,7 @@ impl Project {
                         builder.update(hook_config);
                         builder.combine(&self.config);
 
-                        let hook = builder.build()?;
+                        let hook = builder.build().await?;
                         hooks.push(hook);
                     }
                 }
@@ -215,7 +215,7 @@ impl Project {
                         let mut builder = HookBuilder::new(repo, hook_config.clone(), hooks.len());
                         builder.combine(&self.config);
 
-                        let hook = builder.build()?;
+                        let hook = builder.build().await?;
                         hooks.push(hook);
                     }
                 }
@@ -226,7 +226,7 @@ impl Project {
                         let mut builder = HookBuilder::new(repo, hook_config, hooks.len());
                         builder.combine(&self.config);
 
-                        let hook = builder.build()?;
+                        let hook = builder.build().await?;
                         hooks.push(hook);
                     }
                 }

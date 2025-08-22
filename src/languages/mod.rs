@@ -220,6 +220,21 @@ impl Language {
     }
 }
 
+/// Try to extract metadata from the given hook entry if possible.
+///
+/// Currently, only PEP 723 inline metadata for `python` hooks is supported.
+/// First part of `entry` must be a file path to the Python script.
+/// Effectively, we are implementing a new `python-script` language which works like `script`.
+/// But we don't want to introduce a new language just for this for now.
+pub(crate) async fn extract_metadata_from_entry(hook: &mut Hook) -> Result<()> {
+    // Only support `python` hooks for now.
+    if hook.language == Language::Python {
+        return python::extract_pep723_metadata(hook).await;
+    }
+
+    Ok(())
+}
+
 pub(crate) fn resolve_command(mut cmds: Vec<String>, env_path: Option<&OsStr>) -> Vec<String> {
     let cmd = &cmds[0];
     let exe_path = match which::which_in(cmd, env_path, &*CWD) {

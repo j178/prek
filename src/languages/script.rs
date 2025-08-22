@@ -4,8 +4,8 @@ use anyhow::Result;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::fs::CWD;
+use crate::hook::Hook;
 use crate::hook::InstalledHook;
-use crate::hook::{Error, Hook};
 use crate::languages::{LanguageImpl, resolve_command};
 use crate::process::Cmd;
 use crate::run::run_by_batch;
@@ -34,16 +34,12 @@ impl LanguageImpl for Script {
         filenames: &[&String],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
-        // For `language: script`, the entry must be resolved from the repo path, all other languages
-        // are resolved from the current working directory.
+        // For `language: script`, the `entry[0]` is a script path.
+        // For remote hooks, the path is relative to the repo root.
+        // For local hooks, the path is relative to the current working directory.
+        // TODO: In workspace mode, local hooks should be relative to the project root.
         let repo_path = hook.repo_path().unwrap_or_else(|| CWD.as_path());
-        let mut split = shlex::split(hook.entry.entry()).ok_or_else(|| Error::Hook {
-            hook: hook.to_string(),
-            error: anyhow::anyhow!(
-                "Failed to parse entry `{}` as commands",
-                &hook.entry.entry()
-            ),
-        })?;
+        let mut split = hook.entry.split()?;
 
         let cmd = repo_path.join(&split[0]);
         split[0] = cmd.to_string_lossy().to_string();

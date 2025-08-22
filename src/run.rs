@@ -76,7 +76,7 @@ impl<'a> Partitions<'a> {
         let max_per_batch = max(4, filenames.len().div_ceil(concurrency));
         let max_cli_length = platform_max_cli_length();
 
-        let command_length = hook.entry.entry().len()
+        let command_length = hook.entry.raw().len()
             + hook.args.iter().map(String::len).sum::<usize>()
             + hook.args.len();
 

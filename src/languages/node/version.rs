@@ -136,7 +136,7 @@ impl NodeVersion {
 /// - `lts/<codename>`: Install the latest version of node with the specified code name.
 /// - `local/path/to/node`: Use the node executable at the specified path.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum NodeRequest {
+pub(crate) enum NodeRequest {
     Any,
     Major(u64),
     MajorMinor(u64, u64),
@@ -195,6 +195,10 @@ impl FromStr for NodeRequest {
 pub(crate) const EXTRA_KEY_LTS: &str = "lts";
 
 impl NodeRequest {
+    pub(crate) fn is_any(&self) -> bool {
+        matches!(self, NodeRequest::Any)
+    }
+
     fn parse_version_numbers(
         version_str: &str,
         original_request: &str,

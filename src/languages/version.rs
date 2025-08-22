@@ -7,13 +7,13 @@ use crate::languages::node::NodeRequest;
 use crate::languages::python::PythonRequest;
 
 #[derive(thiserror::Error, Debug)]
-pub enum Error {
+pub(crate) enum Error {
     #[error("Invalid `language_version` value: `{0}`")]
     InvalidVersion(String),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum LanguageRequest {
+pub(crate) enum LanguageRequest {
     Any,
     Python(PythonRequest),
     Node(NodeRequest),
@@ -23,7 +23,17 @@ pub enum LanguageRequest {
 }
 
 impl LanguageRequest {
-    pub fn parse(lang: Language, request: &str) -> Result<Self, Error> {
+    pub(crate) fn is_any(&self) -> bool {
+        match self {
+            LanguageRequest::Any => true,
+            LanguageRequest::Python(req) => req.is_any(),
+            LanguageRequest::Node(req) => req.is_any(),
+            LanguageRequest::Golang(req) => req.is_any(),
+            LanguageRequest::Semver(_) => false,
+        }
+    }
+
+    pub(crate) fn parse(lang: Language, request: &str) -> Result<Self, Error> {
         // `pre-commit` support these values in `language_version`:
         // - `default`: substituted by language `get_default_version` function
         //   In `get_default_version`, if a system version is available, it will return `system`.
@@ -47,7 +57,7 @@ impl LanguageRequest {
         })
     }
 
-    pub fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
+    pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
         match self {
             LanguageRequest::Any => true,
             LanguageRequest::Python(req) => req.satisfied_by(install_info),
@@ -59,7 +69,7 @@ impl LanguageRequest {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct SemverRequest(semver::VersionReq);
+pub(crate) struct SemverRequest(semver::VersionReq);
 
 impl FromStr for SemverRequest {
     type Err = Error;

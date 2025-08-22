@@ -59,6 +59,7 @@ itertools = { version = "0.14.0" }
 # Enable static linking for liblzma
 # This is required for the `xz` feature in `async-compression`
 liblzma = { version = "*", features = ["static"]}
+memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
 rand = { version = "0.9.0" }
 rayon = { version = "1.10.0" }
@@ -79,6 +80,7 @@ textwrap = { version = "0.16.1" }
 thiserror = { version = "2.0.11" }
 tokio = { version = "1.40.0", features = ["fs", "process", "rt", "sync", "macros"] }
 tokio-util = { version = "0.7.13" }
+toml = { version = "0.9.5", default-features = false, features = ["parse", "serde"]}
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 unicode-width = { version = "0.2.0" }

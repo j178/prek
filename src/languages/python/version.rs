@@ -69,6 +69,10 @@ impl FromStr for PythonRequest {
 }
 
 impl PythonRequest {
+    pub(crate) fn is_any(&self) -> bool {
+        matches!(self, PythonRequest::Any)
+    }
+
     /// Parse version numbers into appropriate `PythonRequest` variants
     fn parse_version_numbers(
         version_str: &str,

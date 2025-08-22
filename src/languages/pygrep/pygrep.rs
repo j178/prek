@@ -187,7 +187,7 @@ impl LanguageImpl for Pygrep {
             .arg(py_script.path())
             .args(args.to_args())
             .arg(CONCURRENCY.to_string())
-            .arg(hook.entry.entry())
+            .arg(hook.entry.raw())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

@@ -11,14 +11,14 @@ use rand::Rng;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::error;
+use tracing::{error, warn};
 
 use crate::config::{
     self, Config, HookOptions, Language, LocalHook, MANIFEST_FILE, ManifestHook, MetaHook,
     RemoteHook, SerdeRegex, Stage, read_manifest,
 };
-use crate::languages::resolve_command;
 use crate::languages::version::LanguageRequest;
+use crate::languages::{extract_metadata_from_entry, resolve_command};
 use crate::store::Store;
 
 #[derive(Error, Debug)]
@@ -232,7 +232,7 @@ impl HookBuilder {
     }
 
     /// Build the hook.
-    pub(crate) fn build(mut self) -> Result<Hook, Error> {
+    pub(crate) async fn build(mut self) -> Result<Hook, Error> {
         self.check()?;
         self.fill_in_defaults();
 
@@ -264,11 +264,13 @@ impl HookBuilder {
             None => Stages::All,
         };
 
-        Ok(Hook {
+        let mut hook = Hook {
             entry,
+            stages,
             language_request,
             additional_dependencies,
             dependencies: OnceLock::new(),
+
             repo: self.repo,
             idx: self.idx,
             id: self.config.id,
@@ -287,10 +289,15 @@ impl HookBuilder {
             description: options.description,
             log_file: options.log_file,
             require_serial: options.require_serial.expect("require_serial not set"),
-            stages,
             verbose: options.verbose.expect("verbose not set"),
             minimum_prek_version: options.minimum_prek_version,
-        })
+        };
+
+        if let Err(err) = extract_metadata_from_entry(&mut hook).await {
+            warn!("Failed to extract metadata from entry for hook `{hook}`: {err}");
+        }
+
+        Ok(hook)
     }
 }
 
@@ -336,16 +343,23 @@ impl Entry {
         Self { hook, entry }
     }
 
+    /// Split the entry and resolve the command by parsing its shebang.
     pub(crate) fn resolve(&self, env_path: Option<&OsStr>) -> Result<Vec<String>, Error> {
-        let split = shlex::split(&self.entry).ok_or_else(|| Error::Hook {
-            hook: self.hook.clone(),
-            error: anyhow::anyhow!("Failed to parse entry `{}` as commands", &self.entry),
-        })?;
+        let split = self.split()?;
 
         Ok(resolve_command(split, env_path))
     }
 
-    pub(crate) fn entry(&self) -> &str {
+    /// Split the entry into a list of commands.
+    pub(crate) fn split(&self) -> Result<Vec<String>, Error> {
+        shlex::split(&self.entry).ok_or_else(|| Error::Hook {
+            hook: self.hook.clone(),
+            error: anyhow::anyhow!("Failed to parse entry `{}` as commands", &self.entry),
+        })
+    }
+
+    /// Get the original entry string.
+    pub(crate) fn raw(&self) -> &str {
         &self.entry
     }
 }
@@ -415,6 +429,7 @@ impl Hook {
         matches!(&*self.repo, Repo::Meta { .. })
     }
 
+    // TODO: extract PEP723 dependencies
     pub(crate) fn dependencies(&self) -> &FxHashSet<String> {
         if !self.is_remote() {
             return &self.additional_dependencies;

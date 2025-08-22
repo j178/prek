@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use tracing::debug;
+use tracing::{debug, trace};
 
 use constants::env_vars::EnvVars;
 
@@ -74,6 +74,10 @@ impl LanguageImpl for Python {
 
         // Install dependencies
         if let Some(repo_path) = hook.repo_path() {
+            trace!(
+                "Installing dependencies from repo path: {}",
+                repo_path.display()
+            );
             uv.cmd("uv pip install", store)
                 .arg("pip")
                 .arg("install")
@@ -85,6 +89,7 @@ impl LanguageImpl for Python {
                 .output()
                 .await?;
         } else if !hook.additional_dependencies.is_empty() {
+            trace!("Installing additional dependencies for local hook");
             uv.cmd("uv pip install", store)
                 .arg("pip")
                 .arg("install")
@@ -94,7 +99,7 @@ impl LanguageImpl for Python {
                 .output()
                 .await?;
         } else {
-            debug!("No dependencies to install");
+            debug!("No additional dependencies to install");
         }
 
         let python = python_exec(&info.env_path);

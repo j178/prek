@@ -115,6 +115,10 @@ impl FromStr for GoRequest {
 }
 
 impl GoRequest {
+    pub(crate) fn is_any(&self) -> bool {
+        matches!(self, GoRequest::Any)
+    }
+
     fn parse_version_numbers(
         version_str: &str,
         original_request: &str,
