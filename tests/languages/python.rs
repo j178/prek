@@ -1,5 +1,5 @@
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::PathChild;
+use assert_fs::fixture::{FileWriteStr, PathChild};
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -240,4 +240,42 @@ fn additional_dependencies() {
 
     ----- stderr -----
     "#);
+}
+
+/// Ensure that stderr from hooks is captured and shown to the user.
+#[test]
+fn hook_stderr() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: python
+                entry: python ./hook.py
+    "});
+
+    context.work_dir().child("hook.py").write_str("1/0")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    local....................................................................Failed
+    - hook id: local
+    - exit code: 1
+      Traceback (most recent call last):
+        File "[TEMP_DIR]/./hook.py", line 1, in <module>
+          1/0
+          ~^~
+      ZeroDivisionError: division by zero
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
 }
