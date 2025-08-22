@@ -258,7 +258,10 @@ fn hook_stderr() -> anyhow::Result<()> {
                 entry: python ./hook.py
     "});
 
-    context.work_dir().child("hook.py").write_str("1/0")?;
+    context
+        .work_dir()
+        .child("hook.py")
+        .write_str("import sys; print('How are you', file=sys.stderr); sys.exit(1)")?;
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
@@ -268,11 +271,7 @@ fn hook_stderr() -> anyhow::Result<()> {
     local....................................................................Failed
     - hook id: local
     - exit code: 1
-      Traceback (most recent call last):
-        File "[TEMP_DIR]/./hook.py", line 1, in <module>
-          1/0
-          ~^~
-      ZeroDivisionError: division by zero
+      How are you
 
     ----- stderr -----
     "#);
