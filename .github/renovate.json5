@@ -12,6 +12,19 @@
   "pre-commit": {
     "enabled": true
   },
+  "customManagers": [
+    // Custom manager to update the bundled uv version with the latest uv version from PyPI.
+    {
+      "customType": "regex",
+      "fileMatch": ["src/languages/python/uv.rs$"],
+      "datasourceTemplate": "pypi",
+      "packageNameTemplate": "uv",
+      "matchStrings": [
+        // Match: const CUR_UV_VERSION: &str = "0.8.6";
+        "const\\s+CUR_UV_VERSION\\s*:\\s*&str\\s*=\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
+      ]
+    }
+  ],
   "packageRules": [
     // Pin GitHub Actions to immutable SHAs.
     {
@@ -33,15 +46,6 @@
       matchDatasources: ["github-runners"],
       description: "Disable PRs updating GitHub runners (e.g. 'runs-on: macos-14')",
       enabled: false,
-    },
-    {
-      description: "Bump uv version in bundled `uv.rs`",
-      matchManagers: ["regex"],
-      matchDatasources: ["pypi"],
-      matchPackageNames: ["uv"],
-      matchPaths: ["src/languages/python/uv.rs"],
-      extractVersion: "CUR_UV_VERSION\\s*:\\s*&str\\s*=\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\"",
-      versioning: "semver"
     }
   ]
 }
