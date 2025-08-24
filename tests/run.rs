@@ -1626,6 +1626,7 @@ fn git_commit_a() -> Result<()> {
 }
 
 /// Test hook id completion works.
+#[cfg(unix)]
 #[test]
 fn completion() {
     let context = TestContext::new();
