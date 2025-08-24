@@ -8,6 +8,7 @@
   "ignorePaths": [ ".github/workflows/release.yml" ],
   "prHourlyLimit": 10,
   "labels": ["internal"],
+  "semanticCommits": "disabled",
   // pre-commit is currently in beta testing, must opt in
   "pre-commit": {
     "enabled": true
