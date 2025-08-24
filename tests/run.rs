@@ -1624,3 +1624,86 @@ fn git_commit_a() -> Result<()> {
 
     Ok(())
 }
+
+/// Test hook id completion works.
+#[test]
+fn completion() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: hook
+                name: a useful hook
+                language: system
+                entry: echo
+                verbose: true
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    complete --keep-order --exclusive --command prek --arguments "(COMPLETE=fish "'[CURRENT_EXE]'" -- (commandline --current-process --tokenize --cut-at-cursor) (commandline --current-token))"
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    install	Install the prek git hook
+    install-hooks	Create hook environments for all hooks used in the config file
+    run	Run hooks
+    list	List available hooks
+    uninstall	Uninstall the prek git hook
+    validate-config	Validate `.pre-commit-config.yaml` files
+    validate-manifest	Validate `.pre-commit-hooks.yaml` files
+    sample-config	Produce a sample `.pre-commit-config.yaml` file
+    auto-update	Auto-update pre-commit config to the latest repos' versions
+    gc	Clean unused cached repos
+    clean	Clean out pre-commit files
+    init-template-dir	Install hook script in a directory intended for use with `git config init.templateDir`
+    try-repo	Try the pre-commit hooks in the current repo
+    self	`prek` self management
+    hook	a useful hook
+    --all-files	Run on all files in the repo
+    --files	Specific filenames to run hooks on
+    --directory	Run hooks on all files in the specified directories
+    --from-ref	The original ref in a `<from_ref>...<to_ref>` diff expression. Files changed in this diff will be run through the hooks
+    --to-ref	The destination ref in a `from_ref...to_ref` diff expression. Defaults to `HEAD` if `from_ref` is specified
+    --last-commit	Run hooks against the last commit. Equivalent to `--from-ref HEAD~1 --to-ref HEAD`
+    --hook-stage	The stage during which the hook is fired
+    --show-diff-on-failure	When hooks fail, run `git diff` directly afterward
+    --config	Path to alternate config file
+    --color	Whether to use color in output
+    --help	Display the concise help for this command
+    --no-progress	Hide all progress outputs
+    --quiet	Do not print any output
+    --verbose	Use verbose output
+    --version	Display the prek version
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("run"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    run	Run hooks
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("run").arg("h"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hook	a useful hook
+
+    ----- stderr -----
+    "#);
+}
