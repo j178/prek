@@ -1,6 +1,6 @@
 mod common;
 
-use crate::common::{cmd_snapshot, TestContext};
+use crate::common::{TestContext, cmd_snapshot};
 
 #[test]
 fn sensible_regex_warnings() {
