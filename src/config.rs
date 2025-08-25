@@ -7,6 +7,7 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use fancy_regex::{self as regex, Regex};
+use owo_colors::OwoColorize;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::fs::Simplified;
@@ -269,7 +270,6 @@ where
 }
 
 // TODO: warn deprecated stage
-// TODO: warn sensible regex
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Config {
@@ -713,6 +713,32 @@ pub enum Error {
     Yaml(String, #[source] serde_yaml::Error),
 }
 
+fn warn_sensible_regex(regex: Option<&SerdeRegex>, field: &str, context: &str, config_path: &Path) {
+    let Some(re) = regex else { return };
+    let re_str = re.as_str();
+
+    if re_str.contains("/*") {
+        warn_user!(
+            "The {} `{}` field in `{}` is a regex, not a glob -- matching '/*' probably isn't what you want here",
+            context,
+            field.yellow(),
+            config_path.display().cyan(),
+        );
+    }
+
+    for bad_re in [r"[\\/]", r"[\/]", r"[/\\]"] {
+        if re_str.contains(bad_re) {
+            warn_user!(
+                "prek normalizes slashes in the {} `{}` field in `{}` to forward slashes, so you can use `/` instead of `{}`",
+                context,
+                field.yellow(),
+                config_path.display().cyan(),
+                bad_re.yellow(),
+            );
+        }
+    }
+}
+
 /// Read the configuration file from the given path.
 pub fn read_config(path: &Path) -> Result<Config, Error> {
     let content = match fs_err::read_to_string(path) {
@@ -745,6 +771,35 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
                 .collect::<Vec<_>>()
                 .join(", ")
         );
+    }
+
+    warn_sensible_regex(config.files.as_ref(), "files", "top-level", path);
+    warn_sensible_regex(config.exclude.as_ref(), "exclude", "top-level", path);
+
+    for repo in &config.repos {
+        match repo {
+            Repo::Remote(r) => {
+                for hook in &r.hooks {
+                    let context = format!("hook `{}`", hook.id.yellow());
+                    warn_sensible_regex(hook.options.files.as_ref(), "files", &context, path);
+                    warn_sensible_regex(hook.options.exclude.as_ref(), "exclude", &context, path);
+                }
+            }
+            Repo::Local(r) => {
+                for hook in &r.hooks {
+                    let context = format!("hook `{}`", hook.id.yellow());
+                    warn_sensible_regex(hook.options.files.as_ref(), "files", &context, path);
+                    warn_sensible_regex(hook.options.exclude.as_ref(), "exclude", &context, path);
+                }
+            }
+            Repo::Meta(r) => {
+                for hook in &r.hooks {
+                    let context = format!("hook `{}`", hook.0.id.yellow());
+                    warn_sensible_regex(hook.0.options.files.as_ref(), "files", &context, path);
+                    warn_sensible_regex(hook.0.options.exclude.as_ref(), "exclude", &context, path);
+                }
+            }
+        }
     }
 
     // Check for mutable revs and warn the user.
