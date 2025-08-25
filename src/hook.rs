@@ -429,7 +429,6 @@ impl Hook {
         matches!(&*self.repo, Repo::Meta { .. })
     }
 
-    // TODO: extract PEP723 dependencies
     pub(crate) fn dependencies(&self) -> &FxHashSet<String> {
         if !self.is_remote() {
             return &self.additional_dependencies;

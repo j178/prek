@@ -1111,9 +1111,9 @@ fn invalid_entry() {
     success: false
     exit_code: 2
     ----- stdout -----
-
+    entry....................................................................
     ----- stderr -----
-    error: Failed to install hook `entry`
+    error: Failed to run hook `entry`
       caused by: Hook `entry` is invalid
       caused by: Failed to parse entry `"` as commands
     "#);

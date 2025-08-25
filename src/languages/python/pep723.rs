@@ -266,8 +266,7 @@ pub(crate) async fn extract_pep723_metadata(hook: &mut Hook) -> Result<()> {
     let split = hook.entry.split()?;
     let file = repo_path.join(&split[0]);
 
-    let script = Pep723Script::read(&file).await?;
-    let Some(script) = script else {
+    let Some(script) = Pep723Script::read(&file).await? else {
         return Ok(());
     };
 

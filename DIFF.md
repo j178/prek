@@ -25,7 +25,7 @@
 
 - `prek` supports Python toolchain management, it will install the required Python versions automatically.
 - `prek` uses `uv` for creating virtual environments and installing dependencies.
-- `prek` supports Python local hooks with PEP723 inline metadata.
+- `prek` supports Python hooks with PEP 723 inline metadata.
 
 ### Future plans
 
