@@ -7,7 +7,7 @@ fn sensible_regex_warnings() {
     let context = TestContext::new();
     context.init_project();
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r"
         files: 'src/*\.py'
         exclude: 'src/[\\/]_vendor/.*'
         repos:
@@ -23,7 +23,7 @@ fn sensible_regex_warnings() {
                 entry: echo
                 language: system
                 exclude: 'lib[\/]'
-    "#});
+    "});
     context.git_add(".");
 
     // `run` will trigger config parsing and the warnings.
@@ -48,7 +48,7 @@ fn no_sensible_regex_warnings() {
     let context = TestContext::new();
     context.init_project();
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r"
         files: 'src/.*\.py'
         exclude: 'src/_vendor/.*'
         repos:
@@ -64,7 +64,7 @@ fn no_sensible_regex_warnings() {
                 entry: echo
                 language: system
                 exclude: 'lib/'
-    "#});
+    "});
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
