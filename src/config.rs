@@ -722,7 +722,7 @@ fn warn_sensible_regex(regex: Option<&SerdeRegex>, field: &str, context: &str, c
             "The {} `{}` field in `{}` is a regex, not a glob -- matching '/*' probably isn't what you want here",
             context,
             field.yellow(),
-            config_path.display().cyan(),
+            config_path.user_display().cyan(),
         );
     }
 
@@ -732,7 +732,7 @@ fn warn_sensible_regex(regex: Option<&SerdeRegex>, field: &str, context: &str, c
                 "prek normalizes slashes in the {} `{}` field in `{}` to forward slashes, so you can use `/` instead of `{}`",
                 context,
                 field.yellow(),
-                config_path.display().cyan(),
+                config_path.user_display().cyan(),
                 bad_re.yellow(),
             );
         }
@@ -764,7 +764,7 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
     if !unused.is_empty() {
         warn_user!(
             "Ignored unexpected keys in `{}`: {}",
-            path.display().cyan(),
+            path.user_display().cyan(),
             unused
                 .into_iter()
                 .map(|key| format!("`{}`", key.yellow()))
