@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.3
+
+### Enhancements
+
+- Support PEP 723 scripts for Python hooks ([#529](https://github.com/j178/prek/pull/529))
+
+### Bug fixes
+
+- Fix Python hook stderr are not captured ([#530](https://github.com/j178/prek/pull/530))
+
+### Other changes
+
+- Add an error context when reading manifest failed ([#527](https://github.com/j178/prek/pull/527))
+- Add a renovate rule to bump bundled uv version ([#528](https://github.com/j178/prek/pull/528))
+- Disable semantic commits for renovate PRs ([#538](https://github.com/j178/prek/pull/538))
+
 ## 0.1.2
 
 ### Enhancements
