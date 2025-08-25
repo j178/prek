@@ -3,6 +3,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
+use bstr::ByteSlice;
 use clap::Parser;
 use futures::StreamExt;
 use tempfile::NamedTempFile;
@@ -11,7 +12,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
-const MARKDOWN_LINE_BREAK: &str = "  ";
+const MARKDOWN_LINE_BREAK: &[u8] = b"  ";
 const BUFFER_SIZE_THRESHOLD: usize = 16 * 1024; // 16KB
 
 #[derive(Clone)]
@@ -116,18 +117,18 @@ async fn fix_file(
     let mut buf_writer = create_buffer(usize::try_from(file_len)?)?;
     let mut buf_reader = BufReader::new(file);
 
-    let mut line = String::new();
+    let mut line = Vec::new();
     let mut modified = false;
-    while buf_reader.read_line(&mut line).await? != 0 {
+    while buf_reader.read_until(b'\n', &mut line).await? != 0 {
         let line_ending = detect_line_ending(&line);
-        let mut trimmed = line.trim_end_matches(line_ending);
+        let mut trimmed = line.trim_end_with(|c| line_ending.contains(&(c as u8)));
 
         let markdown_end_flag = needs_markdown_break(is_markdown, trimmed);
 
         if chars.is_empty() {
             trimmed = trimmed.trim_ascii_end();
         } else {
-            trimmed = trimmed.trim_end_matches(|c| chars.contains(&c));
+            trimmed = trimmed.trim_end_with(|c| chars.contains(&c));
         }
 
         buf_writer.write(trimmed).await?;
@@ -152,7 +153,7 @@ async fn fix_file(
 }
 
 trait AsyncWriteBuffer {
-    async fn write(&mut self, data: &str) -> Result<()>;
+    async fn write(&mut self, data: &[u8]) -> Result<()>;
     async fn flush_to_file(&mut self, filename: &str) -> Result<()>;
 }
 
@@ -168,8 +169,8 @@ impl MemoryBuffer {
 }
 
 impl AsyncWriteBuffer for MemoryBuffer {
-    async fn write(&mut self, data: &str) -> Result<()> {
-        self.0.extend_from_slice(data.as_bytes());
+    async fn write(&mut self, data: &[u8]) -> Result<()> {
+        self.0.extend_from_slice(data);
         Ok(())
     }
 
@@ -198,8 +199,8 @@ impl TempFileBuffer {
 }
 
 impl AsyncWriteBuffer for TempFileBuffer {
-    async fn write(&mut self, data: &str) -> Result<()> {
-        self.buf_writer.write_all(data.as_bytes()).await?;
+    async fn write(&mut self, data: &[u8]) -> Result<()> {
+        self.buf_writer.write_all(data).await?;
         Ok(())
     }
 
@@ -216,7 +217,7 @@ enum Buffer {
 }
 
 impl AsyncWriteBuffer for Buffer {
-    async fn write(&mut self, data: &str) -> Result<()> {
+    async fn write(&mut self, data: &[u8]) -> Result<()> {
         match self {
             Buffer::Memory(b) => b.write(data).await,
             Buffer::Temp(b) => b.write(data).await,
@@ -239,19 +240,19 @@ fn create_buffer(file_len: usize) -> Result<Buffer> {
     }
 }
 
-fn detect_line_ending(line: &str) -> &str {
-    if line.ends_with("\r\n") {
-        "\r\n"
-    } else if line.ends_with('\n') {
-        "\n"
-    } else if line.ends_with('\r') {
-        "\r"
+fn detect_line_ending(line: &[u8]) -> &[u8] {
+    if line.ends_with(b"\r\n") {
+        b"\r\n"
+    } else if line.ends_with(b"\n") {
+        b"\n"
+    } else if line.ends_with(b"\r") {
+        b"\r"
     } else {
-        ""
+        b""
     }
 }
 
-fn needs_markdown_break(is_markdown: bool, trimmed: &str) -> bool {
+fn needs_markdown_break(is_markdown: bool, trimmed: &[u8]) -> bool {
     is_markdown
         && !trimmed.chars().all(|b| b.is_ascii_whitespace())
         && trimmed.ends_with(MARKDOWN_LINE_BREAK)
@@ -537,5 +538,22 @@ mod tests {
         let expected = "\ta \t  \n";
         let content = fs_err::tokio::read_to_string(&path).await.unwrap();
         assert_eq!(content, expected);
+    }
+
+    #[tokio::test]
+    async fn test_invalid_utf8_file_is_handled() {
+        let dir = TempDir::new().unwrap();
+        // This is valid ASCII followed by invalid UTF-8 (0xFF)
+        let content = b"valid line\ninvalid utf8 here:\xff\n";
+        let path = create_test_file(&dir, "invalid_utf8.txt", content).await;
+        let chars = vec![' ', '\t'];
+        let md_exts: Vec<String> = vec![];
+
+        let (code, _msg) = run_fix_on_file(&path, &chars, false, &md_exts).await;
+        assert_eq!(code, 0);
+
+        let new_content = fs_err::tokio::read(&path).await.unwrap();
+        // The invalid byte should still be present, but trailing whitespace should be trimmed
+        assert!(new_content.starts_with(b"valid line\ninvalid utf8 here:\xff\n"));
     }
 }
