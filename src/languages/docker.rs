@@ -16,8 +16,6 @@ use crate::process::Cmd;
 use crate::run::{USE_COLOR, run_by_batch};
 use crate::store::Store;
 
-const PRE_COMMIT_LABEL: &str = "PRE_COMMIT";
-
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Docker;
 
@@ -44,7 +42,13 @@ impl Docker {
             .arg("--tag")
             .arg(Self::docker_tag(hook))
             .arg("--label")
-            .arg(PRE_COMMIT_LABEL);
+            .arg("org.opencontainers.image.vendor=prek")
+            .arg("--label")
+            .arg(format!("org.opencontainers.image.source={}", hook.repo()))
+            .arg("--label")
+            .arg(format!("prek.hook.id={}", hook.id))
+            .arg("--label")
+            .arg("prek.managed=true");
 
         // Always attempt to pull all referenced images.
         if pull {
