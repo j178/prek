@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.4
+
+### Enhancements
+
+- Improve docker image labels ([#551](https://github.com/j178/prek/pull/551))
+
+### Performance
+
+- Avoid unnecessary allocation in `run_by_batch` ([#549](https://github.com/j178/prek/pull/549))
+- Cache current docker container mounts ([#552](https://github.com/j178/prek/pull/552))
+
+### Bug fixes
+
+- Fix `trailing-whitespace` cannot handle file contains invalid utf-8 data ([#544](https://github.com/j178/prek/pull/544))
+- Fix trailing-whitespace eol trimming ([#546](https://github.com/j178/prek/pull/546))
+- Fix trailing-whitespace markdown eol trimming ([#547](https://github.com/j178/prek/pull/547))
+
+### Documentation
+
+- Add authlib to `Who are using prek` ([#550](https://github.com/j178/prek/pull/550))
+
 ## 0.1.3
 
 ### Enhancements
