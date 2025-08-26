@@ -4,7 +4,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild};
 use crate::common::{TestContext, cmd_snapshot};
 
 /// Test `language_version` parsing.
-/// Python 3.12.11 and 3.13.5 are installed in the CI environment, when running tests uv can find them.
+/// Python 3.12.11 is installed in the CI environment, when running tests uv can find them.
 /// Other versions may need to be downloaded while running the tests.
 #[test]
 fn language_version() -> anyhow::Result<()> {
@@ -49,12 +49,6 @@ fn language_version() -> anyhow::Result<()> {
                 entry: python -c 'import sys; print(sys.version_info[:3])'
                 language_version: python3.12
                 always_run: true
-              - id: greater-than-python3.13
-                name: greater-than-python3.13
-                language: python
-                entry: python -c 'import sys; print(sys.version_info[:3])'
-                language_version: '>=3.13'
-                always_run: true
               - id: python3.12
                 name: python3.12
                 language: python
@@ -98,10 +92,6 @@ fn language_version() -> anyhow::Result<()> {
     - hook id: python3.12
     - duration: [TIME]
       (3, 12, 11)
-    greater-than-python3.13..................................................Passed
-    - hook id: greater-than-python3.13
-    - duration: [TIME]
-      (3, 13, 5)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]

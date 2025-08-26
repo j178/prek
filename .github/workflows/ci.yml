@@ -18,6 +18,7 @@ env:
   UV_VERSION: '0.8.6'
   NODE_VERSION: '19.9.0'
   GO_VERSION: '1.24.5'
+  PYTHON_VERSION: '3.12.11'
 
 jobs:
   typos:
@@ -102,7 +103,7 @@ jobs:
           version: ${{ env.UV_VERSION }}
 
       - name: "Install Python"
-        run: uv python install --no-bin
+        run: uv python install --no-bin ${{ PYTHON_VERSION }}
 
       - name: "Install Node.js"
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -146,7 +147,7 @@ jobs:
           version: ${{ env.UV_VERSION }}
 
       - name: "Install Python"
-        run: uv python install --no-bin
+        run: uv python install --no-bin ${{ PYTHON_VERSION }}
 
       - name: "Install Node.js"
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -193,7 +194,7 @@ jobs:
           cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
 
       - name: "Install Python"
-        run: uv python install --no-bin
+        run: uv python install --no-bin ${{ PYTHON_VERSION }}
 
       - name: "Install Node.js"
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0

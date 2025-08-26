@@ -1,7 +1,40 @@
 [tools]
-python = [
-    "3.12.11",
-    "3.13.5",
-]
+# Toolchains used in the integration tests.
+python = [ "3.12.11"]
 node = [ "19.9.0" ]
 go = [ "1.23.0" ]
+
+[tasks.lint]
+description = "Run formatting and linting"
+run = [
+    "cargo fmt",
+    "cargo clippy --all-targets --all-features --workspace -- -D warnings"
+]
+
+[tasks.test-unit]
+description = "Run unit tests with insta review"
+run = "cargo insta test --review --bin prek -- $F"
+
+[tasks.test-all-unit]
+description = "Run all unit tests with insta review"
+run = "cargo insta test --review --workspace --lib --bins"
+
+[tasks.test-integration]
+description = "Run specific integration test with insta review"
+run = "cargo insta test --review --test $T -- $F"
+
+[tasks.test-all-integration]
+description = "Run all integration tests with insta review"
+run = "cargo insta test --review --test '*'"
+
+[tasks.test]
+description = "Run all tests"
+run = "cargo test --all-targets --all-features --workspace"
+
+[tasks.release]
+description = "Prepare for a release"
+run = """
+git checkout -b bump
+uvx --from 'rooster-blue>=0.0.7' --python 3.12 -- rooster release
+cargo update
+"""
