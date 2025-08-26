@@ -84,6 +84,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [PDM](https://github.com/pdm-project/pdm/pull/3593)
 - [basedpyright](https://github.com/DetachHead/basedpyright/pull/1413)
 - [OpenLineage](https://github.com/OpenLineage/OpenLineage/pull/3965)
+- [Authlib](https://github.com/authlib/authlib/pull/804)
 
 ## Installation
 
