@@ -151,6 +151,7 @@ where
         hook.id,
     );
 
+    #[allow(clippy::redundant_closure)]
     let mut tasks = futures::stream::iter(partitions)
         .map(|batch| run(batch))
         .buffered(concurrency);
