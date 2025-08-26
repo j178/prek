@@ -141,6 +141,11 @@ rc_buffer = "warn"
 rc_mutex = "warn"
 rest_pat_in_fully_bound_structs = "warn"
 
+[workspace.metadata.typos.default.extend-words]
+edn = "edn"
+styl = "styl"
+jod = "jod"
+
 [profile.bench]
 opt-level = 3
 debug = true # used by the profiler
