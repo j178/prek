@@ -126,6 +126,9 @@ async fn fix_file(
         let mut trimmed = &line[..line.len() - line_ending.len()];
 
         let markdown_end = needs_markdown_break(is_markdown, trimmed);
+        if markdown_end {
+            trimmed = &trimmed[..trimmed.len() - MARKDOWN_LINE_BREAK.len()];
+        }
 
         if chars.is_empty() {
             trimmed = trimmed.trim_ascii_end();
@@ -553,6 +556,21 @@ mod tests {
         assert_eq!(code, 0);
 
         let expected = "a\nb\r\r\r\n";
+        let content = fs_err::tokio::read_to_string(&path).await.unwrap();
+        assert_eq!(content, expected);
+    }
+
+    #[tokio::test]
+    async fn test_markdown_trim() {
+        let dir = TempDir::new().unwrap();
+        let path = create_test_file(&dir, "trim_markdown.md", b"axxx  \n").await;
+        let chars = vec!['x'];
+        let md_exts = vec!["md".to_string()];
+
+        let (code, _msg) = run_fix_on_file(&path, &chars, true, &md_exts).await;
+        assert_eq!(code, 1);
+
+        let expected = "a  \n";
         let content = fs_err::tokio::read_to_string(&path).await.unwrap();
         assert_eq!(content, expected);
     }
