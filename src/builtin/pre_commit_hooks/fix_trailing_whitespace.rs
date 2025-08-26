@@ -106,11 +106,13 @@ async fn fix_file(
     force_markdown: bool,
     markdown_exts: &[String],
 ) -> Result<(i32, Vec<u8>)> {
-    let ext = Path::new(filename)
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| format!(".{}", e.to_ascii_lowercase()));
-    let is_markdown = force_markdown || ext.is_some_and(|e| markdown_exts.contains(&e));
+    let is_markdown = force_markdown || {
+        Path::new(filename)
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| format!(".{}", e.to_ascii_lowercase()))
+            .is_some_and(|e| markdown_exts.contains(&e))
+    };
 
     let file = fs_err::tokio::File::open(filename).await?;
     let file_len = file.metadata().await?.len();
@@ -121,9 +123,9 @@ async fn fix_file(
     let mut modified = false;
     while buf_reader.read_until(b'\n', &mut line).await? != 0 {
         let line_ending = detect_line_ending(&line);
-        let mut trimmed = line.trim_end_with(|c| line_ending.contains(&(c as u8)));
+        let mut trimmed = &line[..line.len() - line_ending.len()];
 
-        let markdown_end_flag = needs_markdown_break(is_markdown, trimmed);
+        let markdown_end = needs_markdown_break(is_markdown, trimmed);
 
         if chars.is_empty() {
             trimmed = trimmed.trim_ascii_end();
@@ -132,7 +134,7 @@ async fn fix_file(
         }
 
         buf_writer.write(trimmed).await?;
-        if markdown_end_flag {
+        if markdown_end {
             buf_writer.write(MARKDOWN_LINE_BREAK).await?;
             modified |= trimmed.len() + MARKDOWN_LINE_BREAK.len() + line_ending.len() != line.len();
         } else {
@@ -404,8 +406,8 @@ mod tests {
         let dir = TempDir::new().unwrap();
         // trailing ascii spaces should be removed by trim_ascii_end when chars is empty
         let path = create_test_file(&dir, "ascii.txt", b"foo   \nbar \t\n").await;
-        let chars: Vec<char> = vec![]; // will hit trim_ascii_end()
-        let md_exts: Vec<String> = vec![];
+        let chars = vec![]; // will hit trim_ascii_end()
+        let md_exts = vec![];
 
         let (code, _msg) = run_fix_on_file(&path, &chars, false, &md_exts).await;
         assert_eq!(code, 1);
@@ -454,7 +456,7 @@ mod tests {
         // use a unicode char '。' and ideographic space '　' to trim
         let path = create_test_file(&dir, "uni.txt", "hello。　\n".as_bytes()).await;
         let chars = vec!['。', '　'];
-        let md_exts: Vec<String> = vec![];
+        let md_exts = vec![];
 
         let (code, _msg) = run_fix_on_file(&path, &chars, false, &md_exts).await;
         assert_eq!(code, 1);
@@ -484,7 +486,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = create_test_file(&dir, "mix.txt", b"ok\nneedtrim   \nalso_ok\n").await;
         let chars = vec![' ', '\t'];
-        let md_exts: Vec<String> = vec![];
+        let md_exts = vec![];
 
         let (code, _msg) = run_fix_on_file(&path, &chars, false, &md_exts).await;
         assert_eq!(code, 1);
@@ -499,7 +501,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = create_test_file(&dir, "ok_no_nl.txt", b"foo\nbar").await;
         let chars = vec![' ', '\t'];
-        let md_exts: Vec<String> = vec![];
+        let md_exts = vec![];
 
         let (code, msg) = run_fix_on_file(&path, &chars, false, &md_exts).await;
         assert_eq!(code, 0);
@@ -536,6 +538,21 @@ mod tests {
         assert_eq!(code, 1);
 
         let expected = "\ta \t  \n";
+        let content = fs_err::tokio::read_to_string(&path).await.unwrap();
+        assert_eq!(content, expected);
+    }
+
+    #[tokio::test]
+    async fn test_eol_trim() {
+        let dir = TempDir::new().unwrap();
+        let path = create_test_file(&dir, "trim_eol.md", b"a\nb\r\r\r\n").await;
+        let chars = vec!['x'];
+        let md_exts = vec![];
+
+        let (code, _msg) = run_fix_on_file(&path, &chars, true, &md_exts).await;
+        assert_eq!(code, 0);
+
+        let expected = "a\nb\r\r\r\n";
         let content = fs_err::tokio::read_to_string(&path).await.unwrap();
         assert_eq!(content, expected);
     }
