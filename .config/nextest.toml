@@ -1,0 +1,4 @@
+[[profile.default.overrides]]
+# Retry flaky node tests due to npm 403 errors
+filter = 'kind(test) and test(node::)'
+retries = 2
