@@ -11,7 +11,7 @@ use rand::Rng;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::{error, warn};
+use tracing::{error, trace};
 
 use crate::config::{
     self, Config, HookOptions, Language, LocalHook, MANIFEST_FILE, ManifestHook, MetaHook,
@@ -294,7 +294,7 @@ impl HookBuilder {
         };
 
         if let Err(err) = extract_metadata_from_entry(&mut hook).await {
-            warn!("Failed to extract metadata from entry for hook `{hook}`: {err}");
+            trace!("Failed to extract metadata from entry for hook `{hook}`: {err}");
         }
 
         Ok(hook)
