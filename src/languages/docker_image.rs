@@ -33,7 +33,7 @@ impl LanguageImpl for DockerImage {
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let entry = hook.entry.resolve(None)?;
-        let run = async move |batch: Vec<String>| {
+        let run = async move |batch: &[&String]| {
             let mut cmd = Docker::docker_run_cmd().await?;
             let mut output = cmd
                 .args(&entry[..])

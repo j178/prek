@@ -137,7 +137,7 @@ pub(crate) async fn run_by_batch<T, F>(
     run: F,
 ) -> anyhow::Result<Vec<T>>
 where
-    F: AsyncFn(Vec<String>) -> anyhow::Result<T>,
+    F: for<'a> AsyncFn(&'a [&'a String]) -> anyhow::Result<T>,
     T: Send + 'static,
 {
     let concurrency = target_concurrency(hook.require_serial);
@@ -152,11 +152,7 @@ where
     );
 
     let mut tasks = futures::stream::iter(partitions)
-        .map(|batch| {
-            // TODO: avoid this allocation
-            let batch: Vec<_> = batch.iter().map(ToString::to_string).collect();
-            run(batch)
-        })
+        .map(|batch| run(batch))
         .buffered(concurrency);
 
     let mut results = Vec::new();

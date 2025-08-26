@@ -143,7 +143,7 @@ impl LanguageImpl for Node {
         let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
 
         let entry = hook.entry.resolve(Some(&new_path))?;
-        let run = async move |batch: Vec<String>| {
+        let run = async move |batch: &[&String]| {
             let mut output = Cmd::new(&entry[0], "node hook")
                 .args(&entry[1..])
                 .env("PATH", &new_path)

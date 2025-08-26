@@ -220,7 +220,7 @@ impl LanguageImpl for Docker {
         let docker_tag = Docker::docker_tag(hook);
         let entry = hook.entry.resolve(None)?;
 
-        let run = async move |batch: Vec<String>| {
+        let run = async move |batch: &[&String]| {
             // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
             let mut cmd = Docker::docker_run_cmd().await?;
             let mut output = cmd

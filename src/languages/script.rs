@@ -45,7 +45,7 @@ impl LanguageImpl for Script {
         split[0] = cmd.to_string_lossy().to_string();
         let entry = resolve_command(split, None);
 
-        let run = async move |batch: Vec<String>| {
+        let run = async move |batch: &[&String]| {
             let mut output = Cmd::new(&entry[0], "run script command")
                 .args(&entry[1..])
                 .args(&hook.args)

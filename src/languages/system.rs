@@ -34,7 +34,7 @@ impl LanguageImpl for System {
     ) -> Result<(i32, Vec<u8>)> {
         let entry = hook.entry.resolve(None)?;
 
-        let run = async move |batch: Vec<String>| {
+        let run = async move |batch: &[&String]| {
             let mut output = Cmd::new(&entry[0], "run system command")
                 .args(&entry[1..])
                 .args(&hook.args)
