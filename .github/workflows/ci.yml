@@ -103,7 +103,7 @@ jobs:
           version: ${{ env.UV_VERSION }}
 
       - name: "Install Python"
-        run: uv python install --no-bin ${{ PYTHON_VERSION }}
+        run: uv python install --no-bin ${{ env.PYTHON_VERSION }}
 
       - name: "Install Node.js"
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -147,7 +147,7 @@ jobs:
           version: ${{ env.UV_VERSION }}
 
       - name: "Install Python"
-        run: uv python install --no-bin ${{ PYTHON_VERSION }}
+        run: uv python install --no-bin ${{ env.PYTHON_VERSION }}
 
       - name: "Install Node.js"
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -194,7 +194,7 @@ jobs:
           cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
 
       - name: "Install Python"
-        run: uv python install --no-bin ${{ PYTHON_VERSION }}
+        run: uv python install --no-bin ${{ env.PYTHON_VERSION }}
 
       - name: "Install Node.js"
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
