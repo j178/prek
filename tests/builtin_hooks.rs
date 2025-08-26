@@ -81,6 +81,63 @@ fn end_of_file_fixer_hook() -> Result<()> {
 }
 
 #[test]
+fn check_yaml_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-yaml
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files
+    cwd.child("valid.yaml").write_str("a: 1")?;
+    cwd.child("invalid.yaml").write_str("a: b: c")?;
+    cwd.child("duplicate.yaml").write_str("a: 1\na: 2")?;
+    cwd.child("empty.yaml").touch()?;
+
+    context.git_add(".");
+
+    // First run: hooks should fail
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check yaml...............................................................Failed
+    - hook id: check-yaml
+    - exit code: 1
+      duplicate.yaml: Failed to yaml decode (duplicate entry with key "a")
+      invalid.yaml: Failed to yaml decode (mapping values are not allowed in this context at line 1 column 5)
+
+    ----- stderr -----
+    "#);
+
+    // Fix the files
+    cwd.child("invalid.yaml").write_str("a:\n  b: c")?;
+    cwd.child("duplicate.yaml").write_str("a: 1\nb: 2")?;
+
+    context.git_add(".");
+
+    // Second run: hooks should now pass
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check yaml...............................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn check_json_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
