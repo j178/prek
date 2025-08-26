@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
 use fancy_regex::Regex;
@@ -19,6 +19,50 @@ use crate::store::Store;
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Docker;
 
+#[derive(serde::Deserialize, Debug)]
+struct Mount {
+    #[serde(rename = "Source")]
+    source: String,
+    #[serde(rename = "Destination")]
+    destination: String,
+}
+
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Failed to parse docker inspect output: {0}")]
+    Serde(#[from] serde_json::Error),
+
+    #[error("Failed to run `docker inspect`: {0}")]
+    Process(#[from] std::io::Error),
+}
+
+static CONTAINER_MOUNTS: LazyLock<Result<Vec<Mount>, Error>> = LazyLock::new(|| {
+    if !Docker::is_in_docker() {
+        trace!("Not in Docker");
+        return Ok(vec![]);
+    }
+
+    let Ok(container_id) = Docker::current_container_id() else {
+        return Ok(vec![]);
+    };
+
+    trace!(?container_id, "Get docker container id");
+
+    let output = std::process::Command::new("docker")
+        .arg("inspect")
+        .arg("--format")
+        .arg("'{{json .Mounts}}'")
+        .arg(&container_id)
+        .output()?
+        .stdout;
+    let stdout = String::from_utf8_lossy(&output);
+    let stdout = stdout.trim().trim_matches('\'');
+    let mounts: Vec<Mount> = serde_json::from_str(stdout)?;
+    trace!(?mounts, "Get docker mounts");
+
+    Ok(mounts)
+});
+
 impl Docker {
     fn docker_tag(hook: &InstalledHook) -> String {
         let InstalledHook::Installed { info, .. } = hook else {
@@ -30,17 +74,17 @@ impl Docker {
         format!("prek-{digest}")
     }
 
-    async fn build_docker_image(hook: &InstalledHook, pull: bool) -> Result<()> {
+    async fn build_docker_image(hook: &InstalledHook, pull: bool) -> Result<String> {
         let Some(src) = hook.repo_path() else {
             anyhow::bail!("Language `docker` cannot work with `local` repository");
         };
 
+        let tag = Self::docker_tag(hook);
         let mut cmd = Cmd::new("docker", "build docker image");
-
         let cmd = cmd
             .arg("build")
             .arg("--tag")
-            .arg(Self::docker_tag(hook))
+            .arg(&tag)
             .arg("--label")
             .arg("org.opencontainers.image.vendor=prek")
             .arg("--label")
@@ -61,7 +105,7 @@ impl Docker {
 
         cmd.current_dir(src).check(true).output().await?;
 
-        Ok(())
+        Ok(tag)
     }
 
     /// see <https://stackoverflow.com/questions/23513045/how-to-check-if-a-process-is-running-inside-docker-container>
@@ -90,57 +134,24 @@ impl Docker {
     }
 
     /// Get the path of the current directory in the host.
-    async fn get_docker_path(path: &str) -> Result<Cow<'_, str>> {
-        if !Self::is_in_docker() {
-            trace!("Not in Docker, returning original path");
-            return Ok(Cow::Borrowed(path));
-        }
+    fn get_docker_path(path: &str) -> Result<Cow<'_, str>> {
+        let mounts = CONTAINER_MOUNTS.as_ref()?;
 
-        let Ok(container_id) = Self::current_container_id() else {
-            return Ok(Cow::Borrowed(path));
-        };
-
-        trace!(?container_id, "Get container id");
-
-        if let Ok(output) = Cmd::new("docker", "inspect container")
-            .arg("inspect")
-            .arg("--format")
-            .arg("'{{json .Mounts}}'")
-            .arg(&container_id)
-            .check(true)
-            .output()
-            .await
-        {
-            #[derive(serde::Deserialize, Debug)]
-            struct Mount {
-                #[serde(rename = "Source")]
-                source: String,
-                #[serde(rename = "Destination")]
-                destination: String,
-            }
-
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stdout = stdout.trim().trim_matches('\'');
-            let mounts: Vec<Mount> = serde_json::from_str(stdout)?;
-
-            trace!(?mounts, "Get docker mounts");
-
-            for mount in mounts {
-                if path.starts_with(&mount.destination) {
-                    let mut path = path.replace(&mount.destination, &mount.source);
-                    if path.contains('\\') {
-                        // Replace `/` with `\` on Windows
-                        path = path.replace('/', "\\");
-                    }
-                    return Ok(Cow::Owned(path));
+        for mount in mounts {
+            if path.starts_with(&mount.destination) {
+                let mut path = path.replace(&mount.destination, &mount.source);
+                if path.contains('\\') {
+                    // Replace `/` with `\` on Windows
+                    path = path.replace('/', "\\");
                 }
+                return Ok(Cow::Owned(path));
             }
         }
 
         Ok(Cow::Borrowed(path))
     }
 
-    pub(crate) async fn docker_run_cmd() -> Result<Cmd> {
+    pub(crate) fn docker_run_cmd() -> Result<Cmd> {
         let mut command = Cmd::new("docker", "run container");
         command.arg("run").arg("--rm");
 
@@ -157,8 +168,9 @@ impl Docker {
             }));
         }
 
+        // TODO: fix in workspace mode
         let cwd = &CWD.to_string_lossy();
-        let work_dir = Self::get_docker_path(cwd).await?;
+        let work_dir = Self::get_docker_path(cwd)?;
         command
             .arg("-v")
             // https://docs.docker.com/engine/reference/commandline/run/#mount-volumes-from-container-volumes-from
@@ -217,16 +229,14 @@ impl LanguageImpl for Docker {
         filenames: &[&String],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
-        Docker::build_docker_image(hook, false)
+        let docker_tag = Docker::build_docker_image(hook, false)
             .await
             .context("Failed to build docker image")?;
-
-        let docker_tag = Docker::docker_tag(hook);
         let entry = hook.entry.resolve(None)?;
 
         let run = async move |batch: &[&String]| {
             // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
-            let mut cmd = Docker::docker_run_cmd().await?;
+            let mut cmd = Docker::docker_run_cmd()?;
             let mut output = cmd
                 .arg("--entrypoint")
                 .arg(&entry[0])
