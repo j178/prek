@@ -6,6 +6,7 @@ use crate::hook::Hook;
 
 mod check_added_large_files;
 mod check_json;
+mod check_toml;
 mod check_yaml;
 mod fix_end_of_file;
 mod fix_trailing_whitespace;
@@ -16,6 +17,7 @@ pub(crate) enum Implemented {
     CheckAddedLargeFiles,
     EndOfFileFixer,
     CheckJson,
+    CheckToml,
     CheckYaml,
     MixedLineEnding,
 }
@@ -29,6 +31,7 @@ impl FromStr for Implemented {
             "check-added-large-files" => Ok(Self::CheckAddedLargeFiles),
             "end-of-file-fixer" => Ok(Self::EndOfFileFixer),
             "check-json" => Ok(Self::CheckJson),
+            "check-toml" => Ok(Self::CheckToml),
             "check-yaml" => Ok(Self::CheckYaml),
             "mixed-line-ending" => Ok(Self::MixedLineEnding),
             _ => Err(()),
@@ -58,6 +61,7 @@ impl Implemented {
             }
             Self::EndOfFileFixer => fix_end_of_file::fix_end_of_file(hook, filenames).await,
             Self::CheckJson => check_json::check_json(hook, filenames).await,
+            Self::CheckToml => check_toml::check_toml(hook, filenames).await,
             Self::CheckYaml => check_yaml::check_yaml(hook, filenames).await,
             Self::MixedLineEnding => mixed_line_ending::mixed_line_ending(hook, filenames).await,
         }
