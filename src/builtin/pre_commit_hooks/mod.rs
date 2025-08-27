@@ -37,6 +37,17 @@ impl FromStr for Implemented {
 }
 
 impl Implemented {
+    pub(crate) fn check_supported(&self, hook: &Hook) -> bool {
+        match self {
+            // `check-yaml` does not support `--unsafe` or `--allow-multiple-documents` flags yet.
+            Self::CheckYaml => !hook
+                .args
+                .iter()
+                .any(|s| s.starts_with("--unsafe") || s.starts_with("--allow-multiple-documents")),
+            _ => true,
+        }
+    }
+
     pub(crate) async fn run(self, hook: &Hook, filenames: &[&String]) -> Result<(i32, Vec<u8>)> {
         match self {
             Self::TrailingWhitespace => {

@@ -19,7 +19,10 @@ pub fn check_fast_path(hook: &Hook) -> bool {
             if *NO_FAST_PATH {
                 return false;
             }
-            Implemented::from_str(hook.id.as_str()).is_ok()
+            let Ok(implemented) = Implemented::from_str(hook.id.as_str()) else {
+                return false;
+            };
+            implemented.check_supported(hook)
         }
         _ => false,
     }

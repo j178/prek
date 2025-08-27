@@ -137,6 +137,55 @@ fn check_yaml_hook() -> Result<()> {
     Ok(())
 }
 
+/// `--allow-multiple-documents` feature is not implemented in Rust,
+/// it should work by delegating to the original Python implementation.
+#[test]
+fn check_yaml_multiple_document() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-yaml
+                name: Python version
+                args: [ --allow-multiple-documents ]
+              - id: check-yaml
+                name: Rust version
+    "});
+
+    context
+        .work_dir()
+        .child("multiple.yaml")
+        .write_str(indoc::indoc! {r"
+        ---
+        a: 1
+        ---
+        b: 2
+        "
+        })?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Python version...........................................................Passed
+    Rust version.............................................................Failed
+    - hook id: check-yaml
+    - exit code: 1
+      multiple.yaml: Failed to yaml decode (deserializing from YAML containing more than one document is not supported)
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
 #[test]
 fn check_json_hook() -> Result<()> {
     let context = TestContext::new();
