@@ -6,8 +6,6 @@ edition = "2024"
 
 [workspace.dependencies]
 constants = { path = "lib/constants" }
-pty = { path = "lib/pty" }
-
 tracing = { version = "0.1.40" }
 
 [package]
@@ -87,7 +85,7 @@ url = { version = "2.5.2", features = ["serde"] }
 which = { version = "8.0.0" }
 
 [target.'cfg(unix)'.dependencies]
-pty = { workspace = true }
+pty = { path = "lib/pty" }
 libc = { version = "0.2.164" }
 pprof = { version = "0.15.0", optional = true }
 
