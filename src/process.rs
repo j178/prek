@@ -55,7 +55,7 @@ pub enum Error {
     Status { summary: String, error: StatusError },
     #[cfg(not(windows))]
     #[error("failed to open pty")]
-    Pty(#[from] crate::pty::Error),
+    Pty(#[from] pty::Error),
     #[error("failed to setup subprocess for pty")]
     PtySetup(#[from] std::io::Error),
 }
@@ -196,14 +196,14 @@ impl Cmd {
             return self.output().await;
         }
 
-        let (mut pty, pts) = crate::pty::open()?;
-        let (stdin, stdout, stderr) = pts.0.setup_subprocess()?;
+        let (mut pty, pts) = pty::open()?;
+        let (stdin, stdout, stderr) = pts.setup_subprocess()?;
 
         self.inner.stdin(stdin);
         self.inner.stdout(stdout);
         self.inner.stderr(stderr);
 
-        let session_leader = pts.0.session_leader();
+        let session_leader = pts.session_leader();
         unsafe { self.inner.pre_exec(session_leader) };
 
         let mut child = self.spawn()?;

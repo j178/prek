@@ -1,16 +1,15 @@
 #![allow(clippy::module_name_repetitions)]
-
 use std::io::Write as _;
 
-type AsyncPty = tokio::io::unix::AsyncFd<crate::pty::sys::Pty>;
+type AsyncPty = tokio::io::unix::AsyncFd<crate::sys::Pty>;
 
 /// Allocate and return a new pty and pts.
 ///
 /// # Errors
 /// Returns an error if the pty failed to be allocated, or if we were
 /// unable to put it into non-blocking mode.
-pub fn open() -> crate::pty::Result<(Pty, Pts)> {
-    let pty = crate::pty::sys::Pty::open()?;
+pub fn open() -> crate::Result<(Pty, Pts)> {
+    let pty = crate::sys::Pty::open()?;
     let pts = pty.pts()?;
     pty.set_nonblocking()?;
     let pty = tokio::io::unix::AsyncFd::new(pty)?;
@@ -29,9 +28,9 @@ impl Pty {
     ///
     /// # Errors
     /// Returns an error if it fails to be registered with the async runtime.
-    pub unsafe fn from_fd(fd: std::os::fd::OwnedFd) -> crate::pty::Result<Self> {
+    pub unsafe fn from_fd(fd: std::os::fd::OwnedFd) -> crate::Result<Self> {
         Ok(Self(tokio::io::unix::AsyncFd::new(unsafe {
-            crate::pty::sys::Pty::from_fd(fd)
+            crate::sys::Pty::from_fd(fd)
         })?))
     }
 
@@ -39,7 +38,7 @@ impl Pty {
     ///
     /// # Errors
     /// Returns an error if we were unable to set the terminal size.
-    pub fn resize(&self, size: crate::pty::Size) -> crate::pty::Result<()> {
+    pub fn resize(&self, size: crate::Size) -> crate::Result<()> {
         self.0.get_ref().set_term_size(size)
     }
 
@@ -119,7 +118,7 @@ impl tokio::io::AsyncWrite for Pty {
 /// The child end of the pty
 ///
 /// See [`open`] and [`Command::spawn`](crate::Command::spawn)
-pub struct Pts(pub(crate) crate::pty::sys::Pts);
+pub struct Pts(pub(crate) crate::sys::Pts);
 
 impl Pts {
     /// Use the provided file descriptor as a pts.
@@ -129,7 +128,21 @@ impl Pts {
     /// child end of a pty.
     #[must_use]
     pub unsafe fn from_fd(fd: std::os::fd::OwnedFd) -> Self {
-        Self(unsafe { crate::pty::sys::Pts::from_fd(fd) })
+        Self(unsafe { crate::sys::Pts::from_fd(fd) })
+    }
+
+    pub fn setup_subprocess(
+        &self,
+    ) -> std::io::Result<(
+        std::process::Stdio,
+        std::process::Stdio,
+        std::process::Stdio,
+    )> {
+        self.0.setup_subprocess()
+    }
+
+    pub fn session_leader(&self) -> impl FnMut() -> std::io::Result<()> + use<> {
+        self.0.session_leader()
     }
 }
 
@@ -166,7 +179,7 @@ impl WritePty<'_> {
     ///
     /// # Errors
     /// Returns an error if we were unable to set the terminal size.
-    pub fn resize(&self, size: crate::pty::Size) -> crate::pty::Result<()> {
+    pub fn resize(&self, size: crate::Size) -> crate::Result<()> {
         self.0.get_ref().set_term_size(size)
     }
 }
@@ -207,7 +220,7 @@ impl OwnedReadPty {
     /// # Errors
     /// Returns an error if the two halves came from different [`Pty`]
     /// instances. The mismatched halves are returned as part of the error.
-    pub fn unsplit(self, write_half: OwnedWritePty) -> crate::pty::Result<Pty> {
+    pub fn unsplit(self, write_half: OwnedWritePty) -> crate::Result<Pty> {
         let Self(read_pt) = self;
         let OwnedWritePty(write_pt) = write_half;
         if std::sync::Arc::ptr_eq(&read_pt, &write_pt) {
@@ -217,7 +230,7 @@ impl OwnedReadPty {
                 // the same pty to exist
                 .unwrap_or_else(|_| unreachable!())))
         } else {
-            Err(crate::pty::Error::Unsplit(
+            Err(crate::Error::Unsplit(
                 Self(read_pt),
                 OwnedWritePty(write_pt),
             ))
@@ -244,7 +257,7 @@ impl OwnedWritePty {
     ///
     /// # Errors
     /// Returns an error if we were unable to set the terminal size.
-    pub fn resize(&self, size: crate::pty::Size) -> crate::pty::Result<()> {
+    pub fn resize(&self, size: crate::Size) -> crate::Result<()> {
         self.0.get_ref().set_term_size(size)
     }
 }

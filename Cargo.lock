@@ -1748,12 +1748,12 @@ dependencies = [
  "owo-colors",
  "pprof",
  "predicates",
+ "pty",
  "rand",
  "rayon",
  "regex",
  "reqwest",
  "rustc-hash",
- "rustix",
  "same-file",
  "semver",
  "serde",
@@ -1792,6 +1792,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e944464ec8536cd1beb0bbfd96987eb5e3b72f2ecdafdc5c769a37f1fa2ae1f"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "pty"
+version = "0.0.1"
+dependencies = [
+ "rustix",
+ "tokio",
 ]
 
 [[package]]

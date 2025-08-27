@@ -1,0 +1,11 @@
+[package]
+name = "pty"
+version = "0.0.1"
+edition = { workspace = true }
+
+[dependencies]
+rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
+tokio = { version = "1.47.1", features = ["fs", "process", "net"] }
+
+[lints]
+workspace = true

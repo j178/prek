@@ -6,6 +6,7 @@ edition = "2024"
 
 [workspace.dependencies]
 constants = { path = "lib/constants" }
+pty = { path = "lib/pty" }
 
 tracing = { version = "0.1.40" }
 
@@ -35,6 +36,7 @@ uv-source-pypi = []
 
 [dependencies]
 constants = { workspace = true }
+pty = { workspace = true }
 
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.86" }
@@ -65,7 +67,6 @@ rand = { version = "0.9.0" }
 rayon = { version = "1.10.0" }
 reqwest = { version = "0.12.9", default-features = false, features = ["http2", "stream", "json", "rustls-tls-webpki-roots"] }
 rustc-hash = { version = "2.1.1" }
-rustix = { version = "1.0.7", features = ["pty", "process", "fs", "termios"] }
 same-file = { version = "1.0.6" }
 semver = { version = "1.0.24", features = ["serde"] }
 serde = { version = "1.0.210", features = ["derive"] }
@@ -78,7 +79,7 @@ target-lexicon = { version = "0.13.0" }
 tempfile = { version = "3.13.0" }
 textwrap = { version = "0.16.1" }
 thiserror = { version = "2.0.11" }
-tokio = { version = "1.40.0", features = ["fs", "process", "rt", "sync", "macros"] }
+tokio = { version = "1.47.1", features = ["fs", "process", "rt", "sync", "macros"] }
 tokio-util = { version = "0.7.13" }
 toml = { version = "0.9.5", default-features = false, features = ["parse", "serde"]}
 tracing = { workspace = true }

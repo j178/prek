@@ -4,8 +4,8 @@ cargo.binstall = true
 [tools]
 # For snapshot testing
 cargo-insta = "latest"
-# For running tests in parallel
 "cargo:cargo-nextest" = "latest"
+"cargo:cargo-shear" = "latest"
 # For pre-commit hooks
 prek = "latest"
 

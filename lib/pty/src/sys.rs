@@ -7,7 +7,7 @@ use std::os::{
 pub struct Pty(std::os::fd::OwnedFd);
 
 impl Pty {
-    pub fn open() -> crate::pty::Result<Self> {
+    pub fn open() -> crate::Result<Self> {
         let pt = rustix::pty::openpt(
             // can't use CLOEXEC here because it's linux-specific
             rustix::pty::OpenptFlags::RDWR | rustix::pty::OpenptFlags::NOCTTY,
@@ -26,14 +26,14 @@ impl Pty {
         Self(fd)
     }
 
-    pub fn set_term_size(&self, size: crate::pty::Size) -> crate::pty::Result<()> {
+    pub fn set_term_size(&self, size: crate::Size) -> crate::Result<()> {
         Ok(rustix::termios::tcsetwinsize(
             &self.0,
             rustix::termios::Winsize::from(size),
         )?)
     }
 
-    pub fn pts(&self) -> crate::pty::Result<Pts> {
+    pub fn pts(&self) -> crate::Result<Pts> {
         Ok(Pts(std::fs::OpenOptions::new()
             .read(true)
             .write(true)
