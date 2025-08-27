@@ -1,5 +1,7 @@
 // Vendored crate from: https://crates.io/crates/pty-process
 
+#![cfg(unix)]
+
 mod error;
 #[allow(clippy::module_inception)]
 mod pty;
