@@ -211,19 +211,22 @@ pub(crate) async fn run(
 
     set_env_vars(from_ref.as_ref(), to_ref.as_ref(), &extra_args);
 
-    let filenames = collect_files(CollectOptions {
-        hook_stage,
-        from_ref,
-        to_ref,
-        all_files,
-        files,
-        directories,
-        commit_msg_filename: extra_args.commit_msg_filename.clone(),
-    })
+    let filenames = collect_files(
+        workspace.root(),
+        CollectOptions {
+            hook_stage,
+            from_ref,
+            to_ref,
+            all_files,
+            files,
+            directories,
+            commit_msg_filename: extra_args.commit_msg_filename,
+        },
+    )
     .await?;
-    let filenames = filenames.iter().map(Path::new).collect();
 
     run_hooks(
+        &workspace,
         &hooks,
         filenames,
         store,
@@ -526,8 +529,9 @@ impl StatusPrinter {
 
 /// Run all hooks.
 async fn run_hooks(
+    workspace: &Workspace,
     hooks: &[HookToRun],
-    filenames: Vec<&Path>,
+    filenames: Vec<PathBuf>,
     store: &Store,
     show_diff_on_failure: bool,
     verbose: bool,
@@ -555,21 +559,21 @@ async fn run_hooks(
     let mut first = true;
 
     // Hooks might modify the files, so they must be run sequentially.
-    for (_, hooks) in project_to_hooks {
+    'outer: for (_, hooks) in project_to_hooks {
         let project = hooks[0].project();
         if projects_len > 1 {
             writeln!(
                 printer.stdout(),
                 "{}{}:",
                 if first { "" } else { "\n" },
-                format!("Running hooks for {}", project.to_string().cyan()).bold()
+                format!("Running hooks for `{}`", project.to_string().cyan()).bold()
             )?;
             first = false;
         }
 
         let fail_fast = project.config().fail_fast.unwrap_or(false);
 
-        let filter = FileFilter::for_project(&filenames, project);
+        let filter = FileFilter::for_project(filenames.iter(), project);
         trace!("Files for `{project}` after filtered: {}", filter.len());
 
         for hook in hooks {
@@ -584,7 +588,7 @@ async fn run_hooks(
                     HookToRun::ToRun(hook) => hook.fail_fast,
                 };
             if !success && fail_fast {
-                break;
+                break 'outer;
             }
         }
     }
@@ -601,6 +605,8 @@ async fn run_hooks(
             .arg("diff")
             .arg("--no-ext-diff")
             .arg(color)
+            .arg("--")
+            .arg(workspace.root())
             .check(true)
             .spawn()?
             .wait()

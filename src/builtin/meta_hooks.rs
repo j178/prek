@@ -1,11 +1,9 @@
 use std::io::Write;
-use std::ops::Deref;
 use std::path::Path;
 
 use anyhow::Result;
 use fancy_regex::Regex;
 use itertools::Itertools;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
 use crate::config::{self, HookOptions, Language};
@@ -17,8 +15,11 @@ use crate::workspace::Project;
 pub(crate) async fn check_hooks_apply(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     let store = STORE.as_ref()?;
 
-    let input = collect_files(CollectOptions::default().with_all_files(true)).await?;
-    let input = input.iter().map(Deref::deref).collect::<Vec<_>>();
+    let input = collect_files(
+        hook.work_dir(),
+        CollectOptions::default().with_all_files(true),
+    )
+    .await?;
 
     let mut code = 0;
     let mut output = Vec::new();
@@ -28,7 +29,7 @@ pub(crate) async fn check_hooks_apply(hook: &Hook, filenames: &[&Path]) -> Resul
         let mut project = Project::from_config_file(path)?;
         let hooks = project.init_hooks(store, None).await?;
 
-        let filter = FileFilter::for_project(&input, &project);
+        let filter = FileFilter::for_project(input.iter(), &project);
 
         for hook in hooks {
             if hook.always_run || matches!(hook.language, Language::Fail) {
@@ -48,13 +49,17 @@ pub(crate) async fn check_hooks_apply(hook: &Hook, filenames: &[&Path]) -> Resul
 }
 
 // Returns true if the exclude pattern matches any files matching the include pattern.
-fn excludes_any(files: &[&Path], include: Option<&Regex>, exclude: Option<&Regex>) -> bool {
+fn excludes_any(
+    files: &[impl AsRef<Path>],
+    include: Option<&Regex>,
+    exclude: Option<&Regex>,
+) -> bool {
     if exclude.is_none() {
         return true;
     }
 
-    files.into_par_iter().any(|f| {
-        let Some(f) = f.to_str() else {
+    files.iter().any(|f| {
+        let Some(f) = f.as_ref().to_str() else {
             return false; // Skip files that cannot be converted to a string
         };
 
@@ -77,8 +82,11 @@ pub(crate) async fn check_useless_excludes(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
-    let input = collect_files(CollectOptions::default().with_all_files(true)).await?;
-    let input = input.iter().map(Deref::deref).collect::<Vec<_>>();
+    let input = collect_files(
+        hook.work_dir(),
+        CollectOptions::default().with_all_files(true),
+    )
+    .await?;
 
     let mut code = 0;
     let mut output = Vec::new();
@@ -97,7 +105,7 @@ pub(crate) async fn check_useless_excludes(
             )?;
         }
 
-        let filter = FileFilter::for_project(&input, &project);
+        let filter = FileFilter::for_project(input.iter(), &project);
 
         for repo in &config.repos {
             let hooks_iter: Box<dyn Iterator<Item = (&String, &HookOptions)>> = match repo {
