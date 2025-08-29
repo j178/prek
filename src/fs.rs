@@ -187,6 +187,8 @@ pub(crate) fn normalize_path(path: PathBuf) -> PathBuf {
 /// that recognize other characters as separators.
 #[cfg(not(unix))]
 pub(crate) fn normalize_path(mut path: PathBuf) -> PathBuf {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
     use std::path::is_separator;
 
     let mut path = path.into_os_string().into_encoded_bytes();
@@ -197,7 +199,8 @@ pub(crate) fn normalize_path(mut path: PathBuf) -> PathBuf {
         path[i] = b'/';
     }
 
-    PathBuf::from(path)
+    let os_str = OsString::from(String::from_utf8_lossy(&path).to_string());
+    PathBuf::from(os_str)
 }
 
 /// Compute a path describing `path` relative to `base`.

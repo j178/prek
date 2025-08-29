@@ -10,7 +10,7 @@ use tracing::{debug, error};
 use constants::env_vars::EnvVars;
 
 use crate::config::Stage;
-use crate::fs::{normalize_path};
+use crate::fs::normalize_path;
 use crate::git::GIT_ROOT;
 use crate::hook::Hook;
 use crate::identify::tags_from_path;
@@ -341,7 +341,12 @@ async fn collect_files_from_args(
     }
 
     if all_files {
-        let files = git::ls_files(git_root, Some(root)).await?;
+        let root = if root == Path::new("") {
+            None
+        } else {
+            Some(root)
+        };
+        let files = git::ls_files(git_root, root).await?;
         debug!("All files in the workspace: {}", files.len());
         return Ok(files);
     }
