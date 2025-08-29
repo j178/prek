@@ -1,18 +1,20 @@
+use std::path::{Path, PathBuf};
+
 use clap::Parser;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 
-use crate::git::{get_staged_files, lfs_files};
+use crate::git::{get_lfs_files, get_staged_files};
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
 enum FileFilter {
     NoFilter,
-    Files(FxHashSet<String>),
+    Files(FxHashSet<PathBuf>),
 }
 
 impl FileFilter {
-    fn contains(&self, path: &str) -> bool {
+    fn contains(&self, path: &Path) -> bool {
         match self {
             FileFilter::NoFilter => true,
             FileFilter::Files(files) => files.contains(path),
@@ -30,7 +32,7 @@ struct Args {
 
 pub(crate) async fn check_added_large_files(
     hook: &Hook,
-    filenames: &[&String],
+    filenames: &[&Path],
 ) -> anyhow::Result<(i32, Vec<u8>)> {
     // `hook.entry` is `check-added-large-files`, set by `pre-commit-hooks`.
     // We don't actually use it, we use it here to parse the arguments.
@@ -39,23 +41,30 @@ pub(crate) async fn check_added_large_files(
     let filter = if args.enforce_all {
         FileFilter::NoFilter
     } else {
-        let add_files: FxHashSet<_> = get_staged_files().await?.into_iter().collect();
+        let add_files = get_staged_files()
+            .await?
+            .into_iter()
+            .collect::<FxHashSet<_>>();
         FileFilter::Files(add_files)
     };
 
-    let lfs_files = lfs_files::<FxHashSet<String>>(filenames).await?;
+    let lfs_files = get_lfs_files(filenames).await?;
+    let lfs_files: FxHashSet<_> = lfs_files.iter().map(Path::new).collect();
+
     let mut tasks = futures::stream::iter(
         filenames
             .iter()
             .filter(|f| filter.contains(f))
-            .filter(|f| !lfs_files.contains(f.as_str())),
+            .filter(|f| !lfs_files.contains(**f)),
     )
     .map(async |filename| {
-        let size = fs_err::tokio::metadata(filename).await?.len();
+        let file_path = hook.project().relative_path().join(filename);
+        let size = fs_err::tokio::metadata(file_path).await?.len();
         let size = size / 1024;
         if size > args.max_kb {
             anyhow::Ok(Some(format!(
-                "{filename} ({size} KB) exceeds {} KB\n",
+                "{} ({size} KB) exceeds {} KB\n",
+                filename.display(),
                 args.max_kb
             )))
         } else {
