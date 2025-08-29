@@ -913,6 +913,46 @@ fn is_text_file(path: &Path) -> bool {
         .all(|&b| text_chars.contains(&b))
 }
 
+pub fn all_tags() -> &'static FxHashSet<&'static str> {
+    static ALL_TAGS: OnceLock<FxHashSet<&'static str>> = OnceLock::new();
+    ALL_TAGS.get_or_init(|| {
+        let mut tags_set = FxHashSet::default();
+
+        // Add basic tags
+        tags_set.insert(tags::DIRECTORY);
+        tags_set.insert(tags::SYMLINK);
+        tags_set.insert(tags::SOCKET);
+        tags_set.insert(tags::FIFO);
+        tags_set.insert(tags::BLOCK_DEVICE);
+        tags_set.insert(tags::CHARACTER_DEVICE);
+        tags_set.insert(tags::FILE);
+        tags_set.insert(tags::EXECUTABLE);
+        tags_set.insert(tags::NON_EXECUTABLE);
+        tags_set.insert(tags::TEXT);
+        tags_set.insert(tags::BINARY);
+
+        for tags_vec in by_extension().values() {
+            for tag in tags_vec {
+                tags_set.insert(*tag);
+            }
+        }
+
+        for tags_slice in by_filename().values() {
+            for tag in *tags_slice {
+                tags_set.insert(*tag);
+            }
+        }
+
+        for tags_vec in by_interpreter().values() {
+            for tag in tags_vec {
+                tags_set.insert(*tag);
+            }
+        }
+
+        tags_set
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;

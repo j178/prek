@@ -10,6 +10,8 @@ use fancy_regex::{self as regex, Regex};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::fs::Simplified;
+
+use crate::identify;
 use crate::version;
 use crate::warn_user;
 
@@ -354,12 +356,15 @@ pub struct HookOptions {
     pub exclude: Option<SerdeRegex>,
     /// List of file types to run on (AND).
     /// Default is `[file]`, which matches all files.
+    #[serde(deserialize_with = "deserialize_and_validate_tags", default)]
     pub types: Option<Vec<String>>,
     /// List of file types to run on (OR).
     /// Default is `[]`.
+    #[serde(deserialize_with = "deserialize_and_validate_tags", default)]
     pub types_or: Option<Vec<String>>,
     /// List of file types to exclude.
     /// Default is `[]`.
+    #[serde(deserialize_with = "deserialize_and_validate_tags", default)]
     pub exclude_types: Option<Vec<String>>,
     /// Not documented in the official docs.
     pub additional_dependencies: Option<Vec<String>>,
@@ -800,6 +805,24 @@ fn looks_like_sha(s: &str) -> bool {
     static SHA_RE: OnceLock<Regex> = OnceLock::new();
     let re = SHA_RE.get_or_init(|| Regex::new(r"^[a-fA-F0-9]+$").unwrap());
     re.is_match(s).unwrap_or(false)
+}
+
+/// Deserializes a vector of strings and validates that each is a known file type tag.
+fn deserialize_and_validate_tags<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let tags_opt: Option<Vec<String>> = Option::deserialize(deserializer)?;
+    if let Some(tags) = &tags_opt {
+        let all_tags = identify::all_tags();
+        for tag in tags {
+            if !all_tags.contains(tag.as_str()) {
+                let msg = format!("Type tag \"{tag}\" is not recognized. Try upgrading prek");
+                return Err(serde::de::Error::custom(msg));
+            }
+        }
+    }
+    Ok(tags_opt)
 }
 
 #[cfg(test)]
@@ -1450,5 +1473,105 @@ mod tests {
         "};
         let result = serde_yaml::from_str::<Config>(yaml);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_type_tags() {
+        // Valid tags should parse successfully
+        let yaml_valid = r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: my-hook
+                    name: My Hook
+                    entry: echo
+                    language: system
+                    types: [python, file]
+                    types_or: [text, binary]
+                    exclude_types: [symlink]
+        ";
+        let result = serde_yaml::from_str::<Config>(yaml_valid);
+        assert!(result.is_ok(), "Should parse valid tags successfully");
+
+        // Empty lists and missing keys should also be fine
+        let yaml_empty = r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: my-hook
+                    name: My Hook
+                    entry: echo
+                    language: system
+                    types: []
+                    exclude_types: []
+                    # types_or is missing, which is also valid
+        ";
+        let result_empty = serde_yaml::from_str::<Config>(yaml_empty);
+        assert!(
+            result_empty.is_ok(),
+            "Should parse empty/missing tags successfully"
+        );
+
+        // Invalid tag in 'types' should fail
+        let yaml_invalid_types = r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: my-hook
+                    name: My Hook
+                    entry: echo
+                    language: system
+                    types: [pythoon] # Deliberate typo
+        ";
+        let result_invalid_types = serde_yaml::from_str::<Config>(yaml_invalid_types);
+        assert!(result_invalid_types.is_err());
+
+        assert!(
+            result_invalid_types
+                .unwrap_err()
+                .to_string()
+                .contains("Type tag \"pythoon\" is not recognized")
+        );
+
+        // Invalid tag in 'types_or' should fail
+        let yaml_invalid_types_or = r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: my-hook
+                    name: My Hook
+                    entry: echo
+                    language: system
+                    types_or: [invalidtag]
+        ";
+        let result_invalid_types_or = serde_yaml::from_str::<Config>(yaml_invalid_types_or);
+        assert!(result_invalid_types_or.is_err());
+        assert!(
+            result_invalid_types_or
+                .unwrap_err()
+                .to_string()
+                .contains("Type tag \"invalidtag\" is not recognized")
+        );
+
+        // Invalid tag in 'exclude_types' should fail
+        let yaml_invalid_exclude_types = r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: my-hook
+                    name: My Hook
+                    entry: echo
+                    language: system
+                    exclude_types: [not-a-real-tag]
+        ";
+        let result_invalid_exclude_types =
+            serde_yaml::from_str::<Config>(yaml_invalid_exclude_types);
+        assert!(result_invalid_exclude_types.is_err());
+        assert!(
+            result_invalid_exclude_types
+                .unwrap_err()
+                .to_string()
+                .contains("Type tag \"not-a-real-tag\" is not recognized")
+        );
     }
 }
