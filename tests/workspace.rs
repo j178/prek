@@ -55,35 +55,35 @@ fn basic_discovery() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Running hooks for nested/project4:
+    Running hooks for `nested/project4`:
     Show CWD.................................................................Passed
     - hook id: show-cwd
     - duration: [TIME]
       [TEMP_DIR]/nested/project4
       ['.pre-commit-config.yaml']
 
-    Running hooks for project3/project5:
+    Running hooks for `project3/project5`:
     Show CWD.................................................................Passed
     - hook id: show-cwd
     - duration: [TIME]
       [TEMP_DIR]/project3/project5
       ['.pre-commit-config.yaml']
 
-    Running hooks for project2:
+    Running hooks for `project2`:
     Show CWD.................................................................Passed
     - hook id: show-cwd
     - duration: [TIME]
       [TEMP_DIR]/project2
       ['.pre-commit-config.yaml']
 
-    Running hooks for project3:
+    Running hooks for `project3`:
     Show CWD.................................................................Passed
     - hook id: show-cwd
     - duration: [TIME]
       [TEMP_DIR]/project3
       ['project5/.pre-commit-config.yaml', '.pre-commit-config.yaml']
 
-    Running hooks for .:
+    Running hooks for `.`:
     Show CWD.................................................................Passed
     - hook id: show-cwd
     - duration: [TIME]
@@ -91,6 +91,54 @@ fn basic_discovery() -> Result<()> {
       ['nested/project4/.pre-commit-config.yaml', '.pre-commit-config.yaml', 'project3/project5/.pre-commit-config.yaml', 'project2/.pre-commit-config.yaml']
       [TEMP_DIR]/
       ['project3/.pre-commit-config.yaml']
+
+    ----- stderr -----
+    ");
+
+    // Run from a subdirectory
+    cmd_snapshot!(context.filters(), context.run().current_dir(&project2), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+      [TEMP_DIR]/project2
+      ['.pre-commit-config.yaml']
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.run().current_dir(&project2).arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+      [TEMP_DIR]/project2
+      ['.pre-commit-config.yaml']
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.run().current_dir(&project3), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `project5`:
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+      [TEMP_DIR]/project3/project5
+      ['.pre-commit-config.yaml']
+
+    Running hooks for `.`:
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+      [TEMP_DIR]/project3
+      ['project5/.pre-commit-config.yaml', '.pre-commit-config.yaml']
 
     ----- stderr -----
     ");

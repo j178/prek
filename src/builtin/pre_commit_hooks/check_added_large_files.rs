@@ -44,7 +44,6 @@ pub(crate) async fn check_added_large_files(
         let add_files = get_staged_files()
             .await?
             .into_iter()
-            .map(PathBuf::from)
             .collect::<FxHashSet<_>>();
         FileFilter::Files(add_files)
     };

@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::str::Utf8Error;
 use std::sync::LazyLock;
 
 use anyhow::Result;
@@ -21,6 +22,9 @@ pub(crate) enum Error {
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    UTF8(#[from] Utf8Error),
 }
 
 pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
@@ -64,19 +68,14 @@ pub(crate) fn git_cmd(summary: &str) -> Result<Cmd, Error> {
     Ok(cmd)
 }
 
-fn zsplit(s: &[u8]) -> Vec<String> {
+fn zsplit(s: &[u8]) -> Result<Vec<PathBuf>, Utf8Error> {
     s.split(|&b| b == b'\0')
-        .filter_map(|slice| {
-            if slice.is_empty() {
-                None
-            } else {
-                Some(String::from_utf8_lossy(slice).to_string())
-            }
-        })
+        .filter(|slice| !slice.is_empty())
+        .map(|slice| str::from_utf8(slice).map(PathBuf::from))
         .collect()
 }
 
-pub(crate) async fn intent_to_add_files() -> Result<Vec<String>, Error> {
+pub(crate) async fn intent_to_add_files() -> Result<Vec<PathBuf>, Error> {
     let output = git_cmd("get intent to add files")?
         .arg("diff")
         .arg("--no-ext-diff")
@@ -87,10 +86,10 @@ pub(crate) async fn intent_to_add_files() -> Result<Vec<String>, Error> {
         .check(true)
         .output()
         .await?;
-    Ok(zsplit(&output.stdout))
+    Ok(zsplit(&output.stdout)?)
 }
 
-pub(crate) async fn get_changed_files(old: &str, new: &str) -> Result<Vec<String>, Error> {
+pub(crate) async fn get_changed_files(old: &str, new: &str) -> Result<Vec<PathBuf>, Error> {
     let output = git_cmd("get changed files")?
         .arg("diff")
         .arg("--name-only")
@@ -101,18 +100,18 @@ pub(crate) async fn get_changed_files(old: &str, new: &str) -> Result<Vec<String
         .check(true)
         .output()
         .await?;
-    Ok(zsplit(&output.stdout))
+    Ok(zsplit(&output.stdout)?)
 }
 
-pub(crate) async fn git_ls_files(path: Option<&Path>) -> Result<Vec<String>, Error> {
+pub(crate) async fn ls_files(cwd: &Path, path: Option<&Path>) -> Result<Vec<PathBuf>, Error> {
     let mut cmd = git_cmd("get git all files")?;
-    cmd.arg("ls-files").arg("-z").check(true);
+    cmd.current_dir(cwd).arg("ls-files").arg("-z").check(true);
 
     if let Some(p) = path {
         cmd.arg("--").arg(p);
     }
     let output = cmd.output().await?;
-    Ok(zsplit(&output.stdout))
+    Ok(zsplit(&output.stdout)?)
 }
 
 pub(crate) async fn get_git_dir() -> Result<PathBuf, Error> {
@@ -143,7 +142,7 @@ pub(crate) async fn get_git_common_dir() -> Result<PathBuf, Error> {
     }
 }
 
-pub(crate) async fn get_staged_files() -> Result<Vec<String>, Error> {
+pub(crate) async fn get_staged_files() -> Result<Vec<PathBuf>, Error> {
     let output = git_cmd("get staged files")?
         .arg("diff")
         .arg("--staged")
@@ -154,10 +153,10 @@ pub(crate) async fn get_staged_files() -> Result<Vec<String>, Error> {
         .check(true)
         .output()
         .await?;
-    Ok(zsplit(&output.stdout))
+    Ok(zsplit(&output.stdout)?)
 }
 
-pub(crate) async fn files_not_staged(files: &[&Path]) -> Result<Vec<String>> {
+pub(crate) async fn files_not_staged(files: &[&Path]) -> Result<Vec<PathBuf>> {
     let output = git_cmd("git diff")?
         .arg("diff")
         .arg("--exit-code")
@@ -170,7 +169,7 @@ pub(crate) async fn files_not_staged(files: &[&Path]) -> Result<Vec<String>> {
         .await?;
 
     if output.status.code().is_some_and(|code| code == 1) {
-        return Ok(zsplit(&output.stdout));
+        return Ok(zsplit(&output.stdout)?);
     }
 
     Ok(vec![])
@@ -191,7 +190,7 @@ pub(crate) async fn is_in_merge_conflict() -> Result<bool, Error> {
     Ok(git_dir.join("MERGE_HEAD").try_exists()? && git_dir.join("MERGE_MSG").try_exists()?)
 }
 
-pub(crate) async fn get_conflicted_files() -> Result<Vec<String>, Error> {
+pub(crate) async fn get_conflicted_files() -> Result<Vec<PathBuf>, Error> {
     let tree = git_cmd("git write-tree")?
         .arg("write-tree")
         .check(true)
@@ -211,24 +210,26 @@ pub(crate) async fn get_conflicted_files() -> Result<Vec<String>, Error> {
         .output()
         .await?;
 
-    Ok(zsplit(&output.stdout)
+    Ok(zsplit(&output.stdout)?
         .into_iter()
         .chain(parse_merge_msg_for_conflicts().await?)
-        .collect::<HashSet<String>>()
+        .collect::<HashSet<PathBuf>>()
         .into_iter()
         .collect())
 }
 
-async fn parse_merge_msg_for_conflicts() -> Result<Vec<String>, Error> {
+async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>, Error> {
     let git_dir = get_git_dir().await?;
     let merge_msg = git_dir.join("MERGE_MSG");
-    let content = fs_err::read_to_string(&merge_msg)?;
+    let content = fs_err::tokio::read_to_string(&merge_msg).await?;
     let conflicts = content
         .lines()
         // Conflicted files start with tabs
         .filter(|line| line.starts_with('\t') || line.starts_with("#\t"))
         .map(|line| line.trim_start_matches('#').trim().to_string())
+        .map(PathBuf::from)
         .collect();
+
     Ok(conflicts)
 }
 

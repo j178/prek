@@ -38,7 +38,7 @@ impl IntentToAddKeeper {
             .status()
             .await?;
 
-        Ok(Self(files.into_iter().map(PathBuf::from).collect()))
+        Ok(Self(files))
     }
 
     fn restore(&self) -> Result<()> {
