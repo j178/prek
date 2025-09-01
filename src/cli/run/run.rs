@@ -97,7 +97,6 @@ pub(crate) async fn run(
 
     let store = STORE.as_ref()?;
     let reporter = HookInitReporter::from(printer);
-
     let lock = store.lock_async().await?;
 
     let hook_ids = hook_ids.into_iter().collect::<BTreeSet<_>>();
