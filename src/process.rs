@@ -468,7 +468,7 @@ impl Display for Cmd {
         let program = self.get_program();
         let mut args = self.get_args().peekable();
 
-        write!(f, "{}", program.to_string_lossy().cyan())?;
+        write!(f, "{}", program.to_string_lossy())?;
         if args.peek().is_some_and(|arg| *arg == program) {
             args.next(); // Skip the program if it's repeated
         }
@@ -482,10 +482,10 @@ impl Display for Cmd {
                 }
                 continue;
             }
-            write!(f, " {}", arg.to_string_lossy().dimmed())?;
+            write!(f, " {}", arg.to_string_lossy())?;
             len += arg.len() + 1;
             if len > 100 {
-                write!(f, " {}", "[...]".dimmed())?;
+                write!(f, " [...]",)?;
                 break;
             }
         }
