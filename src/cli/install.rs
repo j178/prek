@@ -11,12 +11,11 @@ use same_file::is_same_file;
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run;
 use crate::cli::{ExitStatus, HookType};
-use crate::config::CONFIG_FILE;
 use crate::fs::{CWD, Simplified};
 use crate::git::git_cmd;
 use crate::printer::Printer;
 use crate::store::STORE;
-use crate::workspace::Project;
+use crate::workspace::{DiscoverOptions, Project, Workspace};
 use crate::{git, warn_user};
 
 pub(crate) async fn install(
@@ -35,7 +34,7 @@ pub(crate) async fn install(
         );
     }
 
-    let project = Project::from_config_file_or_directory(config.clone(), &CWD).ok();
+    let project = Project::discover(DiscoverOptions::from_args(config.clone(), &CWD)).ok();
     let hook_types = get_hook_types(project.as_ref(), hook_types);
 
     let hooks_path = if let Some(dir) = git_dir {
@@ -45,15 +44,10 @@ pub(crate) async fn install(
     };
     fs_err::create_dir_all(&hooks_path)?;
 
-    let config_file = project
-        .as_ref()
-        .map(Project::config_file)
-        .or(config.as_deref())
-        .unwrap_or(Path::new(CONFIG_FILE));
-
     for hook_type in hook_types {
         install_hook_script(
-            config_file,
+            project.as_ref(),
+            config.clone(),
             hook_type,
             &hooks_path,
             overwrite,
@@ -70,13 +64,13 @@ pub(crate) async fn install(
 }
 
 pub(crate) async fn install_hooks(config: Option<PathBuf>, printer: Printer) -> Result<ExitStatus> {
-    // TODO: use workspace
-    let mut project = Project::from_config_file_or_directory(config, &CWD)?;
+    let mut workspace = Workspace::discover(DiscoverOptions::from_args(config, &CWD))?;
+
     let store = STORE.as_ref()?;
+    let reporter = HookInitReporter::from(printer);
     let _lock = store.lock_async().await?;
 
-    let reporter = HookInitReporter::from(printer);
-    let hooks = project.init_hooks(store, Some(&reporter)).await?;
+    let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
     let hooks = hooks.into_iter().map(Arc::new).collect();
 
     let reporter = HookInstallReporter::from(printer);
@@ -107,7 +101,8 @@ fn get_hook_types(project: Option<&Project>, hook_types: Vec<HookType>) -> Vec<H
 }
 
 fn install_hook_script(
-    config_file: &Path,
+    project: Option<&Project>,
+    config: Option<PathBuf>,
     hook_type: HookType,
     hooks_path: &Path,
     overwrite: bool,
@@ -141,7 +136,17 @@ fn install_hook_script(
         "hook-impl".to_string(),
         format!("--hook-type={}", hook_type.as_str()),
     ];
-    args.push(format!(r#"--config="{}""#, config_file.display()));
+
+    // Prefer explicit config path if given (non-workspace mode).
+    // Otherwise, use the config path from the discovered project (workspace mode).
+    // If neither is available, don't pass a config path (let prek find it). In this case,
+    // we're different with `pre-commit` which always sets `--config=.pre-commit-config.yaml`.
+    if let Some(config) = config {
+        args.push(format!(r#"--config="{}""#, config.display()));
+    } else if let Some(project) = project {
+        args.push(format!(r#"--cd="{}""#, project.path().display()));
+    }
+
     if skip_on_missing_config {
         args.push("--skip-on-missing-config".to_string());
     }
@@ -218,7 +223,8 @@ pub(crate) async fn uninstall(
     hook_types: Vec<HookType>,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let project = Project::from_config_file_or_directory(config, &CWD).ok();
+    let project = Project::discover(DiscoverOptions::from_args(config, &CWD)).ok();
+
     for hook_type in get_hook_types(project.as_ref(), hook_types) {
         let hooks_path = git::get_git_common_dir().await?.join("hooks");
         let hook_path = hooks_path.join(hook_type.as_str());
