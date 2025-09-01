@@ -13,12 +13,13 @@ use crate::fs::CWD;
 use crate::hook;
 use crate::printer::Printer;
 use crate::store::STORE;
-use crate::workspace::Project;
+use crate::workspace::{DiscoverOptions, Workspace};
 
 #[derive(Serialize)]
 struct SerializableHook {
     id: String,
     name: String,
+    project: String,
     alias: String,
     language: Language,
     description: Option<String>,
@@ -34,14 +35,13 @@ pub(crate) async fn list(
     output_format: ListOutputFormat,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    let mut project = Project::from_config_file_or_directory(config, &CWD)?;
+    let mut workspace = Workspace::discover(DiscoverOptions::from_args(config, &CWD))?;
+
     let store = STORE.as_ref()?;
-
     let reporter = HookInitReporter::from(printer);
-
     let lock = store.lock_async().await?;
-    // TODO: use workspace
-    let hooks = project.init_hooks(store, Some(&reporter)).await?;
+
+    let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
     drop(lock);
 
     let hook_ids = hook_ids.into_iter().collect::<BTreeSet<_>>();
@@ -73,6 +73,12 @@ pub(crate) async fn list(
                         "Name:".bold().cyan(),
                         hook.name
                     )?;
+                    writeln!(
+                        printer.stdout(),
+                        "  {} {}",
+                        "Project:".bold().cyan(),
+                        hook.project(),
+                    )?;
                     if let Some(description) = &hook.description {
                         writeln!(
                             printer.stdout(),
@@ -96,6 +102,7 @@ pub(crate) async fn list(
                     writeln!(printer.stdout())?;
                 }
             } else {
+                // TODO: add project prefix to hook id
                 for hook in &hooks {
                     writeln!(printer.stdout(), "{}", hook.id)?;
                 }
@@ -105,6 +112,7 @@ pub(crate) async fn list(
             let serializable_hooks: Vec<_> = hooks
                 .into_iter()
                 .map(|h| {
+                    let project = h.project().to_string();
                     let stages = match h.stages {
                         hook::Stages::All => Stage::value_variants().to_vec(),
                         hook::Stages::Some(s) => s.into_iter().collect(),
@@ -112,6 +120,7 @@ pub(crate) async fn list(
                     SerializableHook {
                         id: h.id,
                         name: h.name,
+                        project,
                         alias: h.alias,
                         language: h.language,
                         description: h.description,
