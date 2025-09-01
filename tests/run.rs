@@ -1034,7 +1034,7 @@ fn merge_conflicts() -> Result<()> {
     // Abort on merge conflicts.
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----

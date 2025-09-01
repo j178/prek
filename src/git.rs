@@ -264,7 +264,8 @@ pub(crate) async fn write_tree() -> Result<String, Error> {
 
 /// Get the path of the top-level directory of the working tree.
 pub(crate) fn get_root() -> Result<PathBuf, Error> {
-    let output = std::process::Command::new(GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?)
+    let git = GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?;
+    let output = std::process::Command::new(git)
         .arg("rev-parse")
         .arg("--show-toplevel")
         .output()?;
@@ -273,7 +274,7 @@ pub(crate) fn get_root() -> Result<PathBuf, Error> {
             summary: "get git root".to_string(),
             error: StatusError {
                 status: output.status,
-                output: None,
+                output: Some(output),
             },
         }));
     }

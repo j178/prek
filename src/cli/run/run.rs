@@ -6,7 +6,7 @@ use std::io::Write;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -26,6 +26,7 @@ use crate::cli::run::{CollectOptions, FileFilter, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, Stage};
 use crate::fs::CWD;
+use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::{Printer, Stdout};
 use crate::run::USE_COLOR;
@@ -79,16 +80,14 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Success);
     }
 
+    // Ensure we are in a git repository.
+    LazyLock::force(&GIT_ROOT).as_ref()?;
+
     let should_stash = !all_files && files.is_empty() && directories.is_empty();
 
     // Check if we have unresolved merge conflict files and fail fast.
     if should_stash && git::has_unmerged_paths().await? {
-        writeln!(
-            printer.stderr(),
-            "{}: You have unmerged paths. Resolve them before running prek",
-            "error".red().bold(),
-        )?;
-        return Ok(ExitStatus::Failure);
+        anyhow::bail!("You have unmerged paths. Resolve them before running prek");
     }
 
     let mut workspace = Workspace::discover(DiscoverOptions::from_args(config, &CWD))?;
@@ -224,6 +223,14 @@ pub(crate) async fn run(
         },
     )
     .await?;
+
+    // Change to the workspace root directory.
+    std::env::set_current_dir(workspace.root()).with_context(|| {
+        format!(
+            "Failed to change directory to `{}`",
+            workspace.root().display()
+        )
+    })?;
 
     run_hooks(
         &workspace,
