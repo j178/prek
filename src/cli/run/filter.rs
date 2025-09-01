@@ -1,19 +1,21 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use fancy_regex::Regex;
 use itertools::{Either, Itertools};
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use rustc_hash::FxHashSet;
 use tracing::{debug, error};
 
 use constants::env_vars::EnvVars;
 
-use crate::config::{SerdeRegex, Stage};
+use crate::config::Stage;
 use crate::fs::normalize_path;
+use crate::git::GIT_ROOT;
 use crate::hook::Hook;
 use crate::identify::tags_from_path;
-use crate::{git, warn_user};
+use crate::workspace::Project;
+use crate::{fs, git, warn_user};
 
 /// Filter filenames by include/exclude patterns.
 pub(crate) struct FilenameFilter<'a> {
@@ -26,8 +28,10 @@ impl<'a> FilenameFilter<'a> {
         Self { include, exclude }
     }
 
-    pub(crate) fn filter(&self, filename: impl AsRef<str>) -> bool {
-        let filename = filename.as_ref();
+    pub(crate) fn filter(&self, filename: &Path) -> bool {
+        let Some(filename) = filename.to_str() else {
+            return false;
+        };
         if let Some(re) = &self.include {
             if !re.is_match(filename).unwrap_or(false) {
                 return false;
@@ -85,23 +89,41 @@ impl<'a> FileTagFilter<'a> {
 }
 
 pub(crate) struct FileFilter<'a> {
-    filenames: Vec<&'a String>,
+    filenames: Vec<&'a Path>,
+    filename_prefix: &'a Path,
 }
 
 impl<'a> FileFilter<'a> {
-    pub(crate) fn new(
-        filenames: &'a [String],
-        include: Option<&'a SerdeRegex>,
-        exclude: Option<&'a SerdeRegex>,
-    ) -> Self {
-        let filter = FilenameFilter::new(include.map(|r| &**r), exclude.map(|r| &**r));
+    pub(crate) fn for_project<I>(filenames: I, project: &'a Project) -> Self
+    where
+        I: Iterator<Item = &'a PathBuf> + Send,
+    {
+        let filter = FilenameFilter::new(
+            project.config().files.as_deref(),
+            project.config().exclude.as_deref(),
+        );
 
-        let filenames = filenames
-            .into_par_iter()
-            .filter(|filename| filter.filter(filename))
+        // TODO: support orphaned project, which does not share files with its parent project.
+        let mut filenames = filenames
+            .enumerate()
+            .par_bridge()
+            .map(|(i, p)| (i, p.as_path()))
+            .filter(|(_, filename)| filter.filter(filename))
+            // Collect files that are inside the hook project directory.
+            .filter(|(_, filename)| filename.starts_with(project.relative_path()))
             .collect::<Vec<_>>();
 
-        Self { filenames }
+        // Keep filename order consistent
+        filenames.sort_by_key(|&(i, _)| i);
+
+        Self {
+            filenames: filenames.into_iter().map(|(_, p)| p).collect(),
+            filename_prefix: project.relative_path(),
+        }
+    }
+
+    pub(crate) fn filenames(&self) -> &[&Path] {
+        &self.filenames
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -114,19 +136,16 @@ impl<'a> FileFilter<'a> {
         types: &[String],
         types_or: &[String],
         exclude_types: &[String],
-    ) -> Vec<&String> {
+    ) -> Vec<&Path> {
         let filter = FileTagFilter::new(types, types_or, exclude_types);
         let filenames: Vec<_> = self
             .filenames
             .par_iter()
-            .filter(|filename| {
-                let path = Path::new(filename);
-                match tags_from_path(path) {
-                    Ok(tags) => filter.filter(&tags),
-                    Err(err) => {
-                        error!(filename, error = %err, "Failed to get tags");
-                        false
-                    }
+            .filter(|filename| match tags_from_path(filename) {
+                Ok(tags) => filter.filter(&tags),
+                Err(err) => {
+                    error!(filename = ?filename.display(), error = %err, "Failed to get tags");
+                    false
                 }
             })
             .copied()
@@ -136,26 +155,30 @@ impl<'a> FileFilter<'a> {
     }
 
     /// Filter filenames by file patterns and tags for a specific hook.
-    pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&'a String> {
+    pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&Path> {
+        // Filter by hook `files` and `exclude` patterns.
         let filter = FilenameFilter::for_hook(hook);
         let filenames = self
             .filenames
             .par_iter()
             .filter(|filename| filter.filter(filename));
 
+        // Filter by hook `types`, `types_or` and `exclude_types`.
         let filter = FileTagFilter::for_hook(hook);
+        let filenames = filenames.filter(|filename| match tags_from_path(filename) {
+            Ok(tags) => filter.filter(&tags),
+            Err(err) => {
+                error!(filename = ?filename.display(), error = %err, "Failed to get tags");
+                false
+            }
+        });
+
+        // Strip the prefix to get relative paths.
         let filenames: Vec<_> = filenames
-            .filter(|filename| {
-                let path = Path::new(filename);
-                match tags_from_path(path) {
-                    Ok(tags) => filter.filter(&tags),
-                    Err(err) => {
-                        error!(filename, error = %err, "Failed to get tags");
-                        false
-                    }
-                }
+            .map(|p| {
+                p.strip_prefix(self.filename_prefix)
+                    .expect("Failed to strip prefix")
             })
-            .copied()
             .collect();
 
         filenames
@@ -174,15 +197,18 @@ pub(crate) struct CollectOptions {
 }
 
 impl CollectOptions {
-    pub(crate) fn with_all_files(mut self, all_files: bool) -> Self {
-        self.all_files = all_files;
-        self
+    pub(crate) fn all_files() -> Self {
+        Self {
+            all_files: true,
+            ..Default::default()
+        }
     }
 }
 
 /// Get all filenames to run hooks on.
+/// Returns a list of file paths relative to the workspace root.
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn collect_files(opts: CollectOptions) -> Result<Vec<String>> {
+pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<Vec<PathBuf>> {
     let CollectOptions {
         hook_stage,
         from_ref,
@@ -193,7 +219,17 @@ pub(crate) async fn collect_files(opts: CollectOptions) -> Result<Vec<String>> {
         commit_msg_filename,
     } = opts;
 
-    let mut filenames = collect_files_from_args(
+    let git_root = GIT_ROOT.as_ref()?;
+
+    // The workspace root relative to the git root.
+    let relative_root = match root.strip_prefix(git_root)? {
+        p if p.as_os_str().is_empty() => None,
+        p => Some(p),
+    };
+
+    let filenames = collect_files_from_args(
+        git_root,
+        relative_root,
         hook_stage,
         from_ref,
         to_ref,
@@ -204,34 +240,56 @@ pub(crate) async fn collect_files(opts: CollectOptions) -> Result<Vec<String>> {
     )
     .await?;
 
+    // Convert filenames to be relative to the workspace root.
+    let mut filenames = filenames
+        .into_iter()
+        .filter_map(|filename| {
+            // Only keep files under the workspace root.
+            if let Some(relative_root) = relative_root {
+                filename
+                    .strip_prefix(relative_root)
+                    .map(|p| normalize_path(p.to_path_buf()))
+                    .ok()
+            } else {
+                Some(normalize_path(filename))
+            }
+        })
+        .collect::<Vec<_>>();
+
     // Sort filenames if in tests to make the order consistent.
     if EnvVars::is_set(EnvVars::PREK_INTERNAL__SORT_FILENAMES) {
         filenames.sort_unstable();
     }
 
-    for filename in &mut filenames {
-        normalize_path(filename);
-    }
     Ok(filenames)
 }
 
+fn adjust_relative_path(path: &str, new_cwd: &Path) -> Result<PathBuf, std::io::Error> {
+    fs::relative_to(std::path::absolute(path)?, new_cwd)
+}
+
+/// Collect files to run hooks on.
+/// Returns a list of file paths relative to the workspace root.
 #[allow(clippy::too_many_arguments)]
 async fn collect_files_from_args(
+    git_root: &Path,
+    relative_root: Option<&Path>,
     hook_stage: Stage,
     from_ref: Option<String>,
     to_ref: Option<String>,
     all_files: bool,
-    mut files: Vec<String>,
-    mut directories: Vec<String>,
+    files: Vec<String>,
+    directories: Vec<String>,
     commit_msg_filename: Option<String>,
-) -> Result<Vec<String>> {
+) -> Result<Vec<PathBuf>> {
     if !hook_stage.operate_on_files() {
         return Ok(vec![]);
     }
+
     if hook_stage == Stage::PrepareCommitMsg || hook_stage == Stage::CommitMsg {
-        return Ok(vec![
-            commit_msg_filename.expect("commit message filename is required"),
-        ]);
+        let path = commit_msg_filename.expect("commit_msg_filename should be set");
+        let path = adjust_relative_path(&path, git_root)?;
+        return Ok(vec![path]);
     }
 
     if let (Some(from_ref), Some(to_ref)) = (from_ref, to_ref) {
@@ -253,21 +311,9 @@ async fn collect_files_from_args(
 
         // Fun fact: if a hook specified `types: [directory]`, it won't run in `--all-files` mode.
 
-        // TODO: It will be convenient to add a `--directory` flag to `prek run`,
-        // we expand the directories to files and pass them to the hook.
-        // See: https://github.com/pre-commit/pre-commit/issues/1173
-
-        // Normalize paths for HashSet to work correctly.
-        for filename in &mut files {
-            normalize_path(filename);
-        }
-        for dir in &mut directories {
-            normalize_path(dir);
-        }
-
-        let (mut exists, non_exists): (FxHashSet<_>, Vec<_>) =
+        let (exists, non_exists): (FxHashSet<_>, Vec<_>) =
             files.into_iter().partition_map(|filename| {
-                if Path::new(&filename).exists() {
+                if std::fs::exists(&filename).unwrap_or(false) {
                     Either::Left(filename)
                 } else {
                     Either::Right(filename)
@@ -279,7 +325,7 @@ async fn collect_files_from_args(
                     "This file does not exist, it will be ignored: `{}`",
                     non_exists[0]
                 );
-            } else if non_exists.len() == 2 {
+            } else {
                 warn_user!(
                     "These files do not exist, they will be ignored: `{}`",
                     non_exists.join(", ")
@@ -287,9 +333,16 @@ async fn collect_files_from_args(
             }
         }
 
+        let mut exists = exists
+            .into_iter()
+            .map(|filename| adjust_relative_path(&filename, git_root).map(normalize_path))
+            .collect::<Result<FxHashSet<_>, _>>()?;
+
         for dir in directories {
-            let dir_files = git::git_ls_files(Some(Path::new(&dir))).await?;
+            let dir = adjust_relative_path(&dir, git_root)?;
+            let dir_files = git::ls_files(git_root, Some(&dir)).await?;
             for file in dir_files {
+                let file = normalize_path(file);
                 exists.insert(file);
             }
         }
@@ -299,8 +352,8 @@ async fn collect_files_from_args(
     }
 
     if all_files {
-        let files = git::git_ls_files(None).await?;
-        debug!("All files in the repo: {}", files.len());
+        let files = git::ls_files(git_root, relative_root).await?;
+        debug!("All files in the workspace: {}", files.len());
         return Ok(files);
     }
 
