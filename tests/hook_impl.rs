@@ -62,6 +62,8 @@ fn hook_impl() {
 fn workspace_hook_impl_root() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
+    context.configure_git_author();
+    context.disable_auto_crlf();
 
     let config = indoc! {r#"
     repos:
@@ -138,6 +140,8 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
     let context = TestContext::new();
     let cwd = context.work_dir();
     context.init_project();
+    context.configure_git_author();
+    context.disable_auto_crlf();
 
     let config = indoc! {r#"
     repos:
@@ -200,6 +204,8 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
 fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
+    context.configure_git_author();
+    context.disable_auto_crlf();
 
     // Create a directory without .pre-commit-config.yaml
     let empty_dir = context.work_dir().child("empty");
