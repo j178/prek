@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use anyhow::Result;
 use itertools::Itertools;
 use tokio::io::AsyncWriteExt;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use crate::process;
 use crate::process::{Cmd, StatusError};
@@ -30,7 +30,11 @@ pub(crate) enum Error {
 pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
     LazyLock::new(|| which::which("git"));
 
-pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(get_root);
+pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| {
+    get_root().inspect(|root| {
+        debug!("Git root: {}", root.display());
+    })
+});
 
 // Remove some `GIT_` environment variables exposed by `git`.
 

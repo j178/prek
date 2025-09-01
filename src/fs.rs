@@ -192,7 +192,7 @@ pub(crate) fn normalize_path(path: PathBuf) -> PathBuf {
 
     let mut path = path.into_os_string().into_encoded_bytes();
     for c in &mut path {
-        if *c == b'/' || !is_separator(char::from(c)) {
+        if *c == b'/' || !is_separator(char::from(*c)) {
             continue;
         }
         *c = b'/';
