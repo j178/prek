@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
+use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir};
 use etcetera::BaseStrategy;
 use rustc_hash::FxHashSet;
 
@@ -312,6 +312,26 @@ impl TestContext {
             .child(".pre-commit-config.yaml")
             .write_str(content)
             .expect("Failed to write pre-commit config");
+    }
+
+    /// Setup a workspace with multiple projects, each with the same config.
+    /// This creates a tree-like directory structure for testing workspace functionality.
+    pub fn setup_workspace(&self, project_paths: &[&str], config: &str) -> anyhow::Result<()> {
+        // Always create root config
+        self.temp_dir
+            .child(".pre-commit-config.yaml")
+            .write_str(config)?;
+
+        // Create each project directory and config
+        for path in project_paths {
+            let project_dir = self.temp_dir.child(path);
+            project_dir.create_dir_all()?;
+            project_dir
+                .child(".pre-commit-config.yaml")
+                .write_str(config)?;
+        }
+
+        Ok(())
     }
 }
 

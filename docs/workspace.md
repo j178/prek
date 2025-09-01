@@ -138,6 +138,8 @@ prek run -C src/backend
 
 The `-C <dir>` or `--cd <dir>` option automatically changes to the specified directory before running, allowing you to target specific projects from any location in the workspace.
 
+**Note**: When using `prek install`, only the workspace root configuration's `default_install_hook_types` will be honored. Nested project configurations are not considered during installation.
+
 #### TODO: Hook ID Prefix Filtering
 
 - Add project prefix to hook IDs to identify which project they belong to
@@ -163,7 +165,7 @@ prek run --config .pre-commit-config.yaml
 | **File Scope** | All files in workspace | All files in git repo |
 | **Hook Scope** | Project-specific file filtering | All files pass to all hooks |
 | **Execution Context** | Each project runs in its own directory | All hooks run from git root |
-| **Configuration** | Multiple configs, inheritance possible | Single config file only |
+| **Configuration** | Multiple configs | Single config file only |
 
 ### Debugging
 
