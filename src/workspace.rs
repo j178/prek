@@ -570,7 +570,7 @@ impl Workspace {
             match non_staged.as_slice() {
                 [filename] => anyhow::bail!(
                     "prek configuration file is not staged, run `{}` to stage it",
-                    format!("git add {}", filename.display()).cyan()
+                    format!("git add {}", filename.user_display()).cyan()
                 ),
                 _ => anyhow::bail!(
                     "The following configuration files are not staged, `git add` them first:\n{}",

@@ -5,7 +5,7 @@ use anyhow::Result;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use indoc::indoc;
 
-fn setup_workspace(context: &TestContext) -> Result<()> {
+fn setup_workspace(context: &TestContext, config: &str) -> Result<()> {
     let project1 = context.work_dir();
     let project2 = context.work_dir().child("project2");
     let project3 = context.work_dir().child("project3");
@@ -16,17 +16,6 @@ fn setup_workspace(context: &TestContext) -> Result<()> {
     project3.create_dir_all()?;
     project4.create_dir_all()?;
     project5.create_dir_all()?;
-
-    let config = indoc! {r"
-    repos:
-      - repo: local
-        hooks:
-        - id: show-cwd
-          name: Show CWD
-          language: python
-          entry: python -c 'import sys, os; print(os.getcwd()); print(sys.argv[1:])'
-          verbose: true
-    "};
 
     project1
         .child(".pre-commit-config.yaml")
@@ -50,9 +39,21 @@ fn setup_workspace(context: &TestContext) -> Result<()> {
 #[test]
 fn basic_discovery() -> Result<()> {
     let context = TestContext::new();
+    let cwd = context.work_dir();
     context.init_project();
 
-    setup_workspace(&context)?;
+    let config = indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+        - id: show-cwd
+          name: Show CWD
+          language: python
+          entry: python -c 'import sys, os; print(os.getcwd()); print(sys.argv[1:])'
+          verbose: true
+    "};
+
+    setup_workspace(&context, config)?;
     context.git_add(".");
 
     // Run from the root directory
@@ -101,7 +102,7 @@ fn basic_discovery() -> Result<()> {
     ");
 
     // Run from a subdirectory
-    cmd_snapshot!(context.filters(), context.run().current_dir("project2"), @r"
+    cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("project2")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -114,7 +115,7 @@ fn basic_discovery() -> Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run().current_dir("project2").arg("--all-files"), @r"
+    cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("project2")).arg("--all-files"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -127,7 +128,7 @@ fn basic_discovery() -> Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run().current_dir("project3"), @r"
+    cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("project3")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -148,7 +149,7 @@ fn basic_discovery() -> Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run().arg("--cd").arg("project3"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("--cd").arg(cwd.join("project3")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -175,20 +176,59 @@ fn basic_discovery() -> Result<()> {
 #[test]
 fn config_not_staged() -> Result<()> {
     let context = TestContext::new();
+    let cwd = context.work_dir();
     context.init_project();
-    setup_workspace(&context)?;
+
+    let config = indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+        - id: show-cwd
+          name: Show CWD
+          language: python
+          entry: python -c 'import sys, os; print(os.getcwd()); print(sys.argv[1:])'
+          verbose: true
+    "};
+    setup_workspace(&context, config)?;
+    context.git_add(".");
+
+    let config = indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+        - id: show-cwd-modified
+          name: Show CWD
+          language: python
+          entry: python -c 'import sys, os; print(os.getcwd()); print(sys.argv[1:])'
+          verbose: true
+    "};
+    // Setup again to modify files after git add
+    setup_workspace(&context, config)?;
 
     // Run from the root directory
     cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
+
     ----- stderr -----
-    Error: Failed to load config from [TEMP_DIR]/.pre-commit-config.yaml: while parsing a block mapping, did not find expected key at line 2 column 1
+    error: The following configuration files are not staged, `git add` them first:
+      .pre-commit-config.yaml
+      nested/project4/.pre-commit-config.yaml
+      project2/.pre-commit-config.yaml
+      project3/.pre-commit-config.yaml
+      project3/project5/.pre-commit-config.yaml
     ");
 
     // Run from a subdirectory
-    cmd_snapshot!(context.filters(), context.run().current_dir("project2"), @"");
+    cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("project2")), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: prek configuration file is not staged, run `git add .pre-commit-config.yaml` to stage it
+    ");
 
     Ok(())
 }
