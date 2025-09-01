@@ -10,8 +10,11 @@ use constants::env_vars::EnvVars;
 
 use crate::cli::{self, ExitStatus, RunArgs};
 use crate::config::HookType;
+use crate::fs::CWD;
 use crate::git;
 use crate::printer::Printer;
+use crate::workspace;
+use crate::workspace::{DiscoverOptions, Project};
 
 pub(crate) async fn hook_impl(
     config: Option<PathBuf>,
@@ -23,27 +26,40 @@ pub(crate) async fn hook_impl(
 ) -> Result<ExitStatus> {
     // TODO: run in legacy mode
 
-    if let Some(ref config_file) = config {
-        if !config_file.try_exists()? {
-            return if skip_on_missing_config || EnvVars::is_set(EnvVars::PREK_ALLOW_NO_CONFIG) {
-                Ok(ExitStatus::Success)
-            } else {
-                eprintln!(
-                    "{}: config file not found: `{}`",
-                    "error".red().bold(),
-                    config_file.display().cyan()
-                );
-                eprintln!(
-                    "- To temporarily silence this, run `{}`",
-                    format!("{}=1 git ...", EnvVars::PREK_ALLOW_NO_CONFIG).cyan()
-                );
-                eprintln!(
-                    "- To permanently silence this, install hooks with the `{}` flag",
-                    "--allow-missing-config".cyan()
-                );
-                eprintln!("- To uninstall hooks, run `{}`", "prek uninstall".cyan());
-                Ok(ExitStatus::Failure)
-            };
+    // Check if there is config file
+    if !skip_on_missing_config && !EnvVars::is_set(EnvVars::PREK_ALLOW_NO_CONFIG) {
+        let exit = if let Some(ref config) = config
+            && !config.try_exists()?
+        {
+            eprintln!(
+                "{}: config file not found: `{}`",
+                "error".red().bold(),
+                config.display().cyan()
+            );
+            true
+        } else {
+            // Try to discover a project from current directory (after `--cd`)
+            match Project::discover(DiscoverOptions::from_args(config.clone(), &CWD)) {
+                Err(e) if matches!(e, workspace::Error::MissingPreCommitConfig) => {
+                    eprintln!("{}: {e}", "error".red().bold(),);
+                    true
+                }
+                Ok(_) => false,
+                Err(e) => return Err(e.into()),
+            }
+        };
+
+        if exit {
+            eprintln!(
+                "- To temporarily silence this, run `{}`",
+                format!("{}=1 git ...", EnvVars::PREK_ALLOW_NO_CONFIG).cyan()
+            );
+            eprintln!(
+                "- To permanently silence this, install hooks with the `{}` flag",
+                "--allow-missing-config".cyan()
+            );
+            eprintln!("- To uninstall hooks, run `{}`", "prek uninstall".cyan());
+            return Ok(ExitStatus::Failure);
         }
     }
 
