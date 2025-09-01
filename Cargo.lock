@@ -1732,6 +1732,7 @@ dependencies = [
  "futures",
  "hex",
  "http",
+ "ignore",
  "indicatif",
  "indoc",
  "insta",

@@ -168,7 +168,7 @@ impl LanguageImpl for Pygrep {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&String],
+        filenames: &[&Path],
         store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let InstalledHook::Installed { info, .. } = hook else {
@@ -185,6 +185,7 @@ impl LanguageImpl for Pygrep {
 
         let args = Args::parse(&hook.args).context("Failed to parse `args`")?;
         let mut cmd = Cmd::new(&info.toolchain, "python script")
+            .current_dir(hook.work_dir())
             .arg("-I") // Isolate mode.
             .arg("-B") // Don't write bytecode.
             .arg(py_script.path())
@@ -199,11 +200,13 @@ impl LanguageImpl for Pygrep {
 
         let mut stdin = cmd.stdin.take().context("Failed to take stdin")?;
         // TODO: avoid this clone if possible.
-        let filenames: Vec<_> = filenames.iter().map(ToString::to_string).collect();
+        let filenames: Vec<_> = filenames.iter().map(PathBuf::from).collect();
 
         let write_task = tokio::spawn(async move {
             for filename in filenames {
-                stdin.write_all(format!("{filename}\n").as_bytes()).await?;
+                stdin
+                    .write_all(format!("{}\n", filename.display()).as_bytes())
+                    .await?;
             }
             let _ = stdin.shutdown().await;
             anyhow::Ok(())

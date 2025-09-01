@@ -20,6 +20,7 @@ use crate::config::{
 use crate::languages::version::LanguageRequest;
 use crate::languages::{extract_metadata_from_entry, resolve_command};
 use crate::store::Store;
+use crate::workspace::Project;
 
 #[derive(Error, Debug)]
 pub(crate) enum Error {
@@ -117,6 +118,7 @@ impl Display for Repo {
 }
 
 pub(crate) struct HookBuilder {
+    project: Arc<Project>,
     repo: Arc<Repo>,
     config: ManifestHook,
     // The index of the hook in the project configuration.
@@ -124,8 +126,18 @@ pub(crate) struct HookBuilder {
 }
 
 impl HookBuilder {
-    pub(crate) fn new(repo: Arc<Repo>, config: ManifestHook, idx: usize) -> Self {
-        Self { repo, config, idx }
+    pub(crate) fn new(
+        project: Arc<Project>,
+        repo: Arc<Repo>,
+        config: ManifestHook,
+        idx: usize,
+    ) -> Self {
+        Self {
+            project,
+            repo,
+            config,
+            idx,
+        }
     }
 
     /// Update the hook from the project level hook configuration.
@@ -270,7 +282,7 @@ impl HookBuilder {
             language_request,
             additional_dependencies,
             dependencies: OnceLock::new(),
-
+            project: self.project,
             repo: self.repo,
             idx: self.idx,
             id: self.config.id,
@@ -372,6 +384,7 @@ impl Entry {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct Hook {
+    project: Arc<Project>,
     repo: Arc<Repo>,
     // Cached computed dependencies.
     dependencies: OnceLock<FxHashSet<String>>,
@@ -413,6 +426,10 @@ impl Display for Hook {
 }
 
 impl Hook {
+    pub(crate) fn project(&self) -> &Project {
+        &self.project
+    }
+
     pub(crate) fn repo(&self) -> &Repo {
         &self.repo
     }
@@ -420,6 +437,11 @@ impl Hook {
     /// Get the path to the repository that contains the hook.
     pub(crate) fn repo_path(&self) -> Option<&Path> {
         self.repo.path()
+    }
+
+    /// Get the path where the hook should be executed.
+    pub(crate) fn work_dir(&self) -> &Path {
+        self.project.path()
     }
 
     pub(crate) fn is_local(&self) -> bool {
@@ -479,6 +501,7 @@ impl Display for InstalledHook {
 }
 
 impl InstalledHook {
+    /// Get the path to the environment where the hook is installed.
     pub(crate) fn env_path(&self) -> Option<&Path> {
         match self {
             InstalledHook::Installed { info, .. } => Some(&info.env_path),

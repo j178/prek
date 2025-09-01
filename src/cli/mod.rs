@@ -6,9 +6,9 @@ use clap::builder::styling::{AnsiColor, Effects};
 use clap::builder::{ArgPredicate, StyledStr, Styles};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
+use serde::{Deserialize, Serialize};
 
 use constants::env_vars::EnvVars;
-use serde::{Deserialize, Serialize};
 
 use crate::config::{self, CONFIG_FILE, HookType, Stage};
 use crate::workspace::Project;
