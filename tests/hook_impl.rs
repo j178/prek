@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::process::Command;
 
 use common::TestContext;
@@ -58,19 +57,19 @@ fn hook_impl() {
 }
 
 #[test]
-fn hook_impl_pre_push() {
+fn hook_impl_pre_push() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.write_pre_commit_config(indoc! { r"
+    context.write_pre_commit_config(indoc! { r#"
         repos:
         - repo: local
           hooks:
-           - id: fail
-             name: fail
-             language: fail
-             entry: always fail
+           - id: success
+             name: success
+             language: system
+             entry: echo "hook ran successfully"
              always_run: true
-    "});
+    "#});
 
     context.git_add(".");
     context.configure_git_author();
@@ -104,31 +103,76 @@ fn hook_impl_pre_push() {
     ----- stderr -----
     ");
 
-    // Test pre-push hook with stdin input
-    let mut hook_cmd = context.command();
-    hook_cmd
-        .arg("hook-impl")
-        .arg("--hook-type")
-        .arg("pre-push")
-        .arg("--hook-dir")
-        .arg(context.work_dir().join(".git/hooks"))
-        .arg("--")
-        .arg("origin") // remote name
-        .arg("https://github.com/test/repo.git"); // remote URL
+    // Set up a bare remote repository
+    let remote_repo_path = context.home_dir().join("remote.git");
+    std::fs::create_dir_all(&remote_repo_path)?;
 
-    // Simulate pre-push stdin: local_ref local_sha remote_ref remote_sha
-    let stdin_input = "refs/heads/main abc123def456789012345678901234567890abc refs/heads/main 0000000000000000000000000000000000000000\n";
+    let mut init_remote = Command::new("git");
+    init_remote
+        .arg("init")
+        .arg("--bare")
+        .arg("--initial-branch=master")
+        .current_dir(&remote_repo_path);
+    cmd_snapshot!(context.filters(), init_remote, @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Initialized empty Git repository in [HOME]/remote.git/
 
-    hook_cmd.stdin(std::process::Stdio::piped());
-    let mut child = hook_cmd.spawn().unwrap();
-    child
-        .stdin
-        .as_mut()
-        .unwrap()
-        .write_all(stdin_input.as_bytes())
-        .unwrap();
-    let output = child.wait_with_output().unwrap();
+    ----- stderr -----
+    "#);
 
-    // For now, just check that the command runs (we'll adjust the snapshot later)
-    assert!(!output.status.success());
+    // Add remote to local repo
+    let mut add_remote = Command::new("git");
+    add_remote
+        .arg("remote")
+        .arg("add")
+        .arg("origin")
+        .arg(&remote_repo_path)
+        .current_dir(context.work_dir());
+    cmd_snapshot!(context.filters(), add_remote, @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "#);
+
+    // First push - should trigger the hook
+    let mut push_cmd = Command::new("git");
+    push_cmd
+        .arg("push")
+        .arg("origin")
+        .arg("master")
+        .current_dir(context.work_dir());
+
+    cmd_snapshot!(context.filters(), push_cmd, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    success..................................................................Passed
+
+    ----- stderr -----
+    To [HOME]/remote.git
+     * [new branch]      master -> master
+    ");
+
+    // Second push - should not trigger the hook (nothing new to push)
+    let mut push_cmd2 = Command::new("git");
+    push_cmd2
+        .arg("push")
+        .arg("origin")
+        .arg("master")
+        .current_dir(context.work_dir());
+
+    cmd_snapshot!(context.filters(), push_cmd2, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Everything up-to-date
+    ");
+
+    Ok(())
 }
