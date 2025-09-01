@@ -13,7 +13,7 @@ repos:
       - id: end-of-file-fixer
 
   - repo: https://github.com/crate-ci/typos
-    rev: v1.35.5
+    rev: v1.35.7
     hooks:
       - id: typos
 
