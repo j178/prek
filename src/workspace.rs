@@ -55,6 +55,9 @@ pub(crate) trait HookInitReporter {
 
 #[derive(Debug, Clone)]
 pub(crate) struct Project {
+    /// The absolute path of the project directory.
+    root: PathBuf,
+    /// The absolute path of the configuration file.
     config_path: PathBuf,
     /// The relative path of the project directory from the git root.
     relative_path: PathBuf,
@@ -90,18 +93,29 @@ impl Hash for Project {
 }
 
 impl Project {
-    // TODO: 考虑 -c 指定文件的情况下，如何处理
-    // 1) -c => legacy non-workspace mode, chdir to git root
-    // 2) -c => taks parent of `-c` as workspace root, non-compatible with `pre-commit`
-    /// Initialize a new project from the configuration file or the file in the current working directory.
-    pub(crate) fn from_config_file(config_path: PathBuf) -> Result<Self, config::Error> {
+    /// Initialize a new project from the configuration file with an optional root path.
+    /// If root is not given, it will be the parent directory of the configuration file.
+    pub(crate) fn from_config_file(
+        config_path: PathBuf,
+        root: Option<PathBuf>,
+    ) -> Result<Self, config::Error> {
         debug!(
             path = %config_path.user_display(),
             "Loading project configuration"
         );
+
         let config = read_config(&config_path)?;
         let size = config.repos.len();
+
+        let root = root.unwrap_or_else(|| {
+            config_path
+                .parent()
+                .expect("config file must have a parent")
+                .to_path_buf()
+        });
+
         Ok(Self {
+            root,
             config,
             config_path,
             idx: 0,
@@ -113,31 +127,8 @@ impl Project {
 
     /// Find the configuration file in the given path.
     pub(crate) fn from_directory(path: &Path) -> Result<Self, config::Error> {
-        Self::from_config_file(path.join(CONFIG_FILE))
+        Self::from_config_file(path.join(CONFIG_FILE), None)
     }
-
-    // Find the project configuration file in the current working directory or its ancestors.
-    //
-    // This function will traverse up the directory tree from the given path until the git root.
-    // pub(crate) fn from_directory_ancestors(path: &Path) -> Result<Self, Error> {
-    //     let mut current = path.to_path_buf();
-    //     loop {
-    //         match Self::from_directory(&current) {
-    //             Ok(project) => return Ok(project),
-    //             Err(Error::InvalidConfig(config::Error::NotFound(_))) => {
-    //                 if let Some(parent) = current.parent() {
-    //                     current = parent.to_path_buf();
-    //                 } else {
-    //                     break;
-    //                 }
-    //             }
-    //             Err(e) => return Err(e),
-    //         }
-    //     }
-    //     Err(Error::InvalidConfig(config::Error::NotFound(
-    //         CWD.user_display().to_string(),
-    //     )))
-    // }
 
     /// Initialize a new project from the configuration file or find it in the given path.
     pub(crate) fn from_config_file_or_directory(
@@ -145,7 +136,7 @@ impl Project {
         path: &Path,
     ) -> Result<Self, config::Error> {
         if let Some(config) = config {
-            return Self::from_config_file(config);
+            return Self::from_config_file(config, None);
         }
         Self::from_directory(path)
     }
@@ -174,9 +165,7 @@ impl Project {
 
     /// Get the path to the project directory.
     pub(crate) fn path(&self) -> &Path {
-        self.config_path
-            .parent()
-            .expect("Project path should have a parent")
+        &self.root
     }
 
     /// Get the path to the project directory relative to the git root.
@@ -344,47 +333,39 @@ pub(crate) struct Workspace {
     projects: Vec<Arc<Project>>,
 }
 
-#[derive(Default)]
-pub(crate) struct DiscoverOptions {
-    config: Option<PathBuf>,
-    directory: Option<PathBuf>,
+pub(crate) enum DiscoverOptions {
+    File(PathBuf),
+    Directory(PathBuf),
 }
 
 impl DiscoverOptions {
-    pub(crate) fn new(config: Option<PathBuf>, path: &Path) -> Self {
-        Self {
-            config,
-            directory: Some(path.to_path_buf()),
+    pub(crate) fn from_args(config: Option<PathBuf>, path: &Path) -> Self {
+        if let Some(config) = config {
+            Self::File(config)
+        } else {
+            Self::Directory(path.to_path_buf())
         }
-    }
-
-    pub(crate) fn config(mut self, config: PathBuf) -> Self {
-        self.config = Some(config);
-        self
-    }
-
-    pub(crate) fn directory(mut self, directory: PathBuf) -> Self {
-        self.directory = Some(directory);
-        self
     }
 }
 
 impl Workspace {
+    /// Discover the workspace from the given options.
     pub(crate) fn discover(opts: DiscoverOptions) -> Result<Self, Error> {
-        if let Some(config) = opts.config {
-            let project = Project::from_config_file(config)?;
+        let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
+
+        if let DiscoverOptions::File(config) = opts {
+            // For `--config <path>`, the workspace root is the git root.
+            let project = Project::from_config_file(config, Some(git_root.clone()))?;
             return Ok(Self {
-                root: project.path().to_path_buf(),
+                root: git_root.clone(),
                 projects: vec![Arc::new(project)],
             });
         }
 
-        // directory should be absolute
-        let Some(path) = opts.directory else {
-            panic!("Config file or path must be provided to discover workspace");
+        // Directory must be absolute
+        let DiscoverOptions::Directory(path) = opts else {
+            unreachable!()
         };
-
-        let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
 
         // Walk from the given path up to the git root, to find the workspace root.
         let workspace_root = path
@@ -409,7 +390,7 @@ impl Workspace {
                         if entry.file_type().is_some_and(|t| t.is_file())
                             && entry.file_name() == CONFIG_FILE
                         {
-                            match Project::from_config_file(entry.path().to_path_buf()) {
+                            match Project::from_config_file(entry.path().to_path_buf(), None) {
                                 Ok(mut project) => {
                                     let depth = entry.depth();
                                     let relative_path = entry
@@ -570,6 +551,7 @@ impl Workspace {
         Ok(hooks)
     }
 
+    /// Check if all configuration files are staged in git.
     pub(crate) async fn check_config_staged(&self) -> Result<()> {
         let config_files = self
             .projects
@@ -608,8 +590,7 @@ mod tests {
     fn test_workspace_discovery_empty_directory() -> Result<()> {
         let dir = tempfile::tempdir()?;
 
-        let workspace =
-            Workspace::discover(DiscoverOptions::default().directory(dir.path().to_path_buf()))?;
+        let workspace = Workspace::discover(DiscoverOptions::from_args(None, dir.path()))?;
         assert_eq!(workspace.projects.len(), 0);
 
         Ok(())
@@ -635,8 +616,7 @@ repos:
 "#,
         )?;
 
-        let workspace =
-            Workspace::discover(DiscoverOptions::default().directory(dir.path().to_path_buf()))?;
+        let workspace = Workspace::discover(DiscoverOptions::from_args(None, dir.path()))?;
         assert_eq!(workspace.projects.len(), 1);
         assert_eq!(
             workspace.projects[0].config_file(),
@@ -668,8 +648,7 @@ repos:
             )?;
         }
 
-        let workspace =
-            Workspace::discover(DiscoverOptions::default().directory(dir.path().to_path_buf()))?;
+        let workspace = Workspace::discover(DiscoverOptions::from_args(None, dir.path()))?;
         assert_eq!(workspace.projects.len(), 3);
 
         // Verify all projects were found
@@ -724,8 +703,7 @@ repos:
 "#,
         )?;
 
-        let workspace =
-            Workspace::discover(DiscoverOptions::default().directory(dir.path().to_path_buf()))?;
+        let workspace = Workspace::discover(DiscoverOptions::from_args(None, dir.path()))?;
         assert_eq!(workspace.projects.len(), 2);
 
         Ok(())
@@ -744,8 +722,7 @@ repos:
         )?;
 
         // Should return an error for invalid config
-        let result =
-            Workspace::discover(DiscoverOptions::default().directory(dir.path().to_path_buf()));
+        let result = Workspace::discover(DiscoverOptions::from_args(None, dir.path()));
         assert!(result.is_err());
 
         Ok(())

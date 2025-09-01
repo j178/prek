@@ -91,7 +91,7 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Failure);
     }
 
-    let mut workspace = Workspace::discover(DiscoverOptions::new(config, &CWD))?;
+    let mut workspace = Workspace::discover(DiscoverOptions::from_args(config, &CWD))?;
     if should_stash {
         workspace.check_config_staged().await?;
     }

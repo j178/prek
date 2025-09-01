@@ -15,18 +15,14 @@ use crate::workspace::Project;
 pub(crate) async fn check_hooks_apply(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     let store = STORE.as_ref()?;
 
-    let input = collect_files(
-        hook.work_dir(),
-        CollectOptions::default().with_all_files(true),
-    )
-    .await?;
+    let input = collect_files(hook.work_dir(), CollectOptions::all_files()).await?;
 
     let mut code = 0;
     let mut output = Vec::new();
 
     for filename in filenames {
         let path = hook.project().relative_path().join(filename);
-        let mut project = Project::from_config_file(path)?;
+        let mut project = Project::from_config_file(path, None)?;
         let hooks = project.init_hooks(store, None).await?;
 
         let filter = FileFilter::for_project(input.iter(), &project);
@@ -82,18 +78,14 @@ pub(crate) async fn check_useless_excludes(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
-    let input = collect_files(
-        hook.work_dir(),
-        CollectOptions::default().with_all_files(true),
-    )
-    .await?;
+    let input = collect_files(hook.work_dir(), CollectOptions::all_files()).await?;
 
     let mut code = 0;
     let mut output = Vec::new();
 
     for filename in filenames {
         let path = hook.project().relative_path().join(filename);
-        let project = Project::from_config_file(path)?;
+        let project = Project::from_config_file(path, None)?;
         let config = project.config();
 
         if !excludes_any(&input, None, config.exclude.as_deref()) {

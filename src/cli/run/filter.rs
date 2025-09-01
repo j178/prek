@@ -197,9 +197,11 @@ pub(crate) struct CollectOptions {
 }
 
 impl CollectOptions {
-    pub(crate) fn with_all_files(mut self, all_files: bool) -> Self {
-        self.all_files = all_files;
-        self
+    pub(crate) fn all_files() -> Self {
+        Self {
+            all_files: true,
+            ..Default::default()
+        }
     }
 }
 
@@ -217,10 +219,16 @@ pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<V
         commit_msg_filename,
     } = opts;
 
+    let git_root = GIT_ROOT.as_ref()?;
+
     // The workspace root relative to the git root.
-    let relative_root = root.strip_prefix(GIT_ROOT.as_ref()?)?;
+    let relative_root = match root.strip_prefix(git_root)? {
+        p if p.as_os_str().is_empty() => None,
+        p => Some(p),
+    };
 
     let filenames = collect_files_from_args(
+        git_root,
         relative_root,
         hook_stage,
         from_ref,
@@ -237,10 +245,14 @@ pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<V
         .into_iter()
         .filter_map(|filename| {
             // Only keep files under the workspace root.
-            filename
-                .strip_prefix(relative_root)
-                .map(|p| normalize_path(p.to_path_buf()))
-                .ok()
+            if let Some(relative_root) = relative_root {
+                filename
+                    .strip_prefix(relative_root)
+                    .map(|p| normalize_path(p.to_path_buf()))
+                    .ok()
+            } else {
+                Some(normalize_path(filename))
+            }
         })
         .collect::<Vec<_>>();
 
@@ -260,7 +272,8 @@ fn adjust_relative_path(path: &str, new_cwd: &Path) -> Result<PathBuf, std::io::
 /// Returns a list of file paths relative to the workspace root.
 #[allow(clippy::too_many_arguments)]
 async fn collect_files_from_args(
-    root: &Path,
+    git_root: &Path,
+    relative_root: Option<&Path>,
     hook_stage: Stage,
     from_ref: Option<String>,
     to_ref: Option<String>,
@@ -272,8 +285,6 @@ async fn collect_files_from_args(
     if !hook_stage.operate_on_files() {
         return Ok(vec![]);
     }
-
-    let git_root = GIT_ROOT.as_ref()?;
 
     if hook_stage == Stage::PrepareCommitMsg || hook_stage == Stage::CommitMsg {
         let path = commit_msg_filename.expect("commit_msg_filename should be set");
@@ -341,12 +352,7 @@ async fn collect_files_from_args(
     }
 
     if all_files {
-        let root = if root == Path::new("") {
-            None
-        } else {
-            Some(root)
-        };
-        let files = git::ls_files(git_root, root).await?;
+        let files = git::ls_files(git_root, relative_root).await?;
         debug!("All files in the workspace: {}", files.len());
         return Ok(files);
     }
