@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 use std::env::consts::EXE_EXTENSION;
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use constants::env_vars::EnvVars;
 use rustc_hash::FxHashSet;
 use tracing::debug;
-
-use constants::env_vars::EnvVars;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::hook::InstalledHook;
@@ -136,15 +136,16 @@ impl LanguageImpl for Node {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&String],
+        filenames: &[&Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Node must have env path");
         let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
 
         let entry = hook.entry.resolve(Some(&new_path))?;
-        let run = async move |batch: &[&String]| {
+        let run = async move |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "node hook")
+                .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env("PATH", &new_path)
                 .env(EnvVars::NPM_CONFIG_PREFIX, env_dir)
