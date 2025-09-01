@@ -88,13 +88,12 @@ prek run black
 
 # Run from specific directory
 cd src/backend && prek run
+
+# Use -C option to change directory automatically
+prek run -C src/backend
 ```
 
-#### TODO: Directory Change Option
-
-- Add a `-C <dir>` option to `prek run` to automatically change to the directory before running
-- This would allow running workspace commands from any location while targeting a specific directory
-- Example: `prek run -C src/backend` would change to `src/backend` before executing
+The `-C <dir>` or `--cd <dir>` option automatically changes to the specified directory before running, allowing you to target specific projects from any location in the workspace.
 
 #### TODO: Hook ID Prefix Filtering
 

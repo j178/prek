@@ -801,6 +801,18 @@ fn subdirectory() -> Result<()> {
     ----- stderr -----
     "#);
 
+    cmd_snapshot!(context.filters(), context.run().arg("--cd").arg(&*child).arg("--files").arg("file.txt"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    trailing-whitespace......................................................Failed
+    - hook id: trailing-whitespace
+    - exit code: 1
+      foo/bar/baz/file.txt
+
+    ----- stderr -----
+    "#);
+
     Ok(())
 }
 
@@ -1411,6 +1423,18 @@ fn run_directory() -> Result<()> {
     ----- stderr -----
     "#);
 
+    cmd_snapshot!(context.filters(), context.run().arg("--cd").arg("dir1").arg("--directory").arg("."), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    directory................................................................Passed
+    - hook id: directory
+    - duration: [TIME]
+      dir1/file.txt
+
+    ----- stderr -----
+    "#);
+
     Ok(())
 }
 
@@ -1652,7 +1676,7 @@ fn completion() {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @r#"
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1680,6 +1704,7 @@ fn completion() {
     --hook-stage	The stage during which the hook is fired
     --show-diff-on-failure	When hooks fail, run `git diff` directly afterward
     --config	Path to alternate config file
+    --cd	Change to directory before running
     --color	Whether to use color in output
     --help	Display the concise help for this command
     --no-progress	Hide all progress outputs
@@ -1688,7 +1713,7 @@ fn completion() {
     --version	Display the prek version
 
     ----- stderr -----
-    "#);
+    ");
 
     cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("run"), @r#"
     success: true

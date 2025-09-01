@@ -143,5 +143,26 @@ fn basic_discovery() -> Result<()> {
     ----- stderr -----
     ");
 
+    cmd_snapshot!(context.filters(), context.run().arg("--cd").arg(&*project3), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `project5`:
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+      [TEMP_DIR]/project3/project5
+      ['.pre-commit-config.yaml']
+
+    Running hooks for `.`:
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+      [TEMP_DIR]/project3
+      ['project5/.pre-commit-config.yaml', '.pre-commit-config.yaml']
+
+    ----- stderr -----
+    ");
+
     Ok(())
 }
