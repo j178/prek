@@ -5,11 +5,7 @@ use anyhow::Result;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use indoc::indoc;
 
-#[test]
-fn basic_discovery() -> Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-
+fn setup_workspace(context: &TestContext) -> Result<()> {
     let project1 = context.work_dir();
     let project2 = context.work_dir().child("project2");
     let project3 = context.work_dir().child("project3");
@@ -48,6 +44,15 @@ fn basic_discovery() -> Result<()> {
         .child(".pre-commit-config.yaml")
         .write_str(config)?;
 
+    Ok(())
+}
+
+#[test]
+fn basic_discovery() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    setup_workspace(&context)?;
     context.git_add(".");
 
     // Run from the root directory
@@ -96,7 +101,7 @@ fn basic_discovery() -> Result<()> {
     ");
 
     // Run from a subdirectory
-    cmd_snapshot!(context.filters(), context.run().current_dir(&project2), @r"
+    cmd_snapshot!(context.filters(), context.run().current_dir("project2"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -109,7 +114,7 @@ fn basic_discovery() -> Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run().current_dir(&project2).arg("--all-files"), @r"
+    cmd_snapshot!(context.filters(), context.run().current_dir("project2").arg("--all-files"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -122,7 +127,7 @@ fn basic_discovery() -> Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run().current_dir(&project3), @r"
+    cmd_snapshot!(context.filters(), context.run().current_dir("project3"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -143,7 +148,7 @@ fn basic_discovery() -> Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run().arg("--cd").arg(&*project3), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("--cd").arg("project3"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -163,6 +168,27 @@ fn basic_discovery() -> Result<()> {
 
     ----- stderr -----
     ");
+
+    Ok(())
+}
+
+#[test]
+fn config_not_staged() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    setup_workspace(&context)?;
+
+    // Run from the root directory
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    ----- stderr -----
+    Error: Failed to load config from [TEMP_DIR]/.pre-commit-config.yaml: while parsing a block mapping, did not find expected key at line 2 column 1
+    ");
+
+    // Run from a subdirectory
+    cmd_snapshot!(context.filters(), context.run().current_dir("project2"), @"");
 
     Ok(())
 }
