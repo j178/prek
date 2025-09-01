@@ -40,6 +40,7 @@ pub(crate) async fn list(
     let reporter = HookInitReporter::from(printer);
 
     let lock = store.lock_async().await?;
+    // TODO: use workspace
     let hooks = project.init_hooks(store, Some(&reporter)).await?;
     drop(lock);
 

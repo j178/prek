@@ -178,23 +178,28 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
 /// Normalizes a path to use `/` as a separator everywhere, even on platforms
 /// that recognize other characters as separators.
 #[cfg(unix)]
-pub(crate) fn normalize_path(_path: &mut str) {
+pub(crate) fn normalize_path(path: PathBuf) -> PathBuf {
     // UNIX only uses /, so we're good.
+    path
 }
 
 /// Normalizes a path to use `/` as a separator everywhere, even on platforms
 /// that recognize other characters as separators.
 #[cfg(not(unix))]
-pub(crate) fn normalize_path(path: &mut str) {
+pub(crate) fn normalize_path(path: PathBuf) -> PathBuf {
+    use std::ffi::OsString;
     use std::path::is_separator;
 
-    let bytes = unsafe { path.as_bytes_mut() };
-    for c in bytes {
+    let mut path = path.into_os_string().into_encoded_bytes();
+    for c in &mut path {
         if *c == b'/' || !is_separator(char::from(*c)) {
             continue;
         }
         *c = b'/';
     }
+
+    let os_str = OsString::from(String::from_utf8_lossy(&path).to_string());
+    PathBuf::from(os_str)
 }
 
 /// Compute a path describing `path` relative to `base`.

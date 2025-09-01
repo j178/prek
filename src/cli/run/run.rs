@@ -3,9 +3,9 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::io::Write;
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -25,12 +25,13 @@ use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, Stage};
-use crate::fs::{CWD, Simplified};
+use crate::fs::CWD;
+use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::{Printer, Stdout};
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::{STORE, Store};
-use crate::workspace::Project;
+use crate::workspace::{DiscoverOptions, Workspace};
 use crate::{git, warn_user};
 
 enum HookToRun {
@@ -79,27 +80,19 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Success);
     }
 
+    // Ensure we are in a git repository.
+    LazyLock::force(&GIT_ROOT).as_ref()?;
+
     let should_stash = !all_files && files.is_empty() && directories.is_empty();
 
     // Check if we have unresolved merge conflict files and fail fast.
     if should_stash && git::has_unmerged_paths().await? {
-        writeln!(
-            printer.stderr(),
-            "{}: You have unmerged paths. Resolve them before running prek",
-            "error".red().bold(),
-        )?;
-        return Ok(ExitStatus::Failure);
+        anyhow::bail!("You have unmerged paths. Resolve them before running prek");
     }
 
-    let mut project = Project::from_config_file_or_directory(config, &CWD)?;
-    if should_stash && git::file_not_staged(project.config_file()).await? {
-        writeln!(
-            printer.stderr(),
-            "{}: prek configuration file is not staged, run `{}` to stage it",
-            "error".red().bold(),
-            format!("git add {}", project.config_file().user_display()).cyan(),
-        )?;
-        return Ok(ExitStatus::Failure);
+    let mut workspace = Workspace::discover(DiscoverOptions::from_args(config, &CWD))?;
+    if should_stash {
+        workspace.check_config_staged().await?;
     }
 
     let store = STORE.as_ref()?;
@@ -109,7 +102,7 @@ pub(crate) async fn run(
 
     let hook_ids = hook_ids.into_iter().collect::<BTreeSet<_>>();
 
-    let hooks = project.init_hooks(store, Some(&reporter)).await?;
+    let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
     let filtered_hooks: Vec<_> = hooks
         .into_iter()
         .filter(|h| hook_ids.is_empty() || hook_ids.contains(&h.id) || hook_ids.contains(&h.alias))
@@ -218,29 +211,33 @@ pub(crate) async fn run(
 
     set_env_vars(from_ref.as_ref(), to_ref.as_ref(), &extra_args);
 
-    let filenames = collect_files(CollectOptions {
-        hook_stage,
-        from_ref,
-        to_ref,
-        all_files,
-        files,
-        directories,
-        commit_msg_filename: extra_args.commit_msg_filename.clone(),
-    })
+    let filenames = collect_files(
+        workspace.root(),
+        CollectOptions {
+            hook_stage,
+            from_ref,
+            to_ref,
+            all_files,
+            files,
+            directories,
+            commit_msg_filename: extra_args.commit_msg_filename,
+        },
+    )
     .await?;
 
-    let filter = FileFilter::new(
-        &filenames,
-        project.config().files.as_ref(),
-        project.config().exclude.as_ref(),
-    );
-    trace!("Files after filtered: {}", filter.len());
+    // Change to the workspace root directory.
+    std::env::set_current_dir(workspace.root()).with_context(|| {
+        format!(
+            "Failed to change directory to `{}`",
+            workspace.root().display()
+        )
+    })?;
 
     run_hooks(
+        &workspace,
         &hooks,
-        &filter,
+        filenames,
         store,
-        project.config().fail_fast.unwrap_or(false),
         show_diff_on_failure,
         verbose,
         printer,
@@ -531,32 +528,67 @@ impl StatusPrinter {
 
 /// Run all hooks.
 async fn run_hooks(
+    workspace: &Workspace,
     hooks: &[HookToRun],
-    filter: &FileFilter<'_>,
+    filenames: Vec<PathBuf>,
     store: &Store,
-    fail_fast: bool,
     show_diff_on_failure: bool,
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    debug_assert!(!hooks.is_empty(), "No hooks to run");
+
     let printer = StatusPrinter::for_hooks(hooks, printer);
+
     let mut success = true;
-
     let mut diff = git::get_diff().await?;
-    // Hooks might modify the files, so they must be run sequentially.
-    for hook in hooks {
-        let (hook_success, new_diff) =
-            run_hook(hook, filter, store, diff, verbose, &printer).await?;
 
-        success &= hook_success;
-        diff = new_diff;
-        let fail_fast = fail_fast
-            || match hook {
-                HookToRun::Skipped(_) => false,
-                HookToRun::ToRun(hook) => hook.fail_fast,
-            };
-        if !success && fail_fast {
-            break;
+    // Group hooks by project to run them in order of their depth in the workspace.
+    let mut project_to_hooks: FxHashMap<&Path, Vec<&HookToRun>> = FxHashMap::default();
+    for hook in hooks {
+        let key = hook.project().config_file();
+        project_to_hooks.entry(key).or_default().push(hook);
+    }
+
+    // Sort projects by their depth in the workspace.
+    let mut project_to_hooks: Vec<_> = project_to_hooks.into_iter().collect();
+    project_to_hooks.sort_by_key(|(_, hooks)| hooks[0].project().idx());
+
+    let projects_len = project_to_hooks.len();
+    let mut first = true;
+
+    // Hooks might modify the files, so they must be run sequentially.
+    'outer: for (_, hooks) in project_to_hooks {
+        let project = hooks[0].project();
+        if projects_len > 1 {
+            writeln!(
+                printer.stdout(),
+                "{}{}:",
+                if first { "" } else { "\n" },
+                format!("Running hooks for `{}`", project.to_string().cyan()).bold()
+            )?;
+            first = false;
+        }
+
+        let fail_fast = project.config().fail_fast.unwrap_or(false);
+
+        let filter = FileFilter::for_project(filenames.iter(), project);
+        trace!("Files for `{project}` after filtered: {}", filter.len());
+
+        for hook in hooks {
+            let (hook_success, new_diff) =
+                run_hook(hook, &filter, store, diff, verbose, &printer).await?;
+
+            success &= hook_success;
+            diff = new_diff;
+            let fail_fast = fail_fast
+                || match hook {
+                    HookToRun::Skipped(_) => false,
+                    HookToRun::ToRun(hook) => hook.fail_fast,
+                };
+            if !success && fail_fast {
+                break 'outer;
+            }
         }
     }
 
@@ -572,6 +604,8 @@ async fn run_hooks(
             .arg("diff")
             .arg("--no-ext-diff")
             .arg(color)
+            .arg("--")
+            .arg(workspace.root())
             .check(true)
             .spawn()?
             .wait()
@@ -610,6 +644,11 @@ async fn run_hook(
     };
 
     let mut filenames = filter.for_hook(hook);
+    trace!(
+        "Files for `{}` after filtered: {}",
+        hook.id,
+        filenames.len()
+    );
 
     if filenames.is_empty() && !hook.always_run {
         printer.write_skipped(

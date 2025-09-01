@@ -2,3 +2,4 @@
 # Retry flaky node tests due to npm 403 errors
 filter = 'kind(test) and test(node::)'
 retries = 2
+slow-timeout = { period = "30s", terminate-after = 3 }
