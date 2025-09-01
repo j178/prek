@@ -294,7 +294,12 @@ impl HookBuilder {
         };
 
         if let Err(err) = extract_metadata_from_entry(&mut hook).await {
-            trace!("Failed to extract metadata from entry for hook `{hook}`: {err}");
+            if err
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|e| e.kind() != std::io::ErrorKind::NotFound)
+            {
+                trace!("Failed to extract metadata from entry for hook `{hook}`: {err}");
+            }
         }
 
         Ok(hook)
