@@ -221,6 +221,17 @@ fn config_not_staged() -> Result<()> {
     ");
 
     // Run from a subdirectory
+    cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("project3")), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The following configuration files are not staged, `git add` them first:
+      .pre-commit-config.yaml
+      project5/.pre-commit-config.yaml
+    ");
+
     cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("project2")), @r"
     success: false
     exit_code: 2
@@ -228,6 +239,189 @@ fn config_not_staged() -> Result<()> {
 
     ----- stderr -----
     error: prek configuration file is not staged, run `git add .pre-commit-config.yaml` to stage it
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn list() -> Result<()> {
+    let context = TestContext::new();
+    let cwd = context.work_dir();
+    context.init_project();
+
+    let config = indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+        - id: show-cwd
+          name: Show CWD
+          language: python
+          entry: python -c 'import sys, os; print(os.getcwd()); print(sys.argv[1:])'
+          verbose: true
+    "};
+
+    setup_workspace(&context, config)?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.list(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    show-cwd
+    show-cwd
+    show-cwd
+    show-cwd
+    show-cwd
+
+    ----- stderr -----
+    ");
+
+    let mut filters = context.filters();
+    filters.push((r"\\/", "/")); // Normalize Windows path separators in JSON output
+    cmd_snapshot!(filters, context.list().arg("--output-format=json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [
+      {
+        "id": "show-cwd",
+        "name": "Show CWD",
+        "project": "nested/project4",
+        "alias": "",
+        "language": "python",
+        "description": null,
+        "stages": [
+          "manual",
+          "commit-msg",
+          "post-checkout",
+          "post-commit",
+          "post-merge",
+          "post-rewrite",
+          "pre-commit",
+          "pre-merge-commit",
+          "pre-push",
+          "pre-rebase",
+          "prepare-commit-msg"
+        ]
+      },
+      {
+        "id": "show-cwd",
+        "name": "Show CWD",
+        "project": "project3/project5",
+        "alias": "",
+        "language": "python",
+        "description": null,
+        "stages": [
+          "manual",
+          "commit-msg",
+          "post-checkout",
+          "post-commit",
+          "post-merge",
+          "post-rewrite",
+          "pre-commit",
+          "pre-merge-commit",
+          "pre-push",
+          "pre-rebase",
+          "prepare-commit-msg"
+        ]
+      },
+      {
+        "id": "show-cwd",
+        "name": "Show CWD",
+        "project": "project2",
+        "alias": "",
+        "language": "python",
+        "description": null,
+        "stages": [
+          "manual",
+          "commit-msg",
+          "post-checkout",
+          "post-commit",
+          "post-merge",
+          "post-rewrite",
+          "pre-commit",
+          "pre-merge-commit",
+          "pre-push",
+          "pre-rebase",
+          "prepare-commit-msg"
+        ]
+      },
+      {
+        "id": "show-cwd",
+        "name": "Show CWD",
+        "project": "project3",
+        "alias": "",
+        "language": "python",
+        "description": null,
+        "stages": [
+          "manual",
+          "commit-msg",
+          "post-checkout",
+          "post-commit",
+          "post-merge",
+          "post-rewrite",
+          "pre-commit",
+          "pre-merge-commit",
+          "pre-push",
+          "pre-rebase",
+          "prepare-commit-msg"
+        ]
+      },
+      {
+        "id": "show-cwd",
+        "name": "Show CWD",
+        "project": ".",
+        "alias": "",
+        "language": "python",
+        "description": null,
+        "stages": [
+          "manual",
+          "commit-msg",
+          "post-checkout",
+          "post-commit",
+          "post-merge",
+          "post-rewrite",
+          "pre-commit",
+          "pre-merge-commit",
+          "pre-push",
+          "pre-rebase",
+          "prepare-commit-msg"
+        ]
+      }
+    ]
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context.filters(), context.list().current_dir(cwd.join("project3")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    show-cwd
+    show-cwd
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.list().current_dir(cwd.join("project3")).arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    show-cwd
+      Name: Show CWD
+      Project: project5
+      Language: python
+      Stages: all
+
+    show-cwd
+      Name: Show CWD
+      Project: .
+      Language: python
+      Stages: all
+
+
+    ----- stderr -----
     ");
 
     Ok(())
