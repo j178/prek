@@ -10,7 +10,7 @@ use itertools::zip_eq;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
-use tracing::{debug, error, trace};
+use tracing::{debug, error};
 
 use crate::config::{self, CONFIG_FILE, Config, ManifestHook, read_config};
 use crate::fs::Simplified;
@@ -139,6 +139,31 @@ impl Project {
             return Self::from_config_file(config, None);
         }
         Self::from_directory(path)
+    }
+
+    pub(crate) fn discover(opts: DiscoverOptions) -> Result<Project, Error> {
+        let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
+
+        if let DiscoverOptions::File(config) = opts {
+            return Ok(Project::from_config_file(config, Some(git_root.clone()))?);
+        }
+
+        // Directory must be absolute
+        let DiscoverOptions::Directory(dir) = opts else {
+            unreachable!()
+        };
+
+        // TODO: add back `.pre-commit-config.yml` support
+        // Walk from the given path up to the git root, to find the project root.
+        let workspace_root = dir
+            .ancestors()
+            .take_while(|p| git_root.parent().map(|root| *p != root).unwrap_or(true))
+            .find(|p| p.join(CONFIG_FILE).is_file())
+            .ok_or(MissingPreCommitConfig)?
+            .to_path_buf();
+
+        debug!("Found project root at {}", workspace_root.user_display());
+        Ok(Project::from_directory(&workspace_root)?)
     }
 
     fn with_relative_path(&mut self, relative_path: PathBuf) {
@@ -363,20 +388,20 @@ impl Workspace {
         }
 
         // Directory must be absolute
-        let DiscoverOptions::Directory(path) = opts else {
+        let DiscoverOptions::Directory(dir) = opts else {
             unreachable!()
         };
 
         // TODO: add back `.pre-commit-config.yml` support
         // Walk from the given path up to the git root, to find the workspace root.
-        let workspace_root = path
+        let workspace_root = dir
             .ancestors()
             .take_while(|p| git_root.parent().map(|root| *p != root).unwrap_or(true))
             .find(|p| p.join(CONFIG_FILE).is_file())
             .ok_or(MissingPreCommitConfig)?
             .to_path_buf();
 
-        trace!("Found workspace root at {}", workspace_root.user_display());
+        debug!("Found workspace root at {}", workspace_root.user_display());
 
         // Then walk subdirectories to find all projects.
         let projects = Mutex::new(Ok(Vec::new()));
