@@ -561,21 +561,26 @@ impl Workspace {
             .collect::<Vec<_>>();
         let non_staged = git::files_not_staged(&config_files).await?;
 
+        let git_root = GIT_ROOT.as_ref()?;
         if !non_staged.is_empty() {
-            if non_staged.len() == 1 {
-                anyhow::bail!(
+            let non_staged = non_staged
+                .into_iter()
+                .map(|p| git_root.join(p))
+                .collect::<Vec<_>>();
+            match non_staged.as_slice() {
+                [filename] => anyhow::bail!(
                     "prek configuration file is not staged, run `{}` to stage it",
-                    format!("git add {}", non_staged[0].user_display()).cyan()
-                )
+                    format!("git add {}", filename.user_display()).cyan()
+                ),
+                _ => anyhow::bail!(
+                    "The following configuration files are not staged, `git add` them first:\n{}",
+                    non_staged
+                        .iter()
+                        .map(|p| format!("  {}", p.user_display()))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                ),
             }
-            anyhow::bail!(
-                "The following configuration files are not staged, `git add` them first:\n{}",
-                non_staged
-                    .iter()
-                    .map(|p| format!("  {}", p.user_display()))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            )
         }
 
         Ok(())
