@@ -27,12 +27,12 @@ while also providing some additional long-requested features.
 ## Features
 
 - 🚀 A single binary with no dependencies, does not require Python or any other runtime.
-- ⚡ About [10x faster](https://github.com/j178/prek/blob/master/docs/benchmark.md) than `pre-commit` and uses only a third of disk space.
+- ⚡ About [10x faster](./docs/benchmark.md) than `pre-commit` and uses only a third of disk space.
 - 🔄 Fully compatible with the original pre-commit configurations and hooks.
+- 🏗️ Built-in support for [monorepos](./docs/workspace.md).
 - 🐍 Integration with [`uv`](https://github.com/astral-sh/uv) for managing Python virtual environments and dependencies.
 - 🛠️ Improved toolchain installations for Python, Node.js, Go, Rust and Ruby, shared between hooks.
 - 📦 Built-in implementation of some common hooks.
-- 🏗️ Built-in support for monorepos.
 
 ## How to migrate
 
@@ -57,7 +57,7 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 
 ### prek is way faster
 
-- It is about [10x faster](https://github.com/j178/prek/blob/master/docs/benchmark.md) than `pre-commit` and uses only a third of disk space.
+- It is about [10x faster](./docs/benchmark.md) than `pre-commit` and uses only a third of disk space.
 - It redesigned how hook environments and toolchains are managed, they are all shared between hooks, which reduces the disk space usage and speeds up the installation process.
 - Repositories are cloned in parallel, and hooks are installed in parallel if their dependencies are disjoint.
 - It uses [`uv`](https://github.com/astral-sh/uv) for creating Python virtualenvs and installing dependencies, which is known for its speed and efficiency.
@@ -67,7 +67,7 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 
 - No need to install Python or any other runtime, just download a single binary.
 - No hassle with your Python version or virtual environments, prek automatically installs the required Python version and creates a virtual environment for you.
-- Built-in support for workspaces (or monorepos), each subproject can have its own `.pre-commit-config.yaml` file.
+- Built-in support for [workspaces](./docs/workspace.md) (or monorepos), each subproject can have its own `.pre-commit-config.yaml` file.
 - `prek run` has some improvements over `pre-commit run`, such as:
     - `prek run --directory <dir>` runs hooks for files in the specified directory, no need to use `git ls-files -- <dir> | xargs pre-commit run --files` anymore.
     - `prek run --last-commit` runs hooks for files changed in the last commit.
