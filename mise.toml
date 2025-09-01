@@ -11,7 +11,7 @@ prek = "latest"
 
 # Toolchains used in the integration tests.
 python = [ "3.12.11"]
-node = [ "19.9.0" ]
+node = [ "22.19.0" ]
 go = [ "1.23.0" ]
 
 [tasks.lint]
