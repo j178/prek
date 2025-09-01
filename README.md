@@ -14,15 +14,12 @@
 [pre-commit](https://pre-commit.com/) is a framework to run hooks written in many languages, and it manages the
 language toolchain and dependencies for running the hooks.
 
-prek is a reimagined version of pre-commit, built in Rust.
+**prek** is a reimagined version of pre-commit, built in Rust.
 It is designed to be a faster, dependency-free and drop-in alternative for it,
 while also providing some additional long-requested features.
 
 > [!WARNING]
-> This project was previously named `prefligit`, but it has been renamed to `prek` to avoid typosquatting issues.
-
-> [!WARNING]
-> It is not production-ready yet, some subcommands and languages are still not implemented, but feel free to try it out and provide feedback.
+> prek is not production-ready yet, a few subcommands and languages are still in works. But it's already being adopted by [some projects](#who-are-using-prek), please give it a try - we'd love your feedback!
 >
 > Current supported languages are `python`, `node`, `go`, `docker`, `docker-image`, `pygrep`, `system`, `script` and `fail`.
 
