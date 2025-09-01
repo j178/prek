@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "my-monorepo"
+version = "0.1.0"
+description = "A sample monorepo demonstrating workspace mode"
+authors = [{name = "Example Author", email = "author@example.com"}]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
