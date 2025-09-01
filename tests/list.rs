@@ -59,24 +59,26 @@ fn list_verbose() {
                 verbose: true
     "});
 
-    cmd_snapshot!(context.filters(), context.list().arg("--verbose"), @r#"
+    cmd_snapshot!(context.filters(), context.list().arg("--verbose"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     check-yaml
       Name: Check YAML
+      Project: .
       Language: system
       Stages: all
 
     check-json
       Name: Check JSON
+      Project: .
       Description: Validate JSON files
       Language: system
       Stages: all
 
 
     ----- stderr -----
-    "#);
+    ");
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -102,20 +104,21 @@ fn list_verbose() {
                 alias: fmt
     "});
 
-    cmd_snapshot!(context.filters(), context.list().arg("--verbose"), @r#"
+    cmd_snapshot!(context.filters(), context.list().arg("--verbose"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     custom-formatter
       Alias: fmt
       Name: Custom Code Formatter
+      Project: .
       Description: Custom formatting tool with specific requirements
       Language: script
       Stages: pre-commit, pre-push
 
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 #[test]
@@ -296,19 +299,20 @@ fn list_with_aliases() {
     "#);
 
     // Test verbose shows alias information
-    cmd_snapshot!(context.filters(), context.list().arg("--verbose").arg("check-yaml"), @r#"
+    cmd_snapshot!(context.filters(), context.list().arg("--verbose").arg("check-yaml"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     check-yaml
       Alias: yaml-check
       Name: Check YAML
+      Project: .
       Language: system
       Stages: all
 
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 #[test]
@@ -343,14 +347,14 @@ fn list_no_config_file() {
     context.init_project();
 
     // No config file exists
-    cmd_snapshot!(context.filters(), context.list(), @r#"
+    cmd_snapshot!(context.filters(), context.list(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Config file not found: .pre-commit-config.yaml
-    "#);
+    error: No `.pre-commit-config.yaml` found in the current directory or parent directories in the repository
+    ");
 }
 
 #[test]
@@ -385,6 +389,7 @@ fn list_json_output() {
       {
         "id": "check-yaml",
         "name": "Check YAML",
+        "project": ".",
         "alias": "yaml-check",
         "language": "system",
         "description": null,
@@ -405,6 +410,7 @@ fn list_json_output() {
       {
         "id": "check-json",
         "name": "Check JSON",
+        "project": ".",
         "alias": "",
         "language": "system",
         "description": "Validate JSON files",
@@ -436,6 +442,7 @@ fn list_json_output() {
       {
         "id": "check-json",
         "name": "Check JSON",
+        "project": ".",
         "alias": "",
         "language": "system",
         "description": "Validate JSON files",
