@@ -52,7 +52,9 @@ pub(crate) async fn hook_impl(
         return Ok(ExitStatus::Failure);
     }
 
-    let run_args = to_run_args(hook_type, &args).await;
+    let Some(run_args) = to_run_args(hook_type, &args).await else {
+        return Ok(ExitStatus::Success);
+    };
 
     cli::run(
         config,
@@ -72,7 +74,7 @@ pub(crate) async fn hook_impl(
     .await
 }
 
-async fn to_run_args(hook_type: HookType, args: &[OsString]) -> RunArgs {
+async fn to_run_args(hook_type: HookType, args: &[OsString]) -> Option<RunArgs> {
     let mut run_args = RunArgs::default();
 
     match hook_type {
@@ -87,6 +89,9 @@ async fn to_run_args(hook_type: HookType, args: &[OsString]) -> RunArgs {
                 run_args.all_files = push_info.all_files;
                 run_args.extra.remote_branch = push_info.remote_branch;
                 run_args.extra.local_branch = push_info.local_branch;
+            } else {
+                // Nothing to push
+                return None;
             }
         }
         HookType::CommitMsg => {
@@ -120,7 +125,7 @@ async fn to_run_args(hook_type: HookType, args: &[OsString]) -> RunArgs {
         HookType::PostCommit | HookType::PreMergeCommit | HookType::PreCommit => {}
     }
 
-    run_args
+    Some(run_args)
 }
 
 #[derive(Debug)]
