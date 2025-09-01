@@ -5,6 +5,7 @@ use std::sync::LazyLock;
 
 use anyhow::Result;
 use itertools::Itertools;
+use rustc_hash::FxHashSet;
 use tokio::io::AsyncWriteExt;
 use tracing::warn;
 
@@ -445,4 +446,71 @@ pub(crate) async fn lfs_files<T: FromIterator<String>>(paths: &[&String]) -> Res
             })
             .collect(),
     )
+}
+
+/// Check if a git revision exists
+pub(crate) async fn rev_exists(rev: &str) -> Result<bool, Error> {
+    let output = git_cmd("check if revision exists")?
+        .arg("rev-list")
+        .arg("--quiet")
+        .arg(rev)
+        .check(false)
+        .output()
+        .await?;
+    Ok(output.status.success())
+}
+
+/// Get commits that are ancestors of the given commit but not in the specified remote
+pub(crate) async fn get_ancestors_not_in_remote(
+    local_sha: &str,
+    remote_name: &str,
+) -> Result<Vec<String>, Error> {
+    let output = git_cmd("get ancestors not in remote")?
+        .arg("rev-list")
+        .arg(local_sha)
+        .arg("--topo-order")
+        .arg("--reverse")
+        .arg("--not")
+        .arg(format!("--remotes={remote_name}"))
+        .check(true)
+        .output()
+        .await?;
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .lines()
+        .map(ToString::to_string)
+        .collect())
+}
+
+/// Get root commits (commits with no parents) for the given commit
+pub(crate) async fn get_root_commits(local_sha: &str) -> Result<FxHashSet<String>, Error> {
+    let output = git_cmd("get root commits")?
+        .arg("rev-list")
+        .arg("--max-parents=0")
+        .arg(local_sha)
+        .check(true)
+        .output()
+        .await?;
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .lines()
+        .map(ToString::to_string)
+        .collect())
+}
+
+/// Get the parent commit of the given commit
+pub(crate) async fn get_parent_commit(commit: &str) -> Result<Option<String>, Error> {
+    let output = git_cmd("get parent commit")?
+        .arg("rev-parse")
+        .arg(format!("{commit}^"))
+        .check(false)
+        .output()
+        .await?;
+    if output.status.success() {
+        Ok(Some(
+            String::from_utf8_lossy(&output.stdout).trim().to_string(),
+        ))
+    } else {
+        Ok(None)
+    }
 }
