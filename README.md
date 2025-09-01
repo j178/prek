@@ -26,7 +26,7 @@ while also providing some additional long-requested features.
 ## Features
 
 - 🚀 A single binary with no dependencies, does not require Python or any other runtime.
-- ⚡ About [10x faster](https://github.com/j178/prek/blob/master/docs/benchmark.md) than `pre-commit` and uses only a third of disk space.
+- ⚡ About [10x faster](./docs/benchmark.md) than `pre-commit` and uses only a third of disk space.
 - 🔄 Fully compatible with the original pre-commit configurations and hooks.
 - 🏗️ Built-in support for monorepos (i.e. [workspace mode](https://github.com/j178/prek/blob/master/docs/workspace.md)).
 - 🐍 Integration with [`uv`](https://github.com/astral-sh/uv) for managing Python virtual environments and dependencies.
@@ -56,7 +56,7 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 
 ### prek is way faster
 
-- It is about [10x faster](https://github.com/j178/prek/blob/master/docs/benchmark.md) than `pre-commit` and uses only a third of disk space.
+- It is about [10x faster](./docs/benchmark.md) than `pre-commit` and uses only a third of disk space.
 - It redesigned how hook environments and toolchains are managed, they are all shared between hooks, which reduces the disk space usage and speeds up the installation process.
 - Repositories are cloned in parallel, and hooks are installed in parallel if their dependencies are disjoint.
 - It uses [`uv`](https://github.com/astral-sh/uv) for creating Python virtualenvs and installing dependencies, which is known for its speed and efficiency.
