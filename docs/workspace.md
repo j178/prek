@@ -21,11 +21,13 @@ When you run `prek run` without the `--config` option, `prek` automatically disc
 
 3. **Git repository boundary**: The search stops at the git repository root (`.git` directory) to avoid including unrelated projects.
 
+**Note**: The workspace root is not necessarily the same as the git repository root, a workspace can exist within a subdirectory of a git repository.
+
 ## Project Organization
 
 ### Example Structure
 
-```
+```text
 my-monorepo/
 ├── .pre-commit-config.yaml          # Workspace root config
 ├── .git/
@@ -74,6 +76,47 @@ Projects are executed from **deepest to shallowest**:
 5. `my-monorepo/` (root, last)
 
 This ensures that more specific configurations (deeper projects) take precedence over general ones.
+
+**Note**: Files in subprojects will be processed multiple times - once for each project in the hierarchy that contains them. For example, a file in `src/backend/` will be checked by hooks in `src/backend/`, then `src/`, then the workspace root.
+
+### Example Output
+
+When running `prek run` on the example structure above, you might see output like this:
+
+```console
+$ prek run
+Running hooks for `src/backend`:
+check python ast.........................................................Passed
+check for merge conflicts................................................Passed
+black....................................................................Passed
+isort....................................................................Passed
+
+Running hooks for `docs`:
+Markdownlint.........................................(unimplemented yet)Skipped
+
+Running hooks for `frontend`:
+prettier.................................................................Passed
+
+Running hooks for `src`:
+isort....................................................................Passed
+mypy.....................................................................Passed
+check python ast.........................................................Passed
+check docstring is first.................................................Passed
+
+Running hooks for `.`:
+fix end of files.........................................................Passed
+check yaml...............................................................Passed
+check for added large files..............................................Passed
+trim trailing whitespace.................................................Passed
+check for merge conflicts................................................Passed
+```
+
+Notice how:
+
+- Files in `src/backend/` are processed by both the `src/backend/` project and the `src/` project
+- Each project runs in its own working directory
+- The workspace root processes all files in the entire workspace
+- Projects are executed from deepest to shallowest as described in the execution order
 
 ## Command Line Usage
 
@@ -129,7 +172,7 @@ prek run --config .pre-commit-config.yaml
 prek run -vvv
 
 # Check file collection for specific project
-cd project/dir && prek run -vvv
+prek run -C project/dir -vvv
 ```
 
 ## Migration from Single Config
