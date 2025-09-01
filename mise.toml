@@ -10,7 +10,7 @@ cargo-insta = "latest"
 prek = "latest"
 
 # Toolchains used in the integration tests.
-python = [ "3.12.11"]
+python = [ "3.13.7"]
 node = [ "19.9.0" ]
 go = [ "1.23.0" ]
 
