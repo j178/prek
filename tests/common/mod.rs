@@ -349,6 +349,8 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
     // Time seconds
     (r"(\d+\.)?\d+(ms|s)", "[TIME]"),
+    // Windows shebang interpreter
+    (r"#!/bin/sh", "#!/usr/bin/env bash"),
 ];
 
 #[allow(unused_macros)]
