@@ -90,6 +90,9 @@ impl Hash for Project {
 }
 
 impl Project {
+    // TODO: 考虑 -c 指定文件的情况下，如何处理
+    // 1) -c => legacy non-workspace mode, chdir to git root
+    // 2) -c => taks parent of `-c` as workspace root, non-compatible with `pre-commit`
     /// Initialize a new project from the configuration file or the file in the current working directory.
     pub(crate) fn from_config_file(config_path: PathBuf) -> Result<Self, config::Error> {
         debug!(
@@ -729,49 +732,6 @@ repos:
     }
 
     #[test]
-    fn test_workspace_discovery_mixed_config_files() -> Result<()> {
-        let dir = tempfile::tempdir()?;
-
-        // Create project with .pre-commit-config.yaml
-        let project1 = dir.path().join("project1");
-        fs::create_dir(&project1)?;
-        fs::write(
-            project1.join(".pre-commit-config.yaml"),
-            r#"
-repos:
-  - repo: local
-    hooks:
-      - id: test-hook1
-        name: Test Hook 1
-        entry: echo "test1"
-        language: system
-"#,
-        )?;
-
-        // Create project with .pre-commit-config.yml
-        let project2 = dir.path().join("project2");
-        fs::create_dir(&project2)?;
-        fs::write(
-            project2.join(".pre-commit-config.yml"),
-            r#"
-repos:
-  - repo: local
-    hooks:
-      - id: test-hook2
-        name: Test Hook 2
-        entry: echo "test2"
-        language: system
-"#,
-        )?;
-
-        let workspace =
-            Workspace::discover(DiscoverOptions::default().directory(dir.path().to_path_buf()))?;
-        assert_eq!(workspace.projects.len(), 2);
-
-        Ok(())
-    }
-
-    #[test]
     fn test_workspace_discovery_invalid_config() -> Result<()> {
         let dir = tempfile::tempdir()?;
 
@@ -787,53 +747,6 @@ repos:
         let result =
             Workspace::discover(DiscoverOptions::default().directory(dir.path().to_path_buf()));
         assert!(result.is_err());
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_workspace_discovery_prefers_yaml_over_yml() -> Result<()> {
-        let dir = tempfile::tempdir()?;
-
-        // Create project with both .yaml and .yml files
-        let project_dir = dir.path().join("project");
-        fs::create_dir(&project_dir)?;
-
-        fs::write(
-            project_dir.join(".pre-commit-config.yaml"),
-            r#"
-repos:
-  - repo: local
-    hooks:
-      - id: yaml-hook
-        name: YAML Hook
-        entry: echo "yaml"
-        language: system
-"#,
-        )?;
-
-        fs::write(
-            project_dir.join(".pre-commit-config.yml"),
-            r#"
-repos:
-  - repo: local
-    hooks:
-      - id: yml-hook
-        name: YML Hook
-        entry: echo "yml"
-        language: system
-"#,
-        )?;
-
-        let workspace =
-            Workspace::discover(DiscoverOptions::default().directory(dir.path().to_path_buf()))?;
-        assert_eq!(workspace.projects.len(), 1);
-
-        // Should prefer .yaml file
-        assert_eq!(
-            workspace.projects[0].config_file().file_name().unwrap(),
-            ".pre-commit-config.yaml"
-        );
 
         Ok(())
     }

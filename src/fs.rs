@@ -186,17 +186,16 @@ pub(crate) fn normalize_path(path: PathBuf) -> PathBuf {
 /// Normalizes a path to use `/` as a separator everywhere, even on platforms
 /// that recognize other characters as separators.
 #[cfg(not(unix))]
-pub(crate) fn normalize_path(mut path: PathBuf) -> PathBuf {
+pub(crate) fn normalize_path(path: PathBuf) -> PathBuf {
     use std::ffi::OsString;
-    use std::os::windows::ffi::OsStringExt;
     use std::path::is_separator;
 
     let mut path = path.into_os_string().into_encoded_bytes();
-    for i in 0..path.len() {
-        if path[i] == b'/' || !is_separator(char::from(path[i])) {
+    for c in &mut path {
+        if *c == b'/' || !is_separator(char::from(c)) {
             continue;
         }
-        path[i] = b'/';
+        *c = b'/';
     }
 
     let os_str = OsString::from(String::from_utf8_lossy(&path).to_string());
