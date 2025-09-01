@@ -171,6 +171,16 @@ pub(crate) struct GlobalArgs {
     #[arg(global = true, short, long, value_parser)]
     pub(crate) config: Option<PathBuf>,
 
+    /// Change to directory before running.
+    #[arg(
+        global = true,
+        short = 'C',
+        long,
+        value_name = "DIR",
+        value_hint = ValueHint::DirPath,
+    )]
+    pub(crate) cd: Option<PathBuf>,
+
     /// Whether to use color in output.
     #[arg(
         global = true,

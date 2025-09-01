@@ -134,6 +134,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         cli.command = Some(Command::Run(Box::new(cli.run_args.clone())));
     }
 
+    if let Some(dir) = cli.globals.cd.as_ref() {
+        std::env::set_current_dir(dir)?;
+    }
+
     debug!("prek: {}", version::version());
 
     macro_rules! show_settings {
