@@ -1,0 +1,7 @@
+repos:
+  - repo: https://github.com/markdownlint/markdownlint
+    rev: v0.13.0
+    hooks:
+      - id: markdownlint
+
+files: \.(md)$
