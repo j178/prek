@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.5
+
+### Enhancements
+
+- Implement `pre-push` hook type ([#598](https://github.com/j178/prek/pull/598))
+- Implement `pre-commit-hooks:check_yaml` as builtin hook ([#557](https://github.com/j178/prek/pull/557))
+- Implement `pre-commit-hooks:check-toml` as builtin hook ([#564](https://github.com/j178/prek/pull/564))
+- Add validation for file type tags ([#565](https://github.com/j178/prek/pull/565))
+- Ignore NotFound error in extracting metadata log ([#597](https://github.com/j178/prek/pull/597))
+
+### Documentation
+
+- Update project status ([#578](https://github.com/j178/prek/pull/578))
+
+### Other changes
+
+- Bump tracing-subscriber to 0.3.20 ([#567](https://github.com/j178/prek/pull/567))
+- Remove color from trace log ([#580](https://github.com/j178/prek/pull/580))
+
 ## 0.1.4
 
 ### Enhancements
