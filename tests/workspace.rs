@@ -277,7 +277,9 @@ fn list() -> Result<()> {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--output-format=json"), @r#"
+    let mut filters = context.filters();
+    filters.push((r"\\/", "/")); // Normalize Windows path separators in JSON output
+    cmd_snapshot!(filters, context.list().arg("--output-format=json"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
