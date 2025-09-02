@@ -1,7 +1,7 @@
+use rustc_hash::FxHashMap;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use rustc_hash::FxHashMap;
 
 use anyhow::{Context, Result};
 use bstr::ByteSlice;
@@ -29,12 +29,6 @@ struct Revision {
     frozen: Option<String>,
 }
 
-struct RepoUpdateInfo<'a> {
-    project: &'a Project,
-    repo_index: usize,
-    remote_repo: &'a RemoteRepo,
-}
-
 pub(crate) async fn auto_update(
     config: Option<PathBuf>,
     filter_repos: Vec<String>,
@@ -45,15 +39,17 @@ pub(crate) async fn auto_update(
 ) -> Result<ExitStatus> {
     let workspace = Workspace::discover(DiscoverOptions::from_args(config, &CWD))?;
 
-    let mut repo_updates = Vec::new();
+    // Collect repos and deduplicate by RemoteRepo
+    #[allow(clippy::mutable_key_type)]
+    let mut repo_updates: FxHashMap<&RemoteRepo, Vec<(&Project, usize)>> = FxHashMap::default();
+
     for project in workspace.projects() {
         for (repo_index, repo) in project.config().repos.iter().enumerate() {
             if let Repo::Remote(remote_repo) = repo {
-                repo_updates.push(RepoUpdateInfo {
-                    project,
-                    repo_index,
-                    remote_repo,
-                });
+                repo_updates
+                    .entry(remote_repo)
+                    .or_default()
+                    .push((project, repo_index));
             }
         }
     }
@@ -69,74 +65,82 @@ pub(crate) async fn auto_update(
 
     let reporter = AutoUpdateReporter::from(printer);
 
-    let mut tasks = futures::stream::iter(repo_updates.iter().enumerate().filter(|(_, update)| {
+    let mut tasks = futures::stream::iter(repo_updates.iter().filter(|(remote_repo, _)| {
         // Filter by user specified repositories
         if filter_repos.is_empty() {
             true
         } else {
-            filter_repos.iter().any(|r| r == update.remote_repo.repo.as_str())
+            filter_repos.iter().any(|r| r == remote_repo.repo.as_str())
         }
     }))
-    .map(async |(idx, update)| {
-        let progress = reporter.on_update_start(&update.remote_repo.to_string());
+    .map(async |(remote_repo, _)| {
+        let progress = reporter.on_update_start(&remote_repo.to_string());
 
-        let result = update_repo(update.remote_repo, bleeding_edge, freeze).await;
+        let result = update_repo(remote_repo, bleeding_edge, freeze).await;
 
         reporter.on_update_complete(progress);
 
-        (idx, result)
+        (*remote_repo, result)
     })
     .buffer_unordered(jobs)
     .collect::<Vec<_>>()
     .await;
 
-    tasks.sort_by_key(|(idx, _)| *idx);
+    // Sort tasks by repository URL for consistent output order
+    tasks.sort_by(|(a, _), (b, _)| a.repo.cmp(&b.repo));
 
     reporter.on_complete();
 
     // Group results by project config file
-    let mut project_updates: FxHashMap<&Path, (Vec<&RemoteRepo>, Vec<Option<Revision>>)> = FxHashMap::default();
+    let mut project_updates: FxHashMap<&Path, (Vec<&RemoteRepo>, Vec<Option<Revision>>)> =
+        FxHashMap::default();
     let mut failure = false;
 
-    for (idx, result) in tasks {
-        let update = &repo_updates[idx];
-        let old = update.remote_repo;
-        
+    for (remote_repo, result) in tasks {
         match result {
-            Ok(new) => {
-                if old.rev == new.rev {
+            Ok(new_rev) => {
+                if remote_repo.rev == new_rev.rev {
                     writeln!(
                         printer.stdout(),
                         "[{}] already up to date",
-                        old.repo.as_str().yellow()
+                        remote_repo.repo.as_str().yellow()
                     )?;
                 } else {
                     writeln!(
                         printer.stdout(),
                         "[{}] updating {} -> {}",
-                        old.repo.as_str().cyan(),
-                        old.rev,
-                        new.rev
+                        remote_repo.repo.as_str().cyan(),
+                        remote_repo.rev,
+                        new_rev.rev
                     )?;
                 }
-                
-                // Initialize the vectors for this project if not already done
-                let (remote_repos, revisions) = project_updates
-                    .entry(update.project.config_file())
-                    .or_insert_with(|| {
-                        let remote_repos: Vec<&RemoteRepo> = update.project.config().repos.iter()
-                            .filter_map(|repo| match repo {
-                                Repo::Remote(remote) => Some(remote),
-                                _ => None,
-                            })
-                            .collect();
-                        let revisions = vec![None; remote_repos.len()];
-                        (remote_repos, revisions)
-                    });
-                
-                // Find the index of this remote repo within the project's remote repos
-                if let Some(remote_index) = remote_repos.iter().position(|r| std::ptr::eq(*r, update.remote_repo)) {
-                    revisions[remote_index] = Some(new);
+
+                // Apply this update to all projects that reference this repo
+                if let Some(projects) = repo_updates.get(&remote_repo) {
+                    for (project, _repo_index) in projects {
+                        let (remote_repos, revisions) = project_updates
+                            .entry(project.config_file())
+                            .or_insert_with(|| {
+                                let remote_repos: Vec<&RemoteRepo> = project
+                                    .config()
+                                    .repos
+                                    .iter()
+                                    .filter_map(|repo| match repo {
+                                        Repo::Remote(remote) => Some(remote),
+                                        _ => None,
+                                    })
+                                    .collect();
+                                let revisions = vec![None; remote_repos.len()];
+                                (remote_repos, revisions)
+                            });
+
+                        // Find the index of this remote repo within the project's remote repos
+                        if let Some(remote_index) =
+                            remote_repos.iter().position(|r| *r == remote_repo)
+                        {
+                            revisions[remote_index] = Some(new_rev.clone());
+                        }
+                    }
                 }
             }
             Err(e) => {
@@ -144,7 +148,7 @@ pub(crate) async fn auto_update(
                 writeln!(
                     printer.stderr(),
                     "[{}] update failed: {e}",
-                    old.repo.as_str().red()
+                    remote_repo.repo.as_str().red()
                 )?;
             }
         }
@@ -152,7 +156,7 @@ pub(crate) async fn auto_update(
 
     // Update each project config file
     for (config_path, (_, revisions)) in project_updates {
-        let has_changes = revisions.iter().any(|r| r.is_some());
+        let has_changes = revisions.iter().any(Option::is_some);
         if has_changes {
             write_new_config(config_path, &revisions).await?;
         }

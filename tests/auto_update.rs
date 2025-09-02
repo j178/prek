@@ -663,7 +663,8 @@ fn auto_update_workspace() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
-    let repo1_path = create_local_git_repo(&context, "workspace-repo1", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
+    let repo1_path =
+        create_local_git_repo(&context, "workspace-repo1", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
     let repo2_path = create_local_git_repo(&context, "workspace-repo2", &["v1.0.0", "v1.5.0"])?;
     let repo3_path = create_local_git_repo(&context, "workspace-repo3", &["v2.0.0"])?;
 
@@ -672,7 +673,10 @@ fn auto_update_workspace() -> Result<()> {
         "repos: []", // Minimal valid config for root
     )?;
 
-    context.work_dir().child("project-a/.pre-commit-config.yaml").write_str(&indoc::formatdoc! {r"
+    context
+        .work_dir()
+        .child("project-a/.pre-commit-config.yaml")
+        .write_str(&indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -684,7 +688,10 @@ fn auto_update_workspace() -> Result<()> {
               - id: another-hook
     ", repo1_path, repo2_path})?;
 
-    context.work_dir().child("project-b/.pre-commit-config.yaml").write_str(&indoc::formatdoc! {r"
+    context
+        .work_dir()
+        .child("project-b/.pre-commit-config.yaml")
+        .write_str(&indoc::formatdoc! {r"
         repos:
           - repo: {}
             rev: v1.0.0
@@ -700,17 +707,16 @@ fn auto_update_workspace() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/workspace-repo1] updating v1.0.0 -> v2.0.0
     [[HOME]/test-repos/workspace-repo2] updating v1.0.0 -> v1.5.0
-    [[HOME]/test-repos/workspace-repo2] updating v1.0.0 -> v1.5.0
     [[HOME]/test-repos/workspace-repo3] already up to date
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
