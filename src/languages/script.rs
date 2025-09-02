@@ -4,7 +4,6 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use crate::cli::reporter::HookInstallReporter;
-use crate::fs::CWD;
 use crate::hook::Hook;
 use crate::hook::InstalledHook;
 use crate::languages::{LanguageImpl, resolve_command};
@@ -38,8 +37,8 @@ impl LanguageImpl for Script {
         // For `language: script`, the `entry[0]` is a script path.
         // For remote hooks, the path is relative to the repo root.
         // For local hooks, the path is relative to the current working directory.
-        // TODO: In workspace mode, local hooks should be relative to the project root.
-        let repo_path = hook.repo_path().unwrap_or_else(|| CWD.as_path());
+
+        let repo_path = hook.repo_path().unwrap_or(hook.work_dir());
         let mut split = hook.entry.split()?;
 
         let cmd = repo_path.join(&split[0]);
