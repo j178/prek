@@ -576,7 +576,7 @@ impl InstallInfo {
 
     pub fn matches(&self, hook: &Hook) -> bool {
         self.language == hook.language
-            && self.dependencies.is_superset(hook.dependencies())
+            && &self.dependencies == hook.dependencies()
             && hook.language_request.satisfied_by(self)
     }
 }

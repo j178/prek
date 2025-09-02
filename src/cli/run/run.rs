@@ -1,7 +1,6 @@
-use std::cmp::{Reverse, max};
+use std::cmp::max;
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use std::hash::Hash;
 use std::io::Write;
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -329,78 +328,67 @@ pub async fn install_hooks(
 
     // Group hooks by language to enable parallel installation across different languages.
     for (_, hooks) in hooks_by_language {
-        // Partition hooks into non-overlapping sets based on their dependencies.
-        // This allows us to install hooks that have no overlapping dependencies in parallel,
-        // while ensuring that hooks with overlapping dependencies are installed sequentially.
-        let partitions = partition_overlapping_sets(&hooks);
+        let installed_hooks = installed_hooks.clone();
 
-        for mut hooks in partitions {
-            let installed_hooks = installed_hooks.clone();
+        group_futures.push(async move {
+            let mut hook_envs = Vec::with_capacity(hooks.len());
+            let mut newly_installed = Vec::new();
 
-            // Install hooks from the one with most dependencies to the least dependencies,
-            // the later hooks can reuse the environment of the earlier ones.
-            hooks.sort_unstable_by_key(|h| Reverse(h.dependencies().len()));
-
-            group_futures.push(async move {
-                let mut hook_envs = Vec::with_capacity(hooks.len());
-                let mut newly_installed = Vec::new();
-
-                for hook in hooks {
-                    // Find a matching installed hook environment.
-                    if let Some(info) = installed_hooks
-                        .iter()
-                        .chain(newly_installed.iter().filter_map(|h| {
-                            if let InstalledHook::Installed { info, .. } = h {
-                                Some(info.as_ref())
-                            } else {
-                                None
-                            }
-                        }))
-                        .find(|info| info.matches(&hook))
-                    {
-                        debug!(
-                            "Found installed environment for hook `{}` at `{}`",
-                            &hook,
-                            info.env_path.display()
-                        );
-                        hook_envs.push(InstalledHook::Installed {
-                            hook: Arc::new(hook),
-                            info: Arc::new(info.clone()),
-                        });
-                        continue;
-                    }
-
-                    let hook = Arc::new(hook);
-                    debug!("No matching environment found for hook `{hook}`, installing...");
-
-                    let installed_hook = hook
-                        .language
-                        .install(hook.clone(), store, reporter)
-                        .await
-                        .context(format!("Failed to install hook `{hook}`"))?;
-
-                    installed_hook
-                        .mark_as_installed(store)
-                        .await
-                        .context(format!("Failed to mark hook `{hook}` as installed"))?;
-
-                    match &installed_hook {
-                        InstalledHook::Installed { info, .. } => {
-                            debug!("Installed hook `{hook}` in `{}`", info.env_path.display());
+            for hook in hooks {
+                // Find a matching installed hook environment.
+                if let Some(info) = installed_hooks
+                    .iter()
+                    .chain(newly_installed.iter().filter_map(|h| {
+                        if let InstalledHook::Installed { info, .. } = h {
+                            Some(info.as_ref())
+                        } else {
+                            None
                         }
-                        InstalledHook::NoNeedInstall { .. } => {
-                            debug!("Hook `{hook}` does not need installation");
-                        }
-                    }
-
-                    newly_installed.push(installed_hook);
+                    }))
+                    .find(|info| info.matches(&hook))
+                {
+                    debug!(
+                        "Found installed environment for hook `{}` at `{}`",
+                        &hook,
+                        info.env_path.display()
+                    );
+                    hook_envs.push(InstalledHook::Installed {
+                        hook: Arc::new(hook),
+                        info: Arc::new(info.clone()),
+                    });
+                    continue;
                 }
 
-                // Add newly installed hooks to the list.
-                hook_envs.extend(newly_installed);
-                anyhow::Ok(hook_envs)
-            });
-        }
+                let hook = Arc::new(hook);
+                debug!("No matching environment found for hook `{hook}`, installing...");
+
+                let installed_hook = hook
+                    .language
+                    .install(hook.clone(), store, reporter)
+                    .await
+                    .context(format!("Failed to install hook `{hook}`"))?;
+
+                installed_hook
+                    .mark_as_installed(store)
+                    .await
+                    .context(format!("Failed to mark hook `{hook}` as installed"))?;
+
+                match &installed_hook {
+                    InstalledHook::Installed { info, .. } => {
+                        debug!("Installed hook `{hook}` in `{}`", info.env_path.display());
+                    }
+                    InstalledHook::NoNeedInstall { .. } => {
+                        debug!("Hook `{hook}` does not need installation");
+                    }
+                }
+
+                newly_installed.push(installed_hook);
+            }
+
+            // Add newly installed hooks to the list.
+            hook_envs.extend(newly_installed);
+            anyhow::Ok(hook_envs)
+        });
     }
 
     while let Some(result) = group_futures.next().await {
@@ -415,59 +403,6 @@ pub async fn install_hooks(
     );
 
     Ok(new_installed)
-}
-
-fn sets_disjoint<T>(set1: &FxHashSet<T>, set2: &FxHashSet<T>) -> bool
-where
-    T: Eq + Hash,
-{
-    // Special case: empty sets overlap with each other
-    if set1.is_empty() && set2.is_empty() {
-        return false;
-    }
-
-    set1.is_disjoint(set2)
-}
-
-fn partition_overlapping_sets(sets: &[Hook]) -> Vec<Vec<Hook>> {
-    if sets.is_empty() {
-        return vec![];
-    }
-
-    let n = sets.len();
-    let mut visited = vec![false; n];
-    let mut groups = Vec::new();
-
-    // DFS to find all connected sets
-    #[allow(clippy::items_after_statements)]
-    fn dfs(index: usize, sets: &[Hook], visited: &mut [bool], current_group: &mut Vec<usize>) {
-        visited[index] = true;
-        current_group.push(index);
-
-        for i in 0..sets.len() {
-            if !visited[i] && !sets_disjoint(sets[index].dependencies(), sets[i].dependencies()) {
-                dfs(i, sets, visited, current_group);
-            }
-        }
-    }
-
-    // Find all connected components
-    for i in 0..n {
-        if !visited[i] {
-            let mut current_group = Vec::new();
-            dfs(i, sets, &mut visited, &mut current_group);
-
-            // Convert indices back to actual sets
-            let group_sets: Vec<Hook> = current_group
-                .into_iter()
-                .map(|idx| sets[idx].clone())
-                .collect();
-
-            groups.push(group_sets);
-        }
-    }
-
-    groups
 }
 
 struct StatusPrinter {
