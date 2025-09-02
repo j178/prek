@@ -37,19 +37,36 @@ pub(crate) async fn auto_update(
     jobs: usize,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    struct RepoInfo<'a> {
+        project: &'a Project,
+        remote_size: usize,
+        remote_index: usize,
+    }
+
     let workspace = Workspace::discover(DiscoverOptions::from_args(config, &CWD))?;
 
     // Collect repos and deduplicate by RemoteRepo
     #[allow(clippy::mutable_key_type)]
-    let mut repo_updates: FxHashMap<&RemoteRepo, Vec<(&Project, usize)>> = FxHashMap::default();
+    let mut repo_updates: FxHashMap<&RemoteRepo, Vec<RepoInfo>> = FxHashMap::default();
 
     for project in workspace.projects() {
-        for (repo_index, repo) in project.config().repos.iter().enumerate() {
+        let remote_size = project
+            .config()
+            .repos
+            .iter()
+            .filter(|r| matches!(r, Repo::Remote(_)))
+            .count();
+
+        let mut remote_index = 0;
+        for repo in &project.config().repos {
             if let Repo::Remote(remote_repo) = repo {
-                repo_updates
-                    .entry(remote_repo)
-                    .or_default()
-                    .push((project, repo_index));
+                let updates = repo_updates.entry(remote_repo).or_default();
+                updates.push(RepoInfo {
+                    project,
+                    remote_size,
+                    remote_index,
+                });
+                remote_index += 1;
             }
         }
     }
@@ -92,8 +109,8 @@ pub(crate) async fn auto_update(
     reporter.on_complete();
 
     // Group results by project config file
-    let mut project_updates: FxHashMap<&Path, (Vec<&RemoteRepo>, Vec<Option<Revision>>)> =
-        FxHashMap::default();
+    #[allow(clippy::mutable_key_type)]
+    let mut project_updates: FxHashMap<&Project, Vec<Option<Revision>>> = FxHashMap::default();
     let mut failure = false;
 
     for (remote_repo, result) in tasks {
@@ -117,29 +134,16 @@ pub(crate) async fn auto_update(
 
                 // Apply this update to all projects that reference this repo
                 if let Some(projects) = repo_updates.get(&remote_repo) {
-                    for (project, _repo_index) in projects {
-                        let (remote_repos, revisions) = project_updates
-                            .entry(project.config_file())
-                            .or_insert_with(|| {
-                                let remote_repos: Vec<&RemoteRepo> = project
-                                    .config()
-                                    .repos
-                                    .iter()
-                                    .filter_map(|repo| match repo {
-                                        Repo::Remote(remote) => Some(remote),
-                                        _ => None,
-                                    })
-                                    .collect();
-                                let revisions = vec![None; remote_repos.len()];
-                                (remote_repos, revisions)
-                            });
-
-                        // Find the index of this remote repo within the project's remote repos
-                        if let Some(remote_index) =
-                            remote_repos.iter().position(|r| *r == remote_repo)
-                        {
-                            revisions[remote_index] = Some(new_rev.clone());
-                        }
+                    for RepoInfo {
+                        project,
+                        remote_size,
+                        remote_index,
+                    } in projects
+                    {
+                        let revisions = project_updates
+                            .entry(project)
+                            .or_insert_with(|| vec![None; *remote_size]);
+                        revisions[*remote_index] = Some(new_rev.clone());
                     }
                 }
             }
@@ -155,10 +159,10 @@ pub(crate) async fn auto_update(
     }
 
     // Update each project config file
-    for (config_path, (_, revisions)) in project_updates {
+    for (project, revisions) in project_updates {
         let has_changes = revisions.iter().any(Option::is_some);
         if has_changes {
-            write_new_config(config_path, &revisions).await?;
+            write_new_config(project.config_file(), &revisions).await?;
         }
     }
 
@@ -360,6 +364,7 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
 
     for (line_no, revision) in rev_lines.iter().zip_eq(revisions) {
         let Some(revision) = revision else {
+            // This repo was not updated, skip
             continue;
         };
 

@@ -206,10 +206,14 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
             hooks:
               - id: test-hook
           - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: same-hook
+          - repo: {}
             rev: v2.0.0
             hooks:
               - id: another-hook
-    ", repo1_path, repo2_path});
+    ", repo1_path, repo1_path, repo2_path});
 
     context.git_add(".");
 
@@ -228,17 +232,21 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(".pre-commit-config.yaml"), @r#"
+            assert_snapshot!(context.read(".pre-commit-config.yaml"), @r"
             repos:
               - repo: [HOME]/test-repos/repo1
                 rev: v1.1.0
                 hooks:
                   - id: test-hook
+              - repo: [HOME]/test-repos/repo1
+                rev: v1.1.0
+                hooks:
+                  - id: same-hook
               - repo: [HOME]/test-repos/repo2
                 rev: v2.0.0
                 hooks:
                   - id: another-hook
-            "#);
+            ");
         }
     );
 
