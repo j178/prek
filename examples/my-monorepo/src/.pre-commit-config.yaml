@@ -14,4 +14,3 @@ repos:
       - id: mypy
 
 files: \.(py)$
-
