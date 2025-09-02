@@ -137,7 +137,7 @@ fn split_wheel_tag_version(mut version: Vec<u64>) -> Vec<u64> {
 mod tests {
     use super::*;
     use crate::config::Language;
-    use std::collections::HashSet;
+    use rustc_hash::FxHashSet;
     use std::path::Path;
 
     #[test]
@@ -219,7 +219,7 @@ mod tests {
     #[test]
     fn test_satisfied_by() {
         let mut install_info =
-            InstallInfo::new(Language::Python, HashSet::default(), Path::new("."));
+            InstallInfo::new(Language::Python, FxHashSet::default(), Path::new("."));
         install_info
             .with_language_version(semver::Version::new(3, 12, 1))
             .with_toolchain(PathBuf::from("/usr/bin/python3.12"));

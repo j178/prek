@@ -1,14 +1,14 @@
 use anyhow::Result;
 use futures::StreamExt;
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer};
-use std::collections::HashMap;
 
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
 #[derive(Debug)]
 enum JsonValue {
-    Object(HashMap<String, JsonValue>),
+    Object(FxHashMap<String, JsonValue>),
     Array(Vec<JsonValue>),
     String(String),
     Number(serde_json::Number),
@@ -62,7 +62,7 @@ async fn check_file(filename: &str) -> Result<(i32, Vec<u8>)> {
 // For deeply nested JSON structures, `Drop` can cause stack overflow.
 fn carefully_drop_nested_json(value: JsonValue) {
     let mut stack = vec![value];
-    let mut map = HashMap::new();
+    let mut map = FxHashMap::default();
     while let Some(value) = stack.pop() {
         match value {
             JsonValue::Array(array) => stack.extend(array),
@@ -132,7 +132,7 @@ impl<'de> Deserialize<'de> for JsonValue {
             where
                 A: MapAccess<'de>,
             {
-                let mut object = HashMap::new();
+                let mut object = FxHashMap::default();
                 while let Some(key) = map.next_key::<String>()? {
                     if object.contains_key(&key) {
                         return Err(de::Error::custom(format!("duplicate key `{key}`")));

@@ -19,13 +19,13 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
-use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::path::{Component, Path, PathBuf};
 
 use async_compression::tokio::bufread::{GzipDecoder, XzDecoder};
 use async_zip::base::read::stream::ZipFileReader;
+use rustc_hash::FxHashSet;
 use tokio::io::{AsyncRead, BufReader};
 use tokio_tar::ArchiveBuilder;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -156,7 +156,7 @@ pub async fn unzip<R: AsyncRead + Unpin>(reader: R, target: impl AsRef<Path>) ->
     let mut reader = BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let mut zip = ZipFileReader::with_tokio(&mut reader);
 
-    let mut directories = HashSet::new();
+    let mut directories = FxHashSet::default();
 
     while let Some(mut entry) = zip.next_with_entry().await? {
         // Construct the (expected) path to the file on-disk.

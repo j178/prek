@@ -256,7 +256,7 @@ mod tests {
     use super::{EXTRA_KEY_LTS, NodeRequest};
     use crate::config::Language;
     use crate::hook::InstallInfo;
-    use std::collections::HashSet;
+    use rustc_hash::FxHashSet;
     use std::path::{Path, PathBuf};
     use std::str::FromStr;
 
@@ -308,7 +308,8 @@ mod tests {
 
     #[test]
     fn test_node_request_satisfied_by() {
-        let mut install_info = InstallInfo::new(Language::Node, HashSet::default(), Path::new("."));
+        let mut install_info =
+            InstallInfo::new(Language::Node, FxHashSet::default(), Path::new("."));
         install_info
             .with_language_version(semver::Version::new(12, 18, 3))
             .with_toolchain(PathBuf::from("/usr/bin/node"))

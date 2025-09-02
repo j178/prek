@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Deref, RangeInclusive};
 use std::path::Path;
@@ -7,6 +6,7 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use fancy_regex::{self as regex, Regex};
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::fs::Simplified;
@@ -280,7 +280,7 @@ pub struct Config {
     /// Default is `[pre-commit]`.
     pub default_install_hook_types: Option<Vec<HookType>>,
     /// A mapping from language to the default `language_version`.
-    pub default_language_version: Option<HashMap<Language, String>>,
+    pub default_language_version: Option<FxHashMap<Language, String>>,
     /// A configuration-wide default for the stages property of hooks.
     /// Default to all stages.
     pub default_stages: Option<Vec<Stage>>,
@@ -295,7 +295,7 @@ pub struct Config {
     #[serde(deserialize_with = "deserialize_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
     /// Configuration for pre-commit.ci service.
-    pub ci: Option<HashMap<String, serde_yaml::Value>>,
+    pub ci: Option<FxHashMap<String, serde_yaml::Value>>,
 }
 
 #[derive(Debug, Clone, Serialize)]

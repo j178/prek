@@ -1,9 +1,10 @@
-use clap::ValueEnum;
-use owo_colors::OwoColorize;
-use serde::Serialize;
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::PathBuf;
+
+use clap::ValueEnum;
+use owo_colors::OwoColorize;
+use serde::Serialize;
 
 use crate::cli::reporter::HookInitReporter;
 use crate::cli::{ExitStatus, ListOutputFormat};
