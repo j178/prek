@@ -130,17 +130,7 @@ impl Project {
         Self::from_config_file(path.join(CONFIG_FILE), None)
     }
 
-    /// Initialize a new project from the configuration file or find it in the given path.
-    pub(crate) fn from_config_file_or_directory(
-        config: Option<PathBuf>,
-        path: &Path,
-    ) -> Result<Self, config::Error> {
-        if let Some(config) = config {
-            return Self::from_config_file(config, None);
-        }
-        Self::from_directory(path)
-    }
-
+    /// Discover a project from the give path or search from the given path to the git root.
     pub(crate) fn discover(opts: DiscoverOptions) -> Result<Project, Error> {
         let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
 
@@ -473,6 +463,10 @@ impl Workspace {
 
     pub(crate) fn root(&self) -> &Path {
         &self.root
+    }
+
+    pub(crate) fn projects(&self) -> &[Arc<Project>] {
+        &self.projects
     }
 
     /// Initialize remote repositories for all projects.
