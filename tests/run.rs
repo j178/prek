@@ -1708,3 +1708,61 @@ fn completion() {
     ----- stderr -----
     "#);
 }
+
+/// Test reusing hook environments only when dependencies are exactly same. (ignore order)
+#[test]
+fn reuse_env() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+    repos:
+      - repo: https://github.com/PyCQA/flake8
+        rev: 7.1.1
+        hooks:
+          - id: flake8
+            additional_dependencies: [flake8-errmsg]
+    "});
+
+    context
+        .work_dir()
+        .child("err.py")
+        .write_str("raise ValueError('error')\n")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    flake8...................................................................Failed
+    - hook id: flake8
+    - exit code: 1
+      err.py:1:1: EM101 Exceptions must not use a string literal; assign to a variable first
+
+    ----- stderr -----
+    ");
+
+    // Remove dependencies, so the environment should not be reused.
+    context.write_pre_commit_config(indoc::indoc! {r"
+    repos:
+      - repo: https://github.com/PyCQA/flake8
+        rev: 7.1.1
+        hooks:
+          - id: flake8
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    flake8...................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    // There should be two hook environments.
+    assert_eq!(context.home_dir().child("hooks").read_dir()?.count(), 2);
+
+    Ok(())
+}
