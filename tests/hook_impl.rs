@@ -1,10 +1,11 @@
 use std::process::Command;
 
-use assert_fs::fixture::{PathChild, PathCreateDir};
+use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use indoc::indoc;
 
-use common::TestContext;
+use constants::env_vars::EnvVars;
 
+use crate::common::TestContext;
 use crate::common::cmd_snapshot;
 
 mod common;
@@ -330,9 +331,11 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     // Create a directory without .pre-commit-config.yaml
     let empty_dir = context.work_dir().child("empty");
     empty_dir.create_dir_all()?;
+    empty_dir.child("file.txt").write_str("Some content")?;
+    context.git_add(".");
 
     // Install hook that allows missing config
-    cmd_snapshot!(context.filters(), context.install().arg("--allow-missing-config"), @r#"
+    cmd_snapshot!(context.filters(), context.install(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -344,19 +347,48 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     // Try to run hook-impl from directory without config
     let mut commit = Command::new("git");
     commit
-        .arg("commit")
         .current_dir(&empty_dir)
+        .arg("commit")
         .arg("-m")
         .arg("Test commit");
 
-    cmd_snapshot!(context.filters(), commit, @r#"
+    cmd_snapshot!(context.filters(), commit, @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     error: No `.pre-commit-config.yaml` found in the current directory or parent directories in the repository
-    "#);
+    - To temporarily silence this, run `PREK_ALLOW_NO_CONFIG=1 git ...`
+    - To permanently silence this, install hooks with the `--allow-missing-config` flag
+    - To uninstall hooks, run `prek uninstall`
+    ");
+
+    // Run with `PREK_ALLOW_NO_CONFIG=1`
+    let mut commit = Command::new("git");
+    commit
+        .current_dir(&empty_dir)
+        .env(EnvVars::PREK_ALLOW_NO_CONFIG, "1")
+        .arg("commit")
+        .arg("-m")
+        .arg("Test commit");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([("[a-f0-9]{7}", "1d5e501")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, commit, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [master (root-commit) 1d5e501] Test commit
+     1 file changed, 1 insertion(+)
+     create mode 100644 empty/file.txt
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }
