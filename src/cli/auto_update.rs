@@ -1,4 +1,3 @@
-use rustc_hash::FxHashMap;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -9,6 +8,7 @@ use fancy_regex::Regex;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use serde::Serializer;
 use serde::ser::SerializeMap;
