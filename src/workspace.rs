@@ -475,6 +475,10 @@ impl Workspace {
         &self.root
     }
 
+    pub(crate) fn projects(&self) -> &[Arc<Project>] {
+        &self.projects
+    }
+
     /// Initialize remote repositories for all projects.
     async fn init_repos(
         &mut self,
