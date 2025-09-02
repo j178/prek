@@ -39,10 +39,7 @@ async fn check_file(filename: &str) -> Result<(i32, Vec<u8>)> {
         return Ok((0, Vec::new()));
     }
 
-    let content_str =
-        std::str::from_utf8(&content).map_err(|_| anyhow::anyhow!("Invalid UTF-8"))?;
-
-    let mut deserializer = serde_json::Deserializer::from_str(content_str);
+    let mut deserializer = serde_json::Deserializer::from_slice(&content);
     deserializer.disable_recursion_limit();
     let deserializer = serde_stacker::Deserializer::new(&mut deserializer);
 
