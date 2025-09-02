@@ -7,7 +7,7 @@ use crate::common::{TestContext, cmd_snapshot};
 mod unix {
     use super::*;
 
-    use assert_fs::fixture::{FileWriteStr, PathChild};
+    use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
     use std::os::unix::fs::PermissionsExt;
 
     #[test]
@@ -40,6 +40,82 @@ mod unix {
         See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details.
         Hint: `prek autoupdate` often fixes this",
         "##);
+    }
+
+    #[test]
+    fn workspace_script_run() -> Result<()> {
+        let context = TestContext::new();
+        context.init_project();
+
+        let config = indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: script
+                name: script
+                language: script
+                entry: ./script.sh
+                verbose: true
+        "};
+        context.write_pre_commit_config(config);
+        context
+            .work_dir()
+            .child("script.sh")
+            .write_str(indoc::indoc! {r#"
+            #!/usr/bin/env bash
+            echo "Hello, World!"
+        "#})?;
+
+        let child = context.work_dir().child("child");
+        child.create_dir_all()?;
+        child.child(".pre-commit-config.yaml").write_str(config)?;
+        child.child("script.sh").write_str(indoc::indoc! {r#"
+            #!/usr/bin/env bash
+            echo "Hello, World from child!"
+        "#})?;
+
+        fs_err::set_permissions(
+            context.work_dir().child("script.sh"),
+            std::fs::Permissions::from_mode(0o755),
+        )?;
+        fs_err::set_permissions(
+            child.child("script.sh"),
+            std::fs::Permissions::from_mode(0o755),
+        )?;
+        context.git_add(".");
+
+        cmd_snapshot!(context.filters(), context.run(), @r"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        Running hooks for `child`:
+        script...................................................................Passed
+        - hook id: script
+        - duration: [TIME]
+          Hello, World from child!
+
+        Running hooks for `.`:
+        script...................................................................Passed
+        - hook id: script
+        - duration: [TIME]
+          Hello, World!
+
+        ----- stderr -----
+        ");
+
+        cmd_snapshot!(context.filters(), context.run().current_dir(&child), @r"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        script...................................................................Passed
+        - hook id: script
+        - duration: [TIME]
+          Hello, World from child!
+
+        ----- stderr -----
+        ");
+
+        Ok(())
     }
 
     #[test]
@@ -89,35 +165,35 @@ fn windows_script_run() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.write_pre_commit_config(indoc::indoc! {r"
-        repos:
-          - repo: local
-            hooks:
-              - id: echo
-                name: echo
-                language: script
-                entry: ./echo.sh
-                verbose: true
-        "});
+    repos:
+      - repo: local
+        hooks:
+          - id: echo
+            name: echo
+            language: script
+            entry: ./echo.sh
+            verbose: true
+    "});
 
     let script = context.work_dir().child("echo.sh");
     script.write_str(indoc::indoc! {r#"
-            #!/usr/bin/env python3
-            print("Hello, World!")
-        "#})?;
+        #!/usr/bin/env python3
+        print("Hello, World!")
+    "#})?;
 
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
-        success: true
-        exit_code: 0
-        ----- stdout -----
-        echo.....................................................................Passed
-        - hook id: echo
-        - duration: [TIME]
-          Hello, World!
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo.....................................................................Passed
+    - hook id: echo
+    - duration: [TIME]
+      Hello, World!
 
-        ----- stderr -----
-        "#);
+    ----- stderr -----
+    "#);
 
     Ok(())
 }
