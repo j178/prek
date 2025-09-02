@@ -59,6 +59,8 @@ pub(crate) async fn hook_impl(
             eprintln!("- To uninstall hooks, run `{}`", "prek uninstall".cyan());
             return Ok(ExitStatus::Failure);
         }
+    } else {
+        return Ok(ExitStatus::Success);
     }
 
     if !hook_type.num_args().contains(&args.len()) {
