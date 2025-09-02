@@ -29,7 +29,6 @@ use memchr::memmem::Finder;
 use serde::Deserialize;
 use tracing::trace;
 
-use crate::fs::CWD;
 use crate::hook::Hook;
 use crate::languages::version::LanguageRequest;
 
@@ -260,8 +259,7 @@ pub(crate) async fn extract_pep723_metadata(hook: &mut Hook) -> Result<()> {
         return Ok(());
     }
 
-    // TODO: In workspace mode, local hooks should be relative to the project root.
-    let repo_path = hook.repo_path().unwrap_or_else(|| CWD.as_path());
+    let repo_path = hook.repo_path().unwrap_or(hook.work_dir());
 
     let split = hook.entry.split()?;
     let file = repo_path.join(&split[0]);
