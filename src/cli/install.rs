@@ -1,6 +1,7 @@
 use std::fmt::Write as _;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::Result;
 use bstr::ByteSlice;
@@ -75,6 +76,8 @@ pub(crate) async fn install_hooks(config: Option<PathBuf>, printer: Printer) -> 
 
     let reporter = HookInitReporter::from(printer);
     let hooks = project.init_hooks(store, Some(&reporter)).await?;
+    let hooks = hooks.into_iter().map(Arc::new).collect();
+
     let reporter = HookInstallReporter::from(printer);
     run::install_hooks(hooks, store, &reporter).await?;
 

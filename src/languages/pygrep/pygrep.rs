@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use constants::env_vars::EnvVars;
-use rustc_hash::FxHashSet;
 use tokio::io::AsyncWriteExt;
 use tracing::debug;
 
@@ -102,7 +101,7 @@ impl LanguageImpl for Pygrep {
             python = Some(installed);
         } else {
             // 2) If not found, try to find a system installed Python (system or system uv managed).
-            debug!("No Python interpreter found, trying to find a system installed one");
+            debug!("No managed Python interpreter found, trying to find a system installed one");
             let mut output = uv
                 .cmd("uv python find", store)
                 .arg("python")
@@ -145,7 +144,11 @@ impl LanguageImpl for Pygrep {
             anyhow::bail!("Failed to find or install a Python interpreter for `pygrep`.");
         };
 
-        let mut info = InstallInfo::new(hook.language, FxHashSet::default(), &store.hooks_dir());
+        let mut info = InstallInfo::new(
+            hook.language,
+            hook.dependencies().clone(),
+            &store.hooks_dir(),
+        );
         info.with_toolchain(python);
 
         fs_err::tokio::create_dir_all(&info.env_path).await?;

@@ -14,6 +14,7 @@ use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::io::AsyncWriteExt;
+use tokio::sync::Semaphore;
 use tracing::{debug, trace};
 use unicode_width::UnicodeWidthStr;
 
@@ -27,7 +28,7 @@ use crate::config::{Language, Stage};
 use crate::fs::{CWD, Simplified};
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::{Printer, Stdout};
-use crate::run::USE_COLOR;
+use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::{STORE, Store};
 use crate::workspace::Project;
 use crate::{git, warn_user};
@@ -113,6 +114,7 @@ pub(crate) async fn run(
         .into_iter()
         .filter(|h| hook_ids.is_empty() || hook_ids.contains(&h.id) || hook_ids.contains(&h.alias))
         .filter(|h| h.stages.contains(hook_stage))
+        .map(Arc::new)
         .collect();
 
     if filtered_hooks.is_empty() {
@@ -196,7 +198,7 @@ pub(crate) async fn run(
         .into_iter()
         .map(|h| {
             if skips.contains(&h.idx) {
-                HookToRun::Skipped(Arc::new(h))
+                HookToRun::Skipped(h)
             } else {
                 // Find and remove the matching resolved hook
                 let idx = installed_hooks
@@ -308,16 +310,15 @@ fn get_skips() -> Vec<String> {
 }
 
 pub async fn install_hooks(
-    hooks: Vec<Hook>,
+    hooks: Vec<Arc<Hook>>,
     store: &Store,
     reporter: &HookInstallReporter,
 ) -> Result<Vec<InstalledHook>> {
     let num_hooks = hooks.len();
-    let mut new_installed = Vec::with_capacity(hooks.len());
-    let mut group_futures = FuturesUnordered::new();
-    // TODO: how to eliminate the Rc?
-    let installed_hooks = Rc::new(store.installed_hooks().collect::<Vec<_>>());
+    let mut installed_hooks = Vec::with_capacity(hooks.len());
+    let store_hooks = Rc::new(store.installed_hooks().collect::<Vec<_>>());
 
+    // Group hooks by language to enable parallel installation across different languages.
     let mut hooks_by_language = FxHashMap::default();
     for hook in hooks {
         hooks_by_language
@@ -326,83 +327,139 @@ pub async fn install_hooks(
             .push(hook);
     }
 
-    // Group hooks by language to enable parallel installation across different languages.
+    let mut futures = FuturesUnordered::new();
+    let semaphore = Arc::new(Semaphore::new(*CONCURRENCY));
+
     for (_, hooks) in hooks_by_language {
-        let installed_hooks = installed_hooks.clone();
+        let semaphore = semaphore.clone();
+        let partitions = partition_hooks(&hooks);
 
-        group_futures.push(async move {
-            let mut hook_envs = Vec::with_capacity(hooks.len());
-            let mut newly_installed = Vec::new();
+        for hooks in partitions {
+            let semaphore = semaphore.clone();
+            let store_hooks = store_hooks.clone();
 
-            for hook in hooks {
-                // Find a matching installed hook environment.
-                if let Some(info) = installed_hooks
-                    .iter()
-                    .chain(newly_installed.iter().filter_map(|h| {
-                        if let InstalledHook::Installed { info, .. } = h {
-                            Some(info.as_ref())
-                        } else {
-                            None
+            futures.push(async move {
+                let mut hook_envs = Vec::with_capacity(hooks.len());
+                let mut newly_installed = Vec::new();
+
+                for hook in hooks {
+                    // Find a matching installed hook environment.
+                    if let Some(info) = store_hooks
+                        .iter()
+                        .chain(newly_installed.iter().filter_map(|h| {
+                            if let InstalledHook::Installed { info, .. } = h {
+                                Some(info)
+                            } else {
+                                None
+                            }
+                        }))
+                        .find(|info| info.matches(&hook))
+                    {
+                        debug!(
+                            "Found installed environment for hook `{}` at `{}`",
+                            &hook,
+                            info.env_path.display()
+                        );
+                        hook_envs.push(InstalledHook::Installed {
+                            hook,
+                            info: info.clone(),
+                        });
+                        continue;
+                    }
+
+                    let _permit = semaphore.acquire().await.unwrap();
+                    debug!("No matching environment found for hook `{hook}`, installing...");
+
+                    let installed_hook = hook
+                        .language
+                        .install(hook.clone(), store, reporter)
+                        .await
+                        .context(format!("Failed to install hook `{hook}`"))?;
+
+                    installed_hook
+                        .mark_as_installed(store)
+                        .await
+                        .context(format!("Failed to mark hook `{hook}` as installed"))?;
+
+                    match &installed_hook {
+                        InstalledHook::Installed { info, .. } => {
+                            debug!("Installed hook `{hook}` in `{}`", info.env_path.display());
                         }
-                    }))
-                    .find(|info| info.matches(&hook))
-                {
-                    debug!(
-                        "Found installed environment for hook `{}` at `{}`",
-                        &hook,
-                        info.env_path.display()
-                    );
-                    hook_envs.push(InstalledHook::Installed {
-                        hook: Arc::new(hook),
-                        info: Arc::new(info.clone()),
-                    });
-                    continue;
+                        InstalledHook::NoNeedInstall { .. } => {
+                            debug!("Hook `{hook}` does not need installation");
+                        }
+                    }
+
+                    newly_installed.push(installed_hook);
                 }
 
-                let hook = Arc::new(hook);
-                debug!("No matching environment found for hook `{hook}`, installing...");
-
-                let installed_hook = hook
-                    .language
-                    .install(hook.clone(), store, reporter)
-                    .await
-                    .context(format!("Failed to install hook `{hook}`"))?;
-
-                installed_hook
-                    .mark_as_installed(store)
-                    .await
-                    .context(format!("Failed to mark hook `{hook}` as installed"))?;
-
-                match &installed_hook {
-                    InstalledHook::Installed { info, .. } => {
-                        debug!("Installed hook `{hook}` in `{}`", info.env_path.display());
-                    }
-                    InstalledHook::NoNeedInstall { .. } => {
-                        debug!("Hook `{hook}` does not need installation");
-                    }
-                }
-
-                newly_installed.push(installed_hook);
-            }
-
-            // Add newly installed hooks to the list.
-            hook_envs.extend(newly_installed);
-            anyhow::Ok(hook_envs)
-        });
+                // Add newly installed hooks to the list.
+                hook_envs.extend(newly_installed);
+                anyhow::Ok(hook_envs)
+            });
+        }
     }
 
-    while let Some(result) = group_futures.next().await {
-        new_installed.extend(result?);
+    while let Some(result) = futures.next().await {
+        installed_hooks.extend(result?);
     }
     reporter.on_complete();
 
     debug_assert_eq!(
         num_hooks,
-        new_installed.len(),
+        installed_hooks.len(),
         "Number of hooks installed should match the number of hooks provided"
     );
 
-    Ok(new_installed)
+    Ok(installed_hooks)
+}
+
+/// Partition hooks into groups where hooks in the same group have same dependencies.
+/// Hooks in different groups can be installed in parallel.
+fn partition_hooks(hooks: &[Arc<Hook>]) -> Vec<Vec<Arc<Hook>>> {
+    if hooks.is_empty() {
+        return vec![];
+    }
+
+    let n = hooks.len();
+    let mut visited = vec![false; n];
+    let mut groups = Vec::new();
+
+    // DFS to find all connected sets
+    #[allow(clippy::items_after_statements)]
+    fn dfs(
+        index: usize,
+        hooks: &[Arc<Hook>],
+        visited: &mut [bool],
+        current_group: &mut Vec<usize>,
+    ) {
+        visited[index] = true;
+        current_group.push(index);
+
+        for i in 0..hooks.len() {
+            if !visited[i] && hooks[index].dependencies() == hooks[i].dependencies() {
+                dfs(i, hooks, visited, current_group);
+            }
+        }
+    }
+
+    // Find all connected components
+    for i in 0..n {
+        if !visited[i] {
+            let mut current_group = Vec::new();
+            dfs(i, hooks, &mut visited, &mut current_group);
+
+            // Convert indices back to actual sets
+            let group_sets: Vec<Arc<Hook>> = current_group
+                .into_iter()
+                .map(|idx| hooks[idx].clone())
+                .collect();
+
+            groups.push(group_sets);
+        }
+    }
+
+    groups
 }
 
 struct StatusPrinter {

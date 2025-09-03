@@ -1,7 +1,7 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use anyhow::Result;
 use etcetera::BaseStrategy;
@@ -118,7 +118,7 @@ impl Store {
     }
 
     /// Returns installed hooks in the store.
-    pub(crate) fn installed_hooks(&self) -> impl Iterator<Item = InstallInfo> {
+    pub(crate) fn installed_hooks(&self) -> impl Iterator<Item = Arc<InstallInfo>> {
         fs_err::read_dir(self.hooks_dir())
             .ok()
             .into_iter()
@@ -127,7 +127,7 @@ impl Store {
             .filter_map(|entry| {
                 let path = entry.path();
                 let mut file = fs_err::File::open(path.join(".prek-hook.json")).ok()?;
-                serde_json::from_reader(&mut file).ok()
+                serde_json::from_reader(&mut file).map(Arc::new).ok()
             })
     }
 
