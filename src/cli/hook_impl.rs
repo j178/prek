@@ -76,7 +76,7 @@ pub(crate) async fn hook_impl(
 
     cli::run(
         config,
-        run_args.hook_ids,
+        run_args.selectors,
         hook_type.into(),
         run_args.from_ref,
         run_args.to_ref,
@@ -85,6 +85,7 @@ pub(crate) async fn hook_impl(
         vec![],
         false, // last_commit is always false in hook implementation context
         false,
+        run_args.skips,
         run_args.extra,
         false,
         printer,

@@ -1,5 +1,4 @@
-use std::cmp::max;
-use std::collections::BTreeSet;
+use std::cmp::{Reverse, max};
 use std::fmt::Write as _;
 use std::io::Write;
 use std::ops::Deref;
@@ -22,7 +21,7 @@ use constants::env_vars::EnvVars;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;
-use crate::cli::run::{CollectOptions, FileFilter, collect_files};
+use crate::cli::run::{CollectOptions, FileFilter, Selections, collect_files, get_skips};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, Stage};
 use crate::fs::CWD;
@@ -33,6 +32,12 @@ use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::{STORE, Store};
 use crate::workspace::{DiscoverOptions, Workspace};
 use crate::{git, warn_user};
+
+enum Selection {
+    HookId(String),
+    ProjectPath(String),
+    ProjectHook { project: String, hook: String },
+}
 
 enum HookToRun {
     Skipped(Arc<Hook>),
@@ -53,7 +58,7 @@ impl Deref for HookToRun {
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     config: Option<PathBuf>,
-    hook_ids: Vec<String>,
+    selections: Selections,
     hook_stage: Stage,
     from_ref: Option<String>,
     to_ref: Option<String>,
@@ -99,38 +104,36 @@ pub(crate) async fn run(
     let reporter = HookInitReporter::from(printer);
     let lock = store.lock_async().await?;
 
-    let hook_ids = hook_ids.into_iter().collect::<BTreeSet<_>>();
-
     let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
+
+    let hooks = hooks.into_iter().map(Arc::new).collect::<Vec<_>>();
     let filtered_hooks: Vec<_> = hooks
         .into_iter()
-        .filter(|h| hook_ids.is_empty() || hook_ids.contains(&h.id) || hook_ids.contains(&h.alias))
-        .filter(|h| h.stages.contains(hook_stage))
-        .map(Arc::new)
+        .filter(|h| h.stages.contains(hook_stage) && selections.matches_hook(h, &workspace))
         .collect();
 
     if filtered_hooks.is_empty() {
-        if hook_ids.is_empty() {
+        if selectors.is_empty() {
             writeln!(
                 printer.stderr(),
                 "{}: No hooks found for stage `{}`",
                 "error".red().bold(),
                 hook_stage.cyan()
             )?;
-        } else if hook_ids.len() == 1 {
+        } else if selectors.len() == 1 {
             writeln!(
                 printer.stderr(),
-                "{}: No hook found with id `{}` in stage `{}`",
+                "{}: No hook found with selector `{}` in stage `{}`",
                 "error".red().bold(),
-                hook_ids.iter().next().unwrap().cyan(),
+                selectors.first().unwrap().cyan(),
                 hook_stage.cyan()
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "{}: No hooks found with ids {} in stage `{}`",
+                "{}: No hooks found with selectors {} in stage `{}`",
                 "error".red().bold(),
-                hook_ids
+                selectors
                     .iter()
                     .map(|id| format!("`{}`", id.cyan()))
                     .collect::<Vec<_>>()
@@ -139,22 +142,18 @@ pub(crate) async fn run(
             )?;
         }
         return Ok(ExitStatus::Failure);
-    } else if !hook_ids.is_empty() {
-        // Warn about hook IDs that don't match any hooks
-        let matched_ids: BTreeSet<String> = filtered_hooks
+    } else if !selectors.is_empty() {
+        // Warn about selectors that don't match any hooks
+        let unmatched_ids: Vec<_> = selections
             .iter()
-            .flat_map(|h| [h.id.clone(), h.alias.clone()])
-            .collect();
-
-        let unmatched_ids: Vec<&String> = hook_ids
-            .iter()
-            .filter(|id| !matched_ids.contains(*id))
+            .filter(|s| !filtered_hooks.iter().any(|h| s.matches_hook(h, &workspace)))
             .collect();
 
         if !unmatched_ids.is_empty() {
             warn_user!(
-                "Ignored non-existent hook ID{}: {}",
+                "Ignored selector{} match{} nothing: {}",
                 if unmatched_ids.len() > 1 { "s" } else { "" },
+                if unmatched_ids.len() > 1 { "" } else { "s" },
                 unmatched_ids
                     .iter()
                     .map(|id| format!("`{}`", id.yellow()))
@@ -164,15 +163,12 @@ pub(crate) async fn run(
         }
     }
 
-    let skips = get_skips();
-    let skips = filtered_hooks
-        .iter()
-        .filter(|h| skips.contains(&h.id) || skips.contains(&h.alias))
-        .map(|h| h.idx)
-        .collect::<FxHashSet<_>>();
+    let skips = get_skips(&skips);
+    let skip_selections = Selections::parse(&skips);
+
     let to_run = filtered_hooks
         .iter()
-        .filter(|h| !skips.contains(&h.idx))
+        .filter(|h| !skip_selections.matches_hook(h, &workspace))
         .cloned()
         .collect::<Vec<_>>();
 
@@ -290,18 +286,6 @@ fn set_env_vars(from_ref: Option<&String>, to_ref: Option<&String>, args: &RunEx
         if let Some(ref command) = args.rewrite_command {
             std::env::set_var("PRE_COMMIT_REWRITE_COMMAND", command.clone());
         }
-    }
-}
-
-fn get_skips() -> Vec<String> {
-    match EnvVars::var_os(EnvVars::SKIP) {
-        Some(s) if !s.is_empty() => s
-            .to_string_lossy()
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect(),
-        _ => vec![],
     }
 }
 

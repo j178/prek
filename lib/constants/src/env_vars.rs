@@ -12,6 +12,7 @@ impl EnvVars {
     // PREK specific environment variables, public for users
     pub const PREK_HOME: &'static str = "PREK_HOME";
     pub const PREK_COLOR: &'static str = "PREK_COLOR";
+    pub const PREK_SKIP: &'static str = "PREK_SKIP";
     pub const PREK_ALLOW_NO_CONFIG: &'static str = "PREK_ALLOW_NO_CONFIG";
     pub const PREK_NO_CONCURRENCY: &'static str = "PREK_NO_CONCURRENCY";
     pub const PREK_NO_FAST_PATH: &'static str = "PREK_NO_FAST_PATH";

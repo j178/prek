@@ -19,6 +19,7 @@ use crate::cleanup::cleanup;
 use crate::cli::{Cli, Command, ExitStatus};
 #[cfg(feature = "self-update")]
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
+use crate::cli::run::Selections;
 use crate::printer::Printer;
 use crate::run::USE_COLOR;
 use crate::store::STORE;
@@ -179,9 +180,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Command::Run(args) => {
             show_settings!(args);
 
+            let selections = Selections::parse(&selectors);
+
             cli::run(
                 cli.globals.config,
-                args.hook_ids,
+                args.selectors,
                 args.hook_stage,
                 args.from_ref,
                 args.to_ref,
@@ -190,6 +193,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.directory,
                 args.last_commit,
                 args.show_diff_on_failure,
+                args.skips,
                 args.extra,
                 cli.globals.verbose > 0,
                 printer,
@@ -202,7 +206,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             cli::list(
                 cli.globals.config,
                 cli.globals.verbose > 0,
-                args.hook_ids,
+                args.selectors,
                 args.hook_stage,
                 args.language,
                 args.output_format,

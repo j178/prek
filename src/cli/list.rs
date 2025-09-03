@@ -29,7 +29,7 @@ struct SerializableHook {
 pub(crate) async fn list(
     config: Option<PathBuf>,
     verbose: bool,
-    hook_ids: Vec<String>,
+    selectors: Vec<String>,
     hook_stage: Option<Stage>,
     language: Option<Language>,
     output_format: ListOutputFormat,
@@ -44,7 +44,7 @@ pub(crate) async fn list(
     let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
     drop(lock);
 
-    let hook_ids = hook_ids.into_iter().collect::<BTreeSet<_>>();
+    let hook_ids = selectors.into_iter().collect::<BTreeSet<_>>();
     let hooks: Vec<_> = hooks
         .into_iter()
         .filter(|h| hook_ids.is_empty() || hook_ids.contains(&h.id) || hook_ids.contains(&h.alias))
