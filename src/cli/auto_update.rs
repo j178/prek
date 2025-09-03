@@ -218,6 +218,19 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
         }
     }
 
+    // Workaround for Windows: https://github.com/pre-commit/pre-commit/issues/2865,
+    // https://github.com/j178/prek/issues/614
+    if cfg!(windows) {
+        git::git_cmd("git show")?
+            .arg("show")
+            .arg(format!("{rev}:{MANIFEST_FILE}"))
+            .current_dir(tmp_dir.path())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await?;
+    }
+
     git::git_cmd("git checkout")?
         .arg("checkout")
         .arg("--quiet")
