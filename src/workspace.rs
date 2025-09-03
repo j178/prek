@@ -12,6 +12,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use tracing::{debug, error};
 
+use crate::cli::run::Selections;
 use crate::config::{self, CONFIG_FILE, Config, ManifestHook, read_config};
 use crate::fs::Simplified;
 use crate::git::GIT_ROOT;
@@ -139,7 +140,8 @@ impl Project {
         }
 
         // Directory must be absolute
-        let DiscoverOptions::Directory(dir) = opts else {
+        // TODO: use selections to skip projects when discovering
+        let DiscoverOptions::Directory { dir, selections: _ } = opts else {
             unreachable!()
         };
 
@@ -348,17 +350,34 @@ pub(crate) struct Workspace {
     projects: Vec<Arc<Project>>,
 }
 
-pub(crate) enum DiscoverOptions {
+pub(crate) enum DiscoverOptions<'a> {
     File(PathBuf),
-    Directory(PathBuf),
+    Directory {
+        dir: PathBuf,
+        selections: Option<&'a Selections>,
+    },
 }
 
-impl DiscoverOptions {
+impl<'a> DiscoverOptions<'a> {
     pub(crate) fn from_args(config: Option<PathBuf>, path: &Path) -> Self {
         if let Some(config) = config {
             Self::File(config)
         } else {
-            Self::Directory(path.to_path_buf())
+            Self::Directory {
+                dir: path.to_path_buf(),
+                selections: None,
+            }
+        }
+    }
+
+    pub(crate) fn with_selections(self, selections: &'a Selections) -> Self {
+        if let Self::Directory { dir, .. } = self {
+            Self::Directory {
+                dir,
+                selections: Some(selections),
+            }
+        } else {
+            self
         }
     }
 }
@@ -378,7 +397,8 @@ impl Workspace {
         }
 
         // Directory must be absolute
-        let DiscoverOptions::Directory(dir) = opts else {
+        // TODO: use selections to skip projects when discovering
+        let DiscoverOptions::Directory { dir, selections } = opts else {
             unreachable!()
         };
 
@@ -403,9 +423,25 @@ impl Workspace {
             .run(|| {
                 Box::new(|result| {
                     if let Ok(entry) = result {
-                        if entry.file_type().is_some_and(|t| t.is_file())
-                            && entry.file_name() == CONFIG_FILE
-                        {
+                        let Some(file_type) = entry.file_type() else {
+                            return WalkState::Continue;
+                        };
+                        if file_type.is_dir() {
+                            let Some(selections) = selections else {
+                                return WalkState::Continue;
+                            };
+                            let relative_path = entry
+                                .path()
+                                .strip_prefix(&workspace_root)
+                                .expect("Entry path should be relative to the root");
+                            if !selections.is_path_selected(relative_path) {
+                                debug!(
+                                    path = %relative_path.user_display(),
+                                    "Skipping unselected path"
+                                );
+                                return WalkState::Skip;
+                            }
+                        } else if file_type.is_file() && entry.file_name() == CONFIG_FILE {
                             match Project::from_config_file(entry.path().to_path_buf(), None) {
                                 Ok(mut project) => {
                                     let depth = entry.depth();

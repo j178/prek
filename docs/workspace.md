@@ -216,6 +216,8 @@ prek run frontend --skip frontend/docs --skip frontend:lint
 prek run --skip black --skip markdownlint
 ```
 
+**Note**: Skipping a project also skips all its subprojects.
+
 **Note**: The `PREK_SKIP` or `SKIP` environment variable can be used as an alternative to `--skip`. Multiple values should be comma-delimited:
 
 ```bash

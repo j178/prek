@@ -8,6 +8,7 @@ use owo_colors::OwoColorize;
 
 use constants::env_vars::EnvVars;
 
+use crate::cli::run::Selections;
 use crate::cli::{self, ExitStatus, RunArgs};
 use crate::config::HookType;
 use crate::fs::CWD;
@@ -74,9 +75,10 @@ pub(crate) async fn hook_impl(
         return Ok(ExitStatus::Success);
     };
 
+    let selections = Selections::from_args(&run_args.selectors, &run_args.skips)?;
     cli::run(
         config,
-        run_args.selectors,
+        selections,
         hook_type.into(),
         run_args.from_ref,
         run_args.to_ref,
@@ -85,7 +87,6 @@ pub(crate) async fn hook_impl(
         vec![],
         false, // last_commit is always false in hook implementation context
         false,
-        run_args.skips,
         run_args.extra,
         false,
         printer,

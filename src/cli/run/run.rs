@@ -1,8 +1,6 @@
-use std::cmp::{Reverse, max};
 use std::fmt::Write as _;
 use std::io::Write;
-use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, LazyLock};
 
@@ -11,7 +9,7 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use owo_colors::{OwoColorize, Style};
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Semaphore;
 use tracing::{debug, trace};
@@ -21,7 +19,7 @@ use constants::env_vars::EnvVars;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;
-use crate::cli::run::{CollectOptions, FileFilter, Selections, collect_files, get_skips};
+use crate::cli::run::{CollectOptions, FileFilter, Selections, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, Stage};
 use crate::fs::CWD;
@@ -30,30 +28,8 @@ use crate::hook::{Hook, InstalledHook};
 use crate::printer::{Printer, Stdout};
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::{STORE, Store};
-use crate::workspace::{DiscoverOptions, Workspace};
+use crate::workspace::{DiscoverOptions, Project, Workspace};
 use crate::{git, warn_user};
-
-enum Selection {
-    HookId(String),
-    ProjectPath(String),
-    ProjectHook { project: String, hook: String },
-}
-
-enum HookToRun {
-    Skipped(Arc<Hook>),
-    ToRun(Arc<InstalledHook>),
-}
-
-impl Deref for HookToRun {
-    type Target = Hook;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            HookToRun::Skipped(hook) => hook,
-            HookToRun::ToRun(hook) => hook,
-        }
-    }
-}
 
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
@@ -95,7 +71,8 @@ pub(crate) async fn run(
         anyhow::bail!("You have unmerged paths. Resolve them before running prek");
     }
 
-    let mut workspace = Workspace::discover(DiscoverOptions::from_args(config, &CWD))?;
+    let mut workspace =
+        Workspace::discover(DiscoverOptions::from_args(config, &CWD).with_selections(&selections))?;
     if should_stash {
         workspace.check_config_staged().await?;
     }
@@ -105,98 +82,87 @@ pub(crate) async fn run(
     let lock = store.lock_async().await?;
 
     let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
-
     let hooks = hooks.into_iter().map(Arc::new).collect::<Vec<_>>();
+
     let filtered_hooks: Vec<_> = hooks
         .into_iter()
-        .filter(|h| h.stages.contains(hook_stage) && selections.matches_hook(h, &workspace))
+        .filter(|h| selections.matches_hook(h, &workspace))
         .collect();
 
-    if filtered_hooks.is_empty() {
-        if selectors.is_empty() {
-            writeln!(
-                printer.stderr(),
-                "{}: No hooks found for stage `{}`",
-                "error".red().bold(),
-                hook_stage.cyan()
-            )?;
-        } else if selectors.len() == 1 {
-            writeln!(
-                printer.stderr(),
-                "{}: No hook found with selector `{}` in stage `{}`",
-                "error".red().bold(),
-                selectors.first().unwrap().cyan(),
-                hook_stage.cyan()
-            )?;
-        } else {
-            writeln!(
-                printer.stderr(),
-                "{}: No hooks found with selectors {} in stage `{}`",
-                "error".red().bold(),
-                selectors
-                    .iter()
-                    .map(|id| format!("`{}`", id.cyan()))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                hook_stage.cyan()
-            )?;
-        }
-        return Ok(ExitStatus::Failure);
-    } else if !selectors.is_empty() {
-        // Warn about selectors that don't match any hooks
-        let unmatched_ids: Vec<_> = selections
-            .iter()
-            .filter(|s| !filtered_hooks.iter().any(|h| s.matches_hook(h, &workspace)))
-            .collect();
+    // if filtered_hooks.is_empty() {
+    //     if selectors.is_empty() {
+    //         writeln!(
+    //             printer.stderr(),
+    //             "{}: No hooks found for stage `{}`",
+    //             "error".red().bold(),
+    //             hook_stage.cyan()
+    //         )?;
+    //     } else if selectors.len() == 1 {
+    //         writeln!(
+    //             printer.stderr(),
+    //             "{}: No hook found with selector `{}` in stage `{}`",
+    //             "error".red().bold(),
+    //             selectors.first().unwrap().cyan(),
+    //             hook_stage.cyan()
+    //         )?;
+    //     } else {
+    //         writeln!(
+    //             printer.stderr(),
+    //             "{}: No hooks found with selectors {} in stage `{}`",
+    //             "error".red().bold(),
+    //             selectors
+    //                 .iter()
+    //                 .map(|id| format!("`{}`", id.cyan()))
+    //                 .collect::<Vec<_>>()
+    //                 .join(", "),
+    //             hook_stage.cyan()
+    //         )?;
+    //     }
+    //     return Ok(ExitStatus::Failure);
+    // } else if !selectors.is_empty() {
+    //     // Warn about selectors that don't match anything
+    //     let unmatched_ids: Vec<_> = selections
+    //         .iter()
+    //         .filter(|s| !filtered_hooks.iter().any(|h| s.matches_hook(h, &workspace)))
+    //         .collect();
+    //
+    //     if !unmatched_ids.is_empty() {
+    //         warn_user!(
+    //             "Ignored selector{} match{} nothing: {}",
+    //             if unmatched_ids.len() > 1 { "s" } else { "" },
+    //             if unmatched_ids.len() > 1 { "" } else { "s" },
+    //             unmatched_ids
+    //                 .iter()
+    //                 .map(|id| format!("`{}`", id.yellow()))
+    //                 .collect::<Vec<_>>()
+    //                 .join(", ")
+    //         );
+    //     }
+    // }
 
-        if !unmatched_ids.is_empty() {
-            warn_user!(
-                "Ignored selector{} match{} nothing: {}",
-                if unmatched_ids.len() > 1 { "s" } else { "" },
-                if unmatched_ids.len() > 1 { "" } else { "s" },
-                unmatched_ids
-                    .iter()
-                    .map(|id| format!("`{}`", id.yellow()))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-    }
-
-    let skips = get_skips(&skips);
-    let skip_selections = Selections::parse(&skips);
-
-    let to_run = filtered_hooks
-        .iter()
-        .filter(|h| !skip_selections.matches_hook(h, &workspace))
-        .cloned()
+    let filtered_hooks = filtered_hooks
+        .into_iter()
+        .filter(|h| h.stages.contains(hook_stage))
         .collect::<Vec<_>>();
+    if filtered_hooks.is_empty() {
+        writeln!(
+            printer.stderr(),
+            "{}: No hooks found for stage `{}` after filtering",
+            "error".red().bold(),
+            hook_stage.cyan()
+        )?;
+        return Ok(ExitStatus::Failure);
+    }
 
     debug!(
         "Hooks going to run: {:?}",
-        to_run.iter().map(|h| &h.id).collect::<Vec<_>>()
+        filtered_hooks.iter().map(|h| &h.id).collect::<Vec<_>>()
     );
     let reporter = HookInstallReporter::from(printer);
-    let mut installed_hooks = install_hooks(to_run, store, &reporter).await?;
+    let installed_hooks = install_hooks(filtered_hooks, store, &reporter).await?;
 
     // Release the store lock.
     drop(lock);
-
-    let hooks = filtered_hooks
-        .into_iter()
-        .map(|h| {
-            if skips.contains(&h.idx) {
-                HookToRun::Skipped(h)
-            } else {
-                // Find and remove the matching resolved hook
-                let idx = installed_hooks
-                    .iter()
-                    .position(|r| r.idx == h.idx)
-                    .expect("Resolved hook must exist");
-                HookToRun::ToRun(Arc::new(installed_hooks.swap_remove(idx)))
-            }
-        })
-        .collect::<Vec<_>>();
 
     // Clear any unstaged changes from the git working directory.
     let mut _guard = None;
@@ -230,7 +196,7 @@ pub(crate) async fn run(
 
     run_hooks(
         &workspace,
-        &hooks,
+        &installed_hooks,
         filenames,
         store,
         show_diff_on_failure,
@@ -454,18 +420,18 @@ impl StatusPrinter {
     const NO_FILES: &'static str = "(no files to check)";
     const UNIMPLEMENTED: &'static str = "(unimplemented yet)";
 
-    fn for_hooks(hooks: &[HookToRun], printer: Printer) -> Self {
+    fn for_hooks(hooks: &[InstalledHook], printer: Printer) -> Self {
         let columns = Self::calculate_columns(hooks);
         Self { printer, columns }
     }
 
-    fn calculate_columns(hooks: &[HookToRun]) -> usize {
+    fn calculate_columns(hooks: &[InstalledHook]) -> usize {
         let name_len = hooks
             .iter()
             .map(|hook| hook.name.width_cjk())
             .max()
             .unwrap_or(0);
-        max(
+        std::cmp::max(
             80,
             name_len + 3 + Self::NO_FILES.len() + 1 + Self::SKIPPED.len(),
         )
@@ -512,7 +478,7 @@ impl StatusPrinter {
 /// Run all hooks.
 async fn run_hooks(
     workspace: &Workspace,
-    hooks: &[HookToRun],
+    hooks: &[InstalledHook],
     filenames: Vec<PathBuf>,
     store: &Store,
     show_diff_on_failure: bool,
@@ -527,10 +493,13 @@ async fn run_hooks(
     let mut diff = git::get_diff().await?;
 
     // Group hooks by project to run them in order of their depth in the workspace.
-    let mut project_to_hooks: FxHashMap<&Path, Vec<&HookToRun>> = FxHashMap::default();
+    #[allow(clippy::mutable_key_type)]
+    let mut project_to_hooks: FxHashMap<&Project, Vec<&InstalledHook>> = FxHashMap::default();
     for hook in hooks {
-        let key = hook.project().config_file();
-        project_to_hooks.entry(key).or_default().push(hook);
+        project_to_hooks
+            .entry(hook.project())
+            .or_default()
+            .push(hook);
     }
 
     // Sort projects by their depth in the workspace.
@@ -541,7 +510,9 @@ async fn run_hooks(
     let mut first = true;
 
     // Hooks might modify the files, so they must be run sequentially.
-    'outer: for (_, hooks) in project_to_hooks {
+    'outer: for (_, mut hooks) in project_to_hooks {
+        hooks.sort_by_key(|h| h.idx);
+
         let project = hooks[0].project();
         if projects_len > 1 {
             writeln!(
@@ -564,12 +535,7 @@ async fn run_hooks(
 
             success &= hook_success;
             diff = new_diff;
-            let fail_fast = fail_fast
-                || match hook {
-                    HookToRun::Skipped(_) => false,
-                    HookToRun::ToRun(hook) => hook.fail_fast,
-                };
-            if !success && fail_fast {
+            if !success && (fail_fast || hook.fail_fast) {
                 break 'outer;
             }
         }
@@ -611,21 +577,13 @@ fn shuffle<T>(filenames: &mut [T]) {
 }
 
 async fn run_hook(
-    hook: &HookToRun,
+    hook: &InstalledHook,
     filter: &FileFilter<'_>,
     store: &Store,
     diff: Vec<u8>,
     verbose: bool,
     printer: &StatusPrinter,
 ) -> Result<(bool, Vec<u8>)> {
-    let hook = match hook {
-        HookToRun::Skipped(hook) => {
-            printer.write_skipped(&hook.name, "", Style::new().black().on_yellow())?;
-            return Ok((true, diff));
-        }
-        HookToRun::ToRun(hook) => hook,
-    };
-
     let mut filenames = filter.for_hook(hook);
     trace!(
         "Files for `{}` after filtered: {}",
