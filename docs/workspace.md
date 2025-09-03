@@ -144,6 +144,18 @@ The `-C <dir>` or `--cd <dir>` option automatically changes to the specified dir
 
 In workspace mode, you can selectively run hooks from specific projects or skip certain projects/hooks using flexible selection syntax.
 
+### Selection Syntax
+
+The selection syntax consists of two optional parts separated by a colon (`:`):
+
+```text
+[<project-path>:][<hook-id>]
+```
+
+- **`<project-path>`**: Path to a project directory (relative to workspace root)
+- **`<hook-id>`**: Identifier of a hook to run
+- **Omitted parts**: When `<project-path>` is omitted, hooks are selected across all projects. When `<hook-id>` is omitted, all hooks from the specified project are selected.
+
 ### Running Specific Hooks or Projects
 
 ```bash
@@ -173,6 +185,55 @@ prek run frontend:lint
 prek run frontend:lint src/backend:black
 ```
 
+### Skipping Projects or Hooks
+
+You can skip specific projects or hooks using the `--skip` option, with the same syntax as for selecting projects or hooks.
+
+```bash
+# Skip all hooks from a specific project
+prek run --skip <project-path>
+
+# Skip specific hooks within a selected project
+prek run <project-path> --skip <subproject-path>
+
+# Skip all hooks with a specific ID across all projects
+prek run --skip <hook-id>
+```
+
+**Examples:**
+
+```bash
+# Run all hooks except those from the 'frontend' project
+prek run --skip frontend
+
+# Run hooks from 'frontend' but skip 'frontend/docs'
+prek run frontend --skip frontend/docs
+
+# Run hooks from 'frontend' but skip 'frontend/docs' and 'frontend:lint'
+prek run frontend --skip frontend/docs --skip frontend:lint
+
+# Run all hooks except 'black' and 'markdownlint' hooks
+prek run --skip black --skip markdownlint
+```
+
+**Note**: The `PREK_SKIP` or `SKIP` environment variable can be used as an alternative to `--skip`. Multiple values should be comma-delimited:
+
+```bash
+# Skip 'frontend' and 'tests' projects
+PREK_SKIP=frontend,tests prek run
+
+# Skip 'frontend/docs' project and 'src/backend:lint' hook
+SKIP=frontend/docs,src/backend:lint prek run
+```
+
+### Selection Rules
+
+- **Project paths** are relative to the workspace root
+- **Hook IDs** can be partial matches (e.g., `black` matches `black` hooks)
+- **Multiple selections** can be combined with `--skip` options
+- **Precedence**: Selections are applied in order, with `--skip` removing from the selected set
+- **Hierarchy**: Selecting a project includes all its subprojects unless explicitly skipped
+
 ### Disambiguation Syntax
 
 When a project path conflicts with a hook ID (e.g., you have both a project named `lint` and a hook named `lint`), you can use special syntax to disambiguate:
@@ -199,48 +260,6 @@ prek run ./lint
 - `:` prefix forces interpretation as a **hook ID**
 - `./` prefix forces interpretation as a **project path**
 - This syntax is only needed when there are naming conflicts
-
-### Skipping Projects or Hooks
-
-You can skip specific projects or hooks using the `--skip` option, with the same syntax as for selecting projects or hooks.
-
-```bash
-# Skip all hooks from a specific project
-prek run --skip <project-path>
-
-# Skip specific hooks within a selected project
-prek run <project-path> --skip <subproject-path>
-
-# Skip all hooks with a specific ID across all projects
-prek run --skip <hook-id>
-```
-
-**Note**: The `SKIP` environment variable can be used as an alternative to `--skip`. Multiple values should be comma-delimited:
-
-```bash
-SKIP=frontend,tests prek run
-```
-
-**Examples:**
-
-```bash
-# Run all hooks except those from the 'frontend' project
-prek run --skip frontend
-
-# Run hooks from 'frontend' but skip 'frontend/docs'
-prek run frontend --skip frontend/docs
-
-# Run all hooks except 'black' hooks
-prek run --skip black
-```
-
-### Selection Rules
-
-- **Project paths** are relative to the workspace root
-- **Hook IDs** can be partial matches (e.g., `black` matches `black` hooks)
-- **Multiple selections** can be combined with `--skip` options
-- **Precedence**: Selections are applied in order, with `--skip` removing from the selected set
-- **Hierarchy**: Selecting a project includes all its subprojects unless explicitly skipped
 
 ### Advanced Examples
 
