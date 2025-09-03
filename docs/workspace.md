@@ -140,11 +140,90 @@ The `-C <dir>` or `--cd <dir>` option automatically changes to the specified dir
 
 **Note**: When using `prek install`, only the workspace root configuration's `default_install_hook_types` will be honored. Nested project configurations are not considered during installation.
 
-#### TODO: Hook ID Prefix Filtering
+## Project and Hook Selection
 
-- Add project prefix to hook IDs to identify which project they belong to
-- Allow filtering hooks by ID prefix to run only hooks from specific projects
-- Example: `prek run docs/black` would run only the `black` hook from the `docs/` project
+In workspace mode, you can selectively run hooks from specific projects or skip certain projects/hooks using flexible selection syntax.
+
+### Selection Syntax
+
+#### Running Specific Hooks or Projects
+
+```bash
+# Run all hooks with a specific ID across all projects
+prek run <hook-id>
+
+# Run only hooks from a specific project
+prek run <project-path>
+
+# Run only hooks with a specific ID from a specific project
+prek run <project-path>:<hook-id>
+```
+
+**Examples:**
+
+```bash
+# Run all 'black' hooks across all projects
+prek run black
+
+# Run all hooks from the 'frontend' project
+prek run frontend
+
+# Run only the 'black' hook from the 'frontend' project
+prek run frontend:black
+```
+
+#### Skipping Projects or Hooks
+
+```bash
+# Skip all hooks from a specific project
+prek run --skip <project-path>
+
+# Skip specific hooks within a selected project
+prek run <project-path> --skip <subproject-path>
+
+# Skip all hooks with a specific ID across all projects
+prek run --skip <hook-id>
+```
+
+**Note**: The `SKIP` environment variable can be used as an alternative to `--skip`. Multiple values should be comma-delimited:
+
+```bash
+SKIP=frontend,tests prek run
+```
+
+**Examples:**
+
+```bash
+# Run all hooks except those from the 'frontend' project
+prek run --skip frontend
+
+# Run hooks from 'frontend' but skip 'frontend/docs'
+prek run frontend --skip frontend/docs
+
+# Run all hooks except 'black' hooks
+prek run --skip black
+```
+
+### Selection Rules
+
+- **Project paths** are relative to the workspace root
+- **Hook IDs** can be partial matches (e.g., `black` matches `black` hooks)
+- **Multiple selections** can be combined with `--skip` options
+- **Precedence**: Selections are applied in order, with `--skip` removing from the selected set
+- **Hierarchy**: Selecting a project includes all its subprojects unless explicitly skipped
+
+### Advanced Examples
+
+```bash
+# Run 'lint' hooks from all projects except 'tests'
+prek run lint --skip tests
+
+# Run all hooks from 'src' and 'docs' but skip 'src/legacy'
+prek run src docs --skip src/legacy
+
+# Run 'format' hooks only from Python projects
+prek run python:format
+```
 
 ### Single Config Mode
 
