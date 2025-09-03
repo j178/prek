@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.6
+
+### Enhancements
+
+- Improve hook install concurrency ([#611](https://github.com/j178/prek/pull/611))
+- Parse JSON from slice ([#604](https://github.com/j178/prek/pull/604))
+
+### Bug fixes
+
+- Reuse hook env only for exactly same dependencies ([#609](https://github.com/j178/prek/pull/609))
+- Workaround checkout file failure on Windows ([#616](https://github.com/j178/prek/pull/616))
+
 ## 0.1.5
 
 ### Enhancements
