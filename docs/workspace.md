@@ -23,6 +23,8 @@ When you run `prek run` without the `--config` option, `prek` automatically disc
 
 **Note**: The workspace root is not necessarily the same as the git repository root, a workspace can exist within a subdirectory of a git repository.
 
+**Note**: The current working directory determines the workspace root discovery. `prek` starts searching from your current location and stops at the first `.pre-commit-config.yaml` file found while traversing up the directory tree. Running from different directories may discover different workspace roots. Use `prek -C <dir>` to change the working directory before execution.
+
 ## Project Organization
 
 ### Example Structure
@@ -120,8 +122,6 @@ Notice how:
 
 ## Command Line Usage
 
-### Workspace Mode (Default)
-
 ```bash
 # Run from current directory, auto-discover workspace
 prek run
@@ -144,9 +144,7 @@ The `-C <dir>` or `--cd <dir>` option automatically changes to the specified dir
 
 In workspace mode, you can selectively run hooks from specific projects or skip certain projects/hooks using flexible selection syntax.
 
-### Selection Syntax
-
-#### Running Specific Hooks or Projects
+### Running Specific Hooks or Projects
 
 ```bash
 # Run all hooks with a specific ID across all projects
@@ -168,11 +166,43 @@ prek run black
 # Run all hooks from the 'frontend' project
 prek run frontend
 
-# Run only the 'black' hook from the 'frontend' project
-prek run frontend:black
+# Run only the 'lint' hook from the 'frontend' project
+prek run frontend:lint
+
+# Run the 'lint' from 'frontend' and 'black' from 'src/backend'
+prek run frontend:lint src/backend:black
 ```
 
-#### Skipping Projects or Hooks
+### Disambiguation Syntax
+
+When a project path conflicts with a hook ID (e.g., you have both a project named `lint` and a hook named `lint`), you can use special syntax to disambiguate:
+
+- **Prefix hook IDs with `:`** to explicitly specify you want a hook, not a project
+- **Prefix project paths with `./`** to explicitly specify you want a project, not a hook
+
+#### Examples
+
+```bash
+# Ambiguous: could mean hook 'lint' or project 'lint', but currently means hooks for backward compatibility
+prek run lint
+
+# Explicitly run all 'lint' hooks across all projects
+prek run :lint
+
+# Explicitly run all hooks from the 'lint' project
+prek run ./lint
+```
+
+#### Disambiguation Rules
+
+- Bare words (no prefix) prioritize **hooks over projects** for backward compatibility
+- `:` prefix forces interpretation as a **hook ID**
+- `./` prefix forces interpretation as a **project path**
+- This syntax is only needed when there are naming conflicts
+
+### Skipping Projects or Hooks
+
+You can skip specific projects or hooks using the `--skip` option, with the same syntax as for selecting projects or hooks.
 
 ```bash
 # Skip all hooks from a specific project
@@ -225,17 +255,31 @@ prek run src docs --skip src/legacy
 prek run python:format
 ```
 
-### Single Config Mode
+## Single Config Mode
+
+When you specify a configuration file using the `-c` or `--config` parameter, workspace mode is disabled and only the specified configuration file is used. This mode provides traditional pre-commit behavior similar to the original pre-commit tool.
+
+In single config mode:
+
+- **No workspace discovery**: Only the explicitly specified configuration file is used
+- **Single execution context**: All hooks run from the git repository root directory
+- **Global file scope**: All files in the git repository are passed to all hooks
+- **No project isolation**: Hooks don't have access to project-specific working directories
+
+### Usage Examples
 
 ```bash
 # Disable workspace mode, use specific config
 prek run --config .pre-commit-config.yaml
 
-# This runs from git root, not workspace root
-# Only uses the specified config file
+# Use config from a subdirectory
+prek run --config src/.pre-commit-config.yaml
+
+# Short form using -c
+prek run -c docs/.pre-commit-config.yaml
 ```
 
-## Key Differences: Workspace vs Single Config
+### Key Differences: Workspace vs Single Config
 
 | Feature | Workspace Mode | Single Config Mode |
 |---------|----------------|-------------------|
@@ -246,7 +290,16 @@ prek run --config .pre-commit-config.yaml
 | **Execution Context** | Each project runs in its own directory | All hooks run from git root |
 | **Configuration** | Multiple configs | Single config file only |
 
-### Debugging
+### Migration from Single Config
+
+To migrate an existing single-config setup to workspace mode:
+
+1. **Create workspace root**: Move existing `.pre-commit-config.yaml` to repository root
+2. **Add project configs**: Create `.pre-commit-config.yaml` in subdirectories as needed
+3. **Update file patterns**: Adjust `files`/`exclude` patterns to be project-relative
+4. **Test execution**: Verify hooks run in correct directories with correct file sets
+
+## Debugging
 
 ```bash
 # See which projects were discovered
@@ -255,14 +308,5 @@ prek run -vvv
 # Check file collection for specific project
 prek run -C project/dir -vvv
 ```
-
-## Migration from Single Config
-
-To migrate an existing single-config setup to workspace mode:
-
-1. **Create workspace root**: Move existing `.pre-commit-config.yaml` to repository root
-2. **Add project configs**: Create `.pre-commit-config.yaml` in subdirectories as needed
-3. **Update file patterns**: Adjust `files`/`exclude` patterns to be project-relative
-4. **Test execution**: Verify hooks run in correct directories with correct file sets
 
 The workspace mode provides powerful organization capabilities while maintaining backward compatibility with existing single-config workflows.
