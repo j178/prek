@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 use std::io::Write;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -19,17 +19,18 @@ use constants::env_vars::EnvVars;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;
+use crate::cli::run::selection::SelectorUsage;
 use crate::cli::run::{CollectOptions, FileFilter, Selections, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, Stage};
 use crate::fs::CWD;
+use crate::git;
 use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::{Printer, Stdout};
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::{STORE, Store};
 use crate::workspace::{DiscoverOptions, Project, Workspace};
-use crate::{git, warn_user};
 
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
@@ -71,8 +72,11 @@ pub(crate) async fn run(
         anyhow::bail!("You have unmerged paths. Resolve them before running prek");
     }
 
-    let mut workspace =
-        Workspace::discover(DiscoverOptions::from_args(config, &CWD).with_selections(&selections))?;
+    let selector_usage = Arc::new(Mutex::new(SelectorUsage::default()));
+    let mut workspace = Workspace::discover(
+        DiscoverOptions::from_args(config, &CWD)
+            .with_selections(&selections, selector_usage.clone()),
+    )?;
     if should_stash {
         workspace.check_config_staged().await?;
     }
@@ -84,61 +88,26 @@ pub(crate) async fn run(
     let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
     let hooks = hooks.into_iter().map(Arc::new).collect::<Vec<_>>();
 
+    let mut selector_usage = Arc::try_unwrap(selector_usage)
+        .unwrap()
+        .into_inner()
+        .unwrap();
+
     let filtered_hooks: Vec<_> = hooks
         .into_iter()
-        .filter(|h| selections.matches_hook(h, &workspace))
+        .filter(|h| selections.matches_hook(h, &workspace, &mut selector_usage))
         .collect();
 
-    // if filtered_hooks.is_empty() {
-    //     if selectors.is_empty() {
-    //         writeln!(
-    //             printer.stderr(),
-    //             "{}: No hooks found for stage `{}`",
-    //             "error".red().bold(),
-    //             hook_stage.cyan()
-    //         )?;
-    //     } else if selectors.len() == 1 {
-    //         writeln!(
-    //             printer.stderr(),
-    //             "{}: No hook found with selector `{}` in stage `{}`",
-    //             "error".red().bold(),
-    //             selectors.first().unwrap().cyan(),
-    //             hook_stage.cyan()
-    //         )?;
-    //     } else {
-    //         writeln!(
-    //             printer.stderr(),
-    //             "{}: No hooks found with selectors {} in stage `{}`",
-    //             "error".red().bold(),
-    //             selectors
-    //                 .iter()
-    //                 .map(|id| format!("`{}`", id.cyan()))
-    //                 .collect::<Vec<_>>()
-    //                 .join(", "),
-    //             hook_stage.cyan()
-    //         )?;
-    //     }
-    //     return Ok(ExitStatus::Failure);
-    // } else if !selectors.is_empty() {
-    //     // Warn about selectors that don't match anything
-    //     let unmatched_ids: Vec<_> = selections
-    //         .iter()
-    //         .filter(|s| !filtered_hooks.iter().any(|h| s.matches_hook(h, &workspace)))
-    //         .collect();
-    //
-    //     if !unmatched_ids.is_empty() {
-    //         warn_user!(
-    //             "Ignored selector{} match{} nothing: {}",
-    //             if unmatched_ids.len() > 1 { "s" } else { "" },
-    //             if unmatched_ids.len() > 1 { "" } else { "s" },
-    //             unmatched_ids
-    //                 .iter()
-    //                 .map(|id| format!("`{}`", id.yellow()))
-    //                 .collect::<Vec<_>>()
-    //                 .join(", ")
-    //         );
-    //     }
-    // }
+    if filtered_hooks.is_empty() {
+        writeln!(
+            printer.stderr(),
+            "{}: No hooks found after filtering with the given selectors",
+            "error".red().bold(),
+        )?;
+        return Ok(ExitStatus::Failure);
+    }
+
+    selector_usage.report_unused(&selections);
 
     let filtered_hooks = filtered_hooks
         .into_iter()

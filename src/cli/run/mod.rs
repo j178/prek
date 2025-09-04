@@ -1,6 +1,6 @@
 pub(crate) use filter::{CollectOptions, FileFilter, collect_files};
 pub(crate) use run::{install_hooks, run};
-pub(crate) use selection::Selections;
+pub(crate) use selection::{Selections, SelectorUsage};
 
 mod filter;
 mod keeper;

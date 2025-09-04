@@ -12,7 +12,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use tracing::{debug, error};
 
-use crate::cli::run::Selections;
+use crate::cli::run::{Selections, SelectorUsage};
 use crate::config::{self, CONFIG_FILE, Config, ManifestHook, read_config};
 use crate::fs::Simplified;
 use crate::git::GIT_ROOT;
@@ -354,7 +354,7 @@ pub(crate) enum DiscoverOptions<'a> {
     File(PathBuf),
     Directory {
         dir: PathBuf,
-        selections: Option<&'a Selections>,
+        selections: Option<(&'a Selections, Arc<Mutex<SelectorUsage>>)>,
     },
 }
 
@@ -370,11 +370,15 @@ impl<'a> DiscoverOptions<'a> {
         }
     }
 
-    pub(crate) fn with_selections(self, selections: &'a Selections) -> Self {
+    pub(crate) fn with_selections(
+        self,
+        selections: &'a Selections,
+        usage: Arc<Mutex<SelectorUsage>>,
+    ) -> Self {
         if let Self::Directory { dir, .. } = self {
             Self::Directory {
                 dir,
-                selections: Some(selections),
+                selections: Some((selections, usage)),
             }
         } else {
             self
@@ -397,7 +401,6 @@ impl Workspace {
         }
 
         // Directory must be absolute
-        // TODO: use selections to skip projects when discovering
         let DiscoverOptions::Directory { dir, selections } = opts else {
             unreachable!()
         };
@@ -422,50 +425,55 @@ impl Workspace {
             .build_parallel()
             .run(|| {
                 Box::new(|result| {
-                    if let Ok(entry) = result {
-                        let Some(file_type) = entry.file_type() else {
+                    let Ok(entry) = result else {
+                        return WalkState::Continue;
+                    };
+                    let Some(file_type) = entry.file_type() else {
+                        return WalkState::Continue;
+                    };
+
+                    if file_type.is_dir() {
+                        let Some((selections, usage)) = selections.as_ref() else {
                             return WalkState::Continue;
                         };
-                        if file_type.is_dir() {
-                            let Some(selections) = selections else {
-                                return WalkState::Continue;
-                            };
-                            let relative_path = entry
-                                .path()
-                                .strip_prefix(&workspace_root)
-                                .expect("Entry path should be relative to the root");
-                            if !selections.is_path_selected(relative_path) {
-                                debug!(
-                                    path = %relative_path.user_display(),
-                                    "Skipping unselected path"
-                                );
-                                return WalkState::Skip;
-                            }
-                        } else if file_type.is_file() && entry.file_name() == CONFIG_FILE {
-                            match Project::from_config_file(entry.path().to_path_buf(), None) {
-                                Ok(mut project) => {
-                                    let depth = entry.depth();
-                                    let relative_path = entry
-                                        .into_path()
-                                        .parent()
-                                        .and_then(|p| p.strip_prefix(&workspace_root).ok())
-                                        .expect("Entry path should be relative to the root")
-                                        .to_path_buf();
-                                    project.with_relative_path(relative_path);
-                                    project.with_depth(depth);
+                        let relative_path = entry
+                            .path()
+                            .strip_prefix(&workspace_root)
+                            .expect("Entry path should be relative to the root");
 
-                                    projects
-                                        .lock()
-                                        .unwrap()
-                                        .as_mut()
-                                        .unwrap()
-                                        .push(Arc::new(project));
-                                }
-                                Err(config::Error::NotFound(_)) => {}
-                                Err(e) => {
-                                    *projects.lock().unwrap() = Err(e);
-                                    return WalkState::Quit;
-                                }
+                        let mut usage = usage.lock().unwrap();
+
+                        if !selections.matches_path(relative_path, &mut usage) {
+                            debug!(
+                                path = %relative_path.user_display(),
+                                "Skipping unselected path"
+                            );
+                            return WalkState::Skip;
+                        }
+                    } else if file_type.is_file() && entry.file_name() == CONFIG_FILE {
+                        match Project::from_config_file(entry.path().to_path_buf(), None) {
+                            Ok(mut project) => {
+                                let depth = entry.depth();
+                                let relative_path = entry
+                                    .into_path()
+                                    .parent()
+                                    .and_then(|p| p.strip_prefix(&workspace_root).ok())
+                                    .expect("Entry path should be relative to the root")
+                                    .to_path_buf();
+                                project.with_relative_path(relative_path);
+                                project.with_depth(depth);
+
+                                projects
+                                    .lock()
+                                    .unwrap()
+                                    .as_mut()
+                                    .unwrap()
+                                    .push(Arc::new(project));
+                            }
+                            Err(config::Error::NotFound(_)) => {}
+                            Err(e) => {
+                                *projects.lock().unwrap() = Err(e);
+                                return WalkState::Quit;
                             }
                         }
                     }

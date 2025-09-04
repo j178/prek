@@ -228,10 +228,11 @@ PREK_SKIP=frontend,tests prek run
 SKIP=frontend/docs,src/backend:lint prek run
 ```
 
+Precedence rules for `--skip` command line options and environment variables are: `--skip` > `PREK_SKIP` > `SKIP`.
+
 ### Selection Rules
 
 - **Project paths** are relative to the workspace root
-- **Hook IDs** can be partial matches (e.g., `black` matches `black` hooks)
 - **Multiple selections** can be combined with `--skip` options
 - **Precedence**: Selections are applied in order, with `--skip` removing from the selected set
 - **Hierarchy**: Selecting a project includes all its subprojects unless explicitly skipped
@@ -241,7 +242,7 @@ SKIP=frontend/docs,src/backend:lint prek run
 When a project path conflicts with a hook ID (e.g., you have both a project named `lint` and a hook named `lint`), you can use special syntax to disambiguate:
 
 - **Prefix hook IDs with `:`** to explicitly specify you want a hook, not a project
-- **Prefix project paths with `./`** to explicitly specify you want a project, not a hook
+- **Suffix project paths with `/`** to explicitly specify you want a project, not a hook
 
 #### Examples
 
@@ -253,14 +254,14 @@ prek run lint
 prek run :lint
 
 # Explicitly run all hooks from the 'lint' project
-prek run ./lint
+prek run lint/
 ```
 
 #### Disambiguation Rules
 
 - Bare words (no prefix) prioritize **hooks over projects** for backward compatibility
 - `:` prefix forces interpretation as a **hook ID**
-- `./` prefix forces interpretation as a **project path**
+- `/` suffix forces interpretation as a **project path**
 - This syntax is only needed when there are naming conflicts
 
 ### Advanced Examples
@@ -329,5 +330,10 @@ prek run -vvv
 # Check file collection for specific project
 prek run -C project/dir -vvv
 ```
+
+## Limitations (TODO)
+
+1. For performance considerations, hook completions are only available for the next-level projects, not for nested ones.
+2. Skipped hooks will not be printed with a `SKIPPED` status.
 
 The workspace mode provides powerful organization capabilities while maintaining backward compatibility with existing single-config workflows.
