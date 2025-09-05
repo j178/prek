@@ -101,6 +101,7 @@ insta = { version = "1.40.0", features = ["filters"] }
 insta-cmd = { version = "0.6.0" }
 predicates = { version = "3.1.2" }
 regex = { version = "1.11.0" }
+tempfile = { version = "3.13.0" }
 
 [package.metadata.cargo-shear]
 ignored = ["liblzma"]

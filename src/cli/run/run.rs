@@ -74,7 +74,7 @@ pub(crate) async fn run(
 
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
-    let mut workspace = Workspace::discover(workspace_root, Some(&selectors))?;
+    let mut workspace = Workspace::discover(workspace_root, config, Some(&selectors))?;
 
     if should_stash {
         workspace.check_config_staged().await?;

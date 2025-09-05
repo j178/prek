@@ -11,6 +11,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::filter::Directive;
+use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
@@ -75,6 +76,7 @@ fn setup_logging(level: Level) -> Result<()> {
         .without_time()
         .with_ansi(*USE_COLOR);
     let stderr_layer = tracing_subscriber::fmt::layer()
+        .with_span_events(FmtSpan::CLOSE)
         .event_format(stderr_format)
         .with_writer(anstream::stderr)
         .with_filter(stderr_filter);
@@ -91,6 +93,7 @@ fn setup_logging(level: Level) -> Result<()> {
         .with_target(false)
         .with_ansi(false);
     let file_layer = tracing_subscriber::fmt::layer()
+        .with_span_events(FmtSpan::CLOSE)
         .event_format(file_format)
         .with_writer(log_file)
         .with_filter(EnvFilter::new("prek=trace"));

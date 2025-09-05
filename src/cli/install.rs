@@ -66,7 +66,7 @@ pub(crate) async fn install(
 pub(crate) async fn install_hooks(config: Option<PathBuf>, printer: Printer) -> Result<ExitStatus> {
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     // TODO: support selectors in `install-hooks`?
-    let mut workspace = Workspace::discover(workspace_root, None)?;
+    let mut workspace = Workspace::discover(workspace_root, config, None)?;
 
     let store = STORE.as_ref()?;
     let reporter = HookInitReporter::from(printer);

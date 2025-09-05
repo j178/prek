@@ -38,7 +38,7 @@ pub(crate) async fn list(
 ) -> anyhow::Result<ExitStatus> {
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
-    let mut workspace = Workspace::discover(workspace_root, Some(&selectors))?;
+    let mut workspace = Workspace::discover(workspace_root, config, Some(&selectors))?;
 
     let store = STORE.as_ref()?;
     let reporter = HookInitReporter::from(printer);

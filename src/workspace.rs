@@ -10,7 +10,7 @@ use itertools::zip_eq;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
-use tracing::{debug, error};
+use tracing::{debug, error, instrument};
 
 use crate::cli::run::Selectors;
 use crate::config::{self, CONFIG_FILE, Config, ManifestHook, read_config};
@@ -96,6 +96,7 @@ impl Hash for Project {
 impl Project {
     /// Initialize a new project from the configuration file with an optional root path.
     /// If root is not given, it will be the parent directory of the configuration file.
+    #[instrument(level = "trace")]
     pub(crate) fn from_config_file(
         config_path: PathBuf,
         root: Option<PathBuf>,
@@ -372,8 +373,20 @@ impl Workspace {
     }
 
     /// Discover the workspace from the given workspace root.
-    pub(crate) fn discover(root: PathBuf, selectors: Option<&Selectors>) -> Result<Self, Error> {
-        // Then walk subdirectories to find all projects.
+    #[instrument(level = "trace", skip(selectors))]
+    pub(crate) fn discover(root: PathBuf, config: Option<PathBuf>, selectors: Option<&Selectors>) -> Result<Self, Error> {
+        let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
+
+        if let Some(config) = config {
+            // For `--config <path>`, the workspace root is the git root.
+            let project = Project::from_config_file(config, Some(git_root.clone()))?;
+            return Ok(Self {
+                root: git_root.clone(),
+                projects: vec![Arc::new(project)],
+            });
+        }
+
+        // Walk subdirectories to find all projects.
         let projects = Mutex::new(Ok(Vec::new()));
 
         ignore::WalkBuilder::new(&root)
