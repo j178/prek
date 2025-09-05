@@ -49,7 +49,7 @@ pub(crate) async fn list(
 
     let filtered_hooks: Vec<_> = hooks
         .into_iter()
-        .filter(|h| selectors.matches_hook(h, &workspace))
+        .filter(|h| selectors.matches_hook(h))
         .filter(|h| hook_stage.is_none_or(|hook_stage| h.stages.contains(hook_stage)))
         .filter(|h| language.is_none_or(|lang| h.language == lang))
         .collect();

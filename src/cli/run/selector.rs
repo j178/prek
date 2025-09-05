@@ -5,11 +5,11 @@ use std::sync::{Arc, Mutex};
 
 use crate::hook::Hook;
 use crate::warn_user;
-use crate::workspace::Workspace;
 
 use anyhow::anyhow;
 use constants::env_vars::EnvVars;
 use rustc_hash::FxHashSet;
+use tracing::trace;
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
@@ -25,21 +25,6 @@ pub(crate) enum Error {
         #[source]
         source: std::io::Error,
     },
-}
-
-#[derive(Debug, Clone, Copy)]
-enum PathMatch<'a> {
-    Exact(&'a PathBuf),
-    Prefix(&'a PathBuf),
-}
-
-impl PathMatch<'_> {
-    fn matches(&self, path: &Path) -> bool {
-        match self {
-            PathMatch::Exact(p) => path == Path::new(p),
-            PathMatch::Prefix(p) => path.starts_with(p),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -64,18 +49,29 @@ pub(crate) struct Selector {
     source: SelectorSource,
     original: String,
     expr: SelectorExpr,
-    is_skip: bool,
 }
 
 impl Display for Selector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.expr {
             SelectorExpr::HookId(hook_id) => write!(f, ":{hook_id}"),
-            SelectorExpr::ProjectPrefix(project_path) => write!(f, "{}/", project_path.display()),
+            SelectorExpr::ProjectPrefix(project_path) => {
+                if project_path.as_os_str().is_empty() {
+                    write!(f, "./")
+                } else {
+                    write!(f, "{}/", project_path.display())
+                }
+            }
             SelectorExpr::ProjectHook {
                 project_path,
                 hook_id,
-            } => write!(f, "{}:{hook_id}", project_path.display()),
+            } => {
+                if project_path.as_os_str().is_empty() {
+                    write!(f, ".:{hook_id}")
+                } else {
+                    write!(f, "{}:{hook_id}", project_path.display())
+                }
+            }
         }
     }
 }
@@ -99,14 +95,7 @@ impl Selector {
 }
 
 impl Selector {
-    /// Check if a hook belongs to a specific project
-    fn project_matches(hook: &Hook, project_path: PathMatch, workspace: &Workspace) -> bool {
-        workspace.projects().iter().any(|project| {
-            project_path.matches(project.relative_path()) && hook.project() == &**project
-        })
-    }
-
-    pub(crate) fn matches_hook(&self, hook: &Hook, workspace: &Workspace) -> bool {
+    pub(crate) fn matches_hook(&self, hook: &Hook) -> bool {
         match &self.expr {
             SelectorExpr::HookId(hook_id) => {
                 // For bare hook IDs, check if it matches the hook
@@ -114,7 +103,7 @@ impl Selector {
             }
             SelectorExpr::ProjectPrefix(project_path) => {
                 // For project paths, check if the hook belongs to that project.
-                Self::project_matches(hook, PathMatch::Prefix(project_path), workspace)
+                hook.project().relative_path().starts_with(project_path)
             }
             SelectorExpr::ProjectHook {
                 project_path,
@@ -122,24 +111,8 @@ impl Selector {
             } => {
                 // For project:hook syntax, check both
                 (hook.id == *hook_id || hook.alias == *hook_id)
-                    && Self::project_matches(hook, PathMatch::Exact(project_path), workspace)
+                    && project_path == hook.project().relative_path()
             }
-        }
-    }
-
-    pub(crate) fn matches_path(&self, path: &Path) -> bool {
-        match &self.expr {
-            SelectorExpr::ProjectPrefix(project_path) => {
-                PathMatch::Prefix(project_path).matches(path)
-            }
-            SelectorExpr::ProjectHook { project_path, .. } => {
-                if self.is_skip {
-                    false // Skip selectors with project:hook do not match any paths
-                } else {
-                    PathMatch::Exact(project_path).matches(path)
-                }
-            }
-            SelectorExpr::HookId(_) => false,
         }
     }
 }
@@ -160,12 +133,28 @@ impl Selectors {
     ) -> Result<Selectors, Error> {
         let includes = includes
             .iter()
-            .map(|selector| {
-                parse_single_selector(selector, workspace_root, SelectorSource::CliArg, false)
-            })
-            .collect::<Result<_, _>>()?;
+            .map(|selector| parse_single_selector(selector, workspace_root, SelectorSource::CliArg))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        trace!(
+            "Include selectors: {}",
+            includes
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
 
         let skips = load_skips(skips, workspace_root)?;
+
+        trace!(
+            "Skip selectors: {}",
+            skips
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
 
         Ok(Self {
             includes,
@@ -175,16 +164,18 @@ impl Selectors {
     }
 
     /// Check if a hook matches any of the selection criteria
-    pub(crate) fn matches_hook(&self, hook: &Hook, workspace: &Workspace) -> bool {
+    pub(crate) fn matches_hook(&self, hook: &Hook) -> bool {
         let mut usage = self.usage.lock().unwrap();
 
-        if let Some((idx, _)) = self
-            .skips
-            .iter()
-            .enumerate()
-            .find(|(_, skip)| skip.matches_hook(hook, workspace))
-        {
-            usage.use_skip(idx);
+        // Always check every selector to track usage
+        let mut skipped = false;
+        for (idx, skip) in self.skips.iter().enumerate() {
+            if skip.matches_hook(hook) {
+                usage.use_skip(idx);
+                skipped = true;
+            }
+        }
+        if skipped {
             return false;
         }
 
@@ -192,47 +183,51 @@ impl Selectors {
             return true; // No `includes` mean all hooks are included
         }
 
-        if let Some((idx, _)) = self
-            .includes
-            .iter()
-            .enumerate()
-            .find(|(_, include)| include.matches_hook(hook, workspace))
-        {
-            usage.use_include(idx);
-            return true;
+        let mut included = false;
+        for (idx, include) in self.includes.iter().enumerate() {
+            if include.matches_hook(hook) {
+                usage.use_include(idx);
+                included = true;
+            }
         }
-
-        false
+        included
     }
 
     pub(crate) fn matches_path(&self, path: &Path) -> bool {
         let mut usage = self.usage.lock().unwrap();
 
-        if let Some((idx, _)) = self
-            .skips
-            .iter()
-            .enumerate()
-            .find(|(_, skip)| skip.matches_path(path))
-        {
-            usage.use_skip(idx);
+        let mut skipped = false;
+        for (idx, skip) in self.skips.iter().enumerate() {
+            if let SelectorExpr::ProjectPrefix(project_path) = &skip.expr {
+                if path.starts_with(project_path) {
+                    usage.use_skip(idx);
+                    skipped = true;
+                }
+            }
+        }
+        if skipped {
             return false;
         }
 
-        if self.includes.is_empty() {
-            return true; // No `includes` mean all paths are included
-        }
-
-        if let Some((idx, _)) = self
+        // If no project prefix selectors are present, all paths are included
+        if !self
             .includes
             .iter()
-            .enumerate()
-            .find(|(_, include)| include.matches_path(path))
+            .any(|include| matches!(include.expr, SelectorExpr::ProjectPrefix(_)))
         {
-            usage.use_include(idx);
             return true;
         }
 
-        false
+        let mut included = false;
+        for (idx, include) in self.includes.iter().enumerate() {
+            if let SelectorExpr::ProjectPrefix(project_path) = &include.expr {
+                if path.starts_with(project_path) {
+                    usage.use_include(idx);
+                    included = true;
+                }
+            }
+        }
+        included
     }
 
     pub(crate) fn report_unused(&self) {
@@ -315,7 +310,6 @@ fn parse_single_selector(
     input: &str,
     workspace_root: &Path,
     source: SelectorSource,
-    is_skip: bool,
 ) -> Result<Selector, Error> {
     if input.chars().filter(|&c| c == ':').count() > 1 {
         return Err(Error::InvalidSelector {
@@ -334,7 +328,6 @@ fn parse_single_selector(
         }
         return Ok(Selector {
             source,
-            is_skip,
             original: input.to_string(),
             expr: SelectorExpr::HookId(hook_id.to_string()),
         });
@@ -359,7 +352,6 @@ fn parse_single_selector(
 
         return Ok(Selector {
             source,
-            is_skip,
             original: input.to_string(),
             expr: SelectorExpr::ProjectHook {
                 project_path,
@@ -374,7 +366,6 @@ fn parse_single_selector(
 
         return Ok(Selector {
             source,
-            is_skip,
             original: input.to_string(),
             expr: SelectorExpr::ProjectPrefix(project_path),
         });
@@ -389,7 +380,6 @@ fn parse_single_selector(
     }
     Ok(Selector {
         source,
-        is_skip,
         original: input.to_string(),
         expr: SelectorExpr::HookId(input.to_string()),
     })
@@ -454,7 +444,7 @@ pub(crate) fn load_skips(
 
     skips
         .into_iter()
-        .map(|skip| parse_single_selector(skip, workspace_root, source, true))
+        .map(|skip| parse_single_selector(skip, workspace_root, source))
         .collect()
 }
 

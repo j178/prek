@@ -367,10 +367,7 @@ impl Workspace {
             .ok_or(MissingPreCommitConfig)?
             .to_path_buf();
 
-        debug!(
-            "Found workspace root at `{}`",
-            workspace_root.user_display()
-        );
+        debug!("Found workspace root at `{}`", workspace_root.display());
         Ok(workspace_root)
     }
 
@@ -403,7 +400,7 @@ impl Workspace {
 
                         if !selectors.matches_path(relative_path) {
                             debug!(
-                                path = %relative_path.user_display(),
+                                path = %relative_path.display(),
                                 "Skipping unselected path"
                             );
                             return WalkState::Skip;

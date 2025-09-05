@@ -89,7 +89,7 @@ pub(crate) async fn run(
 
     let filtered_hooks: Vec<_> = hooks
         .into_iter()
-        .filter(|h| selectors.matches_hook(h, &workspace))
+        .filter(|h| selectors.matches_hook(h))
         .collect();
 
     selectors.report_unused();
