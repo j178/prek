@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
@@ -96,9 +97,8 @@ impl Hash for Project {
 impl Project {
     /// Initialize a new project from the configuration file with an optional root path.
     /// If root is not given, it will be the parent directory of the configuration file.
-    #[instrument(level = "trace")]
     pub(crate) fn from_config_file(
-        config_path: PathBuf,
+        config_path: Cow<'_, Path>,
         root: Option<PathBuf>,
     ) -> Result<Self, config::Error> {
         debug!(
@@ -119,7 +119,7 @@ impl Project {
         Ok(Self {
             root,
             config,
-            config_path,
+            config_path: config_path.into_owned(),
             idx: 0,
             depth: 0,
             relative_path: PathBuf::new(),
@@ -129,7 +129,7 @@ impl Project {
 
     /// Find the configuration file in the given path.
     pub(crate) fn from_directory(path: &Path) -> Result<Self, config::Error> {
-        Self::from_config_file(path.join(CONFIG_FILE), None)
+        Self::from_config_file(path.join(CONFIG_FILE).into(), None)
     }
 
     /// Discover a project from the give path or search from the given path to the git root.
@@ -138,7 +138,7 @@ impl Project {
 
         if let Some(config) = config_file {
             return Ok(Project::from_config_file(
-                config.to_path_buf(),
+                config.into(),
                 Some(git_root.clone()),
             )?);
         }
@@ -374,14 +374,15 @@ impl Workspace {
 
     /// Discover the workspace from the given workspace root.
     #[instrument(level = "trace", skip(selectors))]
-    pub(crate) fn discover(root: PathBuf, config: Option<PathBuf>, selectors: Option<&Selectors>) -> Result<Self, Error> {
-        let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
-
+    pub(crate) fn discover(
+        root: PathBuf,
+        config: Option<PathBuf>,
+        selectors: Option<&Selectors>,
+    ) -> Result<Self, Error> {
         if let Some(config) = config {
-            // For `--config <path>`, the workspace root is the git root.
-            let project = Project::from_config_file(config, Some(git_root.clone()))?;
+            let project = Project::from_config_file(config.into(), Some(root.clone()))?;
             return Ok(Self {
-                root: git_root.clone(),
+                root,
                 projects: vec![Arc::new(project)],
             });
         }
@@ -419,7 +420,7 @@ impl Workspace {
                             return WalkState::Skip;
                         }
                     } else if file_type.is_file() && entry.file_name() == CONFIG_FILE {
-                        match Project::from_config_file(entry.path().to_path_buf(), None) {
+                        match Project::from_config_file(entry.path().into(), None) {
                             Ok(mut project) => {
                                 let depth = entry.depth();
                                 let relative_path = entry

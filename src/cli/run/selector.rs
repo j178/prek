@@ -494,13 +494,13 @@ mod tests {
         std::fs::create_dir_all(workspace_root.join("src"))?;
 
         // Test project path with slash
-        let selector = parse_single_selector("src/", &workspace_root, SelectorSource::CliArg)?;
+        let selector = parse_single_selector("src/", workspace_root, SelectorSource::CliArg)?;
         assert!(
             matches!(selector.expr, SelectorExpr::ProjectPrefix(ref path) if path == &PathBuf::from("src"))
         );
 
         // Test current directory
-        let selector = parse_single_selector(".", &workspace_root, SelectorSource::CliArg)?;
+        let selector = parse_single_selector(".", workspace_root, SelectorSource::CliArg)?;
         assert!(
             matches!(selector.expr, SelectorExpr::ProjectPrefix(ref path) if path == &PathBuf::from(""))
         );
@@ -516,7 +516,7 @@ mod tests {
         // Create the src directory
         std::fs::create_dir_all(workspace_root.join("src"))?;
 
-        let selector = parse_single_selector("src:black", &workspace_root, SelectorSource::CliArg)?;
+        let selector = parse_single_selector("src:black", workspace_root, SelectorSource::CliArg)?;
         match selector.expr {
             SelectorExpr::ProjectHook {
                 project_path,
@@ -537,20 +537,20 @@ mod tests {
         let workspace_root = temp_dir.path();
 
         // Test empty hook ID
-        let result = parse_single_selector(":", &workspace_root, SelectorSource::CliArg);
+        let result = parse_single_selector(":", workspace_root, SelectorSource::CliArg);
         assert!(result.is_err());
 
         // Test empty hook ID in project:hook
-        let result = parse_single_selector("src:", &workspace_root, SelectorSource::CliArg);
+        let result = parse_single_selector("src:", workspace_root, SelectorSource::CliArg);
         assert!(result.is_err());
 
         // Test multiple colons
         let result =
-            parse_single_selector("src:black:extra", &workspace_root, SelectorSource::CliArg);
+            parse_single_selector("src:black:extra", workspace_root, SelectorSource::CliArg);
         assert!(result.is_err());
 
         // Test empty string
-        let result = parse_single_selector("", &workspace_root, SelectorSource::CliArg);
+        let result = parse_single_selector("", workspace_root, SelectorSource::CliArg);
         assert!(result.is_err());
 
         Ok(())

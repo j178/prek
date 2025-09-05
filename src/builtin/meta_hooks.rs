@@ -22,7 +22,7 @@ pub(crate) async fn check_hooks_apply(hook: &Hook, filenames: &[&Path]) -> Resul
 
     for filename in filenames {
         let path = hook.project().relative_path().join(filename);
-        let mut project = Project::from_config_file(path, None)?;
+        let mut project = Project::from_config_file(path.into(), None)?;
         let hooks = project.init_hooks(store, None).await?;
 
         let filter = FileFilter::for_project(input.iter(), &project);
@@ -85,7 +85,7 @@ pub(crate) async fn check_useless_excludes(
 
     for filename in filenames {
         let path = hook.project().relative_path().join(filename);
-        let project = Project::from_config_file(path, None)?;
+        let project = Project::from_config_file(path.into(), None)?;
         let config = project.config();
 
         if !excludes_any(&input, None, config.exclude.as_deref()) {
