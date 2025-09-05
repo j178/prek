@@ -142,19 +142,20 @@ The `-C <dir>` or `--cd <dir>` option automatically changes to the specified dir
 
 ## Project and Hook Selection
 
-In workspace mode, you can selectively run hooks from specific projects or skip certain projects/hooks using flexible selection syntax.
+In workspace mode, you can selectively run hooks from specific projects or skip certain projects/hooks using flexible selector syntax.
 
-### Selection Syntax
+### Selector Syntax
 
-The selection syntax consists of two optional parts separated by a colon (`:`):
+The selector syntax has three different forms:
 
-```text
-[<project-path>:][<hook-id>]
-```
+1. **`<hook-id>`**: Matches all hooks with the given ID across all projects.
+2. **`<project-path>/`**: Matches all hooks from the specified project and its subprojects.
+3. **`<project-path>:<hook-id>`**: Matches only the specified hook from the specified project.
 
-- **`<project-path>`**: Path to a project directory
-- **`<hook-id>`**: Identifier of a hook to run
-- **Omitted parts**: When `<project-path>` is omitted, hooks are selected across all projects. When `<hook-id>` is omitted, all hooks from the specified project are selected.
+Selectors can be used to select specific hooks or projects, and combined with `--skip` to exclude certain hooks or projects.
+
+**Note**: `<project-path>` can be a relative path, which is then resolved relative to the current working directory.
+Note that the trailing slash `/` in a `<project-path>` is important, if a selector does not contain a slash, it is interpreted as a hook ID.
 
 ### Running Specific Hooks or Projects
 
@@ -229,40 +230,6 @@ SKIP=frontend/docs,src/backend:lint prek run
 ```
 
 Precedence rules for `--skip` command line options and environment variables are: `--skip` > `PREK_SKIP` > `SKIP`.
-
-### Selection Rules
-
-- **Project paths** are relative to the workspace root
-- **Multiple selections** can be combined with `--skip` options
-- **Precedence**: Selections are applied in order, with `--skip` removing from the selected set
-- **Hierarchy**: Selecting a project includes all its subprojects unless explicitly skipped
-
-### Disambiguation Syntax
-
-When a project path conflicts with a hook ID (e.g., you have both a project named `lint` and a hook named `lint`), you can use special syntax to disambiguate:
-
-- **Prefix hook IDs with `:`** to explicitly specify you want a hook, not a project
-- **Suffix project paths with `/`** to explicitly specify you want a project, not a hook
-
-#### Examples
-
-```bash
-# Ambiguous: could mean hook 'lint' or project 'lint', but currently means hooks for backward compatibility
-prek run lint
-
-# Explicitly run all 'lint' hooks across all projects
-prek run :lint
-
-# Explicitly run all hooks from the 'lint' project
-prek run lint/
-```
-
-#### Disambiguation Rules
-
-- Bare words (no prefix) prioritize **hooks over projects** for backward compatibility
-- `:` prefix forces interpretation as a **hook ID**
-- `/` suffix forces interpretation as a **project path**
-- This syntax is only needed when there are naming conflicts
 
 ### Advanced Examples
 
