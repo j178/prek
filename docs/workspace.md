@@ -163,7 +163,7 @@ The selection syntax consists of two optional parts separated by a colon (`:`):
 prek run <hook-id>
 
 # Run only hooks from a specific project
-prek run <project-path>
+prek run <project-path>/
 
 # Run only hooks with a specific ID from a specific project
 prek run <project-path>:<hook-id>
@@ -176,7 +176,7 @@ prek run <project-path>:<hook-id>
 prek run black
 
 # Run all hooks from the 'frontend' project
-prek run frontend
+prek run frontend/
 
 # Run only the 'lint' hook from the 'frontend' project
 prek run frontend:lint
@@ -191,10 +191,10 @@ You can skip specific projects or hooks using the `--skip` option, with the same
 
 ```bash
 # Skip all hooks from a specific project
-prek run --skip <project-path>
+prek run --skip <project-path>/
 
 # Skip specific hooks within a selected project
-prek run <project-path> --skip <subproject-path>
+prek run <project-path>/ --skip <subproject-path>/
 
 # Skip all hooks with a specific ID across all projects
 prek run --skip <hook-id>
@@ -204,13 +204,13 @@ prek run --skip <hook-id>
 
 ```bash
 # Run all hooks except those from the 'frontend' project
-prek run --skip frontend
+prek run --skip frontend/
 
 # Run hooks from 'frontend' but skip 'frontend/docs'
-prek run frontend --skip frontend/docs
+prek run frontend/ --skip frontend/docs
 
 # Run hooks from 'frontend' but skip 'frontend/docs' and 'frontend:lint'
-prek run frontend --skip frontend/docs --skip frontend:lint
+prek run frontend/ --skip frontend/docs --skip frontend:lint
 
 # Run all hooks except 'black' and 'markdownlint' hooks
 prek run --skip black --skip markdownlint
@@ -222,7 +222,7 @@ prek run --skip black --skip markdownlint
 
 ```bash
 # Skip 'frontend' and 'tests' projects
-PREK_SKIP=frontend,tests prek run
+PREK_SKIP=frontend/,tests prek run
 
 # Skip 'frontend/docs' project and 'src/backend:lint' hook
 SKIP=frontend/docs,src/backend:lint prek run
@@ -271,7 +271,7 @@ prek run lint/
 prek run lint --skip tests
 
 # Run all hooks from 'src' and 'docs' but skip 'src/legacy'
-prek run src docs --skip src/legacy
+prek run src/ docs/ --skip src/legacy
 
 # Run 'format' hooks only from Python projects
 prek run python:format
