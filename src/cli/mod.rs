@@ -317,14 +317,14 @@ pub(crate) struct RunExtraArgs {
 
 #[derive(Debug, Clone, Default, Args)]
 pub(crate) struct RunArgs {
-    /// Hook or project selection to run.
+    /// Include the specified hooks or projects.
     ///
-    /// Supports flexible selection syntax:
+    /// Supports flexible selector syntax:
     /// - `hook-id`: Run all hooks with the specified ID across all projects
     /// - `project-path`: Run all hooks from the specified project
     /// - `project-path:hook-id`: Run only the specified hook from the specified project
     /// - `:hook-id`: Explicitly run hooks (disambiguation when conflicts with project names)
-    /// - `./project-path`: Explicitly run project (disambiguation when conflicts with hook names)
+    /// - `project-path/`: Explicitly run project (disambiguation when conflicts with hook names)
     ///
     /// Can be specified multiple times to select multiple hooks/projects.
     #[arg(
@@ -332,7 +332,21 @@ pub(crate) struct RunArgs {
         value_hint = ValueHint::Other,
         add = ArgValueCompleter::new(hook_id_completer)
     )]
-    pub(crate) selectors: Vec<String>,
+    pub(crate) includes: Vec<String>,
+
+    /// Skip the specified hooks or projects.
+    ///
+    /// Supports flexible selector syntax:
+    /// - `hook-id`: Skip all hooks with the specified ID across all projects
+    /// - `project-path`: Skip all hooks from the specified project
+    /// - `project-path:hook-id`: Skip only the specified hook from the specified project
+    /// - `:hook-id`: Explicitly skip hooks (disambiguation when conflicts with project names)
+    /// - `project-path/`: Explicitly skip project (disambiguation when conflicts with hook names)
+    ///
+    /// Can be specified multiple times. Also accepts `PREK_SKIP` or `SKIP` environment variables (comma-delimited).
+    #[arg(long = "skip", value_name = "HOOK|PROJECT")]
+    pub(crate) skips: Vec<String>,
+
     /// Run on all files in the repo.
     #[arg(short, long, conflicts_with_all = ["files", "from_ref", "to_ref"])]
     pub(crate) all_files: bool,
@@ -343,6 +357,7 @@ pub(crate) struct RunArgs {
         value_hint = ValueHint::AnyPath)
     ]
     pub(crate) files: Vec<String>,
+
     /// Run hooks on all files in the specified directories.
     ///
     /// You can specify multiple directories. It can be used in conjunction with `--files`.
@@ -354,10 +369,12 @@ pub(crate) struct RunArgs {
         value_hint = ValueHint::DirPath
     )]
     pub(crate) directory: Vec<String>,
+
     /// The original ref in a `<from_ref>...<to_ref>` diff expression.
     /// Files changed in this diff will be run through the hooks.
     #[arg(short = 's', long, alias = "source", value_hint = ValueHint::Other)]
     pub(crate) from_ref: Option<String>,
+
     /// The destination ref in a `from_ref...to_ref` diff expression.
     /// Defaults to `HEAD` if `from_ref` is specified.
     #[arg(
@@ -369,28 +386,18 @@ pub(crate) struct RunArgs {
         default_value_if("from_ref", ArgPredicate::IsPresent, "HEAD")
     )]
     pub(crate) to_ref: Option<String>,
+
     /// Run hooks against the last commit. Equivalent to `--from-ref HEAD~1 --to-ref HEAD`.
     #[arg(long, conflicts_with_all = ["all_files", "files", "directory", "from_ref", "to_ref"])]
     pub(crate) last_commit: bool,
+
     /// The stage during which the hook is fired.
     #[arg(long, default_value_t = Stage::PreCommit, value_enum)]
     pub(crate) hook_stage: Stage,
+
     /// When hooks fail, run `git diff` directly afterward.
     #[arg(long)]
     pub(crate) show_diff_on_failure: bool,
-
-    /// Skip the specified hooks or projects.
-    ///
-    /// Supports flexible selection syntax:
-    /// - `hook-id`: Skip all hooks with the specified ID across all projects
-    /// - `project-path`: Skip all hooks from the specified project
-    /// - `project-path:hook-id`: Skip only the specified hook from the specified project
-    /// - `:hook-id`: Explicitly skip hooks (disambiguation when conflicts with project names)
-    /// - `./project-path`: Explicitly skip project (disambiguation when conflicts with hook names)
-    ///
-    /// Can be specified multiple times. Also accepts `SKIP` or `PREK_SKIP` environment variables (comma-delimited).
-    #[arg(long = "skip", value_name = "HOOK|PROJECT")]
-    pub(crate) skips: Vec<String>,
 
     #[command(flatten)]
     pub(crate) extra: RunExtraArgs,
@@ -406,13 +413,36 @@ pub(crate) enum ListOutputFormat {
 
 #[derive(Debug, Clone, Default, Args)]
 pub(crate) struct ListArgs {
-    /// Hook selection to list.
+    /// Include the specified hooks or projects.
     ///
-    /// Supports flexible selection syntax:
-    /// - `hook-id`: List all hooks with the specified ID across all projects
-    /// - Multiple hook IDs can be specified to list multiple hooks
-    #[arg(value_name = "HOOK", value_hint = ValueHint::Other, add = ArgValueCompleter::new(hook_id_completer))]
-    pub(crate) selectors: Vec<String>,
+    /// Supports flexible selector syntax:
+    /// - `hook-id`: Run all hooks with the specified ID across all projects
+    /// - `project-path`: Run all hooks from the specified project
+    /// - `project-path:hook-id`: Run only the specified hook from the specified project
+    /// - `:hook-id`: Explicitly run hooks (disambiguation when conflicts with project names)
+    /// - `project-path/`: Explicitly run project (disambiguation when conflicts with hook names)
+    ///
+    /// Can be specified multiple times to select multiple hooks/projects.
+    #[arg(
+        value_name = "HOOK|PROJECT",
+        value_hint = ValueHint::Other,
+        add = ArgValueCompleter::new(hook_id_completer)
+    )]
+    pub(crate) includes: Vec<String>,
+
+    /// Skip the specified hooks or projects.
+    ///
+    /// Supports flexible selector syntax:
+    /// - `hook-id`: Skip all hooks with the specified ID across all projects
+    /// - `project-path`: Skip all hooks from the specified project
+    /// - `project-path:hook-id`: Skip only the specified hook from the specified project
+    /// - `:hook-id`: Explicitly skip hooks (disambiguation when conflicts with project names)
+    /// - `project-path/`: Explicitly skip project (disambiguation when conflicts with hook names)
+    ///
+    /// Can be specified multiple times. Also accepts `PREK_SKIP` or `SKIP` environment variables (comma-delimited).
+    #[arg(long = "skip", value_name = "HOOK|PROJECT")]
+    pub(crate) skips: Vec<String>,
+
     /// Show only hooks that has the specified stage.
     #[arg(long, value_enum)]
     pub(crate) hook_stage: Option<Stage>,

@@ -16,7 +16,6 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
 use crate::cleanup::cleanup;
-use crate::cli::run::Selections;
 use crate::cli::{Cli, Command, ExitStatus};
 #[cfg(feature = "self-update")]
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
@@ -180,10 +179,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Command::Run(args) => {
             show_settings!(args);
 
-            let selections = Selections::from_args(&args.selectors, &args.skips)?;
             cli::run(
                 cli.globals.config,
-                selections,
+                args.includes,
+                args.skips,
                 args.hook_stage,
                 args.from_ref,
                 args.to_ref,
@@ -203,11 +202,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             cli::list(
                 cli.globals.config,
-                cli.globals.verbose > 0,
-                args.selectors,
+                args.includes,
+                args.skips,
                 args.hook_stage,
                 args.language,
                 args.output_format,
+                cli.globals.verbose > 0,
                 printer,
             )
             .await

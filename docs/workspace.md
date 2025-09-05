@@ -152,7 +152,7 @@ The selection syntax consists of two optional parts separated by a colon (`:`):
 [<project-path>:][<hook-id>]
 ```
 
-- **`<project-path>`**: Path to a project directory (relative to workspace root)
+- **`<project-path>`**: Path to a project directory
 - **`<hook-id>`**: Identifier of a hook to run
 - **Omitted parts**: When `<project-path>` is omitted, hooks are selected across all projects. When `<hook-id>` is omitted, all hooks from the specified project are selected.
 
@@ -216,7 +216,7 @@ prek run frontend --skip frontend/docs --skip frontend:lint
 prek run --skip black --skip markdownlint
 ```
 
-**Note**: Skipping a project also skips all its subprojects.
+**Note**: Selecting a project includes all its subprojects unless explicitly skipped. Skipping a project also skips all its subprojects.
 
 **Note**: The `PREK_SKIP` or `SKIP` environment variable can be used as an alternative to `--skip`. Multiple values should be comma-delimited:
 

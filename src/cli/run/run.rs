@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 use std::io::Write;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -19,8 +19,7 @@ use constants::env_vars::EnvVars;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;
-use crate::cli::run::selection::SelectorUsage;
-use crate::cli::run::{CollectOptions, FileFilter, Selections, collect_files};
+use crate::cli::run::{CollectOptions, FileFilter, Selectors, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, Stage};
 use crate::fs::CWD;
@@ -30,12 +29,13 @@ use crate::hook::{Hook, InstalledHook};
 use crate::printer::{Printer, Stdout};
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::{STORE, Store};
-use crate::workspace::{DiscoverOptions, Project, Workspace};
+use crate::workspace::{Project, Workspace};
 
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     config: Option<PathBuf>,
-    selections: Selections,
+    includes: Vec<String>,
+    skips: Vec<String>,
     hook_stage: Stage,
     from_ref: Option<String>,
     to_ref: Option<String>,
@@ -72,11 +72,10 @@ pub(crate) async fn run(
         anyhow::bail!("You have unmerged paths. Resolve them before running prek");
     }
 
-    let selector_usage = Arc::new(Mutex::new(SelectorUsage::default()));
-    let mut workspace = Workspace::discover(
-        DiscoverOptions::from_args(config, &CWD)
-            .with_selections(&selections, selector_usage.clone()),
-    )?;
+    let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
+    let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
+    let mut workspace = Workspace::discover(workspace_root, Some(&selectors))?;
+
     if should_stash {
         workspace.check_config_staged().await?;
     }
@@ -88,15 +87,12 @@ pub(crate) async fn run(
     let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
     let hooks = hooks.into_iter().map(Arc::new).collect::<Vec<_>>();
 
-    let mut selector_usage = Arc::try_unwrap(selector_usage)
-        .unwrap()
-        .into_inner()
-        .unwrap();
-
     let filtered_hooks: Vec<_> = hooks
         .into_iter()
-        .filter(|h| selections.matches_hook(h, &workspace, &mut selector_usage))
+        .filter(|h| selectors.matches_hook(h, &workspace))
         .collect();
+
+    selectors.report_unused();
 
     if filtered_hooks.is_empty() {
         writeln!(
@@ -107,12 +103,11 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Failure);
     }
 
-    selector_usage.report_unused(&selections);
-
     let filtered_hooks = filtered_hooks
         .into_iter()
         .filter(|h| h.stages.contains(hook_stage))
         .collect::<Vec<_>>();
+
     if filtered_hooks.is_empty() {
         writeln!(
             printer.stderr(),

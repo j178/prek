@@ -8,14 +8,13 @@ use owo_colors::OwoColorize;
 
 use constants::env_vars::EnvVars;
 
-use crate::cli::run::Selections;
 use crate::cli::{self, ExitStatus, RunArgs};
 use crate::config::HookType;
 use crate::fs::CWD;
 use crate::git;
 use crate::printer::Printer;
 use crate::workspace;
-use crate::workspace::{DiscoverOptions, Project};
+use crate::workspace::Project;
 
 pub(crate) async fn hook_impl(
     config: Option<PathBuf>,
@@ -40,7 +39,7 @@ pub(crate) async fn hook_impl(
             true
         } else {
             // Try to discover a project from current directory (after `--cd`)
-            match Project::discover(DiscoverOptions::from_args(config.clone(), &CWD)) {
+            match Project::discover(config.as_deref(), &CWD) {
                 Err(e) if matches!(e, workspace::Error::MissingPreCommitConfig) => {
                     eprintln!("{}: {e}", "error".red().bold(),);
                     true
@@ -75,10 +74,10 @@ pub(crate) async fn hook_impl(
         return Ok(ExitStatus::Success);
     };
 
-    let selections = Selections::from_args(&run_args.selectors, &run_args.skips)?;
     cli::run(
         config,
-        selections,
+        run_args.includes,
+        run_args.skips,
         hook_type.into(),
         run_args.from_ref,
         run_args.to_ref,

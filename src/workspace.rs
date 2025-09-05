@@ -12,7 +12,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use tracing::{debug, error};
 
-use crate::cli::run::{Selections, SelectorUsage};
+use crate::cli::run::Selectors;
 use crate::config::{self, CONFIG_FILE, Config, ManifestHook, read_config};
 use crate::fs::Simplified;
 use crate::git::GIT_ROOT;
@@ -132,18 +132,15 @@ impl Project {
     }
 
     /// Discover a project from the give path or search from the given path to the git root.
-    pub(crate) fn discover(opts: DiscoverOptions) -> Result<Project, Error> {
+    pub(crate) fn discover(config_file: Option<&Path>, dir: &Path) -> Result<Project, Error> {
         let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
 
-        if let DiscoverOptions::File(config) = opts {
-            return Ok(Project::from_config_file(config, Some(git_root.clone()))?);
+        if let Some(config) = config_file {
+            return Ok(Project::from_config_file(
+                config.to_path_buf(),
+                Some(git_root.clone()),
+            )?);
         }
-
-        // Directory must be absolute
-        // TODO: use selections to skip projects when discovering
-        let DiscoverOptions::Directory { dir, selections: _ } = opts else {
-            unreachable!()
-        };
 
         // TODO: add back `.pre-commit-config.yml` support
         // Walk from the given path up to the git root, to find the project root.
@@ -350,60 +347,16 @@ pub(crate) struct Workspace {
     projects: Vec<Arc<Project>>,
 }
 
-pub(crate) enum DiscoverOptions<'a> {
-    File(PathBuf),
-    Directory {
-        dir: PathBuf,
-        selections: Option<(&'a Selections, Arc<Mutex<SelectorUsage>>)>,
-    },
-}
-
-impl<'a> DiscoverOptions<'a> {
-    pub(crate) fn from_args(config: Option<PathBuf>, path: &Path) -> Self {
-        if let Some(config) = config {
-            Self::File(config)
-        } else {
-            Self::Directory {
-                dir: path.to_path_buf(),
-                selections: None,
-            }
-        }
-    }
-
-    pub(crate) fn with_selections(
-        self,
-        selections: &'a Selections,
-        usage: Arc<Mutex<SelectorUsage>>,
-    ) -> Self {
-        if let Self::Directory { dir, .. } = self {
-            Self::Directory {
-                dir,
-                selections: Some((selections, usage)),
-            }
-        } else {
-            self
-        }
-    }
-}
-
 impl Workspace {
-    /// Discover the workspace from the given options.
-    pub(crate) fn discover(opts: DiscoverOptions) -> Result<Self, Error> {
+    /// Find the workspace root.
+    /// `dir` must be an absolute path.
+    pub(crate) fn find_root(config_file: Option<&Path>, dir: &Path) -> Result<PathBuf, Error> {
         let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
 
-        if let DiscoverOptions::File(config) = opts {
+        if config_file.is_some() {
             // For `--config <path>`, the workspace root is the git root.
-            let project = Project::from_config_file(config, Some(git_root.clone()))?;
-            return Ok(Self {
-                root: git_root.clone(),
-                projects: vec![Arc::new(project)],
-            });
+            return Ok(git_root.clone());
         }
-
-        // Directory must be absolute
-        let DiscoverOptions::Directory { dir, selections } = opts else {
-            unreachable!()
-        };
 
         // TODO: add back `.pre-commit-config.yml` support
         // Walk from the given path up to the git root, to find the workspace root.
@@ -414,12 +367,19 @@ impl Workspace {
             .ok_or(MissingPreCommitConfig)?
             .to_path_buf();
 
-        debug!("Found workspace root at {}", workspace_root.user_display());
+        debug!(
+            "Found workspace root at `{}`",
+            workspace_root.user_display()
+        );
+        Ok(workspace_root)
+    }
 
+    /// Discover the workspace from the given workspace root.
+    pub(crate) fn discover(root: PathBuf, selectors: Option<&Selectors>) -> Result<Self, Error> {
         // Then walk subdirectories to find all projects.
         let projects = Mutex::new(Ok(Vec::new()));
 
-        ignore::WalkBuilder::new(&workspace_root)
+        ignore::WalkBuilder::new(&root)
             .follow_links(false)
             .hidden(false) // Find from hidden directories.
             .build_parallel()
@@ -433,17 +393,15 @@ impl Workspace {
                     };
 
                     if file_type.is_dir() {
-                        let Some((selections, usage)) = selections.as_ref() else {
+                        let Some(selectors) = selectors.as_ref() else {
                             return WalkState::Continue;
                         };
                         let relative_path = entry
                             .path()
-                            .strip_prefix(&workspace_root)
+                            .strip_prefix(&root)
                             .expect("Entry path should be relative to the root");
 
-                        let mut usage = usage.lock().unwrap();
-
-                        if !selections.matches_path(relative_path, &mut usage) {
+                        if !selectors.matches_path(relative_path) {
                             debug!(
                                 path = %relative_path.user_display(),
                                 "Skipping unselected path"
@@ -457,7 +415,7 @@ impl Workspace {
                                 let relative_path = entry
                                     .into_path()
                                     .parent()
-                                    .and_then(|p| p.strip_prefix(&workspace_root).ok())
+                                    .and_then(|p| p.strip_prefix(&root).ok())
                                     .expect("Entry path should be relative to the root")
                                     .to_path_buf();
                                 project.with_relative_path(relative_path);
@@ -499,10 +457,7 @@ impl Workspace {
             Arc::get_mut(project).unwrap().with_idx(idx);
         }
 
-        Ok(Self {
-            root: workspace_root,
-            projects,
-        })
+        Ok(Self { root, projects })
     }
 
     pub(crate) fn root(&self) -> &Path {

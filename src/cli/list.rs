@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::PathBuf;
 
@@ -7,13 +6,14 @@ use owo_colors::OwoColorize;
 use serde::Serialize;
 
 use crate::cli::reporter::HookInitReporter;
+use crate::cli::run::Selectors;
 use crate::cli::{ExitStatus, ListOutputFormat};
 use crate::config::{Language, Stage};
 use crate::fs::CWD;
 use crate::hook;
 use crate::printer::Printer;
 use crate::store::STORE;
-use crate::workspace::{DiscoverOptions, Workspace};
+use crate::workspace::Workspace;
 
 #[derive(Serialize)]
 struct SerializableHook {
@@ -28,26 +28,28 @@ struct SerializableHook {
 
 pub(crate) async fn list(
     config: Option<PathBuf>,
-    verbose: bool,
-    selectors: Vec<String>,
+    includes: Vec<String>,
+    skips: Vec<String>,
     hook_stage: Option<Stage>,
     language: Option<Language>,
     output_format: ListOutputFormat,
+    verbose: bool,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    let mut workspace = Workspace::discover(DiscoverOptions::from_args(config, &CWD))?;
+    let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
+    let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
+    let mut workspace = Workspace::discover(workspace_root, Some(&selectors))?;
 
     let store = STORE.as_ref()?;
     let reporter = HookInitReporter::from(printer);
     let lock = store.lock_async().await?;
-
     let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
+
     drop(lock);
 
-    let hook_ids = selectors.into_iter().collect::<BTreeSet<_>>();
-    let hooks: Vec<_> = hooks
+    let filtered_hooks: Vec<_> = hooks
         .into_iter()
-        .filter(|h| hook_ids.is_empty() || hook_ids.contains(&h.id) || hook_ids.contains(&h.alias))
+        .filter(|h| selectors.matches_hook(h, &workspace))
         .filter(|h| hook_stage.is_none_or(|hook_stage| h.stages.contains(hook_stage)))
         .filter(|h| language.is_none_or(|lang| h.language == lang))
         .collect();
@@ -56,7 +58,7 @@ pub(crate) async fn list(
         ListOutputFormat::Text => {
             if verbose {
                 // TODO: show repo path and environment path (if installed)
-                for hook in &hooks {
+                for hook in &filtered_hooks {
                     writeln!(printer.stdout(), "{}", hook.id.bold())?;
 
                     if !hook.alias.is_empty() && hook.alias != hook.id {
@@ -103,13 +105,13 @@ pub(crate) async fn list(
                 }
             } else {
                 // TODO: add project prefix to hook id
-                for hook in &hooks {
+                for hook in &filtered_hooks {
                     writeln!(printer.stdout(), "{}", hook.id)?;
                 }
             }
         }
         ListOutputFormat::Json => {
-            let serializable_hooks: Vec<_> = hooks
+            let serializable_hooks: Vec<_> = filtered_hooks
                 .into_iter()
                 .map(|h| {
                     let project = h.project().to_string();
