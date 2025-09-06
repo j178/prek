@@ -17,19 +17,22 @@ fn selector_hook_ids() {
           name: Black
           language: system
           entry: echo "black ran"
+          pass_filenames: false
     "#};
 
     context.write_pre_commit_config(config);
     context.git_add(".");
 
     // Test selecting specific hook by ID
-    cmd_snapshot!(context.filters(), context.run().arg("black"), @r"
-    success: false
-    exit_code: 1
+    cmd_snapshot!(context.filters(), context.run().arg("black").arg("-v"), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    Black....................................................................Passed
+    - hook id: black
+    - duration: [TIME]
+      black ran
 
     ----- stderr -----
-    warning: selector `black` (normalized to `:black`) did not match any hooks or projects
-    error: No hooks found after filtering with the given selectors
     ");
 }

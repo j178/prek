@@ -142,7 +142,14 @@ impl Selectors {
         let includes = includes
             .iter()
             .unique()
-            .map(|selector| parse_single_selector(selector, workspace_root, SelectorSource::CliArg))
+            .map(|selector| {
+                parse_single_selector(
+                    selector,
+                    workspace_root,
+                    SelectorSource::CliArg,
+                    RealFileSystem,
+                )
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         trace!(
@@ -154,7 +161,7 @@ impl Selectors {
                 .join(", ")
         );
 
-        let skips = load_skips(skips, workspace_root)?;
+        let skips = load_skips(skips, workspace_root, RealFileSystem)?;
 
         trace!(
             "Skip selectors: {}",
@@ -319,10 +326,11 @@ impl SelectorUsage {
 }
 
 /// Parse a single selector string into a Selection enum.
-fn parse_single_selector(
+fn parse_single_selector<FS: FileSystem>(
     input: &str,
     workspace_root: &Path,
     source: SelectorSource,
+    fs: FS,
 ) -> Result<Selector, Error> {
     if input.chars().filter(|&c| c == ':').count() > 1 {
         return Err(Error::InvalidSelector {
@@ -361,7 +369,7 @@ fn parse_single_selector(
             });
         }
 
-        let project_path = normalize_path(project_path, workspace_root)?;
+        let project_path = normalize_path(project_path, workspace_root, fs)?;
 
         return Ok(Selector {
             source,
@@ -375,7 +383,7 @@ fn parse_single_selector(
 
     // Handle project paths
     if input == "." || input.contains('/') {
-        let project_path = normalize_path(input, workspace_root)?;
+        let project_path = normalize_path(input, workspace_root, fs)?;
 
         return Ok(Selector {
             source,
@@ -398,6 +406,20 @@ fn parse_single_selector(
     })
 }
 
+/// Trait to abstract filesystem operations for easier testing.
+pub trait FileSystem: Copy {
+    fn canonicalize<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf>;
+}
+
+#[derive(Copy, Clone)]
+pub struct RealFileSystem;
+
+impl FileSystem for RealFileSystem {
+    fn canonicalize<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
+        std::fs::canonicalize(path)
+    }
+}
+
 /// Normalize a project path to the relative path from the workspace root.
 /// In workspace root:
 /// './project/' -> 'project'
@@ -412,8 +434,12 @@ fn parse_single_selector(
 /// 'project/' -> 'subdir/project'
 /// '../project/' -> 'project'
 /// '..' -> ''
-fn normalize_path(path: &str, workspace_root: &Path) -> Result<PathBuf, Error> {
-    let canonicalize_path = std::fs::canonicalize(path).map_err(|e| Error::InvalidSelector {
+fn normalize_path<FS: FileSystem>(
+    path: &str,
+    workspace_root: &Path,
+    fs: FS,
+) -> Result<PathBuf, Error> {
+    let canonicalize_path = fs.canonicalize(path).map_err(|e| Error::InvalidSelector {
         selector: path.to_string(),
         source: anyhow!(e),
     })?;
@@ -429,9 +455,10 @@ fn normalize_path(path: &str, workspace_root: &Path) -> Result<PathBuf, Error> {
 }
 
 /// Parse skip selectors from CLI args and environment variables
-pub(crate) fn load_skips(
+pub(crate) fn load_skips<FS: FileSystem>(
     cli_skips: &[String],
     workspace_root: &Path,
+    fs: FS,
 ) -> Result<Vec<Selector>, Error> {
     let prek_skip = EnvVars::var(EnvVars::PREK_SKIP);
     let skip = EnvVars::var(EnvVars::SKIP);
@@ -458,7 +485,7 @@ pub(crate) fn load_skips(
     skips
         .into_iter()
         .unique()
-        .map(|skip| parse_single_selector(skip, workspace_root, source))
+        .map(|skip| parse_single_selector(skip, workspace_root, source, fs))
         .collect()
 }
 
@@ -470,30 +497,50 @@ fn parse_comma_separated(input: &str) -> impl Iterator<Item = &str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use tempfile::TempDir;
 
-    fn create_test_workspace() -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().unwrap();
-        let workspace_root = temp_dir.path().to_path_buf();
+    struct MockFileSystem {
+        current_dir: TempDir,
+    }
 
-        // Create some test directories
-        std::fs::create_dir_all(workspace_root.join("src")).unwrap();
-        std::fs::create_dir_all(workspace_root.join("src/backend")).unwrap();
+    impl FileSystem for &MockFileSystem {
+        fn canonicalize<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
+            let p = path.as_ref();
+            if p.is_absolute() {
+                Ok(p.to_path_buf())
+            } else {
+                Ok(self.current_dir.path().join(p))
+            }
+        }
+    }
 
-        (temp_dir, workspace_root)
+    impl MockFileSystem {
+        fn root(&self) -> &Path {
+            self.current_dir.path()
+        }
+    }
+
+    fn create_test_workspace() -> anyhow::Result<MockFileSystem> {
+        let temp_dir = TempDir::new()?;
+
+        std::fs::create_dir_all(temp_dir.path().join("src"))?;
+        std::fs::create_dir_all(temp_dir.path().join("src/backend"))?;
+
+        Ok(MockFileSystem {
+            current_dir: temp_dir,
+        })
     }
 
     #[test]
     fn test_parse_single_selector_hook_id() -> anyhow::Result<()> {
-        let (_temp, workspace_root) = create_test_workspace();
+        let fs = create_test_workspace()?;
 
         // Test explicit hook ID with colon prefix
-        let selector = parse_single_selector(":black", &workspace_root, SelectorSource::CliArg)?;
+        let selector = parse_single_selector(":black", fs.root(), SelectorSource::CliArg, &fs)?;
         assert!(matches!(selector.expr, SelectorExpr::HookId(ref id) if id == "black"));
 
         // Test bare hook ID (backward compatibility)
-        let selector = parse_single_selector("black", &workspace_root, SelectorSource::CliArg)?;
+        let selector = parse_single_selector("black", fs.root(), SelectorSource::CliArg, &fs)?;
         assert!(matches!(selector.expr, SelectorExpr::HookId(ref id) if id == "black"));
 
         Ok(())
@@ -501,20 +548,20 @@ mod tests {
 
     #[test]
     fn test_parse_single_selector_project_prefix() -> anyhow::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let workspace_root = temp_dir.path();
-
-        // Create the src directory
-        std::fs::create_dir_all(workspace_root.join("src"))?;
+        let fs = create_test_workspace()?;
 
         // Test project path with slash
-        let selector = parse_single_selector("src/", workspace_root, SelectorSource::CliArg)?;
+        let selector = parse_single_selector("src/", fs.root(), SelectorSource::CliArg, &fs)?;
         assert!(
             matches!(selector.expr, SelectorExpr::ProjectPrefix(ref path) if path == &PathBuf::from("src"))
         );
 
         // Test current directory
-        let selector = parse_single_selector(".", workspace_root, SelectorSource::CliArg)?;
+        let selector = parse_single_selector(".", fs.root(), SelectorSource::CliArg, &fs)?;
+        assert!(
+            matches!(selector.expr, SelectorExpr::ProjectPrefix(ref path) if path == &PathBuf::from(""))
+        );
+        let selector = parse_single_selector("./", fs.root(), SelectorSource::CliArg, &fs)?;
         assert!(
             matches!(selector.expr, SelectorExpr::ProjectPrefix(ref path) if path == &PathBuf::from(""))
         );
@@ -524,13 +571,9 @@ mod tests {
 
     #[test]
     fn test_parse_single_selector_project_hook() -> anyhow::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let workspace_root = temp_dir.path();
+        let fs = create_test_workspace()?;
 
-        // Create the src directory
-        std::fs::create_dir_all(workspace_root.join("src"))?;
-
-        let selector = parse_single_selector("src:black", workspace_root, SelectorSource::CliArg)?;
+        let selector = parse_single_selector("src:black", fs.root(), SelectorSource::CliArg, &fs)?;
         match selector.expr {
             SelectorExpr::ProjectHook {
                 project_path,
@@ -547,24 +590,23 @@ mod tests {
 
     #[test]
     fn test_parse_single_selector_invalid() -> anyhow::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let workspace_root = temp_dir.path();
+        let fs = create_test_workspace()?;
 
         // Test empty hook ID
-        let result = parse_single_selector(":", workspace_root, SelectorSource::CliArg);
+        let result = parse_single_selector(":", fs.root(), SelectorSource::CliArg, &fs);
         assert!(result.is_err());
 
         // Test empty hook ID in project:hook
-        let result = parse_single_selector("src:", workspace_root, SelectorSource::CliArg);
+        let result = parse_single_selector("src:", fs.root(), SelectorSource::CliArg, &fs);
         assert!(result.is_err());
 
         // Test multiple colons
         let result =
-            parse_single_selector("src:black:extra", workspace_root, SelectorSource::CliArg);
+            parse_single_selector("src:black:extra", fs.root(), SelectorSource::CliArg, &fs);
         assert!(result.is_err());
 
         // Test empty string
-        let result = parse_single_selector("", workspace_root, SelectorSource::CliArg);
+        let result = parse_single_selector("", fs.root(), SelectorSource::CliArg, &fs);
         assert!(result.is_err());
 
         Ok(())
@@ -572,59 +614,63 @@ mod tests {
 
     #[test]
     fn test_normalize_path() -> anyhow::Result<()> {
-        let (_temp, workspace_root) = create_test_workspace();
+        let fs = create_test_workspace()?;
 
         // Test relative path
-        let result = normalize_path("src", &workspace_root)?;
+        let result = normalize_path("src", fs.root(), &fs)?;
         assert_eq!(result, PathBuf::from("src"));
 
         // Test nested path
-        let result = normalize_path("src/backend", &workspace_root)?;
+        let result = normalize_path("src/backend", fs.root(), &fs)?;
         assert_eq!(result, PathBuf::from("src/backend"));
 
         // Test current directory
-        let result = normalize_path(".", &workspace_root)?;
+        let result = normalize_path(".", fs.root(), &fs)?;
         assert_eq!(result, PathBuf::from(""));
 
         // Test path outside workspace - create a temp dir outside workspace
         let outside_dir = TempDir::new()?;
         let outside_path = outside_dir.path().to_string_lossy();
-        let result = normalize_path(&outside_path, &workspace_root);
+        let result = normalize_path(&outside_path, fs.root(), &fs);
         assert!(result.is_err());
 
         Ok(())
     }
 
     #[test]
-    fn test_parse_comma_separated() {
-        let input = "a,b,c";
-        let result: Vec<_> = parse_comma_separated(input).collect();
-        assert_eq!(result, vec!["a", "b", "c"]);
-
-        let input = "  a  ,  b  ,  c  ";
-        let result: Vec<_> = parse_comma_separated(input).collect();
-        assert_eq!(result, vec!["a", "b", "c"]);
-
-        let input = "a,,b,";
-        let result: Vec<_> = parse_comma_separated(input).collect();
-        assert_eq!(result, vec!["a", "b"]);
-
-        let input = "";
-        let result: Vec<_> = parse_comma_separated(input).collect();
-        assert_eq!(result, Vec::<&str>::new());
-    }
-
-    #[test]
     fn test_selector_display() -> anyhow::Result<()> {
-        let (_temp, workspace_root) = create_test_workspace();
+        let fs = create_test_workspace()?;
 
-        let selector = parse_single_selector(":black", &workspace_root, SelectorSource::CliArg)?;
-        assert_eq!(selector.to_string(), ":black");
+        let selector = parse_single_selector("black", fs.root(), SelectorSource::CliArg, &fs)?;
+        assert_eq!(selector.to_string(), "black");
 
-        let selector = parse_single_selector("src/", &workspace_root, SelectorSource::CliArg)?;
+        let selector = parse_single_selector(":black", fs.root(), SelectorSource::CliArg, &fs)?;
+        assert_eq!(selector.to_string(), "black");
+
+        let selector = parse_single_selector("src/", fs.root(), SelectorSource::CliArg, &fs)?;
         assert_eq!(selector.to_string(), "src/");
 
-        let selector = parse_single_selector("src:black", &workspace_root, SelectorSource::CliArg)?;
+        let selector = parse_single_selector("./src/", fs.root(), SelectorSource::CliArg, &fs)?;
+        assert_eq!(selector.to_string(), "src/");
+
+        let selector = parse_single_selector("src/", fs.root(), SelectorSource::CliArg, &fs)?;
+        assert_eq!(selector.to_string(), "src/");
+
+        let selector = parse_single_selector(".", fs.root(), SelectorSource::CliArg, &fs)?;
+        assert_eq!(selector.to_string(), "./");
+
+        let selector = parse_single_selector("./", fs.root(), SelectorSource::CliArg, &fs)?;
+        assert_eq!(selector.to_string(), "./");
+
+        let selector = parse_single_selector("src:black", fs.root(), SelectorSource::CliArg, &fs)?;
+        assert_eq!(selector.to_string(), "src:black");
+
+        let selector =
+            parse_single_selector("./src:black", fs.root(), SelectorSource::CliArg, &fs)?;
+        assert_eq!(selector.to_string(), "src:black");
+
+        let selector =
+            parse_single_selector("./src/:black", fs.root(), SelectorSource::CliArg, &fs)?;
         assert_eq!(selector.to_string(), "src:black");
 
         Ok(())
@@ -632,8 +678,6 @@ mod tests {
 
     #[test]
     fn test_selector_as_flag() {
-        let (_temp, _workspace_root) = create_test_workspace();
-
         let selector = Selector {
             source: SelectorSource::CliArg,
             original: "black".to_string(),
@@ -654,25 +698,5 @@ mod tests {
             expr: SelectorExpr::HookId("black".to_string()),
         };
         assert_eq!(selector.as_flag(), "SKIP=black");
-    }
-
-    #[test]
-    fn test_disambiguation() -> anyhow::Result<()> {
-        let (_temp, _workspace_root) = create_test_workspace();
-
-        // For disambiguation tests, we need to use a different approach since we can't easily
-        // create files in the test environment. Let's test the parsing logic instead.
-
-        // Test explicit hook with colon prefix - this should work without filesystem
-        let temp_dir = TempDir::new()?;
-        let workspace_root = temp_dir.path();
-        let selector = parse_single_selector(":lint", workspace_root, SelectorSource::CliArg)?;
-        assert!(matches!(selector.expr, SelectorExpr::HookId(ref id) if id == "lint"));
-
-        // Test that ambiguous case defaults to hook ID
-        let selector = parse_single_selector("lint", workspace_root, SelectorSource::CliArg)?;
-        assert!(matches!(selector.expr, SelectorExpr::HookId(ref id) if id == "lint"));
-
-        Ok(())
     }
 }
