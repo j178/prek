@@ -298,9 +298,25 @@ prek run -vvv
 prek run -C project/dir -vvv
 ```
 
-## Limitations (TODO)
+## Workspace Cache
 
-1. For performance considerations, hook completions are only available for the next-level projects, not for nested ones.
-2. Skipped hooks will not be printed with a `SKIPPED` status.
+To improve performance in large monorepos, `prek` introduces a workspace cache mechanism. The workspace cache stores the results of project discovery, so repeated runs are much faster.
+
+- The cache is automatically used by default. You don't need to do anything for it to work.
+- If you make changes to `.pre-commit-config.yaml` files, remove projects, or otherwise change the workspace structure, `prek` will usually detect this and refresh the cache automatically.
+- If you add a new `.pre-commit-config.yaml` to your workspace, `prek` may not detect it immediately, try running with `--refresh` to ensure the cache is up to date.
+
+```bash
+prek run --refresh
+```
+
+This will clear and rebuild the workspace cache before running hooks.
+
+## Behavior Changes in Workspace Mode
+
+When running in workspace mode, there are a few changes to the output format and behavior compared to single-config mode:
+
+1. Hook output is grouped by project, with a header indicating which project is currently running.
+2. Skipped hooks are not shown at all in the output, previously they were listed as "Skipped".
 
 The workspace mode provides powerful organization capabilities while maintaining backward compatibility with existing single-config workflows.

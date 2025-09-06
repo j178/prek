@@ -1709,6 +1709,7 @@ fn completion() {
     --config	Path to alternate config file
     --cd	Change to directory before running
     --color	Whether to use color in output
+    --refresh	Refresh all cached data
     --help	Display the concise help for this command
     --no-progress	Hide all progress outputs
     --quiet	Do not print any output
