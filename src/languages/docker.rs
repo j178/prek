@@ -10,7 +10,6 @@ use fancy_regex::Regex;
 use tracing::trace;
 
 use crate::cli::reporter::HookInstallReporter;
-use crate::fs::CWD;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
@@ -135,24 +134,24 @@ impl Docker {
     }
 
     /// Get the path of the current directory in the host.
-    fn get_docker_path(path: &str) -> Result<Cow<'_, str>> {
+    fn get_docker_path(path: &Path) -> Result<Cow<'_, Path>> {
         let mounts = CONTAINER_MOUNTS.as_ref()?;
 
         for mount in mounts {
-            if path.starts_with(&mount.destination) {
-                let mut path = path.replace(&mount.destination, &mount.source);
-                if path.contains('\\') {
-                    // Replace `/` with `\` on Windows
-                    path = path.replace('/', "\\");
+            if let Ok(suffix) = path.strip_prefix(&mount.destination) {
+                if suffix.components().next().is_none() {
+                    // Exact match
+                    return Ok(Path::new(&mount.source).into());
                 }
-                return Ok(Cow::Owned(path));
+                let path = Path::new(&mount.source).join(suffix);
+                return Ok(path.into());
             }
         }
 
-        Ok(Cow::Borrowed(path))
+        Ok(path.into())
     }
 
-    pub(crate) fn docker_run_cmd() -> Result<Cmd> {
+    pub(crate) fn docker_run_cmd(work_dir: &Path) -> Result<Cmd> {
         let mut command = Cmd::new("docker", "run container");
         command.arg("run").arg("--rm");
 
@@ -169,15 +168,13 @@ impl Docker {
             }));
         }
 
-        // TODO: fix in workspace mode
-        let cwd = &CWD.to_string_lossy();
-        let work_dir = Self::get_docker_path(cwd)?;
+        let work_dir = Self::get_docker_path(work_dir)?;
         command
             .arg("-v")
             // https://docs.docker.com/engine/reference/commandline/run/#mount-volumes-from-container-volumes-from
             // The `Z` option tells Docker to label the content with a private
             // unshared label. Only the current container can use a private volume.
-            .arg(format!("{work_dir}:/src:rw,Z",))
+            .arg(format!("{}:/src:rw,Z", work_dir.display()))
             .arg("--workdir")
             .arg("/src");
 
@@ -237,7 +234,7 @@ impl LanguageImpl for Docker {
 
         let run = async move |batch: &[&Path]| {
             // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
-            let mut cmd = Docker::docker_run_cmd()?;
+            let mut cmd = Docker::docker_run_cmd(hook.work_dir())?;
             let mut output = cmd
                 .current_dir(hook.work_dir())
                 .arg("--entrypoint")
