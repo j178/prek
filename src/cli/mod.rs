@@ -321,10 +321,8 @@ pub(crate) struct RunArgs {
     ///
     /// Supports flexible selector syntax:
     /// - `hook-id`: Run all hooks with the specified ID across all projects
-    /// - `project-path`: Run all hooks from the specified project
+    /// - `project-path/`: Run all hooks from the specified project
     /// - `project-path:hook-id`: Run only the specified hook from the specified project
-    /// - `:hook-id`: Explicitly run hooks (disambiguation when conflicts with project names)
-    /// - `project-path/`: Explicitly run project (disambiguation when conflicts with hook names)
     ///
     /// Can be specified multiple times to select multiple hooks/projects.
     #[arg(
@@ -338,10 +336,8 @@ pub(crate) struct RunArgs {
     ///
     /// Supports flexible selector syntax:
     /// - `hook-id`: Skip all hooks with the specified ID across all projects
-    /// - `project-path`: Skip all hooks from the specified project
+    /// - `project-path/`: Skip all hooks from the specified project
     /// - `project-path:hook-id`: Skip only the specified hook from the specified project
-    /// - `:hook-id`: Explicitly skip hooks (disambiguation when conflicts with project names)
-    /// - `project-path/`: Explicitly skip project (disambiguation when conflicts with hook names)
     ///
     /// Can be specified multiple times. Also accepts `PREK_SKIP` or `SKIP` environment variables (comma-delimited).
     #[arg(long = "skip", value_name = "HOOK|PROJECT")]
@@ -417,10 +413,8 @@ pub(crate) struct ListArgs {
     ///
     /// Supports flexible selector syntax:
     /// - `hook-id`: Run all hooks with the specified ID across all projects
-    /// - `project-path`: Run all hooks from the specified project
+    /// - `project-path/`: Run all hooks from the specified project
     /// - `project-path:hook-id`: Run only the specified hook from the specified project
-    /// - `:hook-id`: Explicitly run hooks (disambiguation when conflicts with project names)
-    /// - `project-path/`: Explicitly run project (disambiguation when conflicts with hook names)
     ///
     /// Can be specified multiple times to select multiple hooks/projects.
     #[arg(
@@ -434,10 +428,8 @@ pub(crate) struct ListArgs {
     ///
     /// Supports flexible selector syntax:
     /// - `hook-id`: Skip all hooks with the specified ID across all projects
-    /// - `project-path`: Skip all hooks from the specified project
+    /// - `project-path/`: Skip all hooks from the specified project
     /// - `project-path:hook-id`: Skip only the specified hook from the specified project
-    /// - `:hook-id`: Explicitly skip hooks (disambiguation when conflicts with project names)
-    /// - `project-path/`: Explicitly skip project (disambiguation when conflicts with hook names)
     ///
     /// Can be specified multiple times. Also accepts `PREK_SKIP` or `SKIP` environment variables (comma-delimited).
     #[arg(long = "skip", value_name = "HOOK|PROJECT")]
