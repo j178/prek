@@ -76,7 +76,7 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 
 For more detailed improvements prek offers, take a look at [diff.md](https://prek.j178.dev/diff/).
 
-## Who are using prek?
+## Who is using prek?
 
 prek is pretty new, but it is already being used or recommend by some projects and organizations:
 

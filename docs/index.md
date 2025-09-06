@@ -62,7 +62,7 @@
 
 For more detailed improvements prek offers, take a look at [Difference from pre-commit](./diff.md).
 
-## Who are using prek?
+## Who is using prek?
 
 prek is pretty new, but it is already being used or recommend by some projects and organizations:
 
