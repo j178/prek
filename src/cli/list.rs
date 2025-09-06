@@ -33,12 +33,13 @@ pub(crate) async fn list(
     hook_stage: Option<Stage>,
     language: Option<Language>,
     output_format: ListOutputFormat,
+    refresh: bool,
     verbose: bool,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
-    let mut workspace = Workspace::discover(workspace_root, config, Some(&selectors))?;
+    let mut workspace = Workspace::discover(workspace_root, config, Some(&selectors), refresh)?;
 
     let store = STORE.as_ref()?;
     let reporter = HookInitReporter::from(printer);

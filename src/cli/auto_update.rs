@@ -45,7 +45,7 @@ pub(crate) async fn auto_update(
 
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     // TODO: support selectors?
-    let workspace = Workspace::discover(workspace_root, config, None)?;
+    let workspace = Workspace::discover(workspace_root, config, None, true)?;
 
     // Collect repos and deduplicate by RemoteRepo
     #[allow(clippy::mutable_key_type)]

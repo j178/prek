@@ -166,6 +166,7 @@ pub(crate) struct Cli {
 #[derive(Debug, Parser)]
 #[command(next_help_heading = "Global options", next_display_order = 1000)]
 #[command(disable_help_flag = true, disable_version_flag = true)]
+#[allow(clippy::struct_excessive_bools)]
 pub(crate) struct GlobalArgs {
     /// Path to alternate config file.
     #[arg(global = true, short, long, value_parser)]
@@ -190,6 +191,10 @@ pub(crate) struct GlobalArgs {
         default_value_t = ColorChoice::Auto,
     )]
     pub(crate) color: ColorChoice,
+
+    /// Refresh all cached data.
+    #[arg(global = true, long)]
+    pub(crate) refresh: bool,
 
     /// Display the concise help for this command.
     #[arg(global = true, short, long, action = clap::ArgAction::HelpShort)]

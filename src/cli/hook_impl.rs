@@ -87,6 +87,7 @@ pub(crate) async fn hook_impl(
         false, // last_commit is always false in hook implementation context
         false,
         false,
+        false,
         run_args.extra,
         false,
         printer,

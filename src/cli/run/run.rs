@@ -45,6 +45,7 @@ pub(crate) async fn run(
     last_commit: bool,
     show_diff_on_failure: bool,
     dry_run: bool,
+    refresh: bool,
     extra_args: RunExtraArgs,
     verbose: bool,
     printer: Printer,
@@ -75,7 +76,7 @@ pub(crate) async fn run(
 
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
-    let mut workspace = Workspace::discover(workspace_root, config, Some(&selectors))?;
+    let mut workspace = Workspace::discover(workspace_root, config, Some(&selectors), refresh)?;
 
     if should_stash {
         workspace.check_configs_staged().await?;

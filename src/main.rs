@@ -168,12 +168,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.install_hooks,
                 args.overwrite,
                 args.allow_missing_config,
+                cli.globals.refresh,
                 printer,
                 None,
             )
             .await
         }
-        Command::InstallHooks => cli::install_hooks(cli.globals.config, printer).await,
+        Command::InstallHooks => {
+            cli::install_hooks(cli.globals.config, cli.globals.refresh, printer).await
+        }
         Command::Uninstall(args) => {
             show_settings!(args);
 
@@ -195,6 +198,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.last_commit,
                 args.show_diff_on_failure,
                 args.dry_run,
+                cli.globals.refresh,
                 args.extra,
                 cli.globals.verbose > 0,
                 printer,
@@ -211,6 +215,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.hook_stage,
                 args.language,
                 args.output_format,
+                cli.globals.refresh,
                 cli.globals.verbose > 0,
                 printer,
             )
@@ -287,6 +292,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 cli.globals.config,
                 args.hook_types,
                 args.no_allow_missing_config,
+                cli.globals.refresh,
                 printer,
             )
             .await

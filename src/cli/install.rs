@@ -18,12 +18,14 @@ use crate::store::STORE;
 use crate::workspace::{Project, Workspace};
 use crate::{git, warn_user};
 
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
     config: Option<PathBuf>,
     hook_types: Vec<HookType>,
     install_hook_environments: bool,
     overwrite: bool,
     allow_missing_config: bool,
+    refresh: bool,
     printer: Printer,
     git_dir: Option<&Path>,
 ) -> Result<ExitStatus> {
@@ -57,16 +59,20 @@ pub(crate) async fn install(
     }
 
     if install_hook_environments {
-        install_hooks(config, printer).await?;
+        install_hooks(config, refresh, printer).await?;
     }
 
     Ok(ExitStatus::Success)
 }
 
-pub(crate) async fn install_hooks(config: Option<PathBuf>, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn install_hooks(
+    config: Option<PathBuf>,
+    refresh: bool,
+    printer: Printer,
+) -> Result<ExitStatus> {
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     // TODO: support selectors in `install-hooks`?
-    let mut workspace = Workspace::discover(workspace_root, config, None)?;
+    let mut workspace = Workspace::discover(workspace_root, config, None, refresh)?;
 
     let store = STORE.as_ref()?;
     let reporter = HookInitReporter::from(printer);
@@ -271,6 +277,7 @@ pub(crate) async fn init_template_dir(
     config: Option<PathBuf>,
     hook_types: Vec<HookType>,
     requires_config: bool,
+    refresh: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     install(
@@ -279,6 +286,7 @@ pub(crate) async fn init_template_dir(
         false,
         true,
         !requires_config,
+        refresh,
         printer,
         Some(&directory),
     )
