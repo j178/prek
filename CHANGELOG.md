@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.2.0a1
+
+This is a huge milestone release that introduces **Workspace Mode** — first‑class monorepo support.
+
+`prek` now allows you to manage multiple projects with their own `.pre-commit-config.yaml` within a single repository. It auto‑discovers nested projects, runs hooks in project scope, and provides flexible selectors to target specific projects and hooks. This makes `prek` a powerful tool for managing pre-commit hooks in complex repository structures.
+
+For more details, see [Workspace Mode](https://prek.j178.dev/workspace/). If you encounter any issues, please report them at [Issues](https://github.com/j178/prek/issues).
+
+Special thanks to @potiuk for all the help and feedback in designing and testing this feature!
+
+### Enhancements
+
+- Support multiple `.pre-commit-config.yaml` in a workspace (monorepo mode) ([#583](https://github.com/j178/prek/pull/583))
+- Implement project and hook selector ([#623](https://github.com/j178/prek/pull/623))
+- Add `prek run --cd <dir>` to change directory before running ([#581](https://github.com/j178/prek/pull/581))
+- Support `prek list` in workspace mode ([#586](https://github.com/j178/prek/pull/586))
+- Support `prek install|install-hooks|hook-impl|init-template-dir` in workspace mode ([#595](https://github.com/j178/prek/pull/595))
+- Implement `auto-update` in workspace mode ([#605](https://github.com/j178/prek/pull/605))
+- Implement selector completion in workspace mode ([#639](https://github.com/j178/prek/pull/639))
+- Simplify `auto-update` implementation ([#608](https://github.com/j178/prek/pull/608))
+- Add a `--dry-run` flag to `prek run` ([#622](https://github.com/j178/prek/pull/622))
+- Cache workspace discovery result ([#636](https://github.com/j178/prek/pull/636))
+- Fix local script hook entry path in workspace mode ([#603](https://github.com/j178/prek/pull/603))
+- Fix `hook-impl` allow missing config ([#600](https://github.com/j178/prek/pull/600))
+- Fix docker mount in workspace mode ([#638](https://github.com/j178/prek/pull/638))
+- Show project line when project is not root ([#637](https://github.com/j178/prek/pull/637))
+
+### Documentation
+
+- Publish docs to `https://prek.j178.dev` ([#627](https://github.com/j178/prek/pull/627))
+- Improve workspace docs about skips rule ([#615](https://github.com/j178/prek/pull/615))
+- Add an full example and update docs ([#582](https://github.com/j178/prek/pull/582))
+
+### Other changes
+
+- Docs: `.pre-commit-config.yml` support has been removed ([#630](https://github.com/j178/prek/pull/630))
+
+### Contributors
+
+- [@luizvbo](https://github.com/luizvbo)
+- [@j178](https://github.com/j178)
+- [@hugovk](https://github.com/hugovk)
+
 ## 0.1.6
 
 ### Enhancements
