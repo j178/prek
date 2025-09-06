@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
@@ -10,8 +11,9 @@ use itertools::zip_eq;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
-use tracing::{debug, error};
+use tracing::{debug, error, instrument};
 
+use crate::cli::run::Selectors;
 use crate::config::{self, CONFIG_FILE, Config, ManifestHook, read_config};
 use crate::fs::Simplified;
 use crate::git::GIT_ROOT;
@@ -96,7 +98,7 @@ impl Project {
     /// Initialize a new project from the configuration file with an optional root path.
     /// If root is not given, it will be the parent directory of the configuration file.
     pub(crate) fn from_config_file(
-        config_path: PathBuf,
+        config_path: Cow<'_, Path>,
         root: Option<PathBuf>,
     ) -> Result<Self, config::Error> {
         debug!(
@@ -117,7 +119,7 @@ impl Project {
         Ok(Self {
             root,
             config,
-            config_path,
+            config_path: config_path.into_owned(),
             idx: 0,
             depth: 0,
             relative_path: PathBuf::new(),
@@ -127,21 +129,19 @@ impl Project {
 
     /// Find the configuration file in the given path.
     pub(crate) fn from_directory(path: &Path) -> Result<Self, config::Error> {
-        Self::from_config_file(path.join(CONFIG_FILE), None)
+        Self::from_config_file(path.join(CONFIG_FILE).into(), None)
     }
 
     /// Discover a project from the give path or search from the given path to the git root.
-    pub(crate) fn discover(opts: DiscoverOptions) -> Result<Project, Error> {
+    pub(crate) fn discover(config_file: Option<&Path>, dir: &Path) -> Result<Project, Error> {
         let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
 
-        if let DiscoverOptions::File(config) = opts {
-            return Ok(Project::from_config_file(config, Some(git_root.clone()))?);
+        if let Some(config) = config_file {
+            return Ok(Project::from_config_file(
+                config.into(),
+                Some(git_root.clone()),
+            )?);
         }
-
-        // Directory must be absolute
-        let DiscoverOptions::Directory(dir) = opts else {
-            unreachable!()
-        };
 
         // TODO: add back `.pre-commit-config.yml` support
         // Walk from the given path up to the git root, to find the project root.
@@ -348,39 +348,16 @@ pub(crate) struct Workspace {
     projects: Vec<Arc<Project>>,
 }
 
-pub(crate) enum DiscoverOptions {
-    File(PathBuf),
-    Directory(PathBuf),
-}
-
-impl DiscoverOptions {
-    pub(crate) fn from_args(config: Option<PathBuf>, path: &Path) -> Self {
-        if let Some(config) = config {
-            Self::File(config)
-        } else {
-            Self::Directory(path.to_path_buf())
-        }
-    }
-}
-
 impl Workspace {
-    /// Discover the workspace from the given options.
-    pub(crate) fn discover(opts: DiscoverOptions) -> Result<Self, Error> {
+    /// Find the workspace root.
+    /// `dir` must be an absolute path.
+    pub(crate) fn find_root(config_file: Option<&Path>, dir: &Path) -> Result<PathBuf, Error> {
         let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
 
-        if let DiscoverOptions::File(config) = opts {
+        if config_file.is_some() {
             // For `--config <path>`, the workspace root is the git root.
-            let project = Project::from_config_file(config, Some(git_root.clone()))?;
-            return Ok(Self {
-                root: git_root.clone(),
-                projects: vec![Arc::new(project)],
-            });
+            return Ok(git_root.clone());
         }
-
-        // Directory must be absolute
-        let DiscoverOptions::Directory(dir) = opts else {
-            unreachable!()
-        };
 
         // TODO: add back `.pre-commit-config.yml` support
         // Walk from the given path up to the git root, to find the workspace root.
@@ -391,45 +368,83 @@ impl Workspace {
             .ok_or(MissingPreCommitConfig)?
             .to_path_buf();
 
-        debug!("Found workspace root at {}", workspace_root.user_display());
+        debug!("Found workspace root at `{}`", workspace_root.display());
+        Ok(workspace_root)
+    }
 
-        // Then walk subdirectories to find all projects.
+    /// Discover the workspace from the given workspace root.
+    #[instrument(level = "trace", skip(selectors))]
+    pub(crate) fn discover(
+        root: PathBuf,
+        config: Option<PathBuf>,
+        selectors: Option<&Selectors>,
+    ) -> Result<Self, Error> {
+        if let Some(config) = config {
+            let project = Project::from_config_file(config.into(), Some(root.clone()))?;
+            return Ok(Self {
+                root,
+                projects: vec![Arc::new(project)],
+            });
+        }
+
+        // Walk subdirectories to find all projects.
         let projects = Mutex::new(Ok(Vec::new()));
 
-        ignore::WalkBuilder::new(&workspace_root)
+        ignore::WalkBuilder::new(&root)
             .follow_links(false)
             .hidden(false) // Find from hidden directories.
             .build_parallel()
             .run(|| {
                 Box::new(|result| {
-                    if let Ok(entry) = result {
-                        if entry.file_type().is_some_and(|t| t.is_file())
-                            && entry.file_name() == CONFIG_FILE
-                        {
-                            match Project::from_config_file(entry.path().to_path_buf(), None) {
-                                Ok(mut project) => {
-                                    let depth = entry.depth();
-                                    let relative_path = entry
-                                        .into_path()
-                                        .parent()
-                                        .and_then(|p| p.strip_prefix(&workspace_root).ok())
-                                        .expect("Entry path should be relative to the root")
-                                        .to_path_buf();
-                                    project.with_relative_path(relative_path);
-                                    project.with_depth(depth);
+                    let Ok(entry) = result else {
+                        return WalkState::Continue;
+                    };
+                    let Some(file_type) = entry.file_type() else {
+                        return WalkState::Continue;
+                    };
 
-                                    projects
-                                        .lock()
-                                        .unwrap()
-                                        .as_mut()
-                                        .unwrap()
-                                        .push(Arc::new(project));
-                                }
-                                Err(config::Error::NotFound(_)) => {}
-                                Err(e) => {
-                                    *projects.lock().unwrap() = Err(e);
-                                    return WalkState::Quit;
-                                }
+                    // If it's a directory, check if it matches the selectors.
+                    // Do not skip the root directory even if it doesn't match.
+                    if file_type.is_dir() && entry.depth() > 0 {
+                        let Some(selectors) = selectors.as_ref() else {
+                            return WalkState::Continue;
+                        };
+                        let relative_path = entry
+                            .path()
+                            .strip_prefix(&root)
+                            .expect("Entry path should be relative to the root");
+
+                        if !selectors.matches_path(relative_path) {
+                            debug!(
+                                path = %relative_path.display(),
+                                "Skipping unselected path"
+                            );
+                            return WalkState::Skip;
+                        }
+                    } else if file_type.is_file() && entry.file_name() == CONFIG_FILE {
+                        match Project::from_config_file(entry.path().into(), None) {
+                            Ok(mut project) => {
+                                let depth = entry.depth();
+                                let relative_path = entry
+                                    .into_path()
+                                    .parent()
+                                    .and_then(|p| p.strip_prefix(&root).ok())
+                                    .expect("Entry path should be relative to the root")
+                                    .to_path_buf();
+                                project.with_relative_path(relative_path);
+                                project.with_depth(depth);
+
+                                projects
+                                    .lock()
+                                    .unwrap()
+                                    .as_mut()
+                                    .unwrap()
+                                    .push(Arc::new(project));
+                            }
+                            Err(config::Error::NotFound(_)) => {}
+                            Err(e) => {
+                                *projects.lock().unwrap() = Err(e);
+                                return WalkState::Quit;
                             }
                         }
                     }
@@ -439,6 +454,7 @@ impl Workspace {
             });
 
         let mut projects = projects.into_inner().unwrap()?;
+        debug_assert!(!projects.is_empty(), "At least one project should be found");
 
         // Sort projects by their depth in the directory tree.
         // The deeper the project comes first.
@@ -455,10 +471,7 @@ impl Workspace {
             Arc::get_mut(project).unwrap().with_idx(idx);
         }
 
-        Ok(Self {
-            root: workspace_root,
-            projects,
-        })
+        Ok(Self { root, projects })
     }
 
     pub(crate) fn root(&self) -> &Path {
@@ -572,7 +585,7 @@ impl Workspace {
     }
 
     /// Check if all configuration files are staged in git.
-    pub(crate) async fn check_config_staged(&self) -> Result<()> {
+    pub(crate) async fn check_configs_staged(&self) -> Result<()> {
         let config_files = self
             .projects
             .iter()

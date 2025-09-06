@@ -60,6 +60,7 @@ itertools = { version = "0.14.0" }
 liblzma = { version = "*", features = ["static"] }
 memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
+path-clean = { version = "1.0.1" }
 rand = { version = "0.9.0" }
 rayon = { version = "1.10.0" }
 reqwest = { version = "0.12.9", default-features = false, features = ["http2", "stream", "json", "rustls-tls-webpki-roots"] }
@@ -101,6 +102,7 @@ insta = { version = "1.40.0", features = ["filters"] }
 insta-cmd = { version = "0.6.0" }
 predicates = { version = "3.1.2" }
 regex = { version = "1.11.0" }
+tempfile = { version = "3.13.0" }
 
 [package.metadata.cargo-shear]
 ignored = ["liblzma"]

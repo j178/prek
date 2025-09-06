@@ -20,7 +20,7 @@ use crate::config::{MANIFEST_FILE, RemoteRepo, Repo};
 use crate::fs::CWD;
 use crate::printer::Printer;
 use crate::run::CONCURRENCY;
-use crate::workspace::{DiscoverOptions, Project, Workspace};
+use crate::workspace::{Project, Workspace};
 use crate::{config, git};
 
 #[derive(Default, Clone)]
@@ -43,7 +43,9 @@ pub(crate) async fn auto_update(
         remote_index: usize,
     }
 
-    let workspace = Workspace::discover(DiscoverOptions::from_args(config, &CWD))?;
+    let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
+    // TODO: support selectors?
+    let workspace = Workspace::discover(workspace_root, config, None)?;
 
     // Collect repos and deduplicate by RemoteRepo
     #[allow(clippy::mutable_key_type)]

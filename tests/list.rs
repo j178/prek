@@ -25,15 +25,15 @@ fn list_basic() {
                 description: Validate JSON files
     "});
 
-    cmd_snapshot!(context.filters(), context.list(), @r#"
+    cmd_snapshot!(context.filters(), context.list(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    check-yaml
-    check-json
+    .:check-yaml
+    .:check-json
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 #[test]
@@ -64,15 +64,15 @@ fn list_verbose() {
     success: true
     exit_code: 0
     ----- stdout -----
-    check-yaml
+    .:check-yaml
+      ID: check-yaml
       Name: Check YAML
-      Project: .
       Language: system
       Stages: all
 
-    check-json
+    .:check-json
+      ID: check-json
       Name: Check JSON
-      Project: .
       Description: Validate JSON files
       Language: system
       Stages: all
@@ -109,10 +109,10 @@ fn list_verbose() {
     success: true
     exit_code: 0
     ----- stdout -----
-    custom-formatter
+    .:custom-formatter
+      ID: custom-formatter
       Alias: fmt
       Name: Custom Code Formatter
-      Project: .
       Description: Custom formatting tool with specific requirements
       Language: script
       Stages: pre-commit, pre-push
@@ -149,25 +149,25 @@ fn list_with_hook_ids_filter() {
     "});
 
     // Test filtering by specific hook ID
-    cmd_snapshot!(context.filters(), context.list().arg("check-yaml"), @r#"
+    cmd_snapshot!(context.filters(), context.list().arg("check-yaml"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    check-yaml
+    .:check-yaml
 
     ----- stderr -----
-    "#);
+    ");
 
     // Test filtering by multiple hook IDs
-    cmd_snapshot!(context.filters(), context.list().arg("check-yaml").arg("check-json"), @r#"
+    cmd_snapshot!(context.filters(), context.list().arg("check-yaml").arg("check-json"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    check-yaml
-    check-json
+    .:check-yaml
+    .:check-json
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 #[test]
@@ -197,23 +197,23 @@ fn list_with_language_filter() {
     "});
 
     // Test filtering by language
-    cmd_snapshot!(context.filters(), context.list().arg("--language").arg("system"), @r#"
+    cmd_snapshot!(context.filters(), context.list().arg("--language").arg("system"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    check-yaml
+    .:check-yaml
 
     ----- stderr -----
-    "#);
+    ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--language").arg("python"), @r#"
+    cmd_snapshot!(context.filters(), context.list().arg("--language").arg("python"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    format-python
+    .:format-python
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 #[test]
@@ -245,26 +245,26 @@ fn list_with_stage_filter() {
     "});
 
     // Test filtering by stage
-    cmd_snapshot!(context.filters(), context.list().arg("--hook-stage").arg("pre-commit"), @r#"
+    cmd_snapshot!(context.filters(), context.list().arg("--hook-stage").arg("pre-commit"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    check-yaml
-    check-toml
+    .:check-yaml
+    .:check-toml
 
     ----- stderr -----
-    "#);
+    ");
 
-    cmd_snapshot!(context.filters(), context.list().arg("--hook-stage").arg("pre-push"), @r#"
+    cmd_snapshot!(context.filters(), context.list().arg("--hook-stage").arg("pre-push"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    check-yaml
-    check-json
-    check-toml
+    .:check-yaml
+    .:check-json
+    .:check-toml
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 #[test]
@@ -290,24 +290,24 @@ fn list_with_aliases() {
     "});
 
     // Test that aliases are recognized
-    cmd_snapshot!(context.filters(), context.list().arg("yaml-check"), @r#"
+    cmd_snapshot!(context.filters(), context.list().arg("yaml-check"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    check-yaml
+    .:check-yaml
 
     ----- stderr -----
-    "#);
+    ");
 
     // Test verbose shows alias information
     cmd_snapshot!(context.filters(), context.list().arg("--verbose").arg("check-yaml"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    check-yaml
+    .:check-yaml
+      ID: check-yaml
       Alias: yaml-check
       Name: Check YAML
-      Project: .
       Language: system
       Stages: all
 
@@ -389,8 +389,8 @@ fn list_json_output() {
     [
       {
         "id": "check-yaml",
+        "full_id": ".:check-yaml",
         "name": "Check YAML",
-        "project": ".",
         "alias": "yaml-check",
         "language": "system",
         "description": null,
@@ -410,8 +410,8 @@ fn list_json_output() {
       },
       {
         "id": "check-json",
+        "full_id": ".:check-json",
         "name": "Check JSON",
-        "project": ".",
         "alias": "",
         "language": "system",
         "description": "Validate JSON files",
@@ -442,8 +442,8 @@ fn list_json_output() {
     [
       {
         "id": "check-json",
+        "full_id": ".:check-json",
         "name": "Check JSON",
-        "project": ".",
         "alias": "",
         "language": "system",
         "description": "Validate JSON files",
@@ -499,11 +499,11 @@ fn workspace_list() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    show-cwd
-    show-cwd
-    show-cwd
-    show-cwd
-    show-cwd
+    nested/project4:show-cwd
+    project3/project5:show-cwd
+    project2:show-cwd
+    project3:show-cwd
+    .:show-cwd
 
     ----- stderr -----
     ");
@@ -517,8 +517,8 @@ fn workspace_list() -> anyhow::Result<()> {
     [
       {
         "id": "show-cwd",
+        "full_id": "nested/project4:show-cwd",
         "name": "Show CWD",
-        "project": "nested/project4",
         "alias": "",
         "language": "python",
         "description": null,
@@ -538,8 +538,8 @@ fn workspace_list() -> anyhow::Result<()> {
       },
       {
         "id": "show-cwd",
+        "full_id": "project3/project5:show-cwd",
         "name": "Show CWD",
-        "project": "project3/project5",
         "alias": "",
         "language": "python",
         "description": null,
@@ -559,8 +559,8 @@ fn workspace_list() -> anyhow::Result<()> {
       },
       {
         "id": "show-cwd",
+        "full_id": "project2:show-cwd",
         "name": "Show CWD",
-        "project": "project2",
         "alias": "",
         "language": "python",
         "description": null,
@@ -580,8 +580,8 @@ fn workspace_list() -> anyhow::Result<()> {
       },
       {
         "id": "show-cwd",
+        "full_id": "project3:show-cwd",
         "name": "Show CWD",
-        "project": "project3",
         "alias": "",
         "language": "python",
         "description": null,
@@ -601,8 +601,8 @@ fn workspace_list() -> anyhow::Result<()> {
       },
       {
         "id": "show-cwd",
+        "full_id": ".:show-cwd",
         "name": "Show CWD",
-        "project": ".",
         "alias": "",
         "language": "python",
         "description": null,
@@ -629,8 +629,8 @@ fn workspace_list() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    show-cwd
-    show-cwd
+    project5:show-cwd
+    .:show-cwd
 
     ----- stderr -----
     ");
@@ -639,18 +639,165 @@ fn workspace_list() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    show-cwd
+    project5:show-cwd
+      ID: show-cwd
       Name: Show CWD
-      Project: project5
       Language: python
       Stages: all
 
-    show-cwd
+    .:show-cwd
+      ID: show-cwd
       Name: Show CWD
-      Project: .
       Language: python
       Stages: all
 
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn list_with_selectors() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let config = indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+        - id: show-cwd
+          name: Show CWD
+          language: python
+          entry: python -c 'import sys, os; print(os.getcwd()); print(sys.argv[1:])'
+          verbose: true
+    "};
+
+    context.setup_workspace(
+        &[
+            "project2",
+            "project3",
+            "nested/project4",
+            "project3/project5",
+        ],
+        config,
+    )?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.list().arg("project2/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project2:show-cwd
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.list().arg("--skip").arg("project2/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    nested/project4:show-cwd
+    project3/project5:show-cwd
+    project3:show-cwd
+    .:show-cwd
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.list().arg("--skip").arg("nested/").arg("--skip").arg("project3/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project2:show-cwd
+    .:show-cwd
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.list().arg("show-cwd"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    nested/project4:show-cwd
+    project3/project5:show-cwd
+    project2:show-cwd
+    project3:show-cwd
+    .:show-cwd
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.list().arg("project2:show-cwd"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project2:show-cwd
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.list().arg(".:show-cwd"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .:show-cwd
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.list().arg("--skip").arg("show-cwd"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.list().arg("--skip").arg("project2:show-cwd").arg("--skip").arg("nested:show-cwd"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    nested/project4:show-cwd
+    project3/project5:show-cwd
+    project3:show-cwd
+    .:show-cwd
+
+    ----- stderr -----
+    warning: selector `--skip=nested:show-cwd` did not match any hooks
+    ");
+
+    cmd_snapshot!(context.filters(), context.list().arg("--skip").arg("non-exist"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    nested/project4:show-cwd
+    project3/project5:show-cwd
+    project2:show-cwd
+    project3:show-cwd
+    .:show-cwd
+
+    ----- stderr -----
+    warning: selector `--skip=non-exist` did not match any hooks
+    ");
+
+    cmd_snapshot!(context.filters(), context.list().arg("--skip").arg("../"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid selector: `../`
+      caused by: Invalid project path: `../`
+      caused by: path is outside the workspace root
+    ");
+
+    cmd_snapshot!(context.filters(), context.list().current_dir(context.work_dir().join("project2")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .:show-cwd
 
     ----- stderr -----
     ");

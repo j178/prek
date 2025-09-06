@@ -14,7 +14,7 @@ use crate::fs::CWD;
 use crate::git;
 use crate::printer::Printer;
 use crate::workspace;
-use crate::workspace::{DiscoverOptions, Project};
+use crate::workspace::Project;
 
 pub(crate) async fn hook_impl(
     config: Option<PathBuf>,
@@ -39,7 +39,7 @@ pub(crate) async fn hook_impl(
             true
         } else {
             // Try to discover a project from current directory (after `--cd`)
-            match Project::discover(DiscoverOptions::from_args(config.clone(), &CWD)) {
+            match Project::discover(config.as_deref(), &CWD) {
                 Err(e) if matches!(e, workspace::Error::MissingPreCommitConfig) => {
                     eprintln!("{}: {e}", "error".red().bold(),);
                     true
@@ -76,7 +76,8 @@ pub(crate) async fn hook_impl(
 
     cli::run(
         config,
-        run_args.hook_ids,
+        run_args.includes,
+        run_args.skips,
         hook_type.into(),
         run_args.from_ref,
         run_args.to_ref,

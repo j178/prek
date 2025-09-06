@@ -142,19 +142,20 @@ The `-C <dir>` or `--cd <dir>` option automatically changes to the specified dir
 
 ## Project and Hook Selection
 
-In workspace mode, you can selectively run hooks from specific projects or skip certain projects/hooks using flexible selection syntax.
+In workspace mode, you can selectively run hooks from specific projects or skip certain projects/hooks using flexible selector syntax.
 
-### Selection Syntax
+### Selector Syntax
 
-The selection syntax consists of two optional parts separated by a colon (`:`):
+The selector syntax has three different forms:
 
-```text
-[<project-path>:][<hook-id>]
-```
+1. **`<hook-id>`**: Matches all hooks with the given ID across all projects.
+2. **`<project-path>/`**: Matches all hooks from the specified project and its subprojects.
+3. **`<project-path>:<hook-id>`**: Matches only the specified hook from the specified project.
 
-- **`<project-path>`**: Path to a project directory (relative to workspace root)
-- **`<hook-id>`**: Identifier of a hook to run
-- **Omitted parts**: When `<project-path>` is omitted, hooks are selected across all projects. When `<hook-id>` is omitted, all hooks from the specified project are selected.
+Selectors can be used to select specific hooks or projects, and combined with `--skip` to exclude certain hooks or projects.
+
+**Note**: `<project-path>` can be a relative path, which is then resolved relative to the current working directory.
+Note that the trailing slash `/` in a `<project-path>` is important, if a selector does not contain a slash, it is interpreted as a hook ID.
 
 ### Running Specific Hooks or Projects
 
@@ -163,7 +164,7 @@ The selection syntax consists of two optional parts separated by a colon (`:`):
 prek run <hook-id>
 
 # Run only hooks from a specific project
-prek run <project-path>
+prek run <project-path>/
 
 # Run only hooks with a specific ID from a specific project
 prek run <project-path>:<hook-id>
@@ -176,7 +177,7 @@ prek run <project-path>:<hook-id>
 prek run black
 
 # Run all hooks from the 'frontend' project
-prek run frontend
+prek run frontend/
 
 # Run only the 'lint' hook from the 'frontend' project
 prek run frontend:lint
@@ -191,10 +192,10 @@ You can skip specific projects or hooks using the `--skip` option, with the same
 
 ```bash
 # Skip all hooks from a specific project
-prek run --skip <project-path>
+prek run --skip <project-path>/
 
 # Skip specific hooks within a selected project
-prek run <project-path> --skip <subproject-path>
+prek run <project-path>/ --skip <subproject-path>/
 
 # Skip all hooks with a specific ID across all projects
 prek run --skip <hook-id>
@@ -204,62 +205,31 @@ prek run --skip <hook-id>
 
 ```bash
 # Run all hooks except those from the 'frontend' project
-prek run --skip frontend
+prek run --skip frontend/
 
 # Run hooks from 'frontend' but skip 'frontend/docs'
-prek run frontend --skip frontend/docs
+prek run frontend/ --skip frontend/docs
 
 # Run hooks from 'frontend' but skip 'frontend/docs' and 'frontend:lint'
-prek run frontend --skip frontend/docs --skip frontend:lint
+prek run frontend/ --skip frontend/docs --skip frontend:lint
 
 # Run all hooks except 'black' and 'markdownlint' hooks
 prek run --skip black --skip markdownlint
 ```
 
+**Note**: Selecting a project includes all its subprojects unless explicitly skipped. Skipping a project also skips all its subprojects.
+
 **Note**: The `PREK_SKIP` or `SKIP` environment variable can be used as an alternative to `--skip`. Multiple values should be comma-delimited:
 
 ```bash
 # Skip 'frontend' and 'tests' projects
-PREK_SKIP=frontend,tests prek run
+PREK_SKIP=frontend/,tests prek run
 
 # Skip 'frontend/docs' project and 'src/backend:lint' hook
 SKIP=frontend/docs,src/backend:lint prek run
 ```
 
-### Selection Rules
-
-- **Project paths** are relative to the workspace root
-- **Hook IDs** can be partial matches (e.g., `black` matches `black` hooks)
-- **Multiple selections** can be combined with `--skip` options
-- **Precedence**: Selections are applied in order, with `--skip` removing from the selected set
-- **Hierarchy**: Selecting a project includes all its subprojects unless explicitly skipped
-
-### Disambiguation Syntax
-
-When a project path conflicts with a hook ID (e.g., you have both a project named `lint` and a hook named `lint`), you can use special syntax to disambiguate:
-
-- **Prefix hook IDs with `:`** to explicitly specify you want a hook, not a project
-- **Prefix project paths with `./`** to explicitly specify you want a project, not a hook
-
-#### Examples
-
-```bash
-# Ambiguous: could mean hook 'lint' or project 'lint', but currently means hooks for backward compatibility
-prek run lint
-
-# Explicitly run all 'lint' hooks across all projects
-prek run :lint
-
-# Explicitly run all hooks from the 'lint' project
-prek run ./lint
-```
-
-#### Disambiguation Rules
-
-- Bare words (no prefix) prioritize **hooks over projects** for backward compatibility
-- `:` prefix forces interpretation as a **hook ID**
-- `./` prefix forces interpretation as a **project path**
-- This syntax is only needed when there are naming conflicts
+Precedence rules for `--skip` command line options and environment variables are: `--skip` > `PREK_SKIP` > `SKIP`.
 
 ### Advanced Examples
 
@@ -268,7 +238,7 @@ prek run ./lint
 prek run lint --skip tests
 
 # Run all hooks from 'src' and 'docs' but skip 'src/legacy'
-prek run src docs --skip src/legacy
+prek run src/ docs/ --skip src/legacy
 
 # Run 'format' hooks only from Python projects
 prek run python:format
@@ -327,5 +297,10 @@ prek run -vvv
 # Check file collection for specific project
 prek run -C project/dir -vvv
 ```
+
+## Limitations (TODO)
+
+1. For performance considerations, hook completions are only available for the next-level projects, not for nested ones.
+2. Skipped hooks will not be printed with a `SKIPPED` status.
 
 The workspace mode provides powerful organization capabilities while maintaining backward compatibility with existing single-config workflows.

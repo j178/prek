@@ -15,7 +15,7 @@ use crate::fs::{CWD, Simplified};
 use crate::git::git_cmd;
 use crate::printer::Printer;
 use crate::store::STORE;
-use crate::workspace::{DiscoverOptions, Project, Workspace};
+use crate::workspace::{Project, Workspace};
 use crate::{git, warn_user};
 
 pub(crate) async fn install(
@@ -34,7 +34,7 @@ pub(crate) async fn install(
         );
     }
 
-    let project = Project::discover(DiscoverOptions::from_args(config.clone(), &CWD)).ok();
+    let project = Project::discover(config.as_deref(), &CWD).ok();
     let hook_types = get_hook_types(project.as_ref(), hook_types);
 
     let hooks_path = if let Some(dir) = git_dir {
@@ -64,7 +64,9 @@ pub(crate) async fn install(
 }
 
 pub(crate) async fn install_hooks(config: Option<PathBuf>, printer: Printer) -> Result<ExitStatus> {
-    let mut workspace = Workspace::discover(DiscoverOptions::from_args(config, &CWD))?;
+    let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
+    // TODO: support selectors in `install-hooks`?
+    let mut workspace = Workspace::discover(workspace_root, config, None)?;
 
     let store = STORE.as_ref()?;
     let reporter = HookInitReporter::from(printer);
@@ -223,7 +225,7 @@ pub(crate) async fn uninstall(
     hook_types: Vec<HookType>,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let project = Project::discover(DiscoverOptions::from_args(config, &CWD)).ok();
+    let project = Project::discover(config.as_deref(), &CWD).ok();
 
     for hook_type in get_hook_types(project.as_ref(), hook_types) {
         let hooks_path = git::get_git_common_dir().await?.join("hooks");
