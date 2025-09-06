@@ -301,4 +301,3 @@ jobs:
     uses: ./.github/workflows/publish-docs.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
-    secrets: inherit
