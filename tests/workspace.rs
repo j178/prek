@@ -269,6 +269,7 @@ fn run_with_selectors() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
+    Running hooks for `project2`:
     Show CWD.................................................................Passed
     - hook id: show-cwd
     - duration: [TIME]
@@ -386,6 +387,7 @@ fn run_with_selectors() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
+    Running hooks for `project2`:
     Show CWD.................................................................Passed
     - hook id: show-cwd
     - duration: [TIME]
