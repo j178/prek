@@ -39,6 +39,17 @@
       ],
       pinDigests: true,
     },
+    // Group all pre-commit updates in examples/ together
+    {
+      groupName: 'pre-commit (examples)',
+      matchManagers: ['pre-commit'],
+      matchPaths: ['examples/**'],
+    },
+    {
+      groupName: 'pre-commit',
+      matchManagers: ['pre-commit'],
+      matchPaths: ['.pre-commit-config.yaml'],
+    },
     // Annotate GitHub Actions SHAs with a SemVer version.
     {
       extends: [
@@ -66,7 +77,7 @@
       matchManagers: [
         'mise',
       ],
-      matchPackageNames: [
+      matchDepNames: [
         'rust',
         'node',
         'python',
