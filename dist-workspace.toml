@@ -44,6 +44,9 @@ targets = [
 local-artifacts-jobs = ["./build-binaries"]
 # Publish jobs to run in CI
 publish-jobs = ["./publish", "homebrew"]
+# Post-announce jobs to run in CI
+post-announce-jobs = ["./publish-docs"]
+github-custom-job-permissions = { "publish-docs" = { contents = "read", pages = "write", id-token = "write" }}
 # A GitHub repo to push Homebrew formulas to
 tap = "j178/homebrew-tap"
 # Customize the Homebrew formula name
