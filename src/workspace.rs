@@ -403,7 +403,9 @@ impl Workspace {
                         return WalkState::Continue;
                     };
 
-                    if file_type.is_dir() {
+                    // If it's a directory, check if it matches the selectors.
+                    // Do not skip the root directory even if it doesn't match.
+                    if file_type.is_dir() && entry.depth() > 0 {
                         let Some(selectors) = selectors.as_ref() else {
                             return WalkState::Continue;
                         };
@@ -452,6 +454,7 @@ impl Workspace {
             });
 
         let mut projects = projects.into_inner().unwrap()?;
+        debug_assert!(!projects.is_empty(), "At least one project should be found");
 
         // Sort projects by their depth in the directory tree.
         // The deeper the project comes first.

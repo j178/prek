@@ -107,7 +107,7 @@ impl Selector {
         match &self.expr {
             SelectorExpr::HookId(hook_id) => {
                 // For bare hook IDs, check if it matches the hook
-                hook.id == *hook_id || hook.alias == *hook_id
+                &hook.id == hook_id || &hook.alias == hook_id
             }
             SelectorExpr::ProjectPrefix(project_path) => {
                 // For project paths, check if the hook belongs to that project.
@@ -118,7 +118,7 @@ impl Selector {
                 hook_id,
             } => {
                 // For project:hook syntax, check both
-                (hook.id == *hook_id || hook.alias == *hook_id)
+                (&hook.id == hook_id || &hook.alias == hook_id)
                     && project_path == hook.project().relative_path()
             }
         }

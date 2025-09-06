@@ -340,7 +340,7 @@ pub(crate) struct RunArgs {
     /// - `project-path:hook-id`: Skip only the specified hook from the specified project
     ///
     /// Can be specified multiple times. Also accepts `PREK_SKIP` or `SKIP` environment variables (comma-delimited).
-    #[arg(long = "skip", value_name = "HOOK|PROJECT")]
+    #[arg(long = "skip", value_name = "HOOK|PROJECT", add = ArgValueCompleter::new(hook_id_completer))]
     pub(crate) skips: Vec<String>,
 
     /// Run on all files in the repo.
@@ -432,7 +432,7 @@ pub(crate) struct ListArgs {
     /// - `project-path:hook-id`: Skip only the specified hook from the specified project
     ///
     /// Can be specified multiple times. Also accepts `PREK_SKIP` or `SKIP` environment variables (comma-delimited).
-    #[arg(long = "skip", value_name = "HOOK|PROJECT")]
+    #[arg(long = "skip", value_name = "HOOK|PROJECT", add = ArgValueCompleter::new(hook_id_completer))]
     pub(crate) skips: Vec<String>,
 
     /// Show only hooks that has the specified stage.

@@ -439,6 +439,15 @@ impl Hook {
         self.repo.path()
     }
 
+    pub(crate) fn full_id(&self) -> String {
+        let path = self.project.relative_path();
+        if path.as_os_str().is_empty() {
+            format!(".:{}", self.id)
+        } else {
+            format!("{}:{}", path.display(), self.id)
+        }
+    }
+
     /// Get the path where the hook should be executed.
     pub(crate) fn work_dir(&self) -> &Path {
         self.project.path()
