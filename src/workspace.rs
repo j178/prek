@@ -73,7 +73,7 @@ pub(crate) struct Project {
 
 impl Display for Project {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.relative_path.as_os_str().is_empty() {
+        if self.is_root() {
             write!(f, ".")
         } else {
             write!(f, "{}", self.relative_path.display())
@@ -178,6 +178,10 @@ impl Project {
     /// In non-workspace mode (`--config <path>`), this is empty.
     pub(crate) fn relative_path(&self) -> &Path {
         &self.relative_path
+    }
+
+    pub(crate) fn is_root(&self) -> bool {
+        self.relative_path.as_os_str().is_empty()
     }
 
     pub(crate) fn depth(&self) -> usize {

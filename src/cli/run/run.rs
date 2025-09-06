@@ -488,7 +488,7 @@ async fn run_hooks(
         hooks.sort_by_key(|h| h.idx);
 
         let project = hooks[0].project();
-        if projects_len > 1 {
+        if projects_len > 1 || !project.is_root() {
             writeln!(
                 printer.stdout(),
                 "{}{}:",
