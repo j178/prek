@@ -49,6 +49,7 @@ changelog_contributors = true
 version_files = [
   "README.md",
   "Cargo.toml",
+  "docs/installation.md",
 ]
 
 [tool.uv]

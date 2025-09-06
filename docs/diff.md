@@ -12,7 +12,7 @@
 
 `prek` supports workspace mode, allowing you to run hooks for multiple projects in a single command. Each subproject can have its own `.pre-commit-config.yaml` file.
 
-See [./docs/workspace.md](./docs/workspace.md) for more information.
+See [Workspace Mode](./workspace.md) for more information.
 
 ## Python support
 

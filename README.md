@@ -2,7 +2,7 @@
 
 # prek
 
-<img width="220" alt="prek" src="https://github.com/user-attachments/assets/3a87815a-9f3c-48e7-8c1d-384b07ad3b35" />
+<img width="220" alt="prek" src="./docs/assets/logo.png" />
 
 [![CI](https://github.com/j178/prek/actions/workflows/ci.yml/badge.svg)](https://github.com/j178/prek/actions/workflows/ci.yml)
 [![GitHub Downloads](https://img.shields.io/github/downloads/j178/prek/total?logo=github)](https://github.com/j178/prek/releases)
@@ -26,9 +26,9 @@ while also providing some additional long-requested features.
 ## Features
 
 - 🚀 A single binary with no dependencies, does not require Python or any other runtime.
-- ⚡ About [10x faster](./docs/benchmark.md) than `pre-commit` and uses only a third of disk space.
+- ⚡ About [10x faster](https://prek.j178.dev/benchmark.md) than `pre-commit` and uses only a third of disk space.
 - 🔄 Fully compatible with the original pre-commit configurations and hooks.
-- 🏗️ Built-in support for monorepos (i.e. [workspace mode](https://github.com/j178/prek/blob/master/docs/workspace.md)).
+- 🏗️ Built-in support for monorepos (i.e. [workspace mode](https://prek.j178.dev/workspace.md)).
 - 🐍 Integration with [`uv`](https://github.com/astral-sh/uv) for managing Python virtual environments and dependencies.
 - 🛠️ Improved toolchain installations for Python, Node.js, Go, Rust and Ruby, shared between hooks.
 - 📦 Built-in implementation of some common hooks.
@@ -56,7 +56,7 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 
 ### prek is way faster
 
-- It is about [10x faster](./docs/benchmark.md) than `pre-commit` and uses only a third of disk space.
+- It is about [10x faster](https://prek.j178.dev/benchmark.md) than `pre-commit` and uses only a third of disk space.
 - It redesigned how hook environments and toolchains are managed, they are all shared between hooks, which reduces the disk space usage and speeds up the installation process.
 - Repositories are cloned in parallel, and hooks are installed in parallel if their dependencies are disjoint.
 - It uses [`uv`](https://github.com/astral-sh/uv) for creating Python virtualenvs and installing dependencies, which is known for its speed and efficiency.
@@ -74,7 +74,7 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 - `prek list` command lists all available hooks, their ids, and descriptions, providing a better overview of the configured hooks.
 - prek provides shell completions for `prek run <hook_id>` command, making it easier to run specific hooks without remembering their ids.
 
-For more detailed improvements prek offers, take a look at [DIFF.md](https://github.com/j178/prek/blob/master/docs/DIFF.md).
+For more detailed improvements prek offers, take a look at [diff.md](https://prek.j178.dev/diff.md).
 
 ## Who are using prek?
 
