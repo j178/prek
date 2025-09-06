@@ -582,7 +582,7 @@ impl Workspace {
     }
 
     /// Check if all configuration files are staged in git.
-    pub(crate) async fn check_config_staged(&self) -> Result<()> {
+    pub(crate) async fn check_configs_staged(&self) -> Result<()> {
         let config_files = self
             .projects
             .iter()

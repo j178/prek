@@ -8,6 +8,7 @@ use crate::warn_user;
 
 use anyhow::anyhow;
 use constants::env_vars::EnvVars;
+use itertools::Itertools;
 use rustc_hash::FxHashSet;
 use tracing::trace;
 
@@ -54,7 +55,7 @@ pub(crate) struct Selector {
 impl Display for Selector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.expr {
-            SelectorExpr::HookId(hook_id) => write!(f, ":{hook_id}"),
+            SelectorExpr::HookId(hook_id) => write!(f, "{hook_id}"),
             SelectorExpr::ProjectPrefix(project_path) => {
                 if project_path.as_os_str().is_empty() {
                     write!(f, "./")
@@ -90,6 +91,13 @@ impl Selector {
             SelectorSource::CliArg => self.to_string(),
             SelectorSource::CliFlag(flag) => format!("{flag}={self}"),
             SelectorSource::EnvVar(var) => format!("{var}={self}"),
+        }
+    }
+
+    pub(crate) fn kind_str(&self) -> &'static str {
+        match &self.expr {
+            SelectorExpr::HookId(_) | SelectorExpr::ProjectHook { .. } => "hooks",
+            SelectorExpr::ProjectPrefix(_) => "projects",
         }
     }
 }
@@ -133,6 +141,7 @@ impl Selectors {
     ) -> Result<Selectors, Error> {
         let includes = includes
             .iter()
+            .unique()
             .map(|selector| parse_single_selector(selector, workspace_root, SelectorSource::CliArg))
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -272,11 +281,15 @@ impl SelectorUsage {
                 let flag = selector.as_flag();
                 let normalized = selector.as_normalized_flag();
                 if flag == normalized {
-                    warn_user!("selector `{flag}` did not match any hooks or projects",);
+                    warn_user!(
+                        "selector `{flag}` did not match any {}",
+                        selector.kind_str()
+                    );
                 } else {
                     warn_user!(
-                        "selector `{flag}` ({}) did not match any hooks or projects",
-                        format!("normalized to `{normalized}`").dimmed()
+                        "selector `{flag}` ({}) did not match any {}",
+                        format!("normalized to `{normalized}`").dimmed(),
+                        selector.kind_str()
                     );
                 }
             }
@@ -444,6 +457,7 @@ pub(crate) fn load_skips(
 
     skips
         .into_iter()
+        .unique()
         .map(|skip| parse_single_selector(skip, workspace_root, source))
         .collect()
 }

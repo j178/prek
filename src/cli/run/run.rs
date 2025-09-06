@@ -77,7 +77,7 @@ pub(crate) async fn run(
     let mut workspace = Workspace::discover(workspace_root, config, Some(&selectors))?;
 
     if should_stash {
-        workspace.check_config_staged().await?;
+        workspace.check_configs_staged().await?;
     }
 
     let store = STORE.as_ref()?;
