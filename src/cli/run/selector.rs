@@ -9,6 +9,7 @@ use crate::warn_user;
 use anyhow::anyhow;
 use constants::env_vars::EnvVars;
 use itertools::Itertools;
+use path_clean::PathClean;
 use rustc_hash::FxHashSet;
 use tracing::trace;
 
@@ -17,6 +18,7 @@ pub(crate) enum Error {
     #[error("Invalid selector: `{selector}`")]
     InvalidSelector {
         selector: String,
+        #[source]
         source: anyhow::Error,
     },
 
@@ -24,7 +26,7 @@ pub(crate) enum Error {
     InvalidPath {
         path: String,
         #[source]
-        source: std::io::Error,
+        source: anyhow::Error,
     },
 }
 
@@ -369,7 +371,12 @@ fn parse_single_selector<FS: FileSystem>(
             });
         }
 
-        let project_path = normalize_path(project_path, workspace_root, fs)?;
+        let project_path = normalize_path(project_path, workspace_root, fs).map_err(|e| {
+            Error::InvalidSelector {
+                selector: input.to_string(),
+                source: anyhow!(e),
+            }
+        })?;
 
         return Ok(Selector {
             source,
@@ -383,7 +390,11 @@ fn parse_single_selector<FS: FileSystem>(
 
     // Handle project paths
     if input == "." || input.contains('/') {
-        let project_path = normalize_path(input, workspace_root, fs)?;
+        let project_path =
+            normalize_path(input, workspace_root, fs).map_err(|e| Error::InvalidSelector {
+                selector: input.to_string(),
+                source: anyhow!(e),
+            })?;
 
         return Ok(Selector {
             source,
@@ -408,15 +419,15 @@ fn parse_single_selector<FS: FileSystem>(
 
 /// Trait to abstract filesystem operations for easier testing.
 pub trait FileSystem: Copy {
-    fn canonicalize<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf>;
+    fn absolute<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf>;
 }
 
 #[derive(Copy, Clone)]
 pub struct RealFileSystem;
 
 impl FileSystem for RealFileSystem {
-    fn canonicalize<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
-        std::fs::canonicalize(path)
+    fn absolute<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
+        std::path::absolute(path)
     }
 }
 
@@ -439,15 +450,16 @@ fn normalize_path<FS: FileSystem>(
     workspace_root: &Path,
     fs: FS,
 ) -> Result<PathBuf, Error> {
-    let canonicalize_path = fs.canonicalize(path).map_err(|e| Error::InvalidSelector {
-        selector: path.to_string(),
+    let absolute_path = fs.absolute(path).map_err(|e| Error::InvalidPath {
+        path: path.to_string(),
         source: anyhow!(e),
     })?;
+    let absolute_path = absolute_path.clean();
 
-    let rel_path = canonicalize_path
+    let rel_path = absolute_path
         .strip_prefix(workspace_root)
-        .map_err(|_| Error::InvalidSelector {
-            selector: path.to_string(),
+        .map_err(|_| Error::InvalidPath {
+            path: path.to_string(),
             source: anyhow!("path is outside the workspace root"),
         })?;
 
@@ -504,7 +516,7 @@ mod tests {
     }
 
     impl FileSystem for &MockFileSystem {
-        fn canonicalize<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
+        fn absolute<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
             let p = path.as_ref();
             if p.is_absolute() {
                 Ok(p.to_path_buf())

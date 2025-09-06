@@ -789,6 +789,7 @@ fn list_with_selectors() -> anyhow::Result<()> {
 
     ----- stderr -----
     error: Invalid selector: `../`
+      caused by: Invalid project path: `../`
       caused by: path is outside the workspace root
     ");
 

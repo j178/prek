@@ -509,6 +509,7 @@ fn run_with_selectors() -> Result<()> {
 
     ----- stderr -----
     error: Invalid selector: `../`
+      caused by: Invalid project path: `../`
       caused by: path is outside the workspace root
     ");
 
