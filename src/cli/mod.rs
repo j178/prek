@@ -3,18 +3,18 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::builder::styling::{AnsiColor, Effects};
-use clap::builder::{ArgPredicate, StyledStr, Styles};
+use clap::builder::{ArgPredicate, Styles};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
-use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
+use clap_complete::engine::ArgValueCompleter;
 use serde::{Deserialize, Serialize};
 
 use constants::env_vars::EnvVars;
 
 use crate::config::{self, CONFIG_FILE, HookType, Stage};
-use crate::workspace::Project;
 
 mod auto_update;
 mod clean;
+mod completion;
 mod hook_impl;
 mod install;
 mod list;
@@ -24,10 +24,10 @@ mod sample_config;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod validate;
-mod completion;
 
 pub(crate) use auto_update::auto_update;
 pub(crate) use clean::clean;
+use completion::selector_completer;
 pub(crate) use hook_impl::hook_impl;
 pub(crate) use install::{init_template_dir, install, install_hooks, uninstall};
 pub(crate) use list::list;
@@ -36,7 +36,6 @@ pub(crate) use sample_config::sample_config;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use validate::{validate_configs, validate_manifest};
-use completion::selector_completer;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {

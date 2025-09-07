@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::process::Command;
 
 use anyhow::Result;
@@ -1650,32 +1651,52 @@ fn git_commit_a() -> Result<()> {
     Ok(())
 }
 
-/// Test hook id completion works.
-#[cfg(unix)]
-#[test]
-fn completion() {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
+fn write_pre_commit_config(path: &Path, hooks: &[(&str, &str)]) -> Result<()> {
+    let mut yaml = String::from(indoc::indoc! {"
         repos:
           - repo: local
             hooks:
-              - id: hook
-                name: a useful hook
-                language: system
-                entry: echo
-                verbose: true
     "});
-    context.git_add(".");
+    for (id, name) in hooks {
+        let hook = textwrap::indent(
+            &indoc::formatdoc! {"
+        - id: {}
+          name: {}
+          entry: echo
+          language: system
+        ", id, name
+            },
+            "      ",
+        );
+        yaml.push_str(&hook);
+    }
 
-    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    complete --keep-order --exclusive --command prek --arguments "(COMPLETE=fish "'[CURRENT_EXE]'" -- (commandline --current-process --tokenize --cut-at-cursor) (commandline --current-token))"
+    std::fs::create_dir_all(path)?;
+    std::fs::write(path.join(".pre-commit-config.yaml"), yaml)?;
 
-    ----- stderr -----
-    "#);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn selectors_completion() -> Result<()> {
+    let context = TestContext::new();
+    let cwd = context.work_dir();
+    context.init_project();
+
+    // Root project with one hook
+    write_pre_commit_config(cwd, &[("root-hook", "Root Hook")])?;
+
+    // Nested project at app/ with one hook
+    let app = cwd.join("app");
+    write_pre_commit_config(&app, &[("app-hook", "App Hook")])?;
+
+    // Deeper nested project at app/lib/ with one hook
+    let app_lib = app.join("lib");
+    write_pre_commit_config(&app_lib, &[("lib-hook", "Lib Hook")])?;
+
+    // Unrelated non-project dir should not appear in subdir suggestions
+    cwd.child("scratch").create_dir_all()?;
 
     cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @r"
     success: true
@@ -1695,7 +1716,11 @@ fn completion() {
     init-template-dir	Install hook script in a directory intended for use with `git config init.templateDir`
     try-repo	Try the pre-commit hooks in the current repo
     self	`prek` self management
-    hook	a useful hook
+    app/
+    app:
+    app-hook	App Hook
+    lib-hook	Lib Hook
+    root-hook	Root Hook
     --skip	Skip the specified hooks or projects
     --all-files	Run on all files in the repo
     --files	Specific filenames to run hooks on
@@ -1719,23 +1744,73 @@ fn completion() {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("run"), @r#"
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("ap"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    run	Run hooks
+    app/
+    app:
+    app-hook	App Hook
 
     ----- stderr -----
-    "#);
+    ");
 
-    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("run").arg("h"), @r#"
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("app:"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    hook	a useful hook
+    app:app-hook	App Hook
 
     ----- stderr -----
-    "#);
+    ");
+
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("app:app"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    app:app-hook	App Hook
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("app/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    app/lib/
+    app/lib:
+
+    ----- stderr -----
+    ");
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("app/li"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    app/lib/
+    app/lib:
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("app/lib:"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    app/lib:lib-hook	Lib Hook
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg("app/lib/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    app/lib/
+
+    ----- stderr -----
+    ");
+
+    Ok(())
 }
 
 /// Test reusing hook environments only when dependencies are exactly same. (ignore order)
