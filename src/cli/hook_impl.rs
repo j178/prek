@@ -29,7 +29,7 @@ pub(crate) async fn hook_impl(
 
     if script_version != Some(cli::install::CUR_SCRIPT_VERSION) {
         warn_user!(
-            "The installed hook script is outdated (version: {:?}, expected: {}). Please reinstall the hooks with `prek install`.",
+            "The installed hook script `{hook_type}` is outdated (version: {:?}, expected: {}). Please reinstall the hooks with `prek install`.",
             script_version.unwrap_or(1),
             cli::install::CUR_SCRIPT_VERSION
         );
