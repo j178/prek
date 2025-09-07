@@ -8,6 +8,8 @@ This is a huge milestone release that introduces **Workspace Mode** — first‑
 
 `prek` now allows you to manage multiple projects with their own `.pre-commit-config.yaml` within a single repository. It auto‑discovers nested projects, runs hooks in project scope, and provides flexible selectors to target specific projects and hooks. This makes `prek` a powerful tool for managing pre-commit hooks in complex repository structures.
 
+**Note**: If you ran `prek install` in a repo before, you gonna need to run `prek install` again to replace the old git hook scripts for the workspace mode to work.
+
 For more details, see [Workspace Mode](https://prek.j178.dev/workspace/). If you encounter any issues, please report them at [Issues](https://github.com/j178/prek/issues).
 
 Special thanks to @potiuk for all the help and feedback in designing and testing this feature!
