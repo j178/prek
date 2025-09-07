@@ -1462,7 +1462,7 @@ fn minimum_prek_version() {
         .filters()
         .into_iter()
         .chain([(
-            r"current version `\d+\.\d+\.\d+`",
+            r"current version `\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?`",
             "current version `[CURRENT_VERSION]`",
         )])
         .collect::<Vec<_>>();
