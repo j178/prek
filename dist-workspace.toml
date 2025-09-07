@@ -17,6 +17,8 @@ dispatch-releases = true
 pr-run-mode = "plan"
 # Which phase dist should use to create the GitHub release
 github-release = "announce"
+# Whether to publish prereleases to package managers
+publish-prereleases = true
 # The installers to generate for each app
 installers = ["shell", "powershell", "homebrew"]
 # Target platforms to build apps for (Rust target-triple syntax)
