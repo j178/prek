@@ -48,6 +48,7 @@ changelog_sections.__unknown__ = "Other changes"
 changelog_contributors = true
 
 version_files = [
+  "pyproject.toml",
   "README.md",
   "Cargo.toml",
   "docs/installation.md",

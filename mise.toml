@@ -45,6 +45,6 @@ run = "cargo test --all-targets --all-features --workspace"
 description = "Prepare for a release"
 run = """
 git checkout -b bump
-uvx --from 'rooster-blue @ git+https://github.com/zanieb/rooster@14b15fad40d638a67277ce7506fa392e6b596f0c' --python 3.12 -- rooster release
+uvx --from 'rooster-blue @ git+https://github.com/j178/rooster@bbca28a' --python 3.12 -- rooster release
 cargo update
 """
