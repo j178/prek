@@ -11,20 +11,29 @@ use constants::env_vars::EnvVars;
 use crate::cli::{self, ExitStatus, RunArgs};
 use crate::config::HookType;
 use crate::fs::CWD;
-use crate::git;
 use crate::printer::Printer;
 use crate::workspace;
 use crate::workspace::Project;
+use crate::{git, warn_user};
 
 pub(crate) async fn hook_impl(
     config: Option<PathBuf>,
     hook_type: HookType,
     _hook_dir: PathBuf,
     skip_on_missing_config: bool,
+    script_version: Option<usize>,
     args: Vec<OsString>,
     printer: Printer,
 ) -> Result<ExitStatus> {
     // TODO: run in legacy mode
+
+    if script_version != Some(cli::install::CUR_SCRIPT_VERSION) {
+        warn_user!(
+            "The installed hook script is outdated (version: {:?}, expected: {}). Please reinstall the hooks with `prek install`.",
+            script_version.unwrap_or(1),
+            cli::install::CUR_SCRIPT_VERSION
+        );
+    }
 
     // Check if there is config file
     if !skip_on_missing_config && !EnvVars::is_set(EnvVars::PREK_ALLOW_NO_CONFIG) {

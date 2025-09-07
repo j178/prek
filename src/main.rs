@@ -229,6 +229,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.hook_type,
                 args.hook_dir,
                 args.skip_on_missing_config,
+                args.script_version,
                 args.args,
                 printer,
             )

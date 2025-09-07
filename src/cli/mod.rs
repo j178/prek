@@ -464,6 +464,9 @@ pub(crate) struct HookImplArgs {
     pub(crate) hook_dir: PathBuf,
     #[arg(long)]
     pub(crate) skip_on_missing_config: bool,
+    /// The prek version that installs the hook.
+    #[arg(long)]
+    pub(crate) script_version: Option<usize>,
     #[arg(last = true)]
     pub(crate) args: Vec<OsString>,
 }
