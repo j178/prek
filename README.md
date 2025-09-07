@@ -74,7 +74,7 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 - `prek list` command lists all available hooks, their ids, and descriptions, providing a better overview of the configured hooks.
 - prek provides shell completions for `prek run <hook_id>` command, making it easier to run specific hooks without remembering their ids.
 
-For more detailed improvements prek offers, take a look at [diff.md](https://prek.j178.dev/diff/).
+For more detailed improvements prek offers, take a look at [Difference from pre-commit](https://prek.j178.dev/diff/).
 
 ## Who is using prek?
 
@@ -95,10 +95,10 @@ prek provides a standalone installer script to download and install the tool:
 
 ```console
 # On Linux and macOS
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.0a1/prek-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.0-alpha.1/prek-installer.sh | sh
 
 # On Windows
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.0a1/prek-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.0-alpha.1/prek-installer.ps1 | iex"
 ```
 </details>
 
