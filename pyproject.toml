@@ -1,6 +1,6 @@
 [project]
 name = "prek"
-version = "0.2.0a1"
+version = "0.2.0a2"
 description = "Better `pre-commit`, re-engineered in Rust"
 authors = [{ name = "j178", email = "hi@j178.dev" }]
 requires-python = ">=3.8"
@@ -33,6 +33,7 @@ include = [
 ]
 
 [tool.rooster]
+version-format = "cargo"
 version_tag_prefix = "v"
 major_labels = []  # We do not use the major version number yet
 minor_labels = ["breaking"]

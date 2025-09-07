@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.2.0a1
+## 0.2.0-alpha.2
+
+*This is a re-release of [0.2.0-alpha.1](https://github.com/j178/prek/releases/tag/v0.2.0-alpha.1), fixed an issue that prereleases are not published to PyPI.*
 
 This is a huge milestone release that introduces **Workspace Mode** — first‑class monorepo support.
 
@@ -36,6 +38,7 @@ Special thanks to @potiuk for all the help and feedback in designing and testing
 ### Other changes
 
 - Docs: `.pre-commit-config.yml` support has been removed ([#630](https://github.com/j178/prek/pull/630))
+- Enable publishing prereleases ([#641](https://github.com/j178/prek/pull/641))
 
 ### Contributors
 
