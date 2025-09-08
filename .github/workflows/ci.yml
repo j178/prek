@@ -130,7 +130,7 @@ jobs:
             --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
