@@ -102,11 +102,6 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
-        with:
-          version: ${{ env.UV_VERSION }}
-
       - name: "Install Python"
         run: uv python install --no-bin ${{ env.PYTHON_VERSION }}
 
@@ -119,6 +114,38 @@ jobs:
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: "Cargo test without uv"
+        run: |
+          cargo nextest show-config test-groups
+          # Test install uv from github
+          cargo llvm-cov nextest \
+            --no-report \
+            --workspace \
+            --features uv-source-github \
+            -E 'binary_id(prek::run) and test(run_basic)'
+          rm -rf ~/.cache/prek/tools/uv
+
+          # Test install uv from pypi
+          cargo llvm-cov nextest \
+            --no-report \
+            --workspace \
+            --features uv-source-pypi \
+            -E 'binary_id(prek::run) and test(run_basic)'
+          rm -rf ~/.cache/prek/tools/uv
+
+          # Test install uv from github or pypi
+          cargo llvm-cov nextest \
+            --no-report \
+            --workspace \
+            --features uv-source-default \
+            -E 'binary_id(prek::run) and test(run_basic)'
+          rm -rf ~/.cache/prek/tools/uv
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
+        with:
+          version: ${{ env.UV_VERSION }}
 
       - name: "Cargo test"
         run: |
@@ -229,104 +256,3 @@ jobs:
         run: |
           cargo nextest show-config test-groups
           cargo nextest run --workspace --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow
-
-
-  test-python-setup-linux:
-    timeout-minutes: 10
-    runs-on: ubuntu-latest
-    name: "test python setup | linux"
-    strategy:
-      matrix:
-        uv-source: ["github", "pypi", "default"]
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-      - uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
-      - name: "Install Rust toolchain"
-        run: rustup show
-      - name: "Build prek with GitHub source"
-        if: matrix.uv-source == 'github'
-        run: cargo build --features uv-source-github
-      - name: "Build prek with PyPI source"
-        if: matrix.uv-source == 'pypi'
-        run: cargo build --features uv-source-pypi
-      - name: "Build prek with default source"
-        if: matrix.uv-source == 'default'
-        run: cargo build
-      - name: "Run test"
-        run: |
-          cd /tmp
-          mkdir python-setup-${{ matrix.uv-source }}
-          cd python-setup-${{ matrix.uv-source }}
-          git init
-          git config user.name "Test User"
-          git config user.email "test@example.com"
-          echo "print('Hello from Python!')" > test.py
-          cat > .pre-commit-config.yaml << 'EOF'
-          repos:
-            - repo: 'https://github.com/pre-commit/pre-commit-hooks'
-              rev: v5.0.0
-              hooks:
-                - id: trailing-whitespace
-                - id: end-of-file-fixer
-                - id: check-yaml
-                - id: check-added-large-files
-          EOF
-          git add .
-          git commit -m "Initial commit"
-          echo "Testing with uv source: ${{ matrix.uv-source }}"
-          ${{ github.workspace }}/target/debug/prek run --files test.py -vvv
-
-  test-python-setup-windows:
-    timeout-minutes: 15
-    runs-on: windows-latest
-    name: "test python setup | windows"
-    strategy:
-      matrix:
-        uv-source: ["github", "pypi", "default"]
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-
-      - name: Create Dev Drive
-        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
-
-      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
-
-      - name: "Install Rust toolchain"
-        run: rustup show
-
-      - name: "Build prek with GitHub source"
-        if: matrix.uv-source == 'github'
-        run: cargo build --features uv-source-github
-
-      - name: "Build prek with PyPI source"
-        if: matrix.uv-source == 'pypi'
-        run: cargo build --features uv-source-pypi
-
-      - name: "Build prek with default source"
-        if: matrix.uv-source == 'default'
-        run: cargo build
-
-      - name: "Run test"
-        run: |
-          cd $env:TEMP
-          mkdir python-setup-${{ matrix.uv-source }}
-          cd python-setup-${{ matrix.uv-source }}
-          git init
-          git config user.name "Test User"
-          git config user.email "test@example.com"
-          echo "print('Hello from Python!')" > test.py
-          @"
-          repos:
-            - repo: 'https://github.com/pre-commit/pre-commit-hooks'
-              rev: v5.0.0
-              hooks:
-                - id: trailing-whitespace
-                - id: end-of-file-fixer
-                - id: check-yaml
-                - id: check-added-large-files
-          "@ > .pre-commit-config.yaml
-          git add .
-          git commit -m "Initial commit"
-          echo "Testing with uv source: ${{ matrix.uv-source }}"
-          & "${{ github.workspace }}/target/debug/prek" run --files test.py -vvv
