@@ -25,6 +25,8 @@ When you run `prek run` without the `--config` option, `prek` automatically disc
 
 **Note**: The current working directory determines the workspace root discovery. `prek` starts searching from your current location and stops at the first `.pre-commit-config.yaml` file found while traversing up the directory tree. Running from different directories may discover different workspace roots. Use `prek -C <dir>` to change the working directory before execution.
 
+**Note**: Directories beginning with a dot (e.g. `.hidden`) are ignored during project discovery.
+
 ## Project Organization
 
 ### Example Structure
