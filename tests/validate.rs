@@ -1,4 +1,5 @@
 use assert_fs::fixture::{FileWriteStr, PathChild};
+use constants::CONFIG_FILE;
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -27,7 +28,7 @@ fn validate_config() -> anyhow::Result<()> {
                   - id: check-json
         "});
     // Validate one file.
-    cmd_snapshot!(context.filters(), context.validate_config().arg(".pre-commit-config.yaml"), @r#"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -44,7 +45,7 @@ fn validate_config() -> anyhow::Result<()> {
         "})?;
 
     // Validate multiple files.
-    cmd_snapshot!(context.filters(), context.validate_config().arg(".pre-commit-config.yaml").arg("config-1.yaml"), @r#"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE).arg("config-1.yaml"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -136,7 +137,7 @@ fn unexpected_keys_warning() {
     "});
 
     // TODO: warning about `unexpected_key_in_hook` currently not working
-    cmd_snapshot!(context.filters(), context.validate_config().arg(".pre-commit-config.yaml"), @r#"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @r#"
     success: true
     exit_code: 0
     ----- stdout -----

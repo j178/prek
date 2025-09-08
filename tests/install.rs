@@ -1,6 +1,7 @@
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+use constants::CONFIG_FILE;
 use indoc::indoc;
 use insta::assert_snapshot;
 
@@ -617,13 +618,13 @@ fn workspace_install_only_root_hook_types() -> anyhow::Result<()> {
 
     context
         .work_dir()
-        .child(".pre-commit-config.yaml")
+        .child(CONFIG_FILE)
         .write_str(root_config)?;
     context.work_dir().child("project2").create_dir_all()?;
     context
         .work_dir()
         .child("project2")
-        .child(".pre-commit-config.yaml")
+        .child(CONFIG_FILE)
         .write_str(nested_config)?;
     context.git_add(".");
 

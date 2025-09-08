@@ -4,6 +4,7 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
+use constants::CONFIG_FILE;
 use insta::assert_snapshot;
 
 use crate::common::{TestContext, cmd_snapshot};
@@ -134,7 +135,7 @@ fn auto_update_basic() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(".pre-commit-config.yaml"), @r#"
+            assert_snapshot!(context.read(CONFIG_FILE), @r#"
             repos:
               - repo: [HOME]/test-repos/test-repo
                 rev: v2.0.0
@@ -178,7 +179,7 @@ fn auto_update_already_up_to_date() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(".pre-commit-config.yaml"), @r#"
+            assert_snapshot!(context.read(CONFIG_FILE), @r#"
             repos:
               - repo: [HOME]/test-repos/up-to-date-repo
                 rev: v1.0.0
@@ -232,7 +233,7 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(".pre-commit-config.yaml"), @r"
+            assert_snapshot!(context.read(CONFIG_FILE), @r"
             repos:
               - repo: [HOME]/test-repos/repo1
                 rev: v1.1.0
@@ -290,7 +291,7 @@ fn auto_update_specific_repos() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(".pre-commit-config.yaml"), @r#"
+            assert_snapshot!(context.read(CONFIG_FILE), @r#"
             repos:
               - repo: [HOME]/test-repos/repo1
                 rev: v1.1.0
@@ -318,7 +319,7 @@ fn auto_update_specific_repos() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(".pre-commit-config.yaml"), @r#"
+            assert_snapshot!(context.read(CONFIG_FILE), @r#"
             repos:
               - repo: [HOME]/test-repos/repo1
                 rev: v1.1.0
@@ -370,7 +371,7 @@ fn auto_update_bleeding_edge() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(".pre-commit-config.yaml"), @r#"
+            assert_snapshot!(context.read(CONFIG_FILE), @r#"
             repos:
               - repo: [HOME]/test-repos/bleeding-repo
                 rev: [COMMIT_SHA]
@@ -419,7 +420,7 @@ fn auto_update_freeze() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(".pre-commit-config.yaml"), @r##"
+            assert_snapshot!(context.read(CONFIG_FILE), @r##"
             repos:
               - repo: [HOME]/test-repos/freeze-repo
                 rev: [COMMIT_SHA]  # frozen: v1.1.0
@@ -475,7 +476,7 @@ fn auto_update_preserve_formatting() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(".pre-commit-config.yaml"), @r##"
+            assert_snapshot!(context.read(CONFIG_FILE), @r##"
             # Pre-commit configuration
             repos:
               - repo: [HOME]/test-repos/repo1  # Test repository
@@ -535,7 +536,7 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(".pre-commit-config.yaml"), @r#"
+            assert_snapshot!(context.read(CONFIG_FILE), @r#"
             repos:
               - repo: [HOME]/test-repos/frozen-repo
                 rev: v1.2.0
@@ -585,7 +586,7 @@ fn auto_update_local_repo_ignored() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(".pre-commit-config.yaml"), @r#"
+            assert_snapshot!(context.read(CONFIG_FILE), @r#"
             repos:
               - repo: local
                 hooks:

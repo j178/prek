@@ -301,7 +301,7 @@ mod tests {
         assert!(NodeRequest::from_str("node12.18.3.4").is_err());
         assert!(NodeRequest::from_str("node12.18.3a").is_err());
         assert!(NodeRequest::from_str("node12.18.x").is_err());
-        assert!(NodeRequest::from_str("node^12.18.3").is_err(),);
+        assert!(NodeRequest::from_str("node^12.18.3").is_err());
         assert!(NodeRequest::from_str("invalid").is_err());
         assert!(NodeRequest::from_str("lts/$$$").is_err());
     }

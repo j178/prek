@@ -207,8 +207,8 @@ mod tests {
         assert!(PythonRequest::from_str("a3.12").is_err());
 
         // TODO: support
-        assert!(PythonRequest::from_str("3.12.3a1").is_err(),);
-        assert!(PythonRequest::from_str("3.12.3rc1").is_err(),);
+        assert!(PythonRequest::from_str("3.12.3a1").is_err());
+        assert!(PythonRequest::from_str("3.12.3rc1").is_err());
         assert!(PythonRequest::from_str("python3.13.2a1").is_err());
         assert!(PythonRequest::from_str("python3.13.2rc1").is_err());
         assert!(PythonRequest::from_str("python3.13.2t1").is_err());

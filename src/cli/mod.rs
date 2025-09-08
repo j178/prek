@@ -8,9 +8,10 @@ use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
 use clap_complete::engine::ArgValueCompleter;
 use serde::{Deserialize, Serialize};
 
+use constants::CONFIG_FILE;
 use constants::env_vars::EnvVars;
 
-use crate::config::{self, CONFIG_FILE, HookType, Stage};
+use crate::config::{self, HookType, Stage};
 
 mod auto_update;
 mod clean;

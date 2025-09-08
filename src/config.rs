@@ -5,18 +5,15 @@ use std::str::FromStr;
 use std::sync::OnceLock;
 
 use anyhow::Result;
+use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
 use fancy_regex::{self as regex, Regex};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::fs::Simplified;
-
 use crate::identify;
 use crate::version;
 use crate::warn_user;
-
-pub const CONFIG_FILE: &str = ".pre-commit-config.yaml";
-pub const MANIFEST_FILE: &str = ".pre-commit-hooks.yaml";
 
 #[derive(Clone)]
 pub struct SerdeRegex(Regex);
@@ -526,9 +523,13 @@ impl<'de> Deserialize<'de> for MetaHook {
                 entry: String::new(),
                 options: HookOptions {
                     files: Some(
-                        Regex::new(&format!("^{}$", regex::escape(CONFIG_FILE),))
-                            .map(SerdeRegex)
-                            .unwrap(),
+                        Regex::new(&format!(
+                            "^{}|{}$",
+                            regex::escape(CONFIG_FILE),
+                            regex::escape(ALT_CONFIG_FILE)
+                        ))
+                        .map(SerdeRegex)
+                        .unwrap(),
                     ),
                     ..Default::default()
                 },
@@ -540,9 +541,13 @@ impl<'de> Deserialize<'de> for MetaHook {
                 entry: String::new(),
                 options: HookOptions {
                     files: Some(
-                        Regex::new(&format!("^{}$", regex::escape(CONFIG_FILE),))
-                            .map(SerdeRegex)
-                            .unwrap(),
+                        Regex::new(&format!(
+                            "^{}|{}$",
+                            regex::escape(CONFIG_FILE),
+                            regex::escape(ALT_CONFIG_FILE)
+                        ))
+                        .map(SerdeRegex)
+                        .unwrap(),
                     ),
                     ..Default::default()
                 },

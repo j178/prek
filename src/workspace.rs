@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use anyhow::Result;
+use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
 use futures::StreamExt;
 use ignore::WalkState;
 use itertools::zip_eq;
@@ -16,13 +17,13 @@ use thiserror::Error;
 use tracing::{debug, error, instrument};
 
 use crate::cli::run::Selectors;
-use crate::config::{self, CONFIG_FILE, Config, ManifestHook, read_config};
+use crate::config::{self, Config, ManifestHook, read_config};
 use crate::fs::Simplified;
 use crate::git::GIT_ROOT;
 use crate::hook::{self, Hook, HookBuilder, Repo};
 use crate::store::{CacheBucket, STORE, Store};
 use crate::workspace::Error::MissingPreCommitConfig;
-use crate::{git, store};
+use crate::{git, store, warn_user};
 
 #[derive(Error, Debug)]
 pub(crate) enum Error {
@@ -129,7 +130,26 @@ impl Project {
 
     /// Find the configuration file in the given path.
     pub(crate) fn from_directory(path: &Path) -> Result<Self, config::Error> {
-        Self::from_config_file(path.join(CONFIG_FILE).into(), None)
+        let main = path.join(CONFIG_FILE);
+        let alternate = path.join(ALT_CONFIG_FILE);
+        let main_exists = main.is_file();
+        let alternate_exists = alternate.is_file();
+
+        if main_exists && alternate_exists {
+            warn_user!(
+                "Both `{main}` and `{alternate}` exist, using `{main}` only",
+                main = main.display(),
+                alternate = alternate.display()
+            );
+        }
+        if main_exists {
+            return Self::from_config_file(main.into(), None);
+        }
+        if alternate_exists {
+            return Self::from_config_file(alternate.into(), None);
+        }
+
+        Err(config::Error::NotFound(main.user_display().to_string()))
     }
 
     /// Discover a project from the give path or search from the given path to the git root.
@@ -521,12 +541,11 @@ impl Workspace {
             return Ok(git_root.clone());
         }
 
-        // TODO: add back `.pre-commit-config.yml` support
         // Walk from the given path up to the git root, to find the workspace root.
         let workspace_root = dir
             .ancestors()
             .take_while(|p| git_root.parent().map(|root| *p != root).unwrap_or(true))
-            .find(|p| p.join(CONFIG_FILE).is_file())
+            .find(|p| p.join(CONFIG_FILE).is_file() || p.join(ALT_CONFIG_FILE).is_file())
             .ok_or(MissingPreCommitConfig)?
             .to_path_buf();
 
@@ -627,30 +646,30 @@ impl Workspace {
                     let Some(file_type) = entry.file_type() else {
                         return WalkState::Continue;
                     };
+                    if !file_type.is_dir() {
+                        return WalkState::Continue;
+                    }
 
-                    if file_type.is_file() && entry.file_name() == CONFIG_FILE {
-                        match Project::from_config_file(entry.path().into(), None) {
-                            Ok(mut project) => {
-                                let relative_path = entry
-                                    .into_path()
-                                    .parent()
-                                    .and_then(|p| p.strip_prefix(root).ok())
-                                    .expect("Entry path should be relative to the root")
-                                    .to_path_buf();
-                                project.with_relative_path(relative_path);
+                    match Project::from_directory(entry.path()) {
+                        Ok(mut project) => {
+                            let relative_path = entry
+                                .into_path()
+                                .strip_prefix(root)
+                                .expect("Entry path should be relative to the root")
+                                .to_path_buf();
+                            project.with_relative_path(relative_path);
 
-                                projects
-                                    .lock()
-                                    .unwrap()
-                                    .as_mut()
-                                    .unwrap()
-                                    .push(Arc::new(project));
-                            }
-                            Err(config::Error::NotFound(_)) => {}
-                            Err(e) => {
-                                *projects.lock().unwrap() = Err(e);
-                                return WalkState::Quit;
-                            }
+                            projects
+                                .lock()
+                                .unwrap()
+                                .as_mut()
+                                .unwrap()
+                                .push(Arc::new(project));
+                        }
+                        Err(config::Error::NotFound(_)) => {}
+                        Err(e) => {
+                            *projects.lock().unwrap() = Err(e);
+                            return WalkState::Quit;
                         }
                     }
 

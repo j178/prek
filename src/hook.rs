@@ -7,6 +7,7 @@ use std::sync::{Arc, OnceLock};
 
 use anyhow::{Context, Result};
 use clap::ValueEnum;
+use constants::MANIFEST_FILE;
 use rand::Rng;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
@@ -14,8 +15,8 @@ use thiserror::Error;
 use tracing::{error, trace};
 
 use crate::config::{
-    self, Config, HookOptions, Language, LocalHook, MANIFEST_FILE, ManifestHook, MetaHook,
-    RemoteHook, SerdeRegex, Stage, read_manifest,
+    self, Config, HookOptions, Language, LocalHook, ManifestHook, MetaHook, RemoteHook, SerdeRegex,
+    Stage, read_manifest,
 };
 use crate::languages::version::LanguageRequest;
 use crate::languages::{extract_metadata_from_entry, resolve_command};

@@ -1,3 +1,5 @@
+use constants::CONFIG_FILE;
+
 use crate::common::{TestContext, cmd_snapshot};
 
 mod common;
@@ -33,7 +35,7 @@ fn sample_config() -> anyhow::Result<()> {
     ----- stderr -----
     "#);
 
-    insta::assert_snapshot!(context.read(".pre-commit-config.yaml"), @r##"
+    insta::assert_snapshot!(context.read(CONFIG_FILE), @r##"
     # See https://pre-commit.com for more information
     # See https://pre-commit.com/hooks.html for more hooks
     repos:

@@ -50,7 +50,7 @@ pub(crate) async fn hook_impl(
             // Try to discover a project from current directory (after `--cd`)
             match Project::discover(config.as_deref(), &CWD) {
                 Err(e) if matches!(e, workspace::Error::MissingPreCommitConfig) => {
-                    eprintln!("{}: {e}", "error".red().bold(),);
+                    eprintln!("{}: {e}", "error".red().bold());
                     true
                 }
                 Ok(_) => false,
