@@ -1,6 +1,6 @@
 [project]
 name = "prek"
-version = "0.2.0a2"
+version = "0.2.0a3"
 description = "Better `pre-commit`, re-engineered in Rust"
 authors = [{ name = "j178", email = "hi@j178.dev" }]
 requires-python = ">=3.8"
@@ -49,8 +49,8 @@ changelog_contributors = true
 
 version_files = [
   "pyproject.toml",
-  "README.md",
   "Cargo.toml",
+  "README.md",
   "docs/installation.md",
 ]
 

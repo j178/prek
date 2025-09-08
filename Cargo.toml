@@ -10,7 +10,7 @@ tracing = { version = "0.1.40" }
 
 [package]
 name = "prek"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 authors = ["j178 <hi@j178.dev>"]
 description = "Better `pre-commit`, re-engineered in Rust"
 repository = "https://github.com/j178/prek"

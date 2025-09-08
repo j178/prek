@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0a3
+
+### Enhancements
+
+- Add a warning to `hook-impl` when the script needs reinstall ([#647](https://github.com/j178/prek/pull/647))
+
+### Documentation
+
+- Add a notice to rerun `prek install` when upgrading to 0.2.0 ([#646](https://github.com/j178/prek/pull/646))
+
+### Contributors
+
+- @j178
+
 ## 0.2.0-alpha.2
 
 *This is a re-release of [0.2.0-alpha.1](https://github.com/j178/prek/releases/tag/v0.2.0-alpha.1), fixed an issue that prereleases are not published to PyPI.*

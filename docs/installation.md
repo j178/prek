@@ -9,13 +9,13 @@ The standalone installer automatically downloads and installs the correct binary
 ### Linux and macOS
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.0-alpha.2/prek-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.0-alpha.3/prek-installer.sh | sh
 ```
 
 ### Windows
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.0-alpha.2/prek-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.0-alpha.3/prek-installer.ps1 | iex"
 ```
 
 ## Package Managers
@@ -41,7 +41,9 @@ pipx install prek
 brew install prek
 ```
 
-### mise (Cross-platform)
+### mise
+
+To use prek with [mise](https://mise.jdx.dev):
 
 ```bash
 mise use prek
@@ -49,13 +51,11 @@ mise use prek
 
 ## Build from Source
 
-### Using Cargo
-
 ```bash
 cargo install --locked --git https://github.com/j178/prek
 ```
 
-### Download from GitHub Releases
+## Download from GitHub Releases
 
 Pre-built binaries are available for download from the [GitHub releases](https://github.com/j178/prek/releases) page.
 

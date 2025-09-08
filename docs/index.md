@@ -6,7 +6,7 @@
 
 [pre-commit](https://pre-commit.com/) is a framework to run hooks written in many languages, and it manages the language toolchain and dependencies for running the hooks.
 
-**prek** is a reimagined version of pre-commit, built in Rust. It is designed to be a faster, dependency-free and drop-in alternative for it, while also providing some additional long-requested features.
+*prek* is a reimagined version of pre-commit, built in Rust. It is designed to be a faster, dependency-free and drop-in alternative for it, while also providing some additional long-requested features.
 
 !!! warning "Not production-ready yet"
     prek is not production-ready yet, a few subcommands and languages are still in works. But it's already being adopted by some projects, please give it a try - we'd love your feedback!
