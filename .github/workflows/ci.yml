@@ -104,29 +104,28 @@ jobs:
 
       - name: "Cargo test without uv"
         run: |
-          cargo nextest show-config test-groups
-          # Test install uv from github
+          echo "::group::Test install uv from github"
           cargo llvm-cov nextest \
             --no-report \
-            --workspace \
             --features uv-source-github \
             -E 'binary_id(prek::run) and test(run_basic)'
           rm -rf ~/.cache/prek/tools/uv
+          echo "::endgroup::"
 
-          # Test install uv from pypi
+          echo "::group::Test install uv from pypi"
           cargo llvm-cov nextest \
             --no-report \
-            --workspace \
             --features uv-source-pypi \
             -E 'binary_id(prek::run) and test(run_basic)'
           rm -rf ~/.cache/prek/tools/uv
+          echo "::endgroup::"
 
-          # Test install uv from github or pypi
+          echo "::group::Test install uv from github or pypi"
           cargo llvm-cov nextest \
             --no-report \
-            --workspace \
             -E 'binary_id(prek::run) and test(run_basic)'
           rm -rf ~/.cache/prek/tools/uv
+          echo "::endgroup::"
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
@@ -148,12 +147,12 @@ jobs:
 
       - name: "Cargo test"
         run: |
-          cargo nextest show-config test-groups
           cargo llvm-cov nextest \
-            --lcov \
-            --output-path lcov.info \
+            --no-report \
             --workspace \
             --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow
+
+          cargo llvm-cov report --lcov --output-path lcov.info
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
