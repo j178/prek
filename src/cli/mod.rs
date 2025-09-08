@@ -227,6 +227,32 @@ pub(crate) enum Command {
 
 #[derive(Debug, Args)]
 pub(crate) struct InstallArgs {
+    /// Include the specified hooks or projects.
+    ///
+    /// Supports flexible selector syntax:
+    /// - `hook-id`: Run all hooks with the specified ID across all projects
+    /// - `project-path/`: Run all hooks from the specified project
+    /// - `project-path:hook-id`: Run only the specified hook from the specified project
+    ///
+    /// Can be specified multiple times to select multiple hooks/projects.
+    #[arg(
+        value_name = "HOOK|PROJECT",
+        value_hint = ValueHint::Other,
+        add = ArgValueCompleter::new(selector_completer)
+    )]
+    pub(crate) includes: Vec<String>,
+
+    /// Skip the specified hooks or projects.
+    ///
+    /// Supports flexible selector syntax:
+    /// - `hook-id`: Skip all hooks with the specified ID across all projects
+    /// - `project-path/`: Skip all hooks from the specified project
+    /// - `project-path:hook-id`: Skip only the specified hook from the specified project
+    ///
+    /// Can be specified multiple times. Also accepts `PREK_SKIP` or `SKIP` environment variables (comma-delimited).
+    #[arg(long = "skip", value_name = "HOOK|PROJECT", add = ArgValueCompleter::new(selector_completer))]
+    pub(crate) skips: Vec<String>,
+
     /// Overwrite existing hooks.
     #[arg(short = 'f', long)]
     pub(crate) overwrite: bool,
@@ -457,6 +483,31 @@ pub(crate) struct AutoUpdateArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct HookImplArgs {
+    /// Include the specified hooks or projects.
+    ///
+    /// Supports flexible selector syntax:
+    /// - `hook-id`: Run all hooks with the specified ID across all projects
+    /// - `project-path/`: Run all hooks from the specified project
+    /// - `project-path:hook-id`: Run only the specified hook from the specified project
+    ///
+    /// Can be specified multiple times to select multiple hooks/projects.
+    #[arg(
+        value_name = "HOOK|PROJECT",
+        value_hint = ValueHint::Other,
+        add = ArgValueCompleter::new(selector_completer)
+    )]
+    pub(crate) includes: Vec<String>,
+
+    /// Skip the specified hooks or projects.
+    ///
+    /// Supports flexible selector syntax:
+    /// - `hook-id`: Skip all hooks with the specified ID across all projects
+    /// - `project-path/`: Skip all hooks from the specified project
+    /// - `project-path:hook-id`: Skip only the specified hook from the specified project
+    ///
+    /// Can be specified multiple times. Also accepts `PREK_SKIP` or `SKIP` environment variables (comma-delimited).
+    #[arg(long = "skip", value_name = "HOOK|PROJECT", add = ArgValueCompleter::new(selector_completer))]
+    pub(crate) skips: Vec<String>,
     #[arg(long)]
     pub(crate) hook_type: HookType,
     #[arg(long)]

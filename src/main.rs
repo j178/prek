@@ -164,6 +164,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             cli::install(
                 cli.globals.config,
+                args.includes,
+                args.skips,
                 args.hook_types,
                 args.install_hooks,
                 args.overwrite,
@@ -226,6 +228,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             cli::hook_impl(
                 cli.globals.config,
+                args.includes,
+                args.skips,
                 args.hook_type,
                 args.hook_dir,
                 args.skip_on_missing_config,

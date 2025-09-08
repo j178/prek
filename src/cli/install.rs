@@ -17,10 +17,13 @@ use crate::printer::Printer;
 use crate::store::STORE;
 use crate::workspace::{Project, Workspace};
 use crate::{git, warn_user};
+use crate::cli::run::Selectors;
 
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
     config: Option<PathBuf>,
+    includes: Vec<String>,
+    skips: Vec<String>,
     hook_types: Vec<HookType>,
     install_hook_environments: bool,
     overwrite: bool,
@@ -46,10 +49,21 @@ pub(crate) async fn install(
     };
     fs_err::create_dir_all(&hooks_path)?;
 
+    let selectors = if let Some(project) = project {
+        Some(Selectors::load(&includes, &skips, project.path())?)
+    } else if !includes.is_empty() || !skips.is_empty() {
+        anyhow::bail!("Cannot use `--include` or `--skip` outside of a git repository");
+    } else {
+        None
+    };
+
+    let selectors =
+
     for hook_type in hook_types {
         install_hook_script(
             project.as_ref(),
             config.clone(),
+            &selectors,
             hook_type,
             &hooks_path,
             overwrite,
@@ -59,7 +73,7 @@ pub(crate) async fn install(
     }
 
     if install_hook_environments {
-        install_hooks(config, refresh, printer).await?;
+        install_hooks(config, &selectors, refresh, printer).await?;
     }
 
     Ok(ExitStatus::Success)
@@ -67,12 +81,12 @@ pub(crate) async fn install(
 
 pub(crate) async fn install_hooks(
     config: Option<PathBuf>,
+    selectors: Option<&Selectors>,
     refresh: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
-    // TODO: support selectors in `install-hooks`?
-    let mut workspace = Workspace::discover(workspace_root, config, None, refresh)?;
+    let mut workspace = Workspace::discover(workspace_root, config, Some(selectors), refresh)?;
 
     let store = STORE.as_ref()?;
     let reporter = HookInitReporter::from(printer);
@@ -111,6 +125,7 @@ fn get_hook_types(project: Option<&Project>, hook_types: Vec<HookType>) -> Vec<H
 fn install_hook_script(
     project: Option<&Project>,
     config: Option<PathBuf>,
+    selectors: &Selectors,
     hook_type: HookType,
     hooks_path: &Path,
     overwrite: bool,

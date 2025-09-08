@@ -18,6 +18,8 @@ use crate::{git, warn_user};
 
 pub(crate) async fn hook_impl(
     config: Option<PathBuf>,
+    includes: Vec<String>,
+    skips: Vec<String>,
     hook_type: HookType,
     _hook_dir: PathBuf,
     skip_on_missing_config: bool,
@@ -85,8 +87,8 @@ pub(crate) async fn hook_impl(
 
     cli::run(
         config,
-        run_args.includes,
-        run_args.skips,
+        includes,
+        skips,
         hook_type.into(),
         run_args.from_ref,
         run_args.to_ref,
