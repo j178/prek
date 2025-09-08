@@ -125,7 +125,7 @@ jobs:
           cargo nextest show-config test-groups
           cargo llvm-cov nextest \
             --lcov
-            ----output-path lcov.info
+            --output-path lcov.info
             --workspace \
             --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow
 
