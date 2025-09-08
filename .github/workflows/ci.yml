@@ -102,19 +102,6 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
-      - name: "Install Python"
-        run: uv python install --no-bin ${{ env.PYTHON_VERSION }}
-
-      - name: "Install Node.js"
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: "Install Go"
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
       - name: "Cargo test without uv"
         run: |
           cargo nextest show-config test-groups
@@ -146,6 +133,19 @@ jobs:
         uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
         with:
           version: ${{ env.UV_VERSION }}
+
+      - name: "Install Python"
+        run: uv python install --no-bin ${{ env.PYTHON_VERSION }}
+
+      - name: "Install Node.js"
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: "Install Go"
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
 
       - name: "Cargo test"
         run: |
