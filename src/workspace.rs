@@ -636,7 +636,6 @@ impl Workspace {
 
         ignore::WalkBuilder::new(root)
             .follow_links(false)
-            .hidden(false) // Find from hidden directories.
             .build_parallel()
             .run(|| {
                 Box::new(|result| {
