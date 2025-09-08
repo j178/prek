@@ -125,7 +125,6 @@ jobs:
           cargo llvm-cov nextest \
             --no-report \
             --workspace \
-            --features uv-source-default \
             -E 'binary_id(prek::run) and test(run_basic)'
           rm -rf ~/.cache/prek/tools/uv
 
