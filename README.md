@@ -94,10 +94,12 @@ prek is pretty new, but it is already being used or recommend by some projects a
 
 prek provides a standalone installer script to download and install the tool:
 
-```console
+```bash
 # On Linux and macOS
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.0-alpha.2/prek-installer.sh | sh
+```
 
+```powershell
 # On Windows
 powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.0-alpha.2/prek-installer.ps1 | iex"
 ```
