@@ -97,6 +97,11 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: "Install cargo-llvm-cov"
+        uses: taiki-e/install-action@57511bcdf8cdb0eab6448cb7fa632952d9f25742 # v2.59.1
+        with:
+          tool: cargo-llvm-cov
+
       - name: "Install uv"
         uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
         with:
@@ -118,9 +123,17 @@ jobs:
       - name: "Cargo test"
         run: |
           cargo nextest show-config test-groups
-          cargo nextest run \
+          cargo llvm-cov nextest \
+            --lcov
+            ----output-path lcov.info
             --workspace \
             --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
 
   cargo-test-macos:
     timeout-minutes: 10

@@ -129,7 +129,7 @@ brew install prek
 </details>
 
 <details>
-<summary>mise</summary>
+<summary>[mise](https://mise.jdx.dev)</summary>
 
 ```console
 mise use prek
