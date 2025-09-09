@@ -10,15 +10,16 @@ fn docker_image() -> Result<()> {
     context.init_project();
 
     let cwd = context.work_dir();
-    // Test suit from https://github.com/super-linter/super-linter/tree/main/test/linters/gitleaks/bad
+    // Test suite from https://github.com/super-linter/super-linter/tree/main/test/linters/gitleaks/bad
     cwd.child("gitleaks_bad_01.txt")
         .write_str(indoc::indoc! {r"
         aws_access_key_id = AROA47DSWDEZA3RQASWB
         aws_secret_access_key = wQwdsZDiWg4UA5ngO0OSI2TkM4kkYxF6d2S1aYWM
     "})?;
 
+    // Use fully qualified image name for Podman/Docker compatibility
     Command::new("docker")
-        .args(["pull", "zricethezav/gitleaks:v8.21.2"])
+        .args(["pull", "docker.io/zricethezav/gitleaks:v8.21.2"])
         .assert()
         .success();
 
@@ -29,7 +30,7 @@ fn docker_image() -> Result<()> {
               - id: gitleaks-docker
                 name: Detect hardcoded secrets
                 language: docker_image
-                entry: zricethezav/gitleaks:v8.21.2 git --pre-commit --redact --staged --verbose
+                entry: docker.io/zricethezav/gitleaks:v8.21.2 git --pre-commit --redact --staged --verbose
                 pass_filenames: false
     "});
     context.git_add(".");
