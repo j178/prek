@@ -87,11 +87,10 @@ pub(crate) async fn run(
     let lock = store.lock_async().await?;
 
     let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
-    let hooks = hooks.into_iter().map(Arc::new).collect::<Vec<_>>();
-
     let filtered_hooks: Vec<_> = hooks
         .into_iter()
         .filter(|h| selectors.matches_hook(h))
+        .map(Arc::new)
         .collect();
 
     selectors.report_unused();

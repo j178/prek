@@ -71,7 +71,7 @@ pub(crate) async fn install(
     }
 
     if install_hook_environments {
-        install_hooks(config, selectors.as_ref(), refresh, printer).await?;
+        install_hooks(config, includes, skips, refresh, printer).await?;
     }
 
     Ok(ExitStatus::Success)
@@ -79,22 +79,28 @@ pub(crate) async fn install(
 
 pub(crate) async fn install_hooks(
     config: Option<PathBuf>,
-    selectors: Option<&Selectors>,
+    includes: Vec<String>,
+    skips: Vec<String>,
     refresh: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
-    let mut workspace = Workspace::discover(workspace_root, config, selectors, refresh)?;
+    let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
+    let mut workspace = Workspace::discover(workspace_root, config, Some(&selectors), refresh)?;
 
     let store = STORE.as_ref()?;
     let reporter = HookInitReporter::from(printer);
     let _lock = store.lock_async().await?;
 
     let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
-    let hooks = hooks.into_iter().map(Arc::new).collect();
+    let filtered_hooks: Vec<_> = hooks
+        .into_iter()
+        .filter(|h| selectors.matches_hook(h))
+        .map(Arc::new)
+        .collect();
 
     let reporter = HookInstallReporter::from(printer);
-    run::install_hooks(hooks, store, &reporter).await?;
+    run::install_hooks(filtered_hooks, store, &reporter).await?;
 
     Ok(ExitStatus::Success)
 }

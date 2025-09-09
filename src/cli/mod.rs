@@ -189,7 +189,7 @@ pub(crate) enum Command {
     /// Create hook environments for all hooks used in the config file.
     ///
     /// This command does not install the git hook. To install the git hook along with the hook environments in one command, use `prek install --install-hooks`.
-    InstallHooks,
+    InstallHooks(InstallHooksArgs),
     /// Run hooks.
     Run(Box<RunArgs>),
     /// List available hooks.
@@ -267,6 +267,35 @@ pub(crate) struct InstallArgs {
     /// Allow a missing `pre-commit` configuration file.
     #[arg(long)]
     pub(crate) allow_missing_config: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct InstallHooksArgs {
+    /// Include the specified hooks or projects.
+    ///
+    /// Supports flexible selector syntax:
+    /// - `hook-id`: Run all hooks with the specified ID across all projects
+    /// - `project-path/`: Run all hooks from the specified project
+    /// - `project-path:hook-id`: Run only the specified hook from the specified project
+    ///
+    /// Can be specified multiple times to select multiple hooks/projects.
+    #[arg(
+        value_name = "HOOK|PROJECT",
+        value_hint = ValueHint::Other,
+        add = ArgValueCompleter::new(selector_completer)
+    )]
+    pub(crate) includes: Vec<String>,
+
+    /// Skip the specified hooks or projects.
+    ///
+    /// Supports flexible selector syntax:
+    /// - `hook-id`: Skip all hooks with the specified ID across all projects
+    /// - `project-path/`: Skip all hooks from the specified project
+    /// - `project-path:hook-id`: Skip only the specified hook from the specified project
+    ///
+    /// Can be specified multiple times. Also accepts `PREK_SKIP` or `SKIP` environment variables (comma-delimited).
+    #[arg(long = "skip", value_name = "HOOK|PROJECT", add = ArgValueCompleter::new(selector_completer))]
+    pub(crate) skips: Vec<String>,
 }
 
 #[derive(Debug, Args)]
