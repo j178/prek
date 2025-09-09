@@ -3,6 +3,7 @@ members = ["lib/*"]
 
 [workspace.package]
 edition = "2024"
+repository = "https://github.com/j178/prek"
 
 [workspace.dependencies]
 constants = { path = "lib/constants" }
@@ -13,7 +14,7 @@ name = "prek"
 version = "0.2.0-alpha.3"
 authors = ["j178 <hi@j178.dev>"]
 description = "Better `pre-commit`, re-engineered in Rust"
-repository = "https://github.com/j178/prek"
+repository = { workspace = true }
 homepage = "https://github.com/j178/prek"
 edition = { workspace = true }
 license-file = "LICENSE"
