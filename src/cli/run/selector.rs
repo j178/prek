@@ -31,7 +31,7 @@ pub(crate) enum Error {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum SelectorSource {
+pub(crate) enum SelectorSource {
     CliArg,
     CliFlag(&'static str),
     EnvVar(&'static str),
@@ -94,6 +94,10 @@ impl Selector {
             SelectorSource::CliFlag(flag) => format!("{flag}={self}"),
             SelectorSource::EnvVar(var) => format!("{var}={self}"),
         }
+    }
+
+    pub(crate) fn source(&self) -> &SelectorSource {
+        &self.source
     }
 
     pub(crate) fn kind_str(&self) -> &'static str {
@@ -179,6 +183,14 @@ impl Selectors {
             skips,
             usage: Arc::default(),
         })
+    }
+
+    pub(crate) fn includes(&self) -> &[Selector] {
+        &self.includes
+    }
+
+    pub(crate) fn skips(&self) -> &[Selector] {
+        &self.skips
     }
 
     /// Check if a hook matches any of the selection criteria

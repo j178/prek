@@ -177,7 +177,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             .await
         }
         Command::InstallHooks => {
-            cli::install_hooks(cli.globals.config, cli.globals.refresh, printer).await
+            // TODO: add selectors?
+            cli::install_hooks(cli.globals.config, None, cli.globals.refresh, printer).await
         }
         Command::Uninstall(args) => {
             show_settings!(args);

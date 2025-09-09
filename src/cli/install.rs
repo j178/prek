@@ -10,6 +10,7 @@ use same_file::is_same_file;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run;
+use crate::cli::run::{SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
 use crate::fs::{CWD, Simplified};
 use crate::git::git_cmd;
@@ -17,7 +18,6 @@ use crate::printer::Printer;
 use crate::store::STORE;
 use crate::workspace::{Project, Workspace};
 use crate::{git, warn_user};
-use crate::cli::run::Selectors;
 
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
@@ -49,7 +49,7 @@ pub(crate) async fn install(
     };
     fs_err::create_dir_all(&hooks_path)?;
 
-    let selectors = if let Some(project) = project {
+    let selectors = if let Some(project) = &project {
         Some(Selectors::load(&includes, &skips, project.path())?)
     } else if !includes.is_empty() || !skips.is_empty() {
         anyhow::bail!("Cannot use `--include` or `--skip` outside of a git repository");
@@ -57,13 +57,11 @@ pub(crate) async fn install(
         None
     };
 
-    let selectors =
-
     for hook_type in hook_types {
         install_hook_script(
             project.as_ref(),
             config.clone(),
-            &selectors,
+            selectors.as_ref(),
             hook_type,
             &hooks_path,
             overwrite,
@@ -73,7 +71,7 @@ pub(crate) async fn install(
     }
 
     if install_hook_environments {
-        install_hooks(config, &selectors, refresh, printer).await?;
+        install_hooks(config, selectors.as_ref(), refresh, printer).await?;
     }
 
     Ok(ExitStatus::Success)
@@ -86,7 +84,7 @@ pub(crate) async fn install_hooks(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
-    let mut workspace = Workspace::discover(workspace_root, config, Some(selectors), refresh)?;
+    let mut workspace = Workspace::discover(workspace_root, config, selectors, refresh)?;
 
     let store = STORE.as_ref()?;
     let reporter = HookInitReporter::from(printer);
@@ -125,7 +123,7 @@ fn get_hook_types(project: Option<&Project>, hook_types: Vec<HookType>) -> Vec<H
 fn install_hook_script(
     project: Option<&Project>,
     config: Option<PathBuf>,
-    selectors: &Selectors,
+    selectors: Option<&Selectors>,
     hook_type: HookType,
     hooks_path: &Path,
     overwrite: bool,
@@ -155,10 +153,36 @@ fn install_hook_script(
         }
     }
 
-    let mut args = vec![
-        "hook-impl".to_string(),
-        format!("--hook-type={}", hook_type.as_str()),
-    ];
+    let mut args = vec!["hook-impl".to_string()];
+
+    // Add include/skip selectors.
+    if let Some(selectors) = selectors {
+        for include in selectors.includes() {
+            args.push(include.as_normalized_flag());
+        }
+
+        // Find any skip selectors from environment variables.
+        if let Some(env_var) = selectors.skips().iter().find_map(|skip| {
+            if let SelectorSource::EnvVar(var) = skip.source() {
+                Some(var)
+            } else {
+                None
+            }
+        }) {
+            warn_user!(
+                "Skip selectors from environment variables `{}` are ignored during installing hooks.",
+                env_var.cyan()
+            );
+        }
+
+        for skip in selectors.skips() {
+            if matches!(skip.source(), SelectorSource::CliFlag(_)) {
+                args.push(skip.as_normalized_flag());
+            }
+        }
+    }
+
+    args.push(format!("--hook-type={}", hook_type.as_str()));
 
     // Prefer explicit config path if given (non-workspace mode).
     // Otherwise, use the config path from the discovered project (workspace mode).
@@ -173,6 +197,7 @@ fn install_hook_script(
     if skip_on_missing_config {
         args.push("--skip-on-missing-config".to_string());
     }
+
     args.push(format!("--script-version={CUR_SCRIPT_VERSION}"));
 
     let prek = std::env::current_exe()?;
@@ -302,6 +327,8 @@ pub(crate) async fn init_template_dir(
 ) -> Result<ExitStatus> {
     install(
         config,
+        vec![],
+        vec![],
         hook_types,
         false,
         true,
