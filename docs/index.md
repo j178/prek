@@ -9,9 +9,9 @@
 *prek* is a reimagined version of pre-commit, built in Rust. It is designed to be a faster, dependency-free and drop-in alternative for it, while also providing some additional long-requested features.
 
 !!! warning "Not production-ready yet"
-    prek is not production-ready yet, a few subcommands and languages are still in works. But it's already being adopted by some projects, please give it a try - we'd love your feedback!
+    prek is not production-ready yet. Some subcommands and languages are not implemented. See the current gaps for drop-in parity on the [TODO page](./todo.md).
 
-    Current supported languages are `python`, `node`, `go`, `docker`, `docker-image`, `pygrep`, `system`, `script` and `fail`.
+    It's already being adopted by [some projects](#who-is-using-prek), please give it a try - we'd love your feedback!
 
 ## Features
 

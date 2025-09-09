@@ -20,9 +20,9 @@ It is designed to be a faster, dependency-free and drop-in alternative for it,
 while also providing some additional long-requested features.
 
 > [!WARNING]
-> prek is not production-ready yet, a few subcommands and languages are still in works. But it's already being adopted by [some projects](#who-are-using-prek), please give it a try - we'd love your feedback!
+> prek is not production-ready yet. Some subcommands and languages are not implemented. See the current gaps for drop-in parity: [TODO](https://prek.j178.dev/todo/).
 >
-> Current supported languages are `python`, `node`, `go`, `docker`, `docker-image`, `pygrep`, `system`, `script` and `fail`.
+> It's already being adopted by [some projects](#who-is-using-prek), please give it a try - we'd love your feedback!
 
 ## Features
 
