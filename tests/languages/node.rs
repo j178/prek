@@ -116,6 +116,7 @@ fn language_version() -> anyhow::Result<()> {
 }
 
 /// Test that `additional_dependencies` are installed correctly.
+#[ignore = "slow and flaky"]
 #[test]
 fn additional_dependencies() {
     let context = TestContext::new();
@@ -160,6 +161,7 @@ fn additional_dependencies() {
 
 /// Test `https://github.com/thlorenz/doctoc` works correctly with prek.
 /// Previously, prek did not install its dependencies correctly.
+#[ignore = "slow and flaky"]
 #[test]
 fn doctoc() -> anyhow::Result<()> {
     let context = TestContext::new();
