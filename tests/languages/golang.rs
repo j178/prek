@@ -112,8 +112,7 @@ fn language_version() -> anyhow::Result<()> {
 
     assert!(
         installed_versions.contains(&"1.23.11".to_string()),
-        "Expected Go version 1.23.11 not found in installed versions: {:?}",
-        installed_versions
+        "Go version 1.23.11 not found in installed versions: {installed_versions:?}",
     );
 
     Ok(())
