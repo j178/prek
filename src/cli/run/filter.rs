@@ -155,23 +155,27 @@ impl<'a> FileFilter<'a> {
     }
 
     /// Filter filenames by file patterns and tags for a specific hook.
-    pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&Path> {
+    pub(crate) fn for_hook(&self, hook: &Hook, file_base: &Path) -> Vec<&Path> {
         // Filter by hook `files` and `exclude` patterns.
         let filter = FilenameFilter::for_hook(hook);
-        let filenames = self
-            .filenames
-            .par_iter()
-            .filter(|filename| filter.filter(filename));
-
-        // Filter by hook `types`, `types_or` and `exclude_types`.
-        let filter = FileTagFilter::for_hook(hook);
-        let filenames = filenames.filter(|filename| match tags_from_path(filename) {
-            Ok(tags) => filter.filter(&tags),
-            Err(err) => {
-                error!(filename = ?filename.display(), error = %err, "Failed to get tags");
+        let filenames = self.filenames.par_iter().filter(|filename| {
+            if let Ok(stripped) = filename.strip_prefix(self.filename_prefix) {
+                filter.filter(stripped)
+            } else {
                 false
             }
         });
+
+        // Filter by hook `types`, `types_or` and `exclude_types`.
+        let filter = FileTagFilter::for_hook(hook);
+        let filenames =
+            filenames.filter(|filename| match tags_from_path(&file_base.join(filename)) {
+                Ok(tags) => filter.filter(&tags),
+                Err(err) => {
+                    error!(filename = ?filename.display(), error = %err, "Failed to get tags");
+                    false
+                }
+            });
 
         // Strip the prefix to get relative paths.
         let filenames: Vec<_> = filenames

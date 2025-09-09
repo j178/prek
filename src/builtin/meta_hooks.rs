@@ -23,20 +23,24 @@ pub(crate) async fn check_hooks_apply(hook: &Hook, filenames: &[&Path]) -> Resul
     for filename in filenames {
         let path = hook.project().relative_path().join(filename);
         let mut project = Project::from_config_file(path.into(), None)?;
-        let hooks = project.init_hooks(store, None).await?;
+        let project_hooks = project.init_hooks(store, None).await?;
 
         let filter = FileFilter::for_project(input.iter(), &project);
 
-        for hook in hooks {
-            if hook.always_run || matches!(hook.language, Language::Fail) {
+        for project_hook in project_hooks {
+            if project_hook.always_run || matches!(project_hook.language, Language::Fail) {
                 continue;
             }
 
-            let filenames = filter.for_hook(&hook);
+            let filenames = filter.for_hook(&project_hook, hook.project().relative_path());
 
             if filenames.is_empty() {
                 code = 1;
-                writeln!(&mut output, "{} does not apply to this repository", hook.id)?;
+                writeln!(
+                    &mut output,
+                    "{} does not apply to this repository",
+                    project_hook.id
+                )?;
             }
         }
     }
