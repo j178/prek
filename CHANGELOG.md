@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.2.0a4
+
+### Enhancements
+
+- Bring back `.pre-commit-config.yml` support ([#676](https://github.com/j178/prek/pull/676))
+- Ignore config file from hidden directory ([#677](https://github.com/j178/prek/pull/677))
+- Support selectors in `prek install/install-hooks/hook-impl` ([#683](https://github.com/j178/prek/pull/683))
+
+### Bug fixes
+
+- Do not set GOROOT for system install Go when running go hooks ([#694](https://github.com/j178/prek/pull/694))
+- Fix `check_toml` and `check_yaml` in workspace mode ([#688](https://github.com/j178/prek/pull/688))
+
+### Documentation
+
+- Add docs about TODOs ([#679](https://github.com/j178/prek/pull/679))
+- Add docs about builtin hooks ([#678](https://github.com/j178/prek/pull/678))
+
+### Other changes
+
+- docs(manifest): Correctly specify metadata for all packages ([#687](https://github.com/j178/prek/pull/687))
+- refactor(cli): Clean up usage of clap ([#689](https://github.com/j178/prek/pull/689))
+
+### Contributors
+
+- @j178
+- @epage
+- @aravindan888
+
 ## 0.2.0a3
 
 ### Enhancements
