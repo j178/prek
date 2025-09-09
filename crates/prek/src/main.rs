@@ -321,13 +321,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 writeln!(printer.stdout(), "{}", store.path().display().cyan())?;
                 Ok(ExitStatus::Success)
             }
-            CacheCommand::GC => {
-                writeln!(printer.stderr(), "Command not implemented yet")?;
-                Ok(ExitStatus::Failure)
-            }
+            CacheCommand::GC => cli::cache_gc(&store, printer).await,
             CacheCommand::Size(cli::SizeArgs { human }) => cli::cache_size(&store, human, printer),
         },
         Command::Clean => cli::cache_clean(&store, printer),
+        Command::GC => cli::cache_gc(&store, printer).await,
         Command::ValidateConfig(args) => {
             show_settings!(args);
 
@@ -407,10 +405,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 printer,
             )
             .await
-        }
-        _ => {
-            writeln!(printer.stderr(), "Command not implemented yet")?;
-            Ok(ExitStatus::Failure)
         }
     }
 }

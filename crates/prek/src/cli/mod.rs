@@ -15,6 +15,7 @@ use crate::config::{HookType, Language, Stage};
 
 mod auto_update;
 mod cache_clean;
+mod cache_gc;
 mod cache_size;
 mod completion;
 mod hook_impl;
@@ -30,6 +31,7 @@ mod validate;
 
 pub(crate) use auto_update::auto_update;
 pub(crate) use cache_clean::cache_clean;
+pub(crate) use cache_gc::cache_gc;
 pub(crate) use cache_size::cache_size;
 use completion::selector_completer;
 pub(crate) use hook_impl::hook_impl;
