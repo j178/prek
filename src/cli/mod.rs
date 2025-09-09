@@ -157,7 +157,7 @@ pub(crate) struct GlobalArgs {
 
     /// Display the concise help for this command.
     #[arg(global = true, short, long, action = clap::ArgAction::HelpShort)]
-    help: Option<bool>,
+    help: (),
 
     /// Hide all progress outputs.
     ///
@@ -175,7 +175,7 @@ pub(crate) struct GlobalArgs {
 
     /// Display the prek version.
     #[arg(global = true, short = 'V', long, action = clap::ArgAction::Version)]
-    version: Option<bool>,
+    version: (),
 
     /// Show the resolved settings for the current command.
     ///
