@@ -1,5 +1,6 @@
 use anyhow::Result;
 use assert_fs::prelude::*;
+use constants::CONFIG_FILE;
 use insta::assert_snapshot;
 
 use crate::common::{TestContext, cmd_snapshot};
@@ -517,6 +518,123 @@ fn check_added_large_files_hook() -> Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+#[test]
+fn builtin_hooks_workspace_mode() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos: []
+    "});
+
+    // Subproject with built-in hooks.
+    let app = context.work_dir().child("app");
+    app.create_dir_all()?;
+    app.child(CONFIG_FILE).write_str(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: end-of-file-fixer
+              - id: check-yaml
+              - id: check-json
+              - id: mixed-line-ending
+              - id: check-added-large-files
+                args: ['--maxkb', '1']
+    "})?;
+
+    app.child("eof_no_newline.txt")
+        .write_str("No trailing newline")?;
+    app.child("eof_multiple_lf.txt").write_str("Multiple\n\n")?;
+    app.child("mixed.txt").write_str("line1\nline2\r\n")?;
+
+    app.child("invalid.yaml").write_str("a: b: c")?;
+    app.child("duplicate.yaml").write_str("a: 1\na: 2")?;
+    app.child("empty.yaml").touch()?;
+
+    app.child("invalid.json").write_str(r#"{"a": 1,}"#)?;
+    app.child("duplicate.json")
+        .write_str(r#"{"a": 1, "a": 2}"#)?;
+    app.child("empty.json").touch()?;
+
+    // 2KB file to trigger check-added-large-files (1 KB threshold).
+    app.child("large.bin").write_binary(&[0u8; 2048])?;
+
+    context.git_add(".");
+
+    // First run: expect failures and auto-fixes where applicable.
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Running hooks for `app`:
+    fix end of files.........................................................Failed
+    - hook id: end-of-file-fixer
+    - exit code: 1
+    - files were modified by this hook
+      Fixing duplicate.json
+      Fixing duplicate.yaml
+      Fixing invalid.json
+      Fixing invalid.yaml
+      Fixing eof_no_newline.txt
+      Fixing eof_multiple_lf.txt
+    check yaml...............................................................Failed
+    - hook id: check-yaml
+    - exit code: 1
+      duplicate.yaml: Failed to yaml decode (duplicate entry with key "a")
+      invalid.yaml: Failed to yaml decode (mapping values are not allowed in this context at line 1 column 5)
+    check json...............................................................Failed
+    - hook id: check-json
+    - exit code: 1
+      duplicate.json: Failed to json decode (duplicate key `a` at line 1 column 12)
+      invalid.json: Failed to json decode (trailing comma at line 1 column 9)
+    mixed line ending........................................................Failed
+    - hook id: mixed-line-ending
+    - exit code: 1
+      Fixing mixed.txt
+    check for added large files..............................................Passed
+
+    ----- stderr -----
+    "#);
+
+    // Commit auto-fixes so size check won't re-trigger on re-run.
+    context.git_add(".");
+    context.git_commit("Apply auto-fixes from hooks");
+
+    // Fix YAML and JSON issues, then stage.
+    app.child("invalid.yaml").write_str("a:\n  b: c")?;
+    app.child("duplicate.yaml").write_str("a: 1\nb: 2")?;
+    app.child("invalid.json").write_str(r#"{"a": 1}"#)?;
+    app.child("duplicate.json")
+        .write_str(r#"{"a": 1, "b": 2}"#)?;
+    context.git_add(".");
+
+    // Second run: all hooks should pass.
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Running hooks for `app`:
+    fix end of files.........................................................Failed
+    - hook id: end-of-file-fixer
+    - exit code: 1
+    - files were modified by this hook
+      Fixing duplicate.yaml
+      Fixing duplicate.json
+      Fixing invalid.yaml
+      Fixing invalid.json
+    check yaml...............................................................Passed
+    check json...............................................................Passed
+    mixed line ending........................................................Passed
+    check for added large files..............................................Passed
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }

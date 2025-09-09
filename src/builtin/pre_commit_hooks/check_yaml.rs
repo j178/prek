@@ -6,9 +6,9 @@ use futures::StreamExt;
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
-pub(crate) async fn check_yaml(_hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn check_yaml(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
-        .map(async |filename| check_file(filename).await)
+        .map(async |filename| check_file(hook.project().relative_path(), filename).await)
         .buffered(*CONCURRENCY);
 
     let mut code = 0;
@@ -23,8 +23,8 @@ pub(crate) async fn check_yaml(_hook: &Hook, filenames: &[&Path]) -> Result<(i32
     Ok((code, output))
 }
 
-async fn check_file(filename: &Path) -> Result<(i32, Vec<u8>)> {
-    let content = fs_err::tokio::read(filename).await?;
+async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+    let content = fs_err::tokio::read(file_base.join(filename)).await?;
     if content.is_empty() {
         return Ok((0, Vec::new()));
     }
@@ -61,7 +61,7 @@ mod tests {
 key2: value2
 ";
         let file_path = create_test_file(&dir, "valid.yaml", content).await?;
-        let (code, output) = check_file(&file_path).await?;
+        let (code, output) = check_file(Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -74,7 +74,7 @@ key2: value2
 key2: value2: another_value
 ";
         let file_path = create_test_file(&dir, "invalid.yaml", content).await?;
-        let (code, output) = check_file(&file_path).await?;
+        let (code, output) = check_file(Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         Ok(())
@@ -87,7 +87,7 @@ key2: value2: another_value
 key1: value2
 ";
         let file_path = create_test_file(&dir, "duplicate.yaml", content).await?;
-        let (code, output) = check_file(&file_path).await?;
+        let (code, output) = check_file(Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         Ok(())
@@ -98,7 +98,7 @@ key1: value2
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.yaml", content).await?;
-        let (code, output) = check_file(&file_path).await?;
+        let (code, output) = check_file(Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
