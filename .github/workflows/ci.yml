@@ -59,6 +59,9 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
 
+      - name: Create Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
       - name: "Install Rust toolchain"
@@ -208,6 +211,10 @@ jobs:
     name: "cargo test | windows"
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Create Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
       - name: "Install Rust toolchain"
@@ -222,6 +229,7 @@ jobs:
         uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
         with:
           version: ${{ env.UV_VERSION }}
+          cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
 
       - name: "Install Python"
         run: uv python install --no-bin ${{ env.PYTHON_VERSION }}
