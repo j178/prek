@@ -32,7 +32,7 @@ while also providing some additional long-requested features.
 - 🏗️ Built-in support for monorepos (i.e. [workspace mode](https://prek.j178.dev/workspace/)).
 - 🐍 Integration with [`uv`](https://github.com/astral-sh/uv) for managing Python virtual environments and dependencies.
 - 🛠️ Improved toolchain installations for Python, Node.js, Go, Rust and Ruby, shared between hooks.
-- 📦 Built-in implementation of some common hooks.
+- 📦 [Built-in](https://prek.j178.dev/builtin/) Rust-native implementation of some common hooks.
 
 ## How to migrate
 
@@ -61,7 +61,7 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 - It redesigned how hook environments and toolchains are managed, they are all shared between hooks, which reduces the disk space usage and speeds up the installation process.
 - Repositories are cloned in parallel, and hooks are installed in parallel if their dependencies are disjoint.
 - It uses [`uv`](https://github.com/astral-sh/uv) for creating Python virtualenvs and installing dependencies, which is known for its speed and efficiency.
-- It implements some common hooks in Rust, built in prek, which are faster than their Python counterparts.
+- It implements some common hooks in Rust, [built in prek](https://prek.j178.dev/builtin/), which are faster than their Python counterparts.
 
 ### prek provides a better user experience
 
@@ -101,7 +101,7 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/down
 ```
 
 On Windows:
-  
+
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.0-alpha.3/prek-installer.ps1 | iex"
 ```
