@@ -100,7 +100,6 @@ fn language_version() -> anyhow::Result<()> {
     ----- stderr -----
     "#);
 
-    // ✅ Updated assertion
     let installed_versions = context
         .home_dir()
         .join("tools")
