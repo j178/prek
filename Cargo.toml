@@ -17,7 +17,7 @@ description = "Better `pre-commit`, re-engineered in Rust"
 repository = { workspace = true }
 homepage = "https://github.com/j178/prek"
 edition = { workspace = true }
-license-file = "LICENSE"
+license = "MIT"
 
 [features]
 default = ["docker"]
