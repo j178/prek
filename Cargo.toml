@@ -4,6 +4,7 @@ members = ["lib/*"]
 [workspace.package]
 edition = "2024"
 repository = "https://github.com/j178/prek"
+license = "MIT"
 
 [workspace.dependencies]
 constants = { path = "lib/constants" }
@@ -17,7 +18,7 @@ description = "Better `pre-commit`, re-engineered in Rust"
 repository = { workspace = true }
 homepage = "https://github.com/j178/prek"
 edition = { workspace = true }
-license = "MIT"
+license = { workspace = true }
 
 [features]
 default = ["docker"]
