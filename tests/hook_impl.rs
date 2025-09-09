@@ -392,3 +392,68 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn workspace_hook_impl_with_selectors() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    let cwd = context.work_dir();
+    context.init_project();
+    context.configure_git_author();
+    context.disable_auto_crlf();
+
+    let config = indoc! {r#"
+    repos:
+      - repo: local
+        hooks:
+        - id: test-hook
+          name: Test Hook
+          language: python
+          entry: python -c 'import os; print("cwd:", os.getcwd())'
+          verbose: true
+    "#};
+
+    context.setup_workspace(&["project2", "project3"], config)?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.install().arg("project2/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+
+    let mut commit = Command::new("git");
+    commit
+        .current_dir(cwd)
+        .arg("commit")
+        .arg("-m")
+        .arg("Test commit from subdirectory");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([("[a-f0-9]{7}", "abc1234")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), commit, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [master (root-commit) abc1234] Test commit from subdirectory
+     3 files changed, 24 insertions(+)
+     create mode 100644 .pre-commit-config.yaml
+     create mode 100644 project2/.pre-commit-config.yaml
+     create mode 100644 project3/.pre-commit-config.yaml
+
+    ----- stderr -----
+    Running hooks for `project2`:
+    Test Hook................................................................Passed
+    - hook id: test-hook
+    - duration: [TIME]
+      cwd: [TEMP_DIR]/project2
+    ");
+
+    Ok(())
+}
