@@ -463,7 +463,6 @@ async fn run_hooks(
     let printer = StatusPrinter::for_hooks(hooks, printer);
 
     let mut success = true;
-    let mut diff = git::get_diff().await?;
 
     // Group hooks by project to run them in order of their depth in the workspace.
     #[allow(clippy::mutable_key_type)]
@@ -496,6 +495,7 @@ async fn run_hooks(
             )?;
             first = false;
         }
+        let mut diff = git::get_diff(project.path()).await?;
 
         let fail_fast = project.config().fail_fast.unwrap_or(false);
 
@@ -522,8 +522,8 @@ async fn run_hooks(
             "--color=never"
         };
         git::git_cmd("git diff")?
-            .arg("--no-pager")
             .arg("diff")
+            .arg("--no-pager")
             .arg("--no-ext-diff")
             .arg(color)
             .arg("--")
@@ -618,7 +618,7 @@ async fn run_hook(
 
     let duration = start.elapsed();
 
-    let new_diff = git::get_diff().await?;
+    let new_diff = git::get_diff(hook.work_dir()).await?;
     let file_modified = diff != new_diff;
     let success = status == 0 && !file_modified;
     if dry_run {

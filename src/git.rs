@@ -238,12 +238,14 @@ async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>, Error> {
     Ok(conflicts)
 }
 
-pub(crate) async fn get_diff() -> Result<Vec<u8>, Error> {
+pub(crate) async fn get_diff(path: &Path) -> Result<Vec<u8>, Error> {
     let output = git_cmd("git diff")?
         .arg("diff")
         .arg("--no-ext-diff") // Disable external diff drivers
         .arg("--no-textconv")
         .arg("--ignore-submodules")
+        .arg("--")
+        .arg(path)
         .check(true)
         .output()
         .await?;
