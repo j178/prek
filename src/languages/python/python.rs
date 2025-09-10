@@ -66,6 +66,7 @@ pub(crate) async fn query_python_info(python: &Path) -> Result<PythonInfo> {
 fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
     match request {
         LanguageRequest::Any => None,
+        LanguageRequest::SystemOnly => "",
         LanguageRequest::Python(request) => match request {
             PythonRequest::Any => None,
             PythonRequest::Major(major) => Some(format!("{major}")),

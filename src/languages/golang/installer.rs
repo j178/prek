@@ -115,6 +115,10 @@ impl GoInstaller {
             return Ok(go);
         }
 
+        if matches!(request, GoRequest::SystemOnly) {
+            anyhow::bail!("No suitable system go version found for request: {request}");
+        }
+
         let resolved_version = self
             .resolve_version(request)
             .await

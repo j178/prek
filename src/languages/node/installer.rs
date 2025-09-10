@@ -113,6 +113,10 @@ impl NodeInstaller {
             return Ok(node_result);
         }
 
+        if matches!(request, NodeRequest::SystemOnly) {
+            anyhow::bail!("No suitable system node version found for request: {request}");
+        }
+
         let resolved_version = self.resolve_version(request).await?;
         trace!(version = %resolved_version, "Downloading node");
 

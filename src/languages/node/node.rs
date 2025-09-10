@@ -45,6 +45,7 @@ impl LanguageImpl for Node {
 
         let node_request = match &hook.language_request {
             LanguageRequest::Any => &NodeRequest::Any,
+            LanguageRequest::SystemOnly => &NodeRequest::SystemOnly,
             LanguageRequest::Node(node_request) => node_request,
             _ => unreachable!(),
         };

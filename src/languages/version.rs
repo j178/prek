@@ -15,6 +15,7 @@ pub(crate) enum Error {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum LanguageRequest {
     Any,
+    SystemOnly,
     Python(PythonRequest),
     Node(NodeRequest),
     Golang(GoRequest),
@@ -26,6 +27,7 @@ impl LanguageRequest {
     pub(crate) fn is_any(&self) -> bool {
         match self {
             LanguageRequest::Any => true,
+            LanguageRequest::SystemOnly => false,
             LanguageRequest::Python(req) => req.is_any(),
             LanguageRequest::Node(req) => req.is_any(),
             LanguageRequest::Golang(req) => req.is_any(),
@@ -44,9 +46,11 @@ impl LanguageRequest {
         // - Node.js version passed down to `nodeenv`
         // - Rust version passed down to `rustup`
 
-        // TODO: support `system`? Does anyone use it?
         if request == "default" || request.is_empty() {
             return Ok(LanguageRequest::Any);
+        }
+        if request == "system" {
+            return Ok(LanguageRequest::SystemOnly);
         }
 
         Ok(match lang {
@@ -60,6 +64,7 @@ impl LanguageRequest {
     pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
         match self {
             LanguageRequest::Any => true,
+            LanguageRequest::SystemOnly => true,
             LanguageRequest::Python(req) => req.satisfied_by(install_info),
             LanguageRequest::Node(req) => req.satisfied_by(install_info),
             LanguageRequest::Golang(req) => req.satisfied_by(install_info),

@@ -70,6 +70,7 @@ impl FromStr for GoVersion {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum GoRequest {
     Any,
+    SystemOnly,
     Major(u64),
     MajorMinor(u64, u64),
     MajorMinorPatch(u64, u64, u64),
@@ -146,6 +147,7 @@ impl GoRequest {
     pub(crate) fn matches(&self, version: &GoVersion, toolchain: Option<&Path>) -> bool {
         match self {
             GoRequest::Any => true,
+            GoRequest::SystemOnly => true,
             GoRequest::Major(major) => version.0.major == *major,
             GoRequest::MajorMinor(major, minor) => {
                 version.0.major == *major && version.0.minor == *minor
