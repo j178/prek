@@ -58,6 +58,7 @@ nav:
   - Introduction: index.md
   - Installation: installation.md
   - Workspace Mode: workspace.md
+  - Configuration: configuration.md
   - Differences: diff.md
   - Benchmark: benchmark.md
   - Built-in Hooks: builtin.md
