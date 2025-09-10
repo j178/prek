@@ -94,6 +94,7 @@ pub(crate) struct FileFilter<'a> {
 }
 
 impl<'a> FileFilter<'a> {
+    // Here, `filenames` are paths relative to the workspace root.
     pub(crate) fn for_project<I>(filenames: I, project: &'a Project) -> Self
     where
         I: Iterator<Item = &'a PathBuf> + Send,
@@ -155,7 +156,7 @@ impl<'a> FileFilter<'a> {
     }
 
     /// Filter filenames by file patterns and tags for a specific hook.
-    pub(crate) fn for_hook(&self, hook: &Hook, file_base: &Path) -> Vec<&Path> {
+    pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&Path> {
         // Filter by hook `files` and `exclude` patterns.
         let filter = FilenameFilter::for_hook(hook);
         let filenames = self.filenames.par_iter().filter(|filename| {
@@ -168,14 +169,13 @@ impl<'a> FileFilter<'a> {
 
         // Filter by hook `types`, `types_or` and `exclude_types`.
         let filter = FileTagFilter::for_hook(hook);
-        let filenames =
-            filenames.filter(|filename| match tags_from_path(&file_base.join(filename)) {
-                Ok(tags) => filter.filter(&tags),
-                Err(err) => {
-                    error!(filename = ?filename.display(), error = %err, "Failed to get tags");
-                    false
-                }
-            });
+        let filenames = filenames.filter(|filename| match tags_from_path(filename) {
+            Ok(tags) => filter.filter(&tags),
+            Err(err) => {
+                error!(filename = ?filename.display(), error = %err, "Failed to get tags");
+                false
+            }
+        });
 
         // Strip the prefix to get relative paths.
         let filenames: Vec<_> = filenames

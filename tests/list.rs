@@ -321,9 +321,7 @@ fn list_empty_config() {
     let context = TestContext::new();
     context.init_project();
 
-    context.write_pre_commit_config(indoc::indoc! {r"
-        repos: []
-    "});
+    context.write_pre_commit_config("repos: []");
 
     cmd_snapshot!(context.filters(), context.list(), @r#"
     success: true

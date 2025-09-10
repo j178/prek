@@ -11,20 +11,32 @@ use crate::hook::Hook;
 use crate::store::STORE;
 use crate::workspace::Project;
 
+// For builtin hooks (meta hooks and builtin pre-commit-hooks), they are not run
+// in the project root like other hooks. Instead, they run in the workspace root.
+// But the input filenames are all relative to the project root. So when accessing these files,
+// we need to adjust the paths by prepending the project relative path.
+// When matching files (files or exclude), we need to match against the filenames
+// relative to the project root.
+
 /// Ensures that the configured hooks apply to at least one file in the repository.
 pub(crate) async fn check_hooks_apply(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     let store = STORE.as_ref()?;
 
+    let relative_path = hook.project().relative_path();
+    // Collect all files in the project
     let input = collect_files(hook.work_dir(), CollectOptions::all_files()).await?;
+    // Prepend the project relative path to each input file
+    let input: Vec<_> = input.into_iter().map(|f| relative_path.join(f)).collect();
 
     let mut code = 0;
     let mut output = Vec::new();
 
     for filename in filenames {
-        let path = hook.project().relative_path().join(filename);
+        let path = relative_path.join(filename);
         let mut project = Project::from_config_file(path.into(), None)?;
-        let project_hooks = project.init_hooks(store, None).await?;
+        project.with_relative_path(relative_path.to_path_buf());
 
+        let project_hooks = project.init_hooks(store, None).await?;
         let filter = FileFilter::for_project(input.iter(), &project);
 
         for project_hook in project_hooks {
@@ -32,7 +44,7 @@ pub(crate) async fn check_hooks_apply(hook: &Hook, filenames: &[&Path]) -> Resul
                 continue;
             }
 
-            let filenames = filter.for_hook(&project_hook, hook.project().relative_path());
+            let filenames = filter.for_hook(&project_hook);
 
             if filenames.is_empty() {
                 code = 1;
@@ -82,16 +94,19 @@ pub(crate) async fn check_useless_excludes(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
+    let relative_path = hook.project().relative_path();
     let input = collect_files(hook.work_dir(), CollectOptions::all_files()).await?;
+    let input: Vec<_> = input.into_iter().map(|f| relative_path.join(f)).collect();
 
     let mut code = 0;
     let mut output = Vec::new();
 
     for filename in filenames {
-        let path = hook.project().relative_path().join(filename);
-        let project = Project::from_config_file(path.into(), None)?;
-        let config = project.config();
+        let path = relative_path.join(filename);
+        let mut project = Project::from_config_file(path.into(), None)?;
+        project.with_relative_path(relative_path.to_path_buf());
 
+        let config = project.config();
         if !excludes_any(&input, None, config.exclude.as_deref()) {
             code = 1;
             writeln!(

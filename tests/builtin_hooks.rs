@@ -528,9 +528,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     context.init_project();
     context.configure_git_author();
 
-    context.write_pre_commit_config(indoc::indoc! {r"
-        repos: []
-    "});
+    context.write_pre_commit_config("repos: []");
 
     // Subproject with built-in hooks.
     let app = context.work_dir().child("app");

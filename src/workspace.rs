@@ -169,7 +169,7 @@ impl Project {
         Ok(Project::from_directory(&workspace_root)?)
     }
 
-    fn with_relative_path(&mut self, relative_path: PathBuf) {
+    pub(crate) fn with_relative_path(&mut self, relative_path: PathBuf) {
         self.relative_path = relative_path;
     }
 

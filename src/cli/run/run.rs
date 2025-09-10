@@ -1,6 +1,6 @@
 use std::fmt::Write as _;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, LazyLock};
 
@@ -558,7 +558,7 @@ async fn run_hook(
     dry_run: bool,
     printer: &StatusPrinter,
 ) -> Result<(bool, Vec<u8>)> {
-    let mut filenames = filter.for_hook(hook, Path::new(""));
+    let mut filenames = filter.for_hook(hook);
     trace!(
         "Files for `{}` after filtered: {}",
         hook.id,
