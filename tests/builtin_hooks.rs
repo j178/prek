@@ -655,8 +655,12 @@ fn fix_byte_order_marker_hook() -> Result<()> {
 
     // Create test files
     cwd.child("without_bom.txt").write_str("Hello, World!")?;
-    cwd.child("with_bom.txt").write_binary(&[0xef, 0xbb, 0xbf, b'H', b'e', b'l', b'l', b'o', b',', b' ', b'W', b'o', b'r', b'l', b'd', b'!'])?;
-    cwd.child("bom_only.txt").write_binary(&[0xef, 0xbb, 0xbf])?;
+    cwd.child("with_bom.txt").write_binary(&[
+        0xef, 0xbb, 0xbf, b'H', b'e', b'l', b'l', b'o', b',', b' ', b'W', b'o', b'r', b'l', b'd',
+        b'!',
+    ])?;
+    cwd.child("bom_only.txt")
+        .write_binary(&[0xef, 0xbb, 0xbf])?;
     cwd.child("empty.txt").touch()?;
 
     context.git_add(".");
