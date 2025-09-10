@@ -11,14 +11,17 @@ use crate::workspace::{Project, Workspace};
 
 /// Provide completion candidates for `include` and `skip` selectors.
 pub(crate) fn selector_completer(current: &OsStr) -> Vec<CompletionCandidate> {
+    let Some(current_str) = current.to_str() else {
+        return vec![];
+    };
+
     let Ok(workspace) = Workspace::find_root(None, &CWD)
         .and_then(|root| Workspace::discover(root, None, None, false))
     else {
-        return Vec::new();
+        return vec![];
     };
 
-    let mut candidates: Vec<CompletionCandidate> = Vec::new();
-    let current_str = current.to_string_lossy();
+    let mut candidates: Vec<CompletionCandidate> = vec![];
 
     // Support optional `path:hook_prefix` form while typing.
     let (path_part, hook_prefix_opt) = match current_str.split_once(':') {

@@ -20,6 +20,8 @@ homepage = "https://github.com/j178/prek"
 edition = { workspace = true }
 license = { workspace = true }
 
+default-run = "prek"
+
 [features]
 default = ["docker"]
 # Adds self-update functionality. This feature is only enabled for prek built binarys
@@ -102,7 +104,9 @@ assert_fs = { version = "1.1.2" }
 etcetera = { version = "0.10.0" }
 insta = { version = "1.40.0", features = ["filters"] }
 insta-cmd = { version = "0.6.0" }
+markdown = { version = "1.0.0" }
 predicates = { version = "3.1.2" }
+pretty_assertions = { version = "1.4.1" }
 regex = { version = "1.11.0" }
 tempfile = { version = "3.13.0" }
 

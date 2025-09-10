@@ -59,6 +59,7 @@ nav:
   - Installation: installation.md
   - Workspace Mode: workspace.md
   - Configuration: configuration.md
+  - Commands: cli.md
   - Differences: diff.md
   - Benchmark: benchmark.md
   - Built-in Hooks: builtin.md

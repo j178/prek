@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use constants::CONFIG_FILE;
 use constants::env_vars::EnvVars;
 
-use crate::config::{self, HookType, Stage};
+use crate::config::{HookType, Language, Stage};
 
 mod auto_update;
 mod clean;
@@ -154,7 +154,7 @@ pub(crate) struct GlobalArgs {
     pub(crate) refresh: bool,
 
     /// Display the concise help for this command.
-    #[arg(global = true, short, long, action = clap::ArgAction::HelpShort)]
+    #[arg(global = true, short, long, action = ArgAction::HelpShort)]
     help: (),
 
     /// Hide all progress outputs.
@@ -172,7 +172,7 @@ pub(crate) struct GlobalArgs {
     pub(crate) verbose: u8,
 
     /// Display the prek version.
-    #[arg(global = true, short = 'V', long, action = clap::ArgAction::Version)]
+    #[arg(global = true, short = 'V', long, action = ArgAction::Version)]
     version: (),
 
     /// Show the resolved settings for the current command.
@@ -230,8 +230,11 @@ pub(crate) struct InstallArgs {
     /// Include the specified hooks or projects.
     ///
     /// Supports flexible selector syntax:
+    ///
     /// - `hook-id`: Run all hooks with the specified ID across all projects
+    ///
     /// - `project-path/`: Run all hooks from the specified project
+    ///
     /// - `project-path:hook-id`: Run only the specified hook from the specified project
     ///
     /// Can be specified multiple times to select multiple hooks/projects.
@@ -245,8 +248,11 @@ pub(crate) struct InstallArgs {
     /// Skip the specified hooks or projects.
     ///
     /// Supports flexible selector syntax:
+    ///
     /// - `hook-id`: Skip all hooks with the specified ID across all projects
+    ///
     /// - `project-path/`: Skip all hooks from the specified project
+    ///
     /// - `project-path:hook-id`: Skip only the specified hook from the specified project
     ///
     /// Can be specified multiple times. Also accepts `PREK_SKIP` or `SKIP` environment variables (comma-delimited).
@@ -274,8 +280,11 @@ pub(crate) struct InstallHooksArgs {
     /// Include the specified hooks or projects.
     ///
     /// Supports flexible selector syntax:
+    ///
     /// - `hook-id`: Run all hooks with the specified ID across all projects
+    ///
     /// - `project-path/`: Run all hooks from the specified project
+    ///
     /// - `project-path:hook-id`: Run only the specified hook from the specified project
     ///
     /// Can be specified multiple times to select multiple hooks/projects.
@@ -289,8 +298,11 @@ pub(crate) struct InstallHooksArgs {
     /// Skip the specified hooks or projects.
     ///
     /// Supports flexible selector syntax:
+    ///
     /// - `hook-id`: Skip all hooks with the specified ID across all projects
+    ///
     /// - `project-path/`: Skip all hooks from the specified project
+    ///
     /// - `project-path:hook-id`: Skip only the specified hook from the specified project
     ///
     /// Can be specified multiple times. Also accepts `PREK_SKIP` or `SKIP` environment variables (comma-delimited).
@@ -338,8 +350,11 @@ pub(crate) struct RunArgs {
     /// Include the specified hooks or projects.
     ///
     /// Supports flexible selector syntax:
+    ///
     /// - `hook-id`: Run all hooks with the specified ID across all projects
+    ///
     /// - `project-path/`: Run all hooks from the specified project
+    ///
     /// - `project-path:hook-id`: Run only the specified hook from the specified project
     ///
     /// Can be specified multiple times to select multiple hooks/projects.
@@ -353,8 +368,11 @@ pub(crate) struct RunArgs {
     /// Skip the specified hooks or projects.
     ///
     /// Supports flexible selector syntax:
+    ///
     /// - `hook-id`: Skip all hooks with the specified ID across all projects
+    ///
     /// - `project-path/`: Skip all hooks from the specified project
+    ///
     /// - `project-path:hook-id`: Skip only the specified hook from the specified project
     ///
     /// Can be specified multiple times. Also accepts `PREK_SKIP` or `SKIP` environment variables (comma-delimited).
@@ -434,8 +452,11 @@ pub(crate) struct ListArgs {
     /// Include the specified hooks or projects.
     ///
     /// Supports flexible selector syntax:
+    ///
     /// - `hook-id`: Run all hooks with the specified ID across all projects
+    ///
     /// - `project-path/`: Run all hooks from the specified project
+    ///
     /// - `project-path:hook-id`: Run only the specified hook from the specified project
     ///
     /// Can be specified multiple times to select multiple hooks/projects.
@@ -449,8 +470,11 @@ pub(crate) struct ListArgs {
     /// Skip the specified hooks or projects.
     ///
     /// Supports flexible selector syntax:
+    ///
     /// - `hook-id`: Skip all hooks with the specified ID across all projects
+    ///
     /// - `project-path/`: Skip all hooks from the specified project
+    ///
     /// - `project-path:hook-id`: Skip only the specified hook from the specified project
     ///
     /// Can be specified multiple times. Also accepts `PREK_SKIP` or `SKIP` environment variables (comma-delimited).
@@ -462,7 +486,7 @@ pub(crate) struct ListArgs {
     pub(crate) hook_stage: Option<Stage>,
     /// Show only hooks that are implemented in the specified language.
     #[arg(long, value_enum)]
-    pub(crate) language: Option<config::Language>,
+    pub(crate) language: Option<Language>,
     /// The output format.
     #[arg(long, value_enum, default_value_t = ListOutputFormat::Text)]
     pub(crate) output_format: ListOutputFormat,
@@ -515,8 +539,11 @@ pub(crate) struct HookImplArgs {
     /// Include the specified hooks or projects.
     ///
     /// Supports flexible selector syntax:
+    ///
     /// - `hook-id`: Run all hooks with the specified ID across all projects
+    ///
     /// - `project-path/`: Run all hooks from the specified project
+    ///
     /// - `project-path:hook-id`: Run only the specified hook from the specified project
     ///
     /// Can be specified multiple times to select multiple hooks/projects.
@@ -530,8 +557,11 @@ pub(crate) struct HookImplArgs {
     /// Skip the specified hooks or projects.
     ///
     /// Supports flexible selector syntax:
+    ///
     /// - `hook-id`: Skip all hooks with the specified ID across all projects
+    ///
     /// - `project-path/`: Skip all hooks from the specified project
+    ///
     /// - `project-path:hook-id`: Skip only the specified hook from the specified project
     ///
     /// Can be specified multiple times. Also accepts `PREK_SKIP` or `SKIP` environment variables (comma-delimited).
@@ -593,4 +623,335 @@ pub(crate) struct InitTemplateDirArgs {
     /// Which hook type to install.
     #[arg(short = 't', long = "hook-type", value_name = "HOOK_TYPE", value_enum)]
     pub(crate) hook_types: Vec<HookType>,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::cli::Cli;
+    use anyhow::{Result, bail};
+    use clap::{Command, CommandFactory};
+    use constants::env_vars::EnvVars;
+    use itertools::Itertools;
+    use pretty_assertions::StrComparison;
+    use std::cmp::max;
+    use std::path::PathBuf;
+
+    const ROOT_DIR: &str = env!("CARGO_MANIFEST_DIR");
+
+    enum Mode {
+        /// Update the content.
+        Write,
+
+        /// Don't write to the file, check if the file is up-to-date and error if not.
+        Check,
+
+        /// Write the generated help to stdout.
+        DryRun,
+    }
+
+    fn generate(mut cmd: Command) -> String {
+        let mut output = String::new();
+
+        cmd.build();
+
+        let mut parents = Vec::new();
+
+        output.push_str("# CLI Reference\n\n");
+        generate_command(&mut output, &cmd, &mut parents);
+
+        output
+    }
+
+    #[allow(clippy::format_push_string)]
+    fn generate_command<'a>(
+        output: &mut String,
+        command: &'a Command,
+        parents: &mut Vec<&'a Command>,
+    ) {
+        if command.is_hide_set() {
+            return;
+        }
+
+        // Generate the command header.
+        let name = if parents.is_empty() {
+            command.get_name().to_string()
+        } else {
+            format!(
+                "{} {}",
+                parents.iter().map(|cmd| cmd.get_name()).join(" "),
+                command.get_name()
+            )
+        };
+
+        // Display the top-level `prek` command at the same level as its children
+        let level = max(2, parents.len() + 1);
+        output.push_str(&format!("{} {name}\n\n", "#".repeat(level)));
+
+        // Display the command description.
+        if let Some(about) = command.get_long_about().or_else(|| command.get_about()) {
+            output.push_str(&about.to_string());
+            output.push_str("\n\n");
+        }
+
+        // Display the usage
+        {
+            // This appears to be the simplest way to get rendered usage from Clap,
+            // it is complicated to render it manually. It's annoying that it
+            // requires a mutable reference but it doesn't really matter.
+            let mut command = command.clone();
+            output.push_str("<h3 class=\"cli-reference\">Usage</h3>\n\n");
+            output.push_str(&format!(
+                "```\n{}\n```",
+                command
+                    .render_usage()
+                    .to_string()
+                    .trim_start_matches("Usage: "),
+            ));
+            output.push_str("\n\n");
+        }
+
+        // Display a list of child commands
+        let mut subcommands = command.get_subcommands().peekable();
+        let has_subcommands = subcommands.peek().is_some();
+        if has_subcommands {
+            output.push_str("<h3 class=\"cli-reference\">Commands</h3>\n\n");
+            output.push_str("<dl class=\"cli-reference\">");
+
+            for subcommand in subcommands {
+                if subcommand.is_hide_set() {
+                    continue;
+                }
+                let subcommand_name = format!("{name} {}", subcommand.get_name());
+                output.push_str(&format!(
+                    "<dt><a href=\"#{}\"><code>{subcommand_name}</code></a></dt>",
+                    subcommand_name.replace(' ', "-")
+                ));
+                if let Some(about) = subcommand.get_about() {
+                    output.push_str(&format!(
+                        "<dd>{}</dd>\n",
+                        markdown::to_html(&about.to_string())
+                    ));
+                }
+            }
+
+            output.push_str("</dl>\n\n");
+        }
+
+        // Do not display options for commands with children
+        if !has_subcommands {
+            let name_key = name.replace(' ', "-");
+
+            // Display positional arguments
+            let mut arguments = command
+                .get_positionals()
+                .filter(|arg| !arg.is_hide_set())
+                .peekable();
+
+            if arguments.peek().is_some() {
+                output.push_str("<h3 class=\"cli-reference\">Arguments</h3>\n\n");
+                output.push_str("<dl class=\"cli-reference\">");
+
+                for arg in arguments {
+                    let id = format!("{name_key}--{}", arg.get_id());
+                    output.push_str(&format!("<dt id=\"{id}\">"));
+                    output.push_str(&format!(
+                        "<a href=\"#{id}\"<code>{}</code></a>",
+                        arg.get_value_names().unwrap().iter().next().unwrap().to_string().to_uppercase(),
+                    ));
+                    output.push_str("</dt>");
+                    if let Some(help) = arg.get_long_help().or_else(|| arg.get_help()) {
+                        output.push_str("<dd>");
+                        println!("{}", help.to_string());
+                        output.push_str(&format!("{}\n", markdown::to_html(&help.to_string())));
+                        output.push_str("</dd>");
+                    }
+                }
+
+                output.push_str("</dl>\n\n");
+            }
+
+            // Display options and flags
+            let mut options = command
+                .get_arguments()
+                .filter(|arg| !arg.is_positional())
+                .filter(|arg| !arg.is_hide_set())
+                .sorted_by_key(|arg| arg.get_id())
+                .peekable();
+
+            if options.peek().is_some() {
+                output.push_str("<h3 class=\"cli-reference\">Options</h3>\n\n");
+                output.push_str("<dl class=\"cli-reference\">");
+                for opt in options {
+                    let Some(long) = opt.get_long() else { continue };
+                    let id = format!("{name_key}--{long}");
+
+                    output.push_str(&format!("<dt id=\"{id}\">"));
+                    output.push_str(&format!("<a href=\"#{id}\"><code>--{long}</code></a>"));
+                    for long_alias in opt.get_all_aliases().into_iter().flatten() {
+                        output.push_str(&format!(", <code>--{long_alias}</code>"));
+                    }
+                    if let Some(short) = opt.get_short() {
+                        output.push_str(&format!(", <code>-{short}</code>"));
+                    }
+                    for short_alias in opt.get_all_short_aliases().into_iter().flatten() {
+                        output.push_str(&format!(", <code>-{short_alias}</code>"));
+                    }
+
+                    // Re-implements private `Arg::is_takes_value_set` used in `Command::get_opts`
+                    if opt
+                        .get_num_args()
+                        .unwrap_or_else(|| 1.into())
+                        .takes_values()
+                    {
+                        if let Some(values) = opt.get_value_names() {
+                            for value in values {
+                                output.push_str(&format!(
+                                    " <i>{}</i>",
+                                    value.to_lowercase().replace('_', "-")
+                                ));
+                            }
+                        }
+                    }
+                    output.push_str("</dt>");
+                    if let Some(help) = opt.get_long_help().or_else(|| opt.get_help()) {
+                        output.push_str("<dd>");
+                        output.push_str(&format!("{}\n", markdown::to_html(&help.to_string())));
+                        emit_env_option(opt, output);
+                        emit_default_option(opt, output);
+                        emit_possible_options(opt, output);
+                        output.push_str("</dd>");
+                    }
+                }
+
+                output.push_str("</dl>");
+            }
+
+            output.push_str("\n\n");
+        }
+
+        parents.push(command);
+
+        // Recurse to all the subcommands.
+        for subcommand in command.get_subcommands() {
+            generate_command(output, subcommand, parents);
+        }
+
+        parents.pop();
+    }
+
+    fn emit_env_option(opt: &clap::Arg, output: &mut String) {
+        if opt.is_hide_env_set() {
+            return;
+        }
+        if let Some(env) = opt.get_env() {
+            output.push_str(&markdown::to_html(&format!(
+                "May also be set with the `{}` environment variable.",
+                env.to_string_lossy()
+            )));
+        }
+    }
+
+    fn emit_default_option(opt: &clap::Arg, output: &mut String) {
+        if opt.is_hide_default_value_set() || !opt.get_num_args().expect("built").takes_values() {
+            return;
+        }
+
+        let values = opt.get_default_values();
+        if !values.is_empty() {
+            let value = format!(
+                "\n[default: {}]",
+                opt.get_default_values()
+                    .iter()
+                    .map(|s| s.to_string_lossy())
+                    .join(",")
+            );
+            output.push_str(&markdown::to_html(&value));
+        }
+    }
+
+    fn emit_possible_options(opt: &clap::Arg, output: &mut String) {
+        if opt.is_hide_possible_values_set() {
+            return;
+        }
+
+        let values = opt.get_possible_values();
+        if !values.is_empty() {
+            let value = format!(
+                "\nPossible values:\n{}",
+                values
+                    .into_iter()
+                    .filter(|value| !value.is_hide_set())
+                    .map(|value| {
+                        let name = value.get_name();
+                        value.get_help().map_or_else(
+                            || format!(" - `{name}`"),
+                            |help| format!(" - `{name}`:  {help}"),
+                        )
+                    })
+                    .collect_vec()
+                    .join("\n"),
+            );
+            output.push_str(&markdown::to_html(&value));
+        }
+    }
+
+    #[test]
+    fn generate_cli_reference() -> Result<()> {
+        let mode = if EnvVars::is_set(EnvVars::PREK_GENERATE) {
+            Mode::Write
+        } else {
+            Mode::Check
+        };
+
+        let reference_string = generate(Cli::command());
+        let filename = "cli.md";
+        let reference_path = PathBuf::from(ROOT_DIR).join("docs").join(filename);
+
+        match mode {
+            Mode::DryRun => {
+                anstream::println!("{reference_string}");
+            }
+            Mode::Check => match fs_err::read_to_string(reference_path) {
+                Ok(current) => {
+                    if current == reference_string {
+                        anstream::println!("Up-to-date: {filename}");
+                    } else {
+                        let comparison = StrComparison::new(&current, &reference_string);
+                        bail!(
+                            "{filename} changed, please run `mise run generate`:\n{comparison}"
+                        );
+                    }
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    bail!("{filename} not found, please run `mise run generate`");
+                }
+                Err(err) => {
+                    bail!(
+                        "{filename} changed, please run `mise run generate`:\n{err}"
+                    );
+                }
+            },
+            Mode::Write => match fs_err::read_to_string(&reference_path) {
+                Ok(current) => {
+                    if current == reference_string {
+                        anstream::println!("Up-to-date: {filename}");
+                    } else {
+                        anstream::println!("Updating: {filename}");
+                        fs_err::write(reference_path, reference_string.as_bytes())?;
+                    }
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    anstream::println!("Updating: {filename}");
+                    fs_err::write(reference_path, reference_string.as_bytes())?;
+                }
+                Err(err) => {
+                    bail!(
+                        "{filename} changed, please run `cargo dev generate-cli-reference`:\n{err}"
+                    );
+                }
+            },
+        }
+
+        Ok(())
+    }
 }

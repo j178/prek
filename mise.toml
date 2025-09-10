@@ -10,9 +10,9 @@ cargo-insta = "latest"
 prek = "latest"
 
 # Toolchains used in the integration tests.
-python = [ "3.12.11"]
-node = [ "19.9.0" ]
-go = [ "1.23.0" ]
+python = ["3.12.11"]
+node = ["19.9.0"]
+go = ["1.23.0"]
 
 [tasks.lint]
 description = "Run formatting and linting"
@@ -40,6 +40,11 @@ run = "cargo insta test --review --test '*'"
 [tasks.test]
 description = "Run all tests"
 run = "cargo test --all-targets --all-features --workspace"
+
+[tasks.generate]
+description = "Generate CLI reference"
+run = "cargo test --bin prek cli::tests::generate_cli_reference -- --exact"
+env = { PREK_GENERATE = "1" }
 
 [tasks.release]
 description = "Prepare for a release"
