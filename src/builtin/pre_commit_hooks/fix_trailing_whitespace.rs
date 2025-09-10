@@ -125,7 +125,7 @@ async fn fix_file(
     };
 
     let file_path = file_base.join(filename);
-    let file = fs_err::tokio::File::open(file_path).await?;
+    let file = fs_err::tokio::File::open(&file_path).await?;
     let file_len = file.metadata().await?.len();
 
     let mut buf_writer = create_buffer(usize::try_from(file_len)?)?;
@@ -161,7 +161,7 @@ async fn fix_file(
 
     drop(buf_reader);
     if modified {
-        buf_writer.flush_to_file(filename).await?;
+        buf_writer.flush_to_file(&file_path).await?;
         Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
     } else {
         drop(buf_writer);

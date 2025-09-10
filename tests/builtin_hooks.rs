@@ -542,6 +542,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
               - id: check-yaml
               - id: check-json
               - id: mixed-line-ending
+              - id: trailing-whitespace
               - id: check-added-large-files
                 args: ['--maxkb', '1']
     "})?;
@@ -550,6 +551,9 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
         .write_str("No trailing newline")?;
     app.child("eof_multiple_lf.txt").write_str("Multiple\n\n")?;
     app.child("mixed.txt").write_str("line1\nline2\r\n")?;
+    app.child("trailing_ws.txt")
+        .write_str("line with trailing space \n")?;
+    app.child("correct.txt").write_str("All good here\n")?;
 
     app.child("invalid.yaml").write_str("a: b: c")?;
     app.child("duplicate.yaml").write_str("a: 1\na: 2")?;
@@ -575,12 +579,12 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     - hook id: end-of-file-fixer
     - exit code: 1
     - files were modified by this hook
-      Fixing duplicate.json
-      Fixing duplicate.yaml
-      Fixing invalid.json
       Fixing invalid.yaml
+      Fixing duplicate.json
       Fixing eof_no_newline.txt
       Fixing eof_multiple_lf.txt
+      Fixing duplicate.yaml
+      Fixing invalid.json
     check yaml...............................................................Failed
     - hook id: check-yaml
     - exit code: 1
@@ -594,7 +598,13 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     mixed line ending........................................................Failed
     - hook id: mixed-line-ending
     - exit code: 1
+    - files were modified by this hook
       Fixing mixed.txt
+    trim trailing whitespace.................................................Failed
+    - hook id: trailing-whitespace
+    - exit code: 1
+    - files were modified by this hook
+      Fixing trailing_ws.txt
     check for added large files..............................................Passed
 
     ----- stderr -----
@@ -629,6 +639,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     check yaml...............................................................Passed
     check json...............................................................Passed
     mixed line ending........................................................Passed
+    trim trailing whitespace.................................................Passed
     check for added large files..............................................Passed
 
     ----- stderr -----

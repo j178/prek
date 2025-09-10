@@ -83,7 +83,7 @@ fn parse_fix_mode(args: &[String]) -> Result<FixMode> {
 // Process a single file for mixed line endings
 async fn fix_file(file_base: &Path, filename: &Path, fix_mode: &FixMode) -> Result<(i32, Vec<u8>)> {
     let file_path = file_base.join(filename);
-    let contents = fs_err::tokio::read(file_path).await?;
+    let contents = fs_err::tokio::read(&file_path).await?;
 
     // Skip empty files or binary files
     if contents.is_empty() || contents.find_byte(0).is_some() {
@@ -110,14 +110,14 @@ async fn fix_file(file_base: &Path, filename: &Path, fix_mode: &FixMode) -> Resu
             }
 
             let target_ending = find_most_common_ending(&counts);
-            apply_line_ending(filename, &contents, target_ending).await?;
+            apply_line_ending(&file_path, &contents, target_ending).await?;
             Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
         }
         FixMode::Value(target_ending) => {
             let needs_fixing = counts.keys().any(|&ending| ending != *target_ending);
 
             if needs_fixing {
-                apply_line_ending(filename, &contents, target_ending).await?;
+                apply_line_ending(&file_path, &contents, target_ending).await?;
                 Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
             } else {
                 Ok((0, Vec::new()))
