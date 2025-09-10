@@ -26,7 +26,7 @@ pub(crate) fn selector_completer(current: &OsStr) -> Vec<CompletionCandidate> {
     // Support optional `path:hook_prefix` form while typing.
     let (path_part, hook_prefix_opt) = match current_str.split_once(':') {
         Some((p, rest)) => (p, Some(rest)),
-        None => (current_str.as_ref(), None),
+        None => (current_str, None),
     };
 
     if path_part.contains('/') {
@@ -100,12 +100,12 @@ pub(crate) fn selector_completer(current: &OsStr) -> Vec<CompletionCandidate> {
     }
 
     // No slash: match subdirectories under cwd and hook ids across workspace
-    candidates.extend(list_subdirs(&CWD, "", &current_str, &workspace));
+    candidates.extend(list_subdirs(&CWD, "", current_str, &workspace));
     // Also suggest immediate child project roots as `name:`
     candidates.extend(list_direct_project_colons(
         &CWD,
         "",
-        &current_str,
+        current_str,
         &workspace,
     ));
 
@@ -137,7 +137,7 @@ pub(crate) fn selector_completer(current: &OsStr) -> Vec<CompletionCandidate> {
     let mut uniq: BTreeMap<String, Option<String>> = BTreeMap::new();
     for proj in workspace.projects() {
         for (id, name) in all_hooks(proj) {
-            if id.contains(&*current_str) || id.starts_with(&*current_str) {
+            if id.contains(current_str) || id.starts_with(current_str) {
                 uniq.entry(id).or_insert(name);
             }
         }

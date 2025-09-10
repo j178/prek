@@ -625,6 +625,7 @@ pub(crate) struct InitTemplateDirArgs {
     pub(crate) hook_types: Vec<HookType>,
 }
 
+#[cfg(unix)]
 #[cfg(test)]
 mod tests {
     use crate::cli::Cli;
@@ -756,12 +757,17 @@ mod tests {
                     output.push_str(&format!("<dt id=\"{id}\">"));
                     output.push_str(&format!(
                         "<a href=\"#{id}\"<code>{}</code></a>",
-                        arg.get_value_names().unwrap().iter().next().unwrap().to_string().to_uppercase(),
+                        arg.get_value_names()
+                            .unwrap()
+                            .iter()
+                            .next()
+                            .unwrap()
+                            .to_string()
+                            .to_uppercase(),
                     ));
                     output.push_str("</dt>");
                     if let Some(help) = arg.get_long_help().or_else(|| arg.get_help()) {
                         output.push_str("<dd>");
-                        println!("{}", help.to_string());
                         output.push_str(&format!("{}\n", markdown::to_html(&help.to_string())));
                         output.push_str("</dd>");
                     }
@@ -917,18 +923,14 @@ mod tests {
                         anstream::println!("Up-to-date: {filename}");
                     } else {
                         let comparison = StrComparison::new(&current, &reference_string);
-                        bail!(
-                            "{filename} changed, please run `mise run generate`:\n{comparison}"
-                        );
+                        bail!("{filename} changed, please run `mise run generate`:\n{comparison}");
                     }
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                     bail!("{filename} not found, please run `mise run generate`");
                 }
                 Err(err) => {
-                    bail!(
-                        "{filename} changed, please run `mise run generate`:\n{err}"
-                    );
+                    bail!("{filename} changed, please run `mise run generate`:\n{err}");
                 }
             },
             Mode::Write => match fs_err::read_to_string(&reference_path) {
