@@ -77,4 +77,4 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [Installation](./installation.md) - Installation options
 - [Workspace Mode](./workspace.md) - Monorepo support
 - [Differences](./diff.md) - What's different from pre-commit
-- [Benchmark](./benchmark.md) - Performance comparison
+- [Debugging](./debugging.md) - Troubleshooting tips

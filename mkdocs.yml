@@ -62,6 +62,7 @@ nav:
   - Benchmark: benchmark.md
   - Built-in Hooks: builtin.md
   - TODO: todo.md
+  - Debugging: debugging.md
 
 markdown_extensions:
   - pymdownx.highlight:

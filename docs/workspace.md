@@ -21,11 +21,13 @@ When you run `prek run` without the `--config` option, `prek` automatically disc
 
 3. **Git repository boundary**: The search stops at the git repository root (`.git` directory) to avoid including unrelated projects.
 
-**Note**: The workspace root is not necessarily the same as the git repository root, a workspace can exist within a subdirectory of a git repository.
+**Note**:
 
-**Note**: The current working directory determines the workspace root discovery. `prek` starts searching from your current location and stops at the first `.pre-commit-config.yaml` file found while traversing up the directory tree. Running from different directories may discover different workspace roots. Use `prek -C <dir>` to change the working directory before execution.
+- The workspace root is not necessarily the same as the git repository root, a workspace can exist within a subdirectory of a git repository.
 
-**Note**: Directories beginning with a dot (e.g. `.hidden`) are ignored during project discovery.
+- The current working directory determines the workspace root discovery. `prek` starts searching from your current location and stops at the first `.pre-commit-config.yaml` file found while traversing up the directory tree. Running from different directories may discover different workspace roots. Use `prek -C <dir>` to change the working directory before execution.
+
+- Directories beginning with a dot (e.g. `.hidden`) are ignored during project discovery.
 
 ## Project Organization
 
@@ -289,16 +291,6 @@ To migrate an existing single-config setup to workspace mode:
 2. **Add project configs**: Create `.pre-commit-config.yaml` in subdirectories as needed
 3. **Update file patterns**: Adjust `files`/`exclude` patterns to be project-relative
 4. **Test execution**: Verify hooks run in correct directories with correct file sets
-
-## Debugging
-
-```bash
-# See which projects were discovered
-prek run -vvv
-
-# Check file collection for specific project
-prek run -C project/dir -vvv
-```
 
 ## Workspace Cache
 
