@@ -13,7 +13,7 @@ use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
 const MARKDOWN_LINE_BREAK: &[u8] = b"  ";
-const BUFFER_SIZE_THRESHOLD: usize = 16 * 1024; // 16KB
+const BUFFER_SIZE_THRESHOLD: usize = 64 * 1024; // 64KB
 
 #[derive(Clone)]
 struct Chars(Vec<char>);
