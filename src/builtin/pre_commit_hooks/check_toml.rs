@@ -45,7 +45,10 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
     } else {
         let mut error_messages = Vec::new();
         for error in errors {
-            error_messages.push(format!("{}: Failed to toml decode ({error})", filename.display()));
+            error_messages.push(format!(
+                "{}: Failed to toml decode ({error})",
+                filename.display()
+            ));
         }
         let combined_errors = error_messages.join("\n") + "\n";
         Ok((1, combined_errors.into_bytes()))
@@ -132,7 +135,7 @@ key4 = "another unclosed string
         let (code, output) = check_file(Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         let output_str = String::from_utf8_lossy(&output);
-        
+
         // Should contain multiple error messages (one for each error found)
         let error_count = output_str.matches("Failed to toml decode").count();
         assert!(error_count == 3, "Expected three errors, got: {output_str}");
