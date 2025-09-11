@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.0a5
+
+### Enhancements
+
+- Add built in byte-order-marker fixer ([#700](https://github.com/j178/prek/pull/700))
+- Use bigger buffer for fixing trailing whitespace ([#705](https://github.com/j178/prek/pull/705))
+
+### Bug fixes
+
+- Fix `trailing-whitespace` & `mixed-line-ending` write file path ([#708](https://github.com/j178/prek/pull/708))
+- Fix file path handling for meta hooks in workspace mode ([#699](https://github.com/j178/prek/pull/699))
+
+### Documentation
+
+- Add docs about configuration ([#703](https://github.com/j178/prek/pull/703))
+- Add docs about debugging ([#702](https://github.com/j178/prek/pull/702))
+- Generate cli reference ([#707](https://github.com/j178/prek/pull/707))
+
+### Contributors
+
+- @kushudai
+- @j178
+
 ## 0.2.0a4
 
 ### Enhancements
