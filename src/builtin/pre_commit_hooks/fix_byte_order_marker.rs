@@ -6,6 +6,7 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
+use crate::store::STORE;
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
 const BUFFER_SIZE: usize = 8192; // 8KB buffer for streaming
@@ -60,7 +61,13 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
         fs_err::tokio::write(&file_path, &content[3..]).await?;
     } else {
         // For large files, use streaming to avoid loading everything into memory
-        let temp_path = file_path.with_extension("tmp_bom_fix");
+        let scratch = STORE.as_ref()?.scratch_path();
+        fs_err::tokio::create_dir_all(&scratch).await?;
+        
+        // Create a unique temporary filename in the scratch directory
+        let temp_filename = format!("bom_fix_{:x}.tmp", 
+            &raw const file_path as usize);
+        let temp_path = scratch.join(temp_filename);
 
         // Reset to position 3 (after BOM)
         file.seek(std::io::SeekFrom::Start(3)).await?;
