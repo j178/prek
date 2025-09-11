@@ -85,6 +85,7 @@ fn setup_logging(level: Level) -> Result<()> {
     let log_file = fs_err::OpenOptions::new()
         .create(true)
         .write(true)
+        .truncate(true)
         .open(log_file_path)
         .context("Failed to open log file")?;
     let log_file = Mutex::new(StripStream::new(log_file.into_file()));
