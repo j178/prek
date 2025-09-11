@@ -11,6 +11,7 @@ Currently, only `pre-commit/pre-commit-hooks` is implemented. More popular repos
 - `trailing-whitespace` (Trim trailing whitespace)
 - `check-added-large-files` (Prevent committing large files)
 - `end-of-file-fixer` (Ensure newline at EOF)
+- `fix-byte-order-marker` (Remove UTF-8 byte order marker)
 - `check-json` (Validate JSON files)
 - `check-toml` (Validate TOML files)
 - `check-yaml` (Validate YAML files)
