@@ -29,12 +29,26 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
         return Ok((0, Vec::new()));
     }
 
-    match toml::from_slice::<toml::Value>(&content) {
-        Ok(_) => Ok((0, Vec::new())),
+    // Use string content for borrowed parsing
+    let content_str = match std::str::from_utf8(&content) {
+        Ok(s) => s,
         Err(e) => {
-            let error_message = format!("{}: Failed to toml decode ({e})\n", filename.display());
-            Ok((1, error_message.into_bytes()))
+            let error_message = format!("{}: Failed to decode UTF-8 ({e})\n", filename.display());
+            return Ok((1, error_message.into_bytes()));
         }
+    };
+
+    // Use DeTable::parse_recoverable to report all parse errors at once
+    let (_parsed, errors) = toml::de::DeTable::parse_recoverable(content_str);
+    if errors.is_empty() {
+        Ok((0, Vec::new()))
+    } else {
+        let mut error_messages = Vec::new();
+        for error in errors {
+            error_messages.push(format!("{}: Failed to toml decode ({error})", filename.display()));
+        }
+        let combined_errors = error_messages.join("\n") + "\n";
+        Ok((1, combined_errors.into_bytes()))
     }
 }
 
@@ -101,6 +115,27 @@ key1 = "value2"
         let (code, output) = check_file(Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_multiple_errors_reported() -> Result<()> {
+        let dir = tempdir()?;
+        // TOML with multiple syntax errors
+        let content = br#"key1 = "unclosed string
+key2 = "value2"
+key3 = invalid_value_without_quotes
+[section
+key4 = "another unclosed string
+"#;
+        let file_path = create_test_file(&dir, "multiple_errors.toml", content).await?;
+        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(code, 1);
+        let output_str = String::from_utf8_lossy(&output);
+        
+        // Should contain multiple error messages (one for each error found)
+        let error_count = output_str.matches("Failed to toml decode").count();
+        assert!(error_count == 3, "Expected three errors, got: {output_str}");
         Ok(())
     }
 }
