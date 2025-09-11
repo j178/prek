@@ -722,3 +722,67 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn fix_byte_order_marker_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: fix-byte-order-marker
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files
+    cwd.child("without_bom.txt").write_str("Hello, World!")?;
+    cwd.child("with_bom.txt").write_binary(&[
+        0xef, 0xbb, 0xbf, b'H', b'e', b'l', b'l', b'o', b',', b' ', b'W', b'o', b'r', b'l', b'd',
+        b'!',
+    ])?;
+    cwd.child("bom_only.txt")
+        .write_binary(&[0xef, 0xbb, 0xbf])?;
+    cwd.child("empty.txt").touch()?;
+
+    context.git_add(".");
+
+    // First run: hooks should fix files with BOM
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fix utf-8 byte order marker..............................................Failed
+    - hook id: fix-byte-order-marker
+    - exit code: 1
+    - files were modified by this hook
+      bom_only.txt: removed byte-order marker
+      with_bom.txt: removed byte-order marker
+
+    ----- stderr -----
+    ");
+
+    // Verify the content is correct
+    assert_eq!(context.read("with_bom.txt"), "Hello, World!");
+    assert_eq!(context.read("bom_only.txt"), "");
+    assert_eq!(context.read("without_bom.txt"), "Hello, World!");
+    assert_eq!(context.read("empty.txt"), "");
+
+    context.git_add(".");
+
+    // Second run: all should pass now
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    fix utf-8 byte order marker..............................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}

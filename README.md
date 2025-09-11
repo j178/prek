@@ -146,7 +146,7 @@ mise use prek
 <details>
 <summary>Cargo</summary>
 
-Build from source using Cargo:
+Build from source using Cargo (Rust 1.89+ is required):
 
 ```bash
 cargo install --locked --git https://github.com/j178/prek
