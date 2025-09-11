@@ -63,10 +63,9 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
         // For large files, use streaming to avoid loading everything into memory
         let scratch = STORE.as_ref()?.scratch_path();
         fs_err::tokio::create_dir_all(&scratch).await?;
-        
+
         // Create a unique temporary filename in the scratch directory
-        let temp_filename = format!("bom_fix_{:x}.tmp", 
-            &raw const file_path as usize);
+        let temp_filename = format!("bom_fix_{:x}.tmp", &raw const file_path as usize);
         let temp_path = scratch.join(temp_filename);
 
         // Reset to position 3 (after BOM)
