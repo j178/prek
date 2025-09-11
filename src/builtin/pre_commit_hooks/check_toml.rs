@@ -121,7 +121,7 @@ key1 = "value2"
         Ok(())
     }
 
-    #[tokio::test]
+        #[tokio::test]
     async fn test_multiple_errors_reported() -> Result<()> {
         let dir = tempdir()?;
         // TOML with multiple syntax errors
@@ -135,10 +135,25 @@ key4 = "another unclosed string
         let (code, output) = check_file(Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         let output_str = String::from_utf8_lossy(&output);
-
+        
         // Should contain multiple error messages (one for each error found)
         let error_count = output_str.matches("Failed to toml decode").count();
         assert!(error_count == 3, "Expected three errors, got: {output_str}");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_invalid_utf8() -> Result<()> {
+        let dir = tempdir()?;
+        // Create content with invalid UTF-8 bytes
+        let content = b"key1 = \"\xff\xfe\xfd\"\nkey2 = \"valid\"";
+        let file_path = create_test_file(&dir, "invalid_utf8.toml", content).await?;
+        
+        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(code, 1);
+        let output_str = String::from_utf8_lossy(&output);
+        assert!(output_str.contains("Failed to decode UTF-8"));
+        assert!(output_str.contains("invalid_utf8.toml"));
         Ok(())
     }
 }
