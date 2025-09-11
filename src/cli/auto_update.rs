@@ -214,9 +214,10 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
         .check(false)
         .current_dir(tmp_dir.path());
     if bleeding_edge {
-        cmd.arg("--exact")
+        cmd.arg("--exact-match")
     } else {
-        cmd.arg("--abbrev=0") // find the closest tag name without any suffix
+        // `--abbrev=0` suppress long format, find the closest tag name without any suffix
+        cmd.arg("--abbrev=0")
     };
 
     let output = cmd.output().await?;

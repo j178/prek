@@ -37,43 +37,52 @@ pub(crate) async fn hook_impl(
         );
     }
 
-    // Check if there is config file
-    if !skip_on_missing_config && !EnvVars::is_set(EnvVars::PREK_ALLOW_NO_CONFIG) {
-        let exit = if let Some(ref config) = config
-            && !config.try_exists()?
-        {
-            eprintln!(
-                "{}: config file not found: `{}`",
-                "error".red().bold(),
-                config.display().cyan()
-            );
-            true
-        } else {
-            // Try to discover a project from current directory (after `--cd`)
-            match Project::discover(config.as_deref(), &CWD) {
-                Err(e) if matches!(e, workspace::Error::MissingPreCommitConfig) => {
-                    eprintln!("{}: {e}", "error".red().bold());
-                    true
-                }
-                Ok(_) => false,
-                Err(e) => return Err(e.into()),
-            }
-        };
+    let allow_missing_config =
+        skip_on_missing_config || EnvVars::is_set(EnvVars::PREK_ALLOW_NO_CONFIG);
+    let warn_for_no_config = || {
+        eprintln!(
+            "- To temporarily silence this, run `{}`",
+            format!("{}=1 git ...", EnvVars::PREK_ALLOW_NO_CONFIG).cyan()
+        );
+        eprintln!(
+            "- To permanently silence this, install hooks with the `{}` flag",
+            "--allow-missing-config".cyan()
+        );
+        eprintln!("- To uninstall hooks, run `{}`", "prek uninstall".cyan());
+    };
 
-        if exit {
-            eprintln!(
-                "- To temporarily silence this, run `{}`",
-                format!("{}=1 git ...", EnvVars::PREK_ALLOW_NO_CONFIG).cyan()
-            );
-            eprintln!(
-                "- To permanently silence this, install hooks with the `{}` flag",
-                "--allow-missing-config".cyan()
-            );
-            eprintln!("- To uninstall hooks, run `{}`", "prek uninstall".cyan());
-            return Ok(ExitStatus::Failure);
+    // Check if there is config file
+    if let Some(ref config) = config {
+        if !config.try_exists()? {
+            return if allow_missing_config {
+                Ok(ExitStatus::Success)
+            } else {
+                eprintln!(
+                    "{}: config file not found: `{}`",
+                    "error".red().bold(),
+                    config.display().cyan()
+                );
+                warn_for_no_config();
+
+                Ok(ExitStatus::Failure)
+            };
         }
     } else {
-        return Ok(ExitStatus::Success);
+        // Try to discover a project from current directory (after `--cd`)
+        match Project::discover(config.as_deref(), &CWD) {
+            Err(e) if matches!(e, workspace::Error::MissingPreCommitConfig) => {
+                return if allow_missing_config {
+                    Ok(ExitStatus::Success)
+                } else {
+                    eprintln!("{}: {e}", "error".red().bold());
+                    warn_for_no_config();
+
+                    Ok(ExitStatus::Failure)
+                };
+            }
+            Ok(_) => {}
+            Err(e) => return Err(e.into()),
+        }
     }
 
     if !hook_type.num_args().contains(&args.len()) {

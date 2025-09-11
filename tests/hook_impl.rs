@@ -1,9 +1,9 @@
 use std::process::Command;
 
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-use indoc::indoc;
-
+use constants::CONFIG_FILE;
 use constants::env_vars::EnvVars;
+use indoc::indoc;
 
 use crate::common::TestContext;
 use crate::common::cmd_snapshot;
@@ -364,7 +364,7 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     - To uninstall hooks, run `prek uninstall`
     ");
 
-    // Run with `PREK_ALLOW_NO_CONFIG=1`
+    // Commit with `PREK_ALLOW_NO_CONFIG=1`
     let mut commit = Command::new("git");
     commit
         .current_dir(&empty_dir)
@@ -379,7 +379,8 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
         .chain([("[a-f0-9]{7}", "1d5e501")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters, commit, @r"
+    // The hook should simply succeed because there is no config
+    cmd_snapshot!(filters.clone(), commit, @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -388,6 +389,44 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
      create mode 100644 empty/file.txt
 
     ----- stderr -----
+    ");
+
+    // Create the root `.pre-commit-config.yaml`
+    context
+        .work_dir()
+        .child(CONFIG_FILE)
+        .write_str(indoc::indoc! {r"
+        repos:
+        - repo: local
+          hooks:
+           - id: fail
+             name: fail
+             entry: fail
+             language: fail
+    "})?;
+    context.git_add(".");
+
+    // Commit with `PREK_ALLOW_NO_CONFIG=1` again, the hooks should run (and fail)
+    let mut commit = Command::new("git");
+    commit
+        .current_dir(&empty_dir)
+        .env(EnvVars::PREK_ALLOW_NO_CONFIG, "1")
+        .arg("commit")
+        .arg("-m")
+        .arg("Test commit");
+
+    cmd_snapshot!(filters.clone(), commit, @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    fail.....................................................................Failed
+    - hook id: fail
+    - exit code: 1
+      fail
+
+      .pre-commit-config.yaml
     ");
 
     Ok(())
