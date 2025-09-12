@@ -1,6 +1,6 @@
 # Built-in Fast Hooks
 
-Prek includes fast, Rust-native implementations of popular hooks for speed and low overhead. When a matching hook from a popular repository (for example, `pre-commit/pre-commit-hooks`) is detected, Prek can run an internal implementation instead of spawning external interpreters.
+Prek includes fast, Rust-native implementations of popular hooks for speed and low overhead. When a matching hook from a popular repository (for example, `pre-commit/pre-commit-hooks`) is detected, prek can run an internal implementation instead of spawning external interpreters.
 
 Currently, only `pre-commit/pre-commit-hooks` is implemented. More popular repositories may be added over time.
 

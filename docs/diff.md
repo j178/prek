@@ -31,6 +31,10 @@ See [Workspace Mode](./workspace.md) for more information.
 
 `prek list` command lists all available hooks, their ids, and descriptions. This provides a better overview of the configured hooks.
 
+## `prek auto-update`
+
+`prek auto-update` will check update for the same remote repositories only once.
+
 ## `prek sample-config`
 
 - `prek sample-config` command has a `--file` option to write the sample configuration to a specific file.

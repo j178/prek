@@ -21,6 +21,15 @@ Your existing configs work unchanged with prek.
 For configuration details, refer to the official pre-commit docs:
 [pre-commit.com](https://pre-commit.com/)
 
+## Prek specific configurations
+
+- `minimum_prek_version` — Specify the minimum required version of prek for the configuration. If the installed version is lower, prek will exit with an error. Example:
+
+  ```yaml
+  minimum_prek_version: '0.2.0'
+  ```
+  The original `minimum_pre_commit_version` has no effect in prek.
+
 ## Environment variables
 
 Prek supports the following environment variables:
