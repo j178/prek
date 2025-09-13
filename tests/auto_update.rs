@@ -763,3 +763,86 @@ fn auto_update_workspace() -> Result<()> {
 
     Ok(())
 }
+
+// When there are multiple tags pointing to the same object,
+// prek prefer picking a tag with a dot and is closest to the current rev according
+// to Levenshtein distance.
+#[test]
+fn prefer_similar_tags() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(&context, "remote-repo", &["v1.0.0", "v1.1.0"])?;
+    // Add tag foo-v1.0.0 pointing to the same commit as v1.1.0
+    // v1.0.0 distance to v1.1.0 is 1
+    // v1.0.0 distance to foo-v1.0.0 is 4
+    // So we choose v1.1.0 as the update target
+    // But if the newest tag is v1.1.1111 (distance is 5), then we would choose foo-v1.0.0 instead
+    Command::new("git")
+        .arg("tag")
+        .arg("foo-v1.0.0")
+        .arg("-m")
+        .arg("foo-v1.0.0")
+        .arg("v1.1.0^{}")
+        .current_dir(&repo_path)
+        .assert()
+        .success();
+    // Add tag v1 pointing to the same commit as v1.1.0
+    Command::new("git")
+        .arg("tag")
+        .arg("v1")
+        .arg("-m")
+        .arg("v1")
+        .arg("v1.1.0^{}")
+        .current_dir(&repo_path)
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: local-hook
+                name: Local Hook
+                language: system
+                entry: echo
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/remote-repo] updating v1.0.0 -> v1.1.0
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(CONFIG_FILE), @r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: local-hook
+                    name: Local Hook
+                    language: system
+                    entry: echo
+              - repo: [HOME]/test-repos/remote-repo
+                rev: v1.1.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}

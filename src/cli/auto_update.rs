@@ -222,7 +222,12 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
 
     let output = cmd.output().await?;
     let mut rev = if output.status.success() {
-        String::from_utf8_lossy(&output.stdout).trim().to_string()
+        let rev = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let rev = get_best_candidate_tag(tmp_dir.path(), &rev, &repo.rev)
+            .await
+            .unwrap_or(rev);
+        trace!("Using best candidate tag `{rev}`");
+        rev
     } else {
         trace!("Failed to describe FETCH_HEAD, using rev-parse instead");
         // "fatal: no tag exactly matches xxx"
@@ -236,14 +241,7 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
             .stdout;
         String::from_utf8_lossy(&stdout).trim().to_string()
     };
-    trace!("Resolved FETCH_HEAD to `{rev}`");
-
-    if !bleeding_edge {
-        rev = get_best_candidate_tag(tmp_dir.path(), &rev)
-            .await
-            .unwrap_or(rev);
-        trace!("Using best candidate tag `{rev}` for revision");
-    }
+    trace!("Resolved latest tag to `{rev}`");
 
     let mut frozen = None;
     if freeze {
@@ -314,13 +312,14 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
     Ok(new_revision)
 }
 
-/// Multiple tags can exist on a SHA. Sometimes a moving tag is attached
-/// to a version tag. Try to pick the tag that looks like a version.
-async fn get_best_candidate_tag(repo: &Path, rev: &str) -> Result<String> {
+/// Multiple tags can exist on an SHA. Sometimes a moving tag is attached
+/// to a version tag. Try to pick the tag that looks like a version and most similar
+/// to the current revision.
+async fn get_best_candidate_tag(repo: &Path, rev: &str, current_rev: &str) -> Result<String> {
     let stdout = git::git_cmd("git tag")?
         .arg("tag")
         .arg("--points-at")
-        .arg(rev)
+        .arg(format!("{rev}^{{}}"))
         .check(true)
         .current_dir(repo)
         .output()
@@ -330,8 +329,12 @@ async fn get_best_candidate_tag(repo: &Path, rev: &str) -> Result<String> {
     String::from_utf8_lossy(&stdout)
         .lines()
         .filter(|line| line.contains('.'))
-        .map(ToString::to_string)
+        .sorted_by_key(|tag| {
+            // Prefer tags that are more similar to the current revision
+            levenshtein::levenshtein(tag, current_rev)
+        })
         .next()
+        .map(ToString::to_string)
         .ok_or_else(|| anyhow::anyhow!("No tags found for revision {}", rev))
 }
 
