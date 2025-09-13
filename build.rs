@@ -86,7 +86,6 @@ fn commit_info(workspace_root: &Path) {
     // https://git-scm.com/docs/pretty-formats#Documentation/pretty-formats.txt-emdescribeoptionsem
     if let Some(describe) = parts.next() {
         // e.g. 'v0.2.0-alpha.5-1-g4e9faf2'
-        println!("cargo:rustc-env=PREK_TAG_DESCRIBE={describe}");
         let mut describe_parts = describe.rsplitn(3, '-');
         describe_parts.next();
         println!(
