@@ -92,7 +92,7 @@ fn commit_info(workspace_root: &Path) {
             "cargo:rustc-env=PREK_LAST_TAG_DISTANCE={}",
             describe_parts.next().unwrap_or("0")
         );
-        if let Some(last_tag) = describe_parts.next(){
+        if let Some(last_tag) = describe_parts.next() {
             println!("cargo:rustc-env=PREK_LAST_TAG={last_tag}");
         }
     }
