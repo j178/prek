@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.2.0
+
+This is a huge milestone release that introduces **Workspace Mode** — first‑class monorepo support.
+
+`prek` now allows you to manage multiple projects with their own `.pre-commit-config.yaml` within a single repository.
+It auto‑discovers nested projects, runs hooks in project scope, and provides flexible selectors to target specific projects and hooks.
+This makes `prek` a powerful tool for managing pre-commit hooks in complex repository structures.
+
+For more details, see [Workspace Mode](https://prek.j178.dev/workspace/). If you encounter any issues, please report them at [Issues](https://github.com/j178/prek/issues).
+
+**Note**: If you ran `prek install` in a repo before, you gonna need to run `prek install` again to replace the old git hook scripts for the workspace mode to work.
+
+Special thanks to @potiuk for all the help and feedback in designing and testing this feature!
+
+For detailed changes between 0.1.6 and 0.2.0, see [0.2.0-alpha.2](https://github.com/j178/prek/releases/v0.2.0-alpha.2), [0.2.0-alpha.3](https://github.com/j178/prek/releases/v0.2.0-alpha.3), [0.2.0-alpha.4](https://github.com/j178/prek/releases/v0.2.0-alpha.4), and [0.2.0-alpha.5](https://github.com/j178/prek/releases/v0.2.0-alpha.5).
+
+### Enhancements
+
+- Fix parsing of tag describe for prerelease versions ([#714](https://github.com/j178/prek/pull/714))
+- Truncate log file each time ([#717](https://github.com/j178/prek/pull/717))
+
+### Performance
+
+- Enable more aggressive optimizations for release ([#724](https://github.com/j178/prek/pull/724))
+- Speed up check_toml ([#713](https://github.com/j178/prek/pull/713))
+
+### Bug fixes
+
+- Fix hook-impl don't run hooks when specified allow missing config ([#716](https://github.com/j178/prek/pull/716))
+- fix: support py38 for pygrep ([#723](https://github.com/j178/prek/pull/723))
+
+### Other changes
+
+- Fix installation on fish and with missing tags ([#721](https://github.com/j178/prek/pull/721))
+
+### Contributors
+
+- @onerandomusername
+- @kushudai
+- @j178
+
 ## 0.2.0a5
 
 ### Enhancements
