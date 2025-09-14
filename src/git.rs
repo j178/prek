@@ -537,7 +537,6 @@ pub(crate) async fn get_root_commits(local_sha: &str) -> Result<FxHashSet<String
         .collect())
 }
 
-
 /// Get the parent commit of the given commit
 pub(crate) async fn get_parent_commit(commit: &str) -> Result<Option<String>, Error> {
     let output = git_cmd("get parent commit")?
