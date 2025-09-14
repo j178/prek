@@ -158,7 +158,13 @@ opt-level = 3
 debug = true # used by the profiler
 strip = false # keep symbols for the profiler
 
+[profile.release]
+# Enable Full LTO for the best optimizations
+lto = "fat"
+# Reduce codegen units to 1 for better optimizations
+codegen-units = 1
+strip = true
+
 # The profile that 'cargo dist' will build with
 [profile.dist]
 inherits = "release"
-lto = "thin"
