@@ -144,6 +144,8 @@ jobs:
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
+          # A dummy dependency path to enable caching of go modules.
+          cache-dependency-path: LICENSE
 
       - name: "Cargo test"
         run: |
@@ -196,6 +198,8 @@ jobs:
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
+          # A dummy dependency path to enable caching of go modules.
+          cache-dependency-path: LICENSE
 
       - name: "Cargo test"
         run: |
@@ -243,6 +247,8 @@ jobs:
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
+          # A dummy dependency path to enable caching of go modules.
+          cache-dependency-path: LICENSE
 
       - name: "Find node and npm versions"
         run: |
