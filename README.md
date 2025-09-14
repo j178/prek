@@ -86,6 +86,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [basedpyright](https://github.com/DetachHead/basedpyright/pull/1413)
 - [OpenLineage](https://github.com/OpenLineage/OpenLineage/pull/3965)
 - [Authlib](https://github.com/authlib/authlib/pull/804)
+- [pre-commit-crocodile](https://radiandevcore.gitlab.io/tools/pre-commit-crocodile/)
 
 ## Installation
 
