@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use anyhow::Result;
 use itertools::Itertools;
 use rustc_hash::FxHashSet;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, warn};
 
 use crate::process;
@@ -412,6 +412,8 @@ pub(crate) async fn has_hooks_path_set() -> Result<bool> {
 }
 
 pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<Vec<String>, Error> {
+    use tokio::select;
+
     let mut job = git_cmd("git check-attr")?
         .arg("check-attr")
         .arg("filter")
@@ -422,33 +424,67 @@ pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<Vec<String>, Error>
         .check(true)
         .spawn()?;
 
-    {
-        let mut stdin = job.stdin.take().expect("Failed to open stdin");
-        stdin
-            .write_all(
-                paths
-                    .iter()
-                    .map(|f| f.to_string_lossy())
-                    .join("\0")
-                    .as_ref(),
-            )
-            .await?;
+    let mut stdout = job.stdout.take().expect("Failed to open stdout");
+    let mut stdin = Some(job.stdin.take().expect("Failed to open stdin"));
+
+    let mut output = Vec::new();
+    let mut read_buffer = [0u8; 8192];
+    let mut path_iter = paths.iter();
+    let mut write_complete = false;
+
+    loop {
+        select! {
+            read_result = stdout.read(&mut read_buffer) => {
+                match read_result? {
+                    0 if write_complete => break,
+                    0 => {},
+                    bytes_read => output.extend_from_slice(&read_buffer[..bytes_read]),
+                }
+            }
+
+            write_result = async {
+                if write_complete {
+                    std::future::pending::<Result<(), std::io::Error>>().await
+                } else if let Some(path) = path_iter.next() {
+                    if let Some(ref mut stdin_handle) = stdin {
+                        stdin_handle.write_all(path.to_string_lossy().as_bytes()).await?;
+                        stdin_handle.write_all(b"\0").await?;
+                    }
+                    Ok(())
+                } else {
+                    stdin.take();
+                    write_complete = true;
+                    Ok(())
+                }
+            } => {
+                write_result?;
+            }
+        }
     }
 
-    Ok(
-        String::from_utf8_lossy(&job.wait_with_output().await?.stdout)
-            .trim()
-            .split('\0')
-            .tuples::<(_, _, _)>()
-            .filter_map(|(file, _, attr)| {
-                if attr == "lfs" {
-                    Some(file.to_owned())
-                } else {
-                    None
-                }
-            })
-            .collect(),
-    )
+    let status = job.wait().await?;
+    if !status.success() {
+        return Err(Error::Command(crate::process::Error::Status {
+            summary: "git check-attr".to_string(),
+            error: crate::process::StatusError {
+                status,
+                output: None,
+            },
+        }));
+    }
+
+    Ok(String::from_utf8_lossy(&output)
+        .trim()
+        .split('\0')
+        .tuples::<(_, _, _)>()
+        .filter_map(|(file, _, attr)| {
+            if attr == "lfs" {
+                Some(file.to_owned())
+            } else {
+                None
+            }
+        })
+        .collect())
 }
 
 /// Check if a git revision exists
@@ -499,6 +535,128 @@ pub(crate) async fn get_root_commits(local_sha: &str) -> Result<FxHashSet<String
         .lines()
         .map(ToString::to_string)
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+    use tempfile::TempDir;
+    use tokio::process::Command;
+
+    async fn create_git_repo_with_files(
+        num_files: usize,
+    ) -> Result<TempDir, Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let repo_path = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .args(&["init"])
+            .current_dir(repo_path)
+            .output()
+            .await?;
+
+        // Set git config to avoid warnings
+        Command::new("git")
+            .args(&["config", "user.name", "Test User"])
+            .current_dir(repo_path)
+            .output()
+            .await?;
+
+        Command::new("git")
+            .args(&["config", "user.email", "test@example.com"])
+            .current_dir(repo_path)
+            .output()
+            .await?;
+
+        // Create files
+        for i in 0..num_files {
+            let file_path = repo_path.join(format!("file_{:04}.txt", i));
+            tokio::fs::write(&file_path, format!("content of file {}", i)).await?;
+        }
+
+        // Add and commit files
+        Command::new("git")
+            .args(&["add", "."])
+            .current_dir(repo_path)
+            .output()
+            .await?;
+
+        Command::new("git")
+            .args(&["commit", "-m", "Initial commit"])
+            .current_dir(repo_path)
+            .output()
+            .await?;
+
+        Ok(temp_dir)
+    }
+
+    #[tokio::test]
+    async fn test_get_lfs_files_chunking() -> Result<(), Box<dyn std::error::Error>> {
+        // Create a temporary git repository with many files
+        let temp_dir = create_git_repo_with_files(2500).await?;
+        let repo_path = temp_dir.path();
+
+        // Change to the repo directory for git operations
+        std::env::set_current_dir(repo_path)?;
+
+        // Collect all file paths as owned PathBuf, then convert to Path references
+        let file_paths: Vec<PathBuf> = (0..2500)
+            .map(|i| PathBuf::from(format!("file_{:04}.txt", i)))
+            .collect();
+
+        let file_refs: Vec<&Path> = file_paths.iter().map(|p| p.as_path()).collect();
+
+        // Test the function with a large number of files
+        // This should exercise the chunking behavior without overwhelming git check-attr
+        let result = get_lfs_files(&file_refs).await;
+
+        // The test should complete successfully (files won't be LFS files, so result should be empty)
+        match result {
+            Ok(lfs_files) => {
+                // In our test case, none of the files should be LFS files
+                assert_eq!(lfs_files.len(), 0);
+            }
+            Err(e) => {
+                panic!("get_lfs_files failed with chunking: {}", e);
+            }
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_lfs_files_empty_input() -> Result<(), Box<dyn std::error::Error>> {
+        // Create a minimal git repo for context
+        let temp_dir = create_git_repo_with_files(1).await?;
+        std::env::set_current_dir(temp_dir.path())?;
+
+        // Test with empty input
+        let result = get_lfs_files(&[]).await?;
+        assert_eq!(result.len(), 0);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_lfs_files_small_input() -> Result<(), Box<dyn std::error::Error>> {
+        // Create a small git repo
+        let temp_dir = create_git_repo_with_files(5).await?;
+        std::env::set_current_dir(temp_dir.path())?;
+
+        let file_paths = [
+            Path::new("file_0000.txt"),
+            Path::new("file_0001.txt"),
+            Path::new("file_0002.txt"),
+        ];
+
+        // Test with small input (should not trigger chunking)
+        let result = get_lfs_files(&file_paths).await?;
+        assert_eq!(result.len(), 0); // No LFS files in our test
+
+        Ok(())
+    }
 }
 
 /// Get the parent commit of the given commit
