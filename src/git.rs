@@ -462,16 +462,7 @@ pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<Vec<String>, Error>
         }
     }
 
-    let status = job.wait().await?;
-    if !status.success() {
-        return Err(Error::Command(crate::process::Error::Status {
-            summary: "git check-attr".to_string(),
-            error: crate::process::StatusError {
-                status,
-                output: None,
-            },
-        }));
-    }
+    job.wait().await?;
 
     Ok(String::from_utf8_lossy(&output)
         .trim()
