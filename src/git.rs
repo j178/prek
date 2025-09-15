@@ -80,7 +80,7 @@ fn zsplit(s: &[u8]) -> Result<Vec<PathBuf>, Utf8Error> {
         .collect()
 }
 
-pub(crate) async fn intent_to_add_files() -> Result<Vec<PathBuf>, Error> {
+pub(crate) async fn intent_to_add_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let output = git_cmd("get intent to add files")?
         .arg("diff")
         .arg("--no-ext-diff")
@@ -88,13 +88,19 @@ pub(crate) async fn intent_to_add_files() -> Result<Vec<PathBuf>, Error> {
         .arg("--diff-filter=A")
         .arg("--name-only")
         .arg("-z")
+        .arg("--")
+        .arg(root)
         .check(true)
         .output()
         .await?;
     Ok(zsplit(&output.stdout)?)
 }
 
-pub(crate) async fn get_changed_files(old: &str, new: &str) -> Result<Vec<PathBuf>, Error> {
+pub(crate) async fn get_changed_files(
+    old: &str,
+    new: &str,
+    root: &Path,
+) -> Result<Vec<PathBuf>, Error> {
     let output = git_cmd("get changed files")?
         .arg("diff")
         .arg("--name-only")
@@ -102,20 +108,25 @@ pub(crate) async fn get_changed_files(old: &str, new: &str) -> Result<Vec<PathBu
         .arg("--no-ext-diff") // Disable external diff drivers
         .arg("-z") // Use NUL as line terminator
         .arg(format!("{old}...{new}"))
+        .arg("--")
+        .arg(root)
         .check(true)
         .output()
         .await?;
     Ok(zsplit(&output.stdout)?)
 }
 
-pub(crate) async fn ls_files(cwd: &Path, path: Option<&Path>) -> Result<Vec<PathBuf>, Error> {
-    let mut cmd = git_cmd("get git all files")?;
-    cmd.current_dir(cwd).arg("ls-files").arg("-z").check(true);
+pub(crate) async fn ls_files(cwd: &Path, path: &Path) -> Result<Vec<PathBuf>, Error> {
+    let output = git_cmd("get git all files")?
+        .current_dir(cwd)
+        .arg("ls-files")
+        .arg("-z")
+        .arg("--")
+        .arg(path)
+        .check(true)
+        .output()
+        .await?;
 
-    if let Some(p) = path {
-        cmd.arg("--").arg(p);
-    }
-    let output = cmd.output().await?;
     Ok(zsplit(&output.stdout)?)
 }
 
@@ -147,7 +158,7 @@ pub(crate) async fn get_git_common_dir() -> Result<PathBuf, Error> {
     }
 }
 
-pub(crate) async fn get_staged_files() -> Result<Vec<PathBuf>, Error> {
+pub(crate) async fn get_staged_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let output = git_cmd("get staged files")?
         .arg("diff")
         .arg("--staged")
@@ -155,6 +166,8 @@ pub(crate) async fn get_staged_files() -> Result<Vec<PathBuf>, Error> {
         .arg("--diff-filter=ACMRTUXB") // Everything except for D
         .arg("--no-ext-diff") // Disable external diff drivers
         .arg("-z") // Use NUL as line terminator
+        .arg("--")
+        .arg(root)
         .check(true)
         .output()
         .await?;
@@ -195,9 +208,11 @@ pub(crate) async fn is_in_merge_conflict() -> Result<bool, Error> {
     Ok(git_dir.join("MERGE_HEAD").try_exists()? && git_dir.join("MERGE_MSG").try_exists()?)
 }
 
-pub(crate) async fn get_conflicted_files() -> Result<Vec<PathBuf>, Error> {
+pub(crate) async fn get_conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let tree = git_cmd("git write-tree")?
         .arg("write-tree")
+        .arg("--prefix")
+        .arg(root)
         .check(true)
         .output()
         .await?;
@@ -211,6 +226,8 @@ pub(crate) async fn get_conflicted_files() -> Result<Vec<PathBuf>, Error> {
         .arg(String::from_utf8_lossy(&tree.stdout).trim())
         .arg("HEAD")
         .arg("MERGE_HEAD")
+        .arg("--")
+        .arg(root)
         .check(true)
         .output()
         .await?;

@@ -1977,10 +1977,16 @@ fn show_diff_on_failure() -> Result<()> {
                 pass_filenames: false
     "#};
     context.write_pre_commit_config(config);
-    context.work_dir().child("file.txt").write_str("Original line\n")?;
+    context
+        .work_dir()
+        .child("file.txt")
+        .write_str("Original line\n")?;
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run().arg("--show-diff-on-failure").arg("-v"), @r"
+    let mut filters = context.filters();
+    filters.push((r"index \w{7}\.\.\w{7} \d{6}", "index [OLD]..[NEW] 100644"));
+
+    cmd_snapshot!(filters.clone(), context.run().arg("--show-diff-on-failure").arg("-v"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1990,7 +1996,7 @@ fn show_diff_on_failure() -> Result<()> {
     - files were modified by this hook
     All changes made by hooks:
     diff --git a/file.txt b/file.txt
-    index 4d42573..abce4e9 100644
+    index [OLD]..[NEW] 100644
     --- a/file.txt
     +++ b/file.txt
     @@ -1 +1,2 @@
@@ -2013,17 +2019,16 @@ fn show_diff_on_failure() -> Result<()> {
         .assert()
         .success();
 
-    cmd_snapshot!(context.filters(), context.run().current_dir(&app).arg("--show-diff-on-failure").arg("-v"), @r"
+    cmd_snapshot!(filters.clone(), context.run().current_dir(&app).arg("--show-diff-on-failure"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     modify...................................................................Failed
     - hook id: modify
-    - duration: [TIME]
     - files were modified by this hook
     All changes made by hooks:
     diff --git a/app/file.txt b/app/file.txt
-    index 4d42573..abce4e9 100644
+    index [OLD]..[NEW] 100644
     --- a/app/file.txt
     +++ b/app/file.txt
     @@ -1 +1,2 @@
@@ -2031,25 +2036,36 @@ fn show_diff_on_failure() -> Result<()> {
     +Added line
 
     ----- stderr -----
-    Non-staged changes detected, saving to `[HOME]/patches/1757927084471-72862.patch`
-
-    Restored working tree changes from `[HOME]/patches/1757927084471-72862.patch`
     ");
 
     context.git_add(".");
 
     // Run in the root
-    cmd_snapshot!(context.filters(), context.run().arg("--show-diff-on-failure").arg("-vvv"), @r#"
+    // Since we add a new subproject, use `--refresh` to find that.
+    cmd_snapshot!(filters.clone(), context.run().arg("--show-diff-on-failure").arg("--refresh"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
+    Running hooks for `app`:
     modify...................................................................Failed
     - hook id: modify
-    - duration: [TIME]
+    - files were modified by this hook
+
+    Running hooks for `.`:
+    modify...................................................................Failed
+    - hook id: modify
     - files were modified by this hook
     All changes made by hooks:
+    diff --git a/app/file.txt b/app/file.txt
+    index [OLD]..[NEW] 100644
+    --- a/app/file.txt
+    +++ b/app/file.txt
+    @@ -1,2 +1,3 @@
+     Original line
+     Added line
+    +Added line
     diff --git a/file.txt b/file.txt
-    index abce4e9..7b461d0 100644
+    index [OLD]..[NEW] 100644
     --- a/file.txt
     +++ b/file.txt
     @@ -1,2 +1,3 @@
@@ -2058,37 +2074,7 @@ fn show_diff_on_failure() -> Result<()> {
     +Added line
 
     ----- stderr -----
-    DEBUG prek: 0.2.0+16 (3c0230835 2025-09-15)
-    DEBUG Git root: [TEMP_DIR]/
-    TRACE Executing `/opt/homebrew/bin/git ls-files --unmerged`
-    DEBUG Found workspace root at `[TEMP_DIR]/`
-    TRACE Include selectors: 
-    TRACE Skip selectors: 
-    DEBUG discover{root="[TEMP_DIR]/" config=None refresh=false}: Loaded workspace from cache
-    DEBUG discover{root="[TEMP_DIR]/" config=None refresh=false}: Loading project configuration path=.pre-commit-config.yaml
-    TRACE discover{root="[TEMP_DIR]/" config=None refresh=false}: close time.busy=727µs time.idle=9.58µs
-    TRACE Executing `/opt/homebrew/bin/git diff --exit-code --name-only -z [TEMP_DIR]/.pre-commit-config.yaml [...]`
-    TRACE Checking lock resource="store" path=[HOME]/.lock
-    DEBUG Acquired lock resource="store"
-    DEBUG Hooks going to run: ["modify"]
-    DEBUG Found installed environment for hook `modify` at `[HOME]/hooks/python-s77Rkcwx3QvfDMLXY6OR`
-    TRACE Released lock path=[HOME]/.lock
-    TRACE Executing `/opt/homebrew/bin/git diff --diff-filter=A --name-only -z`
-    TRACE Executing `/opt/homebrew/bin/git write-tree`
-    TRACE Executing `/opt/homebrew/bin/git diff-index --binary --exit-code 30bfc7e573bff81f6e54e5e6478bbcd4239ffee0 --`
-    TRACE No non-staged changes detected
-    TRACE Executing `/opt/homebrew/bin/git rev-parse --git-dir`
-    TRACE Executing `/opt/homebrew/bin/git diff --staged --name-only --diff-filter=ACMRTUXB -z`
-    DEBUG Staged files: 4
-    TRACE Executing `/opt/homebrew/bin/git diff -- [TEMP_DIR]/`
-    TRACE Files for `.` after filtered: 4
-    TRACE Files for `modify` after filtered: 4
-    TRACE Resolved command: [HOME]/hooks/python-s77Rkcwx3QvfDMLXY6OR/bin/python
-    TRACE Running modify total_files=0 concurrency=12
-    TRACE Executing `cd [TEMP_DIR]/ && [HOME]/hooks/python-s77Rkcwx3QvfDMLXY6OR/bin/python -c import sys; open('file.txt', 'a').write('Added line/n')`
-    TRACE Executing `/opt/homebrew/bin/git diff -- [TEMP_DIR]/`
-    TRACE Executing `/opt/homebrew/bin/git --no-pager diff --color=never -- [TEMP_DIR]/`
-    "#);
+    ");
 
     Ok(())
 }

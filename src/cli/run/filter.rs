@@ -226,14 +226,11 @@ pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<V
     let git_root = GIT_ROOT.as_ref()?;
 
     // The workspace root relative to the git root.
-    let relative_root = match root.strip_prefix(git_root)? {
-        p if p.as_os_str().is_empty() => None,
-        p => Some(p),
-    };
+    let relative_root = root.strip_prefix(git_root)?;
 
     let filenames = collect_files_from_args(
         git_root,
-        relative_root,
+        root,
         hook_stage,
         from_ref,
         to_ref,
@@ -249,14 +246,10 @@ pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<V
         .into_iter()
         .filter_map(|filename| {
             // Only keep files under the workspace root.
-            if let Some(relative_root) = relative_root {
-                filename
-                    .strip_prefix(relative_root)
-                    .map(|p| normalize_path(p.to_path_buf()))
-                    .ok()
-            } else {
-                Some(normalize_path(filename))
-            }
+            filename
+                .strip_prefix(relative_root)
+                .map(|p| normalize_path(p.to_path_buf()))
+                .ok()
         })
         .collect::<Vec<_>>();
 
@@ -273,11 +266,11 @@ fn adjust_relative_path(path: &str, new_cwd: &Path) -> Result<PathBuf, std::io::
 }
 
 /// Collect files to run hooks on.
-/// Returns a list of file paths relative to the workspace root.
+/// Returns a list of file paths relative to the git root.
 #[allow(clippy::too_many_arguments)]
 async fn collect_files_from_args(
     git_root: &Path,
-    relative_root: Option<&Path>,
+    workspace_root: &Path,
     hook_stage: Stage,
     from_ref: Option<String>,
     to_ref: Option<String>,
@@ -297,7 +290,7 @@ async fn collect_files_from_args(
     }
 
     if let (Some(from_ref), Some(to_ref)) = (from_ref, to_ref) {
-        let files = git::get_changed_files(&from_ref, &to_ref).await?;
+        let files = git::get_changed_files(&from_ref, &to_ref, workspace_root).await?;
         debug!(
             "Files changed between {} and {}: {}",
             from_ref,
@@ -344,7 +337,7 @@ async fn collect_files_from_args(
 
         for dir in directories {
             let dir = adjust_relative_path(&dir, git_root)?;
-            let dir_files = git::ls_files(git_root, Some(&dir)).await?;
+            let dir_files = git::ls_files(git_root, &dir).await?;
             for file in dir_files {
                 let file = normalize_path(file);
                 exists.insert(file);
@@ -356,18 +349,18 @@ async fn collect_files_from_args(
     }
 
     if all_files {
-        let files = git::ls_files(git_root, relative_root).await?;
+        let files = git::ls_files(git_root, workspace_root).await?;
         debug!("All files in the workspace: {}", files.len());
         return Ok(files);
     }
 
     if git::is_in_merge_conflict().await? {
-        let files = git::get_conflicted_files().await?;
+        let files = git::get_conflicted_files(workspace_root).await?;
         debug!("Conflicted files: {}", files.len());
         return Ok(files);
     }
 
-    let files = git::get_staged_files().await?;
+    let files = git::get_staged_files(workspace_root).await?;
     debug!("Staged files: {}", files.len());
 
     Ok(files)

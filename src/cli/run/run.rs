@@ -132,7 +132,7 @@ pub(crate) async fn run(
     // Clear any unstaged changes from the git working directory.
     let mut _guard = None;
     if should_stash {
-        _guard = Some(WorkTreeKeeper::clean(store).await?);
+        _guard = Some(WorkTreeKeeper::clean(store, workspace.root()).await?);
     }
 
     set_env_vars(from_ref.as_ref(), to_ref.as_ref(), &extra_args);

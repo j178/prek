@@ -17,11 +17,14 @@ use crate::store::Store;
 static RESTORE_WORKTREE: Mutex<Option<WorkTreeKeeper>> = Mutex::new(None);
 
 struct IntentToAddKeeper(Vec<PathBuf>);
-struct WorkingTreeKeeper(Option<PathBuf>);
+struct WorkingTreeKeeper {
+    root: PathBuf,
+    patch: Option<PathBuf>,
+}
 
 impl IntentToAddKeeper {
-    async fn clean() -> Result<Self> {
-        let files = git::intent_to_add_files().await?;
+    async fn clean(root: &Path) -> Result<Self> {
+        let files = git::intent_to_add_files(root).await?;
         if files.is_empty() {
             return Ok(Self(vec![]));
         }
@@ -70,7 +73,7 @@ impl Drop for IntentToAddKeeper {
 }
 
 impl WorkingTreeKeeper {
-    async fn clean(patch_dir: &Path) -> Result<Self> {
+    async fn clean(root: &Path, patch_dir: &Path) -> Result<Self> {
         let tree = git::write_tree().await?;
 
         let mut cmd = git_cmd("git diff-index")?;
@@ -83,6 +86,7 @@ impl WorkingTreeKeeper {
             .arg("--no-ext-diff")
             .arg(tree)
             .arg("--")
+            .arg(root)
             .check(false)
             .output()
             .await?;
@@ -90,12 +94,18 @@ impl WorkingTreeKeeper {
         if output.status.success() {
             trace!("No non-staged changes detected");
             // No non-staged changes
-            Ok(Self(None))
+            Ok(Self {
+                root: root.to_path_buf(),
+                patch: None,
+            })
         } else if output.status.code() == Some(1) {
             if output.stdout.trim_ascii().is_empty() {
                 trace!("diff-index status code 1 with empty stdout");
                 // probably git auto crlf behavior quirks
-                Ok(Self(None))
+                Ok(Self {
+                    root: root.to_path_buf(),
+                    patch: None,
+                })
             } else {
                 let now = std::time::SystemTime::now();
                 let pid = std::process::id();
@@ -118,63 +128,64 @@ impl WorkingTreeKeeper {
                 fs_err::write(&patch_path, output.stdout)?;
 
                 // Clean the working tree
-                Self::checkout_working_tree()?;
+                Self::checkout_working_tree(root)?;
 
-                Ok(Self(Some(patch_path)))
+                Ok(Self {
+                    root: root.to_path_buf(),
+                    patch: Some(patch_path),
+                })
             }
         } else {
             Err(cmd.check_status(output.status).unwrap_err().into())
         }
     }
 
-    fn checkout_working_tree() -> Result<()> {
-        let status = Command::new(GIT.as_ref()?)
+    fn checkout_working_tree(root: &Path) -> Result<()> {
+        let output = Command::new(GIT.as_ref()?)
             .arg("-c")
             .arg("submodule.recurse=0")
             .arg("checkout")
             .arg("--")
-            .arg(".")
+            .arg(root)
             // prevent recursive post-checkout hooks
             .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()?;
-        if status.success() {
+            .output()?;
+        if output.status.success() {
             Ok(())
         } else {
+            error!("Failed to checkout working tree: {:?}", output);
             Err(anyhow::anyhow!("Failed to checkout working tree"))
         }
     }
 
     fn git_apply(patch: &Path) -> Result<()> {
-        let status = Command::new(GIT.as_ref()?)
+        let output = Command::new(GIT.as_ref()?)
             .arg("apply")
             .arg("--whitespace=nowarn")
             .arg(patch)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()?;
-        if status.success() {
+            .output()?;
+        if output.status.success() {
             Ok(())
         } else {
+            error!("Failed to apply the patch: {:?}", output);
             Err(anyhow::anyhow!("Failed to apply the patch"))
         }
     }
 
     fn restore(&self) -> Result<()> {
-        let Some(patch) = self.0.as_ref() else {
+        let Some(patch) = self.patch.as_ref() else {
             return Ok(());
         };
 
         // Try to apply the patch
-        if Self::git_apply(patch).is_err() {
-            error!("Failed to apply the patch, rolling back changes");
+        if let Err(e) = Self::git_apply(patch) {
+            error!("Failed to apply the patch, rolling back changes: {e}");
             eprintln!(
                 "{}",
                 "Failed to apply the patch, rolling back changes".red()
             );
 
-            Self::checkout_working_tree()?;
+            Self::checkout_working_tree(&self.root)?;
             Self::git_apply(patch)?;
         }
 
@@ -224,10 +235,10 @@ impl Drop for RestoreGuard {
 impl WorkTreeKeeper {
     /// Clear intent-to-add changes from the index and clear the non-staged changes from the working directory.
     /// Restore them when the instance is dropped.
-    pub async fn clean(store: &Store) -> Result<RestoreGuard> {
+    pub async fn clean(store: &Store, root: &Path) -> Result<RestoreGuard> {
         let cleaner = Self {
-            intent_to_add: Some(IntentToAddKeeper::clean().await?),
-            working_tree: Some(WorkingTreeKeeper::clean(&store.patches_dir()).await?),
+            intent_to_add: Some(IntentToAddKeeper::clean(root).await?),
+            working_tree: Some(WorkingTreeKeeper::clean(root, &store.patches_dir()).await?),
         };
 
         // Set to the global for the cleanup hook.

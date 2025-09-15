@@ -41,7 +41,7 @@ pub(crate) async fn check_added_large_files(
     let filter = if args.enforce_all {
         FileFilter::NoFilter
     } else {
-        let add_files = get_staged_files()
+        let add_files = get_staged_files(hook.work_dir())
             .await?
             .into_iter()
             .collect::<FxHashSet<_>>();
