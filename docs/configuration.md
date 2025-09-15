@@ -23,12 +23,17 @@ For configuration details, refer to the official pre-commit docs:
 
 ## Prek specific configurations
 
-- `minimum_prek_version` — Specify the minimum required version of prek for the configuration. If the installed version is lower, prek will exit with an error. Example:
+### `minimum_prek_version`
+
+Specify the minimum required version of prek for the configuration. If the installed version is lower, prek will exit with an error.
+
+Example:
 
   ```yaml
   minimum_prek_version: '0.2.0'
   ```
-  The original `minimum_pre_commit_version` has no effect in prek.
+
+The original `minimum_pre_commit_version` option has no effect and gets ignored in prek.
 
 ## Environment variables
 

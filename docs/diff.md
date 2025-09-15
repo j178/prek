@@ -14,31 +14,32 @@
 
 See [Workspace Mode](./workspace.md) for more information.
 
-## Python support
+## Language support
+
+### Python
 
 - `prek` supports Python toolchain management, it will install the required Python versions automatically.
 - `prek` uses `uv` for creating virtual environments and installing dependencies.
 - `prek` supports Python hooks with PEP 723 inline metadata.
 
-## `prek run`
+## Command line interface
 
+### `prek run`
+
+- `prek run [HOOK|PROJECT]...` supports selecting or skipping multiple projects or hooks in workspace mode. See [Running Specific Hooks or Projects](workspace.md#running-specific-hooks-or-projects) for details.
 - `prek` provides dynamic completions of hook id.
 - `prek run --last-commit` to run hooks on files changed by the last commit.
 - `prek run --directory <DIR>` to run hooks on a specified directory.
-- `prek run [HOOK_ID] [HOOK_ID] ...` to run multiple hooks.
 
-## `prek list`
+### `prek list`
 
 `prek list` command lists all available hooks, their ids, and descriptions. This provides a better overview of the configured hooks.
 
-## `prek auto-update`
+### `prek auto-update`
 
-`prek auto-update` will check update for the same remote repositories only once.
+- `prek auto-update` updates all projects in the workspace to their latest revisions.
+- `prek auto-update` checks updates for the same repository only once, speeding up the process in workspace mode.
 
-## `prek sample-config`
+### `prek sample-config`
 
 - `prek sample-config` command has a `--file` option to write the sample configuration to a specific file.
-
-## Future plans
-
-- Global configurations.
