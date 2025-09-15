@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.1
+
+### Enhancements
+
+- auto-update: prefer tags that are most similar to the current version ([#719](https://github.com/j178/prek/pull/719))
+
+### Bug fixes
+
+- Fix `git --no-pager diff` command syntax upon failures ([#746](https://github.com/j178/prek/pull/746))
+- Clean working tree of current workspace only ([#747](https://github.com/j178/prek/pull/747))
+- Use concurrent read and write in `git check-attr` ([#731](https://github.com/j178/prek/pull/731))
+
+### Documentation
+
+- Fix typo in language-version to language_version ([#727](https://github.com/j178/prek/pull/727))
+- Update benchmarks ([#728](https://github.com/j178/prek/pull/728))
+
+### Contributors
+
+- @j178
+- @matthiask
+- @AdrianDC
+- @onerandomusername
+
 ## 0.2.0
 
 This is a huge milestone release that introduces **Workspace Mode** — first‑class monorepo support.
