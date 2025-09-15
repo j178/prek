@@ -1965,6 +1965,7 @@ fn alternate_config_file() -> Result<()> {
 fn show_diff_on_failure() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
+    context.disable_auto_crlf();
 
     let config = indoc::indoc! {r#"
         repos:
