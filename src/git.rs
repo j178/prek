@@ -5,7 +5,6 @@ use std::str::Utf8Error;
 use std::sync::LazyLock;
 
 use anyhow::Result;
-use itertools::Itertools;
 use rustc_hash::FxHashSet;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, warn};
@@ -411,71 +410,65 @@ pub(crate) async fn has_hooks_path_set() -> Result<bool> {
     }
 }
 
-pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<Vec<String>, Error> {
-    use tokio::select;
+pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<FxHashSet<PathBuf>, Error> {
+    if paths.is_empty() {
+        return Ok(FxHashSet::default());
+    }
 
-    let mut job = git_cmd("git check-attr")?
+    let mut child = git_cmd("git check-attr")?
         .arg("check-attr")
         .arg("filter")
         .arg("-z")
         .arg("--stdin")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
+        .stderr(Stdio::null())
         .check(true)
         .spawn()?;
 
-    let mut stdout = job.stdout.take().expect("Failed to open stdout");
-    let mut stdin = Some(job.stdin.take().expect("Failed to open stdin"));
+    let mut stdout = child.stdout.take().expect("failed to open stdout");
+    let mut stdin = child.stdin.take().expect("failed to open stdin");
 
-    let mut output = Vec::new();
-    let mut read_buffer = [0u8; 8192];
-    let mut path_iter = paths.iter();
-    let mut write_complete = false;
+    let writer = async move {
+        for path in paths {
+            stdin.write_all(path.to_string_lossy().as_bytes()).await?;
+            stdin.write_all(b"\0").await?;
+        }
+        stdin.shutdown().await?;
+        Ok::<(), std::io::Error>(())
+    };
+    let reader = async move {
+        let mut out = Vec::new();
+        stdout.read_to_end(&mut out).await?;
+        Ok::<_, std::io::Error>(out)
+    };
 
+    let (read_result, _write_result) = tokio::try_join!(biased; reader, writer)?;
+
+    let status = child.wait().await?;
+    if !status.success() {
+        return Err(Error::Command(process::Error::Status {
+            summary: "git check-attr".to_string(),
+            error: StatusError {
+                status,
+                output: None,
+            },
+        }));
+    }
+
+    let mut lfs_files = FxHashSet::default();
+    let read_result = String::from_utf8_lossy(&read_result);
+    let mut it = read_result.split_terminator('\0');
     loop {
-        select! {
-            read_result = stdout.read(&mut read_buffer) => {
-                match read_result? {
-                    0 if write_complete => break,
-                    0 => {},
-                    bytes_read => output.extend_from_slice(&read_buffer[..bytes_read]),
-                }
-            }
-
-            write_result = async {
-                if write_complete {
-                    std::future::pending::<Result<(), std::io::Error>>().await
-                } else if let Some(path) = path_iter.next() {
-                    if let Some(ref mut stdin_handle) = stdin {
-                        stdin_handle.write_all(path.to_string_lossy().as_bytes()).await?;
-                        stdin_handle.write_all(b"\0").await?;
-                    }
-                    Ok(())
-                } else {
-                    stdin.take();
-                    write_complete = true;
-                    Ok(())
-                }
-            } => {
-                write_result?;
-            }
+        let (Some(file), Some(_attr), Some(value)) = (it.next(), it.next(), it.next()) else {
+            break;
+        };
+        if value == "lfs" {
+            lfs_files.insert(PathBuf::from(file));
         }
     }
 
-    job.wait().await?;
-
-    Ok(String::from_utf8_lossy(&output)
-        .trim()
-        .split('\0')
-        .tuples::<(_, _, _)>()
-        .filter_map(|(file, _, attr)| {
-            if attr == "lfs" {
-                Some(file.to_owned())
-            } else {
-                None
-            }
-        })
-        .collect())
+    Ok(lfs_files)
 }
 
 /// Check if a git revision exists
