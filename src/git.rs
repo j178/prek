@@ -211,8 +211,6 @@ pub(crate) async fn is_in_merge_conflict() -> Result<bool, Error> {
 pub(crate) async fn get_conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let tree = git_cmd("git write-tree")?
         .arg("write-tree")
-        .arg("--prefix")
-        .arg(root)
         .check(true)
         .output()
         .await?;
