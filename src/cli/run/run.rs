@@ -522,8 +522,8 @@ async fn run_hooks(
             "--color=never"
         };
         git::git_cmd("git diff")?
-            .arg("diff")
             .arg("--no-pager")
+            .arg("diff")
             .arg("--no-ext-diff")
             .arg(color)
             .arg("--")
