@@ -160,6 +160,28 @@ cargo install --locked --git https://github.com/j178/prek
 prek release artifacts can be downloaded directly from the [GitHub releases](https://github.com/j178/prek/releases).
 </details>
 
+<details>
+<summary>GitHub Actions</summary>
+
+prek can be used in GitHub Actions via the [j178/prek-action](https://github.com/j178/prek-action) repository.
+
+Example workflow:
+
+```yaml
+name: Prek checks
+on: [push, pull_request]
+
+jobs:
+  prek:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: j178/prek-action@v1
+```
+
+This action installs prek and runs `prek run --all-files` on your repository.
+</details>
+
 If installed via the standalone installer, prek can update itself to the latest version:
 
 ```bash
