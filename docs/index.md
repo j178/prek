@@ -42,11 +42,11 @@
 
 ### prek is way faster
 
-- It is about [10x faster](./benchmark.md) than `pre-commit` and uses only a third of disk space.
+- It is about [10x faster](./benchmark.md) than `pre-commit` and uses only half the disk space.
 - It redesigned how hook environments and toolchains are managed, they are all shared between hooks, which reduces the disk space usage and speeds up the installation process.
 - Repositories are cloned in parallel, and hooks are installed in parallel if their dependencies are disjoint.
 - It uses [`uv`](https://github.com/astral-sh/uv) for creating Python virtualenvs and installing dependencies, which is known for its speed and efficiency.
-- It implements some common hooks in Rust, built in prek, which are faster than their Python counterparts.
+- It implements some common hooks in Rust, [built in prek](./builtin.md), which are faster than their Python counterparts.
 
 ### prek provides a better user experience
 
@@ -71,6 +71,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [basedpyright](https://github.com/DetachHead/basedpyright/pull/1413)
 - [OpenLineage](https://github.com/OpenLineage/OpenLineage/pull/3965)
 - [Authlib](https://github.com/authlib/authlib/pull/804)
+- [pre-commit-crocodile](https://radiandevcore.gitlab.io/tools/pre-commit-crocodile/)
 
 ## Getting Started
 
