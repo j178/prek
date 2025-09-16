@@ -130,6 +130,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4 # v6.7.0
         with:
+          enable-cache: true
           version: ${{ env.UV_VERSION }}
 
       - name: "Install Python"
@@ -187,6 +188,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4 # v6.7.0
         with:
+          enable-cache: true
           version: ${{ env.UV_VERSION }}
 
       - name: "Install Python"
@@ -239,6 +241,7 @@ jobs:
         uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4 # v6.7.0
         with:
           version: ${{ env.UV_VERSION }}
+          enable-cache: true
           cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
 
       - name: "Install Python"
