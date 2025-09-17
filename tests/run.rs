@@ -1819,49 +1819,53 @@ fn reuse_env() -> Result<()> {
 
     context.write_pre_commit_config(indoc::indoc! {r"
     repos:
-      - repo: https://github.com/PyCQA/flake8
-        rev: 7.1.1
+      - repo: local
         hooks:
           - id: flake8
-            additional_dependencies: [flake8-errmsg]
+            name: flake8
+            language: python
+            entry: flake8
+            additional_dependencies: [flake8-bugbear]
     "});
 
     context
         .work_dir()
         .child("err.py")
-        .write_str("raise ValueError('error')\n")?;
+        .write_str("assert False, 'foo'\n")?;
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
     flake8...................................................................Failed
     - hook id: flake8
     - exit code: 1
-      err.py:1:1: EM101 Exceptions must not use a string literal; assign to a variable first
+      err.py:1:1: B011 Do not perform an `assert False` check, it will be optimized away.
 
     ----- stderr -----
-    ");
+    "#);
 
     // Remove dependencies, so the environment should not be reused.
     context.write_pre_commit_config(indoc::indoc! {r"
     repos:
-      - repo: https://github.com/PyCQA/flake8
-        rev: 7.1.1
+      - repo: local
         hooks:
           - id: flake8
+            name: flake8
+            language: python
+            entry: flake8
     "});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     flake8...................................................................Passed
 
     ----- stderr -----
-    ");
+    "#);
 
     // There should be two hook environments.
     assert_eq!(context.home_dir().child("hooks").read_dir()?.count(), 2);
