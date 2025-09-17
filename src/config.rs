@@ -110,7 +110,7 @@ impl Display for Language {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, Deserialize, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum HookType {
     CommitMsg,
@@ -269,7 +269,7 @@ where
 
 // TODO: warn deprecated stage
 // TODO: warn sensible regex
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Config {
     pub repos: Vec<Repo>,
@@ -632,6 +632,37 @@ pub enum Repo {
     Remote(RemoteRepo),
     Local(LocalRepo),
     Meta(MetaRepo),
+}
+
+impl Serialize for Repo {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeMap;
+
+        match self {
+            Repo::Remote(remote_repo) => {
+                let mut map = serializer.serialize_map(Some(3))?;
+                map.serialize_entry("repo", &remote_repo.repo)?;
+                map.serialize_entry("rev", &remote_repo.rev)?;
+                map.serialize_entry("hooks", &remote_repo.hooks)?;
+                map.end()
+            }
+            Repo::Local(local_repo) => {
+                let mut map = serializer.serialize_map(Some(2))?;
+                map.serialize_entry("repo", "local")?;
+                map.serialize_entry("hooks", &local_repo.hooks)?;
+                map.end()
+            }
+            Repo::Meta(meta_repo) => {
+                let mut map = serializer.serialize_map(Some(2))?;
+                map.serialize_entry("repo", "meta")?;
+                map.serialize_entry("hooks", &meta_repo.hooks)?;
+                map.end()
+            }
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for Repo {

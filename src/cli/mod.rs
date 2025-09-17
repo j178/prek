@@ -24,6 +24,7 @@ pub mod run;
 mod sample_config;
 #[cfg(feature = "self-update")]
 mod self_update;
+mod try_repo;
 mod validate;
 
 pub(crate) use auto_update::auto_update;
@@ -36,6 +37,7 @@ pub(crate) use run::run;
 pub(crate) use sample_config::sample_config;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
+pub(crate) use try_repo::try_repo;
 pub(crate) use validate::{validate_configs, validate_manifest};
 
 #[derive(Copy, Clone)]
@@ -212,8 +214,8 @@ pub(crate) enum Command {
     /// Install hook script in a directory intended for use with `git config init.templateDir`.
     #[command(alias = "init-templatedir")]
     InitTemplateDir(InitTemplateDirArgs),
-    /// Try the pre-commit hooks in the current repo.
-    TryRepo(Box<RunArgs>),
+    /// Try the pre-commit hooks in a repository.
+    TryRepo(Box<TryRepoArgs>),
     /// The implementation of the `pre-commit` hook.
     #[command(hide = true)]
     HookImpl(HookImplArgs),
@@ -437,6 +439,24 @@ pub(crate) struct RunArgs {
 
     #[command(flatten)]
     pub(crate) extra: RunExtraArgs,
+}
+
+#[derive(Debug, Clone, Default, Args)]
+pub(crate) struct TryRepoArgs {
+    /// Repository to source hooks from.
+    #[arg(value_hint = ValueHint::DirPath)]
+    pub(crate) repo: PathBuf,
+
+    /// Manually select a rev to run against, otherwise the `HEAD` revision will be used.
+    #[arg(long, short = 'r')]
+    pub(crate) r#ref: Option<String>,
+
+    /// A single hook-id to run.
+    #[arg(long)]
+    pub(crate) hook: Option<String>,
+
+    #[command(flatten)]
+    pub(crate) run_args: RunArgs,
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, Default, Serialize, Deserialize)]

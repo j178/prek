@@ -202,6 +202,32 @@ pub(crate) async fn has_unmerged_paths() -> Result<bool, Error> {
     Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
 }
 
+pub(crate) async fn commit(repo: &Path, msg: &str) -> Result<()> {
+    let mut cmd = git_cmd("git commit")?;
+    cmd.arg("commit")
+        .arg("-m")
+        .arg(msg)
+        .arg("--no-gpg-sign")
+        .current_dir(repo)
+        .env("GIT_AUTHOR_NAME", "pre-commit test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.com")
+        .env("GIT_COMMITTER_NAME", "pre-commit test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.com");
+    cmd.status().await?;
+    Ok(())
+}
+
+pub(crate) async fn has_diff(rev: &str, path: &Path) -> Result<bool> {
+    let status = git_cmd("check diff")?
+        .arg("diff")
+        .arg("--quiet")
+        .arg(rev)
+        .current_dir(path)
+        .status()
+        .await?;
+    Ok(!status.success())
+}
+
 pub(crate) async fn is_in_merge_conflict() -> Result<bool, Error> {
     let git_dir = get_git_dir().await?;
     Ok(git_dir.join("MERGE_HEAD").try_exists()? && git_dir.join("MERGE_MSG").try_exists()?)

@@ -212,6 +212,23 @@ impl TestContext {
         &self.home_dir
     }
 
+    pub fn configure_git_author_for_path(&self, path: &Path) {
+        Command::new("git")
+            .arg("config")
+            .arg("user.name")
+            .arg("Prek Test")
+            .current_dir(path)
+            .assert()
+            .success();
+        Command::new("git")
+            .arg("config")
+            .arg("user.email")
+            .arg("test@prek.dev")
+            .current_dir(path)
+            .assert()
+            .success();
+    }
+
     /// Initialize a sample project for prek.
     pub fn init_project(&self) {
         Command::new("git")
