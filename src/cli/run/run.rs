@@ -532,6 +532,17 @@ async fn run_hooks(
             .spawn()?
             .wait()
             .await?;
+
+        if EnvVars::is_set(EnvVars::CI) {
+            writeln!(
+                printer.stdout(),
+                "Note: prek hooks modified files, to reproduce locally run:\n  {}",
+                format!(
+                    "prek run --all-files{}",
+                    if dry_run { " --dry-run" } else { "" }
+                )
+            )?;
+        }
     }
 
     if success {
