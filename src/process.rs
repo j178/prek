@@ -165,8 +165,8 @@ impl Cmd {
     pub fn spawn(&mut self) -> Result<tokio::process::Child, Error> {
         self.log_command();
 
-        // temporarily block SIGCHLD on macOS to avoid race conditions
-        // see https://github.com/tokio-rs/tokio/pull/6953
+        // Temporarily block SIGCHLD on macOS to avoid race conditions.
+        // See https://github.com/tokio-rs/tokio/pull/6953
         #[cfg(target_os = "macos")]
         unsafe {
             let mut mask: libc::sigset_t = std::mem::zeroed();
