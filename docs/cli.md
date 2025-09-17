@@ -615,12 +615,13 @@ Try the pre-commit hooks in the current repo
 <h3 class="cli-reference">Usage</h3>
 
 ```
-prek try-repo [OPTIONS] [HOOK|PROJECT]...
+prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 ```
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="prek-try-repo--includes"><a href="#prek-try-repo--includes"<code>HOOK|PROJECT</code></a></dt><dd><p>Include the specified hooks or projects.</p>
+<dl class="cli-reference"><dt id="prek-try-repo--repo"><a href="#prek-try-repo--repo"<code>REPO</code></a></dt><dd><p>Repository to source hooks from</p>
+</dd><dt id="prek-try-repo--includes"><a href="#prek-try-repo--includes"<code>HOOK|PROJECT</code></a></dt><dd><p>Include the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
 <li>
@@ -653,6 +654,7 @@ prek try-repo [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-try-repo--files"><a href="#prek-try-repo--files"><code>--files</code></a> <i>files</i></dt><dd><p>Specific filenames to run hooks on</p>
 </dd><dt id="prek-try-repo--from-ref"><a href="#prek-try-repo--from-ref"><code>--from-ref</code></a>, <code>--source</code>, <code>-s</code> <i>from-ref</i></dt><dd><p>The original ref in a <code>&lt;from_ref&gt;...&lt;to_ref&gt;</code> diff expression. Files changed in this diff will be run through the hooks</p>
 </dd><dt id="prek-try-repo--help"><a href="#prek-try-repo--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="prek-try-repo--hook"><a href="#prek-try-repo--hook"><code>--hook</code></a> <i>hook</i></dt><dd><p>A single hook-id to run</p>
 </dd><dt id="prek-try-repo--hook-stage"><a href="#prek-try-repo--hook-stage"><code>--hook-stage</code></a> <i>hook-stage</i></dt><dd><p>The stage during which the hook is fired</p>
 <p>[default: pre-commit]</p><p>Possible values:</p>
 <ul>
@@ -671,6 +673,7 @@ prek try-repo [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-try-repo--no-progress"><a href="#prek-try-repo--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-try-repo--quiet"><a href="#prek-try-repo--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="prek-try-repo--ref"><a href="#prek-try-repo--ref"><code>--ref</code></a>, <code>-r</code> <i>ref</i></dt><dd><p>Manually select a rev to run against, otherwise the <code>HEAD</code> revision will be used</p>
 </dd><dt id="prek-try-repo--refresh"><a href="#prek-try-repo--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-try-repo--show-diff-on-failure"><a href="#prek-try-repo--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
 </dd><dt id="prek-try-repo--skip"><a href="#prek-try-repo--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>

@@ -1819,49 +1819,50 @@ fn reuse_env() -> Result<()> {
 
     context.write_pre_commit_config(indoc::indoc! {r"
     repos:
-      - repo: https://github.com/PyCQA/flake8
-        rev: 7.1.1
+      - repo: local
         hooks:
-          - id: flake8
-            additional_dependencies: [flake8-errmsg]
+          - id: pyecho
+            name: pyecho
+            language: python
+            entry: pyecho
+            types: [text]
+            additional_dependencies: ['pyecho-cli', 'importlib-metadata']
     "});
 
-    context
-        .work_dir()
-        .child("err.py")
-        .write_str("raise ValueError('error')\n")?;
+    context.work_dir().child("a.txt").write_str("hello\n")?;
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-    flake8...................................................................Failed
-    - hook id: flake8
-    - exit code: 1
-      err.py:1:1: EM101 Exceptions must not use a string literal; assign to a variable first
-
-    ----- stderr -----
-    ");
-
-    // Remove dependencies, so the environment should not be reused.
-    context.write_pre_commit_config(indoc::indoc! {r"
-    repos:
-      - repo: https://github.com/PyCQA/flake8
-        rev: 7.1.1
-        hooks:
-          - id: flake8
-    "});
-    context.git_add(".");
-
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    flake8...................................................................Passed
+    pyecho...................................................................Passed
 
     ----- stderr -----
-    ");
+    "#);
+
+    // Change dependencies, so the environment should not be reused.
+    context.write_pre_commit_config(indoc::indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+          - id: pyecho
+            name: pyecho
+            language: python
+            entry: pyecho
+            types: [text]
+            additional_dependencies: ['pyecho-cli']
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pyecho...................................................................Passed
+
+    ----- stderr -----
+    "#);
 
     // There should be two hook environments.
     assert_eq!(context.home_dir().child("hooks").read_dir()?.count(), 2);
