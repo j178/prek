@@ -43,7 +43,7 @@ async fn get_repo_and_rev(
         .stdout;
     let head_rev = String::from_utf8_lossy(&head_rev).trim().to_string();
 
-    if has_diff("HEAD", &repo).await? {
+    if git::has_diff("HEAD", &repo).await? {
         warn!("Creating temporary repo with uncommitted changes...");
 
         let shadow = tmpdir.join("shadow-repo");
