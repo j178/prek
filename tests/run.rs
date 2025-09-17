@@ -1825,6 +1825,7 @@ fn reuse_env() -> Result<()> {
             name: flake8
             language: python
             entry: flake8
+            types: [python]
             additional_dependencies: [flake8-bugbear]
     "});
 
@@ -1841,7 +1842,7 @@ fn reuse_env() -> Result<()> {
     flake8...................................................................Failed
     - hook id: flake8
     - exit code: 1
-      err.py:1:1: B011 Do not perform an `assert False` check, it will be optimized away.
+      err.py:1:1: B011 Do not call assert False since python -O removes these calls. Instead callers should raise AssertionError().
 
     ----- stderr -----
     "#);
@@ -1855,6 +1856,7 @@ fn reuse_env() -> Result<()> {
             name: flake8
             language: python
             entry: flake8
+            types: [python]
     "});
     context.git_add(".");
 
