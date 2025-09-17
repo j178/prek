@@ -232,8 +232,9 @@ impl TestContext {
     /// Initialize a sample project for prek.
     pub fn init_project(&self) {
         Command::new("git")
+            .arg("-c")
+            .arg("init.defaultBranch=master")
             .arg("init")
-            .arg("--initial-branch=master")
             .current_dir(&self.temp_dir)
             .assert()
             .success();
