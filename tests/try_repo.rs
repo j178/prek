@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use crate::common::{TestContext, cmd_snapshot};
+use assert_fs::fixture::ChildPath;
 
 fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
     let repo_dir = context.home_dir().child(format!("test-repos/{repo_name}"));
@@ -137,7 +138,7 @@ fn try_repo_specific_rev() -> Result<()> {
     let initial_rev = String::from_utf8_lossy(&initial_rev).trim().to_string();
 
     // Make a new commit
-    repo_path
+    ChildPath::new(&repo_path)
         .child(".pre-commit-hooks.yaml")
         .write_str(indoc::indoc! {r#"
         - id: new-hook
@@ -198,7 +199,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     let repo_path = create_hook_repo(&context, "try-repo-uncommitted")?;
 
     // Make uncommitted changes
-    repo_path
+    ChildPath::new(&repo_path)
         .child(".pre-commit-hooks.yaml")
         .write_str(indoc::indoc! {r#"
         - id: uncommitted-hook
@@ -207,7 +208,9 @@ fn try_repo_uncommitted_changes() -> Result<()> {
           language: system
     "#
         })?;
-    repo_path.child("new-file.txt").write_str("new")?;
+    ChildPath::new(&repo_path)
+        .child("new-file.txt")
+        .write_str("new")?;
     Command::new("git")
         .arg("add")
         .arg("new-file.txt")

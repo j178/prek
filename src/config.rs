@@ -110,7 +110,7 @@ impl Display for Language {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum HookType {
     CommitMsg,
@@ -342,7 +342,7 @@ impl Display for RepoLocation {
 }
 
 /// Common hook options.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct HookOptions {
     /// Not documented in the official docs.
     pub alias: Option<String>,
@@ -437,7 +437,7 @@ impl HookOptions {
 /// A remote hook in the configuration file.
 ///
 /// All keys in manifest hook dict are valid in a config hook dict, but are optional.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct RemoteHook {
     /// The id of the hook.
@@ -457,7 +457,7 @@ pub struct RemoteHook {
 /// It's the same as the manifest hook definition.
 pub type LocalHook = ManifestHook;
 
-#[derive(Debug, Copy, Clone, Deserialize)]
+#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum MetaHookID {
     CheckHooksApply,
@@ -492,7 +492,7 @@ impl FromStr for MetaHookID {
 /// A meta hook predefined in pre-commit.
 ///
 /// It's the same as the manifest hook definition but with only a few predefined id allowed.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct MetaHook(pub(crate) ManifestHook);
 
 impl<'de> Deserialize<'de> for MetaHook {
@@ -580,7 +580,6 @@ impl From<MetaHook> for ManifestHook {
 pub struct RemoteRepo {
     pub repo: String,
     pub rev: String,
-    #[serde(skip)]
     pub hooks: Vec<RemoteHook>,
 }
 
@@ -605,7 +604,7 @@ impl Display for RemoteRepo {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct LocalRepo {
     pub hooks: Vec<LocalHook>,
 }
@@ -616,7 +615,7 @@ impl Display for LocalRepo {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct MetaRepo {
     pub hooks: Vec<MetaHook>,
 }
@@ -720,7 +719,7 @@ impl<'de> Deserialize<'de> for Repo {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ManifestHook {
     /// The id of the hook.
