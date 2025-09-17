@@ -112,9 +112,10 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
 
     let mut init_remote = Command::new("git");
     init_remote
+        .arg("-c")
+        .arg("init.defaultBranch=master")
         .arg("init")
         .arg("--bare")
-        .arg("--initial-branch=master")
         .current_dir(&remote_repo_path);
     cmd_snapshot!(context.filters(), init_remote, @r#"
     success: true
