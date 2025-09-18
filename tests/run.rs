@@ -1847,7 +1847,7 @@ fn reuse_env() -> Result<()> {
     ----- stderr -----
     "#);
 
-    // Remove dependencies, so the environment should not be reused.
+    // Change dependencies, so the environment should not be reused.
     context.write_pre_commit_config(indoc::indoc! {r"
     repos:
       - repo: local
@@ -1857,9 +1857,12 @@ fn reuse_env() -> Result<()> {
             language: python
             entry: flake8
             types: [python]
+            additional_dependencies: [flake8]
     "});
     context.git_add(".");
 
+    // This should now pass because the B011 check is from flake8-bugbear,
+    // which is no longer a dependency. The file is still staged.
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: true
     exit_code: 0
