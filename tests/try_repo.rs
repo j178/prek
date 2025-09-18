@@ -89,7 +89,7 @@ fn try_repo_basic() -> Result<()> {
           - id: another-hook
     ===============================================================================
     Test Hook................................................................Passed
-    Another Hook.........................................(no files to check)Skipped
+    Another Hook.............................................................Passed
 
     ----- stderr -----
     "###);
@@ -197,7 +197,7 @@ fn try_repo_specific_rev() -> Result<()> {
           - id: test-hook
           - id: another-hook
     ===============================================================================
-    Test Hook................................................................Passed
+    Test Hook............................................(no files to check)Skipped
     Another Hook.............................................................Passed
 
     ----- stderr -----
@@ -236,7 +236,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     let mut cmd = context.command();
     cmd.arg("try-repo").arg(repo_path);
 
-    let filters = context
+    let mut filters = context
         .filters()
         .into_iter()
         .chain([

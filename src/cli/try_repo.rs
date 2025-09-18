@@ -5,13 +5,13 @@ use std::process::Stdio;
 
 use anyhow::{Context, Result};
 use tempfile::tempdir_in;
-use tracing::warn;
 
 use crate::cli::{ExitStatus, GlobalArgs, TryRepoArgs};
 use crate::config::{self, Repo};
 use crate::git;
 use crate::printer::Printer;
 use crate::store::{STORE, Store};
+use crate::warn_user;
 
 async fn get_repo_and_rev(
     repo: &Path,
@@ -34,7 +34,7 @@ async fn get_repo_and_rev(
     let head_rev = String::from_utf8_lossy(&head_rev).trim().to_string();
 
     if git::has_diff("HEAD", &repo).await? {
-        warn!("Creating temporary repo with uncommitted changes...");
+        warn_user!("Creating temporary repo with uncommitted changes...");
 
         let shadow = tmpdir.join("shadow-repo");
         git::git_cmd("clone shadow repo")?
@@ -190,14 +190,27 @@ pub(crate) async fn try_repo(
         .status()
         .await?;
 
-    let mut run_args = args.run_args;
+    let run_args = args.run_args;
 
-    let original_cwd = env::current_dir()?;
-    run_args.files = run_args
+    let files_to_run: Vec<String> = run_args
         .files
-        .into_iter()
-        .map(|f| Ok(original_cwd.join(f).to_string_lossy().to_string()))
-        .collect::<Result<Vec<_>>>()?;
+        .iter()
+        .map(|f| {
+            Path::new(f)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        })
+        .collect();
+
+    for file_path_str in &run_args.files {
+        let source_path = Path::new(file_path_str); // Already absolute from test
+        if source_path.exists() {
+            let target_path = run_in_dir.join(source_path.file_name().unwrap());
+            fs_err::copy(source_path, &target_path)?;
+        }
+    }
 
     // Create a dummy file to run against if no files are provided.
     if run_args.files.is_empty() && !run_args.all_files {
@@ -211,8 +224,18 @@ pub(crate) async fn try_repo(
             .stderr(Stdio::null())
             .status()
             .await?;
+    } else if !files_to_run.is_empty() {
+        git::git_cmd("add copied files")?
+            .arg("add")
+            .args(&files_to_run)
+            .current_dir(&run_in_dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await?;
     }
 
+    let original_cwd = env::current_dir()?;
     env::set_current_dir(&run_in_dir)?;
 
     let result = crate::cli::run(
@@ -223,7 +246,7 @@ pub(crate) async fn try_repo(
         run_args.from_ref,
         run_args.to_ref,
         run_args.all_files,
-        run_args.files,
+        files_to_run,
         run_args.directory,
         run_args.last_commit,
         run_args.show_diff_on_failure,
