@@ -236,7 +236,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     let mut cmd = context.command();
     cmd.arg("try-repo").arg(repo_path);
 
-    let mut filters = context
+    let filters = context
         .filters()
         .into_iter()
         .chain([
