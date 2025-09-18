@@ -1,7 +1,7 @@
 # prek
 
 <div align="center">
-  <img width="220" alt="prek" src="/assets/logo.png" />
+  <img width="220" alt="prek" src="/assets/logo_512.webp" />
 </div>
 
 [pre-commit](https://pre-commit.com/) is a framework to run hooks written in many languages, and it manages the language toolchain and dependencies for running the hooks.

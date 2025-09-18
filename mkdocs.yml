@@ -10,7 +10,7 @@ copyright: Copyright &copy; 2025 j178
 
 theme:
   name: material
-  logo: assets/logo.png
+  logo: assets/logo_512.webp
   palette:
     - media: "(prefers-color-scheme)"
       toggle:
