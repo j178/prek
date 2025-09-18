@@ -1,6 +1,7 @@
 use std::env;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 
 use anyhow::{Context, Result};
 use tempfile::tempdir_in;
@@ -11,17 +12,6 @@ use crate::config::{self, Repo};
 use crate::git;
 use crate::printer::Printer;
 use crate::store::{STORE, Store};
-
-async fn has_diff(rev: &str, repo: &Path) -> Result<bool> {
-    let status = git::git_cmd("check diff")?
-        .arg("diff")
-        .arg("--quiet")
-        .arg(rev)
-        .current_dir(repo)
-        .status()
-        .await?;
-    Ok(!status.success())
-}
 
 async fn get_repo_and_rev(
     repo: &Path,
@@ -51,6 +41,8 @@ async fn get_repo_and_rev(
             .arg("clone")
             .arg(&repo)
             .arg(&shadow)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .status()
             .await?;
         git::git_cmd("checkout shadow repo")?
@@ -59,6 +51,8 @@ async fn get_repo_and_rev(
             .arg("-b")
             .arg("_pc_tmp")
             .current_dir(&shadow)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .status()
             .await?;
 
@@ -74,7 +68,9 @@ async fn get_repo_and_rev(
                 .args(&staged_files)
                 .current_dir(&repo)
                 .env("GIT_INDEX_FILE", &index_path)
-                .env("GIT_OBJECT_DIRECTORY", &objects_path);
+                .env("GIT_OBJECT_DIRECTORY", &objects_path)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
             add_cmd.status().await?;
         }
 
@@ -84,7 +80,9 @@ async fn get_repo_and_rev(
             .arg("-u")
             .current_dir(&repo)
             .env("GIT_INDEX_FILE", &index_path)
-            .env("GIT_OBJECT_DIRECTORY", &objects_path);
+            .env("GIT_OBJECT_DIRECTORY", &objects_path)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
         add_u_cmd.status().await?;
 
         git::commit(&shadow, "temp commit for try-repo").await?;
@@ -187,10 +185,19 @@ pub(crate) async fn try_repo(
     git::git_cmd("init for try-repo")?
         .arg("init")
         .current_dir(&run_in_dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .await?;
 
-    let run_args = args.run_args;
+    let mut run_args = args.run_args;
+
+    let original_cwd = env::current_dir()?;
+    run_args.files = run_args
+        .files
+        .into_iter()
+        .map(|f| Ok(original_cwd.join(f).to_string_lossy().to_string()))
+        .collect::<Result<Vec<_>>>()?;
 
     // Create a dummy file to run against if no files are provided.
     if run_args.files.is_empty() && !run_args.all_files {
@@ -200,11 +207,12 @@ pub(crate) async fn try_repo(
             .arg("add")
             .arg(dummy_file)
             .current_dir(&run_in_dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .status()
             .await?;
     }
 
-    let original_cwd = env::current_dir()?;
     env::set_current_dir(&run_in_dir)?;
 
     let result = crate::cli::run(

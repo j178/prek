@@ -62,15 +62,19 @@ fn try_repo_basic() -> Result<()> {
     let context = TestContext::new();
     let repo_path = create_hook_repo(&context, "try-repo-basic")?;
 
-    context.work_dir().child("test.txt").write_str("test")?;
+    let test_file = context.work_dir().child("test.txt");
+    test_file.write_str("test")?;
 
     let mut cmd = context.command();
     cmd.arg("try-repo")
-        .arg(repo_path)
+        .arg(&repo_path)
         .arg("--files")
-        .arg("test.txt");
+        .arg(test_file.path());
 
-    cmd_snapshot!(context.filters(), cmd, @r###"
+    let mut filters = context.filters();
+    filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
+
+    cmd_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -106,7 +110,10 @@ fn try_repo_specific_hook() -> Result<()> {
         .arg("--hook")
         .arg("another-hook");
 
-    cmd_snapshot!(context.filters(), cmd, @r###"
+    let mut filters = context.filters();
+    filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
+
+    cmd_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -170,9 +177,13 @@ fn try_repo_specific_rev() -> Result<()> {
     cmd.arg("try-repo")
         .arg(&repo_path)
         .arg("--ref")
-        .arg(initial_rev);
+        .arg(&initial_rev);
 
-    cmd_snapshot!(context.filters(), cmd, @r###"
+    let mut filters = context.filters();
+    filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
+    filters.push((&initial_rev, "[COMMIT_SHA]"));
+
+    cmd_snapshot!(filters, cmd, @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -225,10 +236,14 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     let mut cmd = context.command();
     cmd.arg("try-repo").arg(repo_path);
 
-    let filters = context
+    let mut filters = context
         .filters()
         .into_iter()
-        .chain([(r"shadow-repo\w+", "shadow-repo"), (r"run-in\w+", "run-in")])
+        .chain([
+            (r"shadow-repo\w+", "shadow-repo"),
+            (r"run-in\w+", "run-in"),
+            (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
+        ])
         .collect::<Vec<_>>();
 
     cmd_snapshot!(filters, cmd, @r###"
