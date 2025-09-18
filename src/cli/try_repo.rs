@@ -190,13 +190,15 @@ pub(crate) async fn try_repo(
         .status()
         .await?;
 
-    let run_args = args.run_args;
+    let mut run_args = args.run_args;
 
+    let original_cwd = env::current_dir()?;
     let files_to_run: Vec<String> = run_args
         .files
         .iter()
         .map(|f| {
-            Path::new(f)
+            let absolute_path = original_cwd.join(f);
+            absolute_path
                 .file_name()
                 .unwrap()
                 .to_string_lossy()
@@ -205,12 +207,14 @@ pub(crate) async fn try_repo(
         .collect();
 
     for file_path_str in &run_args.files {
-        let source_path = Path::new(file_path_str); // Already absolute from test
+        let source_path = original_cwd.join(file_path_str);
         if source_path.exists() {
             let target_path = run_in_dir.join(source_path.file_name().unwrap());
             fs_err::copy(source_path, &target_path)?;
         }
     }
+
+    run_args.files = files_to_run;
 
     // Create a dummy file to run against if no files are provided.
     if run_args.files.is_empty() && !run_args.all_files {
@@ -224,10 +228,10 @@ pub(crate) async fn try_repo(
             .stderr(Stdio::null())
             .status()
             .await?;
-    } else if !files_to_run.is_empty() {
+    } else if !run_args.files.is_empty() {
         git::git_cmd("add copied files")?
             .arg("add")
-            .args(&files_to_run)
+            .args(&run_args.files)
             .current_dir(&run_in_dir)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -235,7 +239,6 @@ pub(crate) async fn try_repo(
             .await?;
     }
 
-    let original_cwd = env::current_dir()?;
     env::set_current_dir(&run_in_dir)?;
 
     let result = crate::cli::run(
@@ -246,7 +249,7 @@ pub(crate) async fn try_repo(
         run_args.from_ref,
         run_args.to_ref,
         run_args.all_files,
-        files_to_run,
+        run_args.files,
         run_args.directory,
         run_args.last_commit,
         run_args.show_diff_on_failure,
