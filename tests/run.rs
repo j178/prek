@@ -1826,7 +1826,7 @@ fn reuse_env() -> Result<()> {
             language: python
             entry: flake8
             types: [python]
-            additional_dependencies: [flake8-bugbear]
+            additional_dependencies: [flake8, flake8-bugbear]
     "});
 
     context

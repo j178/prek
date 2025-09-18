@@ -214,7 +214,7 @@ pub(crate) enum Command {
     /// Install hook script in a directory intended for use with `git config init.templateDir`.
     #[command(alias = "init-templatedir")]
     InitTemplateDir(InitTemplateDirArgs),
-    /// Try the pre-commit hooks in the current repo.
+    /// Try the pre-commit hooks in a repository.
     TryRepo(Box<TryRepoArgs>),
     /// The implementation of the `pre-commit` hook.
     #[command(hide = true)]
