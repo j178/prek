@@ -214,7 +214,7 @@ pub(crate) enum Command {
     /// Install hook script in a directory intended for use with `git config init.templateDir`.
     #[command(alias = "init-templatedir")]
     InitTemplateDir(InitTemplateDirArgs),
-    /// Try the pre-commit hooks in a repository.
+    /// Try the pre-commit hooks in the current repo.
     TryRepo(Box<TryRepoArgs>),
     /// The implementation of the `pre-commit` hook.
     #[command(hide = true)]
@@ -444,7 +444,7 @@ pub(crate) struct RunArgs {
 #[derive(Debug, Clone, Default, Args)]
 pub(crate) struct TryRepoArgs {
     /// Repository to source hooks from.
-    #[arg(value_hint = ValueHint::DirPath)]
+    #[arg(value_hint = ValueHint::DirPath, required = true)]
     pub(crate) repo: PathBuf,
 
     /// Manually select a rev to run against, otherwise the `HEAD` revision will be used.

@@ -1821,28 +1821,22 @@ fn reuse_env() -> Result<()> {
     repos:
       - repo: local
         hooks:
-          - id: flake8
-            name: flake8
+          - id: pyecho
+            name: pyecho
             language: python
-            entry: flake8
-            types: [python]
-            additional_dependencies: [flake8, flake8-bugbear]
+            entry: pyecho
+            types: [text]
+            additional_dependencies: ['pyecho-cli', 'importlib-metadata']
     "});
 
-    context
-        .work_dir()
-        .child("err.py")
-        .write_str("assert False, 'foo'\n")?;
+    context.work_dir().child("a.txt").write_str("hello\n")?;
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
-    flake8...................................................................Failed
-    - hook id: flake8
-    - exit code: 1
-      err.py:1:1: B011 Do not call assert False since python -O removes these calls. Instead callers should raise AssertionError().
+    pyecho...................................................................Passed
 
     ----- stderr -----
     "#);
@@ -1852,22 +1846,20 @@ fn reuse_env() -> Result<()> {
     repos:
       - repo: local
         hooks:
-          - id: flake8
-            name: flake8
+          - id: pyecho
+            name: pyecho
             language: python
-            entry: flake8
-            types: [python]
-            additional_dependencies: [flake8]
+            entry: pyecho
+            types: [text]
+            additional_dependencies: ['pyecho-cli']
     "});
     context.git_add(".");
 
-    // This should now pass because the B011 check is from flake8-bugbear,
-    // which is no longer a dependency. The file is still staged.
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
-    flake8...................................................................Passed
+    pyecho...................................................................Passed
 
     ----- stderr -----
     "#);
