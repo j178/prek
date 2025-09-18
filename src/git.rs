@@ -161,7 +161,7 @@ pub(crate) async fn get_staged_files(root: &Path) -> Result<Vec<PathBuf>, Error>
     let output = git_cmd("get staged files")?
         .current_dir(root)
         .arg("diff")
-        .arg("--staged")
+        .arg("--cached")
         .arg("--name-only")
         .arg("--diff-filter=ACMRTUXB") // Everything except for D
         .arg("--no-ext-diff") // Disable external diff drivers
@@ -211,7 +211,9 @@ pub(crate) async fn commit(repo: &Path, msg: &str) -> Result<(), Error> {
         .env("GIT_AUTHOR_NAME", "pre-commit test")
         .env("GIT_AUTHOR_EMAIL", "test@example.com")
         .env("GIT_COMMITTER_NAME", "pre-commit test")
-        .env("GIT_COMMITTER_EMAIL", "test@example.com");
+        .env("GIT_COMMITTER_EMAIL", "test@example.com")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
     cmd.status().await?;
     Ok(())
 }

@@ -80,7 +80,7 @@ fn try_repo_basic() -> Result<()> {
           - id: another-hook
     ===============================================================================
     Test Hook................................................................Passed
-    Another Hook.........................................(no files to check)Skipped
+    Another Hook.............................................................Passed
 
     ----- stderr -----
     "###);
@@ -114,7 +114,7 @@ fn try_repo_specific_hook() -> Result<()> {
         hooks:
           - id: another-hook
     ===============================================================================
-    Another Hook.........................................(no files to check)Skipped
+    Another Hook.............................................................Passed
 
     ----- stderr -----
     "###);
@@ -182,7 +182,7 @@ fn try_repo_specific_rev() -> Result<()> {
           - id: another-hook
     ===============================================================================
     Test Hook................................................................Passed
-    Another Hook.........................................(no files to check)Skipped
+    Another Hook.............................................................Passed
 
     ----- stderr -----
     "###);
@@ -205,7 +205,9 @@ fn try_repo_uncommitted_changes() -> Result<()> {
           language: system
     "#
         })?;
-    ChildPath::new(&repo_path).child("new-file.txt").write_str("new")?;
+    ChildPath::new(&repo_path)
+        .child("new-file.txt")
+        .write_str("new")?;
     Command::new("git")
         .arg("add")
         .arg("new-file.txt")
@@ -221,10 +223,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([
-            (r"shadow-repo\w+", "shadow-repo"),
-            (r"run-in\w+", "run-in"),
-        ])
+        .chain([(r"shadow-repo\w+", "shadow-repo"), (r"run-in\w+", "run-in")])
         .collect::<Vec<_>>();
 
     cmd_snapshot!(filters, cmd, @r###"
@@ -240,7 +239,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
         hooks:
           - id: uncommitted-hook
     ===============================================================================
-    Uncommitted Hook.....................................(no files to check)Skipped
+    Uncommitted Hook.........................................................Passed
 
     ----- stderr -----
     warning: Creating temporary repo with uncommitted changes...
