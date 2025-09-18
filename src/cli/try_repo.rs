@@ -190,7 +190,7 @@ pub(crate) async fn try_repo(
         .status()
         .await?;
 
-    let mut run_args = args.run_args;
+    let run_args = args.run_args;
 
     // Create a dummy file to run against if no files are provided.
     if run_args.files.is_empty() && !run_args.all_files {
@@ -202,7 +202,6 @@ pub(crate) async fn try_repo(
             .current_dir(&run_in_dir)
             .status()
             .await?;
-        run_args.files = vec![dummy_file.to_string()];
     }
 
     let original_cwd = env::current_dir()?;

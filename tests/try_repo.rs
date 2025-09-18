@@ -34,6 +34,11 @@ fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
     "#
         })?;
 
+    // Add a dummy setup.py to make it an installable Python package
+    repo_dir
+        .child("setup.py")
+        .write_str("from setuptools import setup; setup(name='dummy-pkg', version='0.0.1')")?;
+
     Command::new("git")
         .arg("add")
         .arg(".")
@@ -80,7 +85,7 @@ fn try_repo_basic() -> Result<()> {
           - id: another-hook
     ===============================================================================
     Test Hook................................................................Passed
-    Another Hook.............................................................Passed
+    Another Hook.........................................(no files to check)Skipped
 
     ----- stderr -----
     "###);
