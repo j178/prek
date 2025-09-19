@@ -160,46 +160,24 @@ impl Cmd {
         Ok(())
     }
 
-    /// Equivalent to [`tokio::process::Command::spawn`][],
+    /// Equivalent to [`std::process::Command::spawn`][],
     /// but logged and with the error wrapped.
     pub fn spawn(&mut self) -> Result<tokio::process::Child, Error> {
         self.log_command();
-
-        // Temporarily block SIGCHLD on macOS to avoid race conditions.
-        // See https://github.com/tokio-rs/tokio/pull/6953
-        #[cfg(target_os = "macos")]
-        unsafe {
-            let mut mask: libc::sigset_t = std::mem::zeroed();
-            libc::sigemptyset(&raw mut mask);
-            libc::sigaddset(&raw mut mask, libc::SIGCHLD);
-            libc::sigprocmask(libc::SIG_BLOCK, &raw const mask, std::ptr::null_mut());
-        };
-
-        let result = self.inner.spawn().map_err(|cause| Error::Exec {
+        self.inner.spawn().map_err(|cause| Error::Exec {
             summary: self.summary.clone(),
             cause,
-        });
-
-        #[cfg(target_os = "macos")]
-        unsafe {
-            let mut mask: libc::sigset_t = std::mem::zeroed();
-            libc::sigemptyset(&raw mut mask);
-            libc::sigaddset(&raw mut mask, libc::SIGCHLD);
-            libc::sigprocmask(libc::SIG_UNBLOCK, &raw const mask, std::ptr::null_mut());
-        }
-
-        result
+        })
     }
 
-    /// Equivalent to [`tokio::process::Command::output`][],
+    /// Equivalent to [`std::process::Command::output`][],
     /// but logged, with the error wrapped, and status checked (by default)
     pub async fn output(&mut self) -> Result<Output, Error> {
         self.log_command();
-
-        self.inner.stdout(Stdio::piped());
-        self.inner.stderr(Stdio::piped());
-
-        let output = self.spawn()?.wait_with_output().await?;
+        let output = self.inner.output().await.map_err(|cause| Error::Exec {
+            summary: self.summary.clone(),
+            cause,
+        })?;
         self.maybe_check_output(&output)?;
         Ok(output)
     }
