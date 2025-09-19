@@ -123,10 +123,6 @@ impl<'a> FileFilter<'a> {
         }
     }
 
-    pub(crate) fn filenames(&self) -> &[&Path] {
-        &self.filenames
-    }
-
     pub(crate) fn len(&self) -> usize {
         self.filenames.len()
     }

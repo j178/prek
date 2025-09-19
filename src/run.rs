@@ -36,9 +36,7 @@ fn target_concurrency(serial: bool) -> usize {
 
 /// Iterator that yields partitions of filenames that fit within the maximum command line length.
 struct Partitions<'a> {
-    hook: &'a Hook,
     filenames: &'a [&'a Path],
-    concurrency: usize,
     current_index: usize,
     command_length: usize,
     max_per_batch: usize,
@@ -81,9 +79,7 @@ impl<'a> Partitions<'a> {
             + hook.args.len();
 
         Self {
-            hook,
             filenames,
-            concurrency,
             current_index: 0,
             command_length,
             max_per_batch,

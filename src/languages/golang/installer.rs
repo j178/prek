@@ -31,14 +31,6 @@ impl Display for GoResult {
 }
 
 impl GoResult {
-    fn new(path: PathBuf, version: GoVersion, from_system: bool) -> Self {
-        Self {
-            path,
-            version,
-            from_system,
-        }
-    }
-
     fn from_executable(path: PathBuf, from_system: bool) -> Self {
         Self {
             path,

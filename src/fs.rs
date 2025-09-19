@@ -23,7 +23,6 @@
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
-use tempfile::NamedTempFile;
 use tracing::{debug, error, info, trace};
 
 use anyhow::Context;
@@ -73,18 +72,6 @@ impl LockedFile {
         }
     }
 
-    /// The same as [`LockedFile::acquire`], but for synchronous contexts. Do not use from an async
-    /// context, as this can block the runtime while waiting for another process to release the
-    /// lock.
-    pub fn acquire_blocking(
-        path: impl AsRef<Path>,
-        resource: impl Display,
-    ) -> Result<Self, std::io::Error> {
-        let file = fs_err::File::create(path.as_ref())?;
-        let resource = resource.to_string();
-        Self::lock_file_blocking(file, &resource)
-    }
-
     /// Acquire a cross-process lock for a resource using a file at the provided path.
     pub async fn acquire(
         path: impl AsRef<Path>,
@@ -108,71 +95,6 @@ impl Drop for LockedFile {
             trace!(path = %self.0.path().display(), "Released lock");
         }
     }
-}
-
-/// Return a [`NamedTempFile`] in the specified directory.
-///
-/// Sets the permissions of the temporary file to `0o666`, to match the non-temporary file default.
-/// ([`NamedTempfile`] defaults to `0o600`.)
-#[cfg(unix)]
-pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
-    use std::os::unix::fs::PermissionsExt;
-    tempfile::Builder::new()
-        .permissions(std::fs::Permissions::from_mode(0o666))
-        .tempfile_in(path)
-}
-
-/// Return a [`NamedTempFile`] in the specified directory.
-#[cfg(not(unix))]
-pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
-    tempfile::Builder::new().tempfile_in(path)
-}
-
-/// Write `data` to `path` atomically using a temporary file and atomic rename.
-pub fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
-    let temp_file = tempfile_in(
-        path.as_ref()
-            .parent()
-            .expect("Write path must have a parent"),
-    )?;
-    fs_err::write(&temp_file, &data)?;
-    temp_file.persist(&path).map_err(|err| {
-        std::io::Error::other(format!(
-            "Failed to persist temporary file to {}: {}",
-            path.as_ref().display(),
-            err.error
-        ))
-    })?;
-    Ok(())
-}
-
-/// Copy `from` to `to` atomically using a temporary file and atomic rename.
-pub fn copy_atomic(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io::Result<()> {
-    let temp_file = tempfile_in(to.as_ref().parent().expect("Write path must have a parent"))?;
-    fs_err::copy(from.as_ref(), &temp_file)?;
-    temp_file.persist(&to).map_err(|err| {
-        std::io::Error::other(format!(
-            "Failed to persist temporary file to {}: {}",
-            to.as_ref().display(),
-            err.error
-        ))
-    })?;
-    Ok(())
-}
-
-/// Recursively copy a directory and its contents.
-pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
-    fs_err::create_dir_all(&dst)?;
-    for entry in fs_err::read_dir(src.as_ref())? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        } else {
-            fs_err::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        }
-    }
-    Ok(())
 }
 
 /// Normalizes a path to use `/` as a separator everywhere, even on platforms

@@ -454,16 +454,8 @@ impl Hook {
         self.project.path()
     }
 
-    pub(crate) fn is_local(&self) -> bool {
-        matches!(&*self.repo, Repo::Local { .. })
-    }
-
     pub(crate) fn is_remote(&self) -> bool {
         matches!(&*self.repo, Repo::Remote { .. })
-    }
-
-    pub(crate) fn is_meta(&self) -> bool {
-        matches!(&*self.repo, Repo::Meta { .. })
     }
 
     pub(crate) fn dependencies(&self) -> &FxHashSet<String> {

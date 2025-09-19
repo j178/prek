@@ -180,6 +180,7 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
 fn workspace_hook_impl_root() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
