@@ -155,11 +155,15 @@ jobs:
           cargo llvm-cov nextest \
             --no-report \
             --workspace \
-            --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow
+            --status-level skip \
+            --failure-output immediate \
+            --no-fail-fast \
+            -j 8 \
+            --final-status-level slow
 
           cargo llvm-cov report --lcov --ignore-filename-regex lib/pty --output-path lcov.info
 
-      - name: Upload coverage reports to Codecov
+      - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -212,8 +216,11 @@ jobs:
           cargo nextest show-config test-groups
           cargo nextest run \
             --workspace \
-            --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow
-
+            --status-level skip \
+            --failure-output immediate \
+            --no-fail-fast \
+            -j 8 \
+            --final-status-level slow
 
   cargo-test-windows:
     timeout-minutes: 15
@@ -228,12 +235,17 @@ jobs:
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
 
       - name: "Install Rust toolchain"
-        run: rustup show
+        run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@67cc679904bee382389bf22082124fa963c6f6bd # v2.61.3
         with:
           tool: cargo-nextest
+
+      - name: "Install cargo-llvm-cov"
+        uses: taiki-e/install-action@67cc679904bee382389bf22082124fa963c6f6bd # v2.61.3
+        with:
+          tool: cargo-llvm-cov
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4 # v6.7.0
@@ -267,5 +279,20 @@ jobs:
 
       - name: "Cargo test"
         run: |
-          cargo nextest show-config test-groups
-          cargo nextest run --workspace --status-level skip --failure-output immediate --no-fail-fast -j 8 --final-status-level slow
+          cargo llvm-cov nextest \
+            --no-report \
+            --workspace \
+            --status-level skip \
+            --failure-output immediate \
+            --no-fail-fast \
+            -j 8 \
+            --final-status-level slow
+
+          cargo llvm-cov report --lcov --ignore-filename-regex lib/pty --output-path lcov.info
+        shell: bash
+
+      - name: "Upload coverage reports to Codecov"
+        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
