@@ -416,20 +416,15 @@ impl Uv {
             Ok(best)
         }
 
-        let source = if cfg!(feature = "uv-source-github") {
-            InstallSource::GitHub
-        } else if cfg!(feature = "uv-source-pypi") {
-            InstallSource::PyPi(PyPiMirror::Pypi)
-        } else {
-            let client = reqwest::Client::new();
-            tokio::select! {
+        let client = reqwest::Client::new();
+        let source = tokio::select! {
                 Ok(true) = check_github(&client) => InstallSource::GitHub,
                 Ok(source) = select_best_pypi(&client) => InstallSource::PyPi(source),
                 else => {
                     warn!("Failed to check uv source availability, falling back to pip install");
                     InstallSource::Pip
                 }
-            }
+
         };
 
         trace!(?source, "Selected uv source");
@@ -482,10 +477,31 @@ impl Uv {
             return Ok(Self::new(uv_path));
         }
 
-        let source = Self::select_source().await?;
+        let source = if let Some(uv_source) = uv_source_from_env() {
+            uv_source
+        } else {
+            Self::select_source().await?
+        };
         source.install(uv_dir).await?;
 
         Ok(Self::new(uv_path))
+    }
+}
+
+fn uv_source_from_env() -> Option<InstallSource> {
+    let var = EnvVars::var(EnvVars::PREK_UV_SOURCE).ok()?;
+    match var.as_str() {
+        "github" => Some(InstallSource::GitHub),
+        "pypi" => Some(InstallSource::PyPi(PyPiMirror::Pypi)),
+        "tuna" => Some(InstallSource::PyPi(PyPiMirror::Tuna)),
+        "aliyun" => Some(InstallSource::PyPi(PyPiMirror::Aliyun)),
+        "tencent" => Some(InstallSource::PyPi(PyPiMirror::Tencent)),
+        "pip" => Some(InstallSource::Pip),
+        custom if custom.starts_with("http") => Some(InstallSource::PyPi(PyPiMirror::Custom(var))),
+        _ => {
+            warn!("Invalid UV_SOURCE value: {}", var);
+            None
+        }
     }
 }
 

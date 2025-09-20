@@ -80,10 +80,10 @@ jobs:
       - run: cargo binstall --no-confirm cargo-shear
       - run: cargo shear
 
-  cargo-test-linux:
-    timeout-minutes: 10
+  cargo-test-without-uv:
+    timeout-minutes: 5
     runs-on: ubuntu-latest
-    name: "cargo test | ubuntu"
+    name: "cargo test | without uv"
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       - uses: rui314/setup-mold@v1
@@ -104,28 +104,82 @@ jobs:
 
       - name: "Cargo test without uv"
         run: |
+          echo "::group::Test install uv with auto select"
+          cargo llvm-cov nextest \
+          --no-report \
+          -E 'binary_id(prek::run) and test(run_basic)'
+          rm -rf ~/.cache/prek/tools/uv
+          echo "::endgroup::"
+
           echo "::group::Test install uv from github"
+          export PREK_UV_SOURCE=github
           cargo llvm-cov nextest \
             --no-report \
-            --features uv-source-github \
             -E 'binary_id(prek::run) and test(run_basic)'
           rm -rf ~/.cache/prek/tools/uv
           echo "::endgroup::"
 
           echo "::group::Test install uv from pypi"
+          export PREK_UV_SOURCE=pypi
           cargo llvm-cov nextest \
             --no-report \
-            --features uv-source-pypi \
             -E 'binary_id(prek::run) and test(run_basic)'
           rm -rf ~/.cache/prek/tools/uv
           echo "::endgroup::"
 
-          echo "::group::Test install uv from github or pypi"
+          echo "::group::Test install uv from aliyun mirror"
+          export PREK_UV_SOURCE=aliyun
           cargo llvm-cov nextest \
             --no-report \
             -E 'binary_id(prek::run) and test(run_basic)'
           rm -rf ~/.cache/prek/tools/uv
           echo "::endgroup::"
+
+          echo "::group::Test install uv from custom mirror"
+          export PREK_UV_SOURCE=https://mirrors.sustech.edu.cn/pypi/web/simple/
+          cargo llvm-cov nextest \
+            --no-report \
+            -E 'binary_id(prek::run) and test(run_basic)'
+          rm -rf ~/.cache/prek/tools/uv
+          echo "::endgroup::"
+
+          echo "::group::Test install uv with pip"
+          export PREK_UV_SOURCE=pip
+          cargo llvm-cov nextest \
+            --no-report \
+            -E 'binary_id(prek::run) and test(run_basic)'
+          rm -rf ~/.cache/prek/tools/uv
+          echo "::endgroup::"
+
+          cargo llvm-cov report --lcov --ignore-filename-regex lib/pty --output-path lcov.info
+
+      - name: "Upload coverage reports to Codecov"
+        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+
+  cargo-test-linux:
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    name: "cargo test | ubuntu"
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: rui314/setup-mold@v1
+      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+
+      - name: "Install Rust toolchain"
+        run: rustup component add llvm-tools-preview
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@67cc679904bee382389bf22082124fa963c6f6bd # v2.61.3
+        with:
+          tool: cargo-nextest
+
+      - name: "Install cargo-llvm-cov"
+        uses: taiki-e/install-action@67cc679904bee382389bf22082124fa963c6f6bd # v2.61.3
+        with:
+          tool: cargo-llvm-cov
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4 # v6.7.0
@@ -170,7 +224,7 @@ jobs:
           files: lcov.info
 
   cargo-test-macos:
-    timeout-minutes: 10
+    timeout-minutes: 5
     runs-on: macos-latest
     name: "cargo test | macos"
     steps:
@@ -223,7 +277,7 @@ jobs:
             --final-status-level slow
 
   cargo-test-windows:
-    timeout-minutes: 15
+    timeout-minutes: 10
     runs-on: windows-latest
     name: "cargo test | windows"
     steps:

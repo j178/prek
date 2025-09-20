@@ -16,6 +16,7 @@ impl EnvVars {
     pub const PREK_ALLOW_NO_CONFIG: &'static str = "PREK_ALLOW_NO_CONFIG";
     pub const PREK_NO_CONCURRENCY: &'static str = "PREK_NO_CONCURRENCY";
     pub const PREK_NO_FAST_PATH: &'static str = "PREK_NO_FAST_PATH";
+    pub const PREK_UV_SOURCE: &'static str = "PREK_UV_SOURCE";
 
     // PREK internal environment variables
     pub const PREK_INTERNAL__TEST_DIR: &'static str = "PREK_INTERNAL__TEST_DIR";
