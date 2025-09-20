@@ -108,47 +108,22 @@ jobs:
           cargo llvm-cov nextest \
           --no-report \
           -E 'binary_id(prek::run) and test(run_basic)'
-          rm -rf ~/.cache/prek/tools/uv
           echo "::endgroup::"
 
-          echo "::group::Test install uv from github"
-          export PREK_UV_SOURCE=github
-          cargo llvm-cov nextest \
-            --no-report \
-            -E 'binary_id(prek::run) and test(run_basic)'
-          rm -rf ~/.cache/prek/tools/uv
-          echo "::endgroup::"
-
-          echo "::group::Test install uv from pypi"
-          export PREK_UV_SOURCE=pypi
-          cargo llvm-cov nextest \
-            --no-report \
-            -E 'binary_id(prek::run) and test(run_basic)'
-          rm -rf ~/.cache/prek/tools/uv
-          echo "::endgroup::"
-
-          echo "::group::Test install uv from aliyun mirror"
-          export PREK_UV_SOURCE=aliyun
-          cargo llvm-cov nextest \
-            --no-report \
-            -E 'binary_id(prek::run) and test(run_basic)'
-          rm -rf ~/.cache/prek/tools/uv
-          echo "::endgroup::"
+          for source in github pypi aliyun pip invalid; do
+            echo "::group::Test install uv from $source"
+            export PREK_UV_SOURCE=$source
+            cargo llvm-cov nextest \
+              --no-report \
+              -E 'binary_id(prek::run) and test(run_basic)'
+            echo "::endgroup::"
+          done
 
           echo "::group::Test install uv from custom mirror"
           export PREK_UV_SOURCE=https://mirrors.sustech.edu.cn/pypi/web/simple/
           cargo llvm-cov nextest \
             --no-report \
             -E 'binary_id(prek::run) and test(run_basic)'
-          rm -rf ~/.cache/prek/tools/uv
-          echo "::endgroup::"
-
-          echo "::group::Test install uv with pip"
-          export PREK_UV_SOURCE=pip
-          cargo llvm-cov nextest \
-            --no-report \
-            -E 'binary_id(prek::run) and test(run_basic)'
-          rm -rf ~/.cache/prek/tools/uv
           echo "::endgroup::"
 
           cargo llvm-cov report --lcov --ignore-filename-regex lib/pty --output-path lcov.info
