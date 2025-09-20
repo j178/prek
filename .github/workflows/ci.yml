@@ -105,13 +105,6 @@ jobs:
       - name: "Cargo test without uv"
         run: |
           echo "::group::Test install uv with auto select"
-          export PREK_UV_SOURCE=pip
-          cargo llvm-cov nextest \
-          --no-report \
-          -E 'binary_id(prek::run) and test(run_basic)'
-          echo "::endgroup::"
-
-          echo "::group::Test install uv with auto select"
           cargo llvm-cov nextest \
           --no-report \
           -E 'binary_id(prek::run) and test(run_basic)'

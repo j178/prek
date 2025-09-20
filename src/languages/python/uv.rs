@@ -341,21 +341,17 @@ impl InstallSource {
             .output()
             .await?;
 
-        Cmd::new("tree", "List installed uv files")
-            .current_dir(target)
-            .arg("-a")
-            .arg("-L")
-            .arg("3")
-            .arg(".")
-            .check(false)
-            .status()
-            .await
-            .ok();
+        let local_dir = target.join("local");
+        let uv_src = if local_dir.is_dir() {
+            &local_dir
+        } else {
+            target
+        };
 
-        let bin_dir = target.join(if cfg!(windows) { "Scripts" } else { "bin" });
-        let lib_dir = target.join(if cfg!(windows) { "Lib" } else { "lib" });
+        let bin_dir = uv_src.join(if cfg!(windows) { "Scripts" } else { "bin" });
+        let lib_dir = uv_src.join(if cfg!(windows) { "Lib" } else { "lib" });
 
-        let uv = target
+        let uv = uv_src
             .join(&bin_dir)
             .join("uv")
             .with_extension(EXE_EXTENSION);
