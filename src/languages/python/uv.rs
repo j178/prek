@@ -333,9 +333,12 @@ impl InstallSource {
             .arg("install")
             .arg("--prefix")
             .arg(target)
+            .arg("--only-binary=:all:")
+            .arg("--progress-bar=off")
+            .arg("--disable-pip-version-check")
             .arg(format!("uv=={CUR_UV_VERSION}"))
             .check(true)
-            .status()
+            .output()
             .await?;
 
         let bin_dir = target.join(if cfg!(windows) { "Scripts" } else { "bin" });
