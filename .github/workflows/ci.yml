@@ -105,6 +105,13 @@ jobs:
       - name: "Cargo test without uv"
         run: |
           echo "::group::Test install uv with auto select"
+          export PREK_UV_SOURCE=pip
+          cargo llvm-cov nextest \
+          --no-report \
+          -E 'binary_id(prek::run) and test(run_basic)'
+          echo "::endgroup::"
+
+          echo "::group::Test install uv with auto select"
           cargo llvm-cov nextest \
           --no-report \
           -E 'binary_id(prek::run) and test(run_basic)'
@@ -118,13 +125,6 @@ jobs:
               -E 'binary_id(prek::run) and test(run_basic)'
             echo "::endgroup::"
           done
-
-          echo "::group::Test install uv from custom mirror"
-          export PREK_UV_SOURCE=https://mirrors.sustech.edu.cn/pypi/web/simple/
-          cargo llvm-cov nextest \
-            --no-report \
-            -E 'binary_id(prek::run) and test(run_basic)'
-          echo "::endgroup::"
 
           cargo llvm-cov report --lcov --ignore-filename-regex lib/pty --output-path lcov.info
 

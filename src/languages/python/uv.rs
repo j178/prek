@@ -341,6 +341,17 @@ impl InstallSource {
             .output()
             .await?;
 
+        Cmd::new("tree", "List installed uv files")
+            .current_dir(target)
+            .arg("-a")
+            .arg("-L")
+            .arg("3")
+            .arg(".")
+            .check(false)
+            .status()
+            .await
+            .ok();
+
         let bin_dir = target.join(if cfg!(windows) { "Scripts" } else { "bin" });
         let lib_dir = target.join(if cfg!(windows) { "Lib" } else { "lib" });
 
