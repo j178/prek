@@ -42,7 +42,7 @@ impl LockedFile {
             path = %file.path().display(),
             "Checking lock",
         );
-        match file.file().try_lock() {
+        match file.try_lock() {
             Ok(()) => {
                 debug!(resource, "Acquired lock");
                 Ok(Self(file))
@@ -57,7 +57,7 @@ impl LockedFile {
                     path = %file.path().display(),
                     "Waiting to acquire lock",
                 );
-                file.file().lock().map_err(|err| {
+                file.lock().map_err(|err| {
                     // Not a fs_err method, we need to build our own path context
                     std::io::Error::other(format!(
                         "Could not acquire lock for `{resource}` at `{}`: {}",
