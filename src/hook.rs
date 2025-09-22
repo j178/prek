@@ -222,9 +222,7 @@ impl HookBuilder {
                 return Err(Error::Hook {
                     hook: self.config.id.clone(),
                     error: anyhow::anyhow!(
-                        "Hook specified `language_version` `{}` but the language `{}` does not install an environment",
-                        language_version,
-                        language,
+                        "Hook specified `language_version` `{language_version}` but the language `{language}` does not install an environment"
                     ),
                 });
             }

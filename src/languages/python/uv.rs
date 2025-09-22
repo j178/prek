@@ -70,7 +70,7 @@ fn get_uv_version(uv_path: &Path) -> Result<Version> {
     let output = Command::new(uv_path)
         .arg("--version")
         .output()
-        .map_err(|e| anyhow::anyhow!("Failed to execute uv: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to execute uv: {e}"))?;
 
     if !output.status.success() {
         bail!("Failed to get uv version");
@@ -219,7 +219,7 @@ impl InstallSource {
                     && file["yanked"].as_bool() != Some(true)
             })
             .ok_or_else(|| {
-                anyhow::anyhow!("Could not find wheel for {} in PyPI response", wheel_name)
+                anyhow::anyhow!("Could not find wheel for {wheel_name} in PyPI response")
             })?;
 
         let download_url = wheel_file["url"]
@@ -264,8 +264,7 @@ impl InstallSource {
             })
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Could not find wheel download link for {} in simple API response",
-                    wheel_name
+                    "Could not find wheel download link for {wheel_name} in simple API response"
                 )
             })?;
 

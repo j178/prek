@@ -31,7 +31,7 @@ impl Args {
                 "--ignore-case" | "-i" => parsed.ignore_case = true,
                 "--multiline" => parsed.multiline = true,
                 "--negate" => parsed.negate = true,
-                _ => anyhow::bail!("Unknown argument: {}", arg),
+                _ => anyhow::bail!("Unknown argument: {arg}"),
             }
         }
 
