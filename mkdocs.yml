@@ -53,6 +53,7 @@ plugins:
   - search
   - minify:
       minify_html: true
+  - include-markdown
 
 nav:
   - Introduction: index.md
@@ -92,3 +93,6 @@ markdown_extensions:
   - tables
   - toc:
       permalink: true
+
+hooks:
+  - docs/hooks.py

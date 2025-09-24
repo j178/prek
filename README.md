@@ -11,19 +11,21 @@
 [![Discord](https://img.shields.io/discord/1403581202102878289?logo=discord)](https://discord.gg/3NRJUqJz86)
 
 </div>
-
+<!-- description:start -->
 [pre-commit](https://pre-commit.com/) is a framework to run hooks written in many languages, and it manages the
 language toolchain and dependencies for running the hooks.
 
 *prek* is a reimagined version of pre-commit, built in Rust.
 It is designed to be a faster, dependency-free and drop-in alternative for it,
 while also providing some additional long-requested features.
+<!-- description:end -->
 
 > [!WARNING]
-> prek is not production-ready yet. Some subcommands and languages are not implemented. See the current gaps for drop-in parity: [TODO](https://prek.j178.dev/todo/).
+> <!-- warning-p1:start -->prek is not production-ready yet. Some subcommands and languages are not implemented. See the current gaps for drop-in parity: [TODO](https://prek.j178.dev/todo/).<!-- warning-p1:end -->
 >
-> It's already being adopted by [some projects](#who-is-using-prek), please give it a try - we'd love your feedback!
+> <!-- warning-p2:start -->It's already being adopted by [some projects](#who-is-using-prek), please give it a try - we'd love your feedback!<!-- warning-p2:end -->
 
+<!-- features:start -->
 ## Features
 
 - 🚀 A single binary with no dependencies, does not require Python or any other runtime.
@@ -33,6 +35,7 @@ while also providing some additional long-requested features.
 - 🐍 Integration with [`uv`](https://github.com/astral-sh/uv) for managing Python virtual environments and dependencies.
 - 🛠️ Improved toolchain installations for Python, Node.js, Go, Rust and Ruby, shared between hooks.
 - 📦 [Built-in](https://prek.j178.dev/builtin/) Rust-native implementation of some common hooks.
+<!-- features:end -->
 
 ## How to migrate
 
@@ -53,6 +56,7 @@ cargo clippy.............................................................Passed
 
 For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to the [pre-commit documentation](https://pre-commit.com/) as prek is fully compatible with it.
 
+<!-- why:start -->
 ## Why prek?
 
 ### prek is way faster
@@ -69,9 +73,9 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 - No hassle with your Python version or virtual environments, prek automatically installs the required Python version and creates a virtual environment for you.
 - Built-in support for workspaces (or monorepos), each subproject can have its own `.pre-commit-config.yaml` file.
 - `prek run` has some nifty improvements over `pre-commit run`, such as:
-    - `prek run --directory <dir>` runs hooks for files in the specified directory, no need to use `git ls-files -- <dir> | xargs pre-commit run --files` anymore.
-    - `prek run --last-commit` runs hooks for files changed in the last commit.
-    - `prek run [HOOK] [HOOK]` selects and runs multiple hooks.
+  - `prek run --directory <dir>` runs hooks for files in the specified directory, no need to use `git ls-files -- <dir> | xargs pre-commit run --files` anymore.
+  - `prek run --last-commit` runs hooks for files changed in the last commit.
+  - `prek run [HOOK] [HOOK]` selects and runs multiple hooks.
 - `prek list` command lists all available hooks, their ids, and descriptions, providing a better overview of the configured hooks.
 - prek provides shell completions for `prek run <hook_id>` command, making it easier to run specific hooks without remembering their ids.
 
@@ -87,6 +91,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [OpenLineage](https://github.com/OpenLineage/OpenLineage/pull/3965)
 - [Authlib](https://github.com/authlib/authlib/pull/804)
 - [pre-commit-crocodile](https://radiandevcore.gitlab.io/tools/pre-commit-crocodile/)
+<!-- why:end -->
 
 ## Installation
 
@@ -97,15 +102,20 @@ prek provides a standalone installer script to download and install the tool,
 
 On Linux and macOS:
 
+<!-- linux-standalone-install:start -->
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.1/prek-installer.sh | sh
 ```
+<!-- linux-standalone-install:end -->
 
 On Windows:
 
+<!-- windows-standalone-install:start -->
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.1/prek-installer.ps1 | iex"
 ```
+<!-- windows-standalone-install:end -->
+
 </details>
 
 <details>
@@ -113,56 +123,71 @@ powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases
 
 prek is published as Python binary wheel to PyPI, you can install it using `pip`, `uv` (recommended), or `pipx`:
 
-```console
-pip install prek
-
-# or
-
+<!-- pypi-install:start -->
+```bash
+# Using uv (recommended)
 uv tool install prek
 
-# or
+# Using pip
+pip install prek
 
+# Using pipx
 pipx install prek
 ```
+<!-- pypi-install:end -->
+
 </details>
 
 <details>
 <summary>Homebrew</summary>
 
+<!-- homebrew-install:start -->
 ```bash
 brew install prek
 ```
+<!-- homebrew-install:end -->
+
 </details>
 
 <details>
 <summary>mise</summary>
 
+<!-- mise-install:start -->
 To use prek with [mise](https://mise.jdx.dev):
 
 ```bash
 mise use prek
 ```
+<!-- mise-install:end -->
+
 </details>
 
 <details>
 <summary>Cargo</summary>
 
+<!-- cargo-install:start -->
 Build from source using Cargo (Rust 1.89+ is required):
 
 ```bash
 cargo install --locked --git https://github.com/j178/prek
 ```
+<!-- cargo-install:end -->
+
 </details>
 
 <details>
 <summary>GitHub Releases</summary>
 
-prek release artifacts can be downloaded directly from the [GitHub releases](https://github.com/j178/prek/releases).
+<!-- pre-built-binaries:start -->
+Pre-built binaries are available for download from the [GitHub releases](https://github.com/j178/prek/releases) page.
+<!-- pre-built-binaries:end -->
+
 </details>
 
 <details>
 <summary>GitHub Actions</summary>
 
+<!-- github-actions:start -->
 prek can be used in GitHub Actions via the [j178/prek-action](https://github.com/j178/prek-action) repository.
 
 Example workflow:
@@ -180,13 +205,16 @@ jobs:
 ```
 
 This action installs prek and runs `prek run --all-files` on your repository.
+<!-- github-actions:end -->
 </details>
 
+<!-- self-update:start -->
 If installed via the standalone installer, prek can update itself to the latest version:
 
 ```bash
 prek self update
 ```
+<!-- self-update:end -->
 
 ## Acknowledgements
 
