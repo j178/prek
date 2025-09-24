@@ -170,11 +170,13 @@ impl Docker {
 
         let work_dir = Self::get_docker_path(work_dir)?;
         command
-            .arg("-v")
             // https://docs.docker.com/engine/reference/commandline/run/#mount-volumes-from-container-volumes-from
             // The `Z` option tells Docker to label the content with a private
             // unshared label. Only the current container can use a private volume.
+            .arg("--volume")
             .arg(format!("{}:/src:rw,Z", work_dir.display()))
+            // Run an init inside the container that forwards signals and reaps processes
+            .arg("--init")
             .arg("--workdir")
             .arg("/src");
 
