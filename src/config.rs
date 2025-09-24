@@ -292,8 +292,6 @@ pub struct Config {
     /// The minimum version of prek required to run this configuration.
     #[serde(deserialize_with = "deserialize_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
-    /// Configuration for pre-commit.ci service.
-    pub ci: Option<FxHashMap<String, serde_yaml::Value>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -724,7 +722,8 @@ pub enum Error {
     Yaml(String, #[source] serde_yaml::Error),
 }
 
-static EXPECTED_UNUSED: &[&str] = &["minimum_pre_commit_version"];
+/// Keys that prek does not use.
+const EXPECTED_UNUSED: &[&str] = &["minimum_pre_commit_version", "ci"];
 
 /// Read the configuration file from the given path.
 pub fn read_config(path: &Path) -> Result<Config, Error> {
@@ -898,7 +897,6 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
-                ci: None,
             },
         )
         "#);
@@ -975,7 +973,6 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
-                ci: None,
             },
         )
         "#);
@@ -1084,7 +1081,6 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
-                ci: None,
             },
         )
         "#);
@@ -1274,7 +1270,6 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
-                ci: None,
             },
         )
         "#);
@@ -1405,7 +1400,6 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
-                ci: None,
             },
         )
         "#);
@@ -1688,7 +1682,6 @@ mod tests {
             exclude: None,
             fail_fast: None,
             minimum_prek_version: None,
-            ci: None,
         }
         "#);
 
