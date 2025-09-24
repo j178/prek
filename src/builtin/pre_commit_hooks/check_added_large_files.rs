@@ -34,10 +34,8 @@ pub(crate) async fn check_added_large_files(
     hook: &Hook,
     filenames: &[&Path],
 ) -> anyhow::Result<(i32, Vec<u8>)> {
-    // `hook.entry` is `check-added-large-files`, set by `pre-commit-hooks`.
-    // We don't actually use it, we use it here to parse the arguments.
-    // (Parser treats `hook.entry` as a command name.)
     let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
+
     let filter = if args.enforce_all {
         FileFilter::NoFilter
     } else {
