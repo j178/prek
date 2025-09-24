@@ -15,6 +15,9 @@ const CR: &[u8] = b"\r";
 const ALL_ENDINGS: [&[u8]; 3] = [CR, CRLF, LF];
 
 #[derive(Parser)]
+#[command(disable_help_subcommand = true)]
+#[command(disable_version_flag = true)]
+#[command(disable_help_flag = true)]
 struct Args {
     /// Fix mixed line endings by converting to the most common line ending
     /// or a specified line ending.
