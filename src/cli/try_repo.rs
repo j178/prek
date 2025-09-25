@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use tempfile::tempdir_in;
 
 use crate::cli::{ExitStatus, GlobalArgs, TryRepoArgs};
-use crate::config::{self, Repo};
+use crate::config::{self, HookOptions, Repo};
 use crate::git;
 use crate::printer::Printer;
 use crate::store::{STORE, Store};
@@ -136,7 +136,7 @@ pub(crate) async fn try_repo(
             name: None,
             entry: None,
             language: None,
-            options: Default::default(),
+            options: HookOptions::default(),
         }]
     } else {
         manifest
@@ -147,7 +147,7 @@ pub(crate) async fn try_repo(
                 name: None,
                 entry: None,
                 language: None,
-                options: Default::default(),
+                options: HookOptions::default(),
             })
             .collect()
     };

@@ -17,7 +17,7 @@ fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
         .current_dir(&repo_dir)
         .assert()
         .success();
-    context.configure_git_author_for_path(&repo_dir);
+    context.configure_git_author();
 
     repo_dir
         .child(".pre-commit-hooks.yaml")
@@ -150,12 +150,12 @@ fn try_repo_specific_rev() -> Result<()> {
     // Make a new commit
     ChildPath::new(&repo_path)
         .child(".pre-commit-hooks.yaml")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc::indoc! {r"
         - id: new-hook
           name: New Hook
           entry: echo new
           language: system
-    "#
+    "
         })?;
     Command::new("git")
         .arg("add")
@@ -214,12 +214,12 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     // Make uncommitted changes
     ChildPath::new(&repo_path)
         .child(".pre-commit-hooks.yaml")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc::indoc! {r"
         - id: uncommitted-hook
           name: Uncommitted Hook
           entry: echo uncommitted
           language: system
-    "#
+    "
         })?;
     ChildPath::new(&repo_path)
         .child("new-file.txt")
