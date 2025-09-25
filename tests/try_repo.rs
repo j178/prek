@@ -17,7 +17,22 @@ fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
         .current_dir(&repo_dir)
         .assert()
         .success();
-    context.configure_git_author();
+
+    // Configure the author specifically for this hook repository
+    Command::new("git")
+        .arg("config")
+        .arg("user.name")
+        .arg("Prek Test")
+        .current_dir(&repo_dir)
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("config")
+        .arg("user.email")
+        .arg("test@prek.dev")
+        .current_dir(&repo_dir)
+        .assert()
+        .success();
 
     repo_dir
         .child(".pre-commit-hooks.yaml")
@@ -57,6 +72,7 @@ fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
     Ok(repo_dir.to_path_buf())
 }
 
+// Helper for a repo with a hook that is designed to fail
 fn create_failing_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
     let repo_dir = context.home_dir().child(format!("test-repos/{repo_name}"));
     repo_dir.create_dir_all()?;
@@ -66,7 +82,20 @@ fn create_failing_hook_repo(context: &TestContext, repo_name: &str) -> Result<Pa
         .current_dir(&repo_dir)
         .assert()
         .success();
-    context.configure_git_author();
+    Command::new("git")
+        .arg("config")
+        .arg("user.name")
+        .arg("Prek Test")
+        .current_dir(&repo_dir)
+        .assert()
+        .success();
+    Command::new("git")
+        .arg("config")
+        .arg("user.email")
+        .arg("test@prek.dev")
+        .current_dir(&repo_dir)
+        .assert()
+        .success();
 
     repo_dir
         .child(".pre-commit-hooks.yaml")
@@ -97,44 +126,11 @@ fn create_failing_hook_repo(context: &TestContext, repo_name: &str) -> Result<Pa
 }
 
 #[test]
-fn try_repo_failing_hook() -> Result<()> {
-    let context = TestContext::new();
-    let repo_path = create_failing_hook_repo(&context, "try-repo-failing")?;
-
-    context.work_dir().child("test.txt").write_str("test")?;
-
-    let mut cmd = context.command();
-    cmd.arg("try-repo").arg(&repo_path);
-
-    let mut filters = context.filters();
-    filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
-
-    cmd_snapshot!(filters, cmd, @r###"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-    ===============================================================================
-    Using config:
-    ===============================================================================
-    repos:
-      - repo: [HOME]/test-repos/try-repo-failing
-        rev: [COMMIT_SHA]
-        hooks:
-          - id: failing-hook
-    ===============================================================================
-    Always Fail..............................................................Failed
-    - hook id: failing-hook
-    - exit code: 1
-
-    ----- stderr -----
-    "###);
-
-    Ok(())
-}
-
-#[test]
 fn try_repo_basic() -> Result<()> {
     let context = TestContext::new();
+    context.init_project(); // Initialize the main "user" repository
+    context.configure_git_author(); // Configure the user for it
+
     let repo_path = create_hook_repo(&context, "try-repo-basic")?;
 
     let test_file = context.work_dir().child("test.txt");
@@ -149,7 +145,7 @@ fn try_repo_basic() -> Result<()> {
     let mut filters = context.filters();
     filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
 
-    cmd_snapshot!(filters, cmd, @r###"
+    cmd_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -157,17 +153,56 @@ fn try_repo_basic() -> Result<()> {
     Using config:
     ===============================================================================
     repos:
-      - repo: [HOME]/test-repos/try-repo-basic
-        rev: [COMMIT_SHA]
-        hooks:
-          - id: test-hook
-          - id: another-hook
+    - repo: [HOME]/test-repos/try-repo-basic
+      rev: [COMMIT_SHA]
+      hooks:
+      - id: test-hook
+      - id: another-hook
     ===============================================================================
     Test Hook................................................................Passed
     Another Hook.............................................................Passed
 
     ----- stderr -----
-    "###);
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn try_repo_failing_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    let repo_path = create_failing_hook_repo(&context, "try-repo-failing")?;
+
+    context.work_dir().child("test.txt").write_str("test")?;
+
+    let mut cmd = context.command();
+    cmd.arg("try-repo").arg(&repo_path);
+
+    let mut filters = context.filters();
+    filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
+
+    cmd_snapshot!(filters, cmd, @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    ===============================================================================
+    Using config:
+    ===============================================================================
+    repos:
+    - repo: [HOME]/test-repos/try-repo-failing
+      rev: [COMMIT_SHA]
+      hooks:
+      - id: failing-hook
+    ===============================================================================
+    Always Fail..............................................................Failed
+    - hook id: failing-hook
+    - exit code: 1
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }
@@ -175,6 +210,9 @@ fn try_repo_basic() -> Result<()> {
 #[test]
 fn try_repo_specific_hook() -> Result<()> {
     let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
     let repo_path = create_hook_repo(&context, "try-repo-specific-hook")?;
 
     context.work_dir().child("test.txt").write_str("test")?;
@@ -188,7 +226,7 @@ fn try_repo_specific_hook() -> Result<()> {
     let mut filters = context.filters();
     filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
 
-    cmd_snapshot!(filters, cmd, @r###"
+    cmd_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -196,15 +234,15 @@ fn try_repo_specific_hook() -> Result<()> {
     Using config:
     ===============================================================================
     repos:
-      - repo: [HOME]/test-repos/try-repo-specific-hook
-        rev: [COMMIT_SHA]
-        hooks:
-          - id: another-hook
+    - repo: [HOME]/test-repos/try-repo-specific-hook
+      rev: [COMMIT_SHA]
+      hooks:
+      - id: another-hook
     ===============================================================================
     Another Hook.............................................................Passed
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
@@ -212,6 +250,9 @@ fn try_repo_specific_hook() -> Result<()> {
 #[test]
 fn try_repo_specific_rev() -> Result<()> {
     let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
     let repo_path = create_hook_repo(&context, "try-repo-specific-rev")?;
 
     let initial_rev = Command::new("git")
@@ -258,7 +299,7 @@ fn try_repo_specific_rev() -> Result<()> {
     filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
     filters.push((&initial_rev, "[COMMIT_SHA]"));
 
-    cmd_snapshot!(filters, cmd, @r###"
+    cmd_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -266,17 +307,17 @@ fn try_repo_specific_rev() -> Result<()> {
     Using config:
     ===============================================================================
     repos:
-      - repo: [HOME]/test-repos/try-repo-specific-rev
-        rev: [COMMIT_SHA]
-        hooks:
-          - id: test-hook
-          - id: another-hook
+    - repo: [HOME]/test-repos/try-repo-specific-rev
+      rev: [COMMIT_SHA]
+      hooks:
+      - id: test-hook
+      - id: another-hook
     ===============================================================================
     Test Hook............................................(no files to check)Skipped
     Another Hook.............................................................Passed
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
@@ -284,6 +325,9 @@ fn try_repo_specific_rev() -> Result<()> {
 #[test]
 fn try_repo_uncommitted_changes() -> Result<()> {
     let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
     let repo_path = create_hook_repo(&context, "try-repo-uncommitted")?;
 
     // Make uncommitted changes
@@ -321,7 +365,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
         ])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters, cmd, @r###"
+    cmd_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -329,16 +373,16 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     Using config:
     ===============================================================================
     repos:
-      - repo: [TEMP_DIR]/shadow-repo
-        rev: [COMMIT_SHA]
-        hooks:
-          - id: uncommitted-hook
+    - repo: [HOME]/scratch/.tmpMhMxTd/shadow-repo
+      rev: [COMMIT_SHA]
+      hooks:
+      - id: uncommitted-hook
     ===============================================================================
     Uncommitted Hook.........................................................Passed
 
     ----- stderr -----
     warning: Creating temporary repo with uncommitted changes...
-    "###);
+    ");
 
     Ok(())
 }
