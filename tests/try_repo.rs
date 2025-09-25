@@ -57,6 +57,81 @@ fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
     Ok(repo_dir.to_path_buf())
 }
 
+fn create_failing_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
+    let repo_dir = context.home_dir().child(format!("test-repos/{repo_name}"));
+    repo_dir.create_dir_all()?;
+
+    Command::new("git")
+        .arg("init")
+        .current_dir(&repo_dir)
+        .assert()
+        .success();
+    context.configure_git_author();
+
+    repo_dir
+        .child(".pre-commit-hooks.yaml")
+        .write_str(indoc::indoc! {r#"
+        - id: failing-hook
+          name: Always Fail
+          entry: "false"
+          language: system
+    "#
+        })?;
+
+    Command::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&repo_dir)
+        .assert()
+        .success();
+
+    Command::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg("Initial commit")
+        .current_dir(&repo_dir)
+        .assert()
+        .success();
+
+    Ok(repo_dir.to_path_buf())
+}
+
+#[test]
+fn try_repo_failing_hook() -> Result<()> {
+    let context = TestContext::new();
+    let repo_path = create_failing_hook_repo(&context, "try-repo-failing")?;
+
+    context.work_dir().child("test.txt").write_str("test")?;
+
+    let mut cmd = context.command();
+    cmd.arg("try-repo").arg(&repo_path);
+
+    let mut filters = context.filters();
+    filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
+
+    cmd_snapshot!(filters, cmd, @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    ===============================================================================
+    Using config:
+    ===============================================================================
+    repos:
+      - repo: [HOME]/test-repos/try-repo-failing
+        rev: [COMMIT_SHA]
+        hooks:
+          - id: failing-hook
+    ===============================================================================
+    Always Fail..............................................................Failed
+    - hook id: failing-hook
+    - exit code: 1
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
 #[test]
 fn try_repo_basic() -> Result<()> {
     let context = TestContext::new();
