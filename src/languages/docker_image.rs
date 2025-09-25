@@ -4,7 +4,7 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use crate::cli::reporter::HookInstallReporter;
-use crate::hook::{Hook, InstalledHook};
+use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::docker::Docker;
 use crate::run::run_by_batch;
@@ -23,8 +23,8 @@ impl LanguageImpl for DockerImage {
         Ok(InstalledHook::NoNeedInstall(hook))
     }
 
-    async fn check_health(&self) -> Result<()> {
-        todo!()
+    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
+        Ok(())
     }
 
     async fn run(

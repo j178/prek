@@ -4,7 +4,7 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use crate::cli::reporter::HookInstallReporter;
-use crate::hook::{Hook, InstalledHook};
+use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::store::Store;
 
@@ -21,7 +21,7 @@ impl LanguageImpl for Fail {
         Ok(InstalledHook::NoNeedInstall(hook))
     }
 
-    async fn check_health(&self) -> Result<()> {
+    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
         Ok(())
     }
 

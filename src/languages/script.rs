@@ -4,8 +4,8 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use crate::cli::reporter::HookInstallReporter;
-use crate::hook::Hook;
 use crate::hook::InstalledHook;
+use crate::hook::{Hook, InstallInfo};
 use crate::languages::{LanguageImpl, resolve_command};
 use crate::process::Cmd;
 use crate::run::run_by_batch;
@@ -24,7 +24,7 @@ impl LanguageImpl for Script {
         Ok(InstalledHook::NoNeedInstall(hook))
     }
 
-    async fn check_health(&self) -> Result<()> {
+    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
         Ok(())
     }
 

@@ -12,7 +12,7 @@ use crate::archive::ArchiveExtension;
 use crate::cli::reporter::HookInstallReporter;
 use crate::config::Language;
 use crate::fs::CWD;
-use crate::hook::{Hook, InstalledHook};
+use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::identify::parse_shebang;
 use crate::store::{STORE, Store};
 use crate::version::version;
@@ -47,7 +47,7 @@ trait LanguageImpl {
         store: &Store,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook>;
-    async fn check_health(&self) -> Result<()>;
+    async fn check_health(&self, info: &InstallInfo) -> Result<()>;
     async fn run(
         &self,
         hook: &InstalledHook,
@@ -72,7 +72,7 @@ impl LanguageImpl for Unimplemented {
         Ok(InstalledHook::NoNeedInstall(hook))
     }
 
-    async fn check_health(&self) -> Result<()> {
+    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
         Ok(())
     }
 
@@ -179,18 +179,18 @@ impl Language {
         }
     }
 
-    pub async fn check_health(&self) -> Result<()> {
+    pub async fn check_health(&self, info: &InstallInfo) -> Result<()> {
         match self {
-            Self::Golang => GOLANG.check_health().await,
-            Self::Python => PYTHON.check_health().await,
-            Self::Node => NODE.check_health().await,
-            Self::System => SYSTEM.check_health().await,
-            Self::Fail => FAIL.check_health().await,
-            Self::Docker => DOCKER.check_health().await,
-            Self::DockerImage => DOCKER_IMAGE.check_health().await,
-            Self::Script => SCRIPT.check_health().await,
-            Self::Pygrep => PYGREP.check_health().await,
-            _ => UNIMPLEMENTED.check_health().await,
+            Self::Golang => GOLANG.check_health(info).await,
+            Self::Python => PYTHON.check_health(info).await,
+            Self::Node => NODE.check_health(info).await,
+            Self::System => SYSTEM.check_health(info).await,
+            Self::Fail => FAIL.check_health(info).await,
+            Self::Docker => DOCKER.check_health(info).await,
+            Self::DockerImage => DOCKER_IMAGE.check_health(info).await,
+            Self::Script => SCRIPT.check_health(info).await,
+            Self::Pygrep => PYGREP.check_health(info).await,
+            _ => UNIMPLEMENTED.check_health(info).await,
         }
     }
 

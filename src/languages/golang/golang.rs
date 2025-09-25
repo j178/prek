@@ -111,8 +111,8 @@ impl LanguageImpl for Golang {
         })
     }
 
-    async fn check_health(&self) -> anyhow::Result<()> {
-        todo!()
+    async fn check_health(&self, _info: &InstallInfo) -> anyhow::Result<()> {
+        Ok(())
     }
 
     async fn run(
@@ -121,10 +121,8 @@ impl LanguageImpl for Golang {
         filenames: &[&Path],
         store: &Store,
     ) -> anyhow::Result<(i32, Vec<u8>)> {
-        let env_dir = hook.env_path().expect("Node must have env path");
-        let InstalledHook::Installed { hook, info } = hook else {
-            unreachable!()
-        };
+        let env_dir = hook.env_path().expect("Node hook must have env path");
+        let info = hook.install_info().expect("Node hook must be installed");
 
         let go_bin = bin_dir(env_dir);
         let go_tools = store.tools_path(ToolBucket::Go);
