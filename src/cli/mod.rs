@@ -205,9 +205,13 @@ pub(crate) enum Command {
     /// Auto-update pre-commit config to the latest repos' versions.
     #[command(alias = "autoupdate")]
     AutoUpdate(AutoUpdateArgs),
+    /// Manage the prek cache.
+    Cache(CacheNamespace),
     /// Clean unused cached repos.
+    #[command(hide = true)]
     GC,
-    /// Clean out pre-commit files.
+    /// Remove all prek cached data.
+    #[command(hide = true)]
     Clean,
     /// Install hook script in a directory intended for use with `git config init.templateDir`.
     #[command(alias = "init-templatedir")]
@@ -581,19 +585,35 @@ pub(crate) struct HookImplArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct SelfNamespace {
+pub(crate) struct CacheNamespace {
     #[command(subcommand)]
-    pub command: SelfCommand,
+    pub(crate) command: CacheCommand,
 }
 
 #[derive(Debug, Subcommand)]
-pub enum SelfCommand {
+pub(crate) enum CacheCommand {
+    /// Show the location of the prek cache.
+    Dir,
+    /// Remove unused cached repositories, hook environments, and other data.
+    GC,
+    /// Remove all prek cached data.
+    Clean,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct SelfNamespace {
+    #[command(subcommand)]
+    pub(crate) command: SelfCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum SelfCommand {
     /// Update prek.
     Update(SelfUpdateArgs),
 }
 
 #[derive(Debug, Args)]
-pub struct SelfUpdateArgs {
+pub(crate) struct SelfUpdateArgs {
     /// Update to the specified version.
     /// If not provided, prek will update to the latest version.
     pub target_version: Option<String>,

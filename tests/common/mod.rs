@@ -137,12 +137,6 @@ impl TestContext {
         command
     }
 
-    pub fn clean(&self) -> Command {
-        let mut command = self.command();
-        command.arg("clean");
-        command
-    }
-
     pub fn validate_config(&self) -> Command {
         let mut command = self.command();
         command.arg("validate-config");

@@ -1709,8 +1709,7 @@ fn selectors_completion() -> Result<()> {
     validate-manifest	Validate `.pre-commit-hooks.yaml` files
     sample-config	Produce a sample `.pre-commit-config.yaml` file
     auto-update	Auto-update pre-commit config to the latest repos' versions
-    gc	Clean unused cached repos
-    clean	Clean out pre-commit files
+    cache	Manage the prek cache
     init-template-dir	Install hook script in a directory intended for use with `git config init.templateDir`
     try-repo	Try the pre-commit hooks in the current repo
     self	`prek` self management
