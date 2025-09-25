@@ -45,6 +45,7 @@ Prek supports the following environment variables:
 - `PREK_ALLOW_NO_CONFIG` — Allow running without a .pre-commit-config.yaml (useful for ad‑hoc runs). Also honored via `PRE_COMMIT_ALLOW_NO_CONFIG`.
 - `PREK_NO_CONCURRENCY` — Disable parallelism for installs and runs. Also honored via `PRE_COMMIT_NO_CONCURRENCY`.
 - `PREK_NO_FAST_PATH` — Disable Rust-native built-in hooks; always use the original hook implementation. See [Built-in Fast Hooks](builtin.md) for details.
+- `PREK_UV_SOURCE` — Control how uv (Python package installer) is installed. Options: `github` (download from GitHub releases), `pypi` (install from PyPI), `tuna` (use Tsinghua University mirror), `aliyun` (use Alibaba Cloud mirror), `tencent` (use Tencent Cloud mirror), `pip` (install via pip), or a custom PyPI mirror URL. If not set, prek automatically selects the best available source.
 
 Compatibility fallbacks:
 

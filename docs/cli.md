@@ -21,8 +21,7 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 <dt><a href="#prek-validate-manifest"><code>prek validate-manifest</code></a></dt><dd><p>Validate <code>.pre-commit-hooks.yaml</code> files</p></dd>
 <dt><a href="#prek-sample-config"><code>prek sample-config</code></a></dt><dd><p>Produce a sample <code>.pre-commit-config.yaml</code> file</p></dd>
 <dt><a href="#prek-auto-update"><code>prek auto-update</code></a></dt><dd><p>Auto-update pre-commit config to the latest repos' versions</p></dd>
-<dt><a href="#prek-gc"><code>prek gc</code></a></dt><dd><p>Clean unused cached repos</p></dd>
-<dt><a href="#prek-clean"><code>prek clean</code></a></dt><dd><p>Clean out pre-commit files</p></dd>
+<dt><a href="#prek-cache"><code>prek cache</code></a></dt><dd><p>Manage the prek cache</p></dd>
 <dt><a href="#prek-init-template-dir"><code>prek init-template-dir</code></a></dt><dd><p>Install hook script in a directory intended for use with <code>git config init.templateDir</code></p></dd>
 <dt><a href="#prek-try-repo"><code>prek try-repo</code></a></dt><dd><p>Try the pre-commit hooks in the current repo</p></dd>
 <dt><a href="#prek-self"><code>prek self</code></a></dt><dd><p><code>prek</code> self management</p></dd>
@@ -502,62 +501,108 @@ prek auto-update [OPTIONS]
 </dd><dt id="prek-auto-update--version"><a href="#prek-auto-update--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
-## prek gc
+## prek cache
 
-Clean unused cached repos
+Manage the prek cache
 
 <h3 class="cli-reference">Usage</h3>
 
 ```
-prek gc [OPTIONS]
+prek cache [OPTIONS] <COMMAND>
+```
+
+<h3 class="cli-reference">Commands</h3>
+
+<dl class="cli-reference"><dt><a href="#prek-cache-dir"><code>prek cache dir</code></a></dt><dd><p>Show the location of the prek cache</p></dd>
+<dt><a href="#prek-cache-gc"><code>prek cache gc</code></a></dt><dd><p>Remove unused cached repositories, hook environments, and other data</p></dd>
+<dt><a href="#prek-cache-clean"><code>prek cache clean</code></a></dt><dd><p>Remove all prek cached data</p></dd>
+</dl>
+
+### prek cache dir
+
+Show the location of the prek cache
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+prek cache dir [OPTIONS]
 ```
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt id="prek-gc--cd"><a href="#prek-gc--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
-</dd><dt id="prek-gc--color"><a href="#prek-gc--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
+<dl class="cli-reference"><dt id="prek-cache-dir--cd"><a href="#prek-cache-dir--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
+</dd><dt id="prek-cache-dir--color"><a href="#prek-cache-dir--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
 <p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
 <ul>
 <li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
 <li><code>always</code>:  Enables colored output regardless of the detected environment</li>
 <li><code>never</code>:  Disables colored output</li>
-</ul></dd><dt id="prek-gc--config"><a href="#prek-gc--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
-</dd><dt id="prek-gc--help"><a href="#prek-gc--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="prek-gc--no-progress"><a href="#prek-gc--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+</ul></dd><dt id="prek-cache-dir--config"><a href="#prek-cache-dir--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
+</dd><dt id="prek-cache-dir--help"><a href="#prek-cache-dir--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="prek-cache-dir--no-progress"><a href="#prek-cache-dir--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
-</dd><dt id="prek-gc--quiet"><a href="#prek-gc--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
-</dd><dt id="prek-gc--refresh"><a href="#prek-gc--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-gc--verbose"><a href="#prek-gc--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-gc--version"><a href="#prek-gc--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-cache-dir--quiet"><a href="#prek-cache-dir--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="prek-cache-dir--refresh"><a href="#prek-cache-dir--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+</dd><dt id="prek-cache-dir--verbose"><a href="#prek-cache-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
+</dd><dt id="prek-cache-dir--version"><a href="#prek-cache-dir--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
-## prek clean
+### prek cache gc
 
-Clean out pre-commit files
+Remove unused cached repositories, hook environments, and other data
 
 <h3 class="cli-reference">Usage</h3>
 
 ```
-prek clean [OPTIONS]
+prek cache gc [OPTIONS]
 ```
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt id="prek-clean--cd"><a href="#prek-clean--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
-</dd><dt id="prek-clean--color"><a href="#prek-clean--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
+<dl class="cli-reference"><dt id="prek-cache-gc--cd"><a href="#prek-cache-gc--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
+</dd><dt id="prek-cache-gc--color"><a href="#prek-cache-gc--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
 <p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
 <ul>
 <li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
 <li><code>always</code>:  Enables colored output regardless of the detected environment</li>
 <li><code>never</code>:  Disables colored output</li>
-</ul></dd><dt id="prek-clean--config"><a href="#prek-clean--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
-</dd><dt id="prek-clean--help"><a href="#prek-clean--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="prek-clean--no-progress"><a href="#prek-clean--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+</ul></dd><dt id="prek-cache-gc--config"><a href="#prek-cache-gc--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
+</dd><dt id="prek-cache-gc--help"><a href="#prek-cache-gc--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="prek-cache-gc--no-progress"><a href="#prek-cache-gc--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
-</dd><dt id="prek-clean--quiet"><a href="#prek-clean--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
-</dd><dt id="prek-clean--refresh"><a href="#prek-clean--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-clean--verbose"><a href="#prek-clean--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-clean--version"><a href="#prek-clean--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-cache-gc--quiet"><a href="#prek-cache-gc--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="prek-cache-gc--refresh"><a href="#prek-cache-gc--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+</dd><dt id="prek-cache-gc--verbose"><a href="#prek-cache-gc--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
+</dd><dt id="prek-cache-gc--version"><a href="#prek-cache-gc--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd></dl>
+
+### prek cache clean
+
+Remove all prek cached data
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+prek cache clean [OPTIONS]
+```
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt id="prek-cache-clean--cd"><a href="#prek-cache-clean--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
+</dd><dt id="prek-cache-clean--color"><a href="#prek-cache-clean--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
+<p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+<li><code>never</code>:  Disables colored output</li>
+</ul></dd><dt id="prek-cache-clean--config"><a href="#prek-cache-clean--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
+</dd><dt id="prek-cache-clean--help"><a href="#prek-cache-clean--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="prek-cache-clean--no-progress"><a href="#prek-cache-clean--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+<p>For example, spinners or progress bars.</p>
+</dd><dt id="prek-cache-clean--quiet"><a href="#prek-cache-clean--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="prek-cache-clean--refresh"><a href="#prek-cache-clean--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+</dd><dt id="prek-cache-clean--verbose"><a href="#prek-cache-clean--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
+</dd><dt id="prek-cache-clean--version"><a href="#prek-cache-clean--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek init-template-dir

@@ -43,3 +43,11 @@ See [Workspace Mode](./workspace.md) for more information.
 ### `prek sample-config`
 
 - `prek sample-config` command has a `--file` option to write the sample configuration to a specific file.
+
+### `prek cache`
+
+- `prek cache clean` to remove all cached data.
+- `prek cache gc` to remove unused cached repositories, environments and toolchains.
+- `prek cache dir` to show the cache directory.
+
+`prek clean` and `prek gc` are also available but hidden, as `prek cache` is preferred.

@@ -160,7 +160,7 @@ fn remote_hook() {
       	-lang       str    target Go version in the form "go1.X" (default from go.mod)
       	-modpath    str    Go module path containing the source file (default from go.mod)
 
-    ----- stderr ----- 
+    ----- stderr -----
     "#);
 
     // Run hooks with newly downloaded go.
@@ -184,7 +184,7 @@ fn remote_hook() {
     - duration: [TIME]
       .pre-commit-config.yaml
 
-    ----- stderr ----- 
+    ----- stderr -----
     ");
 
     // Run hooks with system found go.
@@ -208,6 +208,6 @@ fn remote_hook() {
     - duration: [TIME]
       .pre-commit-config.yaml
 
-    ----- stderr ----- 
+    ----- stderr -----
     ");
 }

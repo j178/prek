@@ -222,9 +222,7 @@ impl HookBuilder {
                 return Err(Error::Hook {
                     hook: self.config.id.clone(),
                     error: anyhow::anyhow!(
-                        "Hook specified `language_version` `{}` but the language `{}` does not install an environment",
-                        language_version,
-                        language,
+                        "Hook specified `language_version` `{language_version}` but the language `{language}` does not install an environment"
                     ),
                 });
             }
@@ -454,16 +452,8 @@ impl Hook {
         self.project.path()
     }
 
-    pub(crate) fn is_local(&self) -> bool {
-        matches!(&*self.repo, Repo::Local { .. })
-    }
-
     pub(crate) fn is_remote(&self) -> bool {
         matches!(&*self.repo, Repo::Remote { .. })
-    }
-
-    pub(crate) fn is_meta(&self) -> bool {
-        matches!(&*self.repo, Repo::Meta { .. })
     }
 
     pub(crate) fn dependencies(&self) -> &FxHashSet<String> {

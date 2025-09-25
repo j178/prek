@@ -131,11 +131,6 @@ impl Store {
             })
     }
 
-    /// Lock the store.
-    pub(crate) fn lock(&self) -> Result<LockedFile, std::io::Error> {
-        LockedFile::acquire_blocking(self.path.join(".lock"), "store")
-    }
-
     pub(crate) async fn lock_async(&self) -> Result<LockedFile, std::io::Error> {
         LockedFile::acquire(self.path.join(".lock"), "store").await
     }

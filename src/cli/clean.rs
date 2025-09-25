@@ -7,7 +7,6 @@ use owo_colors::OwoColorize;
 use tracing::error;
 
 use crate::cli::ExitStatus;
-use crate::fs::Simplified;
 use crate::printer::Printer;
 use crate::store::{CacheBucket, STORE};
 
@@ -26,7 +25,7 @@ pub(crate) fn clean(printer: Printer) -> Result<ExitStatus> {
     writeln!(
         printer.stdout(),
         "Cleaned `{}`",
-        store.path().user_display().cyan()
+        store.path().display().cyan()
     )?;
 
     Ok(ExitStatus::Success)

@@ -46,11 +46,8 @@ impl FromStr for Implemented {
 impl Implemented {
     pub(crate) fn check_supported(&self, hook: &Hook) -> bool {
         match self {
-            // `check-yaml` does not support `--unsafe` or `--allow-multiple-documents` flags yet.
-            Self::CheckYaml => !hook
-                .args
-                .iter()
-                .any(|s| s.starts_with("--unsafe") || s.starts_with("--allow-multiple-documents")),
+            // `check-yaml` does not support `--unsafe` flag yet.
+            Self::CheckYaml => !hook.args.iter().any(|s| s.starts_with("--unsafe")),
             _ => true,
         }
     }
