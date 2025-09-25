@@ -263,7 +263,7 @@ Config {
     files: None,
     exclude: Some(
         SerdeRegex(
-            "^(.*/(snapshots)/.*|)$",
+            "(?x)^(\n  .*/(snapshots)/.*|\n)$\n",
         ),
     ),
     fail_fast: Some(

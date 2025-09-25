@@ -335,7 +335,7 @@ async fn get_best_candidate_tag(repo: &Path, rev: &str, current_rev: &str) -> Re
         })
         .next()
         .map(ToString::to_string)
-        .ok_or_else(|| anyhow::anyhow!("No tags found for revision {}", rev))
+        .ok_or_else(|| anyhow::anyhow!("No tags found for revision {rev}"))
 }
 
 async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result<()> {

@@ -32,9 +32,6 @@ profiler = ["dep:pprof", "profiler-flamegraph"]
 profiler-flamegraph = ["pprof/flamegraph"]
 # Enable docker related tests in integration tests
 docker = []
-# For testing uv installing from GitHub and PyPI
-uv-source-github = []
-uv-source-pypi = []
 
 [dependencies]
 anstream = { version = "0.6.15" }

@@ -10,7 +10,7 @@ copyright: Copyright &copy; 2025 j178
 
 theme:
   name: material
-  logo: assets/logo.png
+  logo: assets/logo_512.webp
   palette:
     - media: "(prefers-color-scheme)"
       toggle:
@@ -53,6 +53,7 @@ plugins:
   - search
   - minify:
       minify_html: true
+  - include-markdown
 
 nav:
   - Introduction: index.md
@@ -92,3 +93,6 @@ markdown_extensions:
   - tables
   - toc:
       permalink: true
+
+hooks:
+  - docs/hooks.py

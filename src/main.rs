@@ -17,7 +17,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
 use crate::cleanup::cleanup;
-use crate::cli::{Cli, Command, ExitStatus};
+use crate::cli::{CacheCommand, CacheNamespace, Cli, Command, ExitStatus};
 #[cfg(feature = "self-update")]
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::printer::Printer;
@@ -248,6 +248,20 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
+        Command::Cache(CacheNamespace {
+            command: cache_command,
+        }) => match cache_command {
+            CacheCommand::Clean => cli::clean(printer),
+            CacheCommand::Dir => {
+                let store = STORE.as_ref()?;
+                writeln!(printer.stdout(), "{}", store.path().display().cyan())?;
+                Ok(ExitStatus::Success)
+            }
+            CacheCommand::GC => {
+                writeln!(printer.stderr(), "Command not implemented yet")?;
+                Ok(ExitStatus::Failure)
+            }
+        },
         Command::Clean => cli::clean(printer),
         Command::ValidateConfig(args) => {
             show_settings!(args);

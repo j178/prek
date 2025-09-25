@@ -8,15 +8,19 @@ The standalone installer automatically downloads and installs the correct binary
 
 ### Linux and macOS
 
-```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.1/prek-installer.sh | sh
-```
+{%
+  include-markdown "../README.md"
+  start="<!-- linux-standalone-install:start -->"
+  end="<!-- linux-standalone-install:end -->"
+%}
 
 ### Windows
 
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.1/prek-installer.ps1 | iex"
-```
+{%
+  include-markdown "../README.md"
+  start="<!-- windows-standalone-install:start -->"
+  end="<!-- windows-standalone-install:end -->"
+%}
 
 ## Package Managers
 
@@ -24,48 +28,51 @@ powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases
 
 Install via pip, uv (recommended), or pipx:
 
-```bash
-# Using uv (recommended)
-uv tool install prek
-
-# Using pip
-pip install prek
-
-# Using pipx
-pipx install prek
-```
+{%
+  include-markdown "../README.md"
+  start="<!-- pypi-install:start -->"
+  end="<!-- pypi-install:end -->"
+%}
 
 ### Homebrew (macOS/Linux)
 
-```bash
-brew install prek
-```
+{%
+  include-markdown "../README.md"
+  start="<!-- homebrew-install:start -->"
+  end="<!-- homebrew-install:end -->"
+%}
 
 ### mise
 
-To use prek with [mise](https://mise.jdx.dev):
-
-```bash
-mise use prek
-```
+{%
+  include-markdown "../README.md"
+  start="<!-- mise-install:start -->"
+  end="<!-- mise-install:end -->"
+%}
 
 ## Build from Source
 
-```bash
-cargo install --locked --git https://github.com/j178/prek
-```
+{%
+  include-markdown "../README.md"
+  start="<!-- cargo-install:start -->"
+  end="<!-- cargo-install:end -->"
+%}
 
 ## Download from GitHub Releases
 
-Pre-built binaries are available for download from the [GitHub releases](https://github.com/j178/prek/releases) page.
+{%
+  include-markdown "../README.md"
+  start="<!-- pre-built-binaries:start -->"
+  end="<!-- pre-built-binaries:end -->"
+%}
 
 ## Updating
 
-If you installed via the standalone installer, you can update to the latest version:
-
-```bash
-prek self update
-```
+{%
+  include-markdown "../README.md"
+  start="<!-- self-update:start -->"
+  end="<!-- self-update:end -->"
+%}
 
 For other installation methods, follow the same installation steps again.
 
@@ -99,20 +106,8 @@ COMPLETE=powershell prek >> $PROFILE
 
 ## Use in GitHub Actions
 
-prek can be used in GitHub Actions via the [j178/prek-action](https://github.com/j178/prek-action) repository.
-
-Example workflow:
-
-```yaml
-name: Prek checks
-on: [push, pull_request]
-
-jobs:
-  prek:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: j178/prek-action@v1
-```
-
-This action installs prek and runs `prek run --all-files` on your repository.
+{%
+  include-markdown "../README.md"
+  start="<!-- github-actions:start -->"
+  end="<!-- github-actions:end -->"
+%}

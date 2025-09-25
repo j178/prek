@@ -1,6 +1,8 @@
 /target
 
 .cache
+__pycache__/
+site/
 
 # Insta snapshots.
 *.pending-snap

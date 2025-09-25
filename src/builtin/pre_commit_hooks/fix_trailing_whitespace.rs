@@ -33,6 +33,9 @@ impl Deref for Chars {
 }
 
 #[derive(Parser)]
+#[command(disable_help_subcommand = true)]
+#[command(disable_version_flag = true)]
+#[command(disable_help_flag = true)]
 struct Args {
     #[arg(long)]
     markdown_linebreak_ext: Vec<String>,
