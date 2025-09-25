@@ -228,7 +228,7 @@ pub async fn install_hooks(
 ) -> Result<Vec<InstalledHook>> {
     let num_hooks = hooks.len();
     let mut installed_hooks = Vec::with_capacity(hooks.len());
-    let store_hooks = Rc::new(store.installed_hooks().collect::<Vec<_>>());
+    let store_hooks = Rc::new(store.installed_hooks().await);
 
     // Group hooks by language to enable parallel installation across different languages.
     let mut hooks_by_language = FxHashMap::default();
