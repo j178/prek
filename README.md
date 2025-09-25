@@ -91,6 +91,8 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [OpenLineage](https://github.com/OpenLineage/OpenLineage/pull/3965)
 - [Authlib](https://github.com/authlib/authlib/pull/804)
 - [pre-commit-crocodile](https://radiandevcore.gitlab.io/tools/pre-commit-crocodile/)
+- [PaperQA2](https://github.com/Future-House/paper-qa/pull/1098)
+  
 <!-- why:end -->
 
 ## Installation
