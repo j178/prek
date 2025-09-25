@@ -23,7 +23,7 @@ while also providing some additional long-requested features.
 
 > [!WARNING]
 > <!-- warning-p1:start -->prek is not production-ready yet. Some subcommands and languages are not implemented. See the current gaps for drop-in parity: <a href="https://prek.j178.dev/todo/">TODO</a>.<!-- warning-p1:end -->
->
+> <br/>
 > <!-- warning-p2:start -->It's already being adopted by <a href="#who-is-using-prek">some projects</a>, please give it a try - we'd love your feedback!<!-- warning-p2:end -->
 
 <!-- features:start -->
