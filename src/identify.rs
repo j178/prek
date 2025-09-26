@@ -999,6 +999,12 @@ mod tests {
         let tags = super::tags_from_interpreter("/usr/bin/python3");
         assert_eq!(tags, vec!["python", "python3"]);
 
+        let tags = super::tags_from_interpreter("/usr/bin/python3.12");
+        assert_eq!(tags, vec!["python", "python3"]);
+
+        let tags = super::tags_from_interpreter("/usr/bin/python3.12.3");
+        assert_eq!(tags, vec!["python", "python3"]);
+
         let tags = super::tags_from_interpreter("python");
         assert_eq!(tags, vec!["python"]);
 
