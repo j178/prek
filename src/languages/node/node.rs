@@ -129,8 +129,9 @@ impl LanguageImpl for Node {
         })
     }
 
-    async fn check_health(&self) -> Result<()> {
-        todo!()
+    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
+        // TODO: check node
+        Ok(())
     }
 
     async fn run(

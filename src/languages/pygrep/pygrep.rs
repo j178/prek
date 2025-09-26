@@ -161,7 +161,7 @@ impl LanguageImpl for Pygrep {
         })
     }
 
-    async fn check_health(&self) -> Result<()> {
+    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
         todo!()
     }
 
@@ -171,9 +171,7 @@ impl LanguageImpl for Pygrep {
         filenames: &[&Path],
         store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
-        let InstalledHook::Installed { info, .. } = hook else {
-            unreachable!()
-        };
+        let info = hook.install_info().expect("Pygrep hook must be installed");
 
         let cache = store.cache_path(CacheBucket::Python);
         fs_err::tokio::create_dir_all(&cache).await?;
