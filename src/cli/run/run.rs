@@ -480,6 +480,7 @@ async fn run_hooks(
 
     let projects_len = project_to_hooks.len();
     let mut first = true;
+    let mut has_diff = false;
 
     // Hooks might modify the files, so they must be run sequentially.
     'outer: for (_, mut hooks) in project_to_hooks {
@@ -496,6 +497,9 @@ async fn run_hooks(
             first = false;
         }
         let mut diff = git::get_diff(project.path()).await?;
+        if !diff.is_empty() {
+            has_diff = true;
+        }
 
         let fail_fast = project.config().fail_fast.unwrap_or(false);
 
@@ -514,8 +518,24 @@ async fn run_hooks(
         }
     }
 
-    if !success && show_diff_on_failure {
+    if !success && show_diff_on_failure && has_diff {
+        if EnvVars::is_set(EnvVars::CI) {
+            writeln!(
+                printer.stdout(),
+                "{}",
+                indoc::formatdoc! {
+                    "{}: Some hooks made changes to the files.
+                    If you are seeing this message in CI, reproduce locally with: `{}`
+                    To run prek as part of git workflow, use `{}` to set up git hooks.",
+                    "Hint".yellow().bold(),
+                    "prek run --all-files".cyan(),
+                    "prek install".cyan()
+                }
+            )?;
+        }
+
         writeln!(printer.stdout(), "All changes made by hooks:")?;
+
         let color = if *USE_COLOR {
             "--color=always"
         } else {
@@ -532,17 +552,6 @@ async fn run_hooks(
             .spawn()?
             .wait()
             .await?;
-
-        if EnvVars::is_set(EnvVars::CI) {
-            writeln!(
-                printer.stdout(),
-                "Note: prek hooks modified files, to reproduce locally run:\n  {}",
-                format!(
-                    "prek run --all-files{}",
-                    if dry_run { " --dry-run" } else { "" }
-                )
-            )?;
-        }
     }
 
     if success {
