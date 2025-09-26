@@ -50,6 +50,6 @@ env = { PREK_GENERATE = "1" }
 description = "Prepare for a release"
 run = """
 git checkout -b bump
-uvx --from 'rooster-blue @ git+https://github.com/j178/rooster@383fb9c' --python 3.12 -- rooster release
+uvx --from 'rooster @ git+https://github.com/j178/rooster@1b5716e' --python 3.12 -- rooster release
 cargo update
 """

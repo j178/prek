@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.2.2
+
+Released on 2025-09-26.
+
+### Enhancements
+
+- Add `prek cache dir`, move `prek gc` and `prek clean` under `prek cache` ([#795](https://github.com/j178/prek/pull/795))
+- Add a hint when hooks failed in CI ([#800](https://github.com/j178/prek/pull/800))
+- Add support for specifying `PREK_UV_SOURCE` ([#766](https://github.com/j178/prek/pull/766))
+- Run docker container with `--init` ([#791](https://github.com/j178/prek/pull/791))
+- Support `--allow-multiple-documents` for `check-yaml` ([#790](https://github.com/j178/prek/pull/790))
+
+### Bug fixes
+
+- Fix interpreter identification ([#801](https://github.com/j178/prek/pull/801))
+
+### Documentation
+
+- Add PaperQA2 to "Who is using prek" ([#793](https://github.com/j178/prek/pull/793))
+- Clarify built-in hooks activation conditions and behavior ([#781](https://github.com/j178/prek/pull/781))
+- Deduplicate docs between README and MkDocs site ([#792](https://github.com/j178/prek/pull/792))
+- Mention `j178/prek-action` in docs ([#753](https://github.com/j178/prek/pull/753))
+
+### Other Changes
+
+- Bump `pre-commit-hooks` in sample-config to v6.0.0 ([#761](https://github.com/j178/prek/pull/761))
+- Improve arg parsing for builtin hooks ([#789](https://github.com/j178/prek/pull/789))
+
+### Contributors
+
+- @mondeja
+- @akx
+- @bxb100
+- @j178
+- @onerandomusername
+
 ## 0.2.1
 
 ### Enhancements

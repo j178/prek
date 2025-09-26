@@ -1,6 +1,6 @@
 [project]
 name = "prek"
-version = "0.2.1"
+version = "0.2.2"
 description = "Better `pre-commit`, re-engineered in Rust"
 authors = [{ name = "j178", email = "hi@j178.dev" }]
 requires-python = ">=3.8"

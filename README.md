@@ -92,7 +92,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [Authlib](https://github.com/authlib/authlib/pull/804)
 - [pre-commit-crocodile](https://radiandevcore.gitlab.io/tools/pre-commit-crocodile/)
 - [PaperQA2](https://github.com/Future-House/paper-qa/pull/1098)
-  
+
 <!-- why:end -->
 
 ## Installation
@@ -106,7 +106,7 @@ On Linux and macOS:
 
 <!-- linux-standalone-install:start -->
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.1/prek-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.2/prek-installer.sh | sh
 ```
 <!-- linux-standalone-install:end -->
 
@@ -114,7 +114,7 @@ On Windows:
 
 <!-- windows-standalone-install:start -->
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.1/prek-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.2/prek-installer.ps1 | iex"
 ```
 <!-- windows-standalone-install:end -->
 
