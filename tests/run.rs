@@ -1,13 +1,13 @@
 use std::path::Path;
 use std::process::Command;
 
+use crate::common::{TestContext, cmd_snapshot};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
+use constants::env_vars::EnvVars;
 use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
 use insta::assert_snapshot;
-
-use crate::common::{TestContext, cmd_snapshot};
 
 mod common;
 
@@ -1986,7 +1986,39 @@ fn show_diff_on_failure() -> Result<()> {
     let mut filters = context.filters();
     filters.push((r"index \w{7}\.\.\w{7} \d{6}", "index [OLD]..[NEW] 100644"));
 
-    cmd_snapshot!(filters.clone(), context.run().arg("--show-diff-on-failure").arg("-v"), @r"
+    // When failed in CI environment
+    cmd_snapshot!(filters.clone(), context.run().env(EnvVars::CI, "1").arg("--show-diff-on-failure").arg("-v"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    modify...................................................................Failed
+    - hook id: modify
+    - duration: [TIME]
+    - files were modified by this hook
+
+    Hint: Some hooks made changes to the files.
+    If you are seeing this message in CI, reproduce locally with: `prek run --all-files`
+    To run prek as part of git workflow, use `prek install` to set up git hooks.
+
+    All changes made by hooks:
+    diff --git a/file.txt b/file.txt
+    index [OLD]..[NEW] 100644
+    --- a/file.txt
+    +++ b/file.txt
+    @@ -1 +1,2 @@
+     Original line
+    +Added line
+
+    ----- stderr -----
+    ");
+
+    context
+        .work_dir()
+        .child("file.txt")
+        .write_str("Original line\n")?;
+    context.git_add(".");
+    // When failed in non-CI environment
+    cmd_snapshot!(filters.clone(), context.run().env_remove(EnvVars::CI).arg("--show-diff-on-failure").arg("-v"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2019,7 +2051,7 @@ fn show_diff_on_failure() -> Result<()> {
         .assert()
         .success();
 
-    cmd_snapshot!(filters.clone(), context.run().current_dir(&app).arg("--show-diff-on-failure"), @r"
+    cmd_snapshot!(filters.clone(), context.run().env_remove(EnvVars::CI).current_dir(&app).arg("--show-diff-on-failure"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2042,7 +2074,7 @@ fn show_diff_on_failure() -> Result<()> {
 
     // Run in the root
     // Since we add a new subproject, use `--refresh` to find that.
-    cmd_snapshot!(filters.clone(), context.run().arg("--show-diff-on-failure").arg("--refresh"), @r"
+    cmd_snapshot!(filters.clone(), context.run().env_remove(EnvVars::CI).arg("--show-diff-on-failure").arg("--refresh"), @r"
     success: false
     exit_code: 1
     ----- stdout -----

@@ -480,7 +480,7 @@ async fn run_hooks(
 
     let projects_len = project_to_hooks.len();
     let mut first = true;
-    let mut has_diff = false;
+    let mut file_modified = false;
 
     // Hooks might modify the files, so they must be run sequentially.
     'outer: for (_, mut hooks) in project_to_hooks {
@@ -497,36 +497,33 @@ async fn run_hooks(
             first = false;
         }
         let mut diff = git::get_diff(project.path()).await?;
-        if !diff.is_empty() {
-            has_diff = true;
-        }
 
         let fail_fast = project.config().fail_fast.unwrap_or(false);
 
         let filter = FileFilter::for_project(filenames.iter(), project);
         trace!("Files for `{project}` after filtered: {}", filter.len());
 
+        let mut hook_succeed;
         for hook in hooks {
-            let (hook_success, new_diff) =
+            (hook_succeed, diff, file_modified) =
                 run_hook(hook, &filter, store, diff, verbose, dry_run, &printer).await?;
 
-            success &= hook_success;
-            diff = new_diff;
+            success &= hook_succeed;
             if !success && (fail_fast || hook.fail_fast) {
                 break 'outer;
             }
         }
     }
 
-    if !success && show_diff_on_failure && has_diff {
+    if !success && show_diff_on_failure && file_modified {
         if EnvVars::is_set(EnvVars::CI) {
             writeln!(
                 printer.stdout(),
                 "{}",
                 indoc::formatdoc! {
-                    "{}: Some hooks made changes to the files.
+                    "\n{}: Some hooks made changes to the files.
                     If you are seeing this message in CI, reproduce locally with: `{}`
-                    To run prek as part of git workflow, use `{}` to set up git hooks.",
+                    To run prek as part of git workflow, use `{}` to set up git hooks.\n",
                     "Hint".yellow().bold(),
                     "prek run --all-files".cyan(),
                     "prek install".cyan()
@@ -577,7 +574,7 @@ async fn run_hook(
     verbose: bool,
     dry_run: bool,
     printer: &StatusPrinter,
-) -> Result<(bool, Vec<u8>)> {
+) -> Result<(bool, Vec<u8>, bool)> {
     let mut filenames = filter.for_hook(hook);
     trace!(
         "Files for `{}` after filtered: {}",
@@ -591,7 +588,7 @@ async fn run_hook(
             StatusPrinter::NO_FILES,
             Style::new().black().on_cyan(),
         )?;
-        return Ok((true, diff));
+        return Ok((true, diff, false));
     }
 
     if !Language::supported(hook.language) {
@@ -600,7 +597,7 @@ async fn run_hook(
             StatusPrinter::UNIMPLEMENTED,
             Style::new().black().on_yellow(),
         )?;
-        return Ok((true, diff));
+        return Ok((true, diff, false));
     }
 
     printer.write_running(&hook.name)?;
@@ -698,5 +695,5 @@ async fn run_hook(
         }
     }
 
-    Ok((success, new_diff))
+    Ok((success, new_diff, file_modified))
 }
