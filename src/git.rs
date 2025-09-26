@@ -159,14 +159,13 @@ pub(crate) async fn get_git_common_dir() -> Result<PathBuf, Error> {
 
 pub(crate) async fn get_staged_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let output = git_cmd("get staged files")?
+        .current_dir(root)
         .arg("diff")
-        .arg("--staged")
+        .arg("--cached")
         .arg("--name-only")
         .arg("--diff-filter=ACMRTUXB") // Everything except for D
         .arg("--no-ext-diff") // Disable external diff drivers
         .arg("-z") // Use NUL as line terminator
-        .arg("--")
-        .arg(root)
         .check(true)
         .output()
         .await?;
@@ -200,6 +199,35 @@ pub(crate) async fn has_unmerged_paths() -> Result<bool, Error> {
         .output()
         .await?;
     Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
+}
+
+pub(crate) async fn commit(repo: &Path, msg: &str) -> Result<(), Error> {
+    let mut cmd = git_cmd("git commit")?;
+    cmd.arg("commit")
+        .arg("-m")
+        .arg(msg)
+        .arg("--no-gpg-sign")
+        .current_dir(repo)
+        .env("GIT_AUTHOR_NAME", "pre-commit test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.com")
+        .env("GIT_COMMITTER_NAME", "pre-commit test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.com")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    cmd.status().await?;
+    Ok(())
+}
+
+pub(crate) async fn has_diff(rev: &str, path: &Path) -> Result<bool> {
+    let status = git_cmd("check diff")?
+        .arg("diff")
+        .arg("--quiet")
+        .arg(rev)
+        .current_dir(path)
+        .check(false)
+        .status()
+        .await?;
+    Ok(status.code() == Some(1))
 }
 
 pub(crate) async fn is_in_merge_conflict() -> Result<bool, Error> {
