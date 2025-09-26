@@ -1010,5 +1010,8 @@ mod tests {
 
         let tags = super::tags_from_interpreter("sh");
         assert_eq!(tags, vec!["shell", "sh"]);
+
+        let tags = super::tags_from_interpreter("invalid");
+        assert_eq!(tags, Vec::<&str>::new());
     }
 }
