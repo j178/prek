@@ -40,6 +40,19 @@ fn basic_case_sensitive() -> Result<()> {
     ----- stderr -----
     "#);
 
+    // Run again to ensure `health_check` works correctly.
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check-todo...............................................................Failed
+    - hook id: check-todo
+    - exit code: 1
+      test.py:1:TODO: implement this
+
+    ----- stderr -----
+    "#);
+
     Ok(())
 }
 

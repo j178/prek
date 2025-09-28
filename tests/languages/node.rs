@@ -116,7 +116,6 @@ fn language_version() -> anyhow::Result<()> {
 }
 
 /// Test that `additional_dependencies` are installed correctly.
-#[ignore = "slow and flaky"]
 #[test]
 fn additional_dependencies() {
     let context = TestContext::new();
@@ -129,7 +128,6 @@ fn additional_dependencies() {
               - id: node
                 name: node
                 language: node
-                language_version: '18.20.8' # will auto download
                 entry: cowsay Hello World!
                 additional_dependencies: ["cowsay"]
                 always_run: true
@@ -139,6 +137,26 @@ fn additional_dependencies() {
 
     context.git_add(".");
 
+    cmd_snapshot!(context.filters(), context.run(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    node.....................................................................Passed
+    - hook id: node
+    - duration: [TIME]
+      ______________
+      < Hello World! >
+       --------------
+              \   ^__^
+               \  (oo)/_______
+                  (__)\       )\/\
+                      ||----w |
+                      ||     ||
+
+    ----- stderr -----
+    "###);
+
+    // Run again to check `health_check` works correctly.
     cmd_snapshot!(context.filters(), context.run(), @r###"
     success: true
     exit_code: 0
