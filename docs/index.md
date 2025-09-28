@@ -11,17 +11,9 @@
 %}
 
 !!! warning "Not production-ready yet"
-    {%
-      include-markdown "../README.md"
-      start="<!-- warning-p1:start -->"
-      end="<!-- warning-p1:end -->"
-    %}
+    prek is not production-ready yet. Some subcommands and languages are not implemented. See the current gaps for drop-in parity on the [TODO page](./todo.md).
 
-    {%
-      include-markdown "../README.md"
-      start="<!-- warning-p2:start -->"
-      end="<!-- warning-p2:end -->"
-    %}
+    It's already being adopted by [some projects](#who-is-using-prek), please give it a try - we'd love your feedback!
 
 {%
   include-markdown "../README.md"
