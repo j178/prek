@@ -118,8 +118,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         _ => Level::TraceAll,
     })?;
 
-    let printer = if cli.globals.quiet {
+    let printer = if cli.globals.quiet == 1 {
         Printer::Quiet
+    } else if cli.globals.quiet > 1 {
+        Printer::Silent
     } else if cli.globals.verbose > 1 {
         Printer::Verbose
     } else if cli.globals.no_progress {
@@ -128,7 +130,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Printer::Default
     };
 
-    if cli.globals.quiet {
+    if cli.globals.quiet > 0 {
         warnings::disable();
     } else {
         warnings::enable();

@@ -420,9 +420,13 @@ impl StatusPrinter {
         writeln!(self.printer.stdout(), "{line}")
     }
 
-    fn write_running(&self, hook_name: &str) -> Result<(), std::fmt::Error> {
+    fn write_running(&self, hook_name: &str, important: bool) -> Result<(), std::fmt::Error> {
         write!(
-            self.printer.stdout(),
+            if important {
+                self.printer.stdout_important()
+            } else {
+                self.printer.stdout()
+            },
             "{}{}",
             hook_name,
             ".".repeat(self.columns - hook_name.width_cjk() - Self::PASSED.len() - 1)
@@ -438,11 +442,15 @@ impl StatusPrinter {
     }
 
     fn write_failed(&self) -> Result<(), std::fmt::Error> {
-        writeln!(self.printer.stdout(), "{}", Self::FAILED.on_red())
+        writeln!(self.printer.stdout_important(), "{}", Self::FAILED.on_red())
     }
 
     fn stdout(&self) -> Stdout {
         self.printer.stdout()
+    }
+
+    fn stdout_important(&self) -> Stdout {
+        self.printer.stdout_important()
     }
 }
 
@@ -531,7 +539,7 @@ async fn run_hooks(
             )?;
         }
 
-        writeln!(printer.stdout(), "All changes made by hooks:")?;
+        writeln!(printer.stdout_important(), "All changes made by hooks:")?;
 
         let color = if *USE_COLOR {
             "--color=always"
@@ -600,7 +608,7 @@ async fn run_hook(
         return Ok((true, diff, false));
     }
 
-    printer.write_running(&hook.name)?;
+    printer.write_running(&hook.name, false)?;
     std::io::stdout().flush()?;
 
     let start = std::time::Instant::now();
@@ -643,53 +651,51 @@ async fn run_hook(
     } else if success {
         printer.write_passed()?;
     } else {
+        // If the printer is in quiet mode, the running line was not printed.
+        // Reprint it here before printing the failure.
+        if printer.stdout() == Stdout::Disabled {
+            printer.write_running(&hook.name, true)?;
+        }
         printer.write_failed()?;
     }
 
     if verbose || hook.verbose || !success {
-        writeln!(
-            printer.stdout(),
-            "{}",
-            format!("- hook id: {}", hook.id).dimmed()
-        )?;
+        let mut stdout = if success {
+            printer.stdout()
+        } else {
+            printer.stdout_important()
+        };
+
+        writeln!(stdout, "{}", format!("- hook id: {}", hook.id).dimmed())?;
         if verbose || hook.verbose {
             writeln!(
-                printer.stdout(),
+                stdout,
                 "{}",
                 format!("- duration: {:.2?}s", duration.as_secs_f64()).dimmed()
             )?;
         }
         if status != 0 {
-            writeln!(
-                printer.stdout(),
-                "{}",
-                format!("- exit code: {status}").dimmed()
-            )?;
+            writeln!(stdout, "{}", format!("- exit code: {status}").dimmed())?;
         }
         if file_modified {
-            writeln!(
-                printer.stdout(),
-                "{}",
-                "- files were modified by this hook".dimmed()
-            )?;
+            writeln!(stdout, "{}", "- files were modified by this hook".dimmed())?;
         }
 
-        // To be consistent with pre-commit, merge stderr into stdout.
-        let stdout = output.trim_ascii();
-        if !stdout.is_empty() {
+        let output = output.trim_ascii();
+        if !output.is_empty() {
             if let Some(file) = hook.log_file.as_deref() {
                 let mut file = fs_err::tokio::OpenOptions::new()
                     .create(true)
                     .append(true)
                     .open(file)
                     .await?;
-                file.write_all(stdout).await?;
+                file.write_all(output).await?;
                 file.sync_all().await?;
             } else {
                 writeln!(
-                    printer.stdout(),
+                    stdout,
                     "{}",
-                    textwrap::indent(&String::from_utf8_lossy(stdout), "  ").dimmed()
+                    textwrap::indent(&String::from_utf8_lossy(output), "  ").dimmed()
                 )?;
             }
         }
