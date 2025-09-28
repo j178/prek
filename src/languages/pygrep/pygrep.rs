@@ -10,7 +10,7 @@ use tracing::debug;
 use crate::cli::reporter::HookInstallReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
-use crate::languages::python::{Uv, python_exec};
+use crate::languages::python::{Uv, python_exec, query_python_info};
 use crate::process::Cmd;
 use crate::run::CONCURRENCY;
 use crate::store::{CacheBucket, Store, ToolBucket};
@@ -161,8 +161,29 @@ impl LanguageImpl for Pygrep {
         })
     }
 
-    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
-        todo!()
+    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
+        let python = python_exec(&info.env_path);
+        let python_info = query_python_info(&python)
+            .await
+            .context("Failed to query Python info")?;
+
+        if python_info.version != info.language_version {
+            anyhow::bail!(
+                "Python version mismatch: expected {}, found {}",
+                info.language_version,
+                python_info.version
+            );
+        }
+
+        if python_info.python_exec != info.toolchain {
+            anyhow::bail!(
+                "Python executable mismatch: expected {}, found {}",
+                info.toolchain.display(),
+                python_info.python_exec.display()
+            );
+        }
+
+        Ok(())
     }
 
     async fn run(

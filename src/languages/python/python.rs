@@ -22,12 +22,12 @@ use crate::store::{Store, ToolBucket};
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Python;
 
-struct PythonInfo {
-    version: semver::Version,
-    python_exec: PathBuf,
+pub(crate) struct PythonInfo {
+    pub(crate) version: semver::Version,
+    pub(crate) python_exec: PathBuf,
 }
 
-async fn query_python_info(python: &Path) -> Result<PythonInfo> {
+pub(crate) async fn query_python_info(python: &Path) -> Result<PythonInfo> {
     static QUERY_PYTHON_INFO: &str = indoc::indoc! {r#"
     import sys
     print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
