@@ -1734,7 +1734,7 @@ fn selectors_completion() -> Result<()> {
     --refresh	Refresh all cached data
     --help	Display the concise help for this command
     --no-progress	Hide all progress outputs
-    --quiet	Do not print any output
+    --quiet	Use quiet output
     --verbose	Use verbose output
     --version	Display the prek version
 
