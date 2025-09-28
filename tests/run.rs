@@ -2110,3 +2110,47 @@ fn show_diff_on_failure() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn run_quiet() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: success
+                name: success
+                entry: echo
+                language: system
+              - id: fail
+                name: fail
+                entry: fail
+                language: fail
+    "});
+    context.git_add(".");
+
+    // Run with `--quiet`, only print failed hooks.
+    cmd_snapshot!(context.filters(), context.run().arg("--quiet"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fail.....................................................................Failed
+    - hook id: fail
+    - exit code: 1
+      fail
+
+      .pre-commit-config.yaml
+
+    ----- stderr -----
+    ");
+
+    // Run with `-qq`, do not print anything.
+    cmd_snapshot!(context.filters(), context.run().arg("-qq"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+}
