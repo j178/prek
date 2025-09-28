@@ -533,6 +533,9 @@ pub(crate) struct AutoUpdateArgs {
     /// Only update this repository. This option may be specified multiple times.
     #[arg(long)]
     pub(crate) repo: Vec<String>,
+    /// Do not write changes to the config file, only display what would be changed.
+    #[arg(long)]
+    pub(crate) dry_run: bool,
     /// Number of threads to use.
     #[arg(short, long, default_value_t = 3)]
     pub(crate) jobs: usize,

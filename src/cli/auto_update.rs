@@ -36,6 +36,7 @@ pub(crate) async fn auto_update(
     bleeding_edge: bool,
     freeze: bool,
     jobs: usize,
+    dry_run: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     struct RepoInfo<'a> {
@@ -161,11 +162,13 @@ pub(crate) async fn auto_update(
         }
     }
 
-    // Update each project config file
-    for (project, revisions) in project_updates {
-        let has_changes = revisions.iter().any(Option::is_some);
-        if has_changes {
-            write_new_config(project.config_file(), &revisions).await?;
+    if !dry_run {
+        // Update each project config file
+        for (project, revisions) in project_updates {
+            let has_changes = revisions.iter().any(Option::is_some);
+            if has_changes {
+                write_new_config(project.config_file(), &revisions).await?;
+            }
         }
     }
 

@@ -281,6 +281,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.bleeding_edge,
                 args.freeze,
                 args.jobs,
+                args.dry_run,
                 printer,
             )
             .await
