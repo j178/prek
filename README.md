@@ -165,6 +165,7 @@ mise use prek
 
 </details>
 
+<details>
 <summary>npmjs</summary>
 
 prek is published as a Node.js package that downloads standalone binaries, you can install it using `npm`, `pnpm`, or `npx`:
