@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.2.3
+
+Released on 2025-09-29.
+
+### Enhancements
+
+- Add `--dry-run` to `prek auto-update` ([#806](https://github.com/j178/prek/pull/806))
+- Add a global `--log-file` flag to specify the log file path ([#817](https://github.com/j178/prek/pull/817))
+- Implement hook health check ([#798](https://github.com/j178/prek/pull/798))
+- Show error message in quiet mode ([#807](https://github.com/j178/prek/pull/807))
+
+### Bug fixes
+
+- Write `fail` entry into output directly ([#811](https://github.com/j178/prek/pull/811))
+
+### Documentation
+
+- Update docs about uv in prek ([#810](https://github.com/j178/prek/pull/810))
+
+### Other changes
+
+- Add a security policy for reporting vulnerabilities ([#804](https://github.com/j178/prek/pull/804))
+
+### Contributors
+
+- @mondeja
+- @j178
+
 ## 0.2.2
 
 Released on 2025-09-26.
