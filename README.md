@@ -165,6 +165,25 @@ mise use prek
 
 </details>
 
+<summary>npmjs</summary>
+
+prek is published as a Node.js package that downloads standalone binaries, you can install it using `npm`, `pnpm`, or `npx`:
+
+<!-- npmjs-install:start -->
+```bash
+# Using npm
+npm add -D prek
+
+# Using pnpm
+pnpm add -D prek
+
+# Using npx
+npx prek --version
+```
+<!-- npmjs-install:end -->
+
+</details>
+
 <details>
 <summary>Cargo</summary>
 
