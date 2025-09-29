@@ -174,6 +174,15 @@ pub(crate) struct GlobalArgs {
     #[arg(global = true, short, long, action = ArgAction::Count)]
     pub(crate) verbose: u8,
 
+    /// Write trace logs to the specified file.
+    /// If not specified, trace logs will be written to `$PREK_HOME/prek.log`.
+    #[arg(global = true, long, value_name = "LOG_FILE", value_hint = ValueHint::FilePath)]
+    pub(crate) log_file: Option<PathBuf>,
+
+    /// Do not write trace logs to a log file.
+    #[arg(global = true, long, overrides_with = "log_file", hide = true)]
+    pub(crate) no_log_file: bool,
+
     /// Display the prek version.
     #[arg(global = true, short = 'V', long, action = ArgAction::Version)]
     version: (),

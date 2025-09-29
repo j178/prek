@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -59,7 +60,29 @@ pub(crate) enum Level {
     TraceAll,
 }
 
-fn setup_logging(level: Level) -> Result<()> {
+enum LogFile {
+    Default,
+    Path(PathBuf),
+    Disabled,
+}
+
+impl LogFile {
+    fn from_args(log_file: Option<PathBuf>, no_log_file: bool) -> Self {
+        if no_log_file {
+            Self::Disabled
+        } else if let Some(path) = log_file {
+            Self::Path(path)
+        } else {
+            Self::Default
+        }
+    }
+
+    fn is_disabled(&self) -> bool {
+        matches!(self, Self::Disabled)
+    }
+}
+
+fn setup_logging(level: Level, log_file: LogFile) -> Result<()> {
     let directive = match level {
         Level::Default | Level::Verbose => LevelFilter::OFF.into(),
         Level::Debug => Directive::from_str("prek=debug")?,
@@ -81,28 +104,35 @@ fn setup_logging(level: Level) -> Result<()> {
         .with_writer(anstream::stderr)
         .with_filter(stderr_filter);
 
-    let log_file_path = STORE.as_ref()?.log_file();
-    let log_file = fs_err::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(log_file_path)
-        .context("Failed to open log file")?;
-    let log_file = Mutex::new(StripStream::new(log_file.into_file()));
+    let registry = tracing_subscriber::registry().with(stderr_layer);
 
-    let file_format = tracing_subscriber::fmt::format()
-        .with_target(false)
-        .with_ansi(false);
-    let file_layer = tracing_subscriber::fmt::layer()
-        .with_span_events(FmtSpan::CLOSE)
-        .event_format(file_format)
-        .with_writer(log_file)
-        .with_filter(EnvFilter::new("prek=trace"));
+    if log_file.is_disabled() {
+        registry.init();
+    } else {
+        let log_file_path = match log_file {
+            LogFile::Default => STORE.as_ref()?.log_file(),
+            LogFile::Path(path) => path,
+            LogFile::Disabled => unreachable!(),
+        };
+        let log_file = fs_err::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(log_file_path)
+            .context("Failed to open log file")?;
+        let log_file = Mutex::new(StripStream::new(log_file.into_file()));
 
-    tracing_subscriber::registry()
-        .with(stderr_layer)
-        .with(file_layer)
-        .init();
+        let file_format = tracing_subscriber::fmt::format()
+            .with_target(false)
+            .with_ansi(false);
+        let file_layer = tracing_subscriber::fmt::layer()
+            .with_span_events(FmtSpan::CLOSE)
+            .event_format(file_format)
+            .with_writer(log_file)
+            .with_filter(EnvFilter::new("prek=trace"));
+
+        registry.with(file_layer).init();
+    }
 
     Ok(())
 }
@@ -110,13 +140,17 @@ fn setup_logging(level: Level) -> Result<()> {
 async fn run(mut cli: Cli) -> Result<ExitStatus> {
     ColorChoice::write_global(cli.globals.color.into());
 
-    setup_logging(match cli.globals.verbose {
-        0 => Level::Default,
-        1 => Level::Verbose,
-        2 => Level::Debug,
-        3 => Level::Trace,
-        _ => Level::TraceAll,
-    })?;
+    let log_file = LogFile::from_args(cli.globals.log_file.clone(), cli.globals.no_log_file);
+    setup_logging(
+        match cli.globals.verbose {
+            0 => Level::Default,
+            1 => Level::Verbose,
+            2 => Level::Debug,
+            3 => Level::Trace,
+            _ => Level::TraceAll,
+        },
+        log_file,
+    )?;
 
     let printer = if cli.globals.quiet == 1 {
         Printer::Quiet
