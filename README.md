@@ -166,6 +166,19 @@ mise use prek
 </details>
 
 <details>
+<summary>Cargo</summary>
+
+<!-- cargo-install:start -->
+Build from source using Cargo (Rust 1.89+ is required):
+
+```bash
+cargo install --locked --git https://github.com/j178/prek
+```
+<!-- cargo-install:end -->
+
+</details>
+
+<details>
 <summary>npmjs</summary>
 
 prek is published as a Node.js package that downloads standalone binaries, you can install it using `npm`, `pnpm`, or `npx`:
@@ -182,19 +195,6 @@ pnpm add -D prek
 npx prek --version
 ```
 <!-- npmjs-install:end -->
-
-</details>
-
-<details>
-<summary>Cargo</summary>
-
-<!-- cargo-install:start -->
-Build from source using Cargo (Rust 1.89+ is required):
-
-```bash
-cargo install --locked --git https://github.com/j178/prek
-```
-<!-- cargo-install:end -->
 
 </details>
 
