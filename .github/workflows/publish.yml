@@ -30,3 +30,18 @@ jobs:
           merge-multiple: true
       - name: Publish to PyPi
         run: uv publish -v wheels/*
+
+  npm-publish:
+    name: Upload to npmjs registry
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+    permissions:
+      # For npm's trusted publishing.
+      id-token: write
+    steps:
+      - name: Install Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - name: Publish to npm
+        working-directory: ./integrations/nodejs
+        run: npm publish --provenance --access public
