@@ -119,7 +119,7 @@ jobs:
             echo "::endgroup::"
           done
 
-          cargo llvm-cov report --lcov --ignore-filename-regex lib/pty --output-path lcov.info
+          cargo llvm-cov report --lcov --output-path lcov.info
 
       - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
@@ -183,7 +183,7 @@ jobs:
             -j 8 \
             --final-status-level slow
 
-          cargo llvm-cov report --lcov --ignore-filename-regex lib/pty --output-path lcov.info
+          cargo llvm-cov report --lcov --output-path lcov.info
 
       - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
@@ -310,7 +310,7 @@ jobs:
             -j 8 \
             --final-status-level slow
 
-          cargo llvm-cov report --lcov --ignore-filename-regex lib/pty --output-path lcov.info
+          cargo llvm-cov report --lcov --output-path lcov.info
         shell: bash
 
       - name: "Upload coverage reports to Codecov"
