@@ -100,7 +100,7 @@ impl Store {
 
         debug!(
             target = %temp.path().display(),
-            ?repo,
+            %repo,
             "Cloning repo",
         );
         clone_repo(&repo.repo, &repo.rev, temp.path()).await?;
@@ -125,6 +125,7 @@ impl Store {
             return vec![];
         };
 
+        debug!("Checking health of installed hooks");
         let mut tasks = futures::stream::iter(dirs)
             .map(async |entry| {
                 let path = match entry {
