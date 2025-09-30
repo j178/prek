@@ -10,7 +10,7 @@ certifi==2025.8.3
     # via requests
 charset-normalizer==3.4.3
     # via requests
-click==8.2.1
+click==8.1.8
     # via
     #   mkdocs
     #   mkdocs-material
@@ -24,6 +24,11 @@ htmlmin2==0.1.13
     # via mkdocs-minify-plugin
 idna==3.10
     # via requests
+importlib-metadata==8.7.0
+    # via
+    #   markdown
+    #   mkdocs
+    #   mkdocs-get-deps
 jinja2==3.1.6
     # via
     #   mkdocs
@@ -45,20 +50,20 @@ mergedeep==1.3.4
     #   mkdocs-get-deps
 mkdocs==1.6.1
     # via
-    #   -r docs/requirements.in
+    #   -r requirements.in
     #   mkdocs-include-markdown-plugin
     #   mkdocs-material
     #   mkdocs-minify-plugin
 mkdocs-get-deps==0.2.0
     # via mkdocs
-mkdocs-include-markdown-plugin==7.1.7
-    # via -r docs/requirements.in
+mkdocs-include-markdown-plugin==7.1.8
+    # via -r requirements.in
 mkdocs-material==9.6.18
-    # via -r docs/requirements.in
+    # via -r requirements.in
 mkdocs-material-extensions==1.3.1
     # via mkdocs-material
 mkdocs-minify-plugin==0.8.0
-    # via -r docs/requirements.in
+    # via -r requirements.in
 packaging==25.0
     # via mkdocs
 paginate==0.5.7
@@ -71,7 +76,7 @@ pygments==2.19.2
     # via mkdocs-material
 pymdown-extensions==10.16.1
     # via
-    #   -r docs/requirements.in
+    #   -r requirements.in
     #   mkdocs-material
 python-dateutil==2.9.0.post0
     # via ghp-import
@@ -93,3 +98,5 @@ watchdog==6.0.0
     # via mkdocs
 wcmatch==10.1
     # via mkdocs-include-markdown-plugin
+zipp==3.23.0
+    # via importlib-metadata
