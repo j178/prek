@@ -21,12 +21,6 @@ env:
   PYTHON_VERSION: '3.12.11'
 
 jobs:
-  typos:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-      - uses: crate-ci/typos@master
-
   lint:
     name: "lint"
     timeout-minutes: 30
@@ -37,6 +31,10 @@ jobs:
         run: rustup component add rustfmt
       - name: "rustfmt"
         run: cargo fmt --all --check
+      - name: Run prek hooks
+        uses: j178/prek-action@v1
+        with:
+          extra-args: '--all-files --skip examples/ --skip cargo-fmt --skip cargo-clippy'
 
   cargo-clippy-linux:
     name: "cargo clippy | ubuntu"
