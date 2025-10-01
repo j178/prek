@@ -550,7 +550,7 @@ pub(crate) struct AutoUpdateArgs {
     #[arg(long)]
     pub(crate) dry_run: bool,
     /// Number of threads to use.
-    #[arg(short, long, default_value_t = 3)]
+    #[arg(short, long, default_value_t = 0)]
     pub(crate) jobs: usize,
 }
 
