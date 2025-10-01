@@ -359,6 +359,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
         .filters()
         .into_iter()
         .chain([
+            (r"\.tmp\w+", "[TMP]"),
             (r"shadow-repo\w+", "shadow-repo"),
             (r"run-in\w+", "run-in"),
             (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
@@ -373,7 +374,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     Using config:
     ===============================================================================
     repos:
-    - repo: [HOME]/scratch/.tmpMhMxTd/shadow-repo
+    - repo: [HOME]/scratch/[TMP]/shadow-repo
       rev: [COMMIT_SHA]
       hooks:
       - id: uncommitted-hook
