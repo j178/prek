@@ -33,6 +33,14 @@ fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
         .current_dir(&repo_dir)
         .assert()
         .success();
+    // Disable autocrlf for test consistency
+    Command::new("git")
+        .arg("config")
+        .arg("core.autocrlf")
+        .arg("false")
+        .current_dir(&repo_dir)
+        .assert()
+        .success();
 
     repo_dir
         .child(".pre-commit-hooks.yaml")
@@ -96,6 +104,14 @@ fn create_failing_hook_repo(context: &TestContext, repo_name: &str) -> Result<Pa
         .current_dir(&repo_dir)
         .assert()
         .success();
+    // Disable autocrlf for test consistency
+    Command::new("git")
+        .arg("config")
+        .arg("core.autocrlf")
+        .arg("false")
+        .current_dir(&repo_dir)
+        .assert()
+        .success();
 
     repo_dir
         .child(".pre-commit-hooks.yaml")
@@ -130,7 +146,7 @@ fn try_repo_basic() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
-    context.disable_auto_crlf();
+    context.disable_auto_crlf(); // Ensure consistent line endings
 
     let repo_path = create_hook_repo(&context, "try-repo-basic")?;
 
@@ -143,9 +159,12 @@ fn try_repo_basic() -> Result<()> {
         .arg("--files")
         .arg(test_file.path());
 
+    // Define filters for snapshot consistency
     let mut filters = context.filters();
-    filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
-    filters.push((r"file:///?", "file:///")); 
+    filters.extend([
+        (r"file:///?", "file:///"),
+        (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
+    ]);
 
     cmd_snapshot!(filters, cmd, @r"
     success: true
@@ -155,7 +174,7 @@ fn try_repo_basic() -> Result<()> {
     Using config:
     ===============================================================================
     repos:
-    - repo: file://[HOME]/test-repos/try-repo-basic/
+    - repo: file:///[HOME]/test-repos/try-repo-basic/
       rev: [COMMIT_SHA]
       hooks:
       - id: test-hook
@@ -175,7 +194,7 @@ fn try_repo_failing_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
-    context.disable_auto_crlf();
+    context.disable_auto_crlf(); // Ensure consistent line endings
 
     let repo_path = create_failing_hook_repo(&context, "try-repo-failing")?;
 
@@ -184,9 +203,12 @@ fn try_repo_failing_hook() -> Result<()> {
     let mut cmd = context.command();
     cmd.arg("try-repo").arg(&repo_path);
 
+    // Define filters for snapshot consistency
     let mut filters = context.filters();
-    filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
-    filters.push((r"file:///?", "file:///")); 
+    filters.extend([
+        (r"file:///?", "file:///"),
+        (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
+    ]);
 
     cmd_snapshot!(filters, cmd, @r"
     success: false
@@ -196,7 +218,7 @@ fn try_repo_failing_hook() -> Result<()> {
     Using config:
     ===============================================================================
     repos:
-    - repo: file://[HOME]/test-repos/try-repo-failing/
+    - repo: file:///[HOME]/test-repos/try-repo-failing/
       rev: [COMMIT_SHA]
       hooks:
       - id: failing-hook
@@ -216,7 +238,7 @@ fn try_repo_specific_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
-    context.disable_auto_crlf();
+    context.disable_auto_crlf(); // Ensure consistent line endings
 
     let repo_path = create_hook_repo(&context, "try-repo-specific-hook")?;
 
@@ -228,9 +250,12 @@ fn try_repo_specific_hook() -> Result<()> {
         .arg("--hook")
         .arg("another-hook");
 
+    // Define filters for snapshot consistency
     let mut filters = context.filters();
-    filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
-    filters.push((r"file:///?", "file:///")); 
+    filters.extend([
+        (r"file:///?", "file:///"),
+        (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
+    ]);
 
     cmd_snapshot!(filters, cmd, @r"
     success: true
@@ -240,7 +265,7 @@ fn try_repo_specific_hook() -> Result<()> {
     Using config:
     ===============================================================================
     repos:
-    - repo: file://[HOME]/test-repos/try-repo-specific-hook/
+    - repo: file:///[HOME]/test-repos/try-repo-specific-hook/
       rev: [COMMIT_SHA]
       hooks:
       - id: another-hook
@@ -258,7 +283,7 @@ fn try_repo_specific_rev() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
-    context.disable_auto_crlf();
+    context.disable_auto_crlf(); // Ensure consistent line endings
 
     let repo_path = create_hook_repo(&context, "try-repo-specific-rev")?;
 
@@ -302,10 +327,13 @@ fn try_repo_specific_rev() -> Result<()> {
         .arg("--ref")
         .arg(&initial_rev);
 
+    // Define filters for snapshot consistency
     let mut filters = context.filters();
-    filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
-    filters.push((&initial_rev, "[COMMIT_SHA]"));
-    filters.push((r"file:///?", "file:///")); 
+    filters.extend([
+        (r"file:///?", "file:///"),
+        (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
+        (&initial_rev, "[COMMIT_SHA]"),
+    ]);
 
     cmd_snapshot!(filters, cmd, @r"
     success: true
@@ -315,7 +343,7 @@ fn try_repo_specific_rev() -> Result<()> {
     Using config:
     ===============================================================================
     repos:
-    - repo: file://[HOME]/test-repos/try-repo-specific-rev/
+    - repo: file:///[HOME]/test-repos/try-repo-specific-rev/
       rev: [COMMIT_SHA]
       hooks:
       - id: test-hook
@@ -335,7 +363,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
-    context.disable_auto_crlf();
+    context.disable_auto_crlf(); // Ensure consistent line endings
 
     let repo_path = create_hook_repo(&context, "try-repo-uncommitted")?;
 
@@ -364,16 +392,15 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     let mut cmd = context.command();
     cmd.arg("try-repo").arg(repo_path);
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([
-            (r"\.tmp\w+", "[TMP]"),
-            (r"shadow-repo\w+", "shadow-repo"),
-            (r"run-in\w+", "run-in"),
-            (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
-        ])
-        .collect::<Vec<_>>();
+    // Define filters for snapshot consistency
+    let mut filters = context.filters();
+    filters.extend([
+        (r"file:///?", "file:///"),
+        (r"\.tmp\w+", "[TMP]"),
+        (r"shadow-repo\w+", "shadow-repo"),
+        (r"run-in\w+", "run-in"),
+        (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
+    ]);
 
     cmd_snapshot!(filters, cmd, @r"
     success: true
@@ -383,7 +410,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     Using config:
     ===============================================================================
     repos:
-    - repo: file://[HOME]/scratch/[TMP]/shadow-repo/
+    - repo: file:///[HOME]/scratch/[TMP]/shadow-repo/
       rev: [COMMIT_SHA]
       hooks:
       - id: uncommitted-hook

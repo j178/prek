@@ -39,6 +39,7 @@ async fn get_repo_and_rev(
 
         let repo_url = Url::from_directory_path(&repo)
             .map_err(|()| anyhow::anyhow!("Failed to convert path to URL: {}", repo.display()))?;
+
         let shadow = tmpdir.join("shadow-repo");
         git::git_cmd("clone shadow repo")?
             .arg("clone")
