@@ -128,8 +128,9 @@ fn create_failing_hook_repo(context: &TestContext, repo_name: &str) -> Result<Pa
 #[test]
 fn try_repo_basic() -> Result<()> {
     let context = TestContext::new();
-    context.init_project(); // Initialize the main "user" repository
-    context.configure_git_author(); // Configure the user for it
+    context.init_project();
+    context.configure_git_author();
+    context.disable_auto_crlf();
 
     let repo_path = create_hook_repo(&context, "try-repo-basic")?;
 
@@ -173,6 +174,7 @@ fn try_repo_failing_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
+    context.disable_auto_crlf();
 
     let repo_path = create_failing_hook_repo(&context, "try-repo-failing")?;
 
@@ -212,6 +214,7 @@ fn try_repo_specific_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
+    context.disable_auto_crlf();
 
     let repo_path = create_hook_repo(&context, "try-repo-specific-hook")?;
 
@@ -252,6 +255,7 @@ fn try_repo_specific_rev() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
+    context.disable_auto_crlf();
 
     let repo_path = create_hook_repo(&context, "try-repo-specific-rev")?;
 
@@ -327,6 +331,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
+    context.disable_auto_crlf();
 
     let repo_path = create_hook_repo(&context, "try-repo-uncommitted")?;
 

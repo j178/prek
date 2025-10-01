@@ -2,6 +2,7 @@ use std::env;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use url::Url;
 
 use anyhow::{Context, Result};
 use tempfile::tempdir_in;
@@ -116,11 +117,14 @@ pub(crate) async fn try_repo(
         .await
         .context("Failed to determine repository and revision")?;
 
+    let repo_url = Url::from_directory_path(&repo_path)
+        .map_err(|_| anyhow::anyhow!("Failed to convert path to URL: {}", repo_path.display()))?;
+
     let store = Store::from_path(tempdir.path().join("store"));
     let repo_clone_path = store
         .clone_repo(
             &config::RemoteRepo {
-                repo: repo_path.to_string_lossy().to_string(),
+                repo: repo_url.to_string(),
                 rev: rev.clone(),
                 hooks: vec![],
             },
@@ -154,7 +158,7 @@ pub(crate) async fn try_repo(
 
     let config = config::Config {
         repos: vec![Repo::Remote(config::RemoteRepo {
-            repo: repo_path.to_string_lossy().to_string(),
+            repo: repo_url.to_string(),
             rev,
             hooks,
         })],
