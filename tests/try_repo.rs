@@ -154,7 +154,7 @@ fn try_repo_basic() -> Result<()> {
     Using config:
     ===============================================================================
     repos:
-    - repo: [HOME]/test-repos/try-repo-basic
+    - repo: file://[HOME]/test-repos/try-repo-basic/
       rev: [COMMIT_SHA]
       hooks:
       - id: test-hook
@@ -194,7 +194,7 @@ fn try_repo_failing_hook() -> Result<()> {
     Using config:
     ===============================================================================
     repos:
-    - repo: [HOME]/test-repos/try-repo-failing
+    - repo: file://[HOME]/test-repos/try-repo-failing/
       rev: [COMMIT_SHA]
       hooks:
       - id: failing-hook
@@ -237,7 +237,7 @@ fn try_repo_specific_hook() -> Result<()> {
     Using config:
     ===============================================================================
     repos:
-    - repo: [HOME]/test-repos/try-repo-specific-hook
+    - repo: file://[HOME]/test-repos/try-repo-specific-hook/
       rev: [COMMIT_SHA]
       hooks:
       - id: another-hook
@@ -311,7 +311,7 @@ fn try_repo_specific_rev() -> Result<()> {
     Using config:
     ===============================================================================
     repos:
-    - repo: [HOME]/test-repos/try-repo-specific-rev
+    - repo: file://[HOME]/test-repos/try-repo-specific-rev/
       rev: [COMMIT_SHA]
       hooks:
       - id: test-hook
@@ -379,7 +379,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     Using config:
     ===============================================================================
     repos:
-    - repo: [HOME]/scratch/[TMP]/shadow-repo
+    - repo: file://[HOME]/scratch/[TMP]/shadow-repo/
       rev: [COMMIT_SHA]
       hooks:
       - id: uncommitted-hook
