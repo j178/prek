@@ -145,6 +145,7 @@ fn try_repo_basic() -> Result<()> {
 
     let mut filters = context.filters();
     filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
+    filters.push((r"file:///?", "file:///")); 
 
     cmd_snapshot!(filters, cmd, @r"
     success: true
@@ -185,6 +186,7 @@ fn try_repo_failing_hook() -> Result<()> {
 
     let mut filters = context.filters();
     filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
+    filters.push((r"file:///?", "file:///")); 
 
     cmd_snapshot!(filters, cmd, @r"
     success: false
@@ -228,6 +230,7 @@ fn try_repo_specific_hook() -> Result<()> {
 
     let mut filters = context.filters();
     filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
+    filters.push((r"file:///?", "file:///")); 
 
     cmd_snapshot!(filters, cmd, @r"
     success: true
@@ -302,6 +305,7 @@ fn try_repo_specific_rev() -> Result<()> {
     let mut filters = context.filters();
     filters.push((r"[a-f0-9]{40}", "[COMMIT_SHA]"));
     filters.push((&initial_rev, "[COMMIT_SHA]"));
+    filters.push((r"file:///?", "file:///")); 
 
     cmd_snapshot!(filters, cmd, @r"
     success: true

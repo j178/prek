@@ -37,10 +37,12 @@ async fn get_repo_and_rev(
     if git::has_diff("HEAD", &repo).await? {
         warn_user!("Creating temporary repo with uncommitted changes...");
 
+        let repo_url = Url::from_directory_path(&repo)
+            .map_err(|_| anyhow::anyhow!("Failed to convert path to URL: {}", repo.display()))?;
         let shadow = tmpdir.join("shadow-repo");
         git::git_cmd("clone shadow repo")?
             .arg("clone")
-            .arg(&repo)
+            .arg(repo_url.as_str())
             .arg(&shadow)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
