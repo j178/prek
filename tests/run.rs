@@ -1820,50 +1820,49 @@ fn reuse_env() -> Result<()> {
 
     context.write_pre_commit_config(indoc::indoc! {r"
     repos:
-      - repo: local
+      - repo: https://github.com/PyCQA/flake8
+        rev: 7.1.1
         hooks:
-          - id: pyecho
-            name: pyecho
-            language: python
-            entry: pyecho
-            types: [text]
-            additional_dependencies: ['pyecho-cli', 'importlib-metadata']
+          - id: flake8
+            additional_dependencies: [flake8-errmsg]
     "});
 
-    context.work_dir().child("a.txt").write_str("hello\n")?;
+    context
+        .work_dir()
+        .child("err.py")
+        .write_str("raise ValueError('error')\n")?;
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
-    success: true
-    exit_code: 0
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    pyecho...................................................................Passed
+    flake8...................................................................Failed
+    - hook id: flake8
+    - exit code: 1
+      err.py:1:1: EM101 Exceptions must not use a string literal; assign to a variable first
 
     ----- stderr -----
-    "#);
+    ");
 
-    // Change dependencies, so the environment should not be reused.
+    // Remove dependencies, so the environment should not be reused.
     context.write_pre_commit_config(indoc::indoc! {r"
     repos:
-      - repo: local
+      - repo: https://github.com/PyCQA/flake8
+        rev: 7.1.1
         hooks:
-          - id: pyecho
-            name: pyecho
-            language: python
-            entry: pyecho
-            types: [text]
-            additional_dependencies: ['pyecho-cli']
+          - id: flake8
     "});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    pyecho...................................................................Passed
+    flake8...................................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     // There should be two hook environments.
     assert_eq!(context.home_dir().child("hooks").read_dir()?.count(), 2);

@@ -14,6 +14,23 @@ use crate::printer::Printer;
 use crate::store::{STORE, Store};
 use crate::warn_user;
 
+async fn commit(repo: &Path, msg: &str) -> Result<(), git::Error> {
+    let mut cmd = git::git_cmd("git commit")?;
+    cmd.arg("commit")
+        .arg("-m")
+        .arg(msg)
+        .arg("--no-gpg-sign")
+        .current_dir(repo)
+        .env("GIT_AUTHOR_NAME", "prek test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.com")
+        .env("GIT_COMMITTER_NAME", "prek test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.com")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    cmd.status().await?;
+    Ok(())
+}
+
 async fn get_repo_and_rev(
     repo: &Path,
     rev: Option<&str>,
@@ -53,7 +70,7 @@ async fn get_repo_and_rev(
             .arg("checkout")
             .arg(&head_rev)
             .arg("-b")
-            .arg("_pc_tmp")
+            .arg("_prek_tmp")
             .current_dir(&shadow)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -89,7 +106,7 @@ async fn get_repo_and_rev(
             .stderr(Stdio::null());
         add_u_cmd.status().await?;
 
-        git::commit(&shadow, "temp commit for try-repo").await?;
+        commit(&shadow, "temp commit for try-repo").await?;
 
         let new_rev = git::git_cmd("get shadow head")?
             .arg("rev-parse")
