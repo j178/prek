@@ -745,7 +745,8 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 </dd><dt id="prek-try-repo--log-file"><a href="#prek-try-repo--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
 </dd><dt id="prek-try-repo--no-progress"><a href="#prek-try-repo--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
-</dd><dt id="prek-try-repo--quiet"><a href="#prek-try-repo--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="prek-try-repo--quiet"><a href="#prek-try-repo--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 </dd><dt id="prek-try-repo--ref"><a href="#prek-try-repo--ref"><code>--ref</code></a>, <code>-r</code> <i>ref</i></dt><dd><p>Manually select a rev to run against, otherwise the <code>HEAD</code> revision will be used</p>
 </dd><dt id="prek-try-repo--refresh"><a href="#prek-try-repo--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-try-repo--show-diff-on-failure"><a href="#prek-try-repo--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
