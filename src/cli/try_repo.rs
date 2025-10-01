@@ -118,7 +118,7 @@ pub(crate) async fn try_repo(
         .context("Failed to determine repository and revision")?;
 
     let repo_url = Url::from_directory_path(&repo_path)
-        .map_err(|_| anyhow::anyhow!("Failed to convert path to URL: {}", repo_path.display()))?;
+        .map_err(|()| anyhow::anyhow!("Failed to convert path to URL: {}", repo_path.display()))?;
 
     let store = Store::from_path(tempdir.path().join("store"));
     let repo_clone_path = store
