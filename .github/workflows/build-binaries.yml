@@ -262,9 +262,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: auto
           args: --release --locked --out dist --features self-update
-          # Until the llvm updates hit stable
-          # https://github.com/rust-lang/rust/issues/141287
-          rust-toolchain: nightly-2025-08-18
+          rust-toolchain: ${{ matrix.platform.toolchain || null }}
         env:
           CFLAGS_s390x_unknown_linux_gnu: -march=z10
       - name: "Upload wheels"

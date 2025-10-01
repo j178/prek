@@ -1315,6 +1315,41 @@ fn run_last_commit() -> Result<()> {
     Ok(())
 }
 
+/// Test `prek run --files` with multiple files.
+#[test]
+fn run_multiple_files() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: multiple-files
+                name: multiple-files
+                language: system
+                entry: echo
+                verbose: true
+                types: [text]
+    "});
+    let cwd = context.work_dir();
+    cwd.child("file1.txt").write_str("Hello, world!")?;
+    cwd.child("file2.txt").write_str("Hello, world!")?;
+    context.git_add(".");
+    // multiple `--files`
+    cmd_snapshot!(context.filters(), context.run().arg("--files").arg("file1.txt").arg("file2.txt"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    multiple-files...........................................................Passed
+    - hook id: multiple-files
+    - duration: [TIME]
+      file2.txt file1.txt
+
+    ----- stderr -----
+    "#);
+    Ok(())
+}
+
 /// Test `prek run --directory` flags.
 #[test]
 fn run_directory() -> Result<()> {
