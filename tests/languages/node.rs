@@ -1,11 +1,18 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
+use constants::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot, remove_bin_from_path};
 
-// We use `setup-node` action to install node 19.9.0 in CI, so 18.20.8 should be downloaded by prek.
+/// Test `language_version` parsing and auto downloading works correctly.
+/// We use `setup-node` action to install node 20 in CI, so node 19 should be downloaded by prek.
 #[test]
 fn language_version() -> anyhow::Result<()> {
+    if !EnvVars::is_set(EnvVars::CI) {
+        // Skip when not running in CI, as we may have other node versions installed locally.
+        return Ok(());
+    }
+
     let context = TestContext::new();
     context.init_project();
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -16,7 +23,19 @@ fn language_version() -> anyhow::Result<()> {
                 name: node
                 language: node
                 entry: node -p 'process.version'
-                language_version: '19'
+                language_version: '20'
+                always_run: true
+              - id: node
+                name: node
+                language: node
+                entry: node -p 'process.version'
+                language_version: node20
+                always_run: true
+              - id: node
+                name: node
+                language: node
+                entry: node -p 'process.version'
+                language_version: '19' # will auto download
                 always_run: true
               - id: node
                 name: node
@@ -28,88 +47,80 @@ fn language_version() -> anyhow::Result<()> {
                 name: node
                 language: node
                 entry: node -p 'process.version'
-                language_version: '18.20.8' # will auto download
-                always_run: true
-              - id: node
-                name: node
-                language: node
-                entry: node -p 'process.version'
-                language_version: node18.20.8
-                always_run: true
-              - id: node
-                name: node
-                language: node
-                entry: node -p 'process.version'
                 language_version: '<20'
                 always_run: true
               - id: node
                 name: node
                 language: node
                 entry: node -p 'process.version'
-                language_version: 'lts/hydrogen'
+                language_version: 'lts/iron' # node 20
                 always_run: true
     "});
     context.git_add(".");
 
-    context
-        .home_dir()
-        .child("tools")
-        .child("node")
-        .assert(predicates::path::missing());
+    let node_dir = context.home_dir().child("tools").child("node");
+    node_dir.assert(predicates::path::missing());
 
-    cmd_snapshot!(context.filters(), context.run().arg("-v"), @r#"
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"v(\d+)\.\d+.\d+", "v$1.X.X")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, context.run().arg("-v"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     node.....................................................................Passed
     - hook id: node
     - duration: [TIME]
-      v19.9.0
+      v20.X.X
     node.....................................................................Passed
     - hook id: node
     - duration: [TIME]
-      v19.9.0
+      v20.X.X
     node.....................................................................Passed
     - hook id: node
     - duration: [TIME]
-      v18.20.8
+      v19.X.X
     node.....................................................................Passed
     - hook id: node
     - duration: [TIME]
-      v18.20.8
+      v19.X.X
     node.....................................................................Passed
     - hook id: node
     - duration: [TIME]
-      v19.9.0
+      v19.X.X
     node.....................................................................Passed
     - hook id: node
     - duration: [TIME]
-      v18.20.8
+      v20.X.X
 
     ----- stderr -----
     "#);
 
-    // Verify that at least one Node.js version was installed
-    let node_dir = context.home_dir().join("tools").join("node");
-    assert!(
-        node_dir.exists(),
-        "Node tools directory should exist after running pre-commit"
-    );
-
-    // Check that 18.20.8-Hydrogen is included in the installed versions
-    let installed_versions = context
-        .home_dir()
-        .join("tools")
-        .join("node")
+    // Check that only node 19 is installed.
+    let installed_versions = node_dir
         .read_dir()?
         .flatten()
-        .filter(|d| !d.file_name().to_string_lossy().starts_with('.'))
-        .map(|d| d.file_name().to_string_lossy().to_string())
+        .filter_map(|d| {
+            let filename = d.file_name().to_string_lossy().to_string();
+            if filename.starts_with('.') {
+                None
+            } else {
+                Some(filename)
+            }
+        })
         .collect::<Vec<_>>();
 
+    assert_eq!(
+        installed_versions.len(),
+        1,
+        "Expected only one node version to be installed, but found: {installed_versions:?}"
+    );
     assert!(
-        installed_versions.contains(&"18.20.8-Hydrogen".to_string()),
-        "Expected 18.20.8-Hydrogen to be installed, but found: {installed_versions:?}"
+        installed_versions.iter().any(|v| v.starts_with("19")),
+        "Expected node v19 to be installed, but found: {installed_versions:?}"
     );
 
     Ok(())
