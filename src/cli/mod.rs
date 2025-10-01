@@ -402,7 +402,7 @@ pub(crate) struct RunArgs {
     #[arg(
         long,
         conflicts_with_all = ["all_files", "from_ref", "to_ref"],
-        num_args = 1..,
+        num_args = 0..,
         value_hint = ValueHint::AnyPath)
     ]
     pub(crate) files: Vec<String>,

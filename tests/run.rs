@@ -1335,7 +1335,7 @@ fn run_multiple_files() -> Result<()> {
     cwd.child("file1.txt").write_str("Hello, world!")?;
     cwd.child("file2.txt").write_str("Hello, world!")?;
     context.git_add(".");
-    // multiple `--files`
+    // `--files` with multiple files
     cmd_snapshot!(context.filters(), context.run().arg("--files").arg("file1.txt").arg("file2.txt"), @r#"
     success: true
     exit_code: 0
@@ -1348,6 +1348,36 @@ fn run_multiple_files() -> Result<()> {
     ----- stderr -----
     "#);
     Ok(())
+}
+
+/// Test `prek run --files` with no files.
+#[test]
+fn run_no_files() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: no-files
+                name: no-files
+                language: system
+                entry: echo
+                verbose: true
+    "});
+    context.git_add(".");
+    // `--files` with no files
+    cmd_snapshot!(context.filters(), context.run().arg("--files"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    no-files.................................................................Passed
+    - hook id: no-files
+    - duration: [TIME]
+      .pre-commit-config.yaml
+
+    ----- stderr -----
+    "#);
 }
 
 /// Test `prek run --directory` flags.
