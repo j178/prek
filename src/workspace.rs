@@ -636,6 +636,7 @@ impl Workspace {
 
         ignore::WalkBuilder::new(root)
             .follow_links(false)
+            .add_custom_ignore_filename(".prekignore")
             .build_parallel()
             .run(|| {
                 Box::new(|result| {
