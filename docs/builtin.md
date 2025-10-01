@@ -12,7 +12,10 @@ repos:
       - id: trailing-whitespace
 ```
 
-**Note**: Even when all hooks in a repository are supported as built-in hooks, the repository will still be cloned and the environment will still be created as usual. Only the hook execution itself is replaced with the built-in implementation when running the hook. This may change in the future to skip cloning and environment setup when all hooks are built-in.
+!!! note
+    Even when all hooks in a repository are supported as built-in hooks, the repository will still be cloned and the environment will still be created as usual.
+    Only the hook execution itself is replaced with the built-in implementation when running the hook.
+    This may change in the future to skip cloning and environment setup when all hooks are built-in.
 
 Currently, only `https://github.com/pre-commit/pre-commit-hooks` is supported. More popular repositories may be added over time.
 
@@ -31,7 +34,7 @@ Currently, only `https://github.com/pre-commit/pre-commit-hooks` is supported. M
 
 Notes:
 
-- `check-yaml` fast path does not yet support `--unsafe` or `--allow-multiple-documents` flags; for those cases, fast path is skipped automatically.
+- `check-yaml` fast path does not yet support the `--unsafe` flag; for those cases, fast path is skipped automatically.
 - Fast-path detection currently matches only the repository URL (e.g., `https://github.com/pre-commit/pre-commit-hooks`) and does not take the `rev` into account.
 
 ## Disabling the fast path

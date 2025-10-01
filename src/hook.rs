@@ -500,6 +500,8 @@ impl Display for InstalledHook {
     }
 }
 
+const HOOK_MARKER: &str = ".prek-hook.json";
+
 impl InstalledHook {
     /// Get the path to the environment where the hook is installed.
     pub(crate) fn env_path(&self) -> Option<&Path> {
@@ -509,25 +511,24 @@ impl InstalledHook {
         }
     }
 
-    /// Check if the hook is installed in the environment.
-    pub(crate) fn installed(&self) -> bool {
-        let Self::Installed { info, .. } = self else {
-            return true;
-        };
-        // Check if the environment path exists.
-        info.env_path.join(".prek-hook.json").is_file()
+    /// Get the install info of the hook if it is installed.
+    pub(crate) fn install_info(&self) -> Option<&InstallInfo> {
+        match self {
+            InstalledHook::Installed { info, .. } => Some(info),
+            InstalledHook::NoNeedInstall(_) => None,
+        }
     }
 
     /// Mark the hook as installed in the environment.
     pub(crate) async fn mark_as_installed(&self, _store: &Store) -> Result<()> {
-        let Self::Installed { info, .. } = self else {
+        let Some(info) = self.install_info() else {
             return Ok(());
         };
 
-        let content = serde_json::to_string_pretty(info.as_ref())
-            .context("Failed to serialize install info")?;
+        let content =
+            serde_json::to_string_pretty(info).context("Failed to serialize install info")?;
 
-        fs_err::tokio::write(info.env_path.join(".prek-hook.json"), content)
+        fs_err::tokio::write(info.env_path.join(HOOK_MARKER), content)
             .await
             .context("Failed to write install info")?;
 
@@ -537,11 +538,11 @@ impl InstalledHook {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct InstallInfo {
-    pub language: Language,
-    pub language_version: semver::Version,
-    pub dependencies: FxHashSet<String>,
-    pub env_path: PathBuf,
-    pub toolchain: PathBuf,
+    pub(crate) language: Language,
+    pub(crate) language_version: semver::Version,
+    pub(crate) dependencies: FxHashSet<String>,
+    pub(crate) env_path: PathBuf,
+    pub(crate) toolchain: PathBuf,
     extra: FxHashMap<String, String>,
 }
 
@@ -565,7 +566,11 @@ fn random_directory() -> String {
 }
 
 impl InstallInfo {
-    pub fn new(language: Language, dependencies: FxHashSet<String>, hooks_dir: &Path) -> Self {
+    pub(crate) fn new(
+        language: Language,
+        dependencies: FxHashSet<String>,
+        hooks_dir: &Path,
+    ) -> Self {
         let env = random_directory();
 
         Self {
@@ -578,26 +583,37 @@ impl InstallInfo {
         }
     }
 
-    pub fn with_language_version(&mut self, version: semver::Version) -> &mut Self {
+    pub(crate) async fn from_env_path(path: &Path) -> Result<Self> {
+        let content = fs_err::tokio::read_to_string(path.join(HOOK_MARKER)).await?;
+        let info: InstallInfo = serde_json::from_str(&content)?;
+
+        Ok(info)
+    }
+
+    pub(crate) async fn check_health(&self) -> Result<()> {
+        self.language.check_health(self).await
+    }
+
+    pub(crate) fn with_language_version(&mut self, version: semver::Version) -> &mut Self {
         self.language_version = version;
         self
     }
 
-    pub fn with_toolchain(&mut self, toolchain: PathBuf) -> &mut Self {
+    pub(crate) fn with_toolchain(&mut self, toolchain: PathBuf) -> &mut Self {
         self.toolchain = toolchain;
         self
     }
 
-    pub fn with_extra(&mut self, key: &str, value: &str) -> &mut Self {
+    pub(crate) fn with_extra(&mut self, key: &str, value: &str) -> &mut Self {
         self.extra.insert(key.to_string(), value.to_string());
         self
     }
 
-    pub fn get_extra(&self, key: &str) -> Option<&String> {
+    pub(crate) fn get_extra(&self, key: &str) -> Option<&String> {
         self.extra.get(key)
     }
 
-    pub fn matches(&self, hook: &Hook) -> bool {
+    pub(crate) fn matches(&self, hook: &Hook) -> bool {
         self.language == hook.language
             && &self.dependencies == hook.dependencies()
             && hook.language_request.satisfied_by(self)

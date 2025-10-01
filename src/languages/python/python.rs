@@ -22,11 +22,46 @@ use crate::store::{Store, ToolBucket};
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Python;
 
-static QUERY_PYTHON_INFO: &str = indoc::indoc! {r#"\
+pub(crate) struct PythonInfo {
+    pub(crate) version: semver::Version,
+    pub(crate) python_exec: PathBuf,
+}
+
+pub(crate) async fn query_python_info(python: &Path) -> Result<PythonInfo> {
+    static QUERY_PYTHON_INFO: &str = indoc::indoc! {r#"
     import sys
     print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
     print(sys.base_exec_prefix)
-"#};
+    "#};
+
+    let stdout = Cmd::new(python, "python -c")
+        .arg("-I")
+        .arg("-c")
+        .arg(QUERY_PYTHON_INFO)
+        .check(true)
+        .output()
+        .await?
+        .stdout;
+
+    let stdout = String::from_utf8(stdout).context("Failed to parse Python info output")?;
+    let mut lines = stdout.lines();
+    let version = lines
+        .next()
+        .context("Failed to get Python version")?
+        .to_string()
+        .parse()
+        .context("Failed to parse Python version")?;
+    let base_exec_prefix = lines
+        .next()
+        .context("Failed to get Python base_exec_prefix")?
+        .to_string();
+    let python_exec = python_exec(Path::new(&base_exec_prefix));
+
+    Ok(PythonInfo {
+        version,
+        python_exec,
+    })
+}
 
 fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
     match request {
@@ -103,31 +138,12 @@ impl LanguageImpl for Python {
         }
 
         let python = python_exec(&info.env_path);
-        // Get Python version and executable
-        let stdout = Cmd::new(&python, "python -c")
-            .arg("-I")
-            .arg("-c")
-            .arg(QUERY_PYTHON_INFO)
-            .check(true)
-            .output()
-            .await?
-            .stdout;
-        let stdout = String::from_utf8(stdout).context("Failed to parse Python info output")?;
-        let mut lines = stdout.lines();
-        let version = lines
-            .next()
-            .context("Failed to get Python version")?
-            .to_string()
-            .parse()
-            .context("Failed to parse Python version")?;
-        let base_exec_prefix = lines
-            .next()
-            .context("Failed to get Python base_exec_prefix")?
-            .to_string();
-        let python_exec = python_exec(&PathBuf::from(base_exec_prefix));
+        let python_info = query_python_info(&python)
+            .await
+            .context("Failed to query Python info")?;
 
-        info.with_language_version(version)
-            .with_toolchain(python_exec);
+        info.with_language_version(python_info.version)
+            .with_toolchain(python_info.python_exec);
 
         reporter.on_install_complete(progress);
 
@@ -137,8 +153,29 @@ impl LanguageImpl for Python {
         })
     }
 
-    async fn check_health(&self) -> Result<()> {
-        todo!()
+    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
+        let python = python_exec(&info.env_path);
+        let python_info = query_python_info(&python)
+            .await
+            .context("Failed to query Python info")?;
+
+        if python_info.version != info.language_version {
+            anyhow::bail!(
+                "Python version mismatch: expected {}, found {}",
+                info.language_version,
+                python_info.version
+            );
+        }
+
+        if python_info.python_exec != info.toolchain {
+            anyhow::bail!(
+                "Python executable mismatch: expected {}, found {}",
+                info.toolchain.display(),
+                python_info.python_exec.display()
+            );
+        }
+
+        Ok(())
     }
 
     async fn run(

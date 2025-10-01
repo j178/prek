@@ -21,12 +21,6 @@ env:
   PYTHON_VERSION: '3.12.11'
 
 jobs:
-  typos:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-      - uses: crate-ci/typos@master
-
   lint:
     name: "lint"
     timeout-minutes: 30
@@ -37,6 +31,10 @@ jobs:
         run: rustup component add rustfmt
       - name: "rustfmt"
         run: cargo fmt --all --check
+      - name: Run prek hooks
+        uses: j178/prek-action@v1
+        with:
+          extra-args: '--all-files --skip examples/ --skip cargo-fmt --skip cargo-clippy'
 
   cargo-clippy-linux:
     name: "cargo clippy | ubuntu"
@@ -93,12 +91,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@d6912b47771be2c443ec90dbb3d28e023987e782 # v2.62.1
+        uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@d6912b47771be2c443ec90dbb3d28e023987e782 # v2.62.1
+        uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
         with:
           tool: cargo-llvm-cov
 
@@ -119,7 +117,7 @@ jobs:
             echo "::endgroup::"
           done
 
-          cargo llvm-cov report --lcov --ignore-filename-regex lib/pty --output-path lcov.info
+          cargo llvm-cov report --lcov --output-path lcov.info
 
       - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
@@ -140,12 +138,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@d6912b47771be2c443ec90dbb3d28e023987e782 # v2.62.1
+        uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@d6912b47771be2c443ec90dbb3d28e023987e782 # v2.62.1
+        uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
         with:
           tool: cargo-llvm-cov
 
@@ -183,7 +181,7 @@ jobs:
             -j 8 \
             --final-status-level slow
 
-          cargo llvm-cov report --lcov --ignore-filename-regex lib/pty --output-path lcov.info
+          cargo llvm-cov report --lcov --output-path lcov.info
 
       - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
@@ -206,7 +204,7 @@ jobs:
         run: rustup show
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@d6912b47771be2c443ec90dbb3d28e023987e782 # v2.62.1
+        uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
         with:
           tool: cargo-nextest
 
@@ -260,12 +258,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@d6912b47771be2c443ec90dbb3d28e023987e782 # v2.62.1
+        uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@d6912b47771be2c443ec90dbb3d28e023987e782 # v2.62.1
+        uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
         with:
           tool: cargo-llvm-cov
 
@@ -310,7 +308,7 @@ jobs:
             -j 8 \
             --final-status-level slow
 
-          cargo llvm-cov report --lcov --ignore-filename-regex lib/pty --output-path lcov.info
+          cargo llvm-cov report --lcov --output-path lcov.info
         shell: bash
 
       - name: "Upload coverage reports to Codecov"

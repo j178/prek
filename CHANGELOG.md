@@ -1,5 +1,69 @@
 # Changelog
 
+## 0.2.3
+
+Released on 2025-09-29.
+
+### Enhancements
+
+- Add `--dry-run` to `prek auto-update` ([#806](https://github.com/j178/prek/pull/806))
+- Add a global `--log-file` flag to specify the log file path ([#817](https://github.com/j178/prek/pull/817))
+- Implement hook health check ([#798](https://github.com/j178/prek/pull/798))
+- Show error message in quiet mode ([#807](https://github.com/j178/prek/pull/807))
+
+### Bug fixes
+
+- Write `fail` entry into output directly ([#811](https://github.com/j178/prek/pull/811))
+
+### Documentation
+
+- Update docs about uv in prek ([#810](https://github.com/j178/prek/pull/810))
+
+### Other changes
+
+- Add a security policy for reporting vulnerabilities ([#804](https://github.com/j178/prek/pull/804))
+
+### Contributors
+
+- @mondeja
+- @j178
+
+## 0.2.2
+
+Released on 2025-09-26.
+
+### Enhancements
+
+- Add `prek cache dir`, move `prek gc` and `prek clean` under `prek cache` ([#795](https://github.com/j178/prek/pull/795))
+- Add a hint when hooks failed in CI ([#800](https://github.com/j178/prek/pull/800))
+- Add support for specifying `PREK_UV_SOURCE` ([#766](https://github.com/j178/prek/pull/766))
+- Run docker container with `--init` ([#791](https://github.com/j178/prek/pull/791))
+- Support `--allow-multiple-documents` for `check-yaml` ([#790](https://github.com/j178/prek/pull/790))
+
+### Bug fixes
+
+- Fix interpreter identification ([#801](https://github.com/j178/prek/pull/801))
+
+### Documentation
+
+- Add PaperQA2 to "Who is using prek" ([#793](https://github.com/j178/prek/pull/793))
+- Clarify built-in hooks activation conditions and behavior ([#781](https://github.com/j178/prek/pull/781))
+- Deduplicate docs between README and MkDocs site ([#792](https://github.com/j178/prek/pull/792))
+- Mention `j178/prek-action` in docs ([#753](https://github.com/j178/prek/pull/753))
+
+### Other Changes
+
+- Bump `pre-commit-hooks` in sample-config to v6.0.0 ([#761](https://github.com/j178/prek/pull/761))
+- Improve arg parsing for builtin hooks ([#789](https://github.com/j178/prek/pull/789))
+
+### Contributors
+
+- @mondeja
+- @akx
+- @bxb100
+- @j178
+- @onerandomusername
+
 ## 0.2.1
 
 ### Enhancements

@@ -809,22 +809,25 @@ fn tags_from_filename(filename: &Path) -> Vec<&str> {
 }
 
 fn tags_from_interpreter(interpreter: &str) -> Vec<&'static str> {
-    let Some(pos) = interpreter.rfind('/') else {
-        return Vec::new();
-    };
-    let mut name = &interpreter[pos + 1..];
-    // python3.12.3 should match python3.12.3, python3.12, python3, python
-    loop {
+    let mut name = interpreter
+        .rfind('/')
+        .map(|pos| &interpreter[pos + 1..])
+        .unwrap_or(interpreter);
+
+    while !name.is_empty() {
         if let Some(tags) = by_interpreter().get(name) {
             return tags.clone();
         }
+
+        // python3.12.3 should match python3.12.3, python3.12, python3, python
         if let Some(pos) = name.rfind('.') {
             name = &name[..pos];
         } else {
             break;
         }
     }
-    vec![]
+
+    Vec::new()
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -989,5 +992,26 @@ mod tests {
 
         let tags = super::tags_from_filename(Path::new("Pipfile.lock"));
         assert_eq!(tags, vec!["json", "text"]);
+    }
+
+    #[test]
+    fn tags_from_interpreter() {
+        let tags = super::tags_from_interpreter("/usr/bin/python3");
+        assert_eq!(tags, vec!["python", "python3"]);
+
+        let tags = super::tags_from_interpreter("/usr/bin/python3.12");
+        assert_eq!(tags, vec!["python", "python3"]);
+
+        let tags = super::tags_from_interpreter("/usr/bin/python3.12.3");
+        assert_eq!(tags, vec!["python", "python3"]);
+
+        let tags = super::tags_from_interpreter("python");
+        assert_eq!(tags, vec!["python"]);
+
+        let tags = super::tags_from_interpreter("sh");
+        assert_eq!(tags, vec!["shell", "sh"]);
+
+        let tags = super::tags_from_interpreter("invalid");
+        assert_eq!(tags, Vec::<&str>::new());
     }
 }

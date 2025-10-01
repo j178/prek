@@ -1,13 +1,14 @@
 use std::path::Path;
 use std::process::Command;
 
+use crate::common::{TestContext, cmd_snapshot};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
+use constants::env_vars::EnvVars;
 use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
 use insta::assert_snapshot;
-
-use crate::common::{TestContext, cmd_snapshot};
+use predicates::prelude::predicate;
 
 mod common;
 
@@ -1734,8 +1735,9 @@ fn selectors_completion() -> Result<()> {
     --refresh	Refresh all cached data
     --help	Display the concise help for this command
     --no-progress	Hide all progress outputs
-    --quiet	Do not print any output
+    --quiet	Use quiet output
     --verbose	Use verbose output
+    --log-file	Write trace logs to the specified file. If not specified, trace logs will be written to `$PREK_HOME/prek.log`
     --version	Display the prek version
 
     ----- stderr -----
@@ -1987,7 +1989,39 @@ fn show_diff_on_failure() -> Result<()> {
     let mut filters = context.filters();
     filters.push((r"index \w{7}\.\.\w{7} \d{6}", "index [OLD]..[NEW] 100644"));
 
-    cmd_snapshot!(filters.clone(), context.run().arg("--show-diff-on-failure").arg("-v"), @r"
+    // When failed in CI environment
+    cmd_snapshot!(filters.clone(), context.run().env(EnvVars::CI, "1").arg("--show-diff-on-failure").arg("-v"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    modify...................................................................Failed
+    - hook id: modify
+    - duration: [TIME]
+    - files were modified by this hook
+
+    Hint: Some hooks made changes to the files.
+    If you are seeing this message in CI, reproduce locally with: `prek run --all-files`
+    To run prek as part of git workflow, use `prek install` to set up git hooks.
+
+    All changes made by hooks:
+    diff --git a/file.txt b/file.txt
+    index [OLD]..[NEW] 100644
+    --- a/file.txt
+    +++ b/file.txt
+    @@ -1 +1,2 @@
+     Original line
+    +Added line
+
+    ----- stderr -----
+    ");
+
+    context
+        .work_dir()
+        .child("file.txt")
+        .write_str("Original line\n")?;
+    context.git_add(".");
+    // When failed in non-CI environment
+    cmd_snapshot!(filters.clone(), context.run().env_remove(EnvVars::CI).arg("--show-diff-on-failure").arg("-v"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2020,7 +2054,7 @@ fn show_diff_on_failure() -> Result<()> {
         .assert()
         .success();
 
-    cmd_snapshot!(filters.clone(), context.run().current_dir(&app).arg("--show-diff-on-failure"), @r"
+    cmd_snapshot!(filters.clone(), context.run().env_remove(EnvVars::CI).current_dir(&app).arg("--show-diff-on-failure"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2043,7 +2077,7 @@ fn show_diff_on_failure() -> Result<()> {
 
     // Run in the root
     // Since we add a new subproject, use `--refresh` to find that.
-    cmd_snapshot!(filters.clone(), context.run().arg("--show-diff-on-failure").arg("--refresh"), @r"
+    cmd_snapshot!(filters.clone(), context.run().env_remove(EnvVars::CI).arg("--show-diff-on-failure").arg("--refresh"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2078,4 +2112,103 @@ fn show_diff_on_failure() -> Result<()> {
     ");
 
     Ok(())
+}
+
+#[test]
+fn run_quiet() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: success
+                name: success
+                entry: echo
+                language: system
+              - id: fail
+                name: fail
+                entry: fail
+                language: fail
+    "});
+    context.git_add(".");
+
+    // Run with `--quiet`, only print failed hooks.
+    cmd_snapshot!(context.filters(), context.run().arg("--quiet"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fail.....................................................................Failed
+    - hook id: fail
+    - exit code: 1
+      fail
+
+      .pre-commit-config.yaml
+
+    ----- stderr -----
+    ");
+
+    // Run with `-qq`, do not print anything.
+    cmd_snapshot!(context.filters(), context.run().arg("-qq"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+}
+
+/// Test `prek run --log-file <file>` flag.
+#[test]
+fn run_log_file() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: fail
+                name: fail
+                entry: fail
+                language: fail
+    "});
+    context.git_add(".");
+
+    // Run with `--no-log-file`, no `prek.log` is created.
+    cmd_snapshot!(context.filters(), context.run().arg("--no-log-file"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fail.....................................................................Failed
+    - hook id: fail
+    - exit code: 1
+      fail
+
+      .pre-commit-config.yaml
+
+    ----- stderr -----
+    ");
+    context
+        .home_dir()
+        .child("prek.log")
+        .assert(predicate::path::missing());
+
+    // Write log to `log`.
+    cmd_snapshot!(context.filters(), context.run().arg("--log-file").arg("log"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fail.....................................................................Failed
+    - hook id: fail
+    - exit code: 1
+      fail
+
+      .pre-commit-config.yaml
+
+    ----- stderr -----
+    ");
+    context
+        .work_dir()
+        .child("log")
+        .assert(predicate::path::exists());
 }

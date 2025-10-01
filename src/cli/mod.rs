@@ -165,13 +165,25 @@ pub(crate) struct GlobalArgs {
     #[arg(global = true, long)]
     pub no_progress: bool,
 
-    /// Do not print any output.
-    #[arg(global = true, long, short, conflicts_with = "verbose")]
-    pub quiet: bool,
+    /// Use quiet output.
+    ///
+    /// Repeating this option, e.g., `-qq`, will enable a silent mode in which
+    /// prek will write no output to stdout.
+    #[arg(global = true, short, long, conflicts_with = "verbose", action = ArgAction::Count)]
+    pub quiet: u8,
 
     /// Use verbose output.
     #[arg(global = true, short, long, action = ArgAction::Count)]
     pub(crate) verbose: u8,
+
+    /// Write trace logs to the specified file.
+    /// If not specified, trace logs will be written to `$PREK_HOME/prek.log`.
+    #[arg(global = true, long, value_name = "LOG_FILE", value_hint = ValueHint::FilePath)]
+    pub(crate) log_file: Option<PathBuf>,
+
+    /// Do not write trace logs to a log file.
+    #[arg(global = true, long, overrides_with = "log_file", hide = true)]
+    pub(crate) no_log_file: bool,
 
     /// Display the prek version.
     #[arg(global = true, short = 'V', long, action = ArgAction::Version)]
@@ -553,6 +565,9 @@ pub(crate) struct AutoUpdateArgs {
     /// Only update this repository. This option may be specified multiple times.
     #[arg(long)]
     pub(crate) repo: Vec<String>,
+    /// Do not write changes to the config file, only display what would be changed.
+    #[arg(long)]
+    pub(crate) dry_run: bool,
     /// Number of threads to use.
     #[arg(short, long, default_value_t = 3)]
     pub(crate) jobs: usize,

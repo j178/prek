@@ -1,10 +1,11 @@
+use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
 
 use crate::cli::reporter::HookInstallReporter;
-use crate::hook::{Hook, InstalledHook};
+use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::store::Store;
 
@@ -21,7 +22,7 @@ impl LanguageImpl for Fail {
         Ok(InstalledHook::NoNeedInstall(hook))
     }
 
-    async fn check_health(&self) -> Result<()> {
+    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
         Ok(())
     }
 
@@ -31,10 +32,8 @@ impl LanguageImpl for Fail {
         filenames: &[&Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
-        let mut out = shlex::try_join(hook.entry.resolve(None)?.iter().map(std::ops::Deref::deref))
-            .expect("Failed to join `entry` as command")
-            .into_bytes();
-        out.extend(b"\n\n");
+        let mut out = Vec::new();
+        writeln!(out, "{}\n", hook.entry.raw())?;
         for f in filenames {
             out.extend(f.to_string_lossy().as_bytes());
             out.push(b'\n');

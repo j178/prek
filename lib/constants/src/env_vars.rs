@@ -6,6 +6,7 @@ pub struct EnvVars;
 
 impl EnvVars {
     pub const PATH: &'static str = "PATH";
+    pub const CI: &'static str = "CI";
 
     pub const SKIP: &'static str = "SKIP";
 

@@ -6,6 +6,6 @@ mod version;
 
 pub(crate) use pep723::extract_pep723_metadata;
 pub(crate) use python::Python;
-pub(crate) use python::python_exec;
+pub(crate) use python::{python_exec, query_python_info};
 pub(crate) use uv::Uv;
 pub(crate) use version::PythonRequest;

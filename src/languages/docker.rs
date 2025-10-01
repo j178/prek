@@ -65,9 +65,8 @@ static CONTAINER_MOUNTS: LazyLock<Result<Vec<Mount>, Error>> = LazyLock::new(|| 
 
 impl Docker {
     fn docker_tag(hook: &InstalledHook) -> String {
-        let InstalledHook::Installed { info, .. } = hook else {
-            panic!("Docker tag can only be generated for installed hooks");
-        };
+        let info = hook.install_info().expect("Docker hook must be installed");
+
         let mut hasher = DefaultHasher::new();
         info.hash(&mut hasher);
         let digest = hex::encode(hasher.finish().to_le_bytes());
@@ -219,8 +218,8 @@ impl LanguageImpl for Docker {
         Ok(installed_hook)
     }
 
-    async fn check_health(&self) -> Result<()> {
-        todo!()
+    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
+        Ok(())
     }
 
     async fn run(

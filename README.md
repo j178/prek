@@ -22,8 +22,9 @@ while also providing some additional long-requested features.
 <!-- description:end -->
 
 > [!WARNING]
-> <!-- warning-p1:start -->prek is not production-ready yet. Some subcommands and languages are not implemented. See the current gaps for drop-in parity: <a href="https://prek.j178.dev/todo/">TODO</a>.<!-- warning-p1:end --><br/><br/>
-> <!-- warning-p2:start -->It's already being adopted by <a href="#who-is-using-prek">some projects</a>, please give it a try - we'd love your feedback!<!-- warning-p2:end -->
+> prek is not production-ready yet. Some subcommands and languages are not implemented. See the current gaps for drop-in parity: [TODO](https://prek.j178.dev/todo/).
+>
+> It's already being adopted by [some projects](#who-is-using-prek), please give it a try - we'd love your feedback!
 
 <!-- features:start -->
 ## Features
@@ -92,7 +93,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [Authlib](https://github.com/authlib/authlib/pull/804)
 - [pre-commit-crocodile](https://radiandevcore.gitlab.io/tools/pre-commit-crocodile/)
 - [PaperQA2](https://github.com/Future-House/paper-qa/pull/1098)
-  
+
 <!-- why:end -->
 
 ## Installation
@@ -106,7 +107,7 @@ On Linux and macOS:
 
 <!-- linux-standalone-install:start -->
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.1/prek-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.3/prek-installer.sh | sh
 ```
 <!-- linux-standalone-install:end -->
 
@@ -114,7 +115,7 @@ On Windows:
 
 <!-- windows-standalone-install:start -->
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.1/prek-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.3/prek-installer.ps1 | iex"
 ```
 <!-- windows-standalone-install:end -->
 

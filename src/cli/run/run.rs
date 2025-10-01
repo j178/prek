@@ -228,7 +228,7 @@ pub async fn install_hooks(
 ) -> Result<Vec<InstalledHook>> {
     let num_hooks = hooks.len();
     let mut installed_hooks = Vec::with_capacity(hooks.len());
-    let store_hooks = Rc::new(store.installed_hooks().collect::<Vec<_>>());
+    let store_hooks = Rc::new(store.installed_hooks().await);
 
     // Group hooks by language to enable parallel installation across different languages.
     let mut hooks_by_language = FxHashMap::default();
@@ -420,9 +420,13 @@ impl StatusPrinter {
         writeln!(self.printer.stdout(), "{line}")
     }
 
-    fn write_running(&self, hook_name: &str) -> Result<(), std::fmt::Error> {
+    fn write_running(&self, hook_name: &str, important: bool) -> Result<(), std::fmt::Error> {
         write!(
-            self.printer.stdout(),
+            if important {
+                self.printer.stdout_important()
+            } else {
+                self.printer.stdout()
+            },
             "{}{}",
             hook_name,
             ".".repeat(self.columns - hook_name.width_cjk() - Self::PASSED.len() - 1)
@@ -438,11 +442,15 @@ impl StatusPrinter {
     }
 
     fn write_failed(&self) -> Result<(), std::fmt::Error> {
-        writeln!(self.printer.stdout(), "{}", Self::FAILED.on_red())
+        writeln!(self.printer.stdout_important(), "{}", Self::FAILED.on_red())
     }
 
     fn stdout(&self) -> Stdout {
         self.printer.stdout()
+    }
+
+    fn stdout_important(&self) -> Stdout {
+        self.printer.stdout_important()
     }
 }
 
@@ -480,6 +488,7 @@ async fn run_hooks(
 
     let projects_len = project_to_hooks.len();
     let mut first = true;
+    let mut file_modified = false;
 
     // Hooks might modify the files, so they must be run sequentially.
     'outer: for (_, mut hooks) in project_to_hooks {
@@ -502,20 +511,36 @@ async fn run_hooks(
         let filter = FileFilter::for_project(filenames.iter(), project);
         trace!("Files for `{project}` after filtered: {}", filter.len());
 
+        let mut hook_succeed;
         for hook in hooks {
-            let (hook_success, new_diff) =
+            (hook_succeed, diff, file_modified) =
                 run_hook(hook, &filter, store, diff, verbose, dry_run, &printer).await?;
 
-            success &= hook_success;
-            diff = new_diff;
+            success &= hook_succeed;
             if !success && (fail_fast || hook.fail_fast) {
                 break 'outer;
             }
         }
     }
 
-    if !success && show_diff_on_failure {
-        writeln!(printer.stdout(), "All changes made by hooks:")?;
+    if !success && show_diff_on_failure && file_modified {
+        if EnvVars::is_set(EnvVars::CI) {
+            writeln!(
+                printer.stdout(),
+                "{}",
+                indoc::formatdoc! {
+                    "\n{}: Some hooks made changes to the files.
+                    If you are seeing this message in CI, reproduce locally with: `{}`
+                    To run prek as part of git workflow, use `{}` to set up git hooks.\n",
+                    "Hint".yellow().bold(),
+                    "prek run --all-files".cyan(),
+                    "prek install".cyan()
+                }
+            )?;
+        }
+
+        writeln!(printer.stdout_important(), "All changes made by hooks:")?;
+
         let color = if *USE_COLOR {
             "--color=always"
         } else {
@@ -557,7 +582,7 @@ async fn run_hook(
     verbose: bool,
     dry_run: bool,
     printer: &StatusPrinter,
-) -> Result<(bool, Vec<u8>)> {
+) -> Result<(bool, Vec<u8>, bool)> {
     let mut filenames = filter.for_hook(hook);
     trace!(
         "Files for `{}` after filtered: {}",
@@ -571,7 +596,7 @@ async fn run_hook(
             StatusPrinter::NO_FILES,
             Style::new().black().on_cyan(),
         )?;
-        return Ok((true, diff));
+        return Ok((true, diff, false));
     }
 
     if !Language::supported(hook.language) {
@@ -580,10 +605,10 @@ async fn run_hook(
             StatusPrinter::UNIMPLEMENTED,
             Style::new().black().on_yellow(),
         )?;
-        return Ok((true, diff));
+        return Ok((true, diff, false));
     }
 
-    printer.write_running(&hook.name)?;
+    printer.write_running(&hook.name, false)?;
     std::io::stdout().flush()?;
 
     let start = std::time::Instant::now();
@@ -626,57 +651,55 @@ async fn run_hook(
     } else if success {
         printer.write_passed()?;
     } else {
+        // If the printer is in quiet mode, the running line was not printed.
+        // Reprint it here before printing the failure.
+        if printer.stdout() == Stdout::Disabled {
+            printer.write_running(&hook.name, true)?;
+        }
         printer.write_failed()?;
     }
 
     if verbose || hook.verbose || !success {
-        writeln!(
-            printer.stdout(),
-            "{}",
-            format!("- hook id: {}", hook.id).dimmed()
-        )?;
+        let mut stdout = if success {
+            printer.stdout()
+        } else {
+            printer.stdout_important()
+        };
+
+        writeln!(stdout, "{}", format!("- hook id: {}", hook.id).dimmed())?;
         if verbose || hook.verbose {
             writeln!(
-                printer.stdout(),
+                stdout,
                 "{}",
                 format!("- duration: {:.2?}s", duration.as_secs_f64()).dimmed()
             )?;
         }
         if status != 0 {
-            writeln!(
-                printer.stdout(),
-                "{}",
-                format!("- exit code: {status}").dimmed()
-            )?;
+            writeln!(stdout, "{}", format!("- exit code: {status}").dimmed())?;
         }
         if file_modified {
-            writeln!(
-                printer.stdout(),
-                "{}",
-                "- files were modified by this hook".dimmed()
-            )?;
+            writeln!(stdout, "{}", "- files were modified by this hook".dimmed())?;
         }
 
-        // To be consistent with pre-commit, merge stderr into stdout.
-        let stdout = output.trim_ascii();
-        if !stdout.is_empty() {
+        let output = output.trim_ascii();
+        if !output.is_empty() {
             if let Some(file) = hook.log_file.as_deref() {
                 let mut file = fs_err::tokio::OpenOptions::new()
                     .create(true)
                     .append(true)
                     .open(file)
                     .await?;
-                file.write_all(stdout).await?;
+                file.write_all(output).await?;
                 file.sync_all().await?;
             } else {
                 writeln!(
-                    printer.stdout(),
+                    stdout,
                     "{}",
-                    textwrap::indent(&String::from_utf8_lossy(stdout), "  ").dimmed()
+                    textwrap::indent(&String::from_utf8_lossy(output), "  ").dimmed()
                 )?;
             }
         }
     }
 
-    Ok((success, new_diff))
+    Ok((success, new_diff, file_modified))
 }
