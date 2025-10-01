@@ -1,13 +1,19 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
+use constants::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot};
 
-/// Test `language_version` parsing.
-/// Python 3.12.11 is installed in the CI environment, when running tests uv can find them.
+/// Test `language_version` parsing and downloading.
+/// We use `setup-python` action to install Python 3.12 in CI, when running tests uv can find them.
 /// Other versions may need to be downloaded while running the tests.
 #[test]
 fn language_version() -> anyhow::Result<()> {
+    if !EnvVars::is_set(EnvVars::CI) {
+        // Skip when not running in CI, as we may have other Python versions installed locally.
+        return Ok(());
+    }
+
     let context = TestContext::new();
     context.init_project();
     context.write_pre_commit_config(indoc::indoc! {r#"
@@ -23,46 +29,43 @@ fn language_version() -> anyhow::Result<()> {
               - id: python3.12
                 name: python3.12
                 language: python
-                entry: python -c 'import sys; print(sys.version_info[:3])'
+                entry: python -c 'import sys; print(sys.version_info[:2])'
                 language_version: python3.12
                 always_run: true
               - id: python3.12
                 name: python3.12
                 language: python
-                entry: python -c 'import sys; print(sys.version_info[:3])'
+                entry: python -c 'import sys; print(sys.version_info[:2])'
                 language_version: '3.12'
                 always_run: true
               - id: python3.12
                 name: python3.12
                 language: python
-                entry: python -c 'import sys; print(sys.version_info[:3])'
+                entry: python -c 'import sys; print(sys.version_info[:2])'
                 language_version: 'python312'
               - id: python3.12
                 name: python3.12
                 language: python
-                entry: python -c 'import sys; print(sys.version_info[:3])'
+                entry: python -c 'import sys; print(sys.version_info[:2])'
                 language_version: '312'
                 always_run: true
               - id: python3.12
                 name: python3.12
                 language: python
-                entry: python -c 'import sys; print(sys.version_info[:3])'
+                entry: python -c 'import sys; print(sys.version_info[:2])'
                 language_version: python3.12
                 always_run: true
               - id: python3.12
                 name: python3.12
                 language: python
-                entry: python -c 'import sys; print(sys.version_info[:3])'
-                language_version: '3.12.1' # will auto download
+                entry: python -c 'import sys; print(sys.version_info[:2])'
+                language_version: '3.11.1' # will auto download
                 always_run: true
     "#});
     context.git_add(".");
 
-    context
-        .home_dir()
-        .child("tools")
-        .child("python")
-        .assert(predicates::path::missing());
+    let python_dir = context.home_dir().child("tools").child("python");
+    python_dir.assert(predicates::path::missing());
 
     cmd_snapshot!(context.filters(), context.run().arg("-v"), @r#"
     success: true
@@ -75,43 +78,54 @@ fn language_version() -> anyhow::Result<()> {
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 12, 11)
+      (3, 12)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 12, 11)
+      (3, 12)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 12, 11)
+      (3, 12)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 12, 11)
+      (3, 12)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 12, 11)
+      (3, 12)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
-      (3, 12, 1)
+      (3, 11)
 
     ----- stderr -----
     "#);
 
-    let tools_python_dir = context.home_dir().join("tools").join("python");
+    // Check that only Python 3.11 is installed.
+    let installed_versions = python_dir
+        .read_dir()?
+        .flatten()
+        .filter_map(|d| {
+            let filename = d.file_name().to_string_lossy().to_string();
+            if filename.starts_with('.') {
+                None
+            } else {
+                Some(filename)
+            }
+        })
+        .collect::<Vec<_>>();
 
-    // Check that either no downloads were needed (directory doesn't exist)
-    // or some downloads happened (directory exists with content)
-    if tools_python_dir.exists() {
-        let count = tools_python_dir
-            .read_dir()?
-            .flatten()
-            .filter(|d| !d.file_name().to_string_lossy().starts_with('.'))
-            .count();
-        assert!(count > 0, "tools/python directory exists but is empty");
-    }
+    assert_eq!(
+        installed_versions.len(),
+        1,
+        "Expected only one Python version to be installed, but found: {installed_versions:?}"
+    );
+    assert!(
+        installed_versions.iter().any(|v| v.contains("3.11")),
+        "Expected Python 3.11 to be installed, but found: {installed_versions:?}"
+    );
 
     Ok(())
 }

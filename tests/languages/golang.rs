@@ -1,9 +1,18 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::PathChild;
+use constants::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot};
+
+/// Test `language_version` parsing and installation for golang hooks.
+/// We use `setup-go` action to install go 1.24 in CI, so go 1.23 will be auto downloaded.
 #[test]
 fn language_version() -> anyhow::Result<()> {
+    if !EnvVars::is_set(EnvVars::CI) {
+        // Skip when not running in CI, as we may have other go versions installed locally.
+        return Ok(());
+    }
+
     let context = TestContext::new();
     context.init_project();
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -14,28 +23,28 @@ fn language_version() -> anyhow::Result<()> {
                 name: golang
                 language: golang
                 entry: go version
-                language_version: '1.24.5'
+                language_version: '1.24'
                 pass_filenames: false
                 always_run: true
               - id: golang
                 name: golang
                 language: golang
                 entry: go version
-                language_version: go1.24.5
+                language_version: go1.24
                 always_run: true
                 pass_filenames: false
               - id: golang
                 name: golang
                 language: golang
                 entry: go version
-                language_version: '1.23.11' # will auto download
+                language_version: '1.23' # will auto download
                 always_run: true
                 pass_filenames: false
               - id: golang
                 name: golang
                 language: golang
                 entry: go version
-                language_version: go1.23.11
+                language_version: go1.23
                 always_run: true
                 pass_filenames: false
               - id: golang
@@ -55,19 +64,17 @@ fn language_version() -> anyhow::Result<()> {
     "});
     context.git_add(".");
 
-    context
-        .home_dir()
-        .child("tools")
-        .child("go")
-        .assert(predicates::path::missing());
+    let go_dir = context.home_dir().child("tools").child("go");
+    go_dir.assert(predicates::path::missing());
 
     let filters = [(
-        r"(go version go1\.\d{1,2}\.\d{1,2}) ([\w]+/[\w]+)",
-        "$1 [OS]/[ARCH]",
+        r"go version (go1\.\d{1,2})\.\d{1,2} ([\w]+/[\w]+)",
+        "go version $1.X [OS]/[ARCH]",
     )]
     .into_iter()
     .chain(context.filters())
     .collect::<Vec<_>>();
+
     cmd_snapshot!(filters, context.run().arg("-v"), @r#"
     success: true
     exit_code: 0
@@ -75,44 +82,53 @@ fn language_version() -> anyhow::Result<()> {
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
-      go version go1.24.5 [OS]/[ARCH]
+      go version go1.24.X [OS]/[ARCH]
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
-      go version go1.24.5 [OS]/[ARCH]
+      go version go1.24.X [OS]/[ARCH]
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
-      go version go1.23.11 [OS]/[ARCH]
+      go version go1.23.X [OS]/[ARCH]
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
-      go version go1.23.11 [OS]/[ARCH]
+      go version go1.23.X [OS]/[ARCH]
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
-      go version go1.23.11 [OS]/[ARCH]
+      go version go1.23.X [OS]/[ARCH]
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
-      go version go1.24.5 [OS]/[ARCH]
+      go version go1.24.X [OS]/[ARCH]
 
     ----- stderr -----
     "#);
 
-    let installed_versions = context
-        .home_dir()
-        .join("tools")
-        .join("go")
+    // Check that only go 1.23 is installed.
+    let installed_versions = go_dir
         .read_dir()?
         .flatten()
-        .filter(|d| !d.file_name().to_string_lossy().starts_with('.'))
-        .map(|d| d.file_name().to_string_lossy().to_string())
+        .filter_map(|d| {
+            let filename = d.file_name().to_string_lossy().to_string();
+            if filename.starts_with('.') {
+                None
+            } else {
+                Some(filename)
+            }
+        })
         .collect::<Vec<_>>();
 
+    assert_eq!(
+        installed_versions.len(),
+        1,
+        "Expected only one Go version to be installed, but found: {installed_versions:?}"
+    );
     assert!(
-        installed_versions.contains(&"1.23.11".to_string()),
-        "Go version 1.23.11 not found in installed versions: {installed_versions:?}",
+        installed_versions.iter().any(|v| v.contains("1.23")),
+        "Expected Go 1.23 to be installed, but found: {installed_versions:?}"
     );
 
     Ok(())
