@@ -17,6 +17,8 @@ fn create_local_git_repo(context: &TestContext, repo_name: &str, tags: &[&str]) 
     repo_dir.create_dir_all()?;
 
     Command::new("git")
+        .arg("-c")
+        .arg("init.defaultBranch=master")
         .arg("init")
         .current_dir(&repo_dir)
         .assert()
