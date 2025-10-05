@@ -509,7 +509,10 @@ async fn run_hooks(
         let fail_fast = project.config().fail_fast.unwrap_or(false);
 
         let filter = FileFilter::for_project(filenames.iter(), project);
-        trace!("Files for `{project}` after filtered: {}", filter.len());
+        trace!(
+            "Files for project `{project}` after filtered: {}",
+            filter.len()
+        );
 
         let mut hook_succeed;
         for hook in hooks {
@@ -585,7 +588,7 @@ async fn run_hook(
 ) -> Result<(bool, Vec<u8>, bool)> {
     let mut filenames = filter.for_hook(hook);
     trace!(
-        "Files for `{}` after filtered: {}",
+        "Files for hook `{}` after filtered: {}",
         hook.id,
         filenames.len()
     );

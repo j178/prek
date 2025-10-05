@@ -19,10 +19,6 @@
 // THE SOFTWARE.
 
 use std::io::{BufRead, Read};
-#[cfg(unix)]
-use std::os::unix::fs::FileTypeExt;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::OnceLock;
 use std::vec;
@@ -720,7 +716,7 @@ fn is_encoding_tag(tag: &str) -> bool {
     matches!(tag, tags::TEXT | tags::BINARY)
 }
 
-pub fn tags_from_path(path: &Path) -> Result<Vec<&str>> {
+pub(crate) fn tags_from_path(path: &Path) -> Result<Vec<&str>> {
     let metadata = std::fs::symlink_metadata(path)?;
     if metadata.is_dir() {
         return Ok(vec![tags::DIRECTORY]);
@@ -729,6 +725,7 @@ pub fn tags_from_path(path: &Path) -> Result<Vec<&str>> {
     }
     #[cfg(unix)]
     {
+        use std::os::unix::fs::FileTypeExt;
         let file_type = metadata.file_type();
         if file_type.is_socket() {
             return Ok(vec![tags::SOCKET]);
@@ -744,13 +741,19 @@ pub fn tags_from_path(path: &Path) -> Result<Vec<&str>> {
     let mut tags = FxHashSet::default();
     tags.insert(tags::FILE);
 
+    let executable;
     #[cfg(unix)]
-    let executable = metadata.permissions().mode() & 0o111 != 0;
+    {
+        use std::os::unix::fs::PermissionsExt;
+        executable = metadata.permissions().mode() & 0o111 != 0;
+    }
     #[cfg(not(unix))]
-    let executable = {
-        let ext = path.extension().and_then(|ext| ext.to_str());
-        ext.is_some_and(|ext| ext == "exe" || ext == "bat" || ext == "cmd")
-    };
+    {
+        executable = {
+            let ext = path.extension().and_then(|ext| ext.to_str());
+            ext.is_some_and(|ext| ext == "exe" || ext == "bat" || ext == "cmd")
+        };
+    }
 
     if executable {
         tags.insert(tags::EXECUTABLE);
@@ -886,6 +889,12 @@ pub(crate) fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
     Ok(cmd)
 }
 
+fn is_text_char(b: u8) -> bool {
+    (0x20..0x7F).contains(&b) // Printable ASCII
+        || b >= 0x80 // High bit set
+        || [7, 8, 9, 10, 11, 12, 13, 27].contains(&b) // Control characters
+}
+
 /// Return whether the first KB of contents seems to be binary.
 ///
 /// This is roughly based on libmagic's binary/text detection:
@@ -903,17 +912,7 @@ fn is_text_file(path: &Path) -> bool {
         return true;
     }
 
-    let text_chars: Vec<u8> = (0..=255)
-        .filter(|&x| {
-            (0x20..=0x7E).contains(&x) // Printable ASCII
-                || x >= 0x80 // High bit set
-                || [7, 8, 9, 10, 11, 12, 13, 27].contains(&x) // Control characters
-        })
-        .collect();
-
-    buffer[..bytes_read]
-        .iter()
-        .all(|&b| text_chars.contains(&b))
+    buffer[..bytes_read].iter().all(|&b| is_text_char(b))
 }
 
 pub fn all_tags() -> &'static FxHashSet<&'static str> {
@@ -992,6 +991,9 @@ mod tests {
 
         let tags = super::tags_from_filename(Path::new("Pipfile.lock"));
         assert_eq!(tags, vec!["json", "text"]);
+
+        let tags = super::tags_from_filename(Path::new("file.pdf"));
+        assert_eq!(tags, vec!["pdf", "binary"]);
     }
 
     #[test]
