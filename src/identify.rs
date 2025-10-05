@@ -803,7 +803,8 @@ fn tags_from_filename(filename: &Path) -> Vec<&str> {
     }
 
     if let Some(ext) = ext {
-        if let Some(tags) = by_extension().get(ext) {
+        let ext = ext.to_lowercase();
+        if let Some(tags) = by_extension().get(ext.as_str()) {
             result.extend(tags);
         }
     }
@@ -993,6 +994,9 @@ mod tests {
         assert_eq!(tags, vec!["json", "text"]);
 
         let tags = super::tags_from_filename(Path::new("file.pdf"));
+        assert_eq!(tags, vec!["pdf", "binary"]);
+
+        let tags = super::tags_from_filename(Path::new("FILE.PDF"));
         assert_eq!(tags, vec!["pdf", "binary"]);
     }
 
