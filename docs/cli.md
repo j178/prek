@@ -509,7 +509,7 @@ prek auto-update [OPTIONS]
 </dd><dt id="prek-auto-update--freeze"><a href="#prek-auto-update--freeze"><code>--freeze</code></a></dt><dd><p>Store &quot;frozen&quot; hashes in <code>rev</code> instead of tag names</p>
 </dd><dt id="prek-auto-update--help"><a href="#prek-auto-update--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-auto-update--jobs"><a href="#prek-auto-update--jobs"><code>--jobs</code></a>, <code>-j</code> <i>jobs</i></dt><dd><p>Number of threads to use</p>
-<p>[default: 3]</p></dd><dt id="prek-auto-update--log-file"><a href="#prek-auto-update--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
+<p>[default: 0]</p></dd><dt id="prek-auto-update--log-file"><a href="#prek-auto-update--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
 </dd><dt id="prek-auto-update--no-progress"><a href="#prek-auto-update--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-auto-update--quiet"><a href="#prek-auto-update--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>

@@ -32,7 +32,7 @@ jobs:
       - name: "rustfmt"
         run: cargo fmt --all --check
       - name: Run prek hooks
-        uses: j178/prek-action@8b6a22b79a7469cb7048b98da156f98876c960b1 # v1.0.10
+        uses: j178/prek-action@91fd7d7cf70ae1dee9f4f44e7dfa5d1073fe6623 # v1.0.11
         with:
           extra-args: '--all-files --skip cargo-fmt --skip cargo-clippy'
 
