@@ -13,7 +13,7 @@ use crate::cli::run;
 use crate::cli::run::{SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
 use crate::fs::{CWD, Simplified};
-use crate::git::git_cmd;
+use crate::git::{GIT_ROOT, git_cmd};
 use crate::printer::Printer;
 use crate::store::STORE;
 use crate::workspace::{Project, Workspace};
@@ -194,11 +194,22 @@ fn install_hook_script(
     // Otherwise, use the config path from the discovered project (workspace mode).
     // If neither is available, don't pass a config path (let prek find it). In this case,
     // we're different with `pre-commit` which always sets `--config=.pre-commit-config.yaml`.
-    if let Some(config) = config {
+    let target_info = if let Some(config) = config {
         args.push(format!(r#"--config="{}""#, config.display()));
+        format!(" with specified config `{}`", config.display().cyan())
     } else if let Some(project) = project {
-        args.push(format!(r#"--cd="{}""#, project.path().display()));
-    }
+        let project_path = project.path();
+        args.push(format!(r#"--cd="{}""#, project_path.display()));
+
+        if project_path == GIT_ROOT.as_ref()? {
+            String::new()
+        } else {
+            // Show project path if it's a subproject.
+            format!(" for project `{}`", project_path.display().cyan())
+        }
+    } else {
+        String::new()
+    };
 
     if skip_on_missing_config {
         args.push("--skip-on-missing-config".to_string());
@@ -238,8 +249,8 @@ fn install_hook_script(
 
     writeln!(
         printer.stdout(),
-        "prek installed at `{}`",
-        hook_path.user_display().cyan()
+        "prek installed at `{}`{target_info}",
+        hook_path.user_display().cyan(),
     )?;
 
     Ok(())
