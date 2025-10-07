@@ -270,6 +270,11 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ARGS+=(--hook-dir "$HERE" -- "$@")
 PREK="prek"
 
+# Check if the full path to prek is executable, otherwise fallback to PATH
+if [ ! -x "$PREK" ]; then
+    PREK="prek"
+fi
+
 exec "$PREK" "${ARGS[@]}"
 
 "#;

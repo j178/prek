@@ -178,7 +178,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         std::env::set_current_dir(dir)?;
     }
 
-    debug!("prek: {}", version::version());
+    debug!(
+        "prek: {} ({})",
+        version::version(),
+        std::env::current_exe()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| "unknown".to_string())
+    );
 
     macro_rules! show_settings {
         ($arg:expr) => {
