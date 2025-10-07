@@ -133,7 +133,7 @@ pub(crate) async fn try_repo(
     fs_err::tokio::create_dir_all(&scratch_dir).await?;
     let tempdir = tempdir_in(scratch_dir)?;
 
-    let (repo_path, rev) = get_repo_and_rev(&args.repo, args.r#ref.as_deref(), tempdir.path())
+    let (repo_path, rev) = get_repo_and_rev(&args.repo, args.rev.as_deref(), tempdir.path())
         .await
         .context("Failed to determine repository and revision")?;
 

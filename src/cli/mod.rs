@@ -465,8 +465,8 @@ pub(crate) struct TryRepoArgs {
     pub(crate) repo: PathBuf,
 
     /// Manually select a rev to run against, otherwise the `HEAD` revision will be used.
-    #[arg(long, short = 'r')]
-    pub(crate) r#ref: Option<String>,
+    #[arg(long, alias = "ref")]
+    pub(crate) rev: Option<String>,
 
     /// A single hook-id to run.
     #[arg(long)]
