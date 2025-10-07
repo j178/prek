@@ -91,12 +91,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
+        uses: taiki-e/install-action@f33d3f211b0303ea71864a2677724fed135b8e99 # v2.62.22
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
+        uses: taiki-e/install-action@f33d3f211b0303ea71864a2677724fed135b8e99 # v2.62.22
         with:
           tool: cargo-llvm-cov
 
@@ -138,12 +138,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
+        uses: taiki-e/install-action@f33d3f211b0303ea71864a2677724fed135b8e99 # v2.62.22
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
+        uses: taiki-e/install-action@f33d3f211b0303ea71864a2677724fed135b8e99 # v2.62.22
         with:
           tool: cargo-llvm-cov
 
@@ -206,7 +206,7 @@ jobs:
         run: rustup show
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
+        uses: taiki-e/install-action@f33d3f211b0303ea71864a2677724fed135b8e99 # v2.62.22
         with:
           tool: cargo-nextest
 
@@ -262,12 +262,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
+        uses: taiki-e/install-action@f33d3f211b0303ea71864a2677724fed135b8e99 # v2.62.22
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
+        uses: taiki-e/install-action@f33d3f211b0303ea71864a2677724fed135b8e99 # v2.62.22
         with:
           tool: cargo-llvm-cov
 
