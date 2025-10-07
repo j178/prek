@@ -284,7 +284,7 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `../.git/hooks/pre-commit`
+    prek installed at `../.git/hooks/pre-commit` for project `[TEMP_DIR]/project2`
 
     ----- stderr -----
     ");

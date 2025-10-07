@@ -428,15 +428,15 @@ fn init_template_dir() -> anyhow::Result<()> {
     );
 
     // `--config` points to non-existing file.
-    cmd_snapshot!(filters.clone(), context.command().arg("init-templatedir").arg("-c").arg("non-exist-config").arg("subdir2"), @r#"
+    cmd_snapshot!(filters.clone(), context.command().arg("init-templatedir").arg("-c").arg("non-exist-config").arg("subdir2"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `subdir2/hooks/pre-commit`
+    prek installed at `subdir2/hooks/pre-commit` with specified config `non-exist-config`
 
     ----- stderr -----
     warning: git config `init.templateDir` not set to the target directory, try `git config --global init.templateDir 'subdir2'`
-    "#);
+    ");
     insta::with_settings!(
         { filters => filters.clone() },
         {
@@ -520,7 +520,7 @@ fn workspace_install() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `../.git/hooks/pre-commit`
+    prek installed at `../.git/hooks/pre-commit` for project `[TEMP_DIR]/project3`
 
     ----- stderr -----
     ");
