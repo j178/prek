@@ -611,7 +611,7 @@ impl Workspace {
         } else {
             // Cache miss or invalid, perform fresh discovery
             debug!("Performing fresh workspace discovery");
-            let projects = Self::discover_fresh(&root)?;
+            let projects = Self::discover_fresh(&root, selectors)?;
 
             // Save to cache
             let cache = WorkspaceCache::new(root.clone(), &projects);
@@ -631,7 +631,10 @@ impl Workspace {
     }
 
     /// Perform fresh workspace discovery without cache
-    fn discover_fresh(root: &Path) -> Result<Vec<Arc<Project>>, Error> {
+    fn discover_fresh(
+        root: &Path,
+        selectors: Option<&Selectors>,
+    ) -> Result<Vec<Arc<Project>>, Error> {
         let projects = Mutex::new(Ok(Vec::new()));
 
         ignore::WalkBuilder::new(root)
@@ -665,8 +668,23 @@ impl Workspace {
                         }
                         Err(config::Error::NotFound(_)) => {}
                         Err(e) => {
-                            *projects.lock().unwrap() = Err(e);
-                            return WalkState::Quit;
+                            // Exit early if the path is selected
+                            if let Some(selectors) = selectors {
+                                let relative_path = entry
+                                    .path()
+                                    .strip_prefix(root)
+                                    .expect("Entry path should be relative to the root");
+                                if selectors.matches_path(relative_path) {
+                                    *projects.lock().unwrap() = Err(e);
+                                    return WalkState::Quit;
+                                }
+                            }
+                            // Otherwise, just log the error and continue
+                            error!(
+                                path = %entry.path().user_display(),
+                                "Skipping project due to error: {e}"
+                            );
+                            return WalkState::Skip;
                         }
                     }
 
