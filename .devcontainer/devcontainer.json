@@ -3,12 +3,12 @@
 {
   "name": "prek",
   // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-  "image": "mcr.microsoft.com/devcontainers/rust:1-1-bullseye",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-trixie",
   "features": {
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {},
-    "ghcr.io/devcontainers/features/go:1": {},
-    "ghcr.io/va-h/devcontainers-features/uv:1": {}
+    "ghcr.io/devcontainers-extra/features/mise:1": {},
+    "ghcr.io/devcontainers-extra/features/uv:1": {},
   }
   // Use 'mounts' to make the cargo cache persistent in a Docker Volume.
   // "mounts": [
