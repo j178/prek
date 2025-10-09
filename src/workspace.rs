@@ -659,12 +659,9 @@ impl Workspace {
                                 .to_path_buf();
                             project.with_relative_path(relative_path);
 
-                            projects
-                                .lock()
-                                .unwrap()
-                                .as_mut()
-                                .unwrap()
-                                .push(Arc::new(project));
+                            if let Ok(projects) = projects.lock().unwrap().as_mut() {
+                                projects.push(Arc::new(project));
+                            }
                         }
                         Err(config::Error::NotFound(_)) => {}
                         Err(e) => {
