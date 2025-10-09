@@ -750,5 +750,45 @@ fn skips() -> Result<()> {
     warning: selector `PREK_SKIP=non-exist-hook` did not match any hooks
     ");
 
+    // Add an invalid config
+    context
+        .work_dir()
+        .child("project3/.pre-commit-config.yaml")
+        .write_str("invalid_yaml: [")?;
+    context.git_add(".");
+
+    // Should error out because of the invalid config
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `project3/.pre-commit-config.yaml`
+      caused by: did not find expected node content at line 2 column 1, while parsing a flow node
+    ");
+
+    // Should skip the invalid config
+    cmd_snapshot!(context.filters(), context.run().arg("--skip").arg("project3/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `project2`:
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+      [TEMP_DIR]/project2
+      ['.pre-commit-config.yaml']
+
+    Running hooks for `.`:
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+      [TEMP_DIR]/
+      ['project2/.pre-commit-config.yaml', '.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
+
+    ----- stderr -----
+    ");
+
     Ok(())
 }

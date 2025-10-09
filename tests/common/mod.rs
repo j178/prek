@@ -331,7 +331,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     // File sizes
     (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
     // Rewrite Windows output to Unix output
-    (r"\\([\w\d]|\.\.)", "/$1"),
+    (r"\\([\w\d]|\.\.|\.)", "/$1"),
     (r"prek.exe", "prek"),
     // The exact message is host language dependent
     (
