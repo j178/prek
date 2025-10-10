@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
@@ -9,14 +8,11 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use crate::cli::ExitStatus;
-use crate::cli::run::Selectors;
 use crate::config;
-use crate::fs::CWD;
 use crate::git;
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::warn_user;
-use crate::workspace::Workspace;
 
 async fn get_head_rev(repo: &Path) -> Result<String> {
     let head_rev = git::git_cmd("get head rev")?
@@ -48,7 +44,11 @@ async fn prepare_repo_and_rev<'a>(
         .output()
         .await?
         .stdout;
-    let head_rev = String::from_utf8_lossy(&head_rev).trim().to_string();
+    let head_rev = String::from_utf8_lossy(&head_rev)
+        .split_ascii_whitespace()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("Failed to parse HEAD revision from git ls-remote output"))?
+        .to_string();
 
     // If repo is a local repo with uncommitted changes, create a shadow repo to commit the changes.
     let repo_path = Path::new(repo);
@@ -132,9 +132,6 @@ pub(crate) async fn try_repo(
         warn_user!("`--config` option is ignored when using `try-repo`");
     }
 
-    let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
-    let selectors = Selectors::load(&run_args.includes, &run_args.skips, &workspace_root)?;
-
     let tmp_dir = tempfile::tempdir()?;
     let (repo_path, rev) = prepare_repo_and_rev(&repo, rev.as_deref(), tmp_dir.path())
         .await
@@ -152,24 +149,23 @@ pub(crate) async fn try_repo(
         )
         .await?;
 
-    let hooks = if let Some(hook_id) = hook {
-        vec![hook_id]
-    } else {
-        let manifest = config::read_manifest(&repo_clone_path.join(constants::MANIFEST_FILE))?;
-        manifest.hooks.into_iter().map(|h| h.id).collect()
-    };
-
-    let hooks_str = hooks
-        .iter()
-        .map(|hook_id| format!("{}- id: {}", " ".repeat(6), hook_id))
+    let manifest = config::read_manifest(&repo_clone_path.join(constants::MANIFEST_FILE))?;
+    let hooks_str = manifest
+        .hooks
+        .into_iter()
+        .map(|hook| format!("{}- id: {}", " ".repeat(6), hook.id))
         .join("\n");
+
     let config_str = indoc::formatdoc! {r"
     repos:
       - repo: {repo_path}
         rev: {rev}
+        hooks:
+    {hooks_str}
     ",
         repo_path = repo_path,
         rev = rev,
+        hooks_str = hooks_str,
     };
 
     let config_file = tmp_dir.path().join(constants::CONFIG_FILE);
@@ -182,8 +178,8 @@ pub(crate) async fn try_repo(
     crate::cli::run(
         &store,
         Some(config_file),
-        vec![], // includes
-        vec![], // skips
+        run_args.includes,
+        run_args.skips,
         run_args.hook_stage,
         run_args.from_ref,
         run_args.to_ref,
