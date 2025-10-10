@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.5
+
+Released on 2025-10-10.
+
+### Enhancements
+
+- Implement `prek try-repo` ([#797](https://github.com/j178/prek/pull/797))
+- Add fallback mechanism for prek executable in git hooks ([#850](https://github.com/j178/prek/pull/850))
+- Ignore config error if the directory is skipped ([#860](https://github.com/j178/prek/pull/860))
+
+### Bug fixes
+
+- Fix panic when parse config failed ([#859](https://github.com/j178/prek/pull/859))
+
+### Other changes
+
+- Add a Dockerfile ([#852](https://github.com/j178/prek/pull/852))
+
+### Contributors
+
+- @j178
+- @luizvbo
+
 ## 0.2.4
 
 Released on 2025-10-07.
