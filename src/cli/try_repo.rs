@@ -186,8 +186,8 @@ pub(crate) async fn try_repo(
     crate::cli::run(
         &store,
         Some(config_file),
-        run_args.includes,
-        run_args.skips,
+        vec![],
+        vec![],
         run_args.hook_stage,
         run_args.from_ref,
         run_args.to_ref,

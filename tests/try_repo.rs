@@ -151,7 +151,7 @@ fn try_repo_basic() -> Result<()> {
     let mut filters = context.filters();
     filters.extend([(r"[a-f0-9]{40}", "[COMMIT_SHA]")]);
 
-    cmd_snapshot!(filters, context.try_repo().arg(&repo_path), @r"
+    cmd_snapshot!(filters, context.try_repo().arg(&repo_path).arg("--skip").arg("another-hook"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -161,9 +161,7 @@ fn try_repo_basic() -> Result<()> {
         rev: [COMMIT_SHA]
         hooks:
           - id: test-hook
-          - id: another-hook
     Test Hook................................................................Passed
-    Another Hook.............................................................Passed
 
     ----- stderr -----
     ");
