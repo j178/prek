@@ -343,9 +343,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
 
     let mut filters = context.filters();
     filters.extend([
-        (r"\.tmp\w+", "[TMP]"),
-        (r"shadow-repo\w+", "shadow-repo"),
-        (r"run-in\w+", "run-in"),
+        (r"try-repo-[^/\\]+", "[REPO]"),
         (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
     ]);
 
@@ -355,7 +353,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     ----- stdout -----
     Using config:
     repos:
-      - repo: /var/folders/xp/k_qv[TIME]55cd1qj1t0h1_5kjh0000ks/T/[TMP]/shadow-repo
+      - repo: [HOME]/scratch/[REPO]/shadow-repo
         rev: [COMMIT_SHA]
         hooks:
           - id: uncommitted-hook

@@ -135,7 +135,10 @@ pub(crate) async fn try_repo(
         warn_user!("`--config` option is ignored when using `try-repo`");
     }
 
-    let tmp_dir = tempfile::tempdir()?;
+    let store = Store::from_settings()?;
+    fs_err::create_dir_all(store.scratch_path())?;
+    let tmp_dir = tempfile::TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
+
     let (repo_path, rev) = prepare_repo_and_rev(&repo, rev.as_deref(), tmp_dir.path())
         .await
         .context("Failed to determine repository and revision")?;

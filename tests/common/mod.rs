@@ -346,7 +346,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         "Caused by: No such file or directory (os error 2)",
     ),
     // Time seconds
-    (r"(\d+\.)?\d+(ms|s)", "[TIME]"),
+    (r"\b(\d+\.)?\d+(ms|s)\b", "[TIME]"),
     // Windows shebang interpreter
     (r"#!/bin/sh", "#!/usr/bin/env bash"),
 ];
