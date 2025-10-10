@@ -185,6 +185,12 @@ impl TestContext {
         cmd
     }
 
+    pub fn try_repo(&self) -> Command {
+        let mut cmd = self.command();
+        cmd.arg("try-repo");
+        cmd
+    }
+
     /// Standard snapshot filters _plus_ those for this test context.
     pub fn filters(&self) -> Vec<(&str, &str)> {
         // Put test context snapshots before the default filters

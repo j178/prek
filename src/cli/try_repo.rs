@@ -8,8 +8,10 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use crate::cli::ExitStatus;
+use crate::cli::run::Selectors;
 use crate::config;
 use crate::git;
+use crate::git::GIT_ROOT;
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::warn_user;
@@ -53,6 +55,7 @@ async fn prepare_repo_and_rev<'a>(
     // If repo is a local repo with uncommitted changes, create a shadow repo to commit the changes.
     let repo_path = Path::new(repo);
     if repo_path.is_dir() && git::has_diff("HEAD", repo_path).await? {
+        warn_user!("Creating temporary repo with uncommitted changes...");
         debug!("Creating shadow repo for {}", repo);
 
         let shadow = tmp_dir.join("shadow-repo");
@@ -104,7 +107,7 @@ async fn prepare_repo_and_rev<'a>(
             .arg("--no-gpg-sign")
             .arg("--no-edit")
             .arg("--no-verify")
-            .current_dir(repo)
+            .current_dir(&shadow)
             .env("GIT_AUTHOR_NAME", "prek test")
             .env("GIT_AUTHOR_EMAIL", "test@example.com")
             .env("GIT_COMMITTER_NAME", "prek test")
@@ -149,10 +152,13 @@ pub(crate) async fn try_repo(
         )
         .await?;
 
+    let selectors = Selectors::load(&run_args.includes, &run_args.skips, GIT_ROOT.as_ref()?)?;
+
     let manifest = config::read_manifest(&repo_clone_path.join(constants::MANIFEST_FILE))?;
     let hooks_str = manifest
         .hooks
         .into_iter()
+        .filter(|hook| selectors.matches_hook_id(&hook.id))
         .map(|hook| format!("{}- id: {}", " ".repeat(6), hook.id))
         .join("\n");
 
@@ -171,9 +177,8 @@ pub(crate) async fn try_repo(
     let config_file = tmp_dir.path().join(constants::CONFIG_FILE);
     fs_err::tokio::write(&config_file, &config_str).await?;
 
-    let mut stdout = printer.stdout();
-    writeln!(stdout, "{}", "Using config:".cyan().bold())?;
-    write!(stdout, "{}", config_str.dimmed())?;
+    writeln!(printer.stdout(), "{}", "Using config:".cyan().bold())?;
+    write!(printer.stdout(), "{}", config_str.dimmed())?;
 
     crate::cli::run(
         &store,

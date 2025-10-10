@@ -7,6 +7,7 @@ use std::process::Command;
 
 use crate::common::{TestContext, cmd_snapshot};
 use assert_fs::fixture::ChildPath;
+use constants::MANIFEST_FILE;
 
 fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
     let repo_dir = context.home_dir().child(format!("test-repos/{repo_name}"));
@@ -42,9 +43,7 @@ fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
         .assert()
         .success();
 
-    repo_dir
-        .child(".pre-commit-hooks.yaml")
-        .write_str(indoc::indoc! {r#"
+    repo_dir.child(MANIFEST_FILE).write_str(indoc::indoc! {r#"
         - id: test-hook
           name: Test Hook
           entry: echo
@@ -54,8 +53,7 @@ fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
           name: Another Hook
           entry: python3 -c "print('hello')"
           language: python
-    "#
-        })?;
+    "#})?;
 
     // Add a dummy setup.py to make it an installable Python package
     repo_dir
@@ -113,15 +111,12 @@ fn create_failing_hook_repo(context: &TestContext, repo_name: &str) -> Result<Pa
         .assert()
         .success();
 
-    repo_dir
-        .child(".pre-commit-hooks.yaml")
-        .write_str(indoc::indoc! {r#"
+    repo_dir.child(MANIFEST_FILE).write_str(indoc::indoc! {r#"
         - id: failing-hook
           name: Always Fail
           entry: "false"
           language: system
-    "#
-        })?;
+        "#})?;
 
     Command::new("git")
         .arg("add")
@@ -146,40 +141,27 @@ fn try_repo_basic() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
-    context.disable_auto_crlf(); // Ensure consistent line endings
+    context.disable_auto_crlf();
+
+    context.work_dir().child("test.txt").write_str("test")?;
+    context.git_add(".");
 
     let repo_path = create_hook_repo(&context, "try-repo-basic")?;
 
-    let test_file = context.work_dir().child("test.txt");
-    test_file.write_str("test")?;
-
-    let mut cmd = context.command();
-    cmd.arg("try-repo")
-        .arg(&repo_path)
-        .arg("--files")
-        .arg(test_file.path());
-
-    // Define filters for snapshot consistency
     let mut filters = context.filters();
-    filters.extend([
-        (r"file:///?", "file:///"),
-        (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
-    ]);
+    filters.extend([(r"[a-f0-9]{40}", "[COMMIT_SHA]")]);
 
-    cmd_snapshot!(filters, cmd, @r"
+    cmd_snapshot!(filters, context.try_repo().arg(&repo_path), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    ===============================================================================
     Using config:
-    ===============================================================================
     repos:
-    - repo: file:///[HOME]/test-repos/try-repo-basic/
-      rev: [COMMIT_SHA]
-      hooks:
-      - id: test-hook
-      - id: another-hook
-    ===============================================================================
+      - repo: [HOME]/test-repos/try-repo-basic
+        rev: [COMMIT_SHA]
+        hooks:
+          - id: test-hook
+          - id: another-hook
     Test Hook................................................................Passed
     Another Hook.............................................................Passed
 
@@ -194,35 +176,26 @@ fn try_repo_failing_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
-    context.disable_auto_crlf(); // Ensure consistent line endings
+    context.disable_auto_crlf();
+
+    context.work_dir().child("test.txt").write_str("test")?;
+    context.git_add(".");
 
     let repo_path = create_failing_hook_repo(&context, "try-repo-failing")?;
 
-    context.work_dir().child("test.txt").write_str("test")?;
-
-    let mut cmd = context.command();
-    cmd.arg("try-repo").arg(&repo_path);
-
-    // Define filters for snapshot consistency
     let mut filters = context.filters();
-    filters.extend([
-        (r"file:///?", "file:///"),
-        (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
-    ]);
+    filters.extend([(r"[a-f0-9]{40}", "[COMMIT_SHA]")]);
 
-    cmd_snapshot!(filters, cmd, @r"
+    cmd_snapshot!(filters, context.try_repo().arg(&repo_path), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    ===============================================================================
     Using config:
-    ===============================================================================
     repos:
-    - repo: file:///[HOME]/test-repos/try-repo-failing/
-      rev: [COMMIT_SHA]
-      hooks:
-      - id: failing-hook
-    ===============================================================================
+      - repo: [HOME]/test-repos/try-repo-failing
+        rev: [COMMIT_SHA]
+        hooks:
+          - id: failing-hook
     Always Fail..............................................................Failed
     - hook id: failing-hook
     - exit code: 1
@@ -238,38 +211,26 @@ fn try_repo_specific_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
-    context.disable_auto_crlf(); // Ensure consistent line endings
+    context.disable_auto_crlf();
 
     let repo_path = create_hook_repo(&context, "try-repo-specific-hook")?;
 
     context.work_dir().child("test.txt").write_str("test")?;
+    context.git_add(".");
 
-    let mut cmd = context.command();
-    cmd.arg("try-repo")
-        .arg(&repo_path)
-        .arg("--hook")
-        .arg("another-hook");
-
-    // Define filters for snapshot consistency
     let mut filters = context.filters();
-    filters.extend([
-        (r"file:///?", "file:///"),
-        (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
-    ]);
+    filters.extend([(r"[a-f0-9]{40}", "[COMMIT_SHA]")]);
 
-    cmd_snapshot!(filters, cmd, @r"
+    cmd_snapshot!(filters, context.try_repo().arg(&repo_path).arg("another-hook"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    ===============================================================================
     Using config:
-    ===============================================================================
     repos:
-    - repo: file:///[HOME]/test-repos/try-repo-specific-hook/
-      rev: [COMMIT_SHA]
-      hooks:
-      - id: another-hook
-    ===============================================================================
+      - repo: [HOME]/test-repos/try-repo-specific-hook
+        rev: [COMMIT_SHA]
+        hooks:
+          - id: another-hook
     Another Hook.............................................................Passed
 
     ----- stderr -----
@@ -283,7 +244,10 @@ fn try_repo_specific_rev() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
-    context.disable_auto_crlf(); // Ensure consistent line endings
+    context.disable_auto_crlf();
+
+    context.work_dir().child("test.txt").write_str("test")?;
+    context.git_add(".");
 
     let repo_path = create_hook_repo(&context, "try-repo-specific-rev")?;
 
@@ -297,14 +261,13 @@ fn try_repo_specific_rev() -> Result<()> {
 
     // Make a new commit
     ChildPath::new(&repo_path)
-        .child(".pre-commit-hooks.yaml")
+        .child(MANIFEST_FILE)
         .write_str(indoc::indoc! {r"
         - id: new-hook
           name: New Hook
           entry: echo new
           language: system
-    "
-        })?;
+        "})?;
     Command::new("git")
         .arg("add")
         .arg(".")
@@ -319,37 +282,26 @@ fn try_repo_specific_rev() -> Result<()> {
         .assert()
         .success();
 
-    context.work_dir().child("test.txt").write_str("test")?;
-
-    let mut cmd = context.command();
-    cmd.arg("try-repo")
-        .arg(&repo_path)
-        .arg("--ref")
-        .arg(&initial_rev);
-
-    // Define filters for snapshot consistency
     let mut filters = context.filters();
     filters.extend([
-        (r"file:///?", "file:///"),
         (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
         (&initial_rev, "[COMMIT_SHA]"),
     ]);
 
-    cmd_snapshot!(filters, cmd, @r"
+    cmd_snapshot!(filters, context.try_repo().arg(&repo_path)
+        .arg("--ref")
+        .arg(&initial_rev), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    ===============================================================================
     Using config:
-    ===============================================================================
     repos:
-    - repo: file:///[HOME]/test-repos/try-repo-specific-rev/
-      rev: [COMMIT_SHA]
-      hooks:
-      - id: test-hook
-      - id: another-hook
-    ===============================================================================
-    Test Hook............................................(no files to check)Skipped
+      - repo: [HOME]/test-repos/try-repo-specific-rev
+        rev: [COMMIT_SHA]
+        hooks:
+          - id: test-hook
+          - id: another-hook
+    Test Hook................................................................Passed
     Another Hook.............................................................Passed
 
     ----- stderr -----
@@ -363,20 +315,19 @@ fn try_repo_uncommitted_changes() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
-    context.disable_auto_crlf(); // Ensure consistent line endings
+    context.disable_auto_crlf();
 
     let repo_path = create_hook_repo(&context, "try-repo-uncommitted")?;
 
     // Make uncommitted changes
     ChildPath::new(&repo_path)
-        .child(".pre-commit-hooks.yaml")
+        .child(MANIFEST_FILE)
         .write_str(indoc::indoc! {r"
         - id: uncommitted-hook
           name: Uncommitted Hook
           entry: echo uncommitted
           language: system
-    "
-        })?;
+        "})?;
     ChildPath::new(&repo_path)
         .child("new-file.txt")
         .write_str("new")?;
@@ -388,33 +339,26 @@ fn try_repo_uncommitted_changes() -> Result<()> {
         .success();
 
     context.work_dir().child("test.txt").write_str("test")?;
+    context.git_add(".");
 
-    let mut cmd = context.command();
-    cmd.arg("try-repo").arg(repo_path);
-
-    // Define filters for snapshot consistency
     let mut filters = context.filters();
     filters.extend([
-        (r"file:///?", "file:///"),
         (r"\.tmp\w+", "[TMP]"),
         (r"shadow-repo\w+", "shadow-repo"),
         (r"run-in\w+", "run-in"),
         (r"[a-f0-9]{40}", "[COMMIT_SHA]"),
     ]);
 
-    cmd_snapshot!(filters, cmd, @r"
+    cmd_snapshot!(filters, context.try_repo().arg(&repo_path), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    ===============================================================================
     Using config:
-    ===============================================================================
     repos:
-    - repo: file:///[HOME]/scratch/[TMP]/shadow-repo/
-      rev: [COMMIT_SHA]
-      hooks:
-      - id: uncommitted-hook
-    ===============================================================================
+      - repo: /var/folders/xp/k_qv[TIME]55cd1qj1t0h1_5kjh0000ks/T/[TMP]/shadow-repo
+        rev: [COMMIT_SHA]
+        hooks:
+          - id: uncommitted-hook
     Uncommitted Hook.........................................................Passed
 
     ----- stderr -----
