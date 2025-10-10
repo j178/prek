@@ -23,7 +23,7 @@ use crate::cli::{CacheCommand, CacheNamespace, Cli, Command, ExitStatus};
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::printer::Printer;
 use crate::run::USE_COLOR;
-use crate::store::STORE;
+use crate::store::Store;
 
 mod archive;
 mod builtin;
@@ -82,7 +82,7 @@ impl LogFile {
     }
 }
 
-fn setup_logging(level: Level, log_file: LogFile) -> Result<()> {
+fn setup_logging(level: Level, log_file: LogFile, store: &Store) -> Result<()> {
     let directive = match level {
         Level::Default | Level::Verbose => LevelFilter::OFF.into(),
         Level::Debug => Directive::from_str("prek=debug")?,
@@ -110,7 +110,7 @@ fn setup_logging(level: Level, log_file: LogFile) -> Result<()> {
         registry.init();
     } else {
         let log_file_path = match log_file {
-            LogFile::Default => STORE.as_ref()?.log_file(),
+            LogFile::Default => store.log_file(),
             LogFile::Path(path) => path,
             LogFile::Disabled => unreachable!(),
         };
@@ -140,6 +140,7 @@ fn setup_logging(level: Level, log_file: LogFile) -> Result<()> {
 async fn run(mut cli: Cli) -> Result<ExitStatus> {
     ColorChoice::write_global(cli.globals.color.into());
 
+    let store = Store::from_settings()?;
     let log_file = LogFile::from_args(cli.globals.log_file.clone(), cli.globals.no_log_file);
     setup_logging(
         match cli.globals.verbose {
@@ -150,6 +151,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             _ => Level::TraceAll,
         },
         log_file,
+        &store,
     )?;
 
     let printer = if cli.globals.quiet == 1 {
@@ -206,6 +208,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             cli::install(
+                &store,
                 cli.globals.config,
                 args.includes,
                 args.skips,
@@ -222,6 +225,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Command::InstallHooks(args) => {
             // TODO: add selectors?
             cli::install_hooks(
+                &store,
                 cli.globals.config,
                 args.includes,
                 args.skips,
@@ -239,6 +243,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             cli::run(
+                &store,
                 cli.globals.config,
                 args.includes,
                 args.skips,
@@ -262,6 +267,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             cli::list(
+                &store,
                 cli.globals.config,
                 args.includes,
                 args.skips,
@@ -278,6 +284,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             cli::hook_impl(
+                &store,
                 cli.globals.config,
                 args.includes,
                 args.skips,
@@ -293,9 +300,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Command::Cache(CacheNamespace {
             command: cache_command,
         }) => match cache_command {
-            CacheCommand::Clean => cli::clean(printer),
+            CacheCommand::Clean => cli::clean(&store, printer),
             CacheCommand::Dir => {
-                let store = STORE.as_ref()?;
                 writeln!(printer.stdout(), "{}", store.path().display().cyan())?;
                 Ok(ExitStatus::Success)
             }
@@ -304,7 +310,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 Ok(ExitStatus::Failure)
             }
         },
-        Command::Clean => cli::clean(printer),
+        Command::Clean => cli::clean(&store, printer),
         Command::ValidateConfig(args) => {
             show_settings!(args);
 
@@ -318,6 +324,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Command::SampleConfig(args) => cli::sample_config(args.file, printer),
         Command::AutoUpdate(args) => {
             cli::auto_update(
+                &store,
                 cli.globals.config,
                 args.repo,
                 args.bleeding_edge,
@@ -359,6 +366,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             cli::init_template_dir(
+                &store,
                 args.directory,
                 cli.globals.config,
                 args.hook_types,

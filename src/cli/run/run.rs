@@ -28,11 +28,12 @@ use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::{Printer, Stdout};
 use crate::run::{CONCURRENCY, USE_COLOR};
-use crate::store::{STORE, Store};
+use crate::store::Store;
 use crate::workspace::{Project, Workspace};
 
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
+    store: &Store,
     config: Option<PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
@@ -76,13 +77,13 @@ pub(crate) async fn run(
 
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
-    let mut workspace = Workspace::discover(workspace_root, config, Some(&selectors), refresh)?;
+    let mut workspace =
+        Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
     if should_stash {
         workspace.check_configs_staged().await?;
     }
 
-    let store = STORE.as_ref()?;
     let reporter = HookInitReporter::from(printer);
     let lock = store.lock_async().await?;
 

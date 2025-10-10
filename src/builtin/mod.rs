@@ -6,6 +6,7 @@ use constants::env_vars::EnvVars;
 
 use crate::builtin::pre_commit_hooks::{Implemented, is_pre_commit_hooks};
 use crate::hook::{Hook, Repo};
+use crate::store::Store;
 
 mod meta_hooks;
 mod pre_commit_hooks;
@@ -29,9 +30,13 @@ pub fn check_fast_path(hook: &Hook) -> bool {
     }
 }
 
-pub async fn run_fast_path(hook: &Hook, filenames: &[&Path]) -> anyhow::Result<(i32, Vec<u8>)> {
+pub async fn run_fast_path(
+    store: &Store,
+    hook: &Hook,
+    filenames: &[&Path],
+) -> anyhow::Result<(i32, Vec<u8>)> {
     match hook.repo() {
-        Repo::Meta { .. } => run_meta_hook(hook, filenames).await,
+        Repo::Meta { .. } => run_meta_hook(store, hook, filenames).await,
         Repo::Remote { url, .. } if is_pre_commit_hooks(url) => {
             Implemented::from_str(hook.id.as_str())
                 .unwrap()
@@ -42,9 +47,13 @@ pub async fn run_fast_path(hook: &Hook, filenames: &[&Path]) -> anyhow::Result<(
     }
 }
 
-async fn run_meta_hook(hook: &Hook, filenames: &[&Path]) -> anyhow::Result<(i32, Vec<u8>)> {
+async fn run_meta_hook(
+    store: &Store,
+    hook: &Hook,
+    filenames: &[&Path],
+) -> anyhow::Result<(i32, Vec<u8>)> {
     match hook.id.as_str() {
-        "check-hooks-apply" => meta_hooks::check_hooks_apply(hook, filenames).await,
+        "check-hooks-apply" => meta_hooks::check_hooks_apply(store, hook, filenames).await,
         "check-useless-excludes" => meta_hooks::check_useless_excludes(hook, filenames).await,
         "identity" => Ok(meta_hooks::identity(hook, filenames)),
         _ => unreachable!(),

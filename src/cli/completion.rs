@@ -7,6 +7,7 @@ use clap_complete::CompletionCandidate;
 
 use crate::config;
 use crate::fs::CWD;
+use crate::store::Store;
 use crate::workspace::{Project, Workspace};
 
 /// Provide completion candidates for `include` and `skip` selectors.
@@ -15,8 +16,11 @@ pub(crate) fn selector_completer(current: &OsStr) -> Vec<CompletionCandidate> {
         return vec![];
     };
 
+    let Ok(store) = Store::from_settings() else {
+        return vec![];
+    };
     let Ok(workspace) = Workspace::find_root(None, &CWD)
-        .and_then(|root| Workspace::discover(root, None, None, false))
+        .and_then(|root| Workspace::discover(&store, root, None, None, false))
     else {
         return vec![];
     };

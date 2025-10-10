@@ -15,12 +15,13 @@ use crate::cli::{ExitStatus, HookType};
 use crate::fs::{CWD, Simplified};
 use crate::git::{GIT_ROOT, git_cmd};
 use crate::printer::Printer;
-use crate::store::STORE;
+use crate::store::Store;
 use crate::workspace::{Project, Workspace};
 use crate::{git, warn_user};
 
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
+    store: &Store,
     config: Option<PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
@@ -71,13 +72,14 @@ pub(crate) async fn install(
     }
 
     if install_hook_environments {
-        install_hooks(config, includes, skips, refresh, printer).await?;
+        install_hooks(store, config, includes, skips, refresh, printer).await?;
     }
 
     Ok(ExitStatus::Success)
 }
 
 pub(crate) async fn install_hooks(
+    store: &Store,
     config: Option<PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
@@ -86,9 +88,9 @@ pub(crate) async fn install_hooks(
 ) -> Result<ExitStatus> {
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
-    let mut workspace = Workspace::discover(workspace_root, config, Some(&selectors), refresh)?;
+    let mut workspace =
+        Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
-    let store = STORE.as_ref()?;
     let reporter = HookInitReporter::from(printer);
     let _lock = store.lock_async().await?;
 
@@ -340,6 +342,7 @@ pub(crate) async fn uninstall(
 }
 
 pub(crate) async fn init_template_dir(
+    store: &Store,
     directory: PathBuf,
     config: Option<PathBuf>,
     hook_types: Vec<HookType>,
@@ -348,6 +351,7 @@ pub(crate) async fn init_template_dir(
     printer: Printer,
 ) -> Result<ExitStatus> {
     install(
+        store,
         config,
         vec![],
         vec![],

@@ -12,11 +12,13 @@ use crate::cli::{self, ExitStatus, RunArgs};
 use crate::config::HookType;
 use crate::fs::CWD;
 use crate::printer::Printer;
+use crate::store::Store;
 use crate::workspace;
 use crate::workspace::Project;
 use crate::{git, warn_user};
 
 pub(crate) async fn hook_impl(
+    store: &Store,
     config: Option<PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
@@ -95,6 +97,7 @@ pub(crate) async fn hook_impl(
     };
 
     cli::run(
+        store,
         config,
         includes,
         skips,

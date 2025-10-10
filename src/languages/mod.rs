@@ -14,7 +14,7 @@ use crate::config::Language;
 use crate::fs::CWD;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::identify::parse_shebang;
-use crate::store::{STORE, Store};
+use crate::store::Store;
 use crate::version::version;
 use crate::{archive, builtin};
 
@@ -202,7 +202,7 @@ impl Language {
     ) -> Result<(i32, Vec<u8>)> {
         // fast path for hooks implemented in Rust
         if builtin::check_fast_path(hook) {
-            return builtin::run_fast_path(hook, filenames).await;
+            return builtin::run_fast_path(store, hook, filenames).await;
         }
 
         match self {
@@ -285,10 +285,7 @@ async fn download_and_extract(
         .into_async_read()
         .compat();
 
-    let scratch = STORE.as_ref()?.scratch_path();
-    fs_err::tokio::create_dir_all(&scratch).await?;
-
-    let temp_dir = tempfile::tempdir_in(&scratch)?;
+    let temp_dir = tempfile::tempdir()?;
     debug!(url = %url, temp_dir = ?temp_dir.path(), "Downloading");
 
     let ext = ArchiveExtension::from_path(filename)?;
