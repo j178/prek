@@ -461,16 +461,11 @@ pub(crate) struct RunArgs {
 #[derive(Debug, Clone, Default, Args)]
 pub(crate) struct TryRepoArgs {
     /// Repository to source hooks from.
-    #[arg(value_hint = ValueHint::DirPath, required = true)]
-    pub(crate) repo: PathBuf,
+    pub(crate) repo: String,
 
     /// Manually select a rev to run against, otherwise the `HEAD` revision will be used.
     #[arg(long, alias = "ref")]
     pub(crate) rev: Option<String>,
-
-    /// A single hook-id to run.
-    #[arg(long)]
-    pub(crate) hook: Option<String>,
 
     #[command(flatten)]
     pub(crate) run_args: RunArgs,

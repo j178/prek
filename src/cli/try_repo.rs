@@ -1,70 +1,66 @@
-use std::env;
+use std::borrow::Cow;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use url::Url;
 
 use anyhow::{Context, Result};
-use tempfile::tempdir_in;
+use itertools::Itertools;
+use owo_colors::OwoColorize;
+use tracing::debug;
 
-use crate::cli::{ExitStatus, GlobalArgs, TryRepoArgs};
-use crate::config::{self, HookOptions, Repo};
+use crate::cli::ExitStatus;
+use crate::cli::run::Selectors;
+use crate::config;
+use crate::fs::CWD;
 use crate::git;
 use crate::printer::Printer;
-use crate::store::{STORE, Store};
+use crate::store::Store;
 use crate::warn_user;
+use crate::workspace::Workspace;
 
-async fn commit(repo: &Path, msg: &str) -> Result<(), git::Error> {
-    let mut cmd = git::git_cmd("git commit")?;
-    cmd.arg("commit")
-        .arg("-m")
-        .arg(msg)
-        .arg("--no-gpg-sign")
-        .current_dir(repo)
-        .env("GIT_AUTHOR_NAME", "prek test")
-        .env("GIT_AUTHOR_EMAIL", "test@example.com")
-        .env("GIT_COMMITTER_NAME", "prek test")
-        .env("GIT_COMMITTER_EMAIL", "test@example.com")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    cmd.status().await?;
-    Ok(())
-}
-
-async fn get_repo_and_rev(
-    repo: &Path,
-    rev: Option<&str>,
-    tmpdir: &Path,
-) -> Result<(PathBuf, String)> {
-    let repo = std::fs::canonicalize(repo)?;
-
-    if let Some(rev) = rev {
-        return Ok((repo, rev.to_string()));
-    }
-
+async fn get_head_rev(repo: &Path) -> Result<String> {
     let head_rev = git::git_cmd("get head rev")?
         .arg("rev-parse")
         .arg("HEAD")
-        .current_dir(&repo)
+        .current_dir(repo)
+        .output()
+        .await?
+        .stdout;
+    let head_rev = String::from_utf8_lossy(&head_rev).trim().to_string();
+    Ok(head_rev)
+}
+
+async fn prepare_repo_and_rev<'a>(
+    repo: &'a str,
+    rev: Option<&'a str>,
+    tmp_dir: &'a Path,
+) -> Result<(Cow<'a, str>, String)> {
+    // If rev is provided, use it directly.
+    if let Some(rev) = rev {
+        return Ok((Cow::Borrowed(repo), rev.to_string()));
+    }
+
+    let head_rev = git::git_cmd("get head rev")?
+        .arg("ls-remote")
+        .arg("--exit-code")
+        .arg(repo)
+        .arg("HEAD")
         .output()
         .await?
         .stdout;
     let head_rev = String::from_utf8_lossy(&head_rev).trim().to_string();
 
-    if git::has_diff("HEAD", &repo).await? {
-        warn_user!("Creating temporary repo with uncommitted changes...");
+    // If repo is a local repo with uncommitted changes, create a shadow repo to commit the changes.
+    let repo_path = Path::new(repo);
+    if repo_path.is_dir() && git::has_diff("HEAD", repo_path).await? {
+        debug!("Creating shadow repo for {}", repo);
 
-        let repo_url = Url::from_directory_path(&repo)
-            .map_err(|()| anyhow::anyhow!("Failed to convert path to URL: {}", repo.display()))?;
-
-        let shadow = tmpdir.join("shadow-repo");
+        let shadow = tmp_dir.join("shadow-repo");
         git::git_cmd("clone shadow repo")?
             .arg("clone")
-            .arg(repo_url.as_str())
+            .arg(repo)
             .arg(&shadow)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
+            .output()
             .await?;
         git::git_cmd("checkout shadow repo")?
             .arg("checkout")
@@ -72,79 +68,83 @@ async fn get_repo_and_rev(
             .arg("-b")
             .arg("_prek_tmp")
             .current_dir(&shadow)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
+            .output()
             .await?;
 
         let index_path = shadow.join(".git/index");
         let objects_path = shadow.join(".git/objects");
 
-        let staged_files = git::get_staged_files(&repo).await?;
+        let staged_files = git::get_staged_files(repo_path).await?;
         if !staged_files.is_empty() {
-            let mut add_cmd = git::git_cmd("add staged files to shadow")?;
-            add_cmd
+            git::git_cmd("add staged files to shadow")?
                 .arg("add")
                 .arg("--")
                 .args(&staged_files)
-                .current_dir(&repo)
+                .current_dir(repo)
                 .env("GIT_INDEX_FILE", &index_path)
                 .env("GIT_OBJECT_DIRECTORY", &objects_path)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null());
-            add_cmd.status().await?;
+                .output()
+                .await?;
         }
 
         let mut add_u_cmd = git::git_cmd("add unstaged to shadow")?;
         add_u_cmd
             .arg("add")
-            .arg("-u")
-            .current_dir(&repo)
+            .arg("--update") // Update tracked files
+            .current_dir(repo)
             .env("GIT_INDEX_FILE", &index_path)
             .env("GIT_OBJECT_DIRECTORY", &objects_path)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        add_u_cmd.status().await?;
-
-        commit(&shadow, "temp commit for try-repo").await?;
-
-        let new_rev = git::git_cmd("get shadow head")?
-            .arg("rev-parse")
-            .arg("HEAD")
-            .current_dir(&shadow)
             .output()
-            .await?
-            .stdout;
-        let new_rev = String::from_utf8_lossy(&new_rev).trim().to_string();
+            .await?;
 
-        return Ok((shadow, new_rev));
+        git::git_cmd("git commit")?
+            .arg("commit")
+            .arg("-m")
+            .arg("Temporary commit by prek try-repo")
+            .arg("--no-gpg-sign")
+            .arg("--no-edit")
+            .arg("--no-verify")
+            .current_dir(repo)
+            .env("GIT_AUTHOR_NAME", "prek test")
+            .env("GIT_AUTHOR_EMAIL", "test@example.com")
+            .env("GIT_COMMITTER_NAME", "prek test")
+            .env("GIT_COMMITTER_EMAIL", "test@example.com")
+            .output()
+            .await?;
+
+        let new_rev = get_head_rev(&shadow).await?;
+        Ok((Cow::Owned(shadow.to_string_lossy().to_string()), new_rev))
+    } else {
+        Ok((Cow::Borrowed(repo), head_rev))
     }
-
-    Ok((repo, head_rev))
 }
 
 pub(crate) async fn try_repo(
-    args: TryRepoArgs,
-    globals: &GlobalArgs,
+    config: Option<PathBuf>,
+    repo: String,
+    rev: Option<String>,
+    run_args: crate::cli::RunArgs,
+    refresh: bool,
+    verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let store = STORE.as_ref()?;
-    let scratch_dir = store.scratch_path();
-    fs_err::tokio::create_dir_all(&scratch_dir).await?;
-    let tempdir = tempdir_in(scratch_dir)?;
+    if config.is_some() {
+        warn_user!("`--config` option is ignored when using `try-repo`");
+    }
 
-    let (repo_path, rev) = get_repo_and_rev(&args.repo, args.rev.as_deref(), tempdir.path())
+    let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
+    let selectors = Selectors::load(&run_args.includes, &run_args.skips, &workspace_root)?;
+
+    let tmp_dir = tempfile::tempdir()?;
+    let (repo_path, rev) = prepare_repo_and_rev(&repo, rev.as_deref(), tmp_dir.path())
         .await
         .context("Failed to determine repository and revision")?;
 
-    let repo_url = Url::from_directory_path(&repo_path)
-        .map_err(|()| anyhow::anyhow!("Failed to convert path to URL: {}", repo_path.display()))?;
-
-    let store = Store::from_path(tempdir.path().join("store"));
+    let store = Store::from_path(tmp_dir.path());
     let repo_clone_path = store
         .clone_repo(
             &config::RemoteRepo {
-                repo: repo_url.to_string(),
+                repo: repo_path.to_string(),
                 rev: rev.clone(),
                 hooks: vec![],
             },
@@ -152,121 +152,36 @@ pub(crate) async fn try_repo(
         )
         .await?;
 
-    let manifest = config::read_manifest(&repo_clone_path.join(constants::MANIFEST_FILE))?;
-
-    let hooks: Vec<config::RemoteHook> = if let Some(hook_id) = &args.hook {
-        vec![config::RemoteHook {
-            id: hook_id.clone(),
-            name: None,
-            entry: None,
-            language: None,
-            options: HookOptions::default(),
-        }]
+    let hooks = if let Some(hook_id) = hook {
+        vec![hook_id]
     } else {
-        manifest
-            .hooks
-            .into_iter()
-            .map(|h| config::RemoteHook {
-                id: h.id,
-                name: None,
-                entry: None,
-                language: None,
-                options: HookOptions::default(),
-            })
-            .collect()
+        let manifest = config::read_manifest(&repo_clone_path.join(constants::MANIFEST_FILE))?;
+        manifest.hooks.into_iter().map(|h| h.id).collect()
     };
 
-    let config = config::Config {
-        repos: vec![Repo::Remote(config::RemoteRepo {
-            repo: repo_url.to_string(),
-            rev,
-            hooks,
-        })],
-        default_install_hook_types: None,
-        default_language_version: None,
-        default_stages: None,
-        files: None,
-        exclude: None,
-        fail_fast: None,
-        minimum_prek_version: None,
-        ci: None,
+    let hooks_str = hooks
+        .iter()
+        .map(|hook_id| format!("{}- id: {}", " ".repeat(6), hook_id))
+        .join("\n");
+    let config_str = indoc::formatdoc! {r"
+    repos:
+      - repo: {repo_path}
+        rev: {rev}
+    ",
+        repo_path = repo_path,
+        rev = rev,
     };
 
-    let config_s = serde_yaml::to_string(&config)?;
-    let config_filename = tempdir.path().join(constants::CONFIG_FILE);
-    fs_err::tokio::write(&config_filename, &config_s).await?;
+    let config_file = tmp_dir.path().join(constants::CONFIG_FILE);
+    fs_err::tokio::write(&config_file, &config_str).await?;
 
     let mut stdout = printer.stdout();
-    writeln!(stdout, "{}", "=".repeat(79))?;
-    writeln!(stdout, "Using config:")?;
-    writeln!(stdout, "{}", "=".repeat(79))?;
-    write!(stdout, "{config_s}")?;
-    writeln!(stdout, "{}", "=".repeat(79))?;
+    writeln!(stdout, "{}", "Using config:".cyan().bold())?;
+    write!(stdout, "{}", config_str.dimmed())?;
 
-    // `try-repo` needs a git repository to run in.
-    let run_in_dir = tempdir.path().join("run-in");
-    fs_err::tokio::create_dir_all(&run_in_dir).await?;
-    git::git_cmd("init for try-repo")?
-        .arg("init")
-        .current_dir(&run_in_dir)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .await?;
-
-    let mut run_args = args.run_args;
-
-    let original_cwd = env::current_dir()?;
-    let files_to_run: Vec<String> = run_args
-        .files
-        .iter()
-        .map(|f| {
-            let absolute_path = original_cwd.join(f);
-            absolute_path
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .to_string()
-        })
-        .collect();
-
-    for file_path_str in &run_args.files {
-        let source_path = original_cwd.join(file_path_str);
-        if source_path.exists() {
-            let target_path = run_in_dir.join(source_path.file_name().unwrap());
-            fs_err::copy(source_path, &target_path)?;
-        }
-    }
-
-    run_args.files = files_to_run;
-
-    // Create a dummy file to run against if no files are provided.
-    if run_args.files.is_empty() && !run_args.all_files {
-        let dummy_file = "dummy-file";
-        fs_err::tokio::write(run_in_dir.join(dummy_file), "").await?;
-        git::git_cmd("add dummy file")?
-            .arg("add")
-            .arg(dummy_file)
-            .current_dir(&run_in_dir)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .await?;
-    } else if !run_args.files.is_empty() {
-        git::git_cmd("add copied files")?
-            .arg("add")
-            .args(&run_args.files)
-            .current_dir(&run_in_dir)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .await?;
-    }
-
-    env::set_current_dir(&run_in_dir)?;
-
-    let result = crate::cli::run(
-        Some(config_filename),
+    crate::cli::run(
+        &store,
+        Some(config_file),
         vec![], // includes
         vec![], // skips
         run_args.hook_stage,
@@ -278,14 +193,10 @@ pub(crate) async fn try_repo(
         run_args.last_commit,
         run_args.show_diff_on_failure,
         run_args.dry_run,
-        true, // refresh
+        refresh,
         run_args.extra,
-        globals.verbose > 0,
+        verbose,
         printer,
     )
-    .await;
-
-    env::set_current_dir(original_cwd)?;
-
-    result
+    .await
 }

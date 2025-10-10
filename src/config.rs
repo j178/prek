@@ -110,7 +110,7 @@ impl Display for Language {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum HookType {
     CommitMsg,
@@ -269,37 +269,29 @@ where
 
 // TODO: warn deprecated stage
 // TODO: warn sensible regex
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Config {
     pub repos: Vec<Repo>,
     /// A list of `--hook-types` which will be used by default when running `prek install`.
     /// Default is `[pre-commit]`.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub default_install_hook_types: Option<Vec<HookType>>,
     /// A mapping from language to the default `language_version`.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub default_language_version: Option<FxHashMap<Language, String>>,
     /// A configuration-wide default for the stages property of hooks.
     /// Default to all stages.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub default_stages: Option<Vec<Stage>>,
     /// Global file include pattern.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub files: Option<SerdeRegex>,
     /// Global file exclude pattern.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub exclude: Option<SerdeRegex>,
     /// Set to true to have prek stop running hooks after the first failure.
     /// Default is false.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub fail_fast: Option<bool>,
     /// The minimum version of prek required to run this configuration.
     #[serde(deserialize_with = "deserialize_minimum_version", default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub minimum_prek_version: Option<String>,
     /// Configuration for pre-commit.ci service.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub ci: Option<FxHashMap<String, serde_yaml::Value>>,
 }
 
@@ -350,78 +342,60 @@ impl Display for RepoLocation {
 }
 
 /// Common hook options.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct HookOptions {
     /// Not documented in the official docs.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub alias: Option<String>,
     /// The pattern of files to run on.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub files: Option<SerdeRegex>,
     /// Exclude files that were matched by `files`.
     /// Default is `$^`, which matches nothing.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub exclude: Option<SerdeRegex>,
     /// List of file types to run on (AND).
     /// Default is `[file]`, which matches all files.
     #[serde(deserialize_with = "deserialize_and_validate_tags", default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub types: Option<Vec<String>>,
     /// List of file types to run on (OR).
     /// Default is `[]`.
     #[serde(deserialize_with = "deserialize_and_validate_tags", default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub types_or: Option<Vec<String>>,
     /// List of file types to exclude.
     /// Default is `[]`.
     #[serde(deserialize_with = "deserialize_and_validate_tags", default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub exclude_types: Option<Vec<String>>,
     /// Not documented in the official docs.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub additional_dependencies: Option<Vec<String>>,
     /// Additional arguments to pass to the hook.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub args: Option<Vec<String>>,
     /// This hook will run even if there are no matching files.
     /// Default is false.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub always_run: Option<bool>,
     /// If this hook fails, don't run any more hooks.
     /// Default is false.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub fail_fast: Option<bool>,
     /// Append filenames that would be checked to the hook entry as arguments.
     /// Default is true.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub pass_filenames: Option<bool>,
     /// A description of the hook. For metadata only.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Run the hook on a specific version of the language.
     /// Default is `default`.
     /// See <https://pre-commit.com/#overriding-language-version>.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub language_version: Option<String>,
     /// Write the output of the hook to a file when the hook fails or verbose is enabled.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub log_file: Option<String>,
     /// This hook will execute using a single process instead of in parallel.
     /// Default is false.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub require_serial: Option<bool>,
     /// Select which git hook(s) to run for.
     /// Default all stages are selected.
     /// See <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub stages: Option<Vec<Stage>>,
     /// Print the output of the hook even if it passes.
     /// Default is false.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub verbose: Option<bool>,
     /// The minimum version of prek required to run this hook.
     #[serde(deserialize_with = "deserialize_minimum_version", default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub minimum_prek_version: Option<String>,
 }
 
@@ -463,19 +437,16 @@ impl HookOptions {
 /// A remote hook in the configuration file.
 ///
 /// All keys in manifest hook dict are valid in a config hook dict, but are optional.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct RemoteHook {
     /// The id of the hook.
     pub id: String,
     /// Override the name of the hook.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// Override the entrypoint. Not documented in the official docs but works.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub entry: Option<String>,
     /// Override the language. Not documented in the official docs but works.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<Language>,
     #[serde(flatten)]
     pub options: HookOptions,
@@ -486,7 +457,7 @@ pub struct RemoteHook {
 /// It's the same as the manifest hook definition.
 pub type LocalHook = ManifestHook;
 
-#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
+#[derive(Debug, Copy, Clone, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum MetaHookID {
     CheckHooksApply,
@@ -521,7 +492,7 @@ impl FromStr for MetaHookID {
 /// A meta hook predefined in pre-commit.
 ///
 /// It's the same as the manifest hook definition but with only a few predefined id allowed.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct MetaHook(pub(crate) ManifestHook);
 
 impl<'de> Deserialize<'de> for MetaHook {
@@ -609,6 +580,7 @@ impl From<MetaHook> for ManifestHook {
 pub struct RemoteRepo {
     pub repo: String,
     pub rev: String,
+    #[serde(skip)]
     pub hooks: Vec<RemoteHook>,
 }
 
@@ -633,7 +605,7 @@ impl Display for RemoteRepo {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct LocalRepo {
     pub hooks: Vec<LocalHook>,
 }
@@ -644,7 +616,7 @@ impl Display for LocalRepo {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct MetaRepo {
     pub hooks: Vec<MetaHook>,
 }
@@ -660,37 +632,6 @@ pub enum Repo {
     Remote(RemoteRepo),
     Local(LocalRepo),
     Meta(MetaRepo),
-}
-
-impl Serialize for Repo {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        use serde::ser::SerializeMap;
-
-        match self {
-            Repo::Remote(remote_repo) => {
-                let mut map = serializer.serialize_map(Some(3))?;
-                map.serialize_entry("repo", &remote_repo.repo)?;
-                map.serialize_entry("rev", &remote_repo.rev)?;
-                map.serialize_entry("hooks", &remote_repo.hooks)?;
-                map.end()
-            }
-            Repo::Local(local_repo) => {
-                let mut map = serializer.serialize_map(Some(2))?;
-                map.serialize_entry("repo", "local")?;
-                map.serialize_entry("hooks", &local_repo.hooks)?;
-                map.end()
-            }
-            Repo::Meta(meta_repo) => {
-                let mut map = serializer.serialize_map(Some(2))?;
-                map.serialize_entry("repo", "meta")?;
-                map.serialize_entry("hooks", &meta_repo.hooks)?;
-                map.end()
-            }
-        }
-    }
 }
 
 impl<'de> Deserialize<'de> for Repo {
@@ -748,7 +689,7 @@ impl<'de> Deserialize<'de> for Repo {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ManifestHook {
     /// The id of the hook.
