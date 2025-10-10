@@ -726,7 +726,6 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 </dd><dt id="prek-try-repo--files"><a href="#prek-try-repo--files"><code>--files</code></a> <i>files</i></dt><dd><p>Specific filenames to run hooks on</p>
 </dd><dt id="prek-try-repo--from-ref"><a href="#prek-try-repo--from-ref"><code>--from-ref</code></a>, <code>--source</code>, <code>-s</code> <i>from-ref</i></dt><dd><p>The original ref in a <code>&lt;from_ref&gt;...&lt;to_ref&gt;</code> diff expression. Files changed in this diff will be run through the hooks</p>
 </dd><dt id="prek-try-repo--help"><a href="#prek-try-repo--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="prek-try-repo--hook"><a href="#prek-try-repo--hook"><code>--hook</code></a> <i>hook</i></dt><dd><p>A single hook-id to run</p>
 </dd><dt id="prek-try-repo--hook-stage"><a href="#prek-try-repo--hook-stage"><code>--hook-stage</code></a> <i>hook-stage</i></dt><dd><p>The stage during which the hook is fired</p>
 <p>[default: pre-commit]</p><p>Possible values:</p>
 <ul>
