@@ -1,7 +1,7 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use anyhow::Result;
 use etcetera::BaseStrategy;
@@ -30,23 +30,6 @@ pub enum Error {
     Serde(#[from] serde_json::Error),
 }
 
-pub(crate) static STORE: LazyLock<Result<Store, Error>> = LazyLock::new(|| {
-    let path = if let Some(path) = EnvVars::var_os(EnvVars::PREK_HOME) {
-        Some(path.into())
-    } else {
-        etcetera::choose_base_strategy()
-            .map(|path| path.cache_dir().join("prek"))
-            .ok()
-    };
-
-    let Some(path) = path else {
-        return Err(Error::HomeNotFound);
-    };
-    let store = Store::from_path(path).init()?;
-
-    Ok(store)
-});
-
 /// A store for managing repos.
 #[derive(Debug)]
 pub struct Store {
@@ -56,6 +39,24 @@ pub struct Store {
 impl Store {
     pub(crate) fn from_path(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
+    }
+
+    /// Create a store from environment variables or default paths.
+    pub(crate) fn from_settings() -> Result<Self, Error> {
+        let path = if let Some(path) = EnvVars::var_os(EnvVars::PREK_HOME) {
+            Some(path.into())
+        } else {
+            etcetera::choose_base_strategy()
+                .map(|path| path.cache_dir().join("prek"))
+                .ok()
+        };
+
+        let Some(path) = path else {
+            return Err(Error::HomeNotFound);
+        };
+        let store = Store::from_path(path).init()?;
+
+        Ok(store)
     }
 
     pub(crate) fn path(&self) -> &Path {

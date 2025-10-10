@@ -5,7 +5,7 @@ repos:
       - id: check-ast
       - id: check-docstring-first
   - repo: https://github.com/pycqa/isort
-    rev: 6.0.1
+    rev: 6.1.0
     hooks:
       - id: isort
   - repo: https://github.com/pre-commit/mirrors-mypy

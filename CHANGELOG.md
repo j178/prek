@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.4
+
+Released on 2025-10-07.
+
+### Enhancements
+
+- Add support for `.prekignore` to ignore directories from project discovery ([#826](https://github.com/j178/prek/pull/826))
+- Make `prek auto-update --jobs` default to 0 (which uses max available parallelism) ([#833](https://github.com/j178/prek/pull/833))
+- Improve install message when installing for a subproject ([#847](https://github.com/j178/prek/pull/847))
+
+### Bug fixes
+
+- Convert extension to lowercase before checking file tags ([#839](https://github.com/j178/prek/pull/839))
+- Support pass multiple files like `prek run --files a b c d` ([#828](https://github.com/j178/prek/pull/828))
+
+### Documentation
+
+- Add requests-cache to "Who is using prek" ([#824](https://github.com/j178/prek/pull/824))
+
+### Contributors
+
+- @SigureMo
+- @j178
+
 ## 0.2.3
 
 Released on 2025-09-29.

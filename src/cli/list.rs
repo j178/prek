@@ -12,7 +12,7 @@ use crate::config::{Language, Stage};
 use crate::fs::CWD;
 use crate::hook;
 use crate::printer::Printer;
-use crate::store::STORE;
+use crate::store::Store;
 use crate::workspace::Workspace;
 
 #[derive(Serialize)]
@@ -27,6 +27,7 @@ struct SerializableHook {
 }
 
 pub(crate) async fn list(
+    store: &Store,
     config: Option<PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
@@ -39,9 +40,9 @@ pub(crate) async fn list(
 ) -> anyhow::Result<ExitStatus> {
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
-    let mut workspace = Workspace::discover(workspace_root, config, Some(&selectors), refresh)?;
+    let mut workspace =
+        Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
-    let store = STORE.as_ref()?;
     let reporter = HookInitReporter::from(printer);
     let lock = store.lock_async().await?;
     let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
