@@ -397,14 +397,6 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
             .expect("Invalid regex")
             .expect("Failed to capture revision line");
 
-        // TODO: preserve the quote style
-        // Naively add the original quotes
-        let new_rev = if !caps[3].is_empty() && !new_rev.contains(&caps[3]) {
-            format!("{}{}{}", &caps[3], new_rev.trim(), &caps[3])
-        } else {
-            new_rev.trim().to_string()
-        };
-
         let comment = if let Some(frozen) = &revision.frozen {
             format!("  # frozen: {frozen}")
         } else if caps[5].trim().starts_with("# frozen:") {

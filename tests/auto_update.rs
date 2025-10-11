@@ -478,22 +478,22 @@ fn auto_update_preserve_formatting() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r##"
+            assert_snapshot!(context.read(CONFIG_FILE), @r"
             # Pre-commit configuration
             repos:
               - repo: [HOME]/test-repos/repo1  # Test repository
-                rev: 'v1.1.0'  # Current version
+                rev: v1.1.0  # Current version
                 hooks:
                   - id: test-hook
                     # Hook configuration
                     name: Test Hook
               - repo: [HOME]/test-repos/repo2
-                rev: "v1.1.0"  # Current version
+                rev: v1.1.0  # Current version
                 hooks:
                   - id: test-hook
                     # Hook configuration
                     name: Test Hook
-            "##);
+            ");
         }
     );
 
@@ -886,6 +886,51 @@ fn auto_update_dry_run() -> Result<()> {
                 hooks:
                   - id: test-hook
             ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn quoting_float_like_version_number() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(&context, "test-repo", &["0.49", "0.50"])?;
+
+    // Our serialize by default quotes this floats with single quotes, e.g., '0.49'. Use
+    // a different quotaing style here to validate that this does not create conflicts.
+    context.write_pre_commit_config(&indoc::formatdoc! {r#"
+        repos:
+          - repo: {}
+            rev: "0.49"
+            hooks:
+              - id: test-hook
+    "#, repo_path});
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/test-repo] updating 0.49 -> 0.50
+
+    ----- stderr -----
+    "#);
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(CONFIG_FILE), @r#"
+            repos:
+              - repo: [HOME]/test-repos/test-repo
+                rev: '0.50'
+                hooks:
+                  - id: test-hook
+            "#);
         }
     );
 
