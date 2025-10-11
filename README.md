@@ -182,7 +182,7 @@ cargo install --locked --git https://github.com/j178/prek
 <details>
 <summary>npmjs</summary>
 
-prek is published as a Node.js package that downloads standalone binaries, you can install it using `npm`, `pnpm`, or `npx`:
+prek is published as a Node.js package, you can install it using `npm`, `pnpm`, or `npx`:
 
 <!-- npmjs-install:start -->
 ```bash
