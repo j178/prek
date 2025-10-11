@@ -58,6 +58,17 @@ Install via pip, uv (recommended), or pipx:
   end="<!-- cargo-install:end -->"
 %}
 
+### npmjs
+
+Install via npm, pnpm, or npx:
+
+{%
+  include-markdown "../README.md"
+  start="<!-- npmjs-install:start -->"
+  end="<!-- npmjs-install:end -->"
+%}
+
+
 ## Download from GitHub Releases
 
 {%
