@@ -1,5 +1,6 @@
 use std::ffi::OsString;
-use std::io::{self, Read};
+use std::fmt::Write;
+use std::io::Read;
 use std::path::PathBuf;
 
 use anstream::eprintln;
@@ -11,6 +12,7 @@ use constants::env_vars::EnvVars;
 use crate::cli::{self, ExitStatus, RunArgs};
 use crate::config::HookType;
 use crate::fs::CWD;
+use crate::git::GIT_ROOT;
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::workspace;
@@ -69,6 +71,7 @@ pub(crate) async fn hook_impl(
                 Ok(ExitStatus::Failure)
             };
         }
+        writeln!(printer.stdout(), "Using config file: {}", config.display())?;
     } else {
         // Try to discover a project from current directory (after `--cd`)
         match Project::discover(config.as_deref(), &CWD) {
@@ -82,7 +85,15 @@ pub(crate) async fn hook_impl(
                     Ok(ExitStatus::Failure)
                 };
             }
-            Ok(_) => {}
+            Ok(project) => {
+                if project.path() != GIT_ROOT.as_ref()? {
+                    writeln!(
+                        printer.stdout(),
+                        "Running in workspace: `{}`",
+                        project.path().display().cyan()
+                    )?;
+                }
+            }
             Err(e) => return Err(e.into()),
         }
     }
@@ -107,7 +118,7 @@ pub(crate) async fn hook_impl(
         run_args.all_files,
         vec![],
         vec![],
-        false, // last_commit is always false in hook implementation context
+        false,
         false,
         false,
         false,
@@ -183,7 +194,7 @@ struct PushInfo {
 
 async fn parse_pre_push_info(remote_name: &str) -> Option<PushInfo> {
     // Read from stdin
-    let mut stdin = io::stdin();
+    let mut stdin = std::io::stdin();
     let mut buffer = String::new();
 
     if stdin.read_to_string(&mut buffer).is_err() {

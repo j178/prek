@@ -36,12 +36,12 @@ pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| 
     })
 });
 
-// Remove some `GIT_` environment variables exposed by `git`.
-
-// For some commands, like `git commit -a` or `git commit -p`, git creates a `.git/index.lock` file
-// and set `GIT_INDEX_FILE` to point to it.
-// We need to keep the `GIT_INDEX_FILE` env var to make sure `git write-tree` works correctly.
-// https://stackoverflow.com/questions/65639403/git-pre-commit-hook-how-can-i-get-added-modified-files-when-commit-with-a-flag/65647202#65647202
+/// Remove some `GIT_` environment variables exposed by `git`.
+///
+/// For some commands, like `git commit -a` or `git commit -p`, git creates a `.git/index.lock` file
+/// and set `GIT_INDEX_FILE` to point to it.
+/// We need to keep the `GIT_INDEX_FILE` env var to make sure `git write-tree` works correctly.
+/// <https://stackoverflow.com/questions/65639403/git-pre-commit-hook-how-can-i-get-added-modified-files-when-commit-with-a-flag/65647202#65647202>
 pub(crate) static GIT_ENV_TO_REMOVE: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
     let keep = &[
         "GIT_EXEC_PATH",
@@ -137,7 +137,7 @@ pub(crate) async fn get_git_dir() -> Result<PathBuf, Error> {
         .output()
         .await?;
     Ok(PathBuf::from(
-        String::from_utf8_lossy(&output.stdout).trim(),
+        String::from_utf8_lossy(&output.stdout).trim_ascii(),
     ))
 }
 
@@ -152,7 +152,7 @@ pub(crate) async fn get_git_common_dir() -> Result<PathBuf, Error> {
         Ok(get_git_dir().await?)
     } else {
         Ok(PathBuf::from(
-            String::from_utf8_lossy(&output.stdout).trim(),
+            String::from_utf8_lossy(&output.stdout).trim_ascii(),
         ))
     }
 }
@@ -198,7 +198,7 @@ pub(crate) async fn has_unmerged_paths() -> Result<bool, Error> {
         .check(true)
         .output()
         .await?;
-    Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
+    Ok(!output.stdout.trim_ascii().is_empty())
 }
 
 pub(crate) async fn has_diff(rev: &str, path: &Path) -> Result<bool> {
@@ -231,7 +231,7 @@ pub(crate) async fn get_conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Er
         .arg("--no-ext-diff") // Disable external diff drivers
         .arg("-z") // Use NUL as line terminator
         .arg("-m") // Show diffs for merge commits in the default format.
-        .arg(String::from_utf8_lossy(&tree.stdout).trim())
+        .arg(String::from_utf8_lossy(&tree.stdout).trim_ascii())
         .arg("HEAD")
         .arg("MERGE_HEAD")
         .arg("--")
@@ -287,7 +287,9 @@ pub(crate) async fn write_tree() -> Result<String, Error> {
         .check(true)
         .output()
         .await?;
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .trim_ascii()
+        .to_string())
 }
 
 /// Get the path of the top-level directory of the working tree.
@@ -308,7 +310,7 @@ pub(crate) fn get_root() -> Result<PathBuf, Error> {
     }
 
     Ok(PathBuf::from(
-        String::from_utf8_lossy(&output.stdout).trim(),
+        String::from_utf8_lossy(&output.stdout).trim_ascii(),
     ))
 }
 
@@ -430,7 +432,7 @@ pub(crate) async fn has_hooks_path_set() -> Result<bool> {
         .output()
         .await?;
     if output.status.success() {
-        Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
+        Ok(!output.stdout.trim_ascii().is_empty())
     } else {
         Ok(false)
     }
@@ -525,7 +527,7 @@ pub(crate) async fn get_ancestors_not_in_remote(
         .output()
         .await?;
     Ok(String::from_utf8_lossy(&output.stdout)
-        .trim()
+        .trim_ascii()
         .lines()
         .map(ToString::to_string)
         .collect())
@@ -541,7 +543,7 @@ pub(crate) async fn get_root_commits(local_sha: &str) -> Result<FxHashSet<String
         .output()
         .await?;
     Ok(String::from_utf8_lossy(&output.stdout)
-        .trim()
+        .trim_ascii()
         .lines()
         .map(ToString::to_string)
         .collect())
@@ -557,7 +559,9 @@ pub(crate) async fn get_parent_commit(commit: &str) -> Result<Option<String>, Er
         .await?;
     if output.status.success() {
         Ok(Some(
-            String::from_utf8_lossy(&output.stdout).trim().to_string(),
+            String::from_utf8_lossy(&output.stdout)
+                .trim_ascii()
+                .to_string(),
         ))
     } else {
         Ok(None)

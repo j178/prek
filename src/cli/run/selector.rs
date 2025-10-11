@@ -159,7 +159,7 @@ impl Selectors {
             .collect::<Result<Vec<_>, _>>()?;
 
         trace!(
-            "Include selectors: {}",
+            "Include selectors: `{}`",
             includes
                 .iter()
                 .map(ToString::to_string)
@@ -170,7 +170,7 @@ impl Selectors {
         let skips = load_skips(skips, workspace_root, RealFileSystem)?;
 
         trace!(
-            "Skip selectors: {}",
+            "Skip selectors: `{}`",
             skips
                 .iter()
                 .map(ToString::to_string)

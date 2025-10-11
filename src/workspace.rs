@@ -164,7 +164,7 @@ impl Project {
         }
 
         let workspace_root = Workspace::find_root(None, dir)?;
-        debug!("Found project root at {}", workspace_root.user_display());
+        debug!("Found project root at `{}`", workspace_root.user_display());
 
         Ok(Project::from_directory(&workspace_root)?)
     }
@@ -192,7 +192,7 @@ impl Project {
         &self.root
     }
 
-    /// Get the path to the project directory relative to the git root.
+    /// Get the path to the project directory relative to the workspace root.
     ///
     /// Hooks will be executed in this directory and accept only files from this directory.
     /// In non-workspace mode (`--config <path>`), this is empty.
@@ -545,7 +545,7 @@ impl Workspace {
     }
 
     /// Discover the workspace from the given workspace root.
-    #[instrument(level = "trace", skip(selectors))]
+    #[instrument(level = "trace", skip(store, selectors))]
     pub(crate) fn discover(
         store: &Store,
         root: PathBuf,
