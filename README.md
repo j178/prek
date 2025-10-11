@@ -186,13 +186,19 @@ prek is published as a Node.js package that downloads standalone binaries, you c
 <!-- npmjs-install:start -->
 ```bash
 # Using npm
-npm add -D prek
+npm add -D prek-cli
 
 # Using pnpm
-pnpm add -D prek
+pnpm add -D prek-cli
 
 # Using npx
-npx prek --version
+npx prek-cli --version
+
+# or install globally
+npm install -g prek-cli
+
+# then use `prek` command
+prek --version
 ```
 <!-- npmjs-install:end -->
 
