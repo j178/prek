@@ -14,19 +14,13 @@ concurrency:
 
 env:
   # UV_VERSION should not greater than MAX_UV_VERSION in `languages/python/uv`.
-  # Otherwise, tests jobs will install their own uv, and now it has concurrent issue.
-  UV_VERSION: '0.8.6'
-  NODE_VERSION: '19.9.0'
-  GO_VERSION: '1.24.5'
-  PYTHON_VERSION: '3.12.11'
+  # Otherwise, tests jobs will install their own uv, and it will encounter concurrency issue.
+  UV_VERSION: '0.8.22'
+  NODE_VERSION: '20'
+  GO_VERSION: '1.24'
+  PYTHON_VERSION: '3.12'
 
 jobs:
-  typos:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-      - uses: crate-ci/typos@master
-
   lint:
     name: "lint"
     timeout-minutes: 30
@@ -37,6 +31,10 @@ jobs:
         run: rustup component add rustfmt
       - name: "rustfmt"
         run: cargo fmt --all --check
+      - name: Run prek hooks
+        uses: j178/prek-action@91fd7d7cf70ae1dee9f4f44e7dfa5d1073fe6623 # v1.0.11
+        with:
+          extra-args: '--all-files --skip cargo-fmt --skip cargo-clippy'
 
   cargo-clippy-linux:
     name: "cargo clippy | ubuntu"
@@ -155,7 +153,9 @@ jobs:
           version: ${{ env.UV_VERSION }}
 
       - name: "Install Python"
-        run: uv python install --no-bin ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: "Install Node.js"
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -216,7 +216,9 @@ jobs:
           version: ${{ env.UV_VERSION }}
 
       - name: "Install Python"
-        run: uv python install --no-bin ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: "Install Node.js"
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -276,7 +278,9 @@ jobs:
           cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
 
       - name: "Install Python"
-        run: uv python install --no-bin ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: "Install Node.js"
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0

@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -22,7 +23,7 @@ use crate::cli::{CacheCommand, CacheNamespace, Cli, Command, ExitStatus};
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::printer::Printer;
 use crate::run::USE_COLOR;
-use crate::store::STORE;
+use crate::store::Store;
 
 mod archive;
 mod builtin;
@@ -59,7 +60,29 @@ pub(crate) enum Level {
     TraceAll,
 }
 
-fn setup_logging(level: Level) -> Result<()> {
+enum LogFile {
+    Default,
+    Path(PathBuf),
+    Disabled,
+}
+
+impl LogFile {
+    fn from_args(log_file: Option<PathBuf>, no_log_file: bool) -> Self {
+        if no_log_file {
+            Self::Disabled
+        } else if let Some(path) = log_file {
+            Self::Path(path)
+        } else {
+            Self::Default
+        }
+    }
+
+    fn is_disabled(&self) -> bool {
+        matches!(self, Self::Disabled)
+    }
+}
+
+fn setup_logging(level: Level, log_file: LogFile, store: &Store) -> Result<()> {
     let directive = match level {
         Level::Default | Level::Verbose => LevelFilter::OFF.into(),
         Level::Debug => Directive::from_str("prek=debug")?,
@@ -81,28 +104,35 @@ fn setup_logging(level: Level) -> Result<()> {
         .with_writer(anstream::stderr)
         .with_filter(stderr_filter);
 
-    let log_file_path = STORE.as_ref()?.log_file();
-    let log_file = fs_err::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(log_file_path)
-        .context("Failed to open log file")?;
-    let log_file = Mutex::new(StripStream::new(log_file.into_file()));
+    let registry = tracing_subscriber::registry().with(stderr_layer);
 
-    let file_format = tracing_subscriber::fmt::format()
-        .with_target(false)
-        .with_ansi(false);
-    let file_layer = tracing_subscriber::fmt::layer()
-        .with_span_events(FmtSpan::CLOSE)
-        .event_format(file_format)
-        .with_writer(log_file)
-        .with_filter(EnvFilter::new("prek=trace"));
+    if log_file.is_disabled() {
+        registry.init();
+    } else {
+        let log_file_path = match log_file {
+            LogFile::Default => store.log_file(),
+            LogFile::Path(path) => path,
+            LogFile::Disabled => unreachable!(),
+        };
+        let log_file = fs_err::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(log_file_path)
+            .context("Failed to open log file")?;
+        let log_file = Mutex::new(StripStream::new(log_file.into_file()));
 
-    tracing_subscriber::registry()
-        .with(stderr_layer)
-        .with(file_layer)
-        .init();
+        let file_format = tracing_subscriber::fmt::format()
+            .with_target(false)
+            .with_ansi(false);
+        let file_layer = tracing_subscriber::fmt::layer()
+            .with_span_events(FmtSpan::CLOSE)
+            .event_format(file_format)
+            .with_writer(log_file)
+            .with_filter(EnvFilter::new("prek=trace"));
+
+        registry.with(file_layer).init();
+    }
 
     Ok(())
 }
@@ -110,13 +140,19 @@ fn setup_logging(level: Level) -> Result<()> {
 async fn run(mut cli: Cli) -> Result<ExitStatus> {
     ColorChoice::write_global(cli.globals.color.into());
 
-    setup_logging(match cli.globals.verbose {
-        0 => Level::Default,
-        1 => Level::Verbose,
-        2 => Level::Debug,
-        3 => Level::Trace,
-        _ => Level::TraceAll,
-    })?;
+    let store = Store::from_settings()?;
+    let log_file = LogFile::from_args(cli.globals.log_file.clone(), cli.globals.no_log_file);
+    setup_logging(
+        match cli.globals.verbose {
+            0 => Level::Default,
+            1 => Level::Verbose,
+            2 => Level::Debug,
+            3 => Level::Trace,
+            _ => Level::TraceAll,
+        },
+        log_file,
+        &store,
+    )?;
 
     let printer = if cli.globals.quiet == 1 {
         Printer::Quiet
@@ -144,7 +180,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         std::env::set_current_dir(dir)?;
     }
 
-    debug!("prek: {}", version::version());
+    debug!(
+        "prek: {} ({})",
+        version::version(),
+        std::env::current_exe()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| "unknown".to_string())
+    );
 
     macro_rules! show_settings {
         ($arg:expr) => {
@@ -166,6 +208,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             cli::install(
+                &store,
                 cli.globals.config,
                 args.includes,
                 args.skips,
@@ -182,6 +225,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Command::InstallHooks(args) => {
             // TODO: add selectors?
             cli::install_hooks(
+                &store,
                 cli.globals.config,
                 args.includes,
                 args.skips,
@@ -199,6 +243,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             cli::run(
+                &store,
                 cli.globals.config,
                 args.includes,
                 args.skips,
@@ -222,6 +267,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             cli::list(
+                &store,
                 cli.globals.config,
                 args.includes,
                 args.skips,
@@ -238,6 +284,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             cli::hook_impl(
+                &store,
                 cli.globals.config,
                 args.includes,
                 args.skips,
@@ -253,9 +300,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Command::Cache(CacheNamespace {
             command: cache_command,
         }) => match cache_command {
-            CacheCommand::Clean => cli::clean(printer),
+            CacheCommand::Clean => cli::clean(&store, printer),
             CacheCommand::Dir => {
-                let store = STORE.as_ref()?;
                 writeln!(printer.stdout(), "{}", store.path().display().cyan())?;
                 Ok(ExitStatus::Success)
             }
@@ -264,7 +310,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 Ok(ExitStatus::Failure)
             }
         },
-        Command::Clean => cli::clean(printer),
+        Command::Clean => cli::clean(&store, printer),
         Command::ValidateConfig(args) => {
             show_settings!(args);
 
@@ -278,12 +324,27 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Command::SampleConfig(args) => cli::sample_config(args.file, printer),
         Command::AutoUpdate(args) => {
             cli::auto_update(
+                &store,
                 cli.globals.config,
                 args.repo,
                 args.bleeding_edge,
                 args.freeze,
                 args.jobs,
                 args.dry_run,
+                printer,
+            )
+            .await
+        }
+        Command::TryRepo(args) => {
+            show_settings!(args);
+
+            cli::try_repo(
+                cli.globals.config,
+                args.repo,
+                args.rev,
+                args.run_args,
+                cli.globals.refresh,
+                cli.globals.verbose > 0,
                 printer,
             )
             .await
@@ -319,6 +380,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             cli::init_template_dir(
+                &store,
                 args.directory,
                 cli.globals.config,
                 args.hook_types,

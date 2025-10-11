@@ -20,9 +20,9 @@ use crate::store::{CacheBucket, Store};
 use crate::version;
 
 // The version range of `uv` we will install. Should update periodically.
-const CUR_UV_VERSION: &str = "0.8.19";
+const CUR_UV_VERSION: &str = "0.9.0";
 static UV_VERSION_RANGE: LazyLock<VersionReq> =
-    LazyLock::new(|| VersionReq::parse(">=0.7.0, <0.9.0").unwrap());
+    LazyLock::new(|| VersionReq::parse(">=0.7.0, <0.10.0").unwrap());
 
 // Get the uv wheel platform tag for the current host.
 fn get_wheel_platform_tag() -> Result<String> {
@@ -412,7 +412,6 @@ impl Uv {
 
             while let Some(result) = tasks.join_next().await {
                 if let Ok((source, response)) = result {
-                    trace!(?source, ?response, "Checked source");
                     if let Ok(resp) = response
                         && resp.status().is_success()
                     {

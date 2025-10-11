@@ -24,6 +24,7 @@ pub mod run;
 mod sample_config;
 #[cfg(feature = "self-update")]
 mod self_update;
+mod try_repo;
 mod validate;
 
 pub(crate) use auto_update::auto_update;
@@ -36,6 +37,7 @@ pub(crate) use run::run;
 pub(crate) use sample_config::sample_config;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
+pub(crate) use try_repo::try_repo;
 pub(crate) use validate::{validate_configs, validate_manifest};
 
 #[derive(Copy, Clone)]
@@ -174,6 +176,15 @@ pub(crate) struct GlobalArgs {
     #[arg(global = true, short, long, action = ArgAction::Count)]
     pub(crate) verbose: u8,
 
+    /// Write trace logs to the specified file.
+    /// If not specified, trace logs will be written to `$PREK_HOME/prek.log`.
+    #[arg(global = true, long, value_name = "LOG_FILE", value_hint = ValueHint::FilePath)]
+    pub(crate) log_file: Option<PathBuf>,
+
+    /// Do not write trace logs to a log file.
+    #[arg(global = true, long, overrides_with = "log_file", hide = true)]
+    pub(crate) no_log_file: bool,
+
     /// Display the prek version.
     #[arg(global = true, short = 'V', long, action = ArgAction::Version)]
     version: (),
@@ -220,7 +231,7 @@ pub(crate) enum Command {
     #[command(alias = "init-templatedir")]
     InitTemplateDir(InitTemplateDirArgs),
     /// Try the pre-commit hooks in the current repo.
-    TryRepo(Box<RunArgs>),
+    TryRepo(Box<TryRepoArgs>),
     /// The implementation of the `pre-commit` hook.
     #[command(hide = true)]
     HookImpl(HookImplArgs),
@@ -393,6 +404,7 @@ pub(crate) struct RunArgs {
     #[arg(
         long,
         conflicts_with_all = ["all_files", "from_ref", "to_ref"],
+        num_args = 0..,
         value_hint = ValueHint::AnyPath)
     ]
     pub(crate) files: Vec<String>,
@@ -444,6 +456,19 @@ pub(crate) struct RunArgs {
 
     #[command(flatten)]
     pub(crate) extra: RunExtraArgs,
+}
+
+#[derive(Debug, Clone, Default, Args)]
+pub(crate) struct TryRepoArgs {
+    /// Repository to source hooks from.
+    pub(crate) repo: String,
+
+    /// Manually select a rev to run against, otherwise the `HEAD` revision will be used.
+    #[arg(long, alias = "ref")]
+    pub(crate) rev: Option<String>,
+
+    #[command(flatten)]
+    pub(crate) run_args: RunArgs,
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, Default, Serialize, Deserialize)]
@@ -540,7 +565,7 @@ pub(crate) struct AutoUpdateArgs {
     #[arg(long)]
     pub(crate) dry_run: bool,
     /// Number of threads to use.
-    #[arg(short, long, default_value_t = 3)]
+    #[arg(short, long, default_value_t = 0)]
     pub(crate) jobs: usize,
 }
 

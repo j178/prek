@@ -1,12 +1,12 @@
+use std::io::Write;
 use std::path::Path;
 
 use anyhow::Result;
 use futures::StreamExt;
-use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
-use crate::store::STORE;
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
 const BUFFER_SIZE: usize = 8192; // 8KB buffer for streaming
@@ -61,18 +61,12 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
         fs_err::tokio::write(&file_path, &content[3..]).await?;
     } else {
         // For large files, use streaming to avoid loading everything into memory
-        let scratch = STORE.as_ref()?.scratch_path();
-        fs_err::tokio::create_dir_all(&scratch).await?;
-
         // Create a unique temporary filename in the scratch directory
-        let temp_filename = format!("bom_fix_{:x}.tmp", &raw const file_path as usize);
-        let temp_path = scratch.join(temp_filename);
+        let mut temp_file = tempfile::NamedTempFile::new()?;
 
         // Reset to position 3 (after BOM)
         file.seek(std::io::SeekFrom::Start(3)).await?;
 
-        // Create temp file and stream content
-        let mut temp_file = fs_err::tokio::File::create(&temp_path).await?;
         let mut buffer = vec![0u8; BUFFER_SIZE];
 
         loop {
@@ -80,15 +74,13 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
             if bytes_read == 0 {
                 break;
             }
-            temp_file.write_all(&buffer[..bytes_read]).await?;
+            temp_file.write_all(&buffer[..bytes_read])?;
         }
 
-        temp_file.flush().await?;
-        drop(temp_file);
         drop(file);
+        temp_file.flush()?;
 
-        // Atomically replace original file with temp file
-        crate::fs::rename_or_copy(&temp_path, &file_path).await?;
+        crate::fs::rename_or_copy(&temp_file.into_temp_path(), &file_path).await?;
     }
 
     Ok((

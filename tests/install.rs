@@ -44,6 +44,11 @@ fn install() -> anyhow::Result<()> {
             ARGS+=(--hook-dir "$HERE" -- "$@")
             PREK="[CURRENT_EXE]"
 
+            # Check if the full path to prek is executable, otherwise fallback to PATH
+            if [ ! -x "$PREK" ]; then
+                PREK="prek"
+            fi
+
             exec "$PREK" "${ARGS[@]}"
             "#);
         }
@@ -79,6 +84,11 @@ fn install() -> anyhow::Result<()> {
             ARGS+=(--hook-dir "$HERE" -- "$@")
             PREK="[CURRENT_EXE]"
 
+            # Check if the full path to prek is executable, otherwise fallback to PATH
+            if [ ! -x "$PREK" ]; then
+                PREK="prek"
+            fi
+
             exec "$PREK" "${ARGS[@]}"
             "#);
         }
@@ -102,6 +112,11 @@ fn install() -> anyhow::Result<()> {
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
             PREK="[CURRENT_EXE]"
+
+            # Check if the full path to prek is executable, otherwise fallback to PATH
+            if [ ! -x "$PREK" ]; then
+                PREK="prek"
+            fi
 
             exec "$PREK" "${ARGS[@]}"
             "#);
@@ -135,6 +150,11 @@ fn install() -> anyhow::Result<()> {
             ARGS+=(--hook-dir "$HERE" -- "$@")
             PREK="[CURRENT_EXE]"
 
+            # Check if the full path to prek is executable, otherwise fallback to PATH
+            if [ ! -x "$PREK" ]; then
+                PREK="prek"
+            fi
+
             exec "$PREK" "${ARGS[@]}"
             "#);
         }
@@ -152,6 +172,11 @@ fn install() -> anyhow::Result<()> {
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
             PREK="[CURRENT_EXE]"
+
+            # Check if the full path to prek is executable, otherwise fallback to PATH
+            if [ ! -x "$PREK" ]; then
+                PREK="prek"
+            fi
 
             exec "$PREK" "${ARGS[@]}"
             "#);
@@ -219,6 +244,11 @@ fn install_with_hooks() -> anyhow::Result<()> {
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
             PREK="[CURRENT_EXE]"
+
+            # Check if the full path to prek is executable, otherwise fallback to PATH
+            if [ ! -x "$PREK" ]; then
+                PREK="prek"
+            fi
 
             exec "$PREK" "${ARGS[@]}"
             "#);
@@ -390,6 +420,11 @@ fn init_template_dir() -> anyhow::Result<()> {
             ARGS+=(--hook-dir "$HERE" -- "$@")
             PREK="[CURRENT_EXE]"
 
+            # Check if the full path to prek is executable, otherwise fallback to PATH
+            if [ ! -x "$PREK" ]; then
+                PREK="prek"
+            fi
+
             exec "$PREK" "${ARGS[@]}"
             "#);
         }
@@ -422,21 +457,26 @@ fn init_template_dir() -> anyhow::Result<()> {
             ARGS+=(--hook-dir "$HERE" -- "$@")
             PREK="[CURRENT_EXE]"
 
+            # Check if the full path to prek is executable, otherwise fallback to PATH
+            if [ ! -x "$PREK" ]; then
+                PREK="prek"
+            fi
+
             exec "$PREK" "${ARGS[@]}"
             "#);
         }
     );
 
     // `--config` points to non-existing file.
-    cmd_snapshot!(filters.clone(), context.command().arg("init-templatedir").arg("-c").arg("non-exist-config").arg("subdir2"), @r#"
+    cmd_snapshot!(filters.clone(), context.command().arg("init-templatedir").arg("-c").arg("non-exist-config").arg("subdir2"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `subdir2/hooks/pre-commit`
+    prek installed at `subdir2/hooks/pre-commit` with specified config `non-exist-config`
 
     ----- stderr -----
     warning: git config `init.templateDir` not set to the target directory, try `git config --global init.templateDir 'subdir2'`
-    "#);
+    ");
     insta::with_settings!(
         { filters => filters.clone() },
         {
@@ -450,6 +490,11 @@ fn init_template_dir() -> anyhow::Result<()> {
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
             PREK="[CURRENT_EXE]"
+
+            # Check if the full path to prek is executable, otherwise fallback to PATH
+            if [ ! -x "$PREK" ]; then
+                PREK="prek"
+            fi
 
             exec "$PREK" "${ARGS[@]}"
             "#);
@@ -510,6 +555,11 @@ fn workspace_install() -> anyhow::Result<()> {
             ARGS+=(--hook-dir "$HERE" -- "$@")
             PREK="[CURRENT_EXE]"
 
+            # Check if the full path to prek is executable, otherwise fallback to PATH
+            if [ ! -x "$PREK" ]; then
+                PREK="prek"
+            fi
+
             exec "$PREK" "${ARGS[@]}"
             "#);
         }
@@ -520,7 +570,7 @@ fn workspace_install() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `../.git/hooks/pre-commit`
+    prek installed at `../.git/hooks/pre-commit` for project `[TEMP_DIR]/project3`
 
     ----- stderr -----
     ");
@@ -539,6 +589,11 @@ fn workspace_install() -> anyhow::Result<()> {
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
             PREK="[CURRENT_EXE]"
+
+            # Check if the full path to prek is executable, otherwise fallback to PATH
+            if [ ! -x "$PREK" ]; then
+                PREK="prek"
+            fi
 
             exec "$PREK" "${ARGS[@]}"
             "#);
@@ -568,6 +623,11 @@ fn workspace_install() -> anyhow::Result<()> {
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
             PREK="[CURRENT_EXE]"
+
+            # Check if the full path to prek is executable, otherwise fallback to PATH
+            if [ ! -x "$PREK" ]; then
+                PREK="prek"
+            fi
 
             exec "$PREK" "${ARGS[@]}"
             "#);
@@ -609,6 +669,11 @@ fn workspace_install() -> anyhow::Result<()> {
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
             PREK="[CURRENT_EXE]"
+
+            # Check if the full path to prek is executable, otherwise fallback to PATH
+            if [ ! -x "$PREK" ]; then
+                PREK="prek"
+            fi
 
             exec "$PREK" "${ARGS[@]}"
             "#);
@@ -829,6 +894,11 @@ fn workspace_init_template_dir() -> anyhow::Result<()> {
             HERE="$(cd "$(dirname "$0")" && pwd)"
             ARGS+=(--hook-dir "$HERE" -- "$@")
             PREK="[CURRENT_EXE]"
+
+            # Check if the full path to prek is executable, otherwise fallback to PATH
+            if [ ! -x "$PREK" ]; then
+                PREK="prek"
+            fi
 
             exec "$PREK" "${ARGS[@]}"
             "#);

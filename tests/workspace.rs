@@ -1,6 +1,7 @@
 mod common;
 
 use anyhow::Result;
+use assert_fs::fixture::{FileWriteStr, PathChild};
 use constants::env_vars::EnvVars;
 use indoc::indoc;
 
@@ -144,6 +145,45 @@ fn basic_discovery() -> Result<()> {
     - duration: [TIME]
       [TEMP_DIR]/project3
       ['project5/.pre-commit-config.yaml', '.pre-commit-config.yaml']
+
+    ----- stderr -----
+    ");
+
+    // Ignore `project5` in `project3`
+    context
+        .work_dir()
+        .child("project3/.prekignore")
+        .write_str("project5/\n")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--refresh").arg("--cd").arg(cwd.join("project3")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+      [TEMP_DIR]/project3
+      ['.prekignore', '.pre-commit-config.yaml', 'project5/.pre-commit-config.yaml']
+
+    ----- stderr -----
+    ");
+
+    // Ignoring everything under project3, but when runs from project3, it’s still getting picked up.
+    context
+        .work_dir()
+        .child("project3/.prekignore")
+        .write_str("*\n")?;
+    context.git_add(".");
+    cmd_snapshot!(context.filters(), context.run().arg("--refresh").arg("--cd").arg(cwd.join("project3")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+      [TEMP_DIR]/project3
+      ['.prekignore', '.pre-commit-config.yaml', 'project5/.pre-commit-config.yaml']
 
     ----- stderr -----
     ");
@@ -708,6 +748,46 @@ fn skips() -> Result<()> {
 
     ----- stderr -----
     warning: selector `PREK_SKIP=non-exist-hook` did not match any hooks
+    ");
+
+    // Add an invalid config
+    context
+        .work_dir()
+        .child("project3/.pre-commit-config.yaml")
+        .write_str("invalid_yaml: [")?;
+    context.git_add(".");
+
+    // Should error out because of the invalid config
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `project3/.pre-commit-config.yaml`
+      caused by: did not find expected node content at line 2 column 1, while parsing a flow node
+    ");
+
+    // Should skip the invalid config
+    cmd_snapshot!(context.filters(), context.run().arg("--skip").arg("project3/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `project2`:
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+      [TEMP_DIR]/project2
+      ['.pre-commit-config.yaml']
+
+    Running hooks for `.`:
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+      [TEMP_DIR]/
+      ['project2/.pre-commit-config.yaml', '.pre-commit-config.yaml', 'project3/project4/.pre-commit-config.yaml', 'project3/.pre-commit-config.yaml']
+
+    ----- stderr -----
     ");
 
     Ok(())

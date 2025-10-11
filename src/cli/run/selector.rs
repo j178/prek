@@ -193,7 +193,7 @@ impl Selectors {
         &self.skips
     }
 
-    /// Check if a hook matches any of the selection criteria
+    /// Check if a hook matches any of the selection criteria.
     pub(crate) fn matches_hook(&self, hook: &Hook) -> bool {
         let mut usage = self.usage.lock().unwrap();
 
@@ -218,6 +218,39 @@ impl Selectors {
             if include.matches_hook(hook) {
                 usage.use_include(idx);
                 included = true;
+            }
+        }
+        included
+    }
+
+    pub(crate) fn matches_hook_id(&self, hook_id: &str) -> bool {
+        let mut usage = self.usage.lock().unwrap();
+
+        // Always check every selector to track usage
+        let mut skipped = false;
+        for (idx, skip) in self.skips.iter().enumerate() {
+            if let SelectorExpr::HookId(id) = &skip.expr {
+                if id == hook_id {
+                    usage.use_skip(idx);
+                    skipped = true;
+                }
+            }
+        }
+        if skipped {
+            return false;
+        }
+
+        if self.includes.is_empty() {
+            return true; // No `includes` mean all hooks are included
+        }
+
+        let mut included = false;
+        for (idx, include) in self.includes.iter().enumerate() {
+            if let SelectorExpr::HookId(id) = &include.expr {
+                if id == hook_id {
+                    usage.use_include(idx);
+                    included = true;
+                }
             }
         }
         included

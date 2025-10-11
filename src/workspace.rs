@@ -21,7 +21,7 @@ use crate::config::{self, Config, ManifestHook, read_config};
 use crate::fs::Simplified;
 use crate::git::GIT_ROOT;
 use crate::hook::{self, Hook, HookBuilder, Repo};
-use crate::store::{CacheBucket, STORE, Store};
+use crate::store::{CacheBucket, Store};
 use crate::workspace::Error::MissingPreCommitConfig;
 use crate::{git, store, warn_user};
 
@@ -458,31 +458,23 @@ impl WorkspaceCache {
     }
 
     /// Get cache file path for a workspace
-    fn cache_path(workspace_root: &Path) -> Option<PathBuf> {
+    fn cache_path(store: &Store, workspace_root: &Path) -> PathBuf {
         let mut hasher = DefaultHasher::new();
         workspace_root.hash(&mut hasher);
         let digest = hex::encode(hasher.finish().to_le_bytes());
-        STORE
-            .as_ref()
-            .map(|store| {
-                store
-                    .cache_path(CacheBucket::Prek)
-                    .join("workspace")
-                    .join(digest)
-            })
-            .ok()
+
+        store
+            .cache_path(CacheBucket::Prek)
+            .join("workspace")
+            .join(digest)
     }
 
     /// Load cache from file
-    fn load(workspace_root: &Path, refresh: bool) -> Option<Self> {
+    fn load(store: &Store, workspace_root: &Path, refresh: bool) -> Option<Self> {
         if refresh {
             return None;
         }
-        let cache_path = Self::cache_path(workspace_root)?;
-
-        if !cache_path.exists() {
-            return None;
-        }
+        let cache_path = Self::cache_path(store, workspace_root);
 
         match std::fs::read_to_string(&cache_path) {
             Ok(content) => match serde_json::from_str::<Self>(&content) {
@@ -501,6 +493,7 @@ impl WorkspaceCache {
                     None
                 }
             },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
             Err(e) => {
                 debug!("Failed to read cache file: {}", e);
                 None
@@ -509,10 +502,8 @@ impl WorkspaceCache {
     }
 
     /// Save cache to file
-    fn save(&self) -> Result<()> {
-        let Some(cache_path) = Self::cache_path(&self.workspace_root) else {
-            return Ok(());
-        };
+    fn save(&self, store: &Store) -> Result<()> {
+        let cache_path = Self::cache_path(store, &self.workspace_root);
 
         // Create cache directory if it doesn't exist
         if let Some(parent) = cache_path.parent() {
@@ -556,6 +547,7 @@ impl Workspace {
     /// Discover the workspace from the given workspace root.
     #[instrument(level = "trace", skip(selectors))]
     pub(crate) fn discover(
+        store: &Store,
         root: PathBuf,
         config: Option<PathBuf>,
         selectors: Option<&Selectors>,
@@ -570,7 +562,7 @@ impl Workspace {
         }
 
         // Try to load from cache first
-        let projects = if let Some(cache) = WorkspaceCache::load(&root, refresh) {
+        let projects = if let Some(cache) = WorkspaceCache::load(store, &root, refresh) {
             debug!("Loaded workspace from cache");
             let projects: Result<Vec<_>, _> = cache
                 .config_files
@@ -611,11 +603,11 @@ impl Workspace {
         } else {
             // Cache miss or invalid, perform fresh discovery
             debug!("Performing fresh workspace discovery");
-            let projects = Self::discover_fresh(&root)?;
+            let projects = Self::discover_fresh(&root, selectors)?;
 
             // Save to cache
             let cache = WorkspaceCache::new(root.clone(), &projects);
-            if let Err(e) = cache.save() {
+            if let Err(e) = cache.save(store) {
                 debug!("Failed to save workspace cache: {}", e);
             }
             projects
@@ -631,11 +623,15 @@ impl Workspace {
     }
 
     /// Perform fresh workspace discovery without cache
-    fn discover_fresh(root: &Path) -> Result<Vec<Arc<Project>>, Error> {
+    fn discover_fresh(
+        root: &Path,
+        selectors: Option<&Selectors>,
+    ) -> Result<Vec<Arc<Project>>, Error> {
         let projects = Mutex::new(Ok(Vec::new()));
 
         ignore::WalkBuilder::new(root)
             .follow_links(false)
+            .add_custom_ignore_filename(".prekignore")
             .build_parallel()
             .run(|| {
                 Box::new(|result| {
@@ -658,17 +654,29 @@ impl Workspace {
                                 .to_path_buf();
                             project.with_relative_path(relative_path);
 
-                            projects
-                                .lock()
-                                .unwrap()
-                                .as_mut()
-                                .unwrap()
-                                .push(Arc::new(project));
+                            if let Ok(projects) = projects.lock().unwrap().as_mut() {
+                                projects.push(Arc::new(project));
+                            }
                         }
                         Err(config::Error::NotFound(_)) => {}
                         Err(e) => {
-                            *projects.lock().unwrap() = Err(e);
-                            return WalkState::Quit;
+                            // Exit early if the path is selected
+                            if let Some(selectors) = selectors {
+                                let relative_path = entry
+                                    .path()
+                                    .strip_prefix(root)
+                                    .expect("Entry path should be relative to the root");
+                                if selectors.matches_path(relative_path) {
+                                    *projects.lock().unwrap() = Err(e);
+                                    return WalkState::Quit;
+                                }
+                            }
+                            // Otherwise, just log the error and continue
+                            error!(
+                                path = %entry.path().user_display(),
+                                "Skipping project due to error: {e}"
+                            );
+                            return WalkState::Skip;
                         }
                     }
 

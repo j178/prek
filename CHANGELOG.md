@@ -1,5 +1,80 @@
 # Changelog
 
+## 0.2.5
+
+Released on 2025-10-10.
+
+### Enhancements
+
+- Implement `prek try-repo` ([#797](https://github.com/j178/prek/pull/797))
+- Add fallback mechanism for prek executable in git hooks ([#850](https://github.com/j178/prek/pull/850))
+- Ignore config error if the directory is skipped ([#860](https://github.com/j178/prek/pull/860))
+
+### Bug fixes
+
+- Fix panic when parse config failed ([#859](https://github.com/j178/prek/pull/859))
+
+### Other changes
+
+- Add a Dockerfile ([#852](https://github.com/j178/prek/pull/852))
+
+### Contributors
+
+- @j178
+- @luizvbo
+
+## 0.2.4
+
+Released on 2025-10-07.
+
+### Enhancements
+
+- Add support for `.prekignore` to ignore directories from project discovery ([#826](https://github.com/j178/prek/pull/826))
+- Make `prek auto-update --jobs` default to 0 (which uses max available parallelism) ([#833](https://github.com/j178/prek/pull/833))
+- Improve install message when installing for a subproject ([#847](https://github.com/j178/prek/pull/847))
+
+### Bug fixes
+
+- Convert extension to lowercase before checking file tags ([#839](https://github.com/j178/prek/pull/839))
+- Support pass multiple files like `prek run --files a b c d` ([#828](https://github.com/j178/prek/pull/828))
+
+### Documentation
+
+- Add requests-cache to "Who is using prek" ([#824](https://github.com/j178/prek/pull/824))
+
+### Contributors
+
+- @SigureMo
+- @j178
+
+## 0.2.3
+
+Released on 2025-09-29.
+
+### Enhancements
+
+- Add `--dry-run` to `prek auto-update` ([#806](https://github.com/j178/prek/pull/806))
+- Add a global `--log-file` flag to specify the log file path ([#817](https://github.com/j178/prek/pull/817))
+- Implement hook health check ([#798](https://github.com/j178/prek/pull/798))
+- Show error message in quiet mode ([#807](https://github.com/j178/prek/pull/807))
+
+### Bug fixes
+
+- Write `fail` entry into output directly ([#811](https://github.com/j178/prek/pull/811))
+
+### Documentation
+
+- Update docs about uv in prek ([#810](https://github.com/j178/prek/pull/810))
+
+### Other changes
+
+- Add a security policy for reporting vulnerabilities ([#804](https://github.com/j178/prek/pull/804))
+
+### Contributors
+
+- @mondeja
+- @j178
+
 ## 0.2.2
 
 Released on 2025-09-26.

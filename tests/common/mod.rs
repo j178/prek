@@ -185,6 +185,12 @@ impl TestContext {
         cmd
     }
 
+    pub fn try_repo(&self) -> Command {
+        let mut cmd = self.command();
+        cmd.arg("try-repo");
+        cmd
+    }
+
     /// Standard snapshot filters _plus_ those for this test context.
     pub fn filters(&self) -> Vec<(&str, &str)> {
         // Put test context snapshots before the default filters
@@ -209,8 +215,9 @@ impl TestContext {
     /// Initialize a sample project for prek.
     pub fn init_project(&self) {
         Command::new("git")
+            .arg("-c")
+            .arg("init.defaultBranch=master")
             .arg("init")
-            .arg("--initial-branch=master")
             .current_dir(&self.temp_dir)
             .assert()
             .success();
@@ -331,7 +338,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     // File sizes
     (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
     // Rewrite Windows output to Unix output
-    (r"\\([\w\d]|\.\.)", "/$1"),
+    (r"\\([\w\d]|\.\.|\.)", "/$1"),
     (r"prek.exe", "prek"),
     // The exact message is host language dependent
     (
@@ -339,7 +346,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         "Caused by: No such file or directory (os error 2)",
     ),
     // Time seconds
-    (r"(\d+\.)?\d+(ms|s)", "[TIME]"),
+    (r"\b(\d+\.)?\d+(ms|s)\b", "[TIME]"),
     // Windows shebang interpreter
     (r"#!/bin/sh", "#!/usr/bin/env bash"),
 ];

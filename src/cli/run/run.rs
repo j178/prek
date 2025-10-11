@@ -28,11 +28,12 @@ use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstalledHook};
 use crate::printer::{Printer, Stdout};
 use crate::run::{CONCURRENCY, USE_COLOR};
-use crate::store::{STORE, Store};
+use crate::store::Store;
 use crate::workspace::{Project, Workspace};
 
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
+    store: &Store,
     config: Option<PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
@@ -76,13 +77,13 @@ pub(crate) async fn run(
 
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     let selectors = Selectors::load(&includes, &skips, &workspace_root)?;
-    let mut workspace = Workspace::discover(workspace_root, config, Some(&selectors), refresh)?;
+    let mut workspace =
+        Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
     if should_stash {
         workspace.check_configs_staged().await?;
     }
 
-    let store = STORE.as_ref()?;
     let reporter = HookInitReporter::from(printer);
     let lock = store.lock_async().await?;
 
@@ -509,7 +510,10 @@ async fn run_hooks(
         let fail_fast = project.config().fail_fast.unwrap_or(false);
 
         let filter = FileFilter::for_project(filenames.iter(), project);
-        trace!("Files for `{project}` after filtered: {}", filter.len());
+        trace!(
+            "Files for project `{project}` after filtered: {}",
+            filter.len()
+        );
 
         let mut hook_succeed;
         for hook in hooks {
@@ -585,7 +589,7 @@ async fn run_hook(
 ) -> Result<(bool, Vec<u8>, bool)> {
     let mut filenames = filter.for_hook(hook);
     trace!(
-        "Files for `{}` after filtered: {}",
+        "Files for hook `{}` after filtered: {}",
         hook.id,
         filenames.len()
     );

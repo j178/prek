@@ -8,7 +8,7 @@ use itertools::Itertools;
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
 use crate::config::{self, HookOptions, Language};
 use crate::hook::Hook;
-use crate::store::STORE;
+use crate::store::Store;
 use crate::workspace::Project;
 
 // For builtin hooks (meta hooks and builtin pre-commit-hooks), they are not run
@@ -19,9 +19,11 @@ use crate::workspace::Project;
 // relative to the project root.
 
 /// Ensures that the configured hooks apply to at least one file in the repository.
-pub(crate) async fn check_hooks_apply(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
-    let store = STORE.as_ref()?;
-
+pub(crate) async fn check_hooks_apply(
+    store: &Store,
+    hook: &Hook,
+    filenames: &[&Path],
+) -> Result<(i32, Vec<u8>)> {
     let relative_path = hook.project().relative_path();
     // Collect all files in the project
     let input = collect_files(hook.work_dir(), CollectOptions::all_files()).await?;

@@ -21,6 +21,7 @@ use crate::config::{RemoteRepo, Repo};
 use crate::fs::CWD;
 use crate::printer::Printer;
 use crate::run::CONCURRENCY;
+use crate::store::Store;
 use crate::workspace::{Project, Workspace};
 use crate::{config, git};
 
@@ -31,6 +32,7 @@ struct Revision {
 }
 
 pub(crate) async fn auto_update(
+    store: &Store,
     config: Option<PathBuf>,
     filter_repos: Vec<String>,
     bleeding_edge: bool,
@@ -47,7 +49,7 @@ pub(crate) async fn auto_update(
 
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     // TODO: support selectors?
-    let workspace = Workspace::discover(workspace_root, config, None, true)?;
+    let workspace = Workspace::discover(store, workspace_root, config, None, true)?;
 
     // Collect repos and deduplicate by RemoteRepo
     #[allow(clippy::mutable_key_type)]
@@ -394,14 +396,6 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
             .captures(&lines[*line_no])
             .expect("Invalid regex")
             .expect("Failed to capture revision line");
-
-        // TODO: preserve the quote style
-        // Naively add the original quotes
-        let new_rev = if !caps[3].is_empty() && !new_rev.contains(&caps[3]) {
-            format!("{}{}{}", &caps[3], new_rev.trim(), &caps[3])
-        } else {
-            new_rev.trim().to_string()
-        };
 
         let comment = if let Some(frozen) = &revision.frozen {
             format!("  # frozen: {frozen}")

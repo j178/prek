@@ -8,6 +8,7 @@ use assert_fs::prelude::*;
 use constants::env_vars::EnvVars;
 use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
 use insta::assert_snapshot;
+use predicates::prelude::predicate;
 
 mod common;
 
@@ -1314,6 +1315,71 @@ fn run_last_commit() -> Result<()> {
     Ok(())
 }
 
+/// Test `prek run --files` with multiple files.
+#[test]
+fn run_multiple_files() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: multiple-files
+                name: multiple-files
+                language: system
+                entry: echo
+                verbose: true
+                types: [text]
+    "});
+    let cwd = context.work_dir();
+    cwd.child("file1.txt").write_str("Hello, world!")?;
+    cwd.child("file2.txt").write_str("Hello, world!")?;
+    context.git_add(".");
+    // `--files` with multiple files
+    cmd_snapshot!(context.filters(), context.run().arg("--files").arg("file1.txt").arg("file2.txt"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    multiple-files...........................................................Passed
+    - hook id: multiple-files
+    - duration: [TIME]
+      file2.txt file1.txt
+
+    ----- stderr -----
+    "#);
+    Ok(())
+}
+
+/// Test `prek run --files` with no files.
+#[test]
+fn run_no_files() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: no-files
+                name: no-files
+                language: system
+                entry: echo
+                verbose: true
+    "});
+    context.git_add(".");
+    // `--files` with no files
+    cmd_snapshot!(context.filters(), context.run().arg("--files"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    no-files.................................................................Passed
+    - hook id: no-files
+    - duration: [TIME]
+      .pre-commit-config.yaml
+
+    ----- stderr -----
+    "#);
+}
+
 /// Test `prek run --directory` flags.
 #[test]
 fn run_directory() -> Result<()> {
@@ -1736,6 +1802,7 @@ fn selectors_completion() -> Result<()> {
     --no-progress	Hide all progress outputs
     --quiet	Use quiet output
     --verbose	Use verbose output
+    --log-file	Write trace logs to the specified file. If not specified, trace logs will be written to `$PREK_HOME/prek.log`
     --version	Display the prek version
 
     ----- stderr -----
@@ -2153,4 +2220,59 @@ fn run_quiet() {
 
     ----- stderr -----
     ");
+}
+
+/// Test `prek run --log-file <file>` flag.
+#[test]
+fn run_log_file() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: fail
+                name: fail
+                entry: fail
+                language: fail
+    "});
+    context.git_add(".");
+
+    // Run with `--no-log-file`, no `prek.log` is created.
+    cmd_snapshot!(context.filters(), context.run().arg("--no-log-file"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fail.....................................................................Failed
+    - hook id: fail
+    - exit code: 1
+      fail
+
+      .pre-commit-config.yaml
+
+    ----- stderr -----
+    ");
+    context
+        .home_dir()
+        .child("prek.log")
+        .assert(predicate::path::missing());
+
+    // Write log to `log`.
+    cmd_snapshot!(context.filters(), context.run().arg("--log-file").arg("log"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fail.....................................................................Failed
+    - hook id: fail
+    - exit code: 1
+      fail
+
+      .pre-commit-config.yaml
+
+    ----- stderr -----
+    ");
+    context
+        .work_dir()
+        .child("log")
+        .assert(predicate::path::exists());
 }

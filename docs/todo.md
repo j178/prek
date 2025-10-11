@@ -5,7 +5,6 @@ This page tracks gaps that prevent `prek` from being a drop-in replacement for `
 ## Subcommands not implemented
 
 - `gc`
-- `try-repo`
 
 ## Languages not supported yet
 
