@@ -1,12 +1,13 @@
 {
   "name": "prek-cli",
-  "version": "0.2.2",
+  "version": "0.2.5",
   "description": "Better `pre-commit`, re-engineered in Rust",
   "keywords": [
     "pre-commit",
     "git",
     "hooks"
   ],
+  "readme": "README.md",
   "homepage": "https://github.com/j178/prek",
   "bugs": {
     "url": "https://github.com/j178/prek/issues"
@@ -26,20 +27,25 @@
     "email": "hi@j178.dev"
   },
   "scripts": {
+    "prepare": "cpy '../../README.md' './'",
     "postinstall": "node ./install.js"
   },
   "dependencies": {
-    "detect-libc": "^2.0.4",
-    "tar": "^7.4.3",
-    "unzipper": "^0.12.3"
+    "detect-libc": "2.1.2",
+    "tar": "7.5.1",
+    "unzipper": "0.12.3"
   },
   "files": [
     "install.js",
     "prek.js",
-    "utils.js"
+    "utils.js",
+    "README.md"
   ],
   "type": "commonjs",
   "bin": {
     "prek": "./prek.js"
+  },
+  "devDependencies": {
+    "cpy-cli": "6.0.0"
   }
 }

@@ -42,6 +42,9 @@ jobs:
     steps:
       - name: Install Node.js
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
-      - name: Publish to npm
+      - name: Install dependencies
+        working-directory: ./integrations/nodejs
+        run: npm install --ignore-scripts
+      - name: Publish to npmjs
         working-directory: ./integrations/nodejs
         run: npm publish --provenance --access public
