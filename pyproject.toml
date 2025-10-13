@@ -52,7 +52,6 @@ version_files = [
   "Cargo.toml",
   "README.md",
   "docs/installation.md",
-  "integrations/nodejs/package.json",
 ]
 
 [tool.uv]

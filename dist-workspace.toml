@@ -20,7 +20,9 @@ github-release = "announce"
 # Whether to publish prereleases to package managers
 publish-prereleases = true
 # The installers to generate for each app
-installers = ["shell", "powershell", "homebrew"]
+installers = ["shell", "powershell", "npm", "homebrew"]
+# A namespace to use when publishing this package to the npm registry
+npm-scope = "@j178"
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = [
     "aarch64-apple-darwin",
