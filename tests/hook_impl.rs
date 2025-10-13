@@ -1,9 +1,9 @@
-use std::process::Command;
-
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use constants::CONFIG_FILE;
 use constants::env_vars::EnvVars;
 use indoc::indoc;
+use std::process::Command;
 
 use crate::common::TestContext;
 use crate::common::cmd_snapshot;
@@ -181,6 +181,72 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Test prek hook runs in the correct worktree.
+#[test]
+fn run_worktree() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc! { r"
+        repos:
+        - repo: local
+          hooks:
+           - id: fail
+             name: fail
+             language: fail
+             entry: always fail
+             always_run: true
+    "});
+    context.configure_git_author();
+    context.disable_auto_crlf();
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    cmd_snapshot!(context.filters(), context.install(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    "#);
+
+    // Create a new worktree.
+    Command::new("git")
+        .arg("worktree")
+        .arg("add")
+        .arg("worktree")
+        .arg("HEAD")
+        .current_dir(context.work_dir())
+        .output()?
+        .assert()
+        .success();
+
+    // Modify the config in the main worktree
+    context.work_dir().child(CONFIG_FILE).write_str("")?;
+
+    let mut commit = Command::new("git");
+    commit
+        .arg("commit")
+        .current_dir(context.work_dir().child("worktree"))
+        .arg("-m")
+        .arg("Initial commit")
+        .arg("--allow-empty");
+
+    cmd_snapshot!(context.filters(), commit, @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    fail.....................................................................Failed
+    - hook id: fail
+    - exit code: 1
+      always fail
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn workspace_hook_impl_root() -> anyhow::Result<()> {
     let context = TestContext::new();
@@ -319,6 +385,86 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
     - hook id: test-hook
     - duration: [TIME]
       cwd: [TEMP_DIR]/project2
+    ");
+
+    Ok(())
+}
+
+/// Install from a subdirectory, and run commit in another worktree.
+#[test]
+fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    let cwd = context.work_dir();
+    context.init_project();
+    context.configure_git_author();
+    context.disable_auto_crlf();
+
+    let config = indoc! {r#"
+    repos:
+      - repo: local
+        hooks:
+        - id: test-hook
+          name: Test Hook
+          language: python
+          entry: python -c 'import os; print("cwd:", os.getcwd())'
+          verbose: true
+    "#};
+
+    context.setup_workspace(&["project2", "project3"], config)?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    // Install from a subdirectory
+    cmd_snapshot!(context.filters(), context.install().current_dir(cwd.join("project2")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `../.git/hooks/pre-commit` for workspace `[TEMP_DIR]/project2`
+
+    ----- stderr -----
+    ");
+
+    // Create a new worktree.
+    Command::new("git")
+        .arg("worktree")
+        .arg("add")
+        .arg("worktree")
+        .arg("HEAD")
+        .current_dir(cwd)
+        .output()?
+        .assert()
+        .success();
+
+    // Modify the config in the main worktree
+    context
+        .work_dir()
+        .child("project2")
+        .child(CONFIG_FILE)
+        .write_str("")?;
+
+    let mut commit = Command::new("git");
+    commit
+        .current_dir(cwd.child("worktree"))
+        .arg("commit")
+        .arg("-m")
+        .arg("Test commit from subdirectory")
+        .arg("--allow-empty");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([("[a-f0-9]{7}", "abc1234")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), commit, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [detached HEAD abc1234] Test commit from subdirectory
+
+    ----- stderr -----
+    Running in workspace: `[TEMP_DIR]/worktree/project2`
+    Test Hook............................................(no files to check)Skipped
     ");
 
     Ok(())
