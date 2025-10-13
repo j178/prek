@@ -187,16 +187,16 @@ prek is published as a Node.js package, you can install it using `npm`, `pnpm`, 
 <!-- npmjs-install:start -->
 ```bash
 # Using npm
-npm add -D prek-cli
+npm add -D @j178/prek
 
 # Using pnpm
-pnpm add -D prek-cli
+pnpm add -D @j178/prek
 
 # Using npx
-npx prek-cli --version
+npx @j178/prek --version
 
 # or install globally
-npm install -g prek-cli
+npm install -g @j178/prek
 
 # then use `prek` command
 prek --version
