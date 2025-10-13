@@ -9,6 +9,7 @@ use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
 use fancy_regex::{self as regex, Regex};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_yaml::Value;
 
 use crate::fs::Simplified;
 use crate::identify;
@@ -735,9 +736,14 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
 
     let expected_unused = ["minimum_pre_commit_version"];
 
-    let deserializer = serde_yaml::Deserializer::from_str(&content);
+    let mut yaml: Value = serde_yaml::from_str(&content)
+        .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
+
+    yaml.apply_merge()
+        .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
+
     let mut unused = Vec::new();
-    let config: Config = serde_ignored::deserialize(deserializer, |path| {
+    let config: Config = serde_ignored::deserialize(yaml, |path| {
         let key = path.to_string();
         if !expected_unused.contains(&key.as_str()) {
             unused.push(key);
@@ -833,6 +839,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write as _;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn parse_repos() {
@@ -1578,5 +1586,41 @@ mod tests {
                 .to_string()
                 .contains("Type tag \"not-a-real-tag\" is not recognized")
         );
+    }
+
+    #[test]
+    fn read_config_supports_yaml_merge_key_for_local_hooks() {
+        let yaml = indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: mypy-local
+                    name: Local mypy
+                    entry: python tools/pre_commit/mypy.py 0 "local"
+                    <<: &mypy_common
+                      language: python
+                      types_or: [python, pyi]
+                  - id: mypy-3.10
+                    name: Mypy 3.10
+                    entry: python tools/pre_commit/mypy.py 1 "3.10"
+                    <<: *mypy_common
+        "#};
+
+        let mut file = NamedTempFile::new().expect("create temp file");
+        file.write_all(yaml.as_bytes()).expect("write config");
+
+        let config = read_config(file.path()).expect("config parses");
+
+        let hooks = match &config.repos[0] {
+            Repo::Local(local) => &local.hooks,
+            other => panic!("expected local repo, got {other:#?}"),
+        };
+
+        assert_eq!(hooks.len(), 2);
+        assert_eq!(hooks[0].language, Language::Python);
+        assert_eq!(hooks[1].language, Language::Python);
+        let expected_types = vec!["python".to_string(), "pyi".to_string()];
+        assert_eq!(hooks[0].options.types_or.as_ref(), Some(&expected_types));
+        assert_eq!(hooks[1].options.types_or.as_ref(), Some(&expected_types));
     }
 }
