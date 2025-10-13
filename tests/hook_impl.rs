@@ -285,7 +285,7 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    prek installed at `../.git/hooks/pre-commit` for project `[TEMP_DIR]/project2`
+    prek installed at `../.git/hooks/pre-commit` for workspace `[TEMP_DIR]/project2`
 
     ----- stderr -----
     ");
@@ -314,6 +314,7 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
      create mode 100644 project3/.pre-commit-config.yaml
 
     ----- stderr -----
+    Running in workspace: `[TEMP_DIR]/project2`
     Test Hook................................................................Passed
     - hook id: test-hook
     - duration: [TIME]
