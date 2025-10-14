@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.6
+
+Released on 2025-10-14.
+
+### Enhancements
+
+- Publish prek to npmjs.com ([#819](https://github.com/j178/prek/pull/819))
+- Support YAML merge keys in `.pre-commit-config.yaml` ([#871](https://github.com/j178/prek/pull/871))
+
+### Bug fixes
+
+- Use relative path with `--cd` in the generated hook script ([#868](https://github.com/j178/prek/pull/868))
+- Fix autoupdate `rev` rendering for "float-like" version numbers ([#867](https://github.com/j178/prek/pull/867))
+
+### Documentation
+
+- Add Nix and Conda installation details ([#874](https://github.com/j178/prek/pull/874))
+
+### Contributors
+
+- @mondeja
+- @j178
+- @bbannier
+- @yihong0618
+- @colindean
+
 ## 0.2.5
 
 Released on 2025-10-10.
