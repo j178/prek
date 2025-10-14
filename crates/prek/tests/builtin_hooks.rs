@@ -1897,6 +1897,15 @@ fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
     Ok(())
 }
 
+fn is_case_sensitive_filesystem(context: &TestContext) -> Result<bool> {
+    let test_lower = context.work_dir().child("case_test_file.txt");
+    test_lower.write_str("test")?;
+    let test_upper = context.work_dir().child("CASE_TEST_FILE.txt");
+    let is_sensitive = !test_upper.exists();
+    fs_err::remove_file(test_lower.path())?;
+    Ok(is_sensitive)
+}
+
 #[test]
 fn check_case_conflict_hook() -> Result<()> {
     let context = TestContext::new();
