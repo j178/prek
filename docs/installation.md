@@ -26,8 +26,6 @@ The standalone installer automatically downloads and installs the correct binary
 
 ### PyPI
 
-Install via pip, uv (recommended), or pipx:
-
 {%
   include-markdown "../README.md"
   start="<!-- pypi-install:start -->"
@@ -50,17 +48,7 @@ Install via pip, uv (recommended), or pipx:
   end="<!-- mise-install:end -->"
 %}
 
-## Build from Source
-
-{%
-  include-markdown "../README.md"
-  start="<!-- cargo-install:start -->"
-  end="<!-- cargo-install:end -->"
-%}
-
 ### npmjs
-
-Install via npm, pnpm, or npx:
 
 {%
   include-markdown "../README.md"
@@ -68,6 +56,29 @@ Install via npm, pnpm, or npx:
   end="<!-- npmjs-install:end -->"
 %}
 
+### Nix
+
+{%
+  include-markdown "../README.md"
+  start="<!-- nix-install:start -->"
+  end="<!-- nix-install:end -->"
+%}
+
+### Conda
+
+{%
+  include-markdown "../README.md"
+  start="<!-- conda-forge-install:start -->"
+  end="<!-- conda-forge-install:end -->"
+%}
+
+## Build from Source
+
+{%
+  include-markdown "../README.md"
+  start="<!-- cargo-install:start -->"
+  end="<!-- cargo-install:end -->"
+%}
 
 ## Download from GitHub Releases
 
