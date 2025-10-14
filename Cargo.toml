@@ -4,6 +4,7 @@ members = ["lib/*"]
 [workspace.package]
 edition = "2024"
 repository = "https://github.com/j178/prek"
+homepage = "https://prek.j178.dev/"
 license = "MIT"
 
 [workspace.dependencies]
@@ -16,7 +17,7 @@ version = "0.2.8"
 authors = ["j178 <hi@j178.dev>"]
 description = "Better `pre-commit`, re-engineered in Rust"
 repository = { workspace = true }
-homepage = "https://github.com/j178/prek"
+homepage = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 

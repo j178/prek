@@ -21,6 +21,7 @@ classifiers = [
 Repository = "https://github.com/j178/prek"
 Changelog = "https://github.com/j178/prek/blob/master/CHANGELOG.md"
 Releases = "https://github.com/j178/prek/releases"
+Homepage = "https://prek.j178.dev/"
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
