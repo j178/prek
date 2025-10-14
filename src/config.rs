@@ -724,6 +724,8 @@ pub enum Error {
     Yaml(String, #[source] serde_yaml::Error),
 }
 
+static EXPECTED_UNUSED: &[&str] = &["minimum_pre_commit_version"];
+
 /// Read the configuration file from the given path.
 pub fn read_config(path: &Path) -> Result<Config, Error> {
     let content = match fs_err::read_to_string(path) {
@@ -734,8 +736,6 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
         Err(e) => return Err(e.into()),
     };
 
-    let expected_unused = ["minimum_pre_commit_version"];
-
     let mut yaml: Value = serde_yaml::from_str(&content)
         .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
 
@@ -745,7 +745,7 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
     let mut unused = Vec::new();
     let config: Config = serde_ignored::deserialize(yaml, |path| {
         let key = path.to_string();
-        if !expected_unused.contains(&key.as_str()) {
+        if !EXPECTED_UNUSED.contains(&key.as_str()) {
             unused.push(key);
         }
     })
@@ -840,7 +840,6 @@ where
 mod tests {
     use super::*;
     use std::io::Write as _;
-    use tempfile::NamedTempFile;
 
     #[test]
     fn parse_repos() {
@@ -1589,7 +1588,7 @@ mod tests {
     }
 
     #[test]
-    fn read_config_supports_yaml_merge_key_for_local_hooks() {
+    fn read_config_with_merge_keys() -> Result<()> {
         let yaml = indoc::indoc! {r#"
             repos:
               - repo: local
@@ -1606,21 +1605,93 @@ mod tests {
                     <<: *mypy_common
         "#};
 
-        let mut file = NamedTempFile::new().expect("create temp file");
-        file.write_all(yaml.as_bytes()).expect("write config");
+        let mut file = tempfile::NamedTempFile::new()?;
+        file.write_all(yaml.as_bytes())?;
 
-        let config = read_config(file.path()).expect("config parses");
+        let config = read_config(file.path())?;
+        insta::assert_debug_snapshot!(config, @r#"
+        Config {
+            repos: [
+                Local(
+                    LocalRepo {
+                        hooks: [
+                            ManifestHook {
+                                id: "mypy-local",
+                                name: "Local mypy",
+                                entry: "python tools/pre_commit/mypy.py 0 \"local\"",
+                                language: Python,
+                                options: HookOptions {
+                                    alias: None,
+                                    files: None,
+                                    exclude: None,
+                                    types: None,
+                                    types_or: Some(
+                                        [
+                                            "python",
+                                            "pyi",
+                                        ],
+                                    ),
+                                    exclude_types: None,
+                                    additional_dependencies: None,
+                                    args: None,
+                                    always_run: None,
+                                    fail_fast: None,
+                                    pass_filenames: None,
+                                    description: None,
+                                    language_version: None,
+                                    log_file: None,
+                                    require_serial: None,
+                                    stages: None,
+                                    verbose: None,
+                                    minimum_prek_version: None,
+                                },
+                            },
+                            ManifestHook {
+                                id: "mypy-3.10",
+                                name: "Mypy 3.10",
+                                entry: "python tools/pre_commit/mypy.py 1 \"3.10\"",
+                                language: Python,
+                                options: HookOptions {
+                                    alias: None,
+                                    files: None,
+                                    exclude: None,
+                                    types: None,
+                                    types_or: Some(
+                                        [
+                                            "python",
+                                            "pyi",
+                                        ],
+                                    ),
+                                    exclude_types: None,
+                                    additional_dependencies: None,
+                                    args: None,
+                                    always_run: None,
+                                    fail_fast: None,
+                                    pass_filenames: None,
+                                    description: None,
+                                    language_version: None,
+                                    log_file: None,
+                                    require_serial: None,
+                                    stages: None,
+                                    verbose: None,
+                                    minimum_prek_version: None,
+                                },
+                            },
+                        ],
+                    },
+                ),
+            ],
+            default_install_hook_types: None,
+            default_language_version: None,
+            default_stages: None,
+            files: None,
+            exclude: None,
+            fail_fast: None,
+            minimum_prek_version: None,
+            ci: None,
+        }
+        "#);
 
-        let hooks = match &config.repos[0] {
-            Repo::Local(local) => &local.hooks,
-            other => panic!("expected local repo, got {other:#?}"),
-        };
-
-        assert_eq!(hooks.len(), 2);
-        assert_eq!(hooks[0].language, Language::Python);
-        assert_eq!(hooks[1].language, Language::Python);
-        let expected_types = vec!["python".to_string(), "pyi".to_string()];
-        assert_eq!(hooks[0].options.types_or.as_ref(), Some(&expected_types));
-        assert_eq!(hooks[1].options.types_or.as_ref(), Some(&expected_types));
+        Ok(())
     }
 }

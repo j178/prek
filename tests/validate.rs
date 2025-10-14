@@ -45,15 +45,15 @@ fn validate_config() -> anyhow::Result<()> {
         "})?;
 
     // Validate multiple files.
-    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE).arg("config-1.yaml"), @r#"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE).arg("config-1.yaml"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to parse `config-1.yaml`
-      caused by: repos: Invalid remote repo: missing field `rev` at line 2 column 3
-    "#);
+      caused by: Invalid remote repo: missing field `rev`
+    ");
 
     Ok(())
 }
