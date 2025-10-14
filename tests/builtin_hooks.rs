@@ -1264,3 +1264,100 @@ fn check_xml_with_features() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn check_ast_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-ast
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files
+    cwd.child("valid.py").write_str(indoc::indoc! {r#"
+        def hello():
+            print("Hello, world!")
+
+        if __name__ == "__main__":
+            hello()
+    "#})?;
+
+    cwd.child("syntax_error.py").write_str(indoc::indoc! {r"
+        def hello()
+            print('Missing colon')
+    "})?;
+
+    cwd.child("indentation_error.py")
+        .write_str(indoc::indoc! {r"
+        def hello():
+        print('Bad indentation')
+    "})?;
+
+    cwd.child("unclosed_string.py")
+        .write_str(indoc::indoc! {r#"
+        message = "This string is not closed
+        print(message)
+    "#})?;
+
+    cwd.child("empty.py").touch()?;
+
+    context.git_add(".");
+
+    // First run: hooks should fail due to syntax errors
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check python ast.........................................................Failed
+    - hook id: check-ast
+    - exit code: 1
+      indentation_error.py: failed parsing:
+          Expected an indented block after function definition at byte range 13..18
+      syntax_error.py: failed parsing:
+          Expected ':', found newline at byte range 11..12
+      unclosed_string.py: failed parsing:
+          missing closing quote in string literal at byte range 10..36
+
+    ----- stderr -----
+    ");
+
+    // Fix the files
+    cwd.child("syntax_error.py").write_str(indoc::indoc! {r"
+        def hello():
+            print('Fixed!')
+    "})?;
+
+    cwd.child("indentation_error.py")
+        .write_str(indoc::indoc! {r"
+        def hello():
+            print('Fixed indentation')
+    "})?;
+
+    cwd.child("unclosed_string.py")
+        .write_str(indoc::indoc! {r#"
+        message = "This string is closed"
+        print(message)
+    "#})?;
+
+    context.git_add(".");
+
+    // Second run: hooks should now pass
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check python ast.........................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
