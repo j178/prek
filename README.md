@@ -206,6 +206,38 @@ prek --version
 </details>
 
 <details>
+<summary>Nix</summary>
+
+prek is [available in Nix as `prek`](https://search.nixos.org/packages?channel=unstable&show=prek&query=prek).
+
+<!-- nix-install:start -->
+```shell
+# Choose what's appropriate for your use case.
+# One-off in a shell:
+nix-shell -p prek
+# NixOS or non-NixOS without flakes:
+nix-env -iA nixos.prek
+# Non-NixOS with flakes:
+nix profile install nixpkgs#prek
+```
+<!-- nix-install:end -->
+
+</details>
+
+<details>
+<summary>Conda</summary>
+
+prek is [available as `prek` via conda-forge](https://anaconda.org/conda-forge/prek).
+
+<!-- conda-forge-install:start -->
+```shell
+conda install conda-forge::prek
+```
+<!-- conda-forge-install:end -->
+
+</details>
+
+<details>
 <summary>GitHub Releases</summary>
 
 <!-- pre-built-binaries:start -->
