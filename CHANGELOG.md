@@ -1,8 +1,10 @@
 # Changelog
 
-## 0.2.6
+## 0.2.7
 
 Released on 2025-10-14.
+
+*This is a re-release of 0.2.6 that fixes an issue where publishing to npmjs.com failed.*
 
 ### Enhancements
 
