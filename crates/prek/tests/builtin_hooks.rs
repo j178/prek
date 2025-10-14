@@ -1896,3 +1896,159 @@ fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn check_case_conflict_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    if !is_case_sensitive_filesystem(&context)? {
+        // Skipping test on case-insensitive filesystem
+        return Ok(());
+    }
+
+    // Create initial files and commit
+    let cwd = context.work_dir();
+    cwd.child("README.md").write_str("Initial commit")?;
+    cwd.child("src/foo.txt").write_str("existing file")?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-case-conflict
+    "});
+
+    // Try to add a file with conflicting case
+    cwd.child("src/FOO.txt").write_str("conflicting case")?;
+    context.git_add(".");
+
+    // First run: should fail due to case conflict
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for case conflicts.................................................Failed
+    - hook id: check-case-conflict
+    - exit code: 1
+      Case-insensitivity conflict found: src/FOO.txt
+      Case-insensitivity conflict found: src/foo.txt
+
+    ----- stderr -----
+    "#);
+
+    // Remove the conflicting file
+    context.git_rm("src/FOO.txt");
+
+    // Add a non-conflicting file
+    cwd.child("src/bar.txt").write_str("no conflict")?;
+    context.git_add(".");
+
+    // Second run: should pass
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for case conflicts.................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn check_case_conflict_directory() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    if !is_case_sensitive_filesystem(&context)? {
+        // Skipping test on case-insensitive filesystem
+        return Ok(());
+    }
+
+    // Create directory with file
+    let cwd = context.work_dir();
+    cwd.child("src/utils/helper.py").write_str("helper")?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-case-conflict
+    "});
+
+    // Try to add a file that conflicts with directory name
+    cwd.child("src/UTILS/other.py").write_str("conflict")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for case conflicts.................................................Failed
+    - hook id: check-case-conflict
+    - exit code: 1
+      Case-insensitivity conflict found: src/UTILS
+      Case-insensitivity conflict found: src/utils
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn check_case_conflict_among_new_files() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    if !is_case_sensitive_filesystem(&context)? {
+        // Skipping test on case-insensitive filesystem
+        return Ok(());
+    }
+
+    let cwd = context.work_dir();
+    cwd.child("README.md").write_str("Initial")?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-case-conflict
+    "});
+
+    // Add multiple new files with conflicting cases
+    cwd.child("NewFile.txt").write_str("file 1")?;
+    cwd.child("newfile.txt").write_str("file 2")?;
+    cwd.child("NEWFILE.TXT").write_str("file 3")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for case conflicts.................................................Failed
+    - hook id: check-case-conflict
+    - exit code: 1
+      Case-insensitivity conflict found: NEWFILE.TXT
+      Case-insensitivity conflict found: NewFile.txt
+      Case-insensitivity conflict found: newfile.txt
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
