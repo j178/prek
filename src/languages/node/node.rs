@@ -49,7 +49,7 @@ impl LanguageImpl for Node {
             _ => unreachable!(),
         };
         let node = installer
-            .install(node_request)
+            .install(store, node_request)
             .await
             .context("Failed to install node")?;
 

@@ -90,7 +90,9 @@ impl LanguageImpl for Python {
         let progress = reporter.on_install_start(&hook);
 
         let uv_dir = store.tools_path(ToolBucket::Uv);
-        let uv = Uv::install(&uv_dir).await.context("Failed to install uv")?;
+        let uv = Uv::install(store, &uv_dir)
+            .await
+            .context("Failed to install uv")?;
 
         let mut info = InstallInfo::new(
             hook.language,

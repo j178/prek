@@ -16,6 +16,7 @@ use crate::languages::golang::GoRequest;
 use crate::languages::golang::golang::bin_dir;
 use crate::languages::golang::version::GoVersion;
 use crate::process::Cmd;
+use crate::store::Store;
 
 pub(crate) struct GoResult {
     path: PathBuf,
@@ -99,7 +100,7 @@ impl GoInstaller {
         }
     }
 
-    pub(crate) async fn install(&self, request: &GoRequest) -> Result<GoResult> {
+    pub(crate) async fn install(&self, store: &Store, request: &GoRequest) -> Result<GoResult> {
         fs_err::tokio::create_dir_all(&self.root).await?;
 
         let _lock = LockedFile::acquire(self.root.join(".lock"), "go").await?;
@@ -120,7 +121,7 @@ impl GoInstaller {
             .context("Failed to resolve Go version")?;
         trace!(version = %resolved_version, "Installing go");
 
-        self.download(&resolved_version).await
+        self.download(store, &resolved_version).await
     }
 
     fn find_installed(&self, request: &GoRequest) -> Result<GoResult> {
@@ -183,7 +184,7 @@ impl GoInstaller {
         Ok(version)
     }
 
-    async fn download(&self, version: &GoVersion) -> Result<GoResult> {
+    async fn download(&self, store: &Store, version: &GoVersion) -> Result<GoResult> {
         let arch = match HOST.architecture {
             Architecture::X86_32(_) => "386",
             Architecture::X86_64 => "amd64",
@@ -211,7 +212,7 @@ impl GoInstaller {
         let url = format!("https://go.dev/dl/{filename}");
         let target = self.root.join(version.to_string());
 
-        download_and_extract(&self.client, &url, &filename, async |extracted| {
+        download_and_extract(&self.client, &url, &filename, store, async |extracted| {
             if target.exists() {
                 debug!(target = %target.display(), "Removing existing go");
                 fs_err::tokio::remove_dir_all(&target).await?;

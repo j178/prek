@@ -142,15 +142,15 @@ enum InstallSource {
 }
 
 impl InstallSource {
-    async fn install(&self, target: &Path) -> Result<()> {
+    async fn install(&self, store: &Store, target: &Path) -> Result<()> {
         match self {
-            Self::GitHub => self.install_from_github(target).await,
-            Self::PyPi(source) => self.install_from_pypi(target, source).await,
+            Self::GitHub => self.install_from_github(store, target).await,
+            Self::PyPi(source) => self.install_from_pypi(store, target, source).await,
             Self::Pip => self.install_from_pip(target).await,
         }
     }
 
-    async fn install_from_github(&self, target: &Path) -> Result<()> {
+    async fn install_from_github(&self, store: &Store, target: &Path) -> Result<()> {
         let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
         let archive_name = format!("uv-{HOST}.{ext}");
         let download_url = format!(
@@ -158,28 +158,39 @@ impl InstallSource {
         );
 
         let client = reqwest::Client::new();
-        download_and_extract(&client, &download_url, &archive_name, async |extracted| {
-            let source = extracted.join("uv").with_extension(EXE_EXTENSION);
-            let target_path = target.join("uv").with_extension(EXE_EXTENSION);
+        download_and_extract(
+            &client,
+            &download_url,
+            &archive_name,
+            store,
+            async |extracted| {
+                let source = extracted.join("uv").with_extension(EXE_EXTENSION);
+                let target_path = target.join("uv").with_extension(EXE_EXTENSION);
 
-            if target_path.exists() {
-                debug!(target = %target.display(), "Removing existing uv");
-                fs_err::tokio::remove_dir_all(&target).await?;
-            }
+                if target_path.exists() {
+                    debug!(target = %target.display(), "Removing existing uv");
+                    fs_err::tokio::remove_dir_all(&target).await?;
+                }
 
-            debug!(?source, target = %target_path.display(), "Moving uv to target");
-            // TODO: retry on Windows
-            fs_err::tokio::rename(source, target_path).await?;
+                debug!(?source, target = %target_path.display(), "Moving uv to target");
+                // TODO: retry on Windows
+                fs_err::tokio::rename(source, target_path).await?;
 
-            anyhow::Ok(())
-        })
+                anyhow::Ok(())
+            },
+        )
         .await
         .context("Failed to download and extra uv")?;
 
         Ok(())
     }
 
-    async fn install_from_pypi(&self, target: &Path, source: &PyPiMirror) -> Result<()> {
+    async fn install_from_pypi(
+        &self,
+        store: &Store,
+        target: &Path,
+        source: &PyPiMirror,
+    ) -> Result<()> {
         let platform_tag = get_wheel_platform_tag()?;
         let wheel_name = format!("uv-{CUR_UV_VERSION}-py3-none-{platform_tag}.whl");
 
@@ -188,7 +199,7 @@ impl InstallSource {
         let api_url = match source {
             PyPiMirror::Pypi => format!("https://pypi.org/pypi/uv/{CUR_UV_VERSION}/json"),
             // For mirrors, we'll fall back to simple API approach
-            _ => return self.install_from_simple_api(target, source).await,
+            _ => return self.install_from_simple_api(store, target, source).await,
         };
 
         debug!("Fetching uv metadata from: {}", api_url);
@@ -226,11 +237,16 @@ impl InstallSource {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing download URL in PyPI response"))?;
 
-        self.download_and_extract_wheel(&client, target, &wheel_name, download_url)
+        self.download_and_extract_wheel(store, &client, target, &wheel_name, download_url)
             .await
     }
 
-    async fn install_from_simple_api(&self, target: &Path, source: &PyPiMirror) -> Result<()> {
+    async fn install_from_simple_api(
+        &self,
+        store: &Store,
+        target: &Path,
+        source: &PyPiMirror,
+    ) -> Result<()> {
         // Fallback for mirrors that don't support JSON API
         let platform_tag = get_wheel_platform_tag()?;
         let wheel_name = format!("uv-{CUR_UV_VERSION}-py3-none-{platform_tag}.whl");
@@ -275,18 +291,19 @@ impl InstallSource {
             format!("{simple_url}{download_path}")
         };
 
-        self.download_and_extract_wheel(&client, target, &wheel_name, &download_url)
+        self.download_and_extract_wheel(store, &client, target, &wheel_name, &download_url)
             .await
     }
 
     async fn download_and_extract_wheel(
         &self,
+        store: &Store,
         client: &reqwest::Client,
         target: &Path,
         filename: &str,
         download_url: &str,
     ) -> Result<()> {
-        download_and_extract(client, download_url, filename, async |extracted| {
+        download_and_extract(client, download_url, filename, store, async |extracted| {
             // Find the uv binary in the extracted contents
             let data_dir = format!("uv-{CUR_UV_VERSION}.data");
             let extracted_uv = extracted
@@ -439,7 +456,7 @@ impl Uv {
         Ok(source)
     }
 
-    pub(crate) async fn install(uv_dir: &Path) -> Result<Self> {
+    pub(crate) async fn install(store: &Store, uv_dir: &Path) -> Result<Self> {
         // 1) Check `uv` alongside `prek` binary (e.g. `uv tool install prek --with uv`)
         let prek_exe = std::env::current_exe()?.canonicalize()?;
         if let Some(prek_dir) = prek_exe.parent() {
@@ -490,7 +507,7 @@ impl Uv {
         } else {
             Self::select_source().await?
         };
-        source.install(uv_dir).await?;
+        source.install(store, uv_dir).await?;
 
         Ok(Self::new(uv_path))
     }

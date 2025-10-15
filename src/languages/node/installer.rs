@@ -15,6 +15,7 @@ use crate::languages::download_and_extract;
 use crate::languages::node::NodeRequest;
 use crate::languages::node::version::NodeVersion;
 use crate::process::Cmd;
+use crate::store::Store;
 
 #[derive(Debug)]
 pub(crate) struct NodeResult {
@@ -96,7 +97,7 @@ impl NodeInstaller {
     }
 
     /// Install a version of Node.js.
-    pub(crate) async fn install(&self, request: &NodeRequest) -> Result<NodeResult> {
+    pub(crate) async fn install(&self, store: &Store, request: &NodeRequest) -> Result<NodeResult> {
         fs_err::tokio::create_dir_all(&self.root).await?;
 
         let _lock = LockedFile::acquire(self.root.join(".lock"), "node").await?;
@@ -115,7 +116,7 @@ impl NodeInstaller {
         let resolved_version = self.resolve_version(request).await?;
         trace!(version = %resolved_version, "Downloading node");
 
-        self.download(&resolved_version).await
+        self.download(store, &resolved_version).await
     }
 
     /// Get the installed version of Node.js.
@@ -173,7 +174,7 @@ impl NodeInstaller {
 
     // TODO: support mirror?
     /// Install a specific version of Node.js.
-    async fn download(&self, version: &NodeVersion) -> Result<NodeResult> {
+    async fn download(&self, store: &Store, version: &NodeVersion) -> Result<NodeResult> {
         let mut arch = match HOST.architecture {
             Architecture::X86_32(_) => "x86",
             Architecture::X86_64 => "x64",
@@ -201,7 +202,7 @@ impl NodeInstaller {
         let url = format!("https://nodejs.org/dist/v{}/{filename}", version.version());
         let target = self.root.join(version.to_string());
 
-        download_and_extract(&self.client, &url, &filename, async |extracted| {
+        download_and_extract(&self.client, &url, &filename, store, async |extracted| {
             if target.exists() {
                 debug!(target = %target.display(), "Removing existing node");
                 fs_err::tokio::remove_dir_all(&target).await?;

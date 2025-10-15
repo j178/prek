@@ -38,7 +38,7 @@ impl LanguageImpl for Golang {
             _ => unreachable!(),
         };
         let go = installer
-            .install(version)
+            .install(store, version)
             .await
             .context("Failed to install go")?;
 

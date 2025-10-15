@@ -263,6 +263,7 @@ async fn download_and_extract(
     client: &reqwest::Client,
     url: &str,
     filename: &str,
+    store: &Store,
     callback: impl AsyncFn(&Path) -> Result<()>,
 ) -> Result<()> {
     let response = client
@@ -285,7 +286,10 @@ async fn download_and_extract(
         .into_async_read()
         .compat();
 
-    let temp_dir = tempfile::tempdir()?;
+    let scratch_dir = store.scratch_path();
+    fs_err::tokio::create_dir_all(&scratch_dir).await?;
+
+    let temp_dir = tempfile::tempdir_in(&scratch_dir)?;
     debug!(url = %url, temp_dir = ?temp_dir.path(), "Downloading");
 
     let ext = ArchiveExtension::from_path(filename)?;
@@ -299,7 +303,7 @@ async fn download_and_extract(
 
     callback(&extracted).await?;
 
-    fs_err::tokio::remove_dir_all(temp_dir.path()).await?;
+    drop(temp_dir);
 
     Ok(())
 }
