@@ -758,3 +758,139 @@ fn fix_byte_order_marker_hook() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+#[cfg(unix)]
+fn check_symlinks_hook_unix() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-symlinks
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files
+    cwd.child("regular.txt").write_str("regular file")?;
+    cwd.child("target.txt").write_str("target content")?;
+
+    // Create valid symlink
+    std::os::unix::fs::symlink(
+        cwd.child("target.txt").path(),
+        cwd.child("valid_link.txt").path(),
+    )?;
+
+    // Create broken symlink
+    std::os::unix::fs::symlink(
+        cwd.child("nonexistent.txt").path(),
+        cwd.child("broken_link.txt").path(),
+    )?;
+
+    context.git_add(".");
+
+    // First run: should fail due to broken symlink
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for broken symlinks................................................Failed
+    - hook id: check-symlinks
+    - exit code: 1
+      broken_link.txt: Broken symlink
+
+    ----- stderr -----
+    "#);
+
+    // Remove broken symlink
+    std::fs::remove_file(cwd.child("broken_link.txt").path())?;
+    context.git_add(".");
+
+    // Second run: should pass
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for broken symlinks................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(windows)]
+fn check_symlinks_hook_windows() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-symlinks
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files
+    cwd.child("regular.txt").write_str("regular file")?;
+    cwd.child("target.txt").write_str("target content")?;
+
+    // Try to create valid symlink (may fail without admin/developer mode)
+    let valid_link_result = std::os::windows::fs::symlink_file(
+        cwd.child("target.txt").path(),
+        cwd.child("valid_link.txt").path(),
+    );
+
+    // Try to create broken symlink (may fail without admin/developer mode)
+    let broken_link_result = std::os::windows::fs::symlink_file(
+        cwd.child("nonexistent.txt").path(),
+        cwd.child("broken_link.txt").path(),
+    );
+
+    // Skip test if we can't create symlinks (insufficient permissions)
+    if valid_link_result.is_err() || broken_link_result.is_err() {
+        // Skipping test: insufficient permissions for symlink creation on Windows
+        return Ok(());
+    }
+
+    context.git_add(".");
+
+    // First run: should fail due to broken symlink
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for broken symlinks................................................Failed
+    - hook id: check-symlinks
+    - exit code: 1
+      broken_link.txt: Broken symlink
+
+    ----- stderr -----
+    "#);
+
+    // Remove broken symlink
+    std::fs::remove_file(cwd.child("broken_link.txt").path())?;
+    context.git_add(".");
+
+    // Second run: should pass
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for broken symlinks................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
