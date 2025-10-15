@@ -44,8 +44,7 @@ impl LanguageRequest {
         // - Node.js version passed down to `nodeenv`
         // - Rust version passed down to `rustup`
 
-        // TODO: support `system`? Does anyone use it?
-        if request == "default" || request.is_empty() {
+        if request == "default" || request == "system" || request.is_empty() {
             return Ok(LanguageRequest::Any);
         }
 
