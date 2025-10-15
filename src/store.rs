@@ -7,7 +7,7 @@ use anyhow::Result;
 use etcetera::BaseStrategy;
 use futures::StreamExt;
 use thiserror::Error;
-use tracing::{debug};
+use tracing::{debug, warn};
 
 use constants::env_vars::EnvVars;
 
@@ -15,6 +15,7 @@ use crate::config::RemoteRepo;
 use crate::fs::LockedFile;
 use crate::git::clone_repo;
 use crate::hook::InstallInfo;
+use crate::run::CONCURRENCY;
 use crate::workspace::HookInitReporter;
 
 #[derive(Debug, Error)]
@@ -120,13 +121,39 @@ impl Store {
     }
 
     /// Returns installed hooks in the store.
-    pub(crate) async fn installed_hooks(&self) -> impl Iterator<Item = InstallInfo> {
-        fs_err::read_dir(self.hooks_dir())
-            .ok()
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter_map(|entry| InstallInfo::from_env_path(&entry.path()).ok())
+    pub(crate) async fn installed_hooks(&self) -> Vec<Arc<InstallInfo>> {
+        let Ok(dirs) = fs_err::read_dir(self.hooks_dir()) else {
+            return vec![];
+        };
+
+        let mut tasks = futures::stream::iter(dirs)
+            .map(async |entry| {
+                let path = match entry {
+                    Ok(entry) => entry.path(),
+                    Err(err) => {
+                        warn!(%err, "Failed to read hook dir");
+                        return None;
+                    }
+                };
+                let info = match InstallInfo::from_env_path(&path).await {
+                    Ok(info) => info,
+                    Err(err) => {
+                        warn!(%err, path = %path.display(), "Skipping invalid installed hook");
+                        return None;
+                    }
+                };
+                Some(info)
+            })
+            .buffer_unordered(*CONCURRENCY);
+
+        let mut hooks = Vec::new();
+        while let Some(hook) = tasks.next().await {
+            if let Some(hook) = hook {
+                hooks.push(Arc::new(hook));
+            }
+        }
+
+        hooks
     }
 
     pub(crate) async fn lock_async(&self) -> Result<LockedFile, std::io::Error> {

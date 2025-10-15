@@ -271,12 +271,14 @@ pub async fn install_hooks(
     reporter: &HookInstallReporter,
 ) -> Result<Vec<InstalledHook>> {
     let num_hooks = hooks.len();
-    let mut installed_hooks = Vec::with_capacity(hooks.len());
+    let mut result = Vec::with_capacity(hooks.len());
+
     let store_hooks = Rc::new(
         store
             .installed_hooks()
             .await
-            .map(|info| LazyInstallInfo::new(Arc::new(info)))
+            .into_iter()
+            .map(LazyInstallInfo::new)
             .collect::<Vec<_>>(),
     );
 
@@ -307,7 +309,7 @@ pub async fn install_hooks(
                 for hook in hooks {
                     let mut matched_info = None;
 
-                    for env in newly_installed.iter() {
+                    for env in &newly_installed {
                         if let InstalledHook::Installed { info, .. } = env {
                             if info.matches(&hook) {
                                 matched_info = Some(info.clone());
@@ -370,18 +372,18 @@ pub async fn install_hooks(
         }
     }
 
-    while let Some(result) = futures.next().await {
-        installed_hooks.extend(result?);
+    while let Some(hooks) = futures.next().await {
+        result.extend(hooks?);
     }
     reporter.on_complete();
 
     debug_assert_eq!(
         num_hooks,
-        installed_hooks.len(),
+        result.len(),
         "Number of hooks installed should match the number of hooks provided"
     );
 
-    Ok(installed_hooks)
+    Ok(result)
 }
 
 /// Partition hooks into groups where hooks in the same group have same dependencies.
