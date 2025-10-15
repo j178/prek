@@ -985,3 +985,161 @@ fn detect_private_key_hook() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn check_xml_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-xml
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files
+    cwd.child("valid.xml").write_str(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <element>value</element>
+</root>"#,
+    )?;
+    cwd.child("invalid_unclosed.xml").write_str(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <element>value
+</root>"#,
+    )?;
+    cwd.child("invalid_mismatched.xml").write_str(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <element>value</different>
+</root>"#,
+    )?;
+    cwd.child("multiple_roots.xml").write_str(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<element>value</element>
+<another>value</another>"#,
+    )?;
+    cwd.child("empty.xml").touch()?;
+
+    context.git_add(".");
+
+    // First run: hooks should fail
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check xml................................................................Failed
+    - hook id: check-xml
+    - exit code: 1
+      invalid_mismatched.xml: Failed to xml parse (ill-formed document: expected `</element>`, but `</different>` was found)
+      empty.xml: Failed to xml parse (no element found)
+      invalid_unclosed.xml: Failed to xml parse (ill-formed document: expected `</element>`, but `</root>` was found)
+      multiple_roots.xml: Failed to xml parse (junk after document element)
+
+    ----- stderr -----
+    ");
+
+    // Fix the files
+    cwd.child("invalid_unclosed.xml").write_str(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <element>value</element>
+</root>"#,
+    )?;
+    cwd.child("invalid_mismatched.xml").write_str(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <element>value</element>
+</root>"#,
+    )?;
+    cwd.child("multiple_roots.xml").write_str(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <element>value</element>
+    <another>value</another>
+</root>"#,
+    )?;
+
+    context.git_add(".");
+
+    // Second run: hooks should now pass
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check xml................................................................Failed
+    - hook id: check-xml
+    - exit code: 1
+      empty.xml: Failed to xml parse (no element found)
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_xml_with_features() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-xml
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files with various XML features
+    cwd.child("with_attributes.xml").write_str(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<root xmlns="http://example.com">
+    <element id="1" type="test">value</element>
+</root>"#,
+    )?;
+    cwd.child("with_cdata.xml").write_str(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <element><![CDATA[Some <special> characters & symbols]]></element>
+</root>"#,
+    )?;
+    cwd.child("with_comments.xml").write_str(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <!-- This is a comment -->
+    <element>value</element>
+</root>"#,
+    )?;
+    cwd.child("with_doctype.xml").write_str(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root SYSTEM "root.dtd">
+<root>
+    <element>value</element>
+</root>"#,
+    )?;
+
+    context.git_add(".");
+
+    // All should pass
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check xml................................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
