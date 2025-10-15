@@ -11,8 +11,8 @@ use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
 use rustc_hash::FxHashMap;
 use tokio::io::AsyncWriteExt;
-use tokio::sync::Semaphore;
-use tracing::{debug, trace};
+use tokio::sync::{OnceCell, Semaphore};
+use tracing::{debug, trace, warn};
 use unicode_width::UnicodeWidthStr;
 
 use constants::env_vars::EnvVars;
@@ -25,7 +25,7 @@ use crate::config::{Language, Stage};
 use crate::fs::CWD;
 use crate::git;
 use crate::git::GIT_ROOT;
-use crate::hook::{Hook, InstalledHook};
+use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::printer::{Printer, Stdout};
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::Store;
@@ -222,6 +222,49 @@ fn set_env_vars(from_ref: Option<&String>, to_ref: Option<&String>, args: &RunEx
     }
 }
 
+#[derive(Debug)]
+struct LazyInstallInfo {
+    info: Arc<InstallInfo>,
+    health: OnceCell<bool>,
+}
+
+impl LazyInstallInfo {
+    fn new(info: Arc<InstallInfo>) -> Self {
+        Self {
+            info,
+            health: OnceCell::new(),
+        }
+    }
+
+    fn matches(&self, hook: &Hook) -> bool {
+        self.info.matches(hook)
+    }
+
+    fn info(&self) -> Arc<InstallInfo> {
+        self.info.clone()
+    }
+
+    async fn ensure_healthy(&self) -> bool {
+        let info = self.info.clone();
+        *self
+            .health
+            .get_or_init(|| async move {
+                match info.check_health().await {
+                    Ok(()) => true,
+                    Err(err) => {
+                        warn!(
+                            %err,
+                            path = %info.env_path.display(),
+                            "Skipping unhealthy installed hook"
+                        );
+                        false
+                    }
+                }
+            })
+            .await
+    }
+}
+
 pub async fn install_hooks(
     hooks: Vec<Arc<Hook>>,
     store: &Store,
@@ -229,7 +272,13 @@ pub async fn install_hooks(
 ) -> Result<Vec<InstalledHook>> {
     let num_hooks = hooks.len();
     let mut installed_hooks = Vec::with_capacity(hooks.len());
-    let store_hooks = Rc::new(store.installed_hooks().await);
+    let store_hooks = Rc::new(
+        store
+            .installed_hooks()
+            .await
+            .map(|info| LazyInstallInfo::new(Arc::new(info)))
+            .collect::<Vec<_>>(),
+    );
 
     // Group hooks by language to enable parallel installation across different languages.
     let mut hooks_by_language = FxHashMap::default();
@@ -256,27 +305,35 @@ pub async fn install_hooks(
                 let mut newly_installed = Vec::new();
 
                 for hook in hooks {
-                    // Find a matching installed hook environment.
-                    if let Some(info) = store_hooks
-                        .iter()
-                        .chain(newly_installed.iter().filter_map(|h| {
-                            if let InstalledHook::Installed { info, .. } = h {
-                                Some(info)
-                            } else {
-                                None
+                    let mut matched_info = None;
+
+                    for env in newly_installed.iter() {
+                        if let InstalledHook::Installed { info, .. } = env {
+                            if info.matches(&hook) {
+                                matched_info = Some(info.clone());
+                                break;
                             }
-                        }))
-                        .find(|info| info.matches(&hook))
-                    {
+                        }
+                    }
+
+                    if matched_info.is_none() {
+                        for env in store_hooks.iter() {
+                            if env.matches(&hook) {
+                                if env.ensure_healthy().await {
+                                    matched_info = Some(env.info());
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(info) = matched_info {
                         debug!(
                             "Found installed environment for hook `{}` at `{}`",
                             &hook,
                             info.env_path.display()
                         );
-                        hook_envs.push(InstalledHook::Installed {
-                            hook,
-                            info: info.clone(),
-                        });
+                        hook_envs.push(InstalledHook::Installed { hook, info });
                         continue;
                     }
 
