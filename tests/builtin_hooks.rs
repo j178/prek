@@ -894,3 +894,162 @@ fn check_symlinks_hook_windows() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn detect_private_key_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: detect-private-key
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files - various private key types
+    cwd.child("id_rsa")
+        .write_str("-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----\n")?;
+    cwd.child("id_dsa")
+        .write_str("-----BEGIN DSA PRIVATE KEY-----\nAAAAA...\n-----END DSA PRIVATE KEY-----\n")?;
+    cwd.child("id_ecdsa")
+        .write_str("-----BEGIN EC PRIVATE KEY-----\nMHc...\n-----END EC PRIVATE KEY-----\n")?;
+    cwd.child("id_ed25519").write_str(
+        "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNz...\n-----END OPENSSH PRIVATE KEY-----\n",
+    )?;
+    cwd.child("key.ppk")
+        .write_str("PuTTY-User-Key-File-2: ssh-rsa\nEncryption: none\n")?;
+    cwd.child("private.asc")
+        .write_str("-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: GnuPG...\n")?;
+    cwd.child("ta.key").write_str(
+        "#\n# 2048 bit OpenVPN static key\n#\n-----BEGIN OpenVPN Static key V1-----\n",
+    )?;
+    cwd.child("safe.txt")
+        .write_str("This is just a regular file\nwith some content\n")?;
+
+    context.git_add(".");
+
+    // First run: hooks should fail due to private keys
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    detect private key.......................................................Failed
+    - hook id: detect-private-key
+    - exit code: 1
+      Private key found: id_dsa
+      Private key found: id_rsa
+      Private key found: id_ecdsa
+      Private key found: ta.key
+      Private key found: private.asc
+      Private key found: id_ed25519
+      Private key found: key.ppk
+
+    ----- stderr -----
+    ");
+
+    // Remove all private keys
+    context.git_rm("id_rsa");
+    context.git_rm("id_dsa");
+    context.git_rm("id_ecdsa");
+    context.git_rm("id_ed25519");
+    context.git_rm("key.ppk");
+    context.git_rm("private.asc");
+    context.git_rm("ta.key");
+    context.git_clean();
+
+    context.git_add(".");
+
+    // Second run: hooks should now pass
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    detect private key.......................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn detect_private_key_in_middle_of_file() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: detect-private-key
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create a file with a key embedded in documentation
+    cwd.child("doc.txt").write_str(
+        "Some documentation\n\nHere is a key:\n-----BEGIN RSA PRIVATE KEY-----\ndata\n",
+    )?;
+    cwd.child("safe.txt")
+        .write_str("This file talks about BEGIN_RSA_PRIVATE_KEY but doesn't contain one\n")?;
+
+    context.git_add(".");
+
+    // Hook should detect the key even when it's not at the start
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    detect private key.......................................................Failed
+    - hook id: detect-private-key
+    - exit code: 1
+      Private key found: doc.txt
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn detect_private_key_empty_files() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: detect-private-key
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create empty and safe files
+    cwd.child("empty.txt").touch()?;
+    cwd.child("safe1.txt").write_str("Just normal content\n")?;
+    cwd.child("safe2.txt").write_str("No keys here!\n")?;
+
+    context.git_add(".");
+
+    // Hook should pass with no private keys
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    detect private key.......................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}

@@ -11,6 +11,7 @@ mod check_json;
 mod check_symlinks;
 mod check_toml;
 mod check_yaml;
+mod detect_private_key;
 mod fix_byte_order_marker;
 mod fix_end_of_file;
 mod fix_trailing_whitespace;
@@ -26,6 +27,7 @@ pub(crate) enum Implemented {
     CheckToml,
     CheckYaml,
     MixedLineEnding,
+    DetectPrivateKey,
 }
 
 impl FromStr for Implemented {
@@ -42,6 +44,7 @@ impl FromStr for Implemented {
             "check-symlinks" => Ok(Self::CheckSymlinks),
             "check-yaml" => Ok(Self::CheckYaml),
             "mixed-line-ending" => Ok(Self::MixedLineEnding),
+            "detect-private-key" => Ok(Self::DetectPrivateKey),
             _ => Err(()),
         }
     }
@@ -74,6 +77,7 @@ impl Implemented {
             Self::CheckToml => check_toml::check_toml(hook, filenames).await,
             Self::CheckYaml => check_yaml::check_yaml(hook, filenames).await,
             Self::MixedLineEnding => mixed_line_ending::mixed_line_ending(hook, filenames).await,
+            Self::DetectPrivateKey => detect_private_key::detect_private_key(hook, filenames).await,
         }
     }
 }
