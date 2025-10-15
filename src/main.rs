@@ -302,12 +302,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 writeln!(printer.stdout(), "{}", store.path().display().cyan())?;
                 Ok(ExitStatus::Success)
             }
-            CacheCommand::GC => {
-                writeln!(printer.stderr(), "Command not implemented yet")?;
-                Ok(ExitStatus::Failure)
-            }
+            CacheCommand::GC => cli::gc(&store, printer).await,
         },
         Command::Clean => cli::clean(&store, printer),
+        Command::GC => cli::gc(&store, printer).await,
         Command::ValidateConfig(args) => {
             show_settings!(args);
 
@@ -386,10 +384,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 printer,
             )
             .await
-        }
-        _ => {
-            writeln!(printer.stderr(), "Command not implemented yet")?;
-            Ok(ExitStatus::Failure)
         }
     }
 }

@@ -577,7 +577,7 @@ impl From<MetaHook> for ManifestHook {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteRepo {
     pub repo: String,
     pub rev: String,
