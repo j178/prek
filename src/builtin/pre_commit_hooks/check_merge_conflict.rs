@@ -3,6 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use clap::Parser;
 use futures::StreamExt;
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::git::get_git_dir;
 use crate::hook::Hook;
@@ -71,40 +72,29 @@ async fn is_in_merge() -> Result<bool> {
 }
 
 async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
-    let content = fs_err::tokio::read(file_base.join(filename)).await?;
+    let file = fs_err::tokio::File::open(file_base.join(filename)).await?;
+    let reader = BufReader::new(file);
+    let mut lines = reader.lines();
 
     let mut code = 0;
     let mut output = Vec::new();
     let mut line_number = 1;
-    let mut i = 0;
 
-    while i < content.len() {
-        // Find the start of this line
-        let line_start = i;
+    while let Some(line) = lines.next_line().await? {
+        let line_bytes = line.as_bytes();
 
-        // Find the end of this line (including line ending)
-        let mut line_end = i;
-        while line_end < content.len() && content[line_end] != b'\n' {
-            line_end += 1;
-        }
-        if line_end < content.len() && content[line_end] == b'\n' {
-            line_end += 1; // Include the \n
-        }
-
-        let line = &content[line_start..line_end];
-
-        // Check all patterns
         for pattern in CONFLICT_PATTERNS {
-            if line.starts_with(pattern) {
-                // Don't trim the pattern - display it as-is (minus any line endings)
-                let pattern_display = if pattern.ends_with(b"\r\n") {
-                    &pattern[..pattern.len() - 2]
-                } else if pattern.ends_with(b"\n") {
-                    &pattern[..pattern.len() - 1]
-                } else {
-                    pattern
-                };
-                let pattern_str = String::from_utf8_lossy(pattern_display);
+            // Strip line endings from pattern for comparison
+            let pattern_to_check = if pattern.ends_with(b"\r\n") {
+                &pattern[..pattern.len() - 2]
+            } else if pattern.ends_with(b"\n") {
+                &pattern[..pattern.len() - 1]
+            } else {
+                pattern
+            };
+
+            if line_bytes.starts_with(pattern_to_check) {
+                let pattern_str = String::from_utf8_lossy(pattern_to_check);
                 let error_message = format!(
                     "{}:{}: Merge conflict string {:?} found\n",
                     filename.display(),
@@ -118,7 +108,6 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
         }
 
         line_number += 1;
-        i = line_end;
     }
 
     Ok((code, output))
