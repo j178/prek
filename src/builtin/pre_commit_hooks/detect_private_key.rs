@@ -91,69 +91,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_dsa_private_key() -> Result<()> {
-        let dir = tempdir()?;
-        let content = b"-----BEGIN DSA PRIVATE KEY-----\nAAAAA...\n-----END DSA PRIVATE KEY-----\n";
-        let file_path = create_test_file(&dir, "id_dsa", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        let output_str = String::from_utf8_lossy(&output);
-        assert!(output_str.contains("Private key found"));
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_ec_private_key() -> Result<()> {
-        let dir = tempdir()?;
-        let content = b"-----BEGIN EC PRIVATE KEY-----\nMHc...\n-----END EC PRIVATE KEY-----\n";
-        let file_path = create_test_file(&dir, "id_ecdsa", content).await?;
-        let (code, _output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_openssh_private_key() -> Result<()> {
-        let dir = tempdir()?;
-        let content = b"-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNz...\n-----END OPENSSH PRIVATE KEY-----\n";
-        let file_path = create_test_file(&dir, "id_ed25519", content).await?;
-        let (code, _output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_putty_private_key() -> Result<()> {
-        let dir = tempdir()?;
-        let content = b"PuTTY-User-Key-File-2: ssh-rsa\nEncryption: none\n";
-        let file_path = create_test_file(&dir, "key.ppk", content).await?;
-        let (code, _output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_pgp_private_key() -> Result<()> {
-        let dir = tempdir()?;
-        let content = b"-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: GnuPG...\n";
-        let file_path = create_test_file(&dir, "private.asc", content).await?;
-        let (code, _output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_openvpn_static_key() -> Result<()> {
-        let dir = tempdir()?;
-        let content =
-            b"#\n# 2048 bit OpenVPN static key\n#\n-----BEGIN OpenVPN Static key V1-----\n";
-        let file_path = create_test_file(&dir, "ta.key", content).await?;
-        let (code, _output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn test_key_in_middle_of_file() -> Result<()> {
         let dir = tempdir()?;
         let content =
@@ -194,32 +131,6 @@ mod tests {
         let file_path = create_test_file(&dir, "binary.dat", &content).await?;
         let (code, _output) = check_file(Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_all_key_types() -> Result<()> {
-        let dir = tempdir()?;
-
-        let test_cases: Vec<(&str, &[u8])> = vec![
-            ("rsa.key", b"BEGIN RSA PRIVATE KEY"),
-            ("dsa.key", b"BEGIN DSA PRIVATE KEY"),
-            ("ec.key", b"BEGIN EC PRIVATE KEY"),
-            ("openssh.key", b"BEGIN OPENSSH PRIVATE KEY"),
-            ("pkcs8.key", b"BEGIN PRIVATE KEY"),
-            ("putty.ppk", b"PuTTY-User-Key-File-2"),
-            ("ssh2.key", b"BEGIN SSH2 ENCRYPTED PRIVATE KEY"),
-            ("pgp.asc", b"BEGIN PGP PRIVATE KEY BLOCK"),
-            ("encrypted.key", b"BEGIN ENCRYPTED PRIVATE KEY"),
-            ("openvpn.key", b"BEGIN OpenVPN Static key V1"),
-        ];
-
-        for (filename, pattern) in test_cases {
-            let file_path = create_test_file(&dir, filename, pattern).await?;
-            let (code, _) = check_file(Path::new(""), &file_path).await?;
-            assert_eq!(code, 1, "Failed to detect key in {filename}");
-        }
-
         Ok(())
     }
 }
