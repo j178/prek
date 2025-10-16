@@ -252,6 +252,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.directory,
                 args.last_commit,
                 args.show_diff_on_failure,
+                args.fail_fast,
                 args.dry_run,
                 cli.globals.refresh,
                 args.extra,
