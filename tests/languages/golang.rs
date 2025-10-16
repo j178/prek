@@ -1,6 +1,9 @@
+use std::process::Command;
+
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::PathChild;
+use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use constants::env_vars::EnvVars;
+use constants::{CONFIG_FILE, MANIFEST_FILE};
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -140,6 +143,29 @@ fn remote_hook() {
     let context = TestContext::new();
     context.init_project();
 
+    // Run hooks with system found go.
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/prek-test-repos/golang-hooks
+            rev: v1.0
+            hooks:
+              - id: echo
+                verbose: true
+        "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo.....................................................................Passed
+    - hook id: echo
+    - duration: [TIME]
+      .pre-commit-config.yaml
+
+    ----- stderr -----
+    ");
+
     // Test that `additional_dependencies` are installed correctly.
     context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
@@ -202,28 +228,89 @@ fn remote_hook() {
 
     ----- stderr -----
     ");
+}
 
-    // Run hooks with system found go.
-    context.write_pre_commit_config(indoc::indoc! {r"
+/// Fix <https://github.com/j178/prek/issues/901>
+#[test]
+fn local_additional_deps() -> anyhow::Result<()> {
+    let go_hook = TestContext::new();
+    go_hook.init_project();
+    go_hook.configure_git_author();
+    go_hook.disable_auto_crlf();
+
+    // Create a local go hook with additional_dependencies.
+    go_hook
+        .work_dir()
+        .child("go.mod")
+        .write_str(indoc::indoc! {r"
+        module example.com/go-hook
+    "})?;
+    go_hook
+        .work_dir()
+        .child("main.go")
+        .write_str(indoc::indoc! {r#"
+        package main
+
+        func main() {
+            println("Hello, World!")
+        }
+    "#})?;
+    go_hook.work_dir().child("cmd").create_dir_all()?;
+    go_hook
+        .work_dir()
+        .child("cmd/main.go")
+        .write_str(indoc::indoc! {r#"
+        package main
+
+        func main() {
+            println("Hello, Utility!")
+        }
+    "#})?;
+    go_hook
+        .work_dir()
+        .child(MANIFEST_FILE)
+        .write_str(indoc::indoc! {r"
+        - id: go-hook
+          name: go-hook
+          entry: cmd
+          language: golang
+          additional_dependencies: [ ./cmd ]
+    "})?;
+    go_hook.git_add(".");
+    go_hook.git_commit("Initial commit");
+    Command::new("git")
+        .args(["tag", "v1.0", "-m", "v1.0"])
+        .current_dir(go_hook.work_dir())
+        .output()?;
+
+    let context = TestContext::new();
+    context.init_project();
+    let work_dir = context.work_dir();
+
+    let hook_url = go_hook.work_dir().to_str().unwrap();
+    work_dir
+        .child(CONFIG_FILE)
+        .write_str(&indoc::formatdoc! {r"
         repos:
-          - repo: https://github.com/prek-test-repos/golang-hooks
+          - repo: {hook_url}
             rev: v1.0
             hooks:
-              - id: echo
+              - id: go-hook
                 verbose: true
-                language_version: '1.24.5'
-        "});
+   ", hook_url = hook_url})?;
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    echo.....................................................................Passed
-    - hook id: echo
+    go-hook..................................................................Passed
+    - hook id: go-hook
     - duration: [TIME]
-      .pre-commit-config.yaml
+      Hello, Utility!
 
     ----- stderr -----
     ");
+
+    Ok(())
 }
