@@ -1793,6 +1793,7 @@ fn selectors_completion() -> Result<()> {
     --last-commit	Run hooks against the last commit. Equivalent to `--from-ref HEAD~1 --to-ref HEAD`
     --hook-stage	The stage during which the hook is fired
     --show-diff-on-failure	When hooks fail, run `git diff` directly afterward
+    --fail-fast	Stop running hooks after the first failure
     --dry-run	Do not run the hooks, but print the hooks that would have been run
     --config	Path to alternate config file
     --cd	Change to directory before running
