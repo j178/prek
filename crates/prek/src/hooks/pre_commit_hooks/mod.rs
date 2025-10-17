@@ -24,6 +24,7 @@ mod fix_end_of_file;
 mod fix_trailing_whitespace;
 mod mixed_line_ending;
 mod no_commit_to_branch;
+mod pretty_format_json;
 mod shebangs;
 
 pub(crate) use check_added_large_files::check_added_large_files;
@@ -45,6 +46,7 @@ pub(crate) use fix_end_of_file::fix_end_of_file;
 pub(crate) use fix_trailing_whitespace::fix_trailing_whitespace;
 pub(crate) use mixed_line_ending::mixed_line_ending;
 pub(crate) use no_commit_to_branch::no_commit_to_branch;
+pub(crate) use pretty_format_json::pretty_format_json;
 
 /// Hooks from `https://github.com/pre-commit/pre-commit-hooks`.
 #[derive(strum::EnumString)]
@@ -68,6 +70,7 @@ pub(crate) enum PreCommitHooks {
     MixedLineEnding,
     DetectPrivateKey,
     NoCommitToBranch,
+    PrettyFormatJson,
     TrailingWhitespace,
 }
 
@@ -105,6 +108,7 @@ impl PreCommitHooks {
             Self::MixedLineEnding => mixed_line_ending(hook, filenames).await,
             Self::DetectPrivateKey => detect_private_key(hook, filenames).await,
             Self::NoCommitToBranch => no_commit_to_branch(hook).await,
+            Self::PrettyFormatJson => pretty_format_json(hook, filenames).await,
             Self::TrailingWhitespace => fix_trailing_whitespace(hook, filenames).await,
         }
     }

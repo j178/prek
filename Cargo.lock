@@ -2166,6 +2166,7 @@ dependencies = [
  "serde_json",
  "serde_stacker",
  "shlex",
+ "similar",
  "strum",
  "target-lexicon",
  "tempfile",
