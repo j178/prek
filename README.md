@@ -2,7 +2,7 @@
 
 # prek
 
-<img width="220" alt="prek" src="./docs/assets/logo_512.webp" />
+<img width="220" alt="prek" src="./docs/assets/logo.webp" />
 
 [![CI](https://github.com/j178/prek/actions/workflows/ci.yml/badge.svg)](https://github.com/j178/prek/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/github/j178/prek/graph/badge.svg?token=MP6TY24F43)](https://codecov.io/github/j178/prek)
@@ -30,7 +30,7 @@ while also providing some additional long-requested features.
 ## Features
 
 - 🚀 A single binary with no dependencies, does not require Python or any other runtime.
-- ⚡ About [10x faster](https://prek.j178.dev/benchmark/) than `pre-commit` and uses only half the disk space.
+- ⚡ [Faster](https://prek.j178.dev/benchmark/) than `pre-commit` and uses only half the disk space.
 - 🔄 Fully compatible with the original pre-commit configurations and hooks.
 - 🏗️ Built-in support for monorepos (i.e. [workspace mode](https://prek.j178.dev/workspace/)).
 - 🐍 Integration with [`uv`](https://github.com/astral-sh/uv) for managing Python virtual environments and dependencies.
@@ -60,9 +60,9 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 <!-- why:start -->
 ## Why prek?
 
-### prek is way faster
+### prek is faster
 
-- It is about [10x faster](https://prek.j178.dev/benchmark/) than `pre-commit` and uses only half the disk space.
+- It is [multiple times faster](https://prek.j178.dev/benchmark/) than `pre-commit` and takes up half the disk space.
 - It redesigned how hook environments and toolchains are managed, they are all shared between hooks, which reduces the disk space usage and speeds up the installation process.
 - Repositories are cloned in parallel, and hooks are installed in parallel if their dependencies are disjoint.
 - It uses [`uv`](https://github.com/astral-sh/uv) for creating Python virtualenvs and installing dependencies, which is known for its speed and efficiency.
@@ -108,7 +108,7 @@ On Linux and macOS:
 
 <!-- linux-standalone-install:start -->
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.8/prek-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.9/prek-installer.sh | sh
 ```
 <!-- linux-standalone-install:end -->
 
@@ -116,7 +116,7 @@ On Windows:
 
 <!-- windows-standalone-install:start -->
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.8/prek-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.9/prek-installer.ps1 | iex"
 ```
 <!-- windows-standalone-install:end -->
 

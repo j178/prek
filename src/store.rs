@@ -126,39 +126,34 @@ impl Store {
             return vec![];
         };
 
-        debug!("Checking health of installed hooks");
         let mut tasks = futures::stream::iter(dirs)
             .map(async |entry| {
                 let path = match entry {
                     Ok(entry) => entry.path(),
                     Err(err) => {
-                        warn!(?err, "Failed to read hook dir");
+                        warn!(%err, "Failed to read hook dir");
                         return None;
                     }
                 };
                 let info = match InstallInfo::from_env_path(&path).await {
                     Ok(info) => info,
                     Err(err) => {
-                        warn!(?err, path = %path.display(), "Skipping invalid installed hook");
+                        warn!(%err, path = %path.display(), "Skipping invalid installed hook");
                         return None;
                     }
                 };
-                if let Err(e) = info.language.check_health(&info).await {
-                    warn!(?e, path = %path.display(), "Skipping unhealthy installed hook");
-                    return None;
-                }
                 Some(info)
             })
             .buffer_unordered(*CONCURRENCY);
 
-        let mut healthy_hooks = Vec::new();
+        let mut hooks = Vec::new();
         while let Some(hook) = tasks.next().await {
             if let Some(hook) = hook {
-                healthy_hooks.push(Arc::new(hook));
+                hooks.push(Arc::new(hook));
             }
         }
 
-        healthy_hooks
+        hooks
     }
 
     pub(crate) async fn lock_async(&self) -> Result<LockedFile, std::io::Error> {

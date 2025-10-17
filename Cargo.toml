@@ -13,7 +13,7 @@ tracing = { version = "0.1.40" }
 
 [package]
 name = "prek"
-version = "0.2.8"
+version = "0.2.9"
 authors = ["j178 <hi@j178.dev>"]
 description = "Better `pre-commit`, re-engineered in Rust"
 repository = { workspace = true }
@@ -64,6 +64,7 @@ liblzma = { version = "*", features = ["static"] }
 memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
 path-clean = { version = "1.0.1" }
+quick-xml = { version = "0.38" }
 rand = { version = "0.9.0" }
 rayon = { version = "1.10.0" }
 reqwest = { version = "0.12.9", default-features = false, features = ["http2", "stream", "json", "rustls-tls-webpki-roots"] }

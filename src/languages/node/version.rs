@@ -307,9 +307,9 @@ mod tests {
     }
 
     #[test]
-    fn test_node_request_satisfied_by() {
+    fn test_node_request_satisfied_by() -> anyhow::Result<()> {
         let mut install_info =
-            InstallInfo::new(Language::Node, FxHashSet::default(), Path::new("."));
+            InstallInfo::new(Language::Node, FxHashSet::default(), Path::new("."))?;
         install_info
             .with_language_version(semver::Version::new(12, 18, 3))
             .with_toolchain(PathBuf::from("/usr/bin/node"))
@@ -347,5 +347,7 @@ mod tests {
 
         let request = NodeRequest::Range(semver::VersionReq::parse(">=13.0").unwrap());
         assert!(!request.satisfied_by(&install_info));
+
+        Ok(())
     }
 }

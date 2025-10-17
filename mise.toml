@@ -5,7 +5,6 @@ cargo.binstall = true
 # For snapshot testing
 cargo-insta = "latest"
 "cargo:cargo-nextest" = "latest"
-"cargo:cargo-shear" = "latest"
 # For pre-commit hooks
 prek = "latest"
 

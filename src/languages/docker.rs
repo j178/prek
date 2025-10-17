@@ -196,7 +196,7 @@ impl LanguageImpl for Docker {
             hook.language,
             hook.dependencies().clone(),
             &store.hooks_dir(),
-        );
+        )?;
         let installed_hook = InstalledHook::Installed {
             hook,
             info: Arc::new(info),

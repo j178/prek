@@ -8,7 +8,6 @@ use std::sync::{Arc, OnceLock};
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use constants::MANIFEST_FILE;
-use rand::Rng;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -41,6 +40,9 @@ pub(crate) enum Error {
         #[source]
         error: config::Error,
     },
+
+    #[error("Failed to create directory for hook environment")]
+    TmpDir(#[from] std::io::Error),
 }
 
 #[derive(Debug, Clone)]
@@ -556,31 +558,28 @@ impl Hash for InstallInfo {
     }
 }
 
-// TODO: detect collision
-fn random_directory() -> String {
-    rand::rng()
-        .sample_iter(&rand::distr::Alphanumeric)
-        .take(20)
-        .map(char::from)
-        .collect()
-}
-
 impl InstallInfo {
     pub(crate) fn new(
         language: Language,
         dependencies: FxHashSet<String>,
         hooks_dir: &Path,
-    ) -> Self {
-        let env = random_directory();
+    ) -> Result<Self, Error> {
+        fs_err::create_dir_all(hooks_dir)?;
 
-        Self {
+        let env_path = tempfile::Builder::new()
+            .prefix(&format!("{}-", language.as_str()))
+            .rand_bytes(20)
+            .tempdir_in(hooks_dir)?
+            .keep();
+
+        Ok(Self {
             language,
             dependencies,
-            env_path: hooks_dir.join(format!("{}-{env}", language.as_str())),
+            env_path,
             language_version: semver::Version::new(0, 0, 0),
             toolchain: PathBuf::new(),
             extra: FxHashMap::default(),
-        }
+        })
     }
 
     pub(crate) async fn from_env_path(path: &Path) -> Result<Self> {

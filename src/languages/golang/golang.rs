@@ -46,7 +46,7 @@ impl LanguageImpl for Golang {
             hook.language,
             hook.dependencies().clone(),
             &store.hooks_dir(),
-        );
+        )?;
         info.with_toolchain(go.bin().to_path_buf())
             .with_language_version(go.version().deref().clone());
 
@@ -95,12 +95,11 @@ impl LanguageImpl for Golang {
                 .await?;
         }
         for dep in &hook.additional_dependencies {
-            go_install_cmd()
-                .arg(dep)
-                .remove_git_env()
-                .check(true)
-                .output()
-                .await?;
+            let mut cmd = go_install_cmd();
+            if let Some(repo) = hook.repo_path() {
+                cmd.current_dir(repo);
+            }
+            cmd.arg(dep).remove_git_env().check(true).output().await?;
         }
 
         reporter.on_install_complete(progress);

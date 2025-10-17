@@ -217,9 +217,9 @@ mod tests {
     }
 
     #[test]
-    fn test_satisfied_by() {
+    fn test_satisfied_by() -> anyhow::Result<()> {
         let mut install_info =
-            InstallInfo::new(Language::Python, FxHashSet::default(), Path::new("."));
+            InstallInfo::new(Language::Python, FxHashSet::default(), Path::new("."))?;
         install_info
             .with_language_version(semver::Version::new(3, 12, 1))
             .with_toolchain(PathBuf::from("/usr/bin/python3.12"));
@@ -244,5 +244,7 @@ mod tests {
 
         let range_req = semver::VersionReq::parse(">=4.0").unwrap();
         assert!(!PythonRequest::Range(range_req, ">=4.0".to_string()).satisfied_by(&install_info));
+
+        Ok(())
     }
 }

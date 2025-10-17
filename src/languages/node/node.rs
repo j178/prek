@@ -57,7 +57,7 @@ impl LanguageImpl for Node {
             hook.language,
             hook.dependencies().clone(),
             &store.hooks_dir(),
-        );
+        )?;
 
         let lts = serde_json::to_string(&node.version().lts).context("Failed to serialize LTS")?;
         info.with_toolchain(node.node().to_path_buf());

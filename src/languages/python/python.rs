@@ -98,7 +98,7 @@ impl LanguageImpl for Python {
             hook.language,
             hook.dependencies().clone(),
             &store.hooks_dir(),
-        );
+        )?;
 
         debug!(%hook, target = %info.env_path.display(), "Installing environment");
 
@@ -280,7 +280,10 @@ impl Python {
             .arg("--python-preference")
             .arg("managed")
             .arg("--no-project")
-            .arg("--no-config");
+            .arg("--no-config")
+            // `--managed_python` conflicts with `--python-preference`, ignore any user setting
+            .env_remove(EnvVars::UV_MANAGED_PYTHON)
+            .env_remove(EnvVars::UV_NO_MANAGED_PYTHON);
 
         if set_install_dir {
             cmd.env(

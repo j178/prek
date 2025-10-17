@@ -200,6 +200,7 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-run--directory"><a href="#prek-run--directory"><code>--directory</code></a>, <code>-d</code> <i>dir</i></dt><dd><p>Run hooks on all files in the specified directories.</p>
 <p>You can specify multiple directories. It can be used in conjunction with <code>--files</code>.</p>
 </dd><dt id="prek-run--dry-run"><a href="#prek-run--dry-run"><code>--dry-run</code></a></dt><dd><p>Do not run the hooks, but print the hooks that would have been run</p>
+</dd><dt id="prek-run--fail-fast"><a href="#prek-run--fail-fast"><code>--fail-fast</code></a></dt><dd><p>Stop running hooks after the first failure</p>
 </dd><dt id="prek-run--files"><a href="#prek-run--files"><code>--files</code></a> <i>files</i></dt><dd><p>Specific filenames to run hooks on</p>
 </dd><dt id="prek-run--from-ref"><a href="#prek-run--from-ref"><code>--from-ref</code></a>, <code>--source</code>, <code>-s</code> <i>from-ref</i></dt><dd><p>The original ref in a <code>&lt;from_ref&gt;...&lt;to_ref&gt;</code> diff expression. Files changed in this diff will be run through the hooks</p>
 </dd><dt id="prek-run--help"><a href="#prek-run--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
@@ -723,6 +724,7 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 </dd><dt id="prek-try-repo--directory"><a href="#prek-try-repo--directory"><code>--directory</code></a>, <code>-d</code> <i>dir</i></dt><dd><p>Run hooks on all files in the specified directories.</p>
 <p>You can specify multiple directories. It can be used in conjunction with <code>--files</code>.</p>
 </dd><dt id="prek-try-repo--dry-run"><a href="#prek-try-repo--dry-run"><code>--dry-run</code></a></dt><dd><p>Do not run the hooks, but print the hooks that would have been run</p>
+</dd><dt id="prek-try-repo--fail-fast"><a href="#prek-try-repo--fail-fast"><code>--fail-fast</code></a></dt><dd><p>Stop running hooks after the first failure</p>
 </dd><dt id="prek-try-repo--files"><a href="#prek-try-repo--files"><code>--files</code></a> <i>files</i></dt><dd><p>Specific filenames to run hooks on</p>
 </dd><dt id="prek-try-repo--from-ref"><a href="#prek-try-repo--from-ref"><code>--from-ref</code></a>, <code>--source</code>, <code>-s</code> <i>from-ref</i></dt><dd><p>The original ref in a <code>&lt;from_ref&gt;...&lt;to_ref&gt;</code> diff expression. Files changed in this diff will be run through the hooks</p>
 </dd><dt id="prek-try-repo--help"><a href="#prek-try-repo--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>

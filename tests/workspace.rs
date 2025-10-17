@@ -792,3 +792,21 @@ fn skips() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn workspace_no_projects() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config("repos: []");
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--skip").arg("."), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `.pre-commit-config.yaml` found in the current directory or parent directories in the repository
+    ");
+}

@@ -111,6 +111,9 @@ impl LanguageImpl for Pygrep {
                 .arg("--no-python-downloads")
                 .arg("--no-config")
                 .arg("--no-project")
+                // `--managed_python` conflicts with `--python-preference`, ignore any user setting
+                .env_remove(EnvVars::UV_MANAGED_PYTHON)
+                .env_remove(EnvVars::UV_NO_MANAGED_PYTHON)
                 .check(false)
                 .output()
                 .await?;
@@ -148,7 +151,7 @@ impl LanguageImpl for Pygrep {
             hook.language,
             hook.dependencies().clone(),
             &store.hooks_dir(),
-        );
+        )?;
         info.with_toolchain(python);
 
         fs_err::tokio::create_dir_all(&info.env_path).await?;

@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.9
+
+Released on 2025-10-16.
+
+### Enhancements
+
+- Lazily check hook env health ([#897](https://github.com/j178/prek/pull/897))
+- Implement `check-symlinks` as builtin hook ([#895](https://github.com/j178/prek/pull/895))
+- Implement `detect-private-key` as builtin hook ([#893](https://github.com/j178/prek/pull/893))
+
+### Bug fixes
+
+- Download files to scratch directory to avoid cross-filesystem rename ([#889](https://github.com/j178/prek/pull/889))
+- Fix golang hook install local dependencies ([#902](https://github.com/j178/prek/pull/902))
+- Ignore the user-set `UV_MANAGED_PYTHON` ([#900](https://github.com/j178/prek/pull/900))
+
+### Other changes
+
+- Add package metadata for cargo-binstall ([#882](https://github.com/j178/prek/pull/882))
+
+### Contributors
+
+- @j178
+- @lmmx
+
 ## 0.2.8
 
 Released on 2025-10-14.
