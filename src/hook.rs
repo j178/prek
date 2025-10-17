@@ -556,13 +556,23 @@ impl Hash for InstallInfo {
     }
 }
 
-// TODO: detect collision
-fn random_directory() -> String {
-    rand::rng()
-        .sample_iter(&rand::distr::Alphanumeric)
-        .take(20)
-        .map(char::from)
-        .collect()
+const HOOK_DIR_NAME_LENGTH: usize = 20;
+const HOOK_DIR_MAX_ATTEMPTS: usize = 256;
+
+fn random_directory(base_dir: &Path, prefix: &str) -> PathBuf {
+    for _ in 0..HOOK_DIR_MAX_ATTEMPTS {
+        let suffix: String = rand::rng()
+            .sample_iter(&rand::distr::Alphanumeric)
+            .take(HOOK_DIR_NAME_LENGTH)
+            .map(char::from)
+            .collect();
+        let candidate = base_dir.join(format!("{prefix}-{suffix}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+
+    panic!("failed to allocate unique hook directory after {HOOK_DIR_MAX_ATTEMPTS} attempts");
 }
 
 impl InstallInfo {
@@ -571,12 +581,10 @@ impl InstallInfo {
         dependencies: FxHashSet<String>,
         hooks_dir: &Path,
     ) -> Self {
-        let env = random_directory();
-
         Self {
             language,
             dependencies,
-            env_path: hooks_dir.join(format!("{}-{env}", language.as_str())),
+            env_path: random_directory(hooks_dir, language.as_str()),
             language_version: semver::Version::new(0, 0, 0),
             toolchain: PathBuf::new(),
             extra: FxHashMap::default(),
