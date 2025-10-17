@@ -72,6 +72,29 @@ fn run_basic() -> Result<()> {
 }
 
 #[test]
+fn run_in_non_git_repo() {
+    let context = TestContext::new();
+
+    let mut filters = context.filters();
+    filters.push((r"exit code: ", "exit status: "));
+
+    cmd_snapshot!(filters, context.run(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: command `get git root` exited with an error:
+
+    [status]
+    exit status: 128
+
+    [stderr]
+    fatal: not a git repository (or any of the parent directories): .git
+    ");
+}
+
+#[test]
 fn invalid_config() {
     let context = TestContext::new();
     context.init_project();

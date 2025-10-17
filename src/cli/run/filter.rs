@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use fancy_regex::Regex;
 use itertools::{Either, Itertools};
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
@@ -222,7 +222,13 @@ pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<V
     let git_root = GIT_ROOT.as_ref()?;
 
     // The workspace root relative to the git root.
-    let relative_root = root.strip_prefix(git_root)?;
+    let relative_root = root.strip_prefix(git_root).with_context(|| {
+        format!(
+            "Workspace root `{}` is not under git root `{}`",
+            root.display(),
+            git_root.display()
+        )
+    })?;
 
     let filenames = collect_files_from_args(
         git_root,
