@@ -766,6 +766,55 @@ fn fail_fast() {
     "#);
 }
 
+/// Test --fail-fast CLI flag stops execution after first failure. 
+#[test]
+fn fail_fast_cli_flag() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: failing-hook
+                name: failing-hook
+                language: system
+                entry: python3 -c 'print("Failed"); exit(1)'
+                always_run: true
+              - id: passing-hook
+                name: passing-hook
+                language: system
+                entry: python3 -c 'print("Passed")'
+                always_run: true
+    "#});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    failing-hook.............................................................Failed
+    - hook id: failing-hook
+    - exit code: 1
+      Failed
+    passing-hook.............................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context.filters(), context.run().arg("--fail-fast"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    failing-hook.............................................................Failed
+    - hook id: failing-hook
+    - exit code: 1
+      Failed
+
+    ----- stderr -----
+    "#);
+}
+
 /// Run from a subdirectory. File arguments should be fixed to be relative to the root.
 #[test]
 fn subdirectory() -> Result<()> {
