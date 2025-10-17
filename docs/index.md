@@ -1,7 +1,7 @@
 # prek
 
 <div align="center">
-  <img width="220" alt="prek" src="/assets/logo_512.webp" />
+  <img width="220" alt="prek" src="/assets/logo.webp" />
 </div>
 
 {%
