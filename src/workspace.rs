@@ -616,6 +616,10 @@ impl Workspace {
         if let Some(selectors) = selectors {
             projects.retain(|p| selectors.matches_path(p.relative_path()));
         }
+        if projects.is_empty() {
+            return Err(MissingPreCommitConfig);
+        }
+
         let mut workspace = Self { root, projects };
         workspace.sort_and_index_projects();
 
@@ -685,7 +689,9 @@ impl Workspace {
             });
 
         let projects = projects.into_inner().unwrap()?;
-        debug_assert!(!projects.is_empty(), "At least one project should be found");
+        if projects.is_empty() {
+            return Err(MissingPreCommitConfig);
+        }
 
         Ok(projects)
     }

@@ -72,6 +72,29 @@ fn run_basic() -> Result<()> {
 }
 
 #[test]
+fn run_in_non_git_repo() {
+    let context = TestContext::new();
+
+    let mut filters = context.filters();
+    filters.push((r"exit code: ", "exit status: "));
+
+    cmd_snapshot!(filters, context.run(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: command `get git root` exited with an error:
+
+    [status]
+    exit status: 128
+
+    [stderr]
+    fatal: not a git repository (or any of the parent directories): .git
+    ");
+}
+
+#[test]
 fn invalid_config() {
     let context = TestContext::new();
     context.init_project();
@@ -761,6 +784,55 @@ fn fail_fast() {
     - hook id: trailing-whitespace
     - exit code: 1
       Fixing files
+
+    ----- stderr -----
+    "#);
+}
+
+/// Test --fail-fast CLI flag stops execution after first failure.
+#[test]
+fn fail_fast_cli_flag() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: failing-hook
+                name: failing-hook
+                language: system
+                entry: python3 -c 'print("Failed"); exit(1)'
+                always_run: true
+              - id: passing-hook
+                name: passing-hook
+                language: system
+                entry: python3 -c 'print("Passed")'
+                always_run: true
+    "#});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    failing-hook.............................................................Failed
+    - hook id: failing-hook
+    - exit code: 1
+      Failed
+    passing-hook.............................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    cmd_snapshot!(context.filters(), context.run().arg("--fail-fast"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    failing-hook.............................................................Failed
+    - hook id: failing-hook
+    - exit code: 1
+      Failed
 
     ----- stderr -----
     "#);
@@ -1793,6 +1865,7 @@ fn selectors_completion() -> Result<()> {
     --last-commit	Run hooks against the last commit. Equivalent to `--from-ref HEAD~1 --to-ref HEAD`
     --hook-stage	The stage during which the hook is fired
     --show-diff-on-failure	When hooks fail, run `git diff` directly afterward
+    --fail-fast	Stop running hooks after the first failure
     --dry-run	Do not run the hooks, but print the hooks that would have been run
     --config	Path to alternate config file
     --cd	Change to directory before running

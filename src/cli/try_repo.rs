@@ -196,6 +196,7 @@ pub(crate) async fn try_repo(
         run_args.directory,
         run_args.last_commit,
         run_args.show_diff_on_failure,
+        run_args.fail_fast,
         run_args.dry_run,
         refresh,
         run_args.extra,

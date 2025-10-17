@@ -120,6 +120,7 @@ pub(crate) async fn hook_impl(
         vec![],
         false,
         false,
+        run_args.fail_fast,
         false,
         false,
         run_args.extra,

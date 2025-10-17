@@ -450,6 +450,10 @@ pub(crate) struct RunArgs {
     #[arg(long)]
     pub(crate) show_diff_on_failure: bool,
 
+    /// Stop running hooks after the first failure.
+    #[arg(long)]
+    pub(crate) fail_fast: bool,
+
     /// Do not run the hooks, but print the hooks that would have been run.
     #[arg(long)]
     pub(crate) dry_run: bool,

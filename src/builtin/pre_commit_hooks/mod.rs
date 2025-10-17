@@ -8,6 +8,7 @@ use crate::hook::Hook;
 
 mod check_added_large_files;
 mod check_json;
+mod check_merge_conflict;
 mod check_symlinks;
 mod check_toml;
 mod check_xml;
@@ -25,6 +26,7 @@ pub(crate) enum Implemented {
     FixByteOrderMarker,
     CheckJson,
     CheckSymlinks,
+    CheckMergeConflict,
     CheckToml,
     CheckXml,
     CheckYaml,
@@ -42,6 +44,7 @@ impl FromStr for Implemented {
             "end-of-file-fixer" => Ok(Self::EndOfFileFixer),
             "fix-byte-order-marker" => Ok(Self::FixByteOrderMarker),
             "check-json" => Ok(Self::CheckJson),
+            "check-merge-conflict" => Ok(Self::CheckMergeConflict),
             "check-toml" => Ok(Self::CheckToml),
             "check-symlinks" => Ok(Self::CheckSymlinks),
             "check-xml" => Ok(Self::CheckXml),
@@ -77,6 +80,9 @@ impl Implemented {
             }
             Self::CheckJson => check_json::check_json(hook, filenames).await,
             Self::CheckSymlinks => check_symlinks::check_symlinks(hook, filenames).await,
+            Self::CheckMergeConflict => {
+                check_merge_conflict::check_merge_conflict(hook, filenames).await
+            }
             Self::CheckToml => check_toml::check_toml(hook, filenames).await,
             Self::CheckYaml => check_yaml::check_yaml(hook, filenames).await,
             Self::CheckXml => check_xml::check_xml(hook, filenames).await,
