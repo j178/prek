@@ -46,7 +46,7 @@ impl LanguageImpl for Golang {
             hook.language,
             hook.dependencies().clone(),
             &store.hooks_dir(),
-        );
+        )?;
         info.with_toolchain(go.bin().to_path_buf())
             .with_language_version(go.version().deref().clone());
 

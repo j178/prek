@@ -98,7 +98,7 @@ impl LanguageImpl for Python {
             hook.language,
             hook.dependencies().clone(),
             &store.hooks_dir(),
-        );
+        )?;
 
         debug!(%hook, target = %info.env_path.display(), "Installing environment");
 

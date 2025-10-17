@@ -151,7 +151,7 @@ impl LanguageImpl for Pygrep {
             hook.language,
             hook.dependencies().clone(),
             &store.hooks_dir(),
-        );
+        )?;
         info.with_toolchain(python);
 
         fs_err::tokio::create_dir_all(&info.env_path).await?;

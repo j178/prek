@@ -8,7 +8,6 @@ use std::sync::{Arc, OnceLock};
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use constants::MANIFEST_FILE;
-use rand::Rng;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -41,6 +40,9 @@ pub(crate) enum Error {
         #[source]
         error: config::Error,
     },
+
+    #[error("Failed to create directory for hook environment")]
+    TmpDir(#[from] std::io::Error),
 }
 
 #[derive(Debug, Clone)]
@@ -556,39 +558,28 @@ impl Hash for InstallInfo {
     }
 }
 
-const HOOK_DIR_NAME_LENGTH: usize = 20;
-const HOOK_DIR_MAX_ATTEMPTS: usize = 256;
-
-fn random_directory(base_dir: &Path, prefix: &str) -> PathBuf {
-    for _ in 0..HOOK_DIR_MAX_ATTEMPTS {
-        let suffix: String = rand::rng()
-            .sample_iter(&rand::distr::Alphanumeric)
-            .take(HOOK_DIR_NAME_LENGTH)
-            .map(char::from)
-            .collect();
-        let candidate = base_dir.join(format!("{prefix}-{suffix}"));
-        if !candidate.exists() {
-            return candidate;
-        }
-    }
-
-    panic!("failed to allocate unique hook directory after {HOOK_DIR_MAX_ATTEMPTS} attempts");
-}
-
 impl InstallInfo {
     pub(crate) fn new(
         language: Language,
         dependencies: FxHashSet<String>,
         hooks_dir: &Path,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, Error> {
+        fs_err::create_dir_all(hooks_dir)?;
+
+        let env_path = tempfile::Builder::new()
+            .prefix(&format!("{}-", language.as_str()))
+            .rand_bytes(20)
+            .tempdir_in(hooks_dir)?
+            .keep();
+
+        Ok(Self {
             language,
             dependencies,
-            env_path: random_directory(hooks_dir, language.as_str()),
+            env_path,
             language_version: semver::Version::new(0, 0, 0),
             toolchain: PathBuf::new(),
             extra: FxHashMap::default(),
-        }
+        })
     }
 
     pub(crate) async fn from_env_path(path: &Path) -> Result<Self> {
