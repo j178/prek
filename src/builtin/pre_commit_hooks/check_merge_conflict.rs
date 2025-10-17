@@ -3,6 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use clap::Parser;
 use futures::StreamExt;
+use tokio::io::AsyncBufReadExt;
 
 use crate::git::get_git_dir;
 use crate::hook::Hook;
@@ -71,28 +72,16 @@ async fn is_in_merge() -> Result<bool> {
 }
 
 async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
-    let content = fs_err::tokio::read(file_base.join(filename)).await?;
+    let file_path = file_base.join(filename);
+    let file = fs_err::tokio::File::open(&file_path).await?;
+    let mut reader = tokio::io::BufReader::new(file);
 
     let mut code = 0;
     let mut output = Vec::new();
+    let mut line = Vec::new();
     let mut line_number = 1;
-    let mut i = 0;
 
-    while i < content.len() {
-        // Find the start of this line
-        let line_start = i;
-
-        // Find the end of this line (including line ending)
-        let mut line_end = i;
-        while line_end < content.len() && content[line_end] != b'\n' {
-            line_end += 1;
-        }
-        if line_end < content.len() && content[line_end] == b'\n' {
-            line_end += 1; // Include the \n
-        }
-
-        let line = &content[line_start..line_end];
-
+    while reader.read_until(b'\n', &mut line).await? != 0 {
         // Check all patterns
         for pattern in CONFLICT_PATTERNS {
             if line.starts_with(pattern) {
@@ -117,8 +106,8 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
             }
         }
 
+        line.clear();
         line_number += 1;
-        i = line_end;
     }
 
     Ok((code, output))
