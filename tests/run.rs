@@ -766,7 +766,7 @@ fn fail_fast() {
     "#);
 }
 
-/// Test --fail-fast CLI flag stops execution after first failure. 
+/// Test --fail-fast CLI flag stops execution after first failure.
 #[test]
 fn fail_fast_cli_flag() {
     let context = TestContext::new();
