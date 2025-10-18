@@ -68,6 +68,8 @@ quick-xml = { version = "0.38" }
 rand = { version = "0.9.0" }
 rayon = { version = "1.10.0" }
 reqwest = { version = "0.12.9", default-features = false, features = ["http2", "stream", "json", "rustls-tls-webpki-roots"] }
+ruff_python_ast = { git = "https://github.com/astral-sh/ruff/", rev = "591e9bbccbc4b876cef2a23931581efaeb10a50f" }
+ruff_python_parser = { git = "https://github.com/astral-sh/ruff/", rev = "591e9bbccbc4b876cef2a23931581efaeb10a50f" }
 rustc-hash = { version = "2.1.1" }
 same-file = { version = "1.0.6" }
 semver = { version = "1.0.24", features = ["serde"] }

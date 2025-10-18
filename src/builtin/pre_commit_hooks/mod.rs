@@ -13,6 +13,7 @@ mod check_symlinks;
 mod check_toml;
 mod check_xml;
 mod check_yaml;
+mod debug_statements;
 mod detect_private_key;
 mod fix_byte_order_marker;
 mod fix_end_of_file;
@@ -22,6 +23,7 @@ mod mixed_line_ending;
 pub(crate) enum Implemented {
     TrailingWhitespace,
     CheckAddedLargeFiles,
+    DebugStatements,
     EndOfFileFixer,
     FixByteOrderMarker,
     CheckJson,
@@ -41,6 +43,7 @@ impl FromStr for Implemented {
         match s {
             "trailing-whitespace" => Ok(Self::TrailingWhitespace),
             "check-added-large-files" => Ok(Self::CheckAddedLargeFiles),
+            "debug-statements" => Ok(Self::DebugStatements),
             "end-of-file-fixer" => Ok(Self::EndOfFileFixer),
             "fix-byte-order-marker" => Ok(Self::FixByteOrderMarker),
             "check-json" => Ok(Self::CheckJson),
@@ -74,6 +77,7 @@ impl Implemented {
             Self::CheckAddedLargeFiles => {
                 check_added_large_files::check_added_large_files(hook, filenames).await
             }
+            Self::DebugStatements => debug_statements::debug_statements(hook, filenames).await,
             Self::EndOfFileFixer => fix_end_of_file::fix_end_of_file(hook, filenames).await,
             Self::FixByteOrderMarker => {
                 fix_byte_order_marker::fix_byte_order_marker(hook, filenames).await
