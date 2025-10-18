@@ -287,8 +287,14 @@ pub async fn install_hooks(
     // Group hooks by language to enable parallel installation across different languages.
     let mut hooks_by_language = FxHashMap::default();
     for hook in hooks {
+        let mut language = hook.language;
+        if hook.language == Language::Pygrep {
+            // Treat `pygrep` hooks as `python` hooks for installation purposes.
+            // They share the same installation logic.
+            language = Language::Python;
+        }
         hooks_by_language
-            .entry(hook.language)
+            .entry(language)
             .or_insert_with(Vec::new)
             .push(hook);
     }
