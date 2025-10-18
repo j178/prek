@@ -764,7 +764,9 @@ pub(crate) fn tags_from_path(path: &Path) -> Result<Vec<&str>> {
     tags.extend(tags_from_filename(path));
     if executable {
         if let Ok(shebang) = parse_shebang(path) {
-            tags.extend(tags_from_interpreter(&shebang[0]));
+            if let Some(interp) = shebang.first() {
+                tags.extend(tags_from_interpreter(interp));
+            }
         }
     }
 
