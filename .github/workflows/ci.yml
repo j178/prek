@@ -322,3 +322,111 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
+
+  bloat-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: rui314/setup-mold@v1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-bloat
+
+      - name: Build base branch
+        id: bloat_base
+        if: github.event_name == 'pull_request'
+        run: |
+          # Build base branch in separate target directory
+          git checkout ${{ github.event.pull_request.base.sha }}
+          CARGO_TARGET_DIR=target-base cargo bloat --release > bloat_base.txt 2>&1 || true
+          git checkout -
+
+          {
+            echo 'output<<EOF'
+            cat bloat_base.txt
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Build PR branch
+        id: bloat_pr
+        run: |
+          # Build PR branch in default target directory
+          cargo bloat --release > bloat_pr.txt 2>&1 || true
+
+          {
+            echo 'output<<EOF'
+            cat bloat_pr.txt
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Compare bloat results
+        id: compare
+        if: github.event_name == 'pull_request'
+        shell: python
+        run: |
+          import re, os
+          from pathlib import Path
+
+          def parse_size(text):
+              match = re.search(r'\.text section size.*?([\d.]+)\s*([KMGT]i?B)', text)
+              if not match:
+                  raise ValueError("Could not find .text section size")
+              value, unit = float(match.group(1)), match.group(2)
+              multipliers = {'B': 1, 'KiB': 1024, 'MiB': 1024**2, 'GiB': 1024**3, 'TiB': 1024**4}
+              return value * multipliers.get(unit, 1)
+
+          pr_text = Path('bloat_pr.txt').read_text()
+          base_text = Path('bloat_base.txt').read_text()
+
+          pr_bytes = parse_size(pr_text)
+          base_bytes = parse_size(base_text)
+          pr_size = re.search(r'([\d.]+\s*[KMGT]i?B)', pr_text).group(1)
+          base_size = re.search(r'([\d.]+\s*[KMGT]i?B)', base_text).group(1)
+
+          pct_change = ((pr_bytes - base_bytes) / base_bytes) * 100
+          pct_display = f"{pct_change:+.2f}%"
+
+          output = f"""pct_change={pct_display}
+          pr_size={pr_size}
+          base_size={base_size}
+          comparison<<EOF
+          ### Size Comparison
+          - **Base branch**: {base_size}
+          - **PR branch**: {pr_size} ({pct_display})
+
+          ### PR Branch Results
+          {pr_text}
+
+          ### Base Branch Results
+          {base_text}
+          EOF
+          """
+
+          Path(os.environ['GITHUB_OUTPUT']).open('a').write(output)
+
+      - name: Display results (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "### 📦 Cargo Bloat Comparison" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Binary size change: ${{ steps.compare.outputs.pct_change }}**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.compare.outputs.comparison }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          echo "::notice title=Binary Size Change::${{ steps.compare.outputs.pct_change }} (.text: ${{ steps.compare.outputs.base_size }} → ${{ steps.compare.outputs.pr_size }})"
+
+      - name: Display results (Push)
+        if: github.event_name == 'push'
+        run: |
+          echo "### 📦 Cargo Bloat Analysis" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.bloat_pr.outputs.output }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
