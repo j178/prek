@@ -1264,3 +1264,315 @@ fn check_xml_with_features() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(unix)]
+#[test]
+fn check_executables_have_shebangs_hook() -> Result<()> {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-executables-have-shebangs
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files
+    cwd.child("script_with_shebang.sh")
+        .write_str("#!/bin/bash\necho ok\n")?;
+    cwd.child("script_without_shebang.sh")
+        .write_str("echo missing shebang\n")?;
+    cwd.child("not_executable.txt")
+        .write_str("not executable\n")?;
+    cwd.child("empty.sh").touch()?;
+
+    // Mark scripts as executable
+    fs::set_permissions(
+        cwd.child("script_with_shebang.sh").path(),
+        fs::Permissions::from_mode(0o755),
+    )?;
+    fs::set_permissions(
+        cwd.child("script_without_shebang.sh").path(),
+        fs::Permissions::from_mode(0o755),
+    )?;
+    fs::set_permissions(
+        cwd.child("empty.sh").path(),
+        fs::Permissions::from_mode(0o755),
+    )?;
+
+    context.git_add(".");
+
+    // First run: should fail for script_without_shebang.sh and empty.sh
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check that executables have shebangs.....................................Failed
+    - hook id: check-executables-have-shebangs
+    - exit code: 1
+      empty.sh marked executable but has no (or invalid) shebang!
+        If it isn't supposed to be executable, try: 'chmod -x empty.sh'
+        If on Windows, you may also need to: 'git add --chmod=-x empty.sh'
+        If it is supposed to be executable, double-check its shebang.
+      script_without_shebang.sh marked executable but has no (or invalid) shebang!
+        If it isn't supposed to be executable, try: 'chmod -x script_without_shebang.sh'
+        If on Windows, you may also need to: 'git add --chmod=-x script_without_shebang.sh'
+        If it is supposed to be executable, double-check its shebang.
+
+    ----- stderr -----
+    "#);
+
+    // Fix the files: remove executable bit or add shebang
+    cwd.child("script_without_shebang.sh")
+        .write_str("#!/bin/sh\necho fixed\n")?;
+    fs::set_permissions(
+        cwd.child("empty.sh").path(),
+        fs::Permissions::from_mode(0o644),
+    )?;
+
+    context.git_add(".");
+
+    // Second run: should now pass
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check that executables have shebangs.....................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[cfg(windows)]
+#[test]
+fn check_executables_have_shebangs_win() -> Result<()> {
+    use std::process::Command;
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    let repo_path = context.work_dir().path();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-executables-have-shebangs
+    "});
+
+    let cwd = context.work_dir();
+
+    cwd.child("win_script_with_shebang.sh")
+        .write_str("#!/bin/bash\necho ok\n")?;
+    cwd.child("win_script_without_shebang.sh")
+        .write_str("missing shebang\n")?;
+
+    context.git_add(".");
+
+    Command::new("git")
+        .args(["update-index", "--chmod=+x", "win_script_with_shebang.sh"])
+        .current_dir(repo_path)
+        .status()?;
+
+    Command::new("git")
+        .args([
+            "update-index",
+            "--chmod=+x",
+            "win_script_without_shebang.sh",
+        ])
+        .current_dir(repo_path)
+        .status()?;
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check that executables have shebangs.....................................Failed
+    - hook id: check-executables-have-shebangs
+    - exit code: 1
+      win_script_without_shebang.sh marked executable but has no (or invalid) shebang!
+        If it isn't supposed to be executable, try: 'chmod -x win_script_without_shebang.sh'
+        If on Windows, you may also need to: 'git add --chmod=-x win_script_without_shebang.sh'
+        If it is supposed to be executable, double-check its shebang.
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn check_executables_have_shebangs_various_cases() -> Result<()> {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-executables-have-shebangs
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files
+    cwd.child("partial_shebang.sh")
+        .write_str("#\necho partial\n")?;
+    cwd.child("shebang_with_space.sh")
+        .write_str("#! /bin/bash\necho ok\n")?;
+    cwd.child("non_executable.txt")
+        .write_str("not executable\n")?;
+    cwd.child("whitespace.sh").write_str("   \n")?;
+    cwd.child("invalid_shebang.sh")
+        .write_str("##!/bin/bash\necho bad\n")?;
+
+    // Mark scripts as executable
+    fs::set_permissions(
+        cwd.child("partial_shebang.sh").path(),
+        fs::Permissions::from_mode(0o755),
+    )?;
+    fs::set_permissions(
+        cwd.child("shebang_with_space.sh").path(),
+        fs::Permissions::from_mode(0o755),
+    )?;
+    fs::set_permissions(
+        cwd.child("whitespace.sh").path(),
+        fs::Permissions::from_mode(0o755),
+    )?;
+    fs::set_permissions(
+        cwd.child("invalid_shebang.sh").path(),
+        fs::Permissions::from_mode(0o755),
+    )?;
+    // non_executable.txt is not marked executable
+
+    context.git_add(".");
+
+    // Run: should fail for partial_shebang.sh, whitespace.sh, invalid_shebang.sh
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check that executables have shebangs.....................................Failed
+    - hook id: check-executables-have-shebangs
+    - exit code: 1
+      partial_shebang.sh marked executable but has no (or invalid) shebang!
+        If it isn't supposed to be executable, try: 'chmod -x partial_shebang.sh'
+        If on Windows, you may also need to: 'git add --chmod=-x partial_shebang.sh'
+        If it is supposed to be executable, double-check its shebang.
+      invalid_shebang.sh marked executable but has no (or invalid) shebang!
+        If it isn't supposed to be executable, try: 'chmod -x invalid_shebang.sh'
+        If on Windows, you may also need to: 'git add --chmod=-x invalid_shebang.sh'
+        If it is supposed to be executable, double-check its shebang.
+      whitespace.sh marked executable but has no (or invalid) shebang!
+        If it isn't supposed to be executable, try: 'chmod -x whitespace.sh'
+        If on Windows, you may also need to: 'git add --chmod=-x whitespace.sh'
+        If it is supposed to be executable, double-check its shebang.
+
+    ----- stderr -----
+    "#);
+
+    // Fix the files: add valid shebangs or remove executable bit
+    cwd.child("partial_shebang.sh")
+        .write_str("#!/bin/sh\necho fixed\n")?;
+    cwd.child("whitespace.sh").write_str("#!/bin/sh\n")?;
+    cwd.child("invalid_shebang.sh")
+        .write_str("#!/bin/bash\necho fixed\n")?;
+
+    context.git_add(".");
+
+    // Second run: should now pass
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check that executables have shebangs.....................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[cfg(windows)]
+#[test]
+fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
+    use std::process::Command;
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-executables-have-shebangs
+    "});
+
+    let cwd = context.work_dir();
+
+    cwd.child("partial_shebang.sh")
+        .write_str("#\necho partial\n")?;
+    cwd.child("shebang_with_space.sh")
+        .write_str("#! /bin/bash\necho ok\n")?;
+    cwd.child("non_executable.txt")
+        .write_str("not executable\n")?;
+    cwd.child("whitespace.sh").write_str("   \n")?;
+    cwd.child("invalid_shebang.sh")
+        .write_str("##!/bin/bash\necho bad\n")?;
+
+    context.git_add(".");
+
+    let executable_files = [
+        "partial_shebang.sh",
+        "shebang_with_space.sh",
+        "whitespace.sh",
+        "invalid_shebang.sh",
+    ];
+
+    for file in &executable_files {
+        Command::new("git")
+            .args(["update-index", "--chmod=+x", file])
+            .current_dir(cwd.path())
+            .status()?;
+    }
+
+    // Run: should fail for partial_shebang.sh, whitespace.sh, invalid_shebang.sh
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check that executables have shebangs.....................................Failed
+    - hook id: check-executables-have-shebangs
+    - exit code: 1
+      invalid_shebang.sh marked executable but has no (or invalid) shebang!
+        If it isn't supposed to be executable, try: 'chmod -x invalid_shebang.sh'
+        If on Windows, you may also need to: 'git add --chmod=-x invalid_shebang.sh'
+        If it is supposed to be executable, double-check its shebang.
+      partial_shebang.sh marked executable but has no (or invalid) shebang!
+        If it isn't supposed to be executable, try: 'chmod -x partial_shebang.sh'
+        If on Windows, you may also need to: 'git add --chmod=-x partial_shebang.sh'
+        If it is supposed to be executable, double-check its shebang.
+      whitespace.sh marked executable but has no (or invalid) shebang!
+        If it isn't supposed to be executable, try: 'chmod -x whitespace.sh'
+        If on Windows, you may also need to: 'git add --chmod=-x whitespace.sh'
+        If it is supposed to be executable, double-check its shebang.
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}

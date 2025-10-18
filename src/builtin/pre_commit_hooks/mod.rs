@@ -7,6 +7,7 @@ use tracing::debug;
 use crate::hook::Hook;
 
 mod check_added_large_files;
+mod check_executables_have_shebangs;
 mod check_json;
 mod check_merge_conflict;
 mod check_symlinks;
@@ -32,6 +33,7 @@ pub(crate) enum Implemented {
     CheckYaml,
     MixedLineEnding,
     DetectPrivateKey,
+    CheckExecutablesHaveShebangs,
 }
 
 impl FromStr for Implemented {
@@ -51,6 +53,7 @@ impl FromStr for Implemented {
             "check-yaml" => Ok(Self::CheckYaml),
             "mixed-line-ending" => Ok(Self::MixedLineEnding),
             "detect-private-key" => Ok(Self::DetectPrivateKey),
+            "check-executables-have-shebangs" => Ok(Self::CheckExecutablesHaveShebangs),
             _ => Err(()),
         }
     }
@@ -88,6 +91,10 @@ impl Implemented {
             Self::CheckXml => check_xml::check_xml(hook, filenames).await,
             Self::MixedLineEnding => mixed_line_ending::mixed_line_ending(hook, filenames).await,
             Self::DetectPrivateKey => detect_private_key::detect_private_key(hook, filenames).await,
+            Self::CheckExecutablesHaveShebangs => {
+                check_executables_have_shebangs::check_executables_have_shebangs(hook, filenames)
+                    .await
+            }
         }
     }
 }
