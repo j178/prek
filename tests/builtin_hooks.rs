@@ -1,6 +1,5 @@
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-use std::process::Command;
 
 use anyhow::Result;
 use assert_fs::prelude::*;
@@ -1635,6 +1634,7 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
 #[cfg(windows)]
 #[test]
 fn check_executables_have_shebangs() -> Result<()> {
+    use std::process::Command;
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
@@ -1787,6 +1787,7 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
 #[cfg(windows)]
 #[test]
 fn check_executables_have_shebangs_various_cases() -> Result<()> {
+    use std::process::Command;
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();

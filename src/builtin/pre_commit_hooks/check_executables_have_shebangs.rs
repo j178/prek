@@ -21,16 +21,17 @@ pub(crate) async fn check_executables_have_shebangs(
         .output()
         .await?
         .stdout;
-    let tracks_executable_bit = std::str::from_utf8(&stdout)?.trim() != "false";
 
+    let tracks_executable_bit = std::str::from_utf8(&stdout)?.trim() != "false";
     let file_base = hook.project().relative_path();
     let file_paths: Vec<_> = filenames.iter().map(|p| file_base.join(p)).collect();
 
-    // If on win32 use git to check executable bit, else use os level check
     let (code, output) = if tracks_executable_bit {
+        // Unix-like OS with executable bit tracking, use OS level check
         os_check_shebangs(&file_paths).await?
     } else {
-        git_check_shebangs(&file_paths).await?
+        // If on win32 use git to check executable bit
+        git_check_shebangs().await?
     };
 
     Ok((code, output))
@@ -79,14 +80,12 @@ fn print_shebang_warning(path: &Path) -> String {
     )
 }
 
-async fn git_check_shebangs(paths: &Vec<PathBuf>) -> Result<(i32, Vec<u8>), anyhow::Error> {
+async fn git_check_shebangs() -> Result<(i32, Vec<u8>), anyhow::Error> {
     let output = git::git_cmd("git ls-files")?
         .arg("ls-files")
-        .arg("-z")
         // Show staged contents' mode bits, object name and stage number in the output.
         .arg("--stage")
         .arg("--")
-        .args(paths)
         .check(true)
         .output()
         .await?;
@@ -223,7 +222,6 @@ mod tests {
             String::from_utf8_lossy(&output)
                 .contains("marked executable but has no (or invalid) shebang!")
         );
-
         Ok(())
     }
 }
