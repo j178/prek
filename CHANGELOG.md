@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.2.10
+
+Released on 2025-10-18.
+
+### Enhancements
+
+- Add `--fail-fast` CLI flag to stop after first hook failure ([#908](https://github.com/j178/prek/pull/908))
+- Add collision detection for hook env directories ([#914](https://github.com/j178/prek/pull/914))
+- Error out if not projects found ([#913](https://github.com/j178/prek/pull/913))
+- Implement `check-xml` as builtin hook ([#894](https://github.com/j178/prek/pull/894))
+- Implement `check-merge-conflict` as builtin hook ([#885](https://github.com/j178/prek/pull/885))
+- Use line-by-line reading in `check-merge-conflict` ([#910](https://github.com/j178/prek/pull/910))
+
+### Bug fixes
+
+- Fix pygrep hook env health check ([#921](https://github.com/j178/prek/pull/921))
+- Group `pygrep` with `python` when installing pygrep hooks ([#920](https://github.com/j178/prek/pull/920))
+- Ignore `.` prefixed directory when searching managed Python for pygrep ([#919](https://github.com/j178/prek/pull/919))
+
+### Documentation
+
+- Add contribution guide ([#912](https://github.com/j178/prek/pull/912))
+
+### Other changes
+
+
+### Contributors
+
+- @AdityasWorks
+- @j178
+- @kenwoodjw
+- @lmmx
+
 ## 0.2.9
 
 Released on 2025-10-16.
