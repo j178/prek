@@ -205,13 +205,6 @@ impl LanguageImpl for Docker {
         Docker::build_docker_image(&installed_hook, true)
             .await
             .context("Failed to build docker image")?;
-        let env = installed_hook
-            .env_path()
-            .expect("Docker must have env path");
-
-        fs_err::tokio::create_dir_all(env)
-            .await
-            .context("Failed to create docker env dir")?;
 
         reporter.on_install_complete(progress);
 

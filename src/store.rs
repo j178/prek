@@ -66,6 +66,9 @@ impl Store {
     /// Initialize the store.
     pub(crate) fn init(self) -> Result<Self, Error> {
         fs_err::create_dir_all(&self.path)?;
+        fs_err::create_dir_all(self.repos_dir())?;
+        fs_err::create_dir_all(self.hooks_dir())?;
+        fs_err::create_dir_all(self.scratch_path())?;
 
         match fs_err::OpenOptions::new()
             .write(true)
@@ -93,10 +96,7 @@ impl Store {
         let progress =
             reporter.map(|reporter| (reporter, reporter.on_clone_start(&format!("{repo}"))));
 
-        fs_err::tokio::create_dir_all(self.repos_dir()).await?;
-
         // Clone and checkout the repo.
-        fs_err::tokio::create_dir_all(self.scratch_path()).await?;
         let temp = tempfile::tempdir_in(self.scratch_path())?;
 
         debug!(

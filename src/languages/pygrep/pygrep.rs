@@ -161,8 +161,6 @@ impl LanguageImpl for Pygrep {
         )?;
         info.with_toolchain(python);
 
-        fs_err::tokio::create_dir_all(&info.env_path).await?;
-
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {

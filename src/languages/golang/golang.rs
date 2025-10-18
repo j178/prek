@@ -51,7 +51,6 @@ impl LanguageImpl for Golang {
             .with_language_version(go.version().deref().clone());
 
         // 2. Create environment
-        fs_err::tokio::create_dir_all(&info.env_path).await?;
         fs_err::tokio::create_dir_all(bin_dir(&info.env_path)).await?;
 
         // 3. Install dependencies

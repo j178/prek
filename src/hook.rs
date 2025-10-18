@@ -564,8 +564,6 @@ impl InstallInfo {
         dependencies: FxHashSet<String>,
         hooks_dir: &Path,
     ) -> Result<Self, Error> {
-        fs_err::create_dir_all(hooks_dir)?;
-
         let env_path = tempfile::Builder::new()
             .prefix(&format!("{}-", language.as_str()))
             .rand_bytes(20)
