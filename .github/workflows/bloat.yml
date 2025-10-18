@@ -56,26 +56,42 @@ jobs:
         id: compare
         if: github.event_name == 'pull_request'
         run: |
-          pr_line=$(grep "\.text section size" bloat_pr.txt)
-          base_line=$(grep "\.text section size" bloat_base.txt)
+          pr_line=$(grep "\.text section size" bloat_pr.txt || echo "")
+          base_line=$(grep "\.text section size" bloat_base.txt || echo "")
 
-          pr_size=$(echo "$pr_line" | grep -oP '\d+\.\d+[KM]iB' | head -1)
-          base_size=$(echo "$base_line" | grep -oP '\d+\.\d+[KM]iB' | head -1)
+          if [ -z "$pr_line" ] || [ -z "$base_line" ]; then
+            echo "Error: Could not find .text section size in bloat output"
+            exit 1
+          fi
 
-          pr_bytes=$(echo "$pr_line" | grep -oP '\d+\.\d+[KM]iB' | head -1 | awk '{
-            if ($1 ~ /KiB/) { gsub(/KiB/, ""); print $1 * 1024 }
-            else if ($1 ~ /MiB/) { gsub(/MiB/, ""); print $1 * 1024 * 1024 }
-            else print $1
+          pr_size=$(echo "$pr_line" | grep -oP '\d+\.\d+[KMGT]?i?B' | head -1)
+          base_size=$(echo "$base_line" | grep -oP '\d+\.\d+[KMGT]?i?B' | head -1)
+
+          # Convert to bytes for calculation
+          pr_bytes=$(echo "$pr_size" | awk '{
+            val = $1
+            gsub(/[KMGT]?i?B/, "", val)
+            if ($1 ~ /TiB/) print val * 1024 * 1024 * 1024 * 1024
+            else if ($1 ~ /GiB/) print val * 1024 * 1024 * 1024
+            else if ($1 ~ /MiB/) print val * 1024 * 1024
+            else if ($1 ~ /KiB/) print val * 1024
+            else print val
           }')
-          base_bytes=$(echo "$base_line" | grep -oP '\d+\.\d+[KM]iB' | head -1 | awk '{
-            if ($1 ~ /KiB/) { gsub(/KiB/, ""); print $1 * 1024 }
-            else if ($1 ~ /MiB/) { gsub(/MiB/, ""); print $1 * 1024 * 1024 }
-            else print $1
+          base_bytes=$(echo "$base_size" | awk '{
+            val = $1
+            gsub(/[KMGT]?i?B/, "", val)
+            if ($1 ~ /TiB/) print val * 1024 * 1024 * 1024 * 1024
+            else if ($1 ~ /GiB/) print val * 1024 * 1024 * 1024
+            else if ($1 ~ /MiB/) print val * 1024 * 1024
+            else if ($1 ~ /KiB/) print val * 1024
+            else print val
           }')
 
-          pct_change=$(echo "scale=2; (($pr_bytes - $base_bytes) / $base_bytes) * 100" | bc)
+          # Calculate percentage change
+          pct_change=$(awk "BEGIN {printf \"%.2f\", (($pr_bytes - $base_bytes) / $base_bytes) * 100}")
 
-          if (( $(echo "$pct_change >= 0" | bc -l) )); then
+          # Format with + sign if positive
+          if (( $(awk "BEGIN {print ($pct_change >= 0)}") )); then
             pct_display="+${pct_change}%"
           else
             pct_display="${pct_change}%"
