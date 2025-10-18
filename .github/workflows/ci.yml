@@ -368,65 +368,47 @@ jobs:
       - name: Compare bloat results
         id: compare
         if: github.event_name == 'pull_request'
+        shell: python
         run: |
-          pr_line=$(grep "\.text section size" bloat_pr.txt || echo "")
-          base_line=$(grep "\.text section size" bloat_base.txt || echo "")
+          import re, os
+          from pathlib import Path
 
-          if [ -z "$pr_line" ] || [ -z "$base_line" ]; then
-            echo "Error: Could not find .text section size in bloat output"
-            exit 1
-          fi
+          def parse_size(text):
+              match = re.search(r'\.text section size.*?([\d.]+)\s*([KMGT]i?B)', text)
+              if not match:
+                  raise ValueError("Could not find .text section size")
+              value, unit = float(match.group(1)), match.group(2)
+              multipliers = {'B': 1, 'KiB': 1024, 'MiB': 1024**2, 'GiB': 1024**3, 'TiB': 1024**4}
+              return value * multipliers.get(unit, 1)
 
-          pr_size=$(echo "$pr_line" | grep -oP '\d+\.\d+[KMGT]?i?B' | head -1)
-          base_size=$(echo "$base_line" | grep -oP '\d+\.\d+[KMGT]?i?B' | head -1)
+          pr_text = Path('bloat_pr.txt').read_text()
+          base_text = Path('bloat_base.txt').read_text()
 
-          # Convert to bytes for calculation
-          pr_bytes=$(echo "$pr_size" | awk '{
-            val = $1
-            gsub(/[KMGT]?i?B/, "", val)
-            if ($1 ~ /TiB/) print val * 1024 * 1024 * 1024 * 1024
-            else if ($1 ~ /GiB/) print val * 1024 * 1024 * 1024
-            else if ($1 ~ /MiB/) print val * 1024 * 1024
-            else if ($1 ~ /KiB/) print val * 1024
-            else print val
-          }')
-          base_bytes=$(echo "$base_size" | awk '{
-            val = $1
-            gsub(/[KMGT]?i?B/, "", val)
-            if ($1 ~ /TiB/) print val * 1024 * 1024 * 1024 * 1024
-            else if ($1 ~ /GiB/) print val * 1024 * 1024 * 1024
-            else if ($1 ~ /MiB/) print val * 1024 * 1024
-            else if ($1 ~ /KiB/) print val * 1024
-            else print val
-          }')
+          pr_bytes = parse_size(pr_text)
+          base_bytes = parse_size(base_text)
+          pr_size = re.search(r'([\d.]+\s*[KMGT]i?B)', pr_text).group(1)
+          base_size = re.search(r'([\d.]+\s*[KMGT]i?B)', base_text).group(1)
 
-          # Calculate percentage change
-          pct_change=$(awk "BEGIN {printf \"%.2f\", (($pr_bytes - $base_bytes) / $base_bytes) * 100}")
+          pct_change = ((pr_bytes - base_bytes) / base_bytes) * 100
+          pct_display = f"{pct_change:+.2f}%"
 
-          # Format with + sign if positive
-          if (( $(awk "BEGIN {print ($pct_change >= 0)}") )); then
-            pct_display="+${pct_change}%"
-          else
-            pct_display="${pct_change}%"
-          fi
+          output = f"""pct_change={pct_display}
+          pr_size={pr_size}
+          base_size={base_size}
+          comparison<<EOF
+          ### Size Comparison
+          - **Base branch**: {base_size}
+          - **PR branch**: {pr_size} ({pct_display})
 
-          echo "pct_change=${pct_display}" >> $GITHUB_OUTPUT
-          echo "pr_size=${pr_size}" >> $GITHUB_OUTPUT
-          echo "base_size=${base_size}" >> $GITHUB_OUTPUT
+          ### PR Branch Results
+          {pr_text}
 
-          {
-            echo 'comparison<<EOF'
-            echo "### Size Comparison"
-            echo "- **Base branch**: $base_size"
-            echo "- **PR branch**: $pr_size ($pct_display)"
-            echo ""
-            echo "### PR Branch Results"
-            cat bloat_pr.txt
-            echo ""
-            echo "### Base Branch Results"
-            cat bloat_base.txt
-            echo 'EOF'
-          } >> $GITHUB_OUTPUT
+          ### Base Branch Results
+          {base_text}
+          EOF
+          """
+
+          Path(os.environ['GITHUB_OUTPUT']).open('a').write(output)
 
       - name: Display results (PR)
         if: github.event_name == 'pull_request'
