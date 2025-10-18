@@ -18,6 +18,7 @@ mod fix_byte_order_marker;
 mod fix_end_of_file;
 mod fix_trailing_whitespace;
 mod mixed_line_ending;
+mod pretty_format_json;
 
 pub(crate) enum Implemented {
     TrailingWhitespace,
@@ -32,6 +33,7 @@ pub(crate) enum Implemented {
     CheckYaml,
     MixedLineEnding,
     DetectPrivateKey,
+    PrettyFormatJson,
 }
 
 impl FromStr for Implemented {
@@ -51,6 +53,7 @@ impl FromStr for Implemented {
             "check-yaml" => Ok(Self::CheckYaml),
             "mixed-line-ending" => Ok(Self::MixedLineEnding),
             "detect-private-key" => Ok(Self::DetectPrivateKey),
+            "pretty-format-json" => Ok(Self::PrettyFormatJson),
             _ => Err(()),
         }
     }
@@ -88,6 +91,7 @@ impl Implemented {
             Self::CheckXml => check_xml::check_xml(hook, filenames).await,
             Self::MixedLineEnding => mixed_line_ending::mixed_line_ending(hook, filenames).await,
             Self::DetectPrivateKey => detect_private_key::detect_private_key(hook, filenames).await,
+            Self::PrettyFormatJson => pretty_format_json::pretty_format_json(hook, filenames).await,
         }
     }
 }
