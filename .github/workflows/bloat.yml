@@ -17,6 +17,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: rui314/setup-mold@v1
+
+      - uses: Swatinem/rust-cache@v2
+
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-bloat
