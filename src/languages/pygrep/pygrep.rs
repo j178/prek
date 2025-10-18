@@ -76,6 +76,13 @@ fn find_installed_python(python_dir: &Path) -> Option<PathBuf> {
         .flatten()
         .flatten()
         .filter(|entry| entry.file_type().is_ok_and(|f| f.is_dir()))
+        // Ignore any `.` prefixed directories
+        .filter(|path| {
+            path.file_name()
+                .to_str()
+                .map(|name| !name.starts_with('.'))
+                .unwrap_or(true)
+        })
         .map(|entry| python_exec(&entry.path()))
         .next()
 }
