@@ -7,6 +7,7 @@ use tracing::debug;
 use crate::hook::Hook;
 
 mod check_added_large_files;
+mod check_case_conflict;
 mod check_json;
 mod check_merge_conflict;
 mod check_symlinks;
@@ -22,6 +23,7 @@ mod mixed_line_ending;
 pub(crate) enum Implemented {
     TrailingWhitespace,
     CheckAddedLargeFiles,
+    CheckCaseConflict,
     EndOfFileFixer,
     FixByteOrderMarker,
     CheckJson,
@@ -41,6 +43,7 @@ impl FromStr for Implemented {
         match s {
             "trailing-whitespace" => Ok(Self::TrailingWhitespace),
             "check-added-large-files" => Ok(Self::CheckAddedLargeFiles),
+            "check-case-conflict" => Ok(Self::CheckCaseConflict),
             "end-of-file-fixer" => Ok(Self::EndOfFileFixer),
             "fix-byte-order-marker" => Ok(Self::FixByteOrderMarker),
             "check-json" => Ok(Self::CheckJson),
@@ -77,6 +80,9 @@ impl Implemented {
             Self::EndOfFileFixer => fix_end_of_file::fix_end_of_file(hook, filenames).await,
             Self::FixByteOrderMarker => {
                 fix_byte_order_marker::fix_byte_order_marker(hook, filenames).await
+            }
+            Self::CheckCaseConflict => {
+                check_case_conflict::check_case_conflict(hook, filenames).await
             }
             Self::CheckJson => check_json::check_json(hook, filenames).await,
             Self::CheckSymlinks => check_symlinks::check_symlinks(hook, filenames).await,
