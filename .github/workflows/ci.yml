@@ -23,7 +23,7 @@ env:
 jobs:
   lint:
     name: "lint"
-    timeout-minutes: 30
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
 
       - name: "Install Rust toolchain"
@@ -78,13 +78,120 @@ jobs:
       - run: cargo binstall --no-confirm cargo-shear
       - run: cargo shear
 
+  bloat-check:
+    runs-on: ubuntu-latest
+    name: "cargo | bloat check"
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          fetch-depth: 0
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+      - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+      - uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
+        with:
+          tool: cargo-bloat
+
+      - name: Build base branch
+        id: bloat_base
+        if: github.event_name == 'pull_request'
+        run: |
+          # Build base branch in separate target directory
+          git checkout ${{ github.event.pull_request.base.sha }}
+          CARGO_TARGET_DIR=target-base cargo bloat --release > bloat_base.txt 2>&1 || true
+          git checkout -
+
+          {
+            echo 'output<<EOF'
+            cat bloat_base.txt
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Build PR branch
+        id: bloat_pr
+        run: |
+          # Build PR branch in default target directory
+          cargo bloat --release > bloat_pr.txt 2>&1 || true
+
+          {
+            echo 'output<<EOF'
+            cat bloat_pr.txt
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Compare bloat results
+        id: compare
+        if: github.event_name == 'pull_request'
+        shell: python
+        run: |
+          import re, os
+          from pathlib import Path
+
+          def parse_size(text):
+              match = re.search(r'\.text section size.*?([\d.]+)\s*([KMGT]i?B)', text)
+              if not match:
+                  raise ValueError("Could not find .text section size")
+              value, unit = float(match.group(1)), match.group(2)
+              multipliers = {'B': 1, 'KiB': 1024, 'MiB': 1024**2, 'GiB': 1024**3, 'TiB': 1024**4}
+              return value * multipliers.get(unit, 1)
+
+          pr_text = Path('bloat_pr.txt').read_text()
+          base_text = Path('bloat_base.txt').read_text()
+
+          pr_bytes = parse_size(pr_text)
+          base_bytes = parse_size(base_text)
+          pr_size = re.search(r'([\d.]+\s*[KMGT]i?B)', pr_text).group(1)
+          base_size = re.search(r'([\d.]+\s*[KMGT]i?B)', base_text).group(1)
+
+          pct_change = ((pr_bytes - base_bytes) / base_bytes) * 100
+          pct_display = f"{pct_change:+.2f}%"
+
+          output = f"""pct_change={pct_display}
+          pr_size={pr_size}
+          base_size={base_size}
+          comparison<<EOF
+          ### Size Comparison
+          - **Base branch**: {base_size}
+          - **PR branch**: {pr_size} ({pct_display})
+
+          ### PR Branch Results
+          ```
+          {pr_text}
+          ```
+
+          ### Base Branch Results
+          ```
+          {base_text}
+          ```
+          EOF
+          """
+
+          Path(os.environ['GITHUB_OUTPUT']).open('a').write(output)
+
+      - name: Display results (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "### 📦 Cargo Bloat Comparison" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Binary size change: ${{ steps.compare.outputs.pct_change }}**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.compare.outputs.comparison }}" >> $GITHUB_STEP_SUMMARY
+
+          echo "::notice title=Binary Size Change::${{ steps.compare.outputs.pct_change }} (.text: ${{ steps.compare.outputs.base_size }} → ${{ steps.compare.outputs.pr_size }})"
+
+      - name: Display results (Push)
+        if: github.event_name == 'push'
+        run: |
+          echo "### 📦 Cargo Bloat Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.bloat_pr.outputs.output }}" >> $GITHUB_STEP_SUMMARY
+
   cargo-test-without-uv:
     timeout-minutes: 5
     runs-on: ubuntu-latest
     name: "cargo test | without uv"
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
 
       - name: "Install Rust toolchain"
@@ -131,7 +238,7 @@ jobs:
     name: "cargo test | ubuntu"
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-      - uses: rui314/setup-mold@v1
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
 
       - name: "Install Rust toolchain"
@@ -192,14 +299,12 @@ jobs:
           files: lcov.info
 
   cargo-test-macos:
-    timeout-minutes: 5
     runs-on: macos-latest
     name: "cargo test | macos"
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-
-      - uses: rui314/setup-mold@v1
-
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
 
       - name: "Install Rust toolchain"
@@ -247,9 +352,9 @@ jobs:
             --final-status-level slow
 
   cargo-test-windows:
-    timeout-minutes: 10
     runs-on: windows-latest
     name: "cargo test | windows"
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
 
@@ -322,111 +427,3 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
-
-  bloat-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: rui314/setup-mold@v1
-
-      - uses: Swatinem/rust-cache@v2
-
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-bloat
-
-      - name: Build base branch
-        id: bloat_base
-        if: github.event_name == 'pull_request'
-        run: |
-          # Build base branch in separate target directory
-          git checkout ${{ github.event.pull_request.base.sha }}
-          CARGO_TARGET_DIR=target-base cargo bloat --release > bloat_base.txt 2>&1 || true
-          git checkout -
-
-          {
-            echo 'output<<EOF'
-            cat bloat_base.txt
-            echo 'EOF'
-          } >> $GITHUB_OUTPUT
-
-      - name: Build PR branch
-        id: bloat_pr
-        run: |
-          # Build PR branch in default target directory
-          cargo bloat --release > bloat_pr.txt 2>&1 || true
-
-          {
-            echo 'output<<EOF'
-            cat bloat_pr.txt
-            echo 'EOF'
-          } >> $GITHUB_OUTPUT
-
-      - name: Compare bloat results
-        id: compare
-        if: github.event_name == 'pull_request'
-        shell: python
-        run: |
-          import re, os
-          from pathlib import Path
-
-          def parse_size(text):
-              match = re.search(r'\.text section size.*?([\d.]+)\s*([KMGT]i?B)', text)
-              if not match:
-                  raise ValueError("Could not find .text section size")
-              value, unit = float(match.group(1)), match.group(2)
-              multipliers = {'B': 1, 'KiB': 1024, 'MiB': 1024**2, 'GiB': 1024**3, 'TiB': 1024**4}
-              return value * multipliers.get(unit, 1)
-
-          pr_text = Path('bloat_pr.txt').read_text()
-          base_text = Path('bloat_base.txt').read_text()
-
-          pr_bytes = parse_size(pr_text)
-          base_bytes = parse_size(base_text)
-          pr_size = re.search(r'([\d.]+\s*[KMGT]i?B)', pr_text).group(1)
-          base_size = re.search(r'([\d.]+\s*[KMGT]i?B)', base_text).group(1)
-
-          pct_change = ((pr_bytes - base_bytes) / base_bytes) * 100
-          pct_display = f"{pct_change:+.2f}%"
-
-          output = f"""pct_change={pct_display}
-          pr_size={pr_size}
-          base_size={base_size}
-          comparison<<EOF
-          ### Size Comparison
-          - **Base branch**: {base_size}
-          - **PR branch**: {pr_size} ({pct_display})
-
-          ### PR Branch Results
-          {pr_text}
-
-          ### Base Branch Results
-          {base_text}
-          EOF
-          """
-
-          Path(os.environ['GITHUB_OUTPUT']).open('a').write(output)
-
-      - name: Display results (PR)
-        if: github.event_name == 'pull_request'
-        run: |
-          echo "### 📦 Cargo Bloat Comparison" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Binary size change: ${{ steps.compare.outputs.pct_change }}**" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.compare.outputs.comparison }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-          echo "::notice title=Binary Size Change::${{ steps.compare.outputs.pct_change }} (.text: ${{ steps.compare.outputs.base_size }} → ${{ steps.compare.outputs.pr_size }})"
-
-      - name: Display results (Push)
-        if: github.event_name == 'push'
-        run: |
-          echo "### 📦 Cargo Bloat Analysis" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.bloat_pr.outputs.output }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
