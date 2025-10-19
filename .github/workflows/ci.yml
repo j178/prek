@@ -187,7 +187,10 @@ jobs:
         if: github.event_name == 'push'
         run: |
           echo "### 📦 Cargo Bloat Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "```" >> $GITHUB_STEP_SUMMARY
           echo "$PR_OUTPUT" >> $GITHUB_STEP_SUMMARY
+          echo "```" >> $GITHUB_STEP_SUMMARY
         env:
           PR_OUTPUT: ${{ steps.bloat_pr.outputs.output }}
 
