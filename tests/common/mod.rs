@@ -308,6 +308,26 @@ impl TestContext {
             .success();
     }
 
+    /// Create a new git branch.
+    pub fn git_branch(&self, branch_name: &str) {
+        Command::new("git")
+            .arg("branch")
+            .arg(branch_name)
+            .current_dir(&self.temp_dir)
+            .assert()
+            .success();
+    }
+
+    /// Switch to a git branch.
+    pub fn git_checkout(&self, branch_name: &str) {
+        Command::new("git")
+            .arg("checkout")
+            .arg(branch_name)
+            .current_dir(&self.temp_dir)
+            .assert()
+            .success();
+    }
+
     /// Write a `.pre-commit-config.yaml` file in the temporary directory.
     pub fn write_pre_commit_config(&self, content: &str) {
         self.temp_dir

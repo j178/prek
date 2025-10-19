@@ -1264,3 +1264,283 @@ fn check_xml_with_features() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn no_commit_to_branch_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: no-commit-to-branch
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create a test file
+    cwd.child("test.txt").write_str("Hello World")?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    // Test 1: Try to commit to master branch (should fail)
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    don't commit to branch...................................................Failed
+    - hook id: no-commit-to-branch
+    - exit code: 1
+      You are not allowed to commit to branch 'master'
+
+    ----- stderr -----
+    "#);
+
+    // Test 2: Create and switch to a feature branch (should pass)
+    context.git_branch("feature/new-feature");
+    context.git_checkout("feature/new-feature");
+
+    cwd.child("feature.txt").write_str("Feature content")?;
+    context.git_add(".");
+    context.git_commit("Add feature");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    don't commit to branch...................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    // Test 3: Try to commit to main branch (should fail)
+    context.git_branch("main");
+    context.git_checkout("main");
+
+    cwd.child("main.txt").write_str("Main content")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    don't commit to branch...................................................Failed
+    - hook id: no-commit-to-branch
+    - exit code: 1
+      You are not allowed to commit to branch 'main'
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn no_commit_to_branch_hook_with_custom_branches() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: no-commit-to-branch
+                args: ['--branch', 'develop', '--branch', 'production']
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create a test file
+    cwd.child("test.txt").write_str("Hello World")?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    // Test 1: Try to commit to master branch (should pass - not in custom list)
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    don't commit to branch...................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    // Test 2: Create and switch to develop branch (should fail)
+    context.git_branch("develop");
+    context.git_checkout("develop");
+
+    cwd.child("develop.txt").write_str("Develop content")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    don't commit to branch...................................................Failed
+    - hook id: no-commit-to-branch
+    - exit code: 1
+      You are not allowed to commit to branch 'develop'
+
+    ----- stderr -----
+    "#);
+
+    // Test 3: Create and switch to production branch (should fail)
+    context.git_branch("production");
+    context.git_checkout("production");
+
+    cwd.child("production.txt")
+        .write_str("Production content")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    don't commit to branch...................................................Failed
+    - hook id: no-commit-to-branch
+    - exit code: 1
+      You are not allowed to commit to branch 'production'
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: no-commit-to-branch
+                args: ['--pattern', '^feature/.*', '--pattern', '.*-wip$']
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create a test file
+    cwd.child("test.txt").write_str("Hello World")?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    // Test 1: Try to commit to master branch (should fail - If branch is not specified, branch defaults to master and main)
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    don't commit to branch...................................................Failed
+    - hook id: no-commit-to-branch
+    - exit code: 1
+      You are not allowed to commit to branch 'master'
+
+    ----- stderr -----
+    "#);
+
+    // Test 2: Create and switch to feature branch (should fail - matches pattern)
+    context.git_branch("feature/new-feature");
+    context.git_checkout("feature/new-feature");
+
+    cwd.child("feature.txt").write_str("Feature content")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    don't commit to branch...................................................Failed
+    - hook id: no-commit-to-branch
+    - exit code: 1
+      You are not allowed to commit to branch 'feature/new-feature'
+
+    ----- stderr -----
+    "#);
+
+    // Test 3: Create and switch to wip branch (should fail - matches pattern)
+    context.git_branch("my-branch-wip");
+    context.git_checkout("my-branch-wip");
+
+    cwd.child("wip.txt").write_str("WIP content")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    don't commit to branch...................................................Failed
+    - hook id: no-commit-to-branch
+    - exit code: 1
+      You are not allowed to commit to branch 'my-branch-wip'
+
+    ----- stderr -----
+    "#);
+
+    // Test 4: Create and switch to normal branch (should pass - doesn't match patterns)
+    context.git_branch("normal-branch");
+    context.git_checkout("normal-branch");
+
+    cwd.child("normal.txt").write_str("Normal content")?;
+    context.git_add(".");
+    context.git_commit("Add normal content");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    don't commit to branch...................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    // Test 5: Try to run with detached head pointer status (should pass)
+    context.git_checkout("HEAD~1");
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    don't commit to branch...................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    // Test 6: Try to commit to branch with invalid pattern (should fail - invalid pattern)
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: no-commit-to-branch
+                args: ['--pattern', '*invalid-pattern*']
+    "});
+
+    // Test 5: Try to commit to branch with invalid pattern (should fail - invalid pattern)
+    context.git_branch("invalid-branch");
+    context.git_checkout("invalid-branch");
+
+    cwd.child("invalid.txt").write_str("Invalid content")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    don't commit to branch...................................................Failed
+    - hook id: no-commit-to-branch
+    - exit code: 1
+      Parsing error at position 0: Target of repeat operator is invalid
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
