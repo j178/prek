@@ -1502,7 +1502,7 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
     ----- stderr -----
     "#);
 
-    // Test 5: Try to run with detached head pointer status (should pass)
+    // Test 5: Try to run with detached head pointer status (should pass - ignore this status)
     context.git_checkout("HEAD~1");
     cmd_snapshot!(context.filters(), context.run(), @r#"
     success: true
@@ -1523,7 +1523,6 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
                 args: ['--pattern', '*invalid-pattern*']
     "});
 
-    // Test 5: Try to commit to branch with invalid pattern (should fail - invalid pattern)
     context.git_branch("invalid-branch");
     context.git_checkout("invalid-branch");
 
