@@ -38,50 +38,13 @@ while also providing some additional long-requested features.
 - 📦 [Built-in](https://prek.j178.dev/builtin/) Rust-native implementation of some common hooks.
 <!-- features:end -->
 
-## Quick start
+## Table of contents
 
-- **I already use pre-commit:** follow the short migration checklist in the [quickstart guide](https://prek.j178.dev/quickstart/#already-using-pre-commit) to swap in `prek` safely.
-- **I'm new to pre-commit-style tools:** learn the basics—creating a config, running hooks, and installing git hooks—in the [beginner quickstart walkthrough](https://prek.j178.dev/quickstart/#new-to-pre-commit-style-workflows).
-
-<!-- why:start -->
-## Why prek?
-
-### prek is faster
-
-- It is [multiple times faster](https://prek.j178.dev/benchmark/) than `pre-commit` and takes up half the disk space.
-- It redesigned how hook environments and toolchains are managed, they are all shared between hooks, which reduces the disk space usage and speeds up the installation process.
-- Repositories are cloned in parallel, and hooks are installed in parallel if their dependencies are disjoint.
-- It uses [`uv`](https://github.com/astral-sh/uv) for creating Python virtualenvs and installing dependencies, which is known for its speed and efficiency.
-- It implements some common hooks in Rust, [built in prek](https://prek.j178.dev/builtin/), which are faster than their Python counterparts.
-
-### prek provides a better user experience
-
-- No need to install Python or any other runtime, just download a single binary.
-- No hassle with your Python version or virtual environments, prek automatically installs the required Python version and creates a virtual environment for you.
-- Built-in support for [workspaces](https://prek.j178.dev/workspace/) (or monorepos), each subproject can have its own `.pre-commit-config.yaml` file.
-- [`prek run`](https://prek.j178.dev/cli/#prek-run) has some nifty improvements over `pre-commit run`, such as:
-  - `prek run --directory <dir>` runs hooks for files in the specified directory, no need to use `git ls-files -- <dir> | xargs pre-commit run --files` anymore.
-  - `prek run --last-commit` runs hooks for files changed in the last commit.
-  - `prek run [HOOK] [HOOK]` selects and runs multiple hooks.
-- [`prek list`](https://prek.j178.dev/cli/#prek-list) command lists all available hooks, their ids, and descriptions, providing a better overview of the configured hooks.
-- prek provides shell completions for `prek run <hook_id>` command, making it easier to run specific hooks without remembering their ids.
-
-For more detailed improvements prek offers, take a look at [Difference from pre-commit](https://prek.j178.dev/diff/).
-
-## Who is using prek?
-
-prek is pretty new, but it is already being used or recommend by some projects and organizations:
-
-- [Airflow](https://github.com/apache/airflow/issues/44995)
-- [PDM](https://github.com/pdm-project/pdm/pull/3593)
-- [basedpyright](https://github.com/DetachHead/basedpyright/pull/1413)
-- [OpenLineage](https://github.com/OpenLineage/OpenLineage/pull/3965)
-- [Authlib](https://github.com/authlib/authlib/pull/804)
-- [pre-commit-crocodile](https://radiandevcore.gitlab.io/tools/pre-commit-crocodile/)
-- [PaperQA2](https://github.com/Future-House/paper-qa/pull/1098)
-- [requests-cache](https://github.com/requests-cache/requests-cache/pull/1116)
-
-<!-- why:end -->
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Why prek?](#why-prek)
+- [Who is using prek?](#who-is-using-prek)
+- [Acknowledgements](#acknowledgements)
 
 ## Installation
 
@@ -279,6 +242,51 @@ If installed via the standalone installer, prek can update itself to the latest 
 prek self update
 ```
 <!-- self-update:end -->
+
+## Quick start
+
+- **I already use pre-commit:** follow the short migration checklist in the [quickstart guide](https://prek.j178.dev/quickstart/#already-using-pre-commit) to swap in `prek` safely.
+- **I'm new to pre-commit-style tools:** learn the basics—creating a config, running hooks, and installing git hooks—in the [beginner quickstart walkthrough](https://prek.j178.dev/quickstart/#new-to-pre-commit-style-workflows).
+
+<!-- why:start -->
+## Why prek?
+
+### prek is faster
+
+- It is [multiple times faster](https://prek.j178.dev/benchmark/) than `pre-commit` and takes up half the disk space.
+- It redesigned how hook environments and toolchains are managed, they are all shared between hooks, which reduces the disk space usage and speeds up the installation process.
+- Repositories are cloned in parallel, and hooks are installed in parallel if their dependencies are disjoint.
+- It uses [`uv`](https://github.com/astral-sh/uv) for creating Python virtualenvs and installing dependencies, which is known for its speed and efficiency.
+- It implements some common hooks in Rust, [built in prek](https://prek.j178.dev/builtin/), which are faster than their Python counterparts.
+
+### prek provides a better user experience
+
+- No need to install Python or any other runtime, just download a single binary.
+- No hassle with your Python version or virtual environments, prek automatically installs the required Python version and creates a virtual environment for you.
+- Built-in support for [workspaces](https://prek.j178.dev/workspace/) (or monorepos), each subproject can have its own `.pre-commit-config.yaml` file.
+- [`prek run`](https://prek.j178.dev/cli/#prek-run) has some nifty improvements over `pre-commit run`, such as:
+  - `prek run --directory <dir>` runs hooks for files in the specified directory, no need to use `git ls-files -- <dir> | xargs pre-commit run --files` anymore.
+  - `prek run --last-commit` runs hooks for files changed in the last commit.
+  - `prek run [HOOK] [HOOK]` selects and runs multiple hooks.
+- [`prek list`](https://prek.j178.dev/cli/#prek-list) command lists all available hooks, their ids, and descriptions, providing a better overview of the configured hooks.
+- prek provides shell completions for `prek run <hook_id>` command, making it easier to run specific hooks without remembering their ids.
+
+For more detailed improvements prek offers, take a look at [Difference from pre-commit](https://prek.j178.dev/diff/).
+
+## Who is using prek?
+
+prek is pretty new, but it is already being used or recommend by some projects and organizations:
+
+- [Airflow](https://github.com/apache/airflow/issues/44995)
+- [PDM](https://github.com/pdm-project/pdm/pull/3593)
+- [basedpyright](https://github.com/DetachHead/basedpyright/pull/1413)
+- [OpenLineage](https://github.com/OpenLineage/OpenLineage/pull/3965)
+- [Authlib](https://github.com/authlib/authlib/pull/804)
+- [pre-commit-crocodile](https://radiandevcore.gitlab.io/tools/pre-commit-crocodile/)
+- [PaperQA2](https://github.com/Future-House/paper-qa/pull/1098)
+- [requests-cache](https://github.com/requests-cache/requests-cache/pull/1116)
+
+<!-- why:end -->
 
 ## Acknowledgements
 

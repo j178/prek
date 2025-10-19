@@ -2,6 +2,8 @@
 
 This page helps you get productive with **prek** in minutes, whether you are migrating from [pre-commit](https://pre-commit.com/) or starting from scratch.
 
+First follow the [installation guide](./installation.md) to install prek on your system.
+
 [I already use pre-commit](#already-using-pre-commit){ .md-button .md-button--primary }
 [I'm new to pre-commit-style tools](#new-to-pre-commit-style-workflows){ .md-button }
 {: style="display:flex; flex-wrap:wrap; gap:1rem; justify-content:center; margin:1.5rem 0;" }
