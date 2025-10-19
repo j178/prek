@@ -38,24 +38,10 @@ while also providing some additional long-requested features.
 - 📦 [Built-in](https://prek.j178.dev/builtin/) Rust-native implementation of some common hooks.
 <!-- features:end -->
 
-## How to migrate
+## Quick start
 
-prek is designed as a drop-in replacement:
-
-- [Install prek](#installation)
-- Replace `pre-commit` with `prek` in your commands
-- Your existing `.pre-commit-config.yaml` works unchanged
-
-```console
-$ prek run
-trim trailing whitespace.................................................Passed
-fix end of files.........................................................Passed
-typos....................................................................Passed
-cargo fmt................................................................Passed
-cargo clippy.............................................................Passed
-```
-
-For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to the [pre-commit documentation](https://pre-commit.com/) as prek is fully compatible with it.
+- **I already use pre-commit:** follow the short migration checklist in the [quickstart guide](https://prek.j178.dev/quickstart/#already-using-pre-commit) to swap in `prek` safely.
+- **I'm new to pre-commit-style tools:** learn the basics—creating a config, running hooks, and installing git hooks—in the [beginner quickstart walkthrough](https://prek.j178.dev/quickstart/#new-to-pre-commit-style-workflows).
 
 <!-- why:start -->
 ## Why prek?
@@ -72,12 +58,12 @@ For configuring `.pre-commit-config.yaml` and writing hooks, you can refer to th
 
 - No need to install Python or any other runtime, just download a single binary.
 - No hassle with your Python version or virtual environments, prek automatically installs the required Python version and creates a virtual environment for you.
-- Built-in support for workspaces (or monorepos), each subproject can have its own `.pre-commit-config.yaml` file.
-- `prek run` has some nifty improvements over `pre-commit run`, such as:
+- Built-in support for [workspaces](https://prek.j178.dev/workspace/) (or monorepos), each subproject can have its own `.pre-commit-config.yaml` file.
+- [`prek run`](https://prek.j178.dev/cli/#prek-run) has some nifty improvements over `pre-commit run`, such as:
   - `prek run --directory <dir>` runs hooks for files in the specified directory, no need to use `git ls-files -- <dir> | xargs pre-commit run --files` anymore.
   - `prek run --last-commit` runs hooks for files changed in the last commit.
   - `prek run [HOOK] [HOOK]` selects and runs multiple hooks.
-- `prek list` command lists all available hooks, their ids, and descriptions, providing a better overview of the configured hooks.
+- [`prek list`](https://prek.j178.dev/cli/#prek-list) command lists all available hooks, their ids, and descriptions, providing a better overview of the configured hooks.
 - prek provides shell completions for `prek run <hook_id>` command, making it easier to run specific hooks without remembering their ids.
 
 For more detailed improvements prek offers, take a look at [Difference from pre-commit](https://prek.j178.dev/diff/).
