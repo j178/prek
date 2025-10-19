@@ -133,15 +133,14 @@ jobs:
                   raise ValueError("Could not find .text section size")
               value, unit = float(match.group(1)), match.group(2)
               multipliers = {'B': 1, 'KiB': 1024, 'MiB': 1024**2, 'GiB': 1024**3, 'TiB': 1024**4}
-              return value * multipliers.get(unit, 1)
+              size = value * multipliers.get(unit, 1)
+              return size, f"{value} {unit}"
 
           pr_text = Path('bloat_pr.txt').read_text()
           base_text = Path('bloat_base.txt').read_text()
 
-          pr_bytes = parse_size(pr_text)
-          base_bytes = parse_size(base_text)
-          pr_size = re.search(r'([\d.]+\s*[KMGT]i?B)', pr_text).group(1)
-          base_size = re.search(r'([\d.]+\s*[KMGT]i?B)', base_text).group(1)
+          pr_bytes, pr_size = parse_size(pr_text)
+          base_bytes, base_size = parse_size(base_text)
 
           pct_change = ((pr_bytes - base_bytes) / base_bytes) * 100
           pct_display = f"{pct_change:+.2f}%"
