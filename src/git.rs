@@ -95,6 +95,20 @@ pub(crate) async fn intent_to_add_files(root: &Path) -> Result<Vec<PathBuf>, Err
     Ok(zsplit(&output.stdout)?)
 }
 
+pub(crate) async fn get_added_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
+    let output = git_cmd("get added files")?
+        .current_dir(root)
+        .arg("diff")
+        .arg("--staged")
+        .arg("--name-only")
+        .arg("--diff-filter=A")
+        .arg("-z") // Use NUL as line terminator
+        .check(true)
+        .output()
+        .await?;
+    Ok(zsplit(&output.stdout)?)
+}
+
 pub(crate) async fn get_changed_files(
     old: &str,
     new: &str,
