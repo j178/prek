@@ -160,7 +160,7 @@ brew install prek
 <summary>mise</summary>
 
 <!-- mise-install:start -->
-To use prek with [mise](https://mise.jdx.dev):
+To use prek with [mise](https://mise.jdx.dev) ([v2025.8.11](https://github.com/jdx/mise/releases/tag/v2025.8.11) or later):
 
 ```bash
 mise use prek
