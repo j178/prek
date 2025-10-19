@@ -287,6 +287,8 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [requests-cache](https://github.com/requests-cache/requests-cache/pull/1116)
 - [kreuzberg](https://github.com/Goldziher/kreuzberg/pull/142)
 
+For a more comprehensive list of open-source projects using prek see the [list of dependents on github](https://github.com/j178/prek/network/dependents).
+
 <!-- why:end -->
 
 ## Acknowledgements
