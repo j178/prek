@@ -42,7 +42,7 @@ In the root of your repository, add a `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: check-yaml
       - id: end-of-file-fixer
@@ -72,7 +72,7 @@ Now every `git commit` will invoke `prek run` for the files included in the comm
 
 ### 4. Go further
 
-- Explore richer configuration options in the official [pre-commit documentation](https://pre-commit.com/#plugins). Every example there works with prek.
+- Explore richer configuration options in the official [pre-commit documentation](https://pre-commit.com/). Every example there works with prek.
 - Check the [configuration reference](./configuration.md) for prek-specific settings.
 - Browse the [built-in hooks](./builtin.md) and the [difference guide](./diff.md) to see what else you can leverage.
 
