@@ -852,6 +852,53 @@ fn starts_with(slice: &[String], prefix: &[&str]) -> bool {
     slice.len() >= prefix.len() && slice.iter().zip(prefix.iter()).all(|(s, p)| s == p)
 }
 
+/// Parse nix-shell shebangs, which may span multiple lines.
+/// See: <https://nixos.wiki/wiki/Nix-shell_shebang>
+/// Example:
+/// `#!nix-shell -i python3 -p python3` would return `["python3"]`
+fn parse_nix_shebang<R: BufRead>(reader: &mut R, mut cmd: Vec<String>) -> Vec<String> {
+    loop {
+        let Ok(buf) = reader.fill_buf() else {
+            break;
+        };
+
+        if buf.len() < 2 || &buf[..2] != b"#!" {
+            break;
+        }
+
+        reader.consume(2);
+
+        let mut next_line = String::new();
+        match reader.read_line(&mut next_line) {
+            Ok(0) => break,
+            Ok(_) => {}
+            Err(err) => {
+                if err.kind() == std::io::ErrorKind::InvalidData {
+                    return cmd;
+                }
+                break;
+            }
+        }
+
+        let trimmed = next_line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if let Some(line_tokens) = shlex::split(trimmed) {
+            for idx in 0..line_tokens.len().saturating_sub(1) {
+                if line_tokens[idx] == "-i" {
+                    if let Some(interpreter) = line_tokens.get(idx + 1) {
+                        cmd = vec![interpreter.clone()];
+                    }
+                }
+            }
+        }
+    }
+
+    cmd
+}
+
 pub(crate) fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
     let file = std::fs::File::open(path)?;
     let mut reader = std::io::BufReader::new(file);
@@ -870,7 +917,7 @@ pub(crate) fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
     }
 
     let mut tokens = shlex::split(line[2..].trim()).ok_or(ShebangError::ParseFailed)?;
-    let cmd =
+    let mut cmd =
         if starts_with(&tokens, &["/usr/bin/env", "-S"]) || starts_with(&tokens, &["env", "-S"]) {
             tokens.drain(0..2);
             tokens
@@ -883,10 +930,13 @@ pub(crate) fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
     if cmd.is_empty() {
         return Err(ShebangError::NoCommand);
     }
-    // TODO
     if cmd[0] == "nix-shell" {
-        return Ok(vec![]);
+        cmd = parse_nix_shebang(&mut reader, cmd);
     }
+    if cmd.is_empty() {
+        return Err(ShebangError::NoCommand);
+    }
+
     Ok(cmd)
 }
 
@@ -958,25 +1008,26 @@ pub fn all_tags() -> &'static FxHashSet<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
     use std::path::Path;
-    #[cfg(unix)]
-    use tempfile::tempdir;
 
     #[test]
     #[cfg(unix)]
-    fn tags_from_path() {
-        let dir = tempdir().unwrap();
+    fn tags_from_path() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
         let src = dir.path().join("source.txt");
         let dest = dir.path().join("link.txt");
-        fs_err::File::create(&src).unwrap();
-        std::os::unix::fs::symlink(&src, &dest).unwrap();
+        fs_err::File::create(&src)?;
+        std::os::unix::fs::symlink(&src, &dest)?;
 
-        let tags = super::tags_from_path(dir.path()).unwrap();
+        let tags = super::tags_from_path(dir.path())?;
         assert_eq!(tags, vec!["directory"]);
-        let tags = super::tags_from_path(&src).unwrap();
+        let tags = super::tags_from_path(&src)?;
         assert_eq!(tags, vec!["plain-text", "non-executable", "file", "text"]);
-        let tags = super::tags_from_path(&dest).unwrap();
+        let tags = super::tags_from_path(&dest)?;
         assert_eq!(tags, vec!["symlink"]);
+
+        Ok(())
     }
 
     #[test]
@@ -1019,5 +1070,44 @@ mod tests {
 
         let tags = super::tags_from_interpreter("invalid");
         assert_eq!(tags, Vec::<&str>::new());
+    }
+
+    #[test]
+    fn parse_shebang_nix_shell_interpreter() -> anyhow::Result<()> {
+        let mut file = tempfile::NamedTempFile::new()?;
+        writeln!(
+            file,
+            indoc::indoc! {r#"
+            #!/usr/bin/env nix-shell
+            #! nix-shell --pure -i bash -p "python3.withPackages (p: [ p.numpy p.sympy ])"
+            #! nix-shell -I nixpkgs=https://example.com
+            echo hi
+            "#}
+        )?;
+        file.flush()?;
+
+        let cmd = super::parse_shebang(file.path())?;
+        assert_eq!(cmd, vec!["bash"]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_shebang_nix_shell_without_interpreter() -> anyhow::Result<()> {
+        let mut file = tempfile::NamedTempFile::new()?;
+        writeln!(
+            file,
+            indoc::indoc! {r"
+            #!/usr/bin/env nix-shell -p python3
+            #! nix-shell --pure -I nixpkgs=https://example.com
+            echo hi
+            "}
+        )?;
+        file.flush()?;
+
+        let cmd = super::parse_shebang(file.path())?;
+        assert_eq!(cmd, vec!["nix-shell", "-p", "python3"]);
+
+        Ok(())
     }
 }
