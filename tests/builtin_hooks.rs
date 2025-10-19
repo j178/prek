@@ -1264,3 +1264,134 @@ fn check_xml_with_features() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn debug_statements_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: debug-statements
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files with debug statements
+    cwd.child("debug_import.py").write_str(indoc::indoc! {r"
+        import pdb
+        import sys
+
+        def main():
+            print('Hello')
+    "})?;
+
+    cwd.child("debug_breakpoint.py")
+        .write_str(indoc::indoc! {r"
+        def debug_func():
+            x = 1
+            breakpoint()
+            return x
+    "})?;
+
+    cwd.child("clean.py").write_str(indoc::indoc! {r"
+        def hello():
+            print('No debug statements')
+    "})?;
+
+    context.git_add(".");
+
+    // First run: hooks should fail due to debug statements
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    debug statements (python)................................................Failed
+    - hook id: debug-statements
+    - exit code: 1
+      debug_breakpoint.py:3:4: breakpoint called
+      debug_import.py:1:0: pdb imported
+
+    ----- stderr -----
+    ");
+
+    // Fix the files by removing debug statements
+    cwd.child("debug_import.py").write_str(indoc::indoc! {r"
+        import sys
+
+        def main():
+            print('Hello')
+    "})?;
+
+    cwd.child("debug_breakpoint.py")
+        .write_str(indoc::indoc! {r"
+        def debug_func():
+            x = 1
+            return x
+    "})?;
+
+    context.git_add(".");
+
+    // Second run: hooks should now pass
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    debug statements (python)................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn debug_statements_multiple_types() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: debug-statements
+    "});
+
+    let cwd = context.work_dir();
+
+    cwd.child("multiple.py").write_str(indoc::indoc! {r"
+        import ipdb
+        from pdb import set_trace
+
+        def func1():
+            breakpoint()
+            pass
+
+        def func2():
+            x = 1
+    "})?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    debug statements (python)................................................Failed
+    - hook id: debug-statements
+    - exit code: 1
+      multiple.py:1:0: ipdb imported
+      multiple.py:2:0: pdb imported
+      multiple.py:5:4: breakpoint called
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
