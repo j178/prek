@@ -13,7 +13,7 @@
 !!! warning "Not production-ready yet"
     prek is not production-ready yet. Some subcommands and languages are not implemented. See the current gaps for drop-in parity on the [TODO page](./todo.md).
 
-    It's already being adopted by [some projects](#who-is-using-prek), please give it a try - we'd love your feedback!
+    But it's already being adopted by [some projects](#who-is-using-prek) like Airflow, please give it a try - we'd love your feedback!
 
 {%
   include-markdown "../README.md"
@@ -29,7 +29,9 @@
 
 ## Getting Started
 
-- [Installation](./installation.md) - Installation options
+- [Installation](./installation.md) - How to install prek
+- [Quickstart](./quickstart.md) - Getting started with prek
+- [Configuration](./configuration.md) - Configuring prek
 - [Workspace Mode](./workspace.md) - Monorepo support
 - [Differences](./diff.md) - What's different from pre-commit
 - [Debugging](./debugging.md) - Troubleshooting tips

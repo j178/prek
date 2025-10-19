@@ -26,7 +26,22 @@ def on_page_markdown(markdown, **kwargs):
 
     def replacement(match):
         url = match.group(0)
-        path = url.replace(site_url, '').rstrip('/')
-        return f"{path}.md"
+        path = url.replace(site_url, '', 1)
+
+        # Strip any query string and separate fragment identifiers.
+        path = path.split('?', 1)[0]
+        path, *fragment = path.split('#', 1)
+
+        path = path.lstrip('/').rstrip('/')
+        if not path:
+            path = 'index'
+
+        last_segment = path.rsplit('/', 1)[-1]
+        if '.' not in last_segment:
+            path = f"{path}.md"
+
+        if fragment:
+            return f"{path}#{fragment[0]}"
+        return path
 
     return re.sub(rf'{re.escape(site_url)}([^)\s]+)', replacement, markdown)
