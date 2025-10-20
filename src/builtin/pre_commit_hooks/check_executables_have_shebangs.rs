@@ -1,10 +1,12 @@
-use crate::hook::Hook;
-use crate::run::CONCURRENCY;
+use std::path::{Path, PathBuf};
+
 use futures::StreamExt;
 use owo_colors::OwoColorize;
-use std::path::{Path, PathBuf};
-use std::process::Command;
 use tokio::io::AsyncReadExt;
+
+use crate::git;
+use crate::hook::Hook;
+use crate::run::CONCURRENCY;
 
 const EXECUTABLE_VALUES: &[&str] = &["1", "3", "5", "7"];
 
@@ -12,19 +14,16 @@ pub(crate) async fn check_executables_have_shebangs(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>), anyhow::Error> {
-    let output = Command::new("git")
-        .args(["config", "core.fileMode"])
-        .output()?;
+    let stdout = git::git_cmd("get file file mode")?
+        .arg("config")
+        .arg("core.fileMode")
+        .check(true)
+        .output()
+        .await?
+        .stdout;
+    let tracks_executable_bit = std::str::from_utf8(&stdout)?.trim() != "false";
 
     let file_base = hook.project().relative_path();
-
-    if !output.status.success() {
-        return Err(anyhow::anyhow!(
-            "Git command to check core.fileMode failed with status: {}",
-            output.status
-        ));
-    }
-    let tracks_executable_bit = std::str::from_utf8(&output.stdout)?.trim() != "false";
     let file_paths: Vec<_> = filenames.iter().map(|p| file_base.join(p)).collect();
 
     // If on win32 use git to check executable bit, else use os level check
@@ -42,7 +41,7 @@ async fn os_check_shebangs(paths: &Vec<PathBuf>) -> Result<(i32, Vec<u8>), anyho
         .map(|file| async move {
             let has_shebang = file_has_shebang(file).await?;
             if has_shebang {
-                Ok::<(i32, Vec<u8>), anyhow::Error>((0, Vec::new()))
+                anyhow::Ok((0, Vec::new()))
             } else {
                 let msg = print_shebang_warning(file);
                 Ok((1, msg.into_bytes()))
@@ -81,44 +80,40 @@ fn print_shebang_warning(path: &Path) -> String {
 }
 
 async fn git_check_shebangs(paths: &Vec<PathBuf>) -> Result<(i32, Vec<u8>), anyhow::Error> {
-    let output = Command::new("git")
+    let output = git::git_cmd("git ls-files")?
         .arg("ls-files")
         .arg("-z")
+        // Show staged contents' mode bits, object name and stage number in the output.
         .arg("--stage")
         .arg("--")
         .args(paths)
-        .output()?;
+        .check(true)
+        .output()
+        .await?;
 
-    if !output.status.success() {
-        return Err(anyhow::anyhow!(
-            "Git command ls-files failed with status: {}",
-            output.status
-        ));
-    }
-
-    let stdout = str::from_utf8(&output.stdout)?;
-    let entries: Vec<_> = zsplit(stdout)
-        .into_iter()
-        .filter_map(|entry| {
-            let mut parts = entry.split('\t');
-            let metadata = parts.next()?;
-            let file_name = parts.next()?;
-            let mode = metadata.split_whitespace().next().unwrap_or("");
-            let is_executable = mode
-                .chars()
-                .rev()
-                .take(3)
-                .any(|c| EXECUTABLE_VALUES.contains(&c.to_string().as_str()));
-            Some((file_name.to_string(), is_executable))
-        })
-        .collect();
+    let entries = output.stdout.split(|&b| b == b'\0').filter_map(|entry| {
+        let entry = str::from_utf8(entry).ok()?;
+        if entry.is_empty() {
+            return None;
+        }
+        let mut parts = entry.split('\t');
+        let metadata = parts.next()?;
+        let file_name = parts.next()?;
+        let mode = metadata.split_whitespace().next().unwrap_or("");
+        let is_executable = mode
+            .chars()
+            .rev()
+            .take(3)
+            .any(|c| EXECUTABLE_VALUES.contains(&c.to_string().as_str()));
+        Some((file_name.to_string(), is_executable))
+    });
 
     let mut tasks = futures::stream::iter(entries)
         .map(|(file_name, is_executable)| async move {
             if is_executable {
                 let has_shebang = file_has_shebang(Path::new(&file_name)).await?;
                 if has_shebang {
-                    Ok::<(i32, Vec<u8>), anyhow::Error>((0, Vec::new()))
+                    anyhow::Ok((0, Vec::new()))
                 } else {
                     let msg = print_shebang_warning(Path::new(&file_name));
                     Ok((1, msg.into_bytes()))
@@ -141,16 +136,9 @@ async fn git_check_shebangs(paths: &Vec<PathBuf>) -> Result<(i32, Vec<u8>), anyh
     Ok((code, output))
 }
 
-fn zsplit(s: &str) -> Vec<&str> {
-    s.trim_matches('\0')
-        .split('\0')
-        .filter(|s| !s.is_empty())
-        .collect()
-}
-
-// Check first 2 bytes for shebang (#!)
+/// Check first 2 bytes for shebang (#!)
 async fn file_has_shebang(path: &Path) -> Result<bool, anyhow::Error> {
-    let mut file = tokio::fs::File::open(path).await?;
+    let mut file = fs_err::tokio::File::open(path).await?;
     let mut buf = [0u8; 2];
     let n = file.read(&mut buf).await?;
     Ok(n >= 2 && buf[0] == b'#' && buf[1] == b'!')
@@ -215,24 +203,6 @@ mod tests {
         let file_path = dir.path().join("nonshebang.sh");
         tokio::fs::write(&file_path, b"##!/bin/bash\n").await?;
         assert!(!file_has_shebang(&file_path).await?);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_zsplit() -> Result<(), anyhow::Error> {
-        let input = "file1\0file2\0file3\0";
-        let expected = vec!["file1", "file2", "file3"];
-        let result = zsplit(input);
-        assert_eq!(result, expected);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_zsplit_with_empty_strings() -> Result<(), anyhow::Error> {
-        let input = "\0file1\0\0file2\0\0";
-        let expected = vec!["file1", "file2"];
-        let result = zsplit(input);
-        assert_eq!(result, expected);
         Ok(())
     }
 
