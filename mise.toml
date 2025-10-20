@@ -2,6 +2,8 @@
 cargo.binstall = true
 
 [tools]
+# We need cargo-binstall so that Mise would download "cargo:" tools instead of building them.
+cargo-binstall = "latest"
 # For snapshot testing
 cargo-insta = "latest"
 "cargo:cargo-nextest" = "latest"
