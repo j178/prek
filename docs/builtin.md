@@ -30,7 +30,12 @@ Currently, only `https://github.com/pre-commit/pre-commit-hooks` is supported. M
 - `check-json` (Validate JSON files)
 - `check-toml` (Validate TOML files)
 - `check-yaml` (Validate YAML files)
+- `check-xml` (Validate XML files)
 - `mixed-line-ending` (Normalize or check line endings)
+- `check-symlinks` (Check for broken symlinks)
+- `check-merge-conflict` (Check for merge conflicts)
+- `detect-private-key` (Detect private keys)
+- `no-commit-to-branch` (Prevent committing to protected branches)
 
 Notes:
 
