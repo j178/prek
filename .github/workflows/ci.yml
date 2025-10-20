@@ -98,9 +98,9 @@ jobs:
         id: bloat_base
         if: github.event_name == 'pull_request'
         run: |
-          # Build base branch in separate target directory
+          # Build base branch
           git checkout ${{ github.event.pull_request.base.sha }}
-          CARGO_TARGET_DIR=target-base cargo bloat --release > bloat_base.txt 2>&1 || true
+          cargo bloat --release | tee bloat_base.txt >&1 || true
           git checkout -
 
           {
@@ -112,8 +112,8 @@ jobs:
       - name: Build PR branch
         id: bloat_pr
         run: |
-          # Build PR branch in default target directory
-          cargo bloat --release > bloat_pr.txt 2>&1 || true
+          # Build PR branch
+          cargo bloat --release | tee bloat_pr.txt >&1 || true
 
           {
             echo 'output<<EOF'
