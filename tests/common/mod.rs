@@ -252,6 +252,16 @@ impl TestContext {
             .success();
     }
 
+    pub fn add_file_as_git_executable(&self, path: impl AsRef<OsStr>) {
+        Command::new("git")
+            .arg("add")
+            .arg("--chmod=+x")
+            .arg(path)
+            .current_dir(&self.temp_dir)
+            .assert()
+            .success();
+    }
+
     /// Run `git add`.
     pub fn git_add(&self, path: impl AsRef<OsStr>) {
         Command::new("git")

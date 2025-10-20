@@ -2349,3 +2349,39 @@ fn run_log_file() {
         .child("log")
         .assert(predicate::path::exists());
 }
+
+#[cfg(not(unix))]
+#[test]
+fn test_git_executable_windows() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+repos:
+  -   repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v6.0.0
+      hooks:
+        -   id: check-executables-have-shebangs
+"});
+    context.git_add(".pre-commit-config.yaml");
+    let file_path = context.work_dir().join("test_script.sh");
+    std::fs::write(&file_path, "echo Hello World").expect("Failed to write file");
+
+    // Add the file to Git using its relative path
+    context.add_file_as_git_executable("./test_script.sh");
+
+    context.run();
+    cmd_snapshot!(context.filters(), context.run().arg("--log-file").arg("log"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check that executables have shebangs.....................................Failed
+    - hook id: check-executables-have-shebangs
+    - exit code: 1
+      test_script.sh: marked executable but has no (or invalid) shebang!
+        If it isn't supposed to be executable, try: `chmod -x test_script.sh`
+        If on Windows, you may also need to: `git add --chmod=-x test_script.sh`
+        If it is supposed to be executable, double-check its shebang.
+
+    ----- stderr -----
+    ");
+}

@@ -749,10 +749,34 @@ pub(crate) fn tags_from_path(path: &Path) -> Result<Vec<&str>> {
     }
     #[cfg(not(unix))]
     {
-        executable = {
-            let ext = path.extension().and_then(|ext| ext.to_str());
-            ext.is_some_and(|ext| ext == "exe" || ext == "bat" || ext == "cmd")
-        };
+        let output = std::process::Command::new("git")
+            .args(["ls-files", "--stage"])
+            .output()?;
+        if !output.status.success() {
+            return Err(anyhow::anyhow!(
+                "Failed to run git ls-files: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+        let stdout = str::from_utf8(&output.stdout)?;
+        let git_executables: std::collections::HashSet<&str> = stdout
+            .lines()
+            .filter_map(|line| {
+                let mut parts = line.split_whitespace();
+                let mode = parts.next()?;
+                // skip hash and stage
+                parts.next();
+                parts.next();
+                let path = parts.next()?;
+                (mode == "100755").then_some(path)
+            })
+            .collect();
+
+        let ext = path.extension().and_then(|ext| ext.to_str());
+        let is_win_executable = matches!(ext, Some("exe" | "bat" | "cmd"));
+        let path_str = path.to_string_lossy();
+        let is_git_executable = git_executables.contains(path_str.as_ref());
+        executable = is_win_executable || is_git_executable;
     }
 
     if executable {
