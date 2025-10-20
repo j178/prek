@@ -3,22 +3,22 @@ use fancy_regex::Regex;
 
 use crate::git::git_cmd;
 use crate::hook::Hook;
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
 #[command(disable_version_flag = true)]
 #[command(disable_help_flag = true)]
 struct Args {
-    #[arg(short, long = "branch", default_values = &["main", "master"], action = clap::ArgAction::Append)]
+    #[arg(short, long = "branch", default_values = &["main", "master"])]
     branches: Vec<String>,
-    #[arg(short, long = "pattern", action = clap::ArgAction::Append)]
+    #[arg(short, long = "pattern")]
     patterns: Vec<String>,
 }
 
 impl Args {
     fn check_protected(&self, branch: &str) -> Result<bool> {
-        if self.branches.contains(&branch.to_string()) {
+        if self.branches.iter().any(|b| b == branch) {
             return Ok(true);
         }
 
@@ -30,7 +30,8 @@ impl Args {
             .patterns
             .iter()
             .map(|p| Regex::new(p))
-            .collect::<Result<Vec<Regex>, _>>()?;
+            .collect::<Result<Vec<Regex>, _>>()
+            .context("Failed to compile regex patterns")?;
 
         Ok(patterns
             .iter()
@@ -56,12 +57,10 @@ pub(crate) async fn no_commit_to_branch(hook: &Hook) -> Result<(i32, Vec<u8>)> {
     // stdout must start with "refs/heads/"
     let branch = ref_name.trim().trim_start_matches("refs/heads/");
 
-    match args.check_protected(branch) {
-        Ok(true) => {
-            let err_msg = format!("You are not allowed to commit to branch '{branch}'\n");
-            Ok((1, err_msg.into_bytes()))
-        }
-        Ok(false) => Ok((0, Vec::new())),
-        Err(e) => Ok((1, e.to_string().into_bytes())),
+    if args.check_protected(branch)? {
+        let err_msg = format!("You are not allowed to commit to branch '{branch}'\n");
+        Ok((1, err_msg.into_bytes()))
+    } else {
+        Ok((0, Vec::new()))
     }
 }

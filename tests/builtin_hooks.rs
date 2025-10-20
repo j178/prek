@@ -1529,17 +1529,16 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
     cwd.child("invalid.txt").write_str("Invalid content")?;
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
-    don't commit to branch...................................................Failed
-    - hook id: no-commit-to-branch
-    - exit code: 1
-      Parsing error at position 0: Target of repeat operator is invalid
-
+    don't commit to branch...................................................
     ----- stderr -----
-    "#);
+    error: Failed to run hook `no-commit-to-branch`
+      caused by: Failed to compile regex patterns
+      caused by: Parsing error at position 0: Target of repeat operator is invalid
+    ");
 
     Ok(())
 }
