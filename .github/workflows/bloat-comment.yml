@@ -45,7 +45,7 @@ jobs:
         if: steps.pr-number.outputs.pr-number
         with:
           name: bloat-check-results
-          workflow: ci.yaml
+          workflow: ci.yml
           pr: ${{ steps.pr-number.outputs.pr-number }}
           workflow_conclusion: completed
           if_no_artifact_found: ignore
