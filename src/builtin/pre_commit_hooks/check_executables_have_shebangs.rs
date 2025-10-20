@@ -36,7 +36,7 @@ pub(crate) async fn check_executables_have_shebangs(
     Ok((code, output))
 }
 
-async fn os_check_shebangs(paths: &Vec<PathBuf>) -> Result<(i32, Vec<u8>), anyhow::Error> {
+async fn os_check_shebangs(paths: &[PathBuf]) -> Result<(i32, Vec<u8>), anyhow::Error> {
     let mut tasks = futures::stream::iter(paths)
         .map(|file| async move {
             let has_shebang = file_has_shebang(file).await?;
@@ -147,91 +147,83 @@ async fn file_has_shebang(path: &Path) -> Result<bool, anyhow::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
-    // file_has_shebang tests
+    use tempfile::NamedTempFile;
+
     #[tokio::test]
     async fn test_file_with_shebang() -> Result<(), anyhow::Error> {
-        let dir = tempdir()?;
-        let file_path = dir.path().join("script.sh");
-        tokio::fs::write(&file_path, b"#!/bin/bash\necho Hello World\n").await?;
+        let file = NamedTempFile::new()?;
+        tokio::fs::write(file.path(), b"#!/bin/bash\necho Hello World\n").await?;
 
-        assert!(file_has_shebang(&file_path).await?);
+        assert!(file_has_shebang(file.path()).await?);
         Ok(())
     }
 
     #[tokio::test]
     async fn test_file_without_shebang() -> Result<(), anyhow::Error> {
-        let dir = tempdir()?;
-        let file_path = dir.path().join("script.sh");
-        tokio::fs::write(&file_path, b"echo Hello World\n").await?;
+        let file = NamedTempFile::new()?;
+        tokio::fs::write(file.path(), b"echo Hello World\n").await?;
 
-        assert!(!file_has_shebang(&file_path).await?);
+        assert!(!file_has_shebang(file.path()).await?);
         Ok(())
     }
 
     #[tokio::test]
     async fn test_empty_file() -> Result<(), anyhow::Error> {
-        let dir = tempdir()?;
-        let file_path = dir.path().join("empty.sh");
-        tokio::fs::write(&file_path, b"").await?;
+        let file = NamedTempFile::new()?;
+        tokio::fs::write(file.path(), b"").await?;
 
-        assert!(!file_has_shebang(&file_path).await?);
+        assert!(!file_has_shebang(file.path()).await?);
         Ok(())
     }
 
     #[tokio::test]
     async fn test_file_with_partial_shebang() -> Result<(), anyhow::Error> {
-        let dir = tempdir()?;
-        let file_path = dir.path().join("partial.sh");
-        tokio::fs::write(&file_path, b"#\n").await?;
-        assert!(!file_has_shebang(&file_path).await?);
+        let file = NamedTempFile::new()?;
+        tokio::fs::write(file.path(), b"#\n").await?;
+        assert!(!file_has_shebang(file.path()).await?);
         Ok(())
     }
 
     #[tokio::test]
     async fn test_file_with_shebang_and_spaces() -> Result<(), anyhow::Error> {
-        let dir = tempdir()?;
-        let file_path = dir.path().join("spaces.sh");
-        tokio::fs::write(&file_path, b"#! /bin/bash\necho Test\n").await?;
-        assert!(file_has_shebang(&file_path).await?);
+        let file = NamedTempFile::new()?;
+        tokio::fs::write(file.path(), b"#! /bin/bash\necho Test\n").await?;
+        assert!(file_has_shebang(file.path()).await?);
         Ok(())
     }
 
     #[tokio::test]
     async fn test_file_with_non_shebang_start() -> Result<(), anyhow::Error> {
-        let dir = tempdir()?;
-        let file_path = dir.path().join("nonshebang.sh");
-        tokio::fs::write(&file_path, b"##!/bin/bash\n").await?;
-        assert!(!file_has_shebang(&file_path).await?);
+        let file = NamedTempFile::new()?;
+        tokio::fs::write(file.path(), b"##!/bin/bash\n").await?;
+        assert!(!file_has_shebang(file.path()).await?);
         Ok(())
     }
 
-    // integration tests for os_check_shebangs
     #[tokio::test]
     async fn test_os_check_shebangs_with_shebang() -> Result<(), anyhow::Error> {
-        let dir = tempdir()?;
-        let file_path = dir.path().join("with_shebang.sh");
-        tokio::fs::write(&file_path, b"#!/bin/bash\necho ok\n").await?;
-        let files = vec![file_path.clone()];
+        let file = NamedTempFile::new()?;
+        tokio::fs::write(file.path(), b"#!/bin/bash\necho ok\n").await?;
+        let files = vec![file.path().to_path_buf()];
         let (code, output) = os_check_shebangs(&files).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
+
         Ok(())
     }
 
-    // integration tests for os_check_shebangs
     #[tokio::test]
     async fn test_os_check_shebangs_without_shebang() -> Result<(), anyhow::Error> {
-        let dir = tempdir()?;
-        let file_path = dir.path().join("without_shebang.sh");
-        tokio::fs::write(&file_path, b"echo ok\n").await?;
-        let files = vec![file_path.clone()];
+        let file = NamedTempFile::new()?;
+        tokio::fs::write(file.path(), b"echo ok\n").await?;
+        let files = vec![file.path().to_path_buf()];
         let (code, output) = os_check_shebangs(&files).await?;
         assert_eq!(code, 1);
         assert!(
             String::from_utf8_lossy(&output)
                 .contains("marked executable but has no (or invalid) shebang!")
         );
+
         Ok(())
     }
 }
