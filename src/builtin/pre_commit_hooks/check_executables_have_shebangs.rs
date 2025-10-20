@@ -8,7 +8,7 @@ use crate::git;
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
-const EXECUTABLE_VALUES: &[&str] = &["1", "3", "5", "7"];
+const EXECUTABLE_VALUES: &[char] = &['1', '3', '5', '7'];
 
 pub(crate) async fn check_executables_have_shebangs(
     hook: &Hook,
@@ -104,7 +104,7 @@ async fn git_check_shebangs(paths: &Vec<PathBuf>) -> Result<(i32, Vec<u8>), anyh
             .chars()
             .rev()
             .take(3)
-            .any(|c| EXECUTABLE_VALUES.contains(&c.to_string().as_str()));
+            .any(|c| EXECUTABLE_VALUES.contains(&c));
         Some((file_name.to_string(), is_executable))
     });
 
