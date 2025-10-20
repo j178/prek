@@ -1264,3 +1264,234 @@ fn check_xml_with_features() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn check_builtin_literals_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-builtin-literals
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files with builtin literal calls
+    cwd.child("builtin_calls.py").write_str(indoc::indoc! {r"
+        x = list()
+        y = dict()
+        z = tuple()
+        a = int()
+    "})?;
+
+    cwd.child("clean.py").write_str(indoc::indoc! {r"
+        x = [1, 2, 3]
+        y = {'key': 'value'}
+        z = (1, 2)
+    "})?;
+
+    context.git_add(".");
+
+    // First run: should fail due to builtin literal calls
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check builtin type constructor use.......................................Failed
+    - hook id: check-builtin-literals
+    - exit code: 1
+      builtin_calls.py:1:4: replace list() with []
+      builtin_calls.py:2:4: replace dict() with {}
+      builtin_calls.py:3:4: replace tuple() with ()
+      builtin_calls.py:4:4: replace int() with 0
+
+    ----- stderr -----
+    ");
+
+    // Fix the files
+    cwd.child("builtin_calls.py").write_str(indoc::indoc! {r"
+        x = []
+        y = {}
+        z = ()
+        a = 0
+    "})?;
+
+    context.git_add(".");
+
+    // Second run: should pass
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check builtin type constructor use.......................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_builtin_literals_with_args() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-builtin-literals
+    "});
+
+    let cwd = context.work_dir();
+
+    // Builtin calls with arguments should be allowed
+    cwd.child("with_args.py").write_str(indoc::indoc! {r"
+        x = list([1, 2, 3])
+        y = dict([('a', 1)])
+        z = str('hello')
+        a = int('42')
+    "})?;
+
+    context.git_add(".");
+
+    // Should pass because all calls have arguments
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check builtin type constructor use.......................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_builtin_literals_dict_kwargs() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-builtin-literals
+    "});
+
+    let cwd = context.work_dir();
+
+    cwd.child("dict_kwargs.py").write_str(indoc::indoc! {r"
+        x = dict(foo='bar', baz='qux')
+        y = dict()
+    "})?;
+
+    context.git_add(".");
+
+    // By default, dict(foo='bar') is allowed but dict() is not
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check builtin type constructor use.......................................Failed
+    - hook id: check-builtin-literals
+    - exit code: 1
+      dict_kwargs.py:2:4: replace dict() with {}
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_builtin_literals_no_allow_dict_kwargs() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-builtin-literals
+                args: ['--no-allow-dict-kwargs']
+    "});
+
+    let cwd = context.work_dir();
+
+    cwd.child("dict_kwargs.py").write_str(indoc::indoc! {r"
+        x = dict(foo='bar')
+        y = dict()
+    "})?;
+
+    context.git_add(".");
+
+    // With --no-allow-dict-kwargs, dict(foo='bar') still allowed because it has args
+    // Only empty dict() should fail
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check builtin type constructor use.......................................Failed
+    - hook id: check-builtin-literals
+    - exit code: 1
+      dict_kwargs.py:2:4: replace dict() with {}
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_builtin_literals_ignore() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: check-builtin-literals
+                args: ['--ignore=list,dict']
+    "});
+
+    let cwd = context.work_dir();
+
+    cwd.child("ignored.py").write_str(indoc::indoc! {r"
+        x = list()
+        y = dict()
+        z = tuple()
+    "})?;
+
+    context.git_add(".");
+
+    // list() and dict() should be ignored, but tuple() should fail
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check builtin type constructor use.......................................Failed
+    - hook id: check-builtin-literals
+    - exit code: 1
+      ignored.py:3:4: replace tuple() with ()
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
