@@ -1,3 +1,7 @@
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+use std::process::Command;
+
 use anyhow::Result;
 use assert_fs::prelude::*;
 use constants::CONFIG_FILE;
@@ -1546,8 +1550,6 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn check_executables_have_shebangs_hook() -> Result<()> {
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
@@ -1572,17 +1574,17 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
     cwd.child("empty.sh").touch()?;
 
     // Mark scripts as executable
-    fs::set_permissions(
+    std::fs::set_permissions(
         cwd.child("script_with_shebang.sh").path(),
-        fs::Permissions::from_mode(0o755),
+        std::fs::Permissions::from_mode(0o755),
     )?;
-    fs::set_permissions(
+    std::fs::set_permissions(
         cwd.child("script_without_shebang.sh").path(),
-        fs::Permissions::from_mode(0o755),
+        std::fs::Permissions::from_mode(0o755),
     )?;
-    fs::set_permissions(
+    std::fs::set_permissions(
         cwd.child("empty.sh").path(),
-        fs::Permissions::from_mode(0o755),
+        std::fs::Permissions::from_mode(0o755),
     )?;
 
     context.git_add(".");
@@ -1610,9 +1612,9 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
     // Fix the files: remove executable bit or add shebang
     cwd.child("script_without_shebang.sh")
         .write_str("#!/bin/sh\necho fixed\n")?;
-    fs::set_permissions(
+    std::fs::set_permissions(
         cwd.child("empty.sh").path(),
-        fs::Permissions::from_mode(0o644),
+        std::fs::Permissions::from_mode(0o644),
     )?;
 
     context.git_add(".");
@@ -1632,13 +1634,12 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
 
 #[cfg(windows)]
 #[test]
-fn check_executables_have_shebangs_win() -> Result<()> {
-    use std::process::Command;
+fn check_executables_have_shebangs() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
 
-    let repo_path = context.work_dir().path();
+    let repo_path = context.work_dir();
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -1691,8 +1692,6 @@ fn check_executables_have_shebangs_win() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn check_executables_have_shebangs_various_cases() -> Result<()> {
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
@@ -1719,21 +1718,21 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
         .write_str("##!/bin/bash\necho bad\n")?;
 
     // Mark scripts as executable
-    fs::set_permissions(
+    std::fs::set_permissions(
         cwd.child("partial_shebang.sh").path(),
-        fs::Permissions::from_mode(0o755),
+        std::fs::Permissions::from_mode(0o755),
     )?;
-    fs::set_permissions(
+    std::fs::set_permissions(
         cwd.child("shebang_with_space.sh").path(),
-        fs::Permissions::from_mode(0o755),
+        std::fs::Permissions::from_mode(0o755),
     )?;
-    fs::set_permissions(
+    std::fs::set_permissions(
         cwd.child("whitespace.sh").path(),
-        fs::Permissions::from_mode(0o755),
+        std::fs::Permissions::from_mode(0o755),
     )?;
-    fs::set_permissions(
+    std::fs::set_permissions(
         cwd.child("invalid_shebang.sh").path(),
-        fs::Permissions::from_mode(0o755),
+        std::fs::Permissions::from_mode(0o755),
     )?;
     // non_executable.txt is not marked executable
 
@@ -1787,8 +1786,7 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
 
 #[cfg(windows)]
 #[test]
-fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
-    use std::process::Command;
+fn check_executables_have_shebangs_various_cases() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
