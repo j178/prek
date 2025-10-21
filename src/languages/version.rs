@@ -14,8 +14,7 @@ pub(crate) enum Error {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum LanguageRequest {
-    Any,
-    SystemOnly,
+    Any { system_only: bool },
     Python(PythonRequest),
     Node(NodeRequest),
     Golang(GoRequest),
@@ -26,12 +25,23 @@ pub(crate) enum LanguageRequest {
 impl LanguageRequest {
     pub(crate) fn is_any(&self) -> bool {
         match self {
-            LanguageRequest::Any => true,
-            LanguageRequest::SystemOnly => false,
+            LanguageRequest::Any { .. } => true,
             LanguageRequest::Python(req) => req.is_any(),
             LanguageRequest::Node(req) => req.is_any(),
             LanguageRequest::Golang(req) => req.is_any(),
             LanguageRequest::Semver(_) => false,
+        }
+    }
+
+    /// Returns true if this request allows downloading a version.
+    ///
+    /// Currently, only `system` disallows downloading. In the future,
+    /// we may add more specific version requests that also disallow downloading.
+    /// For example `language_version: 3.12; system_only`.
+    pub(crate) fn allows_download(&self) -> bool {
+        match self {
+            LanguageRequest::Any { system_only } => !system_only,
+            _ => false,
         }
     }
 
@@ -47,10 +57,10 @@ impl LanguageRequest {
         // - Rust version passed down to `rustup`
 
         if request == "default" || request.is_empty() {
-            return Ok(LanguageRequest::Any);
+            return Ok(LanguageRequest::Any { system_only: false });
         }
         if request == "system" {
-            return Ok(LanguageRequest::SystemOnly);
+            return Ok(LanguageRequest::Any { system_only: true });
         }
 
         Ok(match lang {
@@ -63,8 +73,7 @@ impl LanguageRequest {
 
     pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
         match self {
-            LanguageRequest::Any => true,
-            LanguageRequest::SystemOnly => true,
+            LanguageRequest::Any { .. } => true,
             LanguageRequest::Python(req) => req.satisfied_by(install_info),
             LanguageRequest::Node(req) => req.satisfied_by(install_info),
             LanguageRequest::Golang(req) => req.satisfied_by(install_info),

@@ -390,18 +390,17 @@ macro_rules! cmd_snapshot {
 pub(crate) use cmd_snapshot;
 
 #[allow(clippy::disallowed_methods)]
-pub(crate) fn remove_bin_from_path(bin: &str) -> anyhow::Result<OsString> {
+pub(crate) fn remove_bin_from_path(bin: &str, path: Option<OsString>) -> anyhow::Result<OsString> {
+    let path = path.unwrap_or(std::env::var_os("PATH").expect("PATH not set"));
     let Ok(dirs) = which::which_all(bin) else {
-        return Ok(std::env::var_os("PATH").expect("PATH environment variable is not set"));
+        return Ok(path);
     };
 
     let dirs: FxHashSet<_> = dirs
         .filter_map(|path| path.parent().map(Path::to_path_buf))
         .collect();
 
-    let current_path = std::env::var("PATH").unwrap_or_default();
-
-    let new_path_entries: Vec<_> = std::env::split_paths(&current_path)
+    let new_path_entries: Vec<_> = std::env::split_paths(&path)
         .filter(|path| !dirs.contains(path.as_path()))
         .collect();
 

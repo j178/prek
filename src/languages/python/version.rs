@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use crate::hook::InstallInfo;
 use crate::languages::version;
-use crate::languages::version::try_into_u64_slice;
+use crate::languages::version::{Error, try_into_u64_slice};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PythonRequest {
@@ -53,7 +53,7 @@ impl FromStr for PythonRequest {
                     // Try to parse as a VersionReq (like ">= 3.12" or ">=3.8, <3.12")
                     semver::VersionReq::parse(request)
                         .map(|version_req| PythonRequest::Range(version_req, request.into()))
-                        .map_err(|_| version::Error::InvalidVersion(request.to_string()))
+                        .map_err(|_| Error::InvalidVersion(request.to_string()))
                 })
                 .or_else(|_| {
                     // If it doesn't match any known format, treat it as a path
@@ -61,7 +61,7 @@ impl FromStr for PythonRequest {
                     if path.exists() {
                         Ok(PythonRequest::Path(path))
                     } else {
-                        Err(version::Error::InvalidVersion(request.to_string()))
+                        Err(Error::InvalidVersion(request.to_string()))
                     }
                 })
         }
@@ -77,16 +77,16 @@ impl PythonRequest {
     fn parse_version_numbers(
         version_str: &str,
         original_request: &str,
-    ) -> Result<PythonRequest, version::Error> {
+    ) -> Result<PythonRequest, Error> {
         let parts = try_into_u64_slice(version_str)
-            .map_err(|_| version::Error::InvalidVersion(original_request.to_string()))?;
+            .map_err(|_| Error::InvalidVersion(original_request.to_string()))?;
         let parts = split_wheel_tag_version(parts);
 
         match parts[..] {
             [major] => Ok(PythonRequest::Major(major)),
             [major, minor] => Ok(PythonRequest::MajorMinor(major, minor)),
             [major, minor, patch] => Ok(PythonRequest::MajorMinorPatch(major, minor, patch)),
-            _ => Err(version::Error::InvalidVersion(original_request.to_string())),
+            _ => Err(Error::InvalidVersion(original_request.to_string())),
         }
     }
 

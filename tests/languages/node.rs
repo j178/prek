@@ -209,7 +209,7 @@ fn doctoc() -> anyhow::Result<()> {
     context.git_add(".");
 
     #[allow(clippy::disallowed_methods)]
-    let new_path = remove_bin_from_path("node")?;
+    let new_path = remove_bin_from_path("node", None)?;
 
     // Set PATH to . to mask the system installed node,
     // ensure that `npm` runs correctly.

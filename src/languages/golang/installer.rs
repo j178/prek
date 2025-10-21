@@ -2,8 +2,10 @@ use std::env::consts::EXE_EXTENSION;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
+use constants::env_vars::EnvVars;
 use itertools::Itertools;
 use reqwest::Client;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
@@ -30,6 +32,15 @@ impl Display for GoResult {
         Ok(())
     }
 }
+
+/// Override the Go binary name for testing.
+static GO_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
+    if let Ok(name) = EnvVars::var(EnvVars::PREK_INTERNAL__GO_BINARY_NAME) {
+        name
+    } else {
+        "go".to_string()
+    }
+});
 
 impl GoResult {
     fn from_executable(path: PathBuf, from_system: bool) -> Self {
@@ -100,7 +111,12 @@ impl GoInstaller {
         }
     }
 
-    pub(crate) async fn install(&self, store: &Store, request: &GoRequest) -> Result<GoResult> {
+    pub(crate) async fn install(
+        &self,
+        store: &Store,
+        request: &GoRequest,
+        allows_download: bool,
+    ) -> Result<GoResult> {
         fs_err::tokio::create_dir_all(&self.root).await?;
 
         let _lock = LockedFile::acquire(self.root.join(".lock"), "go").await?;
@@ -115,8 +131,8 @@ impl GoInstaller {
             return Ok(go);
         }
 
-        if matches!(request, GoRequest::SystemOnly) {
-            anyhow::bail!("No suitable system go version found for request: {request}");
+        if !allows_download {
+            anyhow::bail!("No suitable system Go version found and downloads are disabled");
         }
 
         let resolved_version = self
@@ -235,7 +251,7 @@ impl GoInstaller {
     }
 
     async fn find_system_go(&self, go_request: &GoRequest) -> Result<Option<GoResult>> {
-        let go_paths = match which::which_all("go") {
+        let go_paths = match which::which_all(&*GO_BINARY_NAME) {
             Ok(paths) => paths,
             Err(e) => {
                 debug!("No go executables found in PATH: {}", e);

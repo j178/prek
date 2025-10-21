@@ -63,24 +63,6 @@ pub(crate) async fn query_python_info(python: &Path) -> Result<PythonInfo> {
     })
 }
 
-fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
-    match request {
-        LanguageRequest::Any => None,
-        LanguageRequest::SystemOnly => "",
-        LanguageRequest::Python(request) => match request {
-            PythonRequest::Any => None,
-            PythonRequest::Major(major) => Some(format!("{major}")),
-            PythonRequest::MajorMinor(major, minor) => Some(format!("{major}.{minor}")),
-            PythonRequest::MajorMinorPatch(major, minor, patch) => {
-                Some(format!("{major}.{minor}.{patch}"))
-            }
-            PythonRequest::Range(_, raw) => Some(raw.clone()),
-            PythonRequest::Path(path) => Some(path.to_string_lossy().to_string()),
-        },
-        _ => unreachable!(),
-    }
-}
-
 impl LanguageImpl for Python {
     async fn install(
         &self,
@@ -103,10 +85,8 @@ impl LanguageImpl for Python {
 
         debug!(%hook, target = %info.env_path.display(), "Installing environment");
 
-        let python_request = to_uv_python_request(&hook.language_request);
-
         // Create venv (auto download Python if needed)
-        Self::create_venv_with_retry(&uv, store, &info, python_request.as_ref())
+        Self::create_venv(&uv, store, &info, &hook.language_request)
             .await
             .context("Failed to create Python virtual environment")?;
 
@@ -224,12 +204,29 @@ impl LanguageImpl for Python {
     }
 }
 
+fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
+    match request {
+        LanguageRequest::Any { .. } => None,
+        LanguageRequest::Python(request) => match request {
+            PythonRequest::Any => None,
+            PythonRequest::Major(major) => Some(format!("{major}")),
+            PythonRequest::MajorMinor(major, minor) => Some(format!("{major}.{minor}")),
+            PythonRequest::MajorMinorPatch(major, minor, patch) => {
+                Some(format!("{major}.{minor}.{patch}"))
+            }
+            PythonRequest::Range(_, raw) => Some(raw.clone()),
+            PythonRequest::Path(path) => Some(path.to_string_lossy().to_string()),
+        },
+        _ => unreachable!(),
+    }
+}
+
 impl Python {
-    async fn create_venv_with_retry(
+    async fn create_venv(
         uv: &Uv,
         store: &Store,
         info: &InstallInfo,
-        python_request: Option<&String>,
+        python_request: &LanguageRequest,
     ) -> Result<()> {
         // Try creating venv without downloads first
         match Self::create_venv_command(uv, store, info, python_request, false, false)
@@ -247,6 +244,11 @@ impl Python {
             Err(e @ process::Error::Status { .. }) => {
                 // Check if we can retry with downloads
                 if Self::can_retry_with_downloads(&e) {
+                    if !python_request.allows_download() {
+                        anyhow::bail!(
+                            "No suitable system Python version found and downloads are disabled"
+                        );
+                    }
                     debug!(
                         "Retrying venv creation with managed Python downloads: `{}`",
                         info.env_path.display()
@@ -271,7 +273,7 @@ impl Python {
         uv: &Uv,
         store: &Store,
         info: &InstallInfo,
-        python_request: Option<&String>,
+        python_request: &LanguageRequest,
         set_install_dir: bool,
         allow_downloads: bool,
     ) -> Cmd {
@@ -298,7 +300,7 @@ impl Python {
             cmd.arg("--no-python-downloads");
         }
 
-        if let Some(python) = python_request {
+        if let Some(python) = to_uv_python_request(python_request) {
             cmd.arg("--python").arg(python);
         }
 

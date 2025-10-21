@@ -1,7 +1,6 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::common::{TestContext, cmd_snapshot};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -9,6 +8,8 @@ use constants::env_vars::EnvVars;
 use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+
+use crate::common::{TestContext, cmd_snapshot};
 
 mod common;
 
@@ -2348,4 +2349,78 @@ fn run_log_file() {
         .work_dir()
         .child("log")
         .assert(predicate::path::exists());
+}
+
+/// Test `language_version: system` works and disables downloading.
+#[test]
+fn system_language_version() {
+    if !EnvVars::is_set(EnvVars::CI) {
+        // Skip when not running in CI, as we may not have toolchains installed locally.
+        return;
+    }
+
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: system-node
+                name: system-node
+                language: node
+                language_version: system
+                entry: node -v
+                pass_filenames: false
+              - id: system-go
+                name: system-go
+                language: golang
+                language_version: system
+                entry: go version
+                pass_filenames: false
+   "});
+    context.git_add(".");
+
+    // Go and Node can't be found, `system` must fail.
+    cmd_snapshot!(
+        context.filters(),
+        context.run()
+        .arg("system-node")
+        .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
+        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install hook `system-node`
+      caused by: Failed to install node
+      caused by: No suitable system Node version found and downloads are disabled
+    ");
+
+    cmd_snapshot!(
+        context.filters(),
+        context.run()
+        .arg("system-go")
+        .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
+        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install hook `system-go`
+      caused by: Failed to install go
+      caused by: No suitable system Go version found and downloads are disabled
+    ");
+
+    // When Go and Node are available, hooks pass.
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    system-node..............................................................Passed
+    system-go................................................................Passed
+
+    ----- stderr -----
+    ");
 }

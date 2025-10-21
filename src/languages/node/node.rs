@@ -43,14 +43,13 @@ impl LanguageImpl for Node {
         let node_dir = store.tools_path(ToolBucket::Node);
         let installer = NodeInstaller::new(node_dir);
 
-        let node_request = match &hook.language_request {
-            LanguageRequest::Any => &NodeRequest::Any,
-            LanguageRequest::SystemOnly => &NodeRequest::SystemOnly,
-            LanguageRequest::Node(node_request) => node_request,
+        let (node_request, allows_download) = match &hook.language_request {
+            LanguageRequest::Any { system_only } => (&NodeRequest::Any, !system_only),
+            LanguageRequest::Node(node_request) => (node_request, true),
             _ => unreachable!(),
         };
         let node = installer
-            .install(store, node_request)
+            .install(store, node_request, allows_download)
             .await
             .context("Failed to install node")?;
 

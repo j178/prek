@@ -138,7 +138,6 @@ impl NodeVersion {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum NodeRequest {
     Any,
-    SystemOnly,
     Major(u64),
     MajorMinor(u64, u64),
     MajorMinorPatch(u64, u64, u64),
@@ -234,7 +233,6 @@ impl NodeRequest {
     pub(crate) fn matches(&self, version: &NodeVersion, toolchain: Option<&Path>) -> bool {
         match self {
             NodeRequest::Any => true,
-            NodeRequest::SystemOnly => true,
             NodeRequest::Major(major) => version.major() == *major,
             NodeRequest::MajorMinor(major, minor) => {
                 version.major() == *major && version.minor() == *minor
