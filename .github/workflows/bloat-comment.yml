@@ -9,7 +9,7 @@
 # actions have no write access to GitHub resources and will fail on any attempt.
 name: PR comment (bloat check)
 on:
-  workflow_run:
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [CI]
     types: [completed]
   workflow_dispatch:
