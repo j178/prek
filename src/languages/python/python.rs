@@ -249,6 +249,7 @@ impl Python {
                             "No suitable system Python version found and downloads are disabled"
                         );
                     }
+
                     debug!(
                         "Retrying venv creation with managed Python downloads: `{}`",
                         info.env_path.display()

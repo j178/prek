@@ -41,7 +41,7 @@ impl LanguageRequest {
     pub(crate) fn allows_download(&self) -> bool {
         match self {
             LanguageRequest::Any { system_only } => !system_only,
-            _ => false,
+            _ => true,
         }
     }
 
