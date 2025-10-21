@@ -62,3 +62,8 @@ install-path = ["$XDG_BIN_HOME/", "$XDG_DATA_HOME/../bin", "~/.local/bin"]
 
 [dist.github-custom-runners]
 global = "ubuntu-latest"
+
+[dist.github-action-commits]
+"actions/checkout" = "08c6903cd8c0fde910a37f88322edcfb5dd907a8" # v5
+"actions/upload-artifact" = "ea165f8d65b6e75b540449e92b4886f43607fa02" # v4.6.2
+"actions/download-artifact" = "634f93cb2916e3fdff6788551b99b062d0335ce0" # v5.0.0
