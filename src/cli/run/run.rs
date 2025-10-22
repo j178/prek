@@ -354,12 +354,12 @@ pub async fn install_hooks(
                         .language
                         .install(hook.clone(), store, reporter)
                         .await
-                        .context(format!("Failed to install hook `{hook}`"))?;
+                        .with_context(|| format!("Failed to install hook `{hook}`"))?;
 
                     installed_hook
                         .mark_as_installed(store)
                         .await
-                        .context(format!("Failed to mark hook `{hook}` as installed"))?;
+                        .with_context(|| format!("Failed to mark hook `{hook}` as installed"))?;
 
                     match &installed_hook {
                         InstalledHook::Installed { info, .. } => {
@@ -711,7 +711,7 @@ async fn run_hook(
         hook.language
             .run(hook, &filenames, store)
             .await
-            .context(format!("Failed to run hook `{hook}`"))?
+            .with_context(|| format!("Failed to run hook `{hook}`"))?
     };
 
     let duration = start.elapsed();

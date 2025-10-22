@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use anstream::eprintln;
 use anyhow::Result;
 use owo_colors::OwoColorize;
-use tracing::{error, trace};
+use tracing::{debug, error, trace};
 
 use constants::env_vars::EnvVars;
 
@@ -64,7 +64,7 @@ impl IntentToAddKeeper {
 impl Drop for IntentToAddKeeper {
     fn drop(&mut self) {
         if let Err(err) = self.restore() {
-            anstream::eprintln!(
+            eprintln!(
                 "{}",
                 format!("Failed to restore intent-to-add changes: {err}").red()
             );
@@ -92,7 +92,7 @@ impl WorkingTreeKeeper {
             .await?;
 
         if output.status.success() {
-            trace!("No non-staged changes detected");
+            debug!("Working tree is clean");
             // No non-staged changes
             Ok(Self {
                 root: root.to_path_buf(),
@@ -116,18 +116,21 @@ impl WorkingTreeKeeper {
                 );
                 let patch_path = patch_dir.join(&patch_name);
 
+                trace!("Unstaged changes detected");
                 eprintln!(
                     "{}",
                     format!(
-                        "Non-staged changes detected, saving to `{}`",
+                        "Unstaged changes detected, stashing unstaged changes to `{}`",
                         patch_path.user_display()
                     )
                     .yellow()
+                    .bold()
                 );
                 fs_err::create_dir_all(patch_dir)?;
                 fs_err::write(&patch_path, output.stdout)?;
 
                 // Clean the working tree
+                trace!("Cleaning working tree");
                 Self::checkout_working_tree(root)?;
 
                 Ok(Self {
@@ -153,8 +156,9 @@ impl WorkingTreeKeeper {
         if output.status.success() {
             Ok(())
         } else {
-            error!("Failed to checkout working tree: {:?}", output);
-            Err(anyhow::anyhow!("Failed to checkout working tree"))
+            Err(anyhow::anyhow!(
+                "Failed to checkout working tree: {output:?}"
+            ))
         }
     }
 
@@ -167,8 +171,7 @@ impl WorkingTreeKeeper {
         if output.status.success() {
             Ok(())
         } else {
-            error!("Failed to apply the patch: {:?}", output);
-            Err(anyhow::anyhow!("Failed to apply the patch"))
+            Err(anyhow::anyhow!("Failed to apply the patch: {output:?}"))
         }
     }
 
@@ -179,12 +182,13 @@ impl WorkingTreeKeeper {
 
         // Try to apply the patch
         if let Err(e) = Self::git_apply(patch) {
-            error!("Failed to apply the patch, rolling back changes: {e}");
+            error!("{e}");
             eprintln!(
                 "{}",
-                "Failed to apply the patch, rolling back changes".red()
+                "Stashed changes conflicted with changes made by hook, rolling back the hook changes".red().bold()
             );
 
+            // Discard any changes made by hooks, and try applying the patch again.
             Self::checkout_working_tree(&self.root)?;
             Self::git_apply(patch)?;
         }
@@ -192,10 +196,11 @@ impl WorkingTreeKeeper {
         eprintln!(
             "{}",
             format!(
-                "\nRestored working tree changes from `{}`",
+                "Restored working tree changes from `{}`",
                 patch.user_display()
             )
             .yellow()
+            .bold()
         );
 
         Ok(())

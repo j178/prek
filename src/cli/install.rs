@@ -312,9 +312,9 @@ pub(crate) async fn uninstall(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let project = Project::discover(config.as_deref(), &CWD).ok();
+    let hooks_path = git::get_git_common_dir().await?.join("hooks");
 
     for hook_type in get_hook_types(project.as_ref(), hook_types) {
-        let hooks_path = git::get_git_common_dir().await?.join("hooks");
         let hook_path = hooks_path.join(hook_type.as_str());
         let legacy_path = hooks_path.join(format!("{}.legacy", hook_type.as_str()));
 

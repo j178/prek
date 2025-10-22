@@ -989,7 +989,7 @@ fn staged_files_only() -> Result<()> {
         .chain([(r"/\d+-\d+.patch", "/[TIME]-[PID].patch")])
         .collect();
 
-    cmd_snapshot!(filters, context.run(), @r#"
+    cmd_snapshot!(filters, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -999,10 +999,9 @@ fn staged_files_only() -> Result<()> {
       Hello, world!
 
     ----- stderr -----
-    Non-staged changes detected, saving to `[HOME]/patches/[TIME]-[PID].patch`
-
+    Unstaged changes detected, stashing unstaged changes to `[HOME]/patches/[TIME]-[PID].patch`
     Restored working tree changes from `[HOME]/patches/[TIME]-[PID].patch`
-    "#);
+    ");
 
     let content = context.read("file.txt");
     assert_snapshot!(content, @"Hello world again!");
