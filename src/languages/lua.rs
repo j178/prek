@@ -74,11 +74,11 @@ impl LanguageImpl for Lua {
         let lua_info = query_lua_info().await.context("Failed to query Lua info")?;
 
         // install dependencies for current project and remote repository
-        let paths = std::iter::once(hook.project().path()).chain(hook.repo_path());
-        for path in paths {
-            if let Some(rockspec) = Self::get_rockspec_file(path) {
-                trace!("Installing dependencies for {}", path.display());
-                Self::install_rockspec(&info.env_path, path, &rockspec).await?;
+        let root_paths = std::iter::once(hook.project().path()).chain(hook.repo_path());
+        for root_path in root_paths {
+            if let Some(rockspec) = Self::get_rockspec_file(root_path) {
+                trace!("Installing dependencies for {}", root_path.display());
+                Self::install_rockspec(&info.env_path, root_path, &rockspec).await?;
             }
         }
 

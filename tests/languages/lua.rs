@@ -349,3 +349,34 @@ fn additional_dependencies() {
     ----- stderr -----
     "#);
 }
+
+/// Test remote Lua hook from GitHub repository.
+#[test]
+fn remote_hook() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/fllesser/lua-hooks
+            rev: v1.0.0
+            hooks:
+              - id: lua-hooks
+                always_run: true
+                verbose: true
+    "});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    lua-hooks................................................................Passed
+    - hook id: lua-hooks
+    - duration: [TIME]
+      this is a lua remote hook
+
+    ----- stderr -----
+    "#);
+}
