@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use futures::TryStreamExt;
 use http::header::USER_AGENT;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, trace};
+use tracing::{debug, error, trace};
 
 use crate::archive::ArchiveExtension;
 use crate::cli::reporter::HookInstallReporter;
