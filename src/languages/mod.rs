@@ -3,10 +3,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use constants::env_vars::EnvVars;
 use futures::TryStreamExt;
 use http::header::USER_AGENT;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, trace};
+use tracing::{debug, error, trace};
 
 use crate::archive::ArchiveExtension;
 use crate::cli::reporter::HookInstallReporter;
@@ -304,4 +305,37 @@ async fn download_and_extract(
     drop(temp_dir);
 
     Ok(())
+}
+
+pub(crate) fn create_reqwest_client() -> reqwest::Client {
+    let client = match EnvVars::var_os(EnvVars::PREK_REQWEST_SYSTEM_TLS) {
+        Some(system_tls) => {
+            let system_tls = system_tls.to_str().unwrap_or_else(|| {
+                error!(
+                    "Error problem unwrapping environment variables {} value defaulting to false",
+                    EnvVars::PREK_REQWEST_SYSTEM_TLS
+                );
+                "false"
+            });
+            if system_tls.eq_ignore_ascii_case("true") {
+                reqwest::Client::builder()
+                    .tls_built_in_root_certs(true)
+                    .tls_built_in_webpki_certs(false)
+                    .build()
+            } else {
+                reqwest::Client::builder()
+                    .tls_built_in_root_certs(false)
+                    .tls_built_in_webpki_certs(true)
+                    .build()
+            }
+        }
+        None => reqwest::Client::builder()
+            .tls_built_in_root_certs(false)
+            .tls_built_in_webpki_certs(true)
+            .build(),
+    };
+    client.unwrap_or_else(|e| {
+        error!("Error constructing reqwest client falling back to default client {e:?}");
+        reqwest::Client::new()
+    })
 }

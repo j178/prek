@@ -13,9 +13,9 @@ use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
 use crate::fs::LockedFile;
-use crate::languages::download_and_extract;
 use crate::languages::node::NodeRequest;
 use crate::languages::node::version::NodeVersion;
+use crate::languages::{create_reqwest_client, download_and_extract};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -103,7 +103,7 @@ impl NodeInstaller {
     pub(crate) fn new(root: PathBuf) -> Self {
         Self {
             root,
-            client: Client::new(),
+            client: create_reqwest_client(),
         }
     }
 
