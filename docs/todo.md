@@ -8,7 +8,7 @@ This page tracks gaps that prevent `prek` from being a drop-in replacement for `
 
 ## Languages not supported yet
 
-The original pre-commit supports hooks written in 10+ languages. Besides the commonly used ones like `python`, `node`, `golang`, `system`, `script`, `pygrep`, `docker`, `docker_image`, and `fail` that are already supported, support for the following languages is still in the works:
+The original pre-commit supports hooks written in 10+ languages. Besides the commonly used ones like `python`, `node`, `golang`, `lua`, `system`, `script`, `pygrep`, `docker`, `docker_image`, and `fail` that are already supported, support for the following languages is still in the works:
 
 - `conda`
 - `coursier`
@@ -16,7 +16,6 @@ The original pre-commit supports hooks written in 10+ languages. Besides the com
 - `dotnet`
 - `haskell`
 - `julia`
-- `lua`
 - `perl`
 - `r`
 - `ruby`
