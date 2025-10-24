@@ -33,6 +33,7 @@ profiler = ["dep:pprof", "profiler-flamegraph"]
 profiler-flamegraph = ["pprof/flamegraph"]
 # Enable docker related tests in integration tests
 docker = []
+hotpath = ["dep:hotpath", "hotpath/hotpath"]
 
 [dependencies]
 anstream = { version = "0.6.15" }
@@ -52,6 +53,7 @@ fancy-regex = { version = "0.16.0" }
 fs-err = { version = "3.1.0", features = ["tokio"] }
 futures = { version = "0.3.31" }
 hex = { version = "0.4.3" }
+hotpath = { version = "0.5", optional = true }
 http = { version = "1.1.0" }
 ignore = { version = "0.4.23" }
 indicatif = { version = "0.18.0" }

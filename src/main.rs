@@ -415,8 +415,14 @@ fn main() -> ExitCode {
         Err(err) => err.exit(),
     };
 
-    // Initialize the profiler guard if the feature is enabled.
+    #[cfg(feature = "hotpath")]
+    let _hotpath_guard = hotpath::GuardBuilder::new("prek")
+        .percentiles(&[95, 99])
+        .format(hotpath::Format::Table)
+        .build();
+
     let mut _profiler_guard = None;
+
     #[cfg(all(unix, feature = "profiler"))]
     {
         _profiler_guard = profiler::start_profiling();
@@ -438,6 +444,8 @@ fn main() -> ExitCode {
     {
         profiler::finish_profiling(_profiler_guard);
     }
+
+    // hotpath will automatically print its report when _hotpath_guard is dropped here
 
     match result {
         Ok(code) => code.into(),
