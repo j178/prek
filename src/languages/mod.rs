@@ -3,20 +3,21 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use constants::env_vars::EnvVars;
 use futures::TryStreamExt;
 use http::header::USER_AGENT;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, trace};
+use tracing::{debug, error, trace};
 
 use crate::archive::ArchiveExtension;
 use crate::cli::reporter::HookInstallReporter;
 use crate::config::Language;
-use crate::fs::CWD;
+use crate::fs::{CWD, Simplified};
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::identify::parse_shebang;
 use crate::store::Store;
 use crate::version::version;
-use crate::{archive, builtin};
+use crate::{archive, builtin, warn_user_once};
 
 mod docker;
 mod docker_image;
@@ -304,4 +305,36 @@ async fn download_and_extract(
     drop(temp_dir);
 
     Ok(())
+}
+
+pub(crate) fn get_reqwest_client() -> reqwest::Client {
+    let builder = reqwest::ClientBuilder::new().tls_built_in_root_certs(false);
+    let builder = if use_native_tls() {
+        builder.tls_built_in_native_certs(true)
+    } else {
+        builder.tls_built_in_webpki_certs(true)
+    };
+    builder.build().unwrap_or_else(|e| {
+        error!(
+            "Unable to create reqwest client, falling back to default {:?}",
+            e
+        );
+        reqwest::Client::new()
+    })
+}
+
+fn use_native_tls() -> bool {
+    let ssl_cert_file_exists = EnvVars::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
+        let path_exists = Path::new(&path).exists();
+        if !path_exists {
+            warn_user_once!(
+                "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
+                path.simplified_display().cyan()
+            );
+        }
+        path_exists
+    });
+    let prek_native_tls =
+        EnvVars::var_os(EnvVars::PREK_NATIVE_TLS).is_some_and(|native_tls| native_tls.eq("true"));
+    ssl_cert_file_exists | prek_native_tls
 }
