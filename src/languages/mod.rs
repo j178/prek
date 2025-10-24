@@ -140,7 +140,7 @@ impl Language {
     pub fn supports_language_version(self) -> bool {
         matches!(
             self,
-            Self::Python | Self::Node | Self::Ruby | Self::Rust | Self::Golang
+            Self::Python | Self::Node | Self::Golang | Self::Ruby | Self::Rust
         )
     }
 

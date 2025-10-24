@@ -2,8 +2,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use constants::env_vars::EnvVars;
 use semver::Version;
-use tracing::{debug, trace};
+use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
@@ -67,30 +68,20 @@ impl LanguageImpl for Lua {
         )?;
 
         debug!(%hook, target = %info.env_path.display(), "Installing Lua environment");
-        // create environment directory
-        fs_err::tokio::create_dir_all(&info.env_path).await?;
 
-        // check lua and luarocks are installed
+        // Check lua and luarocks are installed.
         let lua_info = query_lua_info().await.context("Failed to query Lua info")?;
 
-        // install dependencies for current project and remote repository
-        let root_paths = std::iter::once(hook.project().path()).chain(hook.repo_path());
-        for root_path in root_paths {
-            if let Some(rockspec) = Self::get_rockspec_file(root_path) {
-                trace!("Installing dependencies for {}", root_path.display());
-                Self::install_rockspec(&info.env_path, root_path, &rockspec).await?;
+        // Install dependencies for the remote repository.
+        if let Some(repo_path) = hook.repo_path() {
+            if let Some(rockspec) = Self::get_rockspec_file(repo_path) {
+                Self::install_rockspec(&info.env_path, repo_path, &rockspec).await?;
             }
         }
 
-        // install additional dependencies
-        let dependencies = &hook.additional_dependencies;
-        if !dependencies.is_empty() {
-            trace!("Installing additional dependencies: {dependencies:?}",);
-            // luarocks don't support installing multiple dependencies at once
-            for dep in dependencies {
-                debug!("Installing dependency: {dep}");
-                Self::install_dependency(&info.env_path, dep).await?;
-            }
+        // Install additional dependencies.
+        for dep in &hook.additional_dependencies {
+            Self::install_dependency(&info.env_path, dep).await?;
         }
 
         info.with_toolchain(lua_info.executable)
@@ -111,7 +102,7 @@ impl LanguageImpl for Lua {
 
         if current_lua_info.version != info.language_version {
             anyhow::bail!(
-                "Lua version mismatch: expected {}, found {}",
+                "Lua version mismatch: expected `{}`, found `{}`",
                 info.language_version,
                 current_lua_info.version
             );
@@ -119,7 +110,7 @@ impl LanguageImpl for Lua {
 
         if current_lua_info.executable != info.toolchain {
             anyhow::bail!(
-                "Lua executable mismatch: expected {}, found {}",
+                "Lua executable mismatch: expected `{}`, found `{}`",
                 info.toolchain.display(),
                 current_lua_info.executable.display()
             );
@@ -144,14 +135,16 @@ impl LanguageImpl for Lua {
             .language_version;
         // version without patch, e.g. 5.4
         let version = format!("{}.{}", version.major, version.minor);
+        let lua_path = Lua::get_lua_path(env_dir, &version);
+        let lua_cpath = Lua::get_lua_cpath(env_dir, &version);
 
         let run = async move |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "run lua command")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env("PATH", &new_path)
-                .env("LUA_PATH", Lua::get_lua_path(env_dir, &version))
-                .env("LUA_CPATH", Lua::get_lua_cpath(env_dir, &version))
+                .env(EnvVars::LUA_PATH, &lua_path)
+                .env(EnvVars::LUA_CPATH, &lua_cpath)
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
@@ -165,7 +158,6 @@ impl LanguageImpl for Lua {
 
         let results = run_by_batch(hook, filenames, run).await?;
 
-        // 收集结果
         let mut combined_status = 0;
         let mut combined_output = Vec::new();
 
@@ -207,8 +199,7 @@ impl Lua {
     }
 
     fn get_rockspec_file(root_path: &Path) -> Option<PathBuf> {
-        use std::fs;
-        if let Ok(entries) = fs::read_dir(root_path) {
+        if let Ok(entries) = std::fs::read_dir(root_path) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().and_then(|s| s.to_str()) == Some("rockspec") {
@@ -222,7 +213,7 @@ impl Lua {
     fn get_lua_path(env_dir: &Path, version: &str) -> String {
         let share_dir = env_dir.join("share");
         format!(
-            "{};{}",
+            "{};{};;",
             share_dir.join("lua").join(version).join("?.lua").display(),
             share_dir
                 .join("lua")
@@ -236,11 +227,13 @@ impl Lua {
     fn get_lua_cpath(env_dir: &Path, version: &str) -> String {
         let lib_dir = env_dir.join("lib");
         let so_ext = if cfg!(windows) { "dll" } else { "so" };
-        lib_dir
-            .join("lua")
-            .join(version)
-            .join(format!("?.{so_ext}"))
-            .display()
-            .to_string()
+        format!(
+            "{};;",
+            lib_dir
+                .join("lua")
+                .join(version)
+                .join(format!("?.{so_ext}"))
+                .display()
+        )
     }
 }
