@@ -17,10 +17,12 @@ permissions: {}
 env:
   # UV_VERSION should not greater than MAX_UV_VERSION in `languages/python/uv`.
   # Otherwise, tests jobs will install their own uv, and it will encounter concurrency issue.
-  UV_VERSION: '0.8.22'
-  NODE_VERSION: '20'
-  GO_VERSION: '1.24'
-  PYTHON_VERSION: '3.12'
+  UV_VERSION: "0.8.22"
+  NODE_VERSION: "20"
+  GO_VERSION: "1.24"
+  PYTHON_VERSION: "3.12"
+  LUA_VERSION: "5.4"
+  LUAROCKS_VERSION: "3.12.2"
 
 jobs:
   lint:
@@ -38,7 +40,7 @@ jobs:
       - name: Run prek hooks
         uses: j178/prek-action@91fd7d7cf70ae1dee9f4f44e7dfa5d1073fe6623 # v1.0.11
         with:
-          extra-args: '--all-files --skip cargo-fmt --skip cargo-clippy'
+          extra-args: "--all-files --skip cargo-fmt --skip cargo-clippy"
 
   cargo-clippy-linux:
     name: "cargo clippy | ubuntu"
@@ -305,6 +307,16 @@ jobs:
           # A dummy dependency path to enable caching of go modules.
           cache-dependency-path: LICENSE
 
+      - name: "Install Lua"
+        uses: leafo/gh-actions-lua@8c9e175e7a3d77e21f809eefbee34a19b858641b
+        with:
+          luaVersion: ${{ env.LUA_VERSION }}
+
+      - name: "Install LuaRocks"
+        uses: leafo/gh-actions-luarocks@97053c556d6ce2c8e26eb7ac93743437c7af7248
+        with:
+          luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
+
       - name: "Cargo test"
         run: |
           cargo llvm-cov nextest \
@@ -367,6 +379,16 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           # A dummy dependency path to enable caching of go modules.
           cache-dependency-path: LICENSE
+
+      - name: "Install Lua"
+        uses: leafo/gh-actions-lua@8c9e175e7a3d77e21f809eefbee34a19b858641b
+        with:
+          luaVersion: ${{ env.LUA_VERSION }}
+
+      - name: "Install LuaRocks"
+        uses: leafo/gh-actions-luarocks@97053c556d6ce2c8e26eb7ac93743437c7af7248
+        with:
+          luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
 
       - name: "Cargo test"
         run: |
@@ -431,6 +453,17 @@ jobs:
           # A dummy dependency path to enable caching of go modules.
           cache-dependency-path: LICENSE
 
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # windows only
+      - name: "Install Lua"
+        uses: luarocks/gh-actions-lua@989f8e6ffba55ce1817e236478c98558e598776c # windows only
+        with:
+          luaVersion: ${{ env.LUA_VERSION }}
+
+      - name: "Install LuaRocks"
+        uses: luarocks/gh-actions-luarocks@7c85eeff60655651b444126f2a78be784e836a0a # windows only
+        with:
+          luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
+
       - name: "Find node and npm versions"
         run: |
           Get-Command node -All
@@ -439,17 +472,17 @@ jobs:
 
       - name: "Cargo test"
         run: |
-          cargo llvm-cov nextest \
-            --no-report \
-            --workspace \
-            --status-level skip \
-            --failure-output immediate \
-            --no-fail-fast \
-            -j 8 \
+          cargo llvm-cov nextest `
+            --no-report `
+            --workspace `
+            --status-level skip `
+            --failure-output immediate `
+            --no-fail-fast `
+            -j 8 `
             --final-status-level slow
 
           cargo llvm-cov report --lcov --output-path lcov.info
-        shell: bash
+        shell: pwsh
 
       - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1

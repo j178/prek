@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.11
+
+Released on 2025-10-24.
+
+### Enhancements
+
+- Support `language: lua` hooks ([#954](https://github.com/j178/prek/pull/954))
+- Support `language_version: system` ([#949](https://github.com/j178/prek/pull/949))
+- Implement `no-commit-to-branch` as builtin hook ([#930](https://github.com/j178/prek/pull/930))
+- Improve styling for stashing error message ([#953](https://github.com/j178/prek/pull/953))
+- Support nix-shell style shebang ([#929](https://github.com/j178/prek/pull/929))
+
+### Documentation
+
+- Add a page about "Quick start" ([#934](https://github.com/j178/prek/pull/934))
+- Add kreuzberg to "who is using prek" ([#936](https://github.com/j178/prek/pull/936))
+- Clarify minimum mise version required to use `mise use prek` ([#931](https://github.com/j178/prek/pull/931))
+
+### Contributors
+
+- @fllesser
+- @j178
+
 ## 0.2.10
 
 Released on 2025-10-18.
@@ -24,7 +47,6 @@ Released on 2025-10-18.
 - Add contribution guide ([#912](https://github.com/j178/prek/pull/912))
 
 ### Other changes
-
 
 ### Contributors
 

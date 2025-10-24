@@ -206,36 +206,38 @@ impl HookBuilder {
             .as_ref()
             .map_or(&[][..], |deps| deps.as_slice());
 
-        if !language.supports_dependency() && !additional_dependencies.is_empty() {
-            return Err(Error::Hook {
-                hook: self.config.id.clone(),
-                error: anyhow::anyhow!(
-                    "Hook specified `additional_dependencies` `{}` but the language `{}` does not support installing dependencies for now",
-                    additional_dependencies.join(", "),
-                    language,
-                ),
-            });
+        if !additional_dependencies.is_empty() {
+            if !language.supports_install_env() {
+                return Err(Error::Hook {
+                    hook: self.config.id.clone(),
+                    error: anyhow::anyhow!(
+                        "Hook specified `additional_dependencies: {}` but the language `{}` does not install an environment",
+                        additional_dependencies.join(", "),
+                        language,
+                    ),
+                });
+            }
+
+            if !language.supports_dependency() {
+                return Err(Error::Hook {
+                    hook: self.config.id.clone(),
+                    error: anyhow::anyhow!(
+                        "Hook specified `additional_dependencies: {}` but the language `{}` does not support installing dependencies for now",
+                        additional_dependencies.join(", "),
+                        language,
+                    ),
+                });
+            }
         }
 
-        if !language.supports_install_env() {
+        if !language.supports_language_version() {
             if let Some(language_version) = language_version
                 && language_version != "default"
             {
                 return Err(Error::Hook {
                     hook: self.config.id.clone(),
                     error: anyhow::anyhow!(
-                        "Hook specified `language_version` `{language_version}` but the language `{language}` does not install an environment"
-                    ),
-                });
-            }
-
-            if !additional_dependencies.is_empty() {
-                return Err(Error::Hook {
-                    hook: self.config.id.clone(),
-                    error: anyhow::anyhow!(
-                        "Hook specified `additional_dependencies` `{}` but the language `{}` does not install an environment",
-                        additional_dependencies.join(", "),
-                        language,
+                        "Hook specified `language_version: {language_version}` but the language `{language}` does not support toolchain installation for now",
                     ),
                 });
             }

@@ -23,6 +23,7 @@ mod docker;
 mod docker_image;
 mod fail;
 mod golang;
+mod lua;
 mod node;
 mod pygrep;
 mod python;
@@ -39,6 +40,7 @@ static DOCKER: docker::Docker = docker::Docker;
 static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
 static SCRIPT: script::Script = script::Script;
 static PYGREP: pygrep::Pygrep = pygrep::Pygrep;
+static LUA: lua::Lua = lua::Lua;
 static UNIMPLEMENTED: Unimplemented = Unimplemented;
 
 trait LanguageImpl {
@@ -122,6 +124,7 @@ impl Language {
                 | Self::DockerImage
                 | Self::Script
                 | Self::Pygrep
+                | Self::Lua
         )
     }
 
@@ -138,7 +141,7 @@ impl Language {
     pub fn supports_language_version(self) -> bool {
         matches!(
             self,
-            Self::Python | Self::Node | Self::Ruby | Self::Rust | Self::Golang
+            Self::Python | Self::Node | Self::Golang | Self::Ruby | Self::Rust
         )
     }
 
@@ -176,6 +179,7 @@ impl Language {
             Self::DockerImage => DOCKER_IMAGE.install(hook, store, reporter).await,
             Self::Script => SCRIPT.install(hook, store, reporter).await,
             Self::Pygrep => PYGREP.install(hook, store, reporter).await,
+            Self::Lua => LUA.install(hook, store, reporter).await,
             _ => UNIMPLEMENTED.install(hook, store, reporter).await,
         }
     }
@@ -191,6 +195,7 @@ impl Language {
             Self::DockerImage => DOCKER_IMAGE.check_health(info).await,
             Self::Script => SCRIPT.check_health(info).await,
             Self::Pygrep => PYGREP.check_health(info).await,
+            Self::Lua => LUA.check_health(info).await,
             _ => UNIMPLEMENTED.check_health(info).await,
         }
     }
@@ -216,6 +221,7 @@ impl Language {
             Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, store).await,
             Self::Script => SCRIPT.run(hook, filenames, store).await,
             Self::Pygrep => PYGREP.run(hook, filenames, store).await,
+            Self::Lua => LUA.run(hook, filenames, store).await,
             _ => UNIMPLEMENTED.run(hook, filenames, store).await,
         }
     }
