@@ -40,7 +40,7 @@ anyhow = { version = "1.0.86" }
 astral-tokio-tar = { version = "0.5.1" }
 async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
 async_zip = { git = "https://github.com/astral-sh/rs-async-zip", rev = "c909fda63fcafe4af496a07bfda28a5aae97e58d", features = ["deflate", "tokio"] }
-axoupdater = { version = "0.9.0", default-features = false, features = [ "github_releases"], optional = true }
+axoupdater = { version = "0.9.0", default-features = false, features = ["github_releases"], optional = true }
 bstr = { version = "1.11.0" }
 clap = { version = "4.5.16", features = ["derive", "env", "string", "wrap_help"] }
 clap_complete = { version = "4.5.37", features = ["unstable-dynamic"] }
@@ -67,7 +67,7 @@ path-clean = { version = "1.0.1" }
 quick-xml = { version = "0.38" }
 rand = { version = "0.9.0" }
 rayon = { version = "1.10.0" }
-reqwest = { version = "0.12.9", default-features = false, features = ["http2", "stream", "json", "rustls-tls-webpki-roots"] }
+reqwest = { version = "0.12.9", default-features = false, features = ["http2", "stream", "json", "rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
 rustc-hash = { version = "2.1.1" }
 same-file = { version = "1.0.6" }
 semver = { version = "1.0.24", features = ["serde"] }

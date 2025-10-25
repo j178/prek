@@ -14,7 +14,7 @@ use tracing::{debug, trace, warn};
 use constants::env_vars::EnvVars;
 
 use crate::fs::LockedFile;
-use crate::languages::download_and_extract;
+use crate::languages::{download_and_extract, get_reqwest_client};
 use crate::process::Cmd;
 use crate::store::{CacheBucket, Store};
 use crate::version;
@@ -157,7 +157,7 @@ impl InstallSource {
             "https://github.com/astral-sh/uv/releases/download/{CUR_UV_VERSION}/{archive_name}"
         );
 
-        let client = reqwest::Client::new();
+        let client = get_reqwest_client();
         download_and_extract(
             &client,
             &download_url,
@@ -195,7 +195,7 @@ impl InstallSource {
         let wheel_name = format!("uv-{CUR_UV_VERSION}-py3-none-{platform_tag}.whl");
 
         // Use PyPI JSON API instead of parsing HTML
-        let client = reqwest::Client::new();
+        let client = get_reqwest_client();
         let api_url = match source {
             PyPiMirror::Pypi => format!("https://pypi.org/pypi/uv/{CUR_UV_VERSION}/json"),
             // For mirrors, we'll fall back to simple API approach
@@ -252,7 +252,7 @@ impl InstallSource {
         let wheel_name = format!("uv-{CUR_UV_VERSION}-py3-none-{platform_tag}.whl");
 
         let simple_url = format!("{}uv/", source.url());
-        let client = reqwest::Client::new();
+        let client = get_reqwest_client();
 
         debug!("Fetching from simple API: {}", simple_url);
         let response = client
@@ -441,7 +441,7 @@ impl Uv {
             Ok(best)
         }
 
-        let client = reqwest::Client::new();
+        let client = get_reqwest_client();
         let source = tokio::select! {
                 Ok(true) = check_github(&client) => InstallSource::GitHub,
                 Ok(source) = select_best_pypi(&client) => InstallSource::PyPi(source),
