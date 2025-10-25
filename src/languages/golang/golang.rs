@@ -141,7 +141,7 @@ impl LanguageImpl for Golang {
             let mut output = Cmd::new(&entry[0], "go hook")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
-                .env("PATH", &new_path)
+                .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::GOTOOLCHAIN, "local")
                 .env(EnvVars::GOBIN, &go_bin)
                 .envs(go_envs.iter().copied())

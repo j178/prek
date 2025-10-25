@@ -224,6 +224,7 @@ pub(crate) enum CacheBucket {
     Go,
     Python,
     Prek,
+    Deno,
 }
 
 impl CacheBucket {
@@ -233,6 +234,7 @@ impl CacheBucket {
             CacheBucket::Go => "go",
             CacheBucket::Python => "python",
             CacheBucket::Prek => "prek",
+            CacheBucket::Deno => "deno",
         }
     }
 }

@@ -35,6 +35,10 @@ impl EnvVars {
     pub const UV_MANAGED_PYTHON: &'static str = "UV_MANAGED_PYTHON";
     pub const UV_NO_MANAGED_PYTHON: &'static str = "UV_NO_MANAGED_PYTHON";
 
+    // Python related
+    pub const VIRTUAL_ENV: &'static str = "VIRTUAL_ENV";
+    pub const PYTHONHOME: &'static str = "PYTHONHOME";
+
     // Node/Npm related
     pub const NPM_CONFIG_USERCONFIG: &'static str = "NPM_CONFIG_USERCONFIG";
     pub const NPM_CONFIG_PREFIX: &'static str = "NPM_CONFIG_PREFIX";
@@ -49,6 +53,9 @@ impl EnvVars {
     // Lua related
     pub const LUA_PATH: &'static str = "LUA_PATH";
     pub const LUA_CPATH: &'static str = "LUA_CPATH";
+
+    // Deno related
+    pub const DENO_DIR: &'static str = "DENO_DIR";
 }
 
 impl EnvVars {
