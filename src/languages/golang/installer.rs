@@ -7,16 +7,15 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result};
 use constants::env_vars::EnvVars;
 use itertools::Itertools;
-use reqwest::Client;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
 use crate::fs::LockedFile;
 use crate::git;
+use crate::languages::download_and_extract;
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::golang::bin_dir;
 use crate::languages::golang::version::GoVersion;
-use crate::languages::{download_and_extract, get_reqwest_client};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -100,15 +99,11 @@ impl GoResult {
 
 pub(crate) struct GoInstaller {
     root: PathBuf,
-    client: Client,
 }
 
 impl GoInstaller {
     pub(crate) fn new(root: PathBuf) -> Self {
-        Self {
-            root,
-            client: get_reqwest_client(),
-        }
+        Self { root }
     }
 
     pub(crate) async fn install(
@@ -232,7 +227,7 @@ impl GoInstaller {
         let url = format!("https://go.dev/dl/{filename}");
         let target = self.root.join(version.to_string());
 
-        download_and_extract(&self.client, &url, &filename, store, async |extracted| {
+        download_and_extract(&url, &filename, store, async |extracted| {
             if target.exists() {
                 debug!(target = %target.display(), "Removing existing go");
                 fs_err::tokio::remove_dir_all(&target).await?;

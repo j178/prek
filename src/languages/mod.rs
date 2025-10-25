@@ -5,7 +5,6 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use constants::env_vars::EnvVars;
 use futures::TryStreamExt;
-use http::header::USER_AGENT;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, error, trace};
 
@@ -267,15 +266,13 @@ pub(crate) fn resolve_command(mut cmds: Vec<String>, env_path: Option<&OsStr>) -
 }
 
 async fn download_and_extract(
-    client: &reqwest::Client,
     url: &str,
     filename: &str,
     store: &Store,
     callback: impl AsyncFn(&Path) -> Result<()>,
 ) -> Result<()> {
-    let response = client
+    let response = REQWEST_CLIENT
         .get(url)
-        .header(USER_AGENT, format!("prek/{}", version()))
         .send()
         .await
         .with_context(|| format!("Failed to download file from {url}"))?;
@@ -313,9 +310,18 @@ async fn download_and_extract(
     Ok(())
 }
 
-pub(crate) fn get_reqwest_client() -> reqwest::Client {
-    let builder = reqwest::ClientBuilder::new().tls_built_in_root_certs(false);
-    let builder = if use_native_tls() {
+pub(crate) static REQWEST_CLIENT: std::sync::LazyLock<reqwest::Client> =
+    std::sync::LazyLock::new(|| {
+        let native_tls = use_native_tls();
+        create_reqwest_client(native_tls)
+    });
+
+fn create_reqwest_client(native_tls: bool) -> reqwest::Client {
+    let builder = reqwest::ClientBuilder::new()
+        .user_agent(format!("prek/{}", crate::version::version()))
+        .tls_built_in_root_certs(false);
+    let builder = if native_tls {
+        debug!("Using native TLS for reqwest client");
         builder.tls_built_in_native_certs(true)
     } else {
         builder.tls_built_in_webpki_certs(true)
@@ -330,7 +336,15 @@ pub(crate) fn get_reqwest_client() -> reqwest::Client {
 }
 
 fn use_native_tls() -> bool {
-    let ssl_cert_file_exists = EnvVars::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
+    if let Some(val) = EnvVars::var_os(EnvVars::PREK_NATIVE_TLS)
+        && let Some(val) = val.to_str()
+        && let Some(val) = parse_boolish(val)
+    {
+        return val;
+    }
+
+    // SSL_CERT_FILE is only respected when using native TLS
+    EnvVars::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
         let path_exists = Path::new(&path).exists();
         if !path_exists {
             warn_user_once!(
@@ -339,8 +353,64 @@ fn use_native_tls() -> bool {
             );
         }
         path_exists
-    });
-    let prek_native_tls =
-        EnvVars::var_os(EnvVars::PREK_NATIVE_TLS).is_some_and(|native_tls| native_tls.eq("true"));
-    ssl_cert_file_exists | prek_native_tls
+    })
+}
+
+/// Parse a boolean from a string.
+///
+/// Adapted from Clap's `BoolishValueParser` which is dual licensed under the MIT and Apache-2.0.
+/// See `clap_builder/src/util/str_to_bool.rs`
+fn parse_boolish(val: &str) -> Option<bool> {
+    // True values are `y`, `yes`, `t`, `true`, `on`, and `1`.
+    const TRUE_LITERALS: [&str; 6] = ["y", "yes", "t", "true", "on", "1"];
+
+    // False values are `n`, `no`, `f`, `false`, `off`, and `0`.
+    const FALSE_LITERALS: [&str; 6] = ["n", "no", "f", "false", "off", "0"];
+
+    let val = val.to_lowercase();
+    let pat = val.as_str();
+    if TRUE_LITERALS.contains(&pat) {
+        Some(true)
+    } else if FALSE_LITERALS.contains(&pat) {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_boolish;
+
+    #[test]
+    fn test_parse_boolish() {
+        let true_values = ["y", "yes", "t", "true", "on", "1"];
+        let false_values = ["n", "no", "f", "false", "off", "0"];
+        for val in true_values {
+            assert_eq!(parse_boolish(val), Some(true), "Failed to parse {val}");
+            assert_eq!(
+                parse_boolish(&val.to_uppercase()),
+                Some(true),
+                "Failed to parse {val}",
+            );
+        }
+        for val in false_values {
+            assert_eq!(parse_boolish(val), Some(false), "Failed to parse {val}");
+            assert_eq!(
+                parse_boolish(&val.to_uppercase()),
+                Some(false),
+                "Failed to parse {val}",
+            );
+        }
+        assert_eq!(parse_boolish("maybe"), None);
+        assert_eq!(parse_boolish(""), None);
+        assert_eq!(parse_boolish("123"), None);
+    }
+
+    #[tokio::test]
+    async fn test_native_tls() {
+        let client = super::create_reqwest_client(true);
+        let resp = client.get("https://github.com").send().await;
+        assert!(resp.is_ok(), "Failed to send request with native TLS");
+    }
 }
