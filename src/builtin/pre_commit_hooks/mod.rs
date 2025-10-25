@@ -19,6 +19,7 @@ mod fix_end_of_file;
 mod fix_trailing_whitespace;
 mod mixed_line_ending;
 mod no_commit_to_branch;
+mod pretty_format_json;
 
 pub(crate) enum Implemented {
     TrailingWhitespace,
@@ -34,6 +35,7 @@ pub(crate) enum Implemented {
     MixedLineEnding,
     DetectPrivateKey,
     NoCommitToBranch,
+    PrettyFormatJson,
 }
 
 impl FromStr for Implemented {
@@ -54,6 +56,7 @@ impl FromStr for Implemented {
             "mixed-line-ending" => Ok(Self::MixedLineEnding),
             "detect-private-key" => Ok(Self::DetectPrivateKey),
             "no-commit-to-branch" => Ok(Self::NoCommitToBranch),
+            "pretty-format-json" => Ok(Self::PrettyFormatJson),
             _ => Err(()),
         }
     }
@@ -92,6 +95,7 @@ impl Implemented {
             Self::MixedLineEnding => mixed_line_ending::mixed_line_ending(hook, filenames).await,
             Self::DetectPrivateKey => detect_private_key::detect_private_key(hook, filenames).await,
             Self::NoCommitToBranch => no_commit_to_branch::no_commit_to_branch(hook).await,
+            Self::PrettyFormatJson => pretty_format_json::pretty_format_json(hook, filenames).await,
         }
     }
 }
