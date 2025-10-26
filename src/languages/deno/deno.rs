@@ -19,12 +19,9 @@ use crate::store::{CacheBucket, Store, ToolBucket};
 /// Find the script in the entry that should be cached.
 /// Handles both direct scripts and `deno run ...` commands.
 fn find_script_to_cache(entry: &[String]) -> Option<&str> {
-    if entry.is_empty() {
-        return None;
-    }
+    let first = entry.first()?.as_str();
 
-    // Check if first arg is a built-in Deno command
-    let first = entry[0].as_str();
+    // Skip built-in Deno commands
     if matches!(
         first,
         "fmt" | "lint" | "test" | "check" | "bundle" | "doc" | "repl" | "eval"
@@ -32,38 +29,26 @@ fn find_script_to_cache(entry: &[String]) -> Option<&str> {
         return None;
     }
 
-    // If first arg is "run", look for the script after flags
-    if first == "run" {
-        for arg in &entry[1..] {
-            let arg_str = arg.as_str();
-            // Skip flags
-            if arg_str.starts_with('-') {
-                continue;
-            }
-            // Found the script
-            if is_cacheable_script(arg_str) {
-                return Some(arg_str);
-            }
-        }
-        return None;
-    }
+    // For "deno run ...", find the script after flags
+    let candidates = if first == "run" { &entry[1..] } else { entry };
 
-    // Otherwise, check if the first arg itself is a script
-    if is_cacheable_script(first) {
-        Some(first)
-    } else {
-        None
-    }
+    candidates
+        .iter()
+        .map(|s| s.as_str())
+        .find(|s| !s.starts_with('-') && is_cacheable_script(s))
 }
 
 /// Check if a script path should be cached.
 fn is_cacheable_script(script: &str) -> bool {
+    // Only cache remote modules and TypeScript/JavaScript files
     script.starts_with("http")
         || script.starts_with("jsr:")
         || script.starts_with("npm:")
-        || script.contains('/')
         || script.ends_with(".ts")
         || script.ends_with(".js")
+        || script.ends_with(".mjs")
+        || script.ends_with(".tsx")
+        || script.ends_with(".jsx")
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -110,79 +95,59 @@ impl LanguageImpl for Deno {
         info.with_toolchain(deno.deno().to_path_buf());
         info.with_language_version((**deno.version()).clone());
 
-        // 2. Create env with bin directory
+        // 2. Create env with bin directory and symlink to deno
         let bin_dir_path = bin_dir(&info.env_path);
         fs_err::tokio::create_dir_all(&bin_dir_path).await?;
 
-        // Create symlink to deno executable in the bin directory
-        crate::fs::create_symlink_or_copy(
-            deno.deno(),
-            &bin_dir_path.join("deno").with_extension(EXE_EXTENSION),
-        )
-        .await?;
+        let deno_bin = bin_dir_path.join("deno").with_extension(EXE_EXTENSION);
+        crate::fs::create_symlink_or_copy(deno.deno(), &deno_bin).await?;
 
         let deno_cache_dir = store.cache_path(CacheBucket::Deno);
         fs_err::tokio::create_dir_all(&deno_cache_dir).await?;
 
-        // Initialize deno.json if we have dependencies to install
+        let new_path = prepend_paths(&[&bin_dir_path]).context("Failed to join PATH")?;
+
+        // 3. Set up deno.json and install dependencies
         if hook.repo_path().is_some() || !hook.additional_dependencies.is_empty() {
             let deno_json = info.env_path.join("deno.json");
 
-            // Check if repo has deno.json to copy, otherwise create minimal one
-            let mut needs_deno_json = true;
+            // Copy deno.json from repo if it exists, otherwise create minimal one
             if let Some(repo_path) = hook.repo_path() {
                 let repo_deno_json = repo_path.join("deno.json");
                 if repo_deno_json.exists() {
-                    // Copy the deno.json from the repo
                     fs_err::tokio::copy(repo_deno_json, &deno_json).await?;
-                    needs_deno_json = false;
                 }
             }
-
-            if needs_deno_json {
-                // Create a minimal deno.json for dependency management
+            if !deno_json.exists() {
                 fs_err::tokio::write(&deno_json, "{}").await?;
             }
 
             // Install additional dependencies
-            // Prepend bin_dir to PATH so deno can be found
-            let new_path = prepend_paths(&[&bin_dir_path]).context("Failed to join PATH")?;
-
             if !hook.additional_dependencies.is_empty() {
-                Cmd::new(
-                    &bin_dir_path.join("deno").with_extension(EXE_EXTENSION),
-                    "deno add",
-                )
-                .current_dir(&info.env_path)
-                .env(EnvVars::PATH, &new_path)
-                .env(EnvVars::DENO_DIR, &deno_cache_dir)
-                .arg("add")
-                .args(&hook.additional_dependencies)
-                .check(true)
-                .output()
-                .await?;
+                Cmd::new(&deno_bin, "deno add")
+                    .current_dir(&info.env_path)
+                    .env(EnvVars::PATH, &new_path)
+                    .env(EnvVars::DENO_DIR, &deno_cache_dir)
+                    .arg("add")
+                    .args(&hook.additional_dependencies)
+                    .check(true)
+                    .output()
+                    .await?;
             }
         }
 
-        // Cache the entry script and its dependencies for offline use
-        let entry = hook.entry.split()?;
-        if let Some(script) = find_script_to_cache(&entry) {
-            let work_dir = hook.work_dir();
-            let new_path = prepend_paths(&[&bin_dir_path]).context("Failed to join PATH")?;
-
-            Cmd::new(
-                &bin_dir_path.join("deno").with_extension(EXE_EXTENSION),
-                "deno cache",
-            )
-            .current_dir(work_dir)
-            .env(EnvVars::PATH, &new_path)
-            .env(EnvVars::DENO_DIR, &deno_cache_dir)
-            .arg("cache")
-            .arg(script)
-            .check(true)
-            .output()
-            .await
-            .context("Failed to cache entry script dependencies")?;
+        // Cache entry script dependencies for offline use
+        if let Some(script) = find_script_to_cache(&hook.entry.split()?) {
+            Cmd::new(&deno_bin, "deno cache")
+                .current_dir(hook.work_dir())
+                .env(EnvVars::PATH, &new_path)
+                .env(EnvVars::DENO_DIR, &deno_cache_dir)
+                .arg("cache")
+                .arg(script)
+                .check(true)
+                .output()
+                .await
+                .context("Failed to cache entry script dependencies")?;
         }
 
         reporter.on_install_complete(progress);
