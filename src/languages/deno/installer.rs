@@ -7,14 +7,13 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result};
 use constants::env_vars::EnvVars;
 use itertools::Itertools;
-use reqwest::Client;
 use serde::Deserialize;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
 use crate::fs::LockedFile;
 use crate::languages::deno::{DenoRequest, DenoVersion};
-use crate::languages::download_and_extract;
+use crate::languages::{REQWEST_CLIENT, download_and_extract};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -88,15 +87,11 @@ impl DenoResult {
 
 pub(crate) struct DenoInstaller {
     root: PathBuf,
-    client: Client,
 }
 
 impl DenoInstaller {
     pub(crate) fn new(root: PathBuf) -> Self {
-        Self {
-            root,
-            client: Client::new(),
-        }
+        Self { root }
     }
 
     /// Install a version of Deno.
@@ -179,14 +174,7 @@ impl DenoInstaller {
         }
 
         let url = "https://api.github.com/repos/denoland/deno/releases?per_page=100";
-        let releases: Vec<Release> = self
-            .client
-            .get(url)
-            .header("User-Agent", "prek")
-            .send()
-            .await?
-            .json()
-            .await?;
+        let releases: Vec<Release> = REQWEST_CLIENT.get(url).send().await?.json().await?;
 
         let versions: Vec<DenoVersion> = releases
             .into_iter()
@@ -223,7 +211,7 @@ impl DenoInstaller {
             format!("https://github.com/denoland/deno/releases/download/v{version}/{filename}");
         let target = self.root.join(version.to_string());
 
-        download_and_extract(&self.client, &url, &filename, store, async |extracted| {
+        download_and_extract(&url, &filename, store, async |extracted| {
             // Deno comes as a single binary in the zip root.
             // After strip_component, `extracted` points to the deno binary itself (not a directory).
             // We need to move this file to our target bin directory.
