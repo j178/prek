@@ -39,18 +39,13 @@ impl LanguageImpl for Deno {
         let installer = DenoInstaller::new(deno_dir);
 
         let (deno_request, allows_download) = match &hook.language_request {
-            LanguageRequest::Any { system_only } => (DenoRequest::Any, !system_only),
-            LanguageRequest::Semver(semver_request) => {
-                let deno_request = semver_request
-                    .parse_for_deno()
-                    .context("Failed to parse Deno version request")?;
-                (deno_request, true)
-            }
-            _ => unreachable!("Deno only supports Any and Semver language requests"),
+            LanguageRequest::Any { system_only } => (&DenoRequest::Any, !system_only),
+            LanguageRequest::Deno(deno_request) => (deno_request, true),
+            _ => unreachable!(),
         };
 
         let deno = installer
-            .install(store, &deno_request, allows_download)
+            .install(store, deno_request, allows_download)
             .await
             .context("Failed to install deno")?;
 

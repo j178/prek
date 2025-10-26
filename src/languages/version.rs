@@ -19,6 +19,7 @@ pub(crate) enum LanguageRequest {
     Python(PythonRequest),
     Node(NodeRequest),
     Golang(GoRequest),
+    Deno(DenoRequest),
     // TODO: all other languages default to semver for now.
     Semver(SemverRequest),
 }
@@ -30,6 +31,7 @@ impl LanguageRequest {
             LanguageRequest::Python(req) => req.is_any(),
             LanguageRequest::Node(req) => req.is_any(),
             LanguageRequest::Golang(req) => req.is_any(),
+            LanguageRequest::Deno(req) => req.is_any(),
             LanguageRequest::Semver(_) => false,
         }
     }
@@ -68,6 +70,7 @@ impl LanguageRequest {
             Language::Python => Self::Python(request.parse()?),
             Language::Node => Self::Node(request.parse()?),
             Language::Golang => Self::Golang(request.parse()?),
+            Language::Deno => Self::Deno(request.parse()?),
             _ => Self::Semver(request.parse()?),
         })
     }
@@ -78,6 +81,7 @@ impl LanguageRequest {
             LanguageRequest::Python(req) => req.satisfied_by(install_info),
             LanguageRequest::Node(req) => req.satisfied_by(install_info),
             LanguageRequest::Golang(req) => req.satisfied_by(install_info),
+            LanguageRequest::Deno(req) => req.satisfied_by(install_info),
             LanguageRequest::Semver(req) => req.satisfied_by(install_info),
         }
     }
@@ -99,34 +103,6 @@ impl FromStr for SemverRequest {
 impl SemverRequest {
     fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
         self.0.matches(&install_info.language_version)
-    }
-
-    /// Parse this semver request for Deno
-    pub(crate) fn parse_for_deno(&self) -> Result<DenoRequest, Error> {
-        // semver::VersionReq formats version requirements with operators (e.g., "^2.3.7")
-        // We need to extract the actual version parts for Deno
-        // Check if we have a simple version requirement (single comparator)
-        let comparators = &self.0.comparators;
-
-        if comparators.len() == 1 {
-            let comp = &comparators[0];
-            // If it's a caret or default requirement with no pre-release, extract the version
-            if comp.pre.is_empty() {
-                let major = comp.major;
-                return match (comp.minor, comp.patch) {
-                    (Some(minor), Some(patch)) => {
-                        Ok(DenoRequest::MajorMinorPatch(major, minor, patch))
-                    }
-                    (Some(minor), None) => Ok(DenoRequest::MajorMinor(major, minor)),
-                    (None, None) => Ok(DenoRequest::Major(major)),
-                    _ => Err(Error::InvalidVersion(format!("{}", self.0))),
-                };
-            }
-        }
-
-        // For complex requirements, use the Range variant
-        let version_str = format!("{}", self.0);
-        Ok(DenoRequest::Range(self.0.clone(), version_str))
     }
 }
 
