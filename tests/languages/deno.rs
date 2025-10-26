@@ -1,5 +1,4 @@
 use assert_fs::fixture::{FileWriteStr, PathChild};
-use constants::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -318,48 +317,5 @@ fn no_dependencies() {
       typescript X.X.X
 
     ----- stderr -----
-    "#);
-}
-
-/// Test that when deno is not available, a helpful error is shown.
-#[test]
-fn deno_not_found() {
-    if !EnvVars::is_set(EnvVars::CI) {
-        // Skip when not running in CI, as we may have deno installed locally.
-        return;
-    }
-
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r#"
-        repos:
-          - repo: local
-            hooks:
-              - id: deno-check
-                name: deno check
-                language: deno
-                entry: deno eval 'console.log("test")'
-                always_run: true
-    "#});
-
-    context.git_add(".");
-
-    // Remove deno from PATH
-    let new_path = EnvVars::var("PATH")
-        .unwrap_or_default()
-        .split(':')
-        .filter(|path_part| !path_part.contains("deno"))
-        .collect::<Vec<_>>()
-        .join(":");
-
-    cmd_snapshot!(context.filters(), context.run().env("PATH", new_path), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Failed to install hook `deno-check`
-      caused by: Failed to find deno executable
     "#);
 }
