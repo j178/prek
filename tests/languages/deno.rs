@@ -319,3 +319,61 @@ fn no_dependencies() {
     ----- stderr -----
     "#);
 }
+
+/// Test that deno is available in PATH when running a shell script.
+/// This verifies that the bin directory with the deno symlink is properly added to PATH.
+#[test]
+fn deno_in_path_for_scripts() {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Create a shell script that calls deno
+    context
+        .work_dir()
+        .child("check_deno.sh")
+        .write_str(indoc::indoc! {r#"
+            #!/bin/bash
+            set -e
+            deno --version
+            echo "Deno is available in PATH!"
+        "#})
+        .unwrap();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: deno-path-test
+                name: deno path test
+                language: deno
+                entry: bash ./check_deno.sh
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "#});
+
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"deno \d+\.\d+\.\d+.*", "deno X.X.X")])
+        .chain([(r"v8 \d+\.\d+\.\d+\.\d+.*", "v8 X.X.X.X")])
+        .chain([(r"typescript \d+\.\d+\.\d+", "typescript X.X.X")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    deno path test...........................................................Passed
+    - hook id: deno-path-test
+    - duration: [TIME]
+      deno X.X.X
+      v8 X.X.X.X
+      typescript X.X.X
+      Deno is available in PATH!
+
+    ----- stderr -----
+    "#);
+}

@@ -1,3 +1,4 @@
+use std::env::consts::EXE_EXTENSION;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -9,11 +10,61 @@ use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::LanguageImpl;
 use crate::languages::deno::DenoRequest;
-use crate::languages::deno::installer::{DenoInstaller, DenoResult};
+use crate::languages::deno::installer::{DenoInstaller, DenoResult, bin_dir};
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
-use crate::run::run_by_batch;
+use crate::run::{prepend_paths, run_by_batch};
 use crate::store::{CacheBucket, Store, ToolBucket};
+
+/// Find the script in the entry that should be cached.
+/// Handles both direct scripts and `deno run ...` commands.
+fn find_script_to_cache(entry: &[String]) -> Option<&str> {
+    if entry.is_empty() {
+        return None;
+    }
+
+    // Check if first arg is a built-in Deno command
+    let first = entry[0].as_str();
+    if matches!(
+        first,
+        "fmt" | "lint" | "test" | "check" | "bundle" | "doc" | "repl" | "eval"
+    ) {
+        return None;
+    }
+
+    // If first arg is "run", look for the script after flags
+    if first == "run" {
+        for arg in &entry[1..] {
+            let arg_str = arg.as_str();
+            // Skip flags
+            if arg_str.starts_with('-') {
+                continue;
+            }
+            // Found the script
+            if is_cacheable_script(arg_str) {
+                return Some(arg_str);
+            }
+        }
+        return None;
+    }
+
+    // Otherwise, check if the first arg itself is a script
+    if is_cacheable_script(first) {
+        Some(first)
+    } else {
+        None
+    }
+}
+
+/// Check if a script path should be cached.
+fn is_cacheable_script(script: &str) -> bool {
+    script.starts_with("http")
+        || script.starts_with("jsr:")
+        || script.starts_with("npm:")
+        || script.contains('/')
+        || script.ends_with(".ts")
+        || script.ends_with(".js")
+}
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Deno;
@@ -59,6 +110,17 @@ impl LanguageImpl for Deno {
         info.with_toolchain(deno.deno().to_path_buf());
         info.with_language_version((**deno.version()).clone());
 
+        // 2. Create env with bin directory
+        let bin_dir_path = bin_dir(&info.env_path);
+        fs_err::tokio::create_dir_all(&bin_dir_path).await?;
+
+        // Create symlink to deno executable in the bin directory
+        crate::fs::create_symlink_or_copy(
+            deno.deno(),
+            &bin_dir_path.join("deno").with_extension(EXE_EXTENSION),
+        )
+        .await?;
+
         let deno_cache_dir = store.cache_path(CacheBucket::Deno);
         fs_err::tokio::create_dir_all(&deno_cache_dir).await?;
 
@@ -75,7 +137,6 @@ impl LanguageImpl for Deno {
                     fs_err::tokio::copy(repo_deno_json, &deno_json).await?;
                     needs_deno_json = false;
                 }
-                // Deno can run scripts directly from the repo without installation
             }
 
             if needs_deno_json {
@@ -84,16 +145,44 @@ impl LanguageImpl for Deno {
             }
 
             // Install additional dependencies
+            // Prepend bin_dir to PATH so deno can be found
+            let new_path = prepend_paths(&[&bin_dir_path]).context("Failed to join PATH")?;
+
             if !hook.additional_dependencies.is_empty() {
-                Cmd::new(deno.deno(), "deno add")
-                    .current_dir(&info.env_path)
-                    .env(EnvVars::DENO_DIR, &deno_cache_dir)
-                    .arg("add")
-                    .args(&hook.additional_dependencies)
-                    .check(true)
-                    .output()
-                    .await?;
+                Cmd::new(
+                    &bin_dir_path.join("deno").with_extension(EXE_EXTENSION),
+                    "deno add",
+                )
+                .current_dir(&info.env_path)
+                .env(EnvVars::PATH, &new_path)
+                .env(EnvVars::DENO_DIR, &deno_cache_dir)
+                .arg("add")
+                .args(&hook.additional_dependencies)
+                .check(true)
+                .output()
+                .await?;
             }
+        }
+
+        // Cache the entry script and its dependencies for offline use
+        let entry = hook.entry.split()?;
+        if let Some(script) = find_script_to_cache(&entry) {
+            let work_dir = hook.work_dir();
+            let new_path = prepend_paths(&[&bin_dir_path]).context("Failed to join PATH")?;
+
+            Cmd::new(
+                &bin_dir_path.join("deno").with_extension(EXE_EXTENSION),
+                "deno cache",
+            )
+            .current_dir(work_dir)
+            .env(EnvVars::PATH, &new_path)
+            .env(EnvVars::DENO_DIR, &deno_cache_dir)
+            .arg("cache")
+            .arg(script)
+            .check(true)
+            .output()
+            .await
+            .context("Failed to cache entry script dependencies")?;
         }
 
         reporter.on_install_complete(progress);
@@ -135,23 +224,17 @@ impl LanguageImpl for Deno {
         store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let deno_dir = store.cache_path(CacheBucket::Deno);
-        let info = hook.install_info().expect("Deno hook must be installed");
+        let env_dir = hook.env_path().expect("Deno must have env path");
 
-        // Use the toolchain path directly as the deno executable
-        let deno_bin = &info.toolchain;
+        // Prepend bin directory to PATH so scripts can find deno
+        let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
 
-        let entry = hook.entry.split()?;
+        let entry = hook.entry.resolve(Some(&new_path))?;
         let run = async move |batch: &[&Path]| {
-            // Replace "deno" with the actual path to the installed deno binary
-            let command = if entry[0] == "deno" {
-                deno_bin.as_path()
-            } else {
-                Path::new(&entry[0])
-            };
-
-            let mut output = Cmd::new(command, "deno run")
+            let mut output = Cmd::new(&entry[0], "deno hook")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
+                .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::DENO_DIR, &deno_dir)
                 .args(&hook.args)
                 .args(batch)
