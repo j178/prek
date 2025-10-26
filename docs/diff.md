@@ -67,13 +67,14 @@ main()
 
 ### Deno
 
-`prek` uses system-installed Deno and creates isolated dependency environments:
+`prek` automatically installs Deno from GitHub releases and creates isolated dependency environments:
 
-- Detects Deno from system PATH (no automatic version installation)
+- Automatically downloads and installs requested Deno versions from GitHub releases
+- Falls back to system-installed Deno if it matches the requested version
 - Creates isolated `DENO_DIR` for dependency caching
 - Supports `additional_dependencies` with `npm:` and `jsr:` specifiers via `deno add`
 - Copies repository `deno.json` if present for local repos
-- Does not support `language_version` - uses system-installed Deno only
+- Supports `language_version` for specifying Deno versions (e.g., `1.40`, `1.40.0`, `>= 1.40`)
 
 **Example:**
 
@@ -86,6 +87,7 @@ repos:
         language: deno
         entry: deno fmt
         types_or: [typescript, javascript]
+        language_version: "1.40"  # Optional: specify Deno version
       - id: custom-linter
         language: deno
         entry: deno run -A npm:eslint

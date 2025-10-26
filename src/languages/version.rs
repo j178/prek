@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use crate::config::Language;
 use crate::hook::InstallInfo;
+use crate::languages::deno::DenoRequest;
 use crate::languages::golang::GoRequest;
 use crate::languages::node::NodeRequest;
 use crate::languages::python::PythonRequest;
@@ -98,6 +99,34 @@ impl FromStr for SemverRequest {
 impl SemverRequest {
     fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
         self.0.matches(&install_info.language_version)
+    }
+
+    /// Parse this semver request for Deno
+    pub(crate) fn parse_for_deno(&self) -> Result<DenoRequest, Error> {
+        // semver::VersionReq formats version requirements with operators (e.g., "^2.3.7")
+        // We need to extract the actual version parts for Deno
+        // Check if we have a simple version requirement (single comparator)
+        let comparators = &self.0.comparators;
+
+        if comparators.len() == 1 {
+            let comp = &comparators[0];
+            // If it's a caret or default requirement with no pre-release, extract the version
+            if comp.pre.is_empty() {
+                let major = comp.major;
+                return match (comp.minor, comp.patch) {
+                    (Some(minor), Some(patch)) => {
+                        Ok(DenoRequest::MajorMinorPatch(major, minor, patch))
+                    }
+                    (Some(minor), None) => Ok(DenoRequest::MajorMinor(major, minor)),
+                    (None, None) => Ok(DenoRequest::Major(major)),
+                    _ => Err(Error::InvalidVersion(format!("{}", self.0))),
+                };
+            }
+        }
+
+        // For complex requirements, use the Range variant
+        let version_str = format!("{}", self.0);
+        Ok(DenoRequest::Range(self.0.clone(), version_str))
     }
 }
 

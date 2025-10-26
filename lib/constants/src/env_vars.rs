@@ -27,6 +27,7 @@ impl EnvVars {
         "PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT";
     pub const PREK_INTERNAL__GO_BINARY_NAME: &'static str = "PREK_INTERNAL__GO_BINARY_NAME";
     pub const PREK_INTERNAL__NODE_BINARY_NAME: &'static str = "PREK_INTERNAL__NODE_BINARY_NAME";
+    pub const PREK_INTERNAL__DENO_BINARY_NAME: &'static str = "PREK_INTERNAL__DENO_BINARY_NAME";
     pub const PREK_GENERATE: &'static str = "PREK_GENERATE";
 
     // UV related
