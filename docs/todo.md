@@ -6,35 +6,35 @@ This page tracks gaps that prevent `prek` from being a drop-in replacement for `
 
 - `gc`
 
-## Languages not supported yet
+## Language support status
 
-The original pre-commit supports hooks written in 10+ languages. Besides the commonly used ones like `python`, `node`, `golang`, `lua`, `system`, `script`, `pygrep`, `docker`, `docker_image`, and `fail` that are already supported, support for the following languages is still in the works:
+The original pre-commit supports hooks written in 10+ languages. The table below tracks `prek`'s parity progress and references any open follow-up work.
 
-- `conda`
-- `coursier`
-- `dart`
-- `dotnet`
-- `haskell`
-- `julia`
-- `perl`
-- `r`
-- `ruby`
-- `rust`
-- `swift`
+| Language | Status in `prek` | Tracking | Notes |
+| --- | --- | --- |  |
+| python ⭐ | ✅ Supported | — | `prek` supports automatic version management of Python toolchains. |
+| node | ✅ Supported | — | |
+| golang | ✅ Supported | — | |
+| lua | ✅ Supported | — | |
+| system | ✅ Supported | — | |
+| script | ✅ Supported | — | |
+| pygrep | ✅ Supported | — | |
+| docker | ✅ Supported | — | |
+| docker_image | ✅ Supported | — | |
+| fail | ✅ Supported | — | |
+| deno ⭐ | 🚧 WIP | — | Experimental support in `prek`; upstream `pre-commit` lacks a native `deno` language. |
+| ruby | 🚧 Planned | [#43](https://github.com/j178/prek/issues/43) | |
+| rust | 🚧 Planned | [#44](https://github.com/j178/prek/issues/44) | |
+| conda | 🚧 Planned | [#52](https://github.com/j178/prek/issues/52) | |
+| coursier | 🚧 Planned | [#53](https://github.com/j178/prek/issues/53) | |
+| dart | 🚧 Planned | [#51](https://github.com/j178/prek/issues/51) | |
+| dotnet | 🚧 Planned | [#48](https://github.com/j178/prek/issues/48) | |
+| haskell | 🚧 Planned | — | |
+| julia | 🚧 Planned | — | |
+| perl | 🚧 Planned | — | |
+| r | 🚧 Planned | [#42](https://github.com/j178/prek/issues/42) | |
+| swift | 🚧 Planned | [#46](https://github.com/j178/prek/issues/46) | |
 
-Tracking / issue links:
-
-- Conda: [#52](https://github.com/j178/prek/issues/52)
-- Coursier: [#53](https://github.com/j178/prek/issues/53)
-- Dart: [#51](https://github.com/j178/prek/issues/51)
-- Dotnet: [#48](https://github.com/j178/prek/issues/48)
-- Haskell: (no tracking issue yet)
-- Julia: (no tracking issue yet)
-- Lua: [#41](https://github.com/j178/prek/issues/41)
-- Perl: (no tracking issue yet)
-- R: [#42](https://github.com/j178/prek/issues/42)
-- Ruby: [#43](https://github.com/j178/prek/issues/43)
-- Rust: [#44](https://github.com/j178/prek/issues/44)
-- Swift: [#46](https://github.com/j178/prek/issues/46)
+⭐ Languages marked with a star highlight functionality `prek` offers beyond what upstream `pre-commit` includes today.
 
 Contributions welcome — if you'd like to help add support for any of these languages, please open a PR or comment on the corresponding issue.

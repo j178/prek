@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use http::header::{ACCEPT, USER_AGENT};
+use http::header::ACCEPT;
 use semver::{Version, VersionReq};
 use target_lexicon::{Architecture, ArmArchitecture, HOST, OperatingSystem};
 use tokio::task::JoinSet;
@@ -14,7 +14,7 @@ use tracing::{debug, trace, warn};
 use constants::env_vars::EnvVars;
 
 use crate::fs::LockedFile;
-use crate::languages::download_and_extract;
+use crate::languages::{REQWEST_CLIENT, download_and_extract};
 use crate::process::Cmd;
 use crate::store::{CacheBucket, Store};
 use crate::version;
@@ -157,28 +157,21 @@ impl InstallSource {
             "https://github.com/astral-sh/uv/releases/download/{CUR_UV_VERSION}/{archive_name}"
         );
 
-        let client = reqwest::Client::new();
-        download_and_extract(
-            &client,
-            &download_url,
-            &archive_name,
-            store,
-            async |extracted| {
-                let source = extracted.join("uv").with_extension(EXE_EXTENSION);
-                let target_path = target.join("uv").with_extension(EXE_EXTENSION);
+        download_and_extract(&download_url, &archive_name, store, async |extracted| {
+            let source = extracted.join("uv").with_extension(EXE_EXTENSION);
+            let target_path = target.join("uv").with_extension(EXE_EXTENSION);
 
-                if target_path.exists() {
-                    debug!(target = %target.display(), "Removing existing uv");
-                    fs_err::tokio::remove_dir_all(&target).await?;
-                }
+            if target_path.exists() {
+                debug!(target = %target.display(), "Removing existing uv");
+                fs_err::tokio::remove_dir_all(&target).await?;
+            }
 
-                debug!(?source, target = %target_path.display(), "Moving uv to target");
-                // TODO: retry on Windows
-                fs_err::tokio::rename(source, target_path).await?;
+            debug!(?source, target = %target_path.display(), "Moving uv to target");
+            // TODO: retry on Windows
+            fs_err::tokio::rename(source, target_path).await?;
 
-                anyhow::Ok(())
-            },
-        )
+            anyhow::Ok(())
+        })
         .await
         .context("Failed to download and extra uv")?;
 
@@ -195,7 +188,6 @@ impl InstallSource {
         let wheel_name = format!("uv-{CUR_UV_VERSION}-py3-none-{platform_tag}.whl");
 
         // Use PyPI JSON API instead of parsing HTML
-        let client = reqwest::Client::new();
         let api_url = match source {
             PyPiMirror::Pypi => format!("https://pypi.org/pypi/uv/{CUR_UV_VERSION}/json"),
             // For mirrors, we'll fall back to simple API approach
@@ -203,9 +195,8 @@ impl InstallSource {
         };
 
         debug!("Fetching uv metadata from: {}", api_url);
-        let response = client
+        let response = REQWEST_CLIENT
             .get(&api_url)
-            .header(USER_AGENT, format!("prek/{}", version::version()))
             .header("Accept", "*/*")
             .send()
             .await?;
@@ -237,7 +228,7 @@ impl InstallSource {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing download URL in PyPI response"))?;
 
-        self.download_and_extract_wheel(store, &client, target, &wheel_name, download_url)
+        self.download_and_extract_wheel(store, target, &wheel_name, download_url)
             .await
     }
 
@@ -252,12 +243,10 @@ impl InstallSource {
         let wheel_name = format!("uv-{CUR_UV_VERSION}-py3-none-{platform_tag}.whl");
 
         let simple_url = format!("{}uv/", source.url());
-        let client = reqwest::Client::new();
 
         debug!("Fetching from simple API: {}", simple_url);
-        let response = client
+        let response = REQWEST_CLIENT
             .get(&simple_url)
-            .header(USER_AGENT, format!("prek/{}", version::version().version))
             .header(ACCEPT, "*/*")
             .send()
             .await?;
@@ -291,19 +280,18 @@ impl InstallSource {
             format!("{simple_url}{download_path}")
         };
 
-        self.download_and_extract_wheel(store, &client, target, &wheel_name, &download_url)
+        self.download_and_extract_wheel(store, target, &wheel_name, &download_url)
             .await
     }
 
     async fn download_and_extract_wheel(
         &self,
         store: &Store,
-        client: &reqwest::Client,
         target: &Path,
         filename: &str,
         download_url: &str,
     ) -> Result<()> {
-        download_and_extract(client, download_url, filename, store, async |extracted| {
+        download_and_extract(download_url, filename, store, async |extracted| {
             // Find the uv binary in the extracted contents
             let data_dir = format!("uv-{CUR_UV_VERSION}.data");
             let extracted_uv = extracted
@@ -395,11 +383,11 @@ impl Uv {
     }
 
     async fn select_source() -> Result<InstallSource> {
-        async fn check_github(client: &reqwest::Client) -> Result<bool> {
+        async fn check_github() -> Result<bool> {
             let url = format!(
                 "https://github.com/astral-sh/uv/releases/download/{CUR_UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz"
             );
-            let response = client
+            let response = REQWEST_CLIENT
                 .head(url)
                 .timeout(Duration::from_secs(3))
                 .send()
@@ -408,11 +396,11 @@ impl Uv {
             Ok(response.status().is_success())
         }
 
-        async fn select_best_pypi(client: &reqwest::Client) -> Result<PyPiMirror> {
+        async fn select_best_pypi() -> Result<PyPiMirror> {
             let mut best = PyPiMirror::Pypi;
             let mut tasks = PyPiMirror::iter()
                 .map(|source| {
-                    let client = client.clone();
+                    let client = REQWEST_CLIENT.clone();
                     async move {
                         let url = format!("{}uv/", source.url());
                         let response = client
@@ -441,10 +429,9 @@ impl Uv {
             Ok(best)
         }
 
-        let client = reqwest::Client::new();
         let source = tokio::select! {
-                Ok(true) = check_github(&client) => InstallSource::GitHub,
-                Ok(source) = select_best_pypi(&client) => InstallSource::PyPi(source),
+                Ok(true) = check_github() => InstallSource::GitHub,
+                Ok(source) = select_best_pypi() => InstallSource::PyPi(source),
                 else => {
                     warn!("Failed to check uv source availability, falling back to pip install");
                     InstallSource::Pip
