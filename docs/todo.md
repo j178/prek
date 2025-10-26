@@ -11,29 +11,29 @@ This page tracks gaps that prevent `prek` from being a drop-in replacement for `
 The original pre-commit supports hooks written in 10+ languages. The table below tracks `prek`'s parity progress and references any open follow-up work.
 
 | Language | Status in `prek` | Tracking | Notes |
-| --- | --- | --- | --- |
+| --- | --- | --- |  |
 | python ⭐ | ✅ Supported | — | `prek` supports automatic version management of Python toolchains. |
-| node | ✅ Supported | — |  |
-| golang | ✅ Supported | — |  |
-| lua | ✅ Supported | — |  |
-| system | ✅ Supported | — |  |
-| script | ✅ Supported | — |  |
-| pygrep | ✅ Supported | — |  |
-| docker | ✅ Supported | — |  |
-| docker_image | ✅ Supported | — |  |
-| fail | ✅ Supported | — |  |
+| node | ✅ Supported | — | |
+| golang | ✅ Supported | — | |
+| lua | ✅ Supported | — | |
+| system | ✅ Supported | — | |
+| script | ✅ Supported | — | |
+| pygrep | ✅ Supported | — | |
+| docker | ✅ Supported | — | |
+| docker_image | ✅ Supported | — | |
+| fail | ✅ Supported | — | |
 | deno ⭐ | 🚧 WIP | — | Experimental support in `prek`; upstream `pre-commit` lacks a native `deno` language. |
-| ruby | 🚧 Planned | [#43](https://github.com/j178/prek/issues/43) |  |
-| rust | 🚧 Planned | [#44](https://github.com/j178/prek/issues/44) |  |
-| conda | 🚧 Planned | [#52](https://github.com/j178/prek/issues/52) |  |
-| coursier | 🚧 Planned | [#53](https://github.com/j178/prek/issues/53) |  |
-| dart | 🚧 Planned | [#51](https://github.com/j178/prek/issues/51) |  |
-| dotnet | 🚧 Planned | [#48](https://github.com/j178/prek/issues/48) |  |
-| haskell | 🚧 Planned | — | Tracking issue TBD |
-| julia | 🚧 Planned | — | Tracking issue TBD |
-| perl | 🚧 Planned | — | Tracking issue TBD |
-| r | 🚧 Planned | [#42](https://github.com/j178/prek/issues/42) |  |
-| swift | 🚧 Planned | [#46](https://github.com/j178/prek/issues/46) |  |
+| ruby | 🚧 Planned | [#43](https://github.com/j178/prek/issues/43) | |
+| rust | 🚧 Planned | [#44](https://github.com/j178/prek/issues/44) | |
+| conda | 🚧 Planned | [#52](https://github.com/j178/prek/issues/52) | |
+| coursier | 🚧 Planned | [#53](https://github.com/j178/prek/issues/53) | |
+| dart | 🚧 Planned | [#51](https://github.com/j178/prek/issues/51) | |
+| dotnet | 🚧 Planned | [#48](https://github.com/j178/prek/issues/48) | |
+| haskell | 🚧 Planned | — | |
+| julia | 🚧 Planned | — | |
+| perl | 🚧 Planned | — | |
+| r | 🚧 Planned | [#42](https://github.com/j178/prek/issues/42) | |
+| swift | 🚧 Planned | [#46](https://github.com/j178/prek/issues/46) | |
 
 ⭐ Languages marked with a star highlight functionality `prek` offers beyond what upstream `pre-commit` includes today.
 
