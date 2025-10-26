@@ -481,6 +481,8 @@ jobs:
             -j 8 `
             --final-status-level slow
 
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           cargo llvm-cov report --lcov --output-path lcov.info
         shell: pwsh
 
