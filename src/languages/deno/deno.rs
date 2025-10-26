@@ -10,7 +10,7 @@ use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
-use crate::run::{prepend_paths, run_by_batch};
+use crate::run::run_by_batch;
 use crate::store::{CacheBucket, Store};
 
 #[derive(Debug, Copy, Clone)]
@@ -68,26 +68,39 @@ impl LanguageImpl for Deno {
             executable: deno_executable,
         } = query_deno_info().await?;
 
-        // TODO: how to install the local repo?
-        // if let Some(repo_path) = hook.repo_path() {
-        //     Cmd::new(&deno_executable, "deno add")
-        //         .current_dir(&info.env_path)
-        //         .env(EnvVars::DENO_DIR, &deno_dir)
-        //         .arg("add")
-        //         .arg(format!("npm:{}", crate::fs::relative_to(repo_path, &info.env_path)?.display()))
-        //         .check(true)
-        //         .output()
-        //         .await?;
-        // }
+        // Initialize deno.json if we have dependencies to install
+        if hook.repo_path().is_some() || !hook.additional_dependencies.is_empty() {
+            let deno_json = info.env_path.join("deno.json");
 
-        Cmd::new(&deno_executable, "deno add")
-            .current_dir(&info.env_path)
-            .env(EnvVars::DENO_DIR, &deno_dir)
-            .arg("add")
-            .args(&hook.additional_dependencies)
-            .check(true)
-            .output()
-            .await?;
+            // Check if repo has deno.json to copy, otherwise create minimal one
+            let mut needs_deno_json = true;
+            if let Some(repo_path) = hook.repo_path() {
+                let repo_deno_json = repo_path.join("deno.json");
+                if repo_deno_json.exists() {
+                    // Copy the deno.json from the repo
+                    fs_err::tokio::copy(repo_deno_json, &deno_json).await?;
+                    needs_deno_json = false;
+                }
+                // Deno can run scripts directly from the repo without installation
+            }
+
+            if needs_deno_json {
+                // Create a minimal deno.json for dependency management
+                fs_err::tokio::write(&deno_json, "{}").await?;
+            }
+
+            // Install additional dependencies
+            if !hook.additional_dependencies.is_empty() {
+                Cmd::new(&deno_executable, "deno add")
+                    .current_dir(&info.env_path)
+                    .env(EnvVars::DENO_DIR, &deno_dir)
+                    .arg("add")
+                    .args(&hook.additional_dependencies)
+                    .check(true)
+                    .output()
+                    .await?;
+            }
+        }
 
         info.with_language_version(deno_version)
             .with_toolchain(deno_executable);
@@ -129,17 +142,13 @@ impl LanguageImpl for Deno {
         filenames: &[&Path],
         store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
-        let env_dir = hook.env_path().expect("Deno must have env path");
-        let bin_dir = env_dir.join("bin");
         let deno_dir = store.cache_path(CacheBucket::Deno);
-        let new_path = prepend_paths(&[&bin_dir]).context("Failed to join PATH")?;
 
         let entry = hook.entry.resolve(None)?;
         let run = async move |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "deno run")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
-                .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::DENO_DIR, &deno_dir)
                 .args(&hook.args)
                 .args(batch)

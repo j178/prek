@@ -1,6 +1,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+mod deno;
 #[cfg(all(feature = "docker", target_os = "linux"))]
 mod docker;
 #[cfg(all(feature = "docker", target_os = "linux"))]
