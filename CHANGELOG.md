@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.12
+
+Released on 2025-10-27.
+
+### Enhancements
+
+- Add a warning for unimplemented hooks ([#976](https://github.com/j178/prek/pull/976))
+- Allow using system trusted store by `PREK_NATIVE_TLS` ([#959](https://github.com/j178/prek/pull/959))
+
+### Bug fixes
+
+- Do not check for `script` subprocess status ([#964](https://github.com/j178/prek/pull/964))
+- Fix compatibility with older luarocks ([#967](https://github.com/j178/prek/pull/967))
+- Fix local relative path in `try-repo` ([#975](https://github.com/j178/prek/pull/975))
+
+### Documentation
+
+- Update language support status ([#970](https://github.com/j178/prek/pull/970))
+
+### Contributors
+
+- @yihong0618
+- @st1971
+- @j178
+
 ## 0.2.11
 
 Released on 2025-10-24.
