@@ -363,3 +363,42 @@ fn try_repo_uncommitted_changes() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn try_repo_relative_path() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+    context.disable_auto_crlf();
+
+    context.work_dir().child("test.txt").write_str("test")?;
+    context.git_add(".");
+
+    let _repo_path = create_hook_repo(&context, "try-repo-relative")?;
+
+    let relative_path = format!("../home/test-repos/try-repo-relative");
+
+    let mut filters = context.filters();
+    filters.extend([(r"[a-f0-9]{40}", "[COMMIT_SHA]")]);
+
+    cmd_snapshot!(filters,
+        context.try_repo()
+            .arg(&relative_path)
+            .arg("--skip")
+            .arg("another-hook"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Using config:
+    repos:
+      - repo: [TEMP_DIR]/../home/test-repos/try-repo-relative
+        rev: [COMMIT_SHA]
+        hooks:
+          - id: test-hook
+    Test Hook................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}

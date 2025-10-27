@@ -6,7 +6,6 @@ use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tempfile::TempDir;
-use tracing::debug;
 
 use crate::cli::ExitStatus;
 use crate::cli::run::Selectors;
@@ -34,35 +33,66 @@ async fn prepare_repo_and_rev<'a>(
     rev: Option<&'a str>,
     tmp_dir: &'a Path,
 ) -> Result<(Cow<'a, str>, String)> {
+    // Check if repo is a local path and convert to absolute path if needed
+    let repo_path = Path::new(repo);
+    // First, try to resolve to absolute path
+    let abs_path = if repo_path.is_relative() {
+        std::env::current_dir()?.join(repo_path)
+    } else {
+        repo_path.to_path_buf()
+    };
+    // Check if it's a directory using the absolute path
+    let repo_to_use = if abs_path.is_dir() {
+        Cow::Owned(abs_path.to_string_lossy().to_string())
+    } else {
+        Cow::Borrowed(repo)
+    };
+
     // If rev is provided, use it directly.
     if let Some(rev) = rev {
-        return Ok((Cow::Borrowed(repo), rev.to_string()));
+        return Ok((repo_to_use, rev.to_string()));
     }
 
-    let head_rev = git::git_cmd("get head rev")?
-        .arg("ls-remote")
-        .arg("--exit-code")
-        .arg(repo)
-        .arg("HEAD")
-        .output()
-        .await?
-        .stdout;
-    let head_rev = String::from_utf8_lossy(&head_rev)
-        .split_ascii_whitespace()
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("Failed to parse HEAD revision from git ls-remote output"))?
-        .to_string();
+    // Get HEAD revision
+    let repo_path = Path::new(repo_to_use.as_ref());
+    let head_rev = if repo_path.is_dir() {
+        // For local repositories, use rev-parse to get HEAD
+        let head_rev = git::git_cmd("get head rev")?
+            .arg("rev-parse")
+            .arg("HEAD")
+            .current_dir(repo_path)
+            .output()
+            .await?
+            .stdout;
+        String::from_utf8_lossy(&head_rev).trim().to_string()
+    } else {
+        // For remote repositories, use ls-remote
+        let head_rev = git::git_cmd("get head rev")?
+            .arg("ls-remote")
+            .arg("--exit-code")
+            .arg(repo_to_use.as_ref())
+            .arg("HEAD")
+            .output()
+            .await?
+            .stdout;
+        String::from_utf8_lossy(&head_rev)
+            .split_ascii_whitespace()
+            .next()
+            .ok_or_else(|| {
+                anyhow::anyhow!("Failed to parse HEAD revision from git ls-remote output")
+            })?
+            .to_string()
+    };
 
     // If repo is a local repo with uncommitted changes, create a shadow repo to commit the changes.
-    let repo_path = Path::new(repo);
+    let repo_path = Path::new(repo_to_use.as_ref());
     if repo_path.is_dir() && git::has_diff("HEAD", repo_path).await? {
         warn_user!("Creating temporary repo with uncommitted changes...");
-        debug!("Creating shadow repo for {}", repo);
 
         let shadow = tmp_dir.join("shadow-repo");
         git::git_cmd("clone shadow repo")?
             .arg("clone")
-            .arg(repo)
+            .arg(repo_to_use.as_ref())
             .arg(&shadow)
             .output()
             .await?;
@@ -84,7 +114,7 @@ async fn prepare_repo_and_rev<'a>(
                 .arg("add")
                 .arg("--")
                 .args(&staged_files)
-                .current_dir(repo)
+                .current_dir(repo_to_use.as_ref())
                 .env("GIT_INDEX_FILE", &index_path)
                 .env("GIT_OBJECT_DIRECTORY", &objects_path)
                 .output()
@@ -95,7 +125,7 @@ async fn prepare_repo_and_rev<'a>(
         add_u_cmd
             .arg("add")
             .arg("--update") // Update tracked files
-            .current_dir(repo)
+            .current_dir(repo_to_use.as_ref())
             .env("GIT_INDEX_FILE", &index_path)
             .env("GIT_OBJECT_DIRECTORY", &objects_path)
             .output()
@@ -119,7 +149,7 @@ async fn prepare_repo_and_rev<'a>(
         let new_rev = get_head_rev(&shadow).await?;
         Ok((Cow::Owned(shadow.to_string_lossy().to_string()), new_rev))
     } else {
-        Ok((Cow::Borrowed(repo), head_rev))
+        Ok((repo_to_use, head_rev))
     }
 }
 
