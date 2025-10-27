@@ -23,7 +23,7 @@ repos:
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --
-        language: perl
+        language: system
         types: [rust]
         pass_filenames: false # This makes it a lot faster
 

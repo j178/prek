@@ -749,10 +749,10 @@ pub(crate) fn tags_from_path(path: &Path) -> Result<Vec<&str>> {
     }
     #[cfg(not(unix))]
     {
-        executable = {
-            let ext = path.extension().and_then(|ext| ext.to_str());
-            ext.is_some_and(|ext| ext == "exe" || ext == "bat" || ext == "cmd")
-        };
+        // `pre-commit/identify` uses `os.access(path, os.X_OK)` to check for executability on Windows.
+        // This would actually return true for any file.
+        // We keep this behavior for compatibility.
+        executable = true;
     }
 
     if executable {
@@ -1026,6 +1026,21 @@ mod tests {
         assert_eq!(tags, vec!["plain-text", "non-executable", "file", "text"]);
         let tags = super::tags_from_path(&dest)?;
         assert_eq!(tags, vec!["symlink"]);
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn tags_from_path() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let src = dir.path().join("source.txt");
+        fs_err::File::create(&src)?;
+
+        let tags = super::tags_from_path(dir.path())?;
+        assert_eq!(tags, vec!["directory"]);
+        let tags = super::tags_from_path(&src)?;
+        assert_eq!(tags, vec!["plain-text", "executable", "file", "text"]);
 
         Ok(())
     }
