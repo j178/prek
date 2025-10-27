@@ -376,7 +376,7 @@ fn try_repo_relative_path() -> Result<()> {
 
     let _repo_path = create_hook_repo(&context, "try-repo-relative")?;
 
-    let relative_path = format!("../home/test-repos/try-repo-relative");
+    let relative_path = "../home/test-repos/try-repo-relative".to_string();
 
     let mut filters = context.filters();
     filters.extend([(r"[a-f0-9]{40}", "[COMMIT_SHA]")]);
