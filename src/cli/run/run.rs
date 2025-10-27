@@ -23,13 +23,13 @@ use crate::cli::run::{CollectOptions, FileFilter, Selectors, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, Stage};
 use crate::fs::CWD;
-use crate::git;
 use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::printer::{Printer, Stdout};
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
+use crate::{git, warn_user};
 
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
@@ -558,6 +558,7 @@ async fn run_hooks(
     let projects_len = project_to_hooks.len();
     let mut first = true;
     let mut file_modified = false;
+    let mut has_unimplemented = false;
 
     // Hooks might modify the files, so they must be run sequentially.
     'outer: for (_, mut hooks) in project_to_hooks {
@@ -584,16 +585,26 @@ async fn run_hooks(
             filter.len()
         );
 
-        let mut hook_succeed;
         for hook in hooks {
-            (hook_succeed, diff, file_modified) =
-                run_hook(hook, &filter, store, diff, verbose, dry_run, &printer).await?;
+            let result = run_hook(hook, &filter, store, diff, verbose, dry_run, &printer).await?;
+            diff = result.new_diff;
+            file_modified |= result.file_modified;
+            has_unimplemented |= result.status.is_unimplemented();
 
-            success &= hook_succeed;
+            success &= result.status.as_bool();
             if !success && (fail_fast || hook.fail_fast) {
                 break 'outer;
             }
         }
+    }
+
+    if has_unimplemented {
+        warn_user!(
+            "Some hooks were skipped because their languages are unimplemented.\nWe're working hard to support more languages. Check out current support status at {}.",
+            "https://prek.j178.dev/todo/#language-support-status"
+                .cyan()
+                .underline()
+        );
     }
 
     if !success && show_diff_on_failure && file_modified {
@@ -647,6 +658,33 @@ fn shuffle<T>(filenames: &mut [T]) {
     filenames.shuffle(&mut rng);
 }
 
+enum RunStatus {
+    Success,
+    Failed,
+    Skipped,
+    Unimplemented,
+}
+
+impl RunStatus {
+    fn from_bool(success: bool) -> Self {
+        if success { Self::Success } else { Self::Failed }
+    }
+
+    fn as_bool(&self) -> bool {
+        matches!(self, Self::Success | Self::Skipped | Self::Unimplemented)
+    }
+
+    fn is_unimplemented(&self) -> bool {
+        matches!(self, Self::Unimplemented)
+    }
+}
+
+struct RunResult {
+    status: RunStatus,
+    new_diff: Vec<u8>,
+    file_modified: bool,
+}
+
 async fn run_hook(
     hook: &InstalledHook,
     filter: &FileFilter<'_>,
@@ -655,7 +693,7 @@ async fn run_hook(
     verbose: bool,
     dry_run: bool,
     printer: &StatusPrinter,
-) -> Result<(bool, Vec<u8>, bool)> {
+) -> Result<RunResult> {
     let mut filenames = filter.for_hook(hook);
     trace!(
         "Files for hook `{}` after filtered: {}",
@@ -669,7 +707,11 @@ async fn run_hook(
             StatusPrinter::NO_FILES,
             Style::new().black().on_cyan(),
         )?;
-        return Ok((true, diff, false));
+        return Ok(RunResult {
+            status: RunStatus::Skipped,
+            new_diff: diff,
+            file_modified: false,
+        });
     }
 
     if !Language::supported(hook.language) {
@@ -678,7 +720,11 @@ async fn run_hook(
             StatusPrinter::UNIMPLEMENTED,
             Style::new().black().on_yellow(),
         )?;
-        return Ok((true, diff, false));
+        return Ok(RunResult {
+            status: RunStatus::Unimplemented,
+            new_diff: diff,
+            file_modified: false,
+        });
     }
 
     printer.write_running(&hook.name, false)?;
@@ -774,5 +820,9 @@ async fn run_hook(
         }
     }
 
-    Ok((success, new_diff, file_modified))
+    Ok(RunResult {
+        status: RunStatus::from_bool(success),
+        new_diff,
+        file_modified,
+    })
 }
