@@ -386,7 +386,7 @@ fn try_repo_relative_path() -> Result<()> {
     ----- stdout -----
     Using config:
     repos:
-      - repo: [TEMP_DIR]/../home/test-repos/try-repo-relative
+      - repo: ../home/test-repos/try-repo-relative
         rev: [COMMIT_SHA]
         hooks:
           - id: test-hook

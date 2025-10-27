@@ -96,16 +96,10 @@ async fn prepare_repo_and_rev<'a>(
 ) -> Result<(Cow<'a, str>, String)> {
     let repo_path = Path::new(repo);
     let is_local = repo_path.is_dir();
-    // Try to resolve to absolute path
-    let repo = if is_local {
-        Cow::Owned(std::path::absolute(repo)?.to_string_lossy().to_string())
-    } else {
-        Cow::Borrowed(repo)
-    };
 
     // If rev is provided, use it directly.
     if let Some(rev) = rev {
-        return Ok((repo, rev.to_string()));
+        return Ok((Cow::Borrowed(repo), rev.to_string()));
     }
 
     // Get HEAD revision
@@ -116,7 +110,7 @@ async fn prepare_repo_and_rev<'a>(
         let head_rev = git::git_cmd("get head rev")?
             .arg("ls-remote")
             .arg("--exit-code")
-            .arg(&*repo)
+            .arg(repo)
             .arg("HEAD")
             .output()
             .await?
@@ -137,7 +131,7 @@ async fn prepare_repo_and_rev<'a>(
         let head_rev = get_head_rev(&shadow).await?;
         Ok((Cow::Owned(shadow.to_string_lossy().to_string()), head_rev))
     } else {
-        Ok((repo, head_rev))
+        Ok((Cow::Borrowed(repo), head_rev))
     }
 }
 
