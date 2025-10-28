@@ -18,6 +18,7 @@ use crate::store::Store;
 use crate::version::version;
 use crate::{archive, builtin, warn_user_once};
 
+mod deno;
 mod docker;
 mod docker_image;
 mod fail;
@@ -33,6 +34,7 @@ pub mod version;
 static GOLANG: golang::Golang = golang::Golang;
 static PYTHON: python::Python = python::Python;
 static NODE: node::Node = node::Node;
+static DENO: deno::Deno = deno::Deno;
 static SYSTEM: system::System = system::System;
 static FAIL: fail::Fail = fail::Fail;
 static DOCKER: docker::Docker = docker::Docker;
@@ -117,6 +119,7 @@ impl Language {
             Self::Golang
                 | Self::Python
                 | Self::Node
+                | Self::Deno
                 | Self::System
                 | Self::Fail
                 | Self::Docker
@@ -172,6 +175,7 @@ impl Language {
             Self::Golang => GOLANG.install(hook, store, reporter).await,
             Self::Python => PYTHON.install(hook, store, reporter).await,
             Self::Node => NODE.install(hook, store, reporter).await,
+            Self::Deno => DENO.install(hook, store, reporter).await,
             Self::System => SYSTEM.install(hook, store, reporter).await,
             Self::Fail => FAIL.install(hook, store, reporter).await,
             Self::Docker => DOCKER.install(hook, store, reporter).await,
@@ -188,6 +192,7 @@ impl Language {
             Self::Golang => GOLANG.check_health(info).await,
             Self::Python => PYTHON.check_health(info).await,
             Self::Node => NODE.check_health(info).await,
+            Self::Deno => DENO.check_health(info).await,
             Self::System => SYSTEM.check_health(info).await,
             Self::Fail => FAIL.check_health(info).await,
             Self::Docker => DOCKER.check_health(info).await,
@@ -214,6 +219,7 @@ impl Language {
             Self::Golang => GOLANG.run(hook, filenames, store).await,
             Self::Python => PYTHON.run(hook, filenames, store).await,
             Self::Node => NODE.run(hook, filenames, store).await,
+            Self::Deno => DENO.run(hook, filenames, store).await,
             Self::System => SYSTEM.run(hook, filenames, store).await,
             Self::Fail => FAIL.run(hook, filenames, store).await,
             Self::Docker => DOCKER.run(hook, filenames, store).await,

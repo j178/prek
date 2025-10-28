@@ -18,7 +18,7 @@ pub(crate) struct Lua;
 
 pub(crate) struct LuaInfo {
     pub(crate) version: Version,
-    pub(crate) executable: std::path::PathBuf,
+    pub(crate) executable: PathBuf,
 }
 
 pub(crate) async fn query_lua_info() -> Result<LuaInfo> {
@@ -142,7 +142,7 @@ impl LanguageImpl for Lua {
             let mut output = Cmd::new(&entry[0], "run lua command")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
-                .env("PATH", &new_path)
+                .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::LUA_PATH, &lua_path)
                 .env(EnvVars::LUA_CPATH, &lua_cpath)
                 .args(&hook.args)
