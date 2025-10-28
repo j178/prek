@@ -631,7 +631,7 @@ jobs:
             </details>
             """
 
-            Path("hotpath-comparison.txt").write_text(comparison)
+            Path("hotpath_comparison.txt").write_text(comparison)
 
         - name: Save pr-number
           run: |
@@ -646,11 +646,11 @@ jobs:
           uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
           with:
             name: hotpath-results
-            path: hotpath-comparison.txt
+            path: hotpath_comparison.txt
 
         - name: Display results (PR)
           if: github.event_name == 'pull_request'
-          run: cat hotpath-comparison.txt >> $GITHUB_STEP_SUMMARY
+          run: cat hotpath_comparison.txt >> $GITHUB_STEP_SUMMARY
 
         - name: Display results (Push)
           if: github.event_name == 'push'
