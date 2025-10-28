@@ -104,7 +104,7 @@ mod tests {
         // Windows requires different APIs for file vs directory symlinks
         tokio::fs::symlink_file(&target, &link_path).await?;
 
-        let (code, output) = check_file(Utf8Path::new(""), &link_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), link_path.to_utf8_path()).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -127,7 +127,7 @@ mod tests {
             return Ok(());
         }
 
-        let (code, output) = check_file(Utf8Path::new(""), &link_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), link_path.to_utf8_path()).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         let output_str = String::from_utf8_lossy(&output);

@@ -973,10 +973,10 @@ mod tests {
     #[cfg(windows)]
     fn tags_from_path() -> anyhow::Result<()> {
         let dir = tempfile::tempdir()?;
-        let src = dir.path().join("source.txt");
+        let src = dir.path().join("source.txt").into_utf8_path_buf();
         fs_err::File::create(&src)?;
 
-        let tags = super::tags_from_path(dir.path())?;
+        let tags = super::tags_from_path(dir.path().to_utf8_path())?;
         assert_tagset(&tags, &["directory"]);
         let tags = super::tags_from_path(&src)?;
         assert_tagset(&tags, &["plain-text", "executable", "file", "text"]);
