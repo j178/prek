@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -61,11 +61,11 @@ pub(crate) trait HookInitReporter {
 #[derive(Debug, Clone)]
 pub(crate) struct Project {
     /// The absolute path of the project directory.
-    root: PathBuf,
+    root: Utf8PathBuf,
     /// The absolute path of the configuration file.
-    config_path: PathBuf,
+    config_path: Utf8PathBuf,
     /// The relative path of the project directory from the git root.
-    relative_path: PathBuf,
+    relative_path: Utf8PathBuf,
     // The order index of the project in the workspace.
     idx: usize,
     config: Config,
@@ -100,8 +100,8 @@ impl Project {
     /// Initialize a new project from the configuration file with an optional root path.
     /// If root is not given, it will be the parent directory of the configuration file.
     pub(crate) fn from_config_file(
-        config_path: Cow<'_, Path>,
-        root: Option<PathBuf>,
+        config_path: Cow<'_, Utf8Path>,
+        root: Option<Utf8PathBuf>,
     ) -> Result<Self, config::Error> {
         debug!(
             path = %config_path.user_display(),
@@ -123,13 +123,13 @@ impl Project {
             config,
             config_path: config_path.into_owned(),
             idx: 0,
-            relative_path: PathBuf::new(),
+            relative_path: Utf8PathBuf::new(),
             repos: Vec::with_capacity(size),
         })
     }
 
     /// Find the configuration file in the given path.
-    pub(crate) fn from_directory(path: &Path) -> Result<Self, config::Error> {
+    pub(crate) fn from_directory(path: &Utf8Path) -> Result<Self, config::Error> {
         let main = path.join(CONFIG_FILE);
         let alternate = path.join(ALT_CONFIG_FILE);
         let main_exists = main.is_file();
@@ -153,7 +153,7 @@ impl Project {
     }
 
     /// Discover a project from the give path or search from the given path to the git root.
-    pub(crate) fn discover(config_file: Option<&Path>, dir: &Path) -> Result<Project, Error> {
+    pub(crate) fn discover(config_file: Option<&Utf8Path>, dir: &Utf8Path) -> Result<Project, Error> {
         let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
 
         if let Some(config) = config_file {
@@ -169,7 +169,7 @@ impl Project {
         Ok(Project::from_directory(&workspace_root)?)
     }
 
-    pub(crate) fn with_relative_path(&mut self, relative_path: PathBuf) {
+    pub(crate) fn with_relative_path(&mut self, relative_path: Utf8PathBuf) {
         self.relative_path = relative_path;
     }
 
@@ -183,12 +183,12 @@ impl Project {
 
     /// Get the path to the configuration file.
     /// Must be an absolute path.
-    pub(crate) fn config_file(&self) -> &Path {
+    pub(crate) fn config_file(&self) -> &Utf8Path {
         &self.config_path
     }
 
     /// Get the path to the project directory.
-    pub(crate) fn path(&self) -> &Path {
+    pub(crate) fn path(&self) -> &Utf8Path {
         &self.root
     }
 
@@ -196,7 +196,7 @@ impl Project {
     ///
     /// Hooks will be executed in this directory and accept only files from this directory.
     /// In non-workspace mode (`--config <path>`), this is empty.
-    pub(crate) fn relative_path(&self) -> &Path {
+    pub(crate) fn relative_path(&self) -> &Utf8Path {
         &self.relative_path
     }
 
@@ -360,7 +360,7 @@ impl Project {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CachedConfigFile {
     /// Absolute path to the config file
-    path: PathBuf,
+    path: Utf8PathBuf,
     /// Last modification time
     modified: SystemTime,
     /// File size for quick change detection
@@ -373,7 +373,7 @@ struct WorkspaceCache {
     /// Cache version for compatibility
     version: u32,
     /// Workspace root path
-    workspace_root: PathBuf,
+    workspace_root: Utf8PathBuf,
     /// Cache creation timestamp
     created_at: SystemTime,
     /// Configuration files with their metadata
@@ -386,7 +386,7 @@ impl WorkspaceCache {
     const MAX_CACHE_AGE: u64 = 60 * 60;
 
     /// Create a new cache from workspace discovery results
-    fn new(workspace_root: PathBuf, projects: &[Arc<Project>]) -> Self {
+    fn new(workspace_root: Utf8PathBuf, projects: &[Arc<Project>]) -> Self {
         let mut config_files = Vec::new();
 
         for project in projects {
@@ -429,14 +429,14 @@ impl WorkspaceCache {
 
                 if current_modified != cached_file.modified || current_size != cached_file.size {
                     debug!(
-                        path = %cached_file.path.display(),
+                        path = %cached_file.path,
                         "Config file changed, invalidating cache"
                     );
                     return false;
                 }
             } else {
                 debug!(
-                    path = %cached_file.path.display(),
+                    path = %cached_file.path,
                     "Config file no longer exists, invalidating cache"
                 );
                 return false;
@@ -458,7 +458,7 @@ impl WorkspaceCache {
     }
 
     /// Get cache file path for a workspace
-    fn cache_path(store: &Store, workspace_root: &Path) -> PathBuf {
+    fn cache_path(store: &Store, workspace_root: &Utf8Path) -> Utf8PathBuf {
         let mut hasher = DefaultHasher::new();
         workspace_root.hash(&mut hasher);
         let digest = hex::encode(hasher.finish().to_le_bytes());
@@ -470,7 +470,7 @@ impl WorkspaceCache {
     }
 
     /// Load cache from file
-    fn load(store: &Store, workspace_root: &Path, refresh: bool) -> Option<Self> {
+    fn load(store: &Store, workspace_root: &Utf8Path, refresh: bool) -> Option<Self> {
         if refresh {
             return None;
         }
@@ -517,14 +517,14 @@ impl WorkspaceCache {
 }
 
 pub(crate) struct Workspace {
-    root: PathBuf,
+    root: Utf8PathBuf,
     projects: Vec<Arc<Project>>,
 }
 
 impl Workspace {
     /// Find the workspace root.
     /// `dir` must be an absolute path.
-    pub(crate) fn find_root(config_file: Option<&Path>, dir: &Path) -> Result<PathBuf, Error> {
+    pub(crate) fn find_root(config_file: Option<&Utf8Path>, dir: &Utf8Path) -> Result<Utf8PathBuf, Error> {
         let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
 
         if config_file.is_some() {
@@ -548,8 +548,8 @@ impl Workspace {
     #[instrument(level = "trace", skip(store, selectors))]
     pub(crate) fn discover(
         store: &Store,
-        root: PathBuf,
-        config: Option<PathBuf>,
+        root: Utf8PathBuf,
+        config: Option<Utf8PathBuf>,
         selectors: Option<&Selectors>,
         refresh: bool,
     ) -> Result<Self, Error> {
@@ -628,7 +628,7 @@ impl Workspace {
 
     /// Perform fresh workspace discovery without cache
     fn discover_fresh(
-        root: &Path,
+        root: &Utf8Path,
         selectors: Option<&Selectors>,
     ) -> Result<Vec<Arc<Project>>, Error> {
         let projects = Mutex::new(Ok(Vec::new()));
@@ -714,7 +714,7 @@ impl Workspace {
         }
     }
 
-    pub(crate) fn root(&self) -> &Path {
+    pub(crate) fn root(&self) -> &Utf8Path {
         &self.root
     }
 

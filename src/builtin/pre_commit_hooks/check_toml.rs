@@ -1,4 +1,4 @@
-use std::path::Path;
+use camino::Utf8Path;
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -6,7 +6,7 @@ use futures::StreamExt;
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
-pub(crate) async fn check_toml(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn check_toml(hook: &Hook, filenames: &[&Utf8Path]) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
         .map(async |filename| check_file(hook.project().relative_path(), filename).await)
         .buffered(*CONCURRENCY);
@@ -23,7 +23,7 @@ pub(crate) async fn check_toml(hook: &Hook, filenames: &[&Path]) -> Result<(i32,
     Ok((code, output))
 }
 
-async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, Vec<u8>)> {
     let content = fs_err::tokio::read(file_base.join(filename)).await?;
     if content.is_empty() {
         return Ok((0, Vec::new()));
@@ -33,7 +33,7 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
     let content_str = match std::str::from_utf8(&content) {
         Ok(s) => s,
         Err(e) => {
-            let error_message = format!("{}: Failed to decode UTF-8 ({e})\n", filename.display());
+            let error_message = format!("{}: Failed to decode UTF-8 ({e})\n", filename);
             return Ok((1, error_message.into_bytes()));
         }
     };
@@ -47,7 +47,7 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
         for error in errors {
             error_messages.push(format!(
                 "{}: Failed to toml decode ({error})",
-                filename.display()
+                filename
             ));
         }
         let combined_errors = error_messages.join("\n") + "\n";
@@ -58,14 +58,14 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use camino::Utf8PathBuf;
     use tempfile::tempdir;
 
     async fn create_test_file(
         dir: &tempfile::TempDir,
         name: &str,
         content: &[u8],
-    ) -> Result<PathBuf> {
+    ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
         Ok(file_path)
@@ -78,7 +78,7 @@ mod tests {
 key2 = "value2"
 "#;
         let file_path = create_test_file(&dir, "valid.toml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -91,7 +91,7 @@ key2 = "value2"
 key2 = "value2"
 "#;
         let file_path = create_test_file(&dir, "invalid.toml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         Ok(())
@@ -104,7 +104,7 @@ key2 = "value2"
 key1 = "value2"
 "#;
         let file_path = create_test_file(&dir, "duplicate.toml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         Ok(())
@@ -115,7 +115,7 @@ key1 = "value2"
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.toml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -132,7 +132,7 @@ key3 = invalid_value_without_quotes
 key4 = "another unclosed string
 "#;
         let file_path = create_test_file(&dir, "multiple_errors.toml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         let output_str = String::from_utf8_lossy(&output);
 
@@ -149,7 +149,7 @@ key4 = "another unclosed string
         let content = b"key1 = \"\xff\xfe\xfd\"\nkey2 = \"valid\"";
         let file_path = create_test_file(&dir, "invalid_utf8.toml", content).await?;
 
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         let output_str = String::from_utf8_lossy(&output);
         assert!(output_str.contains("Failed to decode UTF-8"));

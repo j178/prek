@@ -1,5 +1,5 @@
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -116,7 +116,7 @@ impl LanguageImpl for Golang {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&Path],
+        filenames: &[&Utf8Path],
         store: &Store,
     ) -> anyhow::Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Node hook must have env path");
@@ -137,7 +137,7 @@ impl LanguageImpl for Golang {
         let new_path = prepend_paths(&[&go_bin, go_root_bin]).context("Failed to join PATH")?;
 
         let entry = hook.entry.resolve(Some(&new_path))?;
-        let run = async move |batch: &[&Path]| {
+        let run = async move |batch: &[&Utf8Path]| {
             let mut output = Cmd::new(&entry[0], "go hook")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
@@ -170,6 +170,6 @@ impl LanguageImpl for Golang {
     }
 }
 
-pub(crate) fn bin_dir(env_path: &Path) -> PathBuf {
+pub(crate) fn bin_dir(env_path: &Utf8Path) -> Utf8PathBuf {
     env_path.join("bin")
 }

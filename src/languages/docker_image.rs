@@ -1,4 +1,4 @@
-use std::path::Path;
+use camino::Utf8Path;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -30,11 +30,11 @@ impl LanguageImpl for DockerImage {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&Path],
+        filenames: &[&Utf8Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let entry = hook.entry.resolve(None)?;
-        let run = async move |batch: &[&Path]| {
+        let run = async move |batch: &[&Utf8Path]| {
             let mut cmd = Docker::docker_run_cmd(hook.work_dir())?;
             let mut output = cmd
                 .current_dir(hook.work_dir())

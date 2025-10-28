@@ -1,6 +1,6 @@
 use std::env::consts::EXE_EXTENSION;
 use std::fmt::Display;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::str::FromStr;
 use std::string::ToString;
 use std::sync::LazyLock;
@@ -20,8 +20,8 @@ use crate::store::Store;
 
 #[derive(Debug)]
 pub(crate) struct NodeResult {
-    node: PathBuf,
-    npm: PathBuf,
+    node: Utf8PathBuf,
+    npm: Utf8PathBuf,
     version: NodeVersion,
 }
 
@@ -42,7 +42,7 @@ static NODE_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
 });
 
 impl NodeResult {
-    pub(crate) fn from_executables(node: PathBuf, npm: PathBuf) -> Self {
+    pub(crate) fn from_executables(node: Utf8PathBuf, npm: Utf8PathBuf) -> Self {
         Self {
             node,
             npm,
@@ -50,7 +50,7 @@ impl NodeResult {
         }
     }
 
-    pub(crate) fn from_dir(dir: &Path) -> Self {
+    pub(crate) fn from_dir(dir: &Utf8Path) -> Self {
         let node = bin_dir(dir).join("node").with_extension(EXE_EXTENSION);
         let npm = bin_dir(dir)
             .join("npm")
@@ -80,11 +80,11 @@ impl NodeResult {
         Ok(self)
     }
 
-    pub(crate) fn node(&self) -> &Path {
+    pub(crate) fn node(&self) -> &Utf8Path {
         &self.node
     }
 
-    pub(crate) fn npm(&self) -> &Path {
+    pub(crate) fn npm(&self) -> &Utf8Path {
         &self.npm
     }
 
@@ -94,11 +94,11 @@ impl NodeResult {
 }
 
 pub(crate) struct NodeInstaller {
-    root: PathBuf,
+    root: Utf8PathBuf,
 }
 
 impl NodeInstaller {
-    pub(crate) fn new(root: PathBuf) -> Self {
+    pub(crate) fn new(root: Utf8PathBuf) -> Self {
         Self { root }
     }
 
@@ -286,7 +286,7 @@ impl NodeInstaller {
     }
 
     /// Find npm executable in the same directory as the given node executable.
-    fn find_npm_in_same_directory(node_path: &Path) -> Result<Option<PathBuf>> {
+    fn find_npm_in_same_directory(node_path: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
         let node_dir = node_path
             .parent()
             .context("Node executable has no parent directory")?;
@@ -310,7 +310,7 @@ impl NodeInstaller {
     }
 }
 
-pub(crate) fn bin_dir(prefix: &Path) -> PathBuf {
+pub(crate) fn bin_dir(prefix: &Utf8Path) -> Utf8PathBuf {
     if cfg!(windows) {
         prefix.to_path_buf()
     } else {
@@ -318,7 +318,7 @@ pub(crate) fn bin_dir(prefix: &Path) -> PathBuf {
     }
 }
 
-pub(crate) fn lib_dir(prefix: &Path) -> PathBuf {
+pub(crate) fn lib_dir(prefix: &Utf8Path) -> Utf8PathBuf {
     if cfg!(windows) {
         prefix.join("node_modules")
     } else {
@@ -326,7 +326,7 @@ pub(crate) fn lib_dir(prefix: &Path) -> PathBuf {
     }
 }
 
-fn is_executable(path: &Path) -> bool {
+fn is_executable(path: &Utf8Path) -> bool {
     #[cfg(windows)]
     {
         path.extension()

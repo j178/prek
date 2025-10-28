@@ -1,5 +1,5 @@
 use std::io::Write;
-use std::path::Path;
+use camino::Utf8Path;
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -13,7 +13,7 @@ const BUFFER_SIZE: usize = 8192; // 8KB buffer for streaming
 
 pub(crate) async fn fix_byte_order_marker(
     hook: &Hook,
-    filenames: &[&Path],
+    filenames: &[&Utf8Path],
 ) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
         .map(async |filename| fix_file(hook.project().relative_path(), filename).await)
@@ -31,7 +31,7 @@ pub(crate) async fn fix_byte_order_marker(
     Ok((code, output))
 }
 
-async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+async fn fix_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, Vec<u8>)> {
     let file_path = file_base.join(filename);
 
     // First, just peek at the first 3 bytes to check for BOM
@@ -80,26 +80,26 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
         drop(file);
         temp_file.flush()?;
 
-        crate::fs::rename_or_copy(&temp_file.into_temp_path(), &file_path).await?;
+        crate::fs::rename_or_copy(&temp_file.into_temp_path(), file_path.as_std_path()).await?;
     }
 
     Ok((
         1,
-        format!("{}: removed byte-order marker\n", filename.display()).into_bytes(),
+        format!("{}: removed byte-order marker\n", filename).into_bytes(),
     ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use camino::Utf8PathBuf;
     use tempfile::tempdir;
 
     async fn create_test_file(
         dir: &tempfile::TempDir,
         name: &str,
         content: &[u8],
-    ) -> Result<PathBuf> {
+    ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
         Ok(file_path)
@@ -111,7 +111,7 @@ mod tests {
         let content = b"\xef\xbb\xbfHello, World!";
         let file_path = create_test_file(&dir, "with_bom.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
 
         assert_eq!(code, 1);
         let output_str = String::from_utf8_lossy(&output);
@@ -129,7 +129,7 @@ mod tests {
         let content = b"Hello, World!";
         let file_path = create_test_file(&dir, "without_bom.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
 
         assert_eq!(code, 0);
         assert!(output.is_empty());
@@ -146,7 +146,7 @@ mod tests {
         let content = b"";
         let file_path = create_test_file(&dir, "empty.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
 
         assert_eq!(code, 0);
         assert!(output.is_empty());
@@ -163,7 +163,7 @@ mod tests {
         let content = b"Hi";
         let file_path = create_test_file(&dir, "short.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
 
         assert_eq!(code, 0);
         assert!(output.is_empty());
@@ -180,7 +180,7 @@ mod tests {
         let content = b"\xef\xbbHello"; // Only first 2 bytes of BOM
         let file_path = create_test_file(&dir, "partial_bom.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
 
         assert_eq!(code, 0);
         assert!(output.is_empty());
@@ -197,7 +197,7 @@ mod tests {
         let content = b"\xef\xbb\xbf";
         let file_path = create_test_file(&dir, "bom_only.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
 
         assert_eq!(code, 1);
         let output_str = String::from_utf8_lossy(&output);
@@ -215,7 +215,7 @@ mod tests {
         let content = b"\xef\xbb\xbf\xe4\xb8\xad\xe6\x96\x87"; // BOM + Chinese characters "中文"
         let file_path = create_test_file(&dir, "utf8_with_bom.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
 
         assert_eq!(code, 1);
         let output_str = String::from_utf8_lossy(&output);
@@ -242,7 +242,7 @@ mod tests {
 
         let file_path = create_test_file(&dir, "large_with_bom.txt", &content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
 
         assert_eq!(code, 1);
         let output_str = String::from_utf8_lossy(&output);

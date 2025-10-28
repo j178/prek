@@ -29,9 +29,10 @@ use std::fmt::Display;
 use std::process::Output;
 use std::{
     ffi::OsStr,
-    path::Path,
     process::{CommandArgs, CommandEnvs, ExitStatus, Stdio},
 };
+
+use camino::Utf8Path;
 
 use owo_colors::OwoColorize;
 use thiserror::Error;
@@ -329,7 +330,7 @@ impl Cmd {
     }
 
     /// Forwards to [`std::process::Command::current_dir`][]
-    pub fn current_dir<P: AsRef<Path>>(&mut self, dir: P) -> &mut Self {
+    pub fn current_dir<P: AsRef<Utf8Path>>(&mut self, dir: P) -> &mut Self {
         self.inner.current_dir(dir);
         self
     }
@@ -368,7 +369,7 @@ impl Cmd {
     }
 
     /// Forwards to [`std::process::Command::get_current_dir`][]
-    pub fn get_current_dir(&self) -> Option<&Path> {
+    pub fn get_current_dir(&self) -> Option<&Utf8Path> {
         self.inner.as_std().get_current_dir()
     }
 

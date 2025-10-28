@@ -20,7 +20,7 @@
 
 use std::io::{BufRead, Read};
 use std::iter::FromIterator;
-use std::path::Path;
+use camino::Utf8Path;
 use std::sync::OnceLock;
 
 use anyhow::Result;
@@ -649,7 +649,7 @@ fn is_encoding_tag(tag: &str) -> bool {
 }
 
 /// Identify tags for a file at the given path.
-pub(crate) fn tags_from_path(path: &Path) -> Result<TagSet> {
+pub(crate) fn tags_from_path(path: &Utf8Path) -> Result<TagSet> {
     let metadata = std::fs::symlink_metadata(path)?;
     if metadata.is_dir() {
         return Ok(TagSet::from([tags::DIRECTORY]));
@@ -714,7 +714,7 @@ pub(crate) fn tags_from_path(path: &Path) -> Result<TagSet> {
     Ok(tags)
 }
 
-fn tags_from_filename(filename: &Path) -> TagSet {
+fn tags_from_filename(filename: &Utf8Path) -> TagSet {
     let ext = filename.extension().and_then(|ext| ext.to_str());
     let filename = filename
         .file_name()
@@ -832,7 +832,7 @@ fn parse_nix_shebang<R: BufRead>(reader: &mut R, mut cmd: Vec<String>) -> Vec<St
     cmd
 }
 
-pub(crate) fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
+pub(crate) fn parse_shebang(path: &Utf8Path) -> Result<Vec<String>, ShebangError> {
     let file = std::fs::File::open(path)?;
     let mut reader = std::io::BufReader::new(file);
     let mut line = String::new();
@@ -883,7 +883,7 @@ fn is_text_char(b: u8) -> bool {
 ///
 /// This is roughly based on libmagic's binary/text detection:
 /// <https://github.com/file/file/blob/df74b09b9027676088c797528edcaae5a9ce9ad0/src/encoding.c#L203-L228>
-fn is_text_file(path: &Path) -> bool {
+fn is_text_file(path: &Utf8Path) -> bool {
     let mut buffer = [0; 1024];
     let Ok(mut file) = fs_err::File::open(path) else {
         return false;
@@ -942,7 +942,7 @@ pub fn all_tags() -> &'static FxHashSet<&'static str> {
 mod tests {
     use super::*;
     use std::io::Write;
-    use std::path::Path;
+    use camino::Utf8Path;
 
     fn assert_tagset(actual: &TagSet, expected: &[&'static str]) {
         let mut actual_vec: Vec<_> = actual.iter().collect();
@@ -988,22 +988,22 @@ mod tests {
 
     #[test]
     fn tags_from_filename() {
-        let tags = super::tags_from_filename(Path::new("test.py"));
+        let tags = super::tags_from_filename(Utf8Path::new("test.py"));
         assert_tagset(&tags, &["python", "text"]);
 
-        let tags = super::tags_from_filename(Path::new("data.json"));
+        let tags = super::tags_from_filename(Utf8Path::new("data.json"));
         assert_tagset(&tags, &["json", "text"]);
 
-        let tags = super::tags_from_filename(Path::new("Pipfile"));
+        let tags = super::tags_from_filename(Utf8Path::new("Pipfile"));
         assert_tagset(&tags, &["toml", "text"]);
 
-        let tags = super::tags_from_filename(Path::new("Pipfile.lock"));
+        let tags = super::tags_from_filename(Utf8Path::new("Pipfile.lock"));
         assert_tagset(&tags, &["json", "text"]);
 
-        let tags = super::tags_from_filename(Path::new("file.pdf"));
+        let tags = super::tags_from_filename(Utf8Path::new("file.pdf"));
         assert_tagset(&tags, &["pdf", "binary"]);
 
-        let tags = super::tags_from_filename(Path::new("FILE.PDF"));
+        let tags = super::tags_from_filename(Utf8Path::new("FILE.PDF"));
         assert_tagset(&tags, &["pdf", "binary"]);
     }
 

@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 
 use anyhow::{Context, Result};
 use fancy_regex::Regex;
@@ -28,7 +28,7 @@ impl<'a> FilenameFilter<'a> {
         Self { include, exclude }
     }
 
-    pub(crate) fn filter(&self, filename: &Path) -> bool {
+    pub(crate) fn filter(&self, filename: &Utf8Path) -> bool {
         let Some(filename) = filename.to_str() else {
             return false;
         };
@@ -85,15 +85,15 @@ impl<'a> FileTagFilter<'a> {
 }
 
 pub(crate) struct FileFilter<'a> {
-    filenames: Vec<&'a Path>,
-    filename_prefix: &'a Path,
+    filenames: Vec<&'a Utf8Path>,
+    filename_prefix: &'a Utf8Path,
 }
 
 impl<'a> FileFilter<'a> {
     // Here, `filenames` are paths relative to the workspace root.
     pub(crate) fn for_project<I>(filenames: I, project: &'a Project) -> Self
     where
-        I: Iterator<Item = &'a PathBuf> + Send,
+        I: Iterator<Item = &'a Utf8PathBuf> + Send,
     {
         let filter = FilenameFilter::new(
             project.config().files.as_deref(),
@@ -129,7 +129,7 @@ impl<'a> FileFilter<'a> {
         types: &[String],
         types_or: &[String],
         exclude_types: &[String],
-    ) -> Vec<&Path> {
+    ) -> Vec<&Utf8Path> {
         let filter = FileTagFilter::new(types, types_or, exclude_types);
         let filenames: Vec<_> = self
             .filenames
@@ -137,7 +137,7 @@ impl<'a> FileFilter<'a> {
             .filter(|filename| match tags_from_path(filename) {
                 Ok(tags) => filter.filter(&tags),
                 Err(err) => {
-                    error!(filename = ?filename.display(), error = %err, "Failed to get tags");
+                    error!(filename = ?filename, error = %err, "Failed to get tags");
                     false
                 }
             })
@@ -148,7 +148,7 @@ impl<'a> FileFilter<'a> {
     }
 
     /// Filter filenames by file patterns and tags for a specific hook.
-    pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&Path> {
+    pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&Utf8Path> {
         // Filter by hook `files` and `exclude` patterns.
         let filter = FilenameFilter::for_hook(hook);
         let filenames = self.filenames.par_iter().filter(|filename| {
@@ -164,7 +164,7 @@ impl<'a> FileFilter<'a> {
         let filenames = filenames.filter(|filename| match tags_from_path(filename) {
             Ok(tags) => filter.filter(&tags),
             Err(err) => {
-                error!(filename = ?filename.display(), error = %err, "Failed to get tags");
+                error!(filename = ?filename, error = %err, "Failed to get tags");
                 false
             }
         });
@@ -204,7 +204,7 @@ impl CollectOptions {
 /// Get all filenames to run hooks on.
 /// Returns a list of file paths relative to the workspace root.
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<Vec<PathBuf>> {
+pub(crate) async fn collect_files(root: &Utf8Path, opts: CollectOptions) -> Result<Vec<Utf8PathBuf>> {
     let CollectOptions {
         hook_stage,
         from_ref,
@@ -221,8 +221,8 @@ pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<V
     let relative_root = root.strip_prefix(git_root).with_context(|| {
         format!(
             "Workspace root `{}` is not under git root `{}`",
-            root.display(),
-            git_root.display()
+            root,
+            git_root
         )
     })?;
 
@@ -246,8 +246,12 @@ pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<V
             // Only keep files under the workspace root.
             filename
                 .strip_prefix(relative_root)
-                .map(|p| normalize_path(p.to_path_buf()))
+                .map(|p| {
+                    let std_path = normalize_path(p.to_path_buf().into_std_path_buf());
+                    Utf8PathBuf::from_path_buf(std_path).ok()
+                })
                 .ok()
+                .flatten()
         })
         .collect::<Vec<_>>();
 
@@ -259,7 +263,7 @@ pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<V
     Ok(filenames)
 }
 
-fn adjust_relative_path(path: &str, new_cwd: &Path) -> Result<PathBuf, std::io::Error> {
+fn adjust_relative_path(path: &str, new_cwd: &Utf8Path) -> Result<Utf8PathBuf, std::io::Error> {
     fs::relative_to(std::path::absolute(path)?, new_cwd)
 }
 
@@ -267,8 +271,8 @@ fn adjust_relative_path(path: &str, new_cwd: &Path) -> Result<PathBuf, std::io::
 /// Returns a list of file paths relative to the git root.
 #[allow(clippy::too_many_arguments)]
 async fn collect_files_from_args(
-    git_root: &Path,
-    workspace_root: &Path,
+    git_root: &Utf8Path,
+    workspace_root: &Utf8Path,
     hook_stage: Stage,
     from_ref: Option<String>,
     to_ref: Option<String>,
@@ -276,7 +280,7 @@ async fn collect_files_from_args(
     files: Vec<String>,
     directories: Vec<String>,
     commit_msg_filename: Option<String>,
-) -> Result<Vec<PathBuf>> {
+) -> Result<Vec<Utf8PathBuf>> {
     if !hook_stage.operate_on_files() {
         return Ok(vec![]);
     }
@@ -330,14 +334,20 @@ async fn collect_files_from_args(
 
         let mut exists = exists
             .into_iter()
-            .map(|filename| adjust_relative_path(&filename, git_root).map(normalize_path))
+            .map(|filename| {
+                adjust_relative_path(&filename, git_root).map(|p| {
+                    let std_path = normalize_path(p.into_std_path_buf());
+                    Utf8PathBuf::from_path_buf(std_path).expect("normalized path should be UTF-8")
+                })
+            })
             .collect::<Result<FxHashSet<_>, _>>()?;
 
         for dir in directories {
             let dir = adjust_relative_path(&dir, git_root)?;
             let dir_files = git::ls_files(git_root, &dir).await?;
             for file in dir_files {
-                let file = normalize_path(file);
+                let std_path = normalize_path(file.into_std_path_buf());
+                let file = Utf8PathBuf::from_path_buf(std_path).expect("normalized path should be UTF-8");
                 exists.insert(file);
             }
         }

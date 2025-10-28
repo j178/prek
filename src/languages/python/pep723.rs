@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::path::Path;
+use camino::Utf8Path;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
@@ -51,7 +51,7 @@ impl Pep723Script {
     /// Returns `None` if the file is missing a PEP 723 metadata block.
     ///
     /// See: <https://peps.python.org/pep-0723/>
-    pub async fn read(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
+    pub async fn read(file: impl AsRef<Utf8Path>) -> Result<Option<Self>, Pep723Error> {
         let contents = fs_err::tokio::read(&file).await?;
 
         // Extract the `script` tag.

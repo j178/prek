@@ -1,6 +1,6 @@
 use std::env::consts::EXE_EXTENSION;
 use std::fmt::Display;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
 
@@ -20,14 +20,14 @@ use crate::process::Cmd;
 use crate::store::Store;
 
 pub(crate) struct GoResult {
-    path: PathBuf,
+    path: Utf8PathBuf,
     version: GoVersion,
     from_system: bool,
 }
 
 impl Display for GoResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}@{}", self.path.display(), self.version)?;
+        write!(f, "{}@{}", self.path, self.version)?;
         Ok(())
     }
 }
@@ -42,7 +42,7 @@ static GO_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
 });
 
 impl GoResult {
-    fn from_executable(path: PathBuf, from_system: bool) -> Self {
+    fn from_executable(path: Utf8PathBuf, from_system: bool) -> Self {
         Self {
             path,
             from_system,
@@ -50,12 +50,12 @@ impl GoResult {
         }
     }
 
-    pub(crate) fn from_dir(dir: &Path, from_system: bool) -> Self {
+    pub(crate) fn from_dir(dir: &Utf8Path, from_system: bool) -> Self {
         let go = bin_dir(dir).join("go").with_extension(EXE_EXTENSION);
         Self::from_executable(go, from_system)
     }
 
-    pub(crate) fn bin(&self) -> &Path {
+    pub(crate) fn bin(&self) -> &Utf8Path {
         &self.path
     }
 
@@ -98,11 +98,11 @@ impl GoResult {
 }
 
 pub(crate) struct GoInstaller {
-    root: PathBuf,
+    root: Utf8PathBuf,
 }
 
 impl GoInstaller {
-    pub(crate) fn new(root: PathBuf) -> Self {
+    pub(crate) fn new(root: Utf8PathBuf) -> Self {
         Self { root }
     }
 

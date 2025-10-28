@@ -1,4 +1,4 @@
-use std::path::Path;
+use camino::Utf8Path;
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -6,7 +6,7 @@ use futures::StreamExt;
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
-pub(crate) async fn check_symlinks(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn check_symlinks(hook: &Hook, filenames: &[&Utf8Path]) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
         .map(|filename| check_file(hook.project().relative_path(), filename))
         .buffered(*CONCURRENCY);
@@ -24,12 +24,12 @@ pub(crate) async fn check_symlinks(hook: &Hook, filenames: &[&Path]) -> Result<(
 }
 
 #[allow(clippy::unused_async)]
-async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, Vec<u8>)> {
     let path = file_base.join(filename);
 
     // Check if it's a symlink and if it's broken
     if path.is_symlink() && !path.exists() {
-        let error_message = format!("{}: Broken symlink\n", filename.display());
+        let error_message = format!("{}: Broken symlink\n", filename);
         return Ok((1, error_message.into_bytes()));
     }
 
@@ -39,14 +39,14 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use camino::Utf8PathBuf;
     use tempfile::tempdir;
 
     async fn create_test_file(
         dir: &tempfile::TempDir,
         name: &str,
         content: &[u8],
-    ) -> Result<PathBuf> {
+    ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
         Ok(file_path)
@@ -57,7 +57,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"regular file content";
         let file_path = create_test_file(&dir, "regular.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -71,7 +71,7 @@ mod tests {
         let link_path = dir.path().join("link.txt");
         tokio::fs::symlink(&target, &link_path).await?;
 
-        let (code, output) = check_file(Path::new(""), &link_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &link_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -85,7 +85,7 @@ mod tests {
         let nonexistent = dir.path().join("nonexistent.txt");
         tokio::fs::symlink(&nonexistent, &link_path).await?;
 
-        let (code, output) = check_file(Path::new(""), &link_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &link_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         let output_str = String::from_utf8_lossy(&output);
@@ -103,7 +103,7 @@ mod tests {
         // Windows requires different APIs for file vs directory symlinks
         tokio::fs::symlink_file(&target, &link_path).await?;
 
-        let (code, output) = check_file(Path::new(""), &link_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &link_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -126,7 +126,7 @@ mod tests {
             return Ok(());
         }
 
-        let (code, output) = check_file(Path::new(""), &link_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &link_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         let output_str = String::from_utf8_lossy(&output);
@@ -142,7 +142,7 @@ mod tests {
         let link_path = dir.path().join("link.txt");
         tokio::fs::symlink(&target, &link_path).await?;
 
-        let (code, output) = check_file(Path::new(""), &link_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &link_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -156,7 +156,7 @@ mod tests {
         let nonexistent = dir.path().join("nonexistent.txt");
         tokio::fs::symlink(&nonexistent, &link_path).await?;
 
-        let (code, output) = check_file(Path::new(""), &link_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &link_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         let output_str = String::from_utf8_lossy(&output);

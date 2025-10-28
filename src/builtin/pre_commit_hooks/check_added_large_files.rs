@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 
 use clap::Parser;
 use futures::StreamExt;
@@ -10,11 +10,11 @@ use crate::run::CONCURRENCY;
 
 enum FileFilter {
     NoFilter,
-    Files(FxHashSet<PathBuf>),
+    Files(FxHashSet<Utf8PathBuf>),
 }
 
 impl FileFilter {
-    fn contains(&self, path: &Path) -> bool {
+    fn contains(&self, path: &Utf8Path) -> bool {
         match self {
             FileFilter::NoFilter => true,
             FileFilter::Files(files) => files.contains(path),
@@ -35,7 +35,7 @@ struct Args {
 
 pub(crate) async fn check_added_large_files(
     hook: &Hook,
-    filenames: &[&Path],
+    filenames: &[&Utf8Path],
 ) -> anyhow::Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
 
@@ -64,7 +64,7 @@ pub(crate) async fn check_added_large_files(
         if size > args.max_kb {
             anyhow::Ok(Some(format!(
                 "{} ({size} KB) exceeds {} KB\n",
-                filename.display(),
+                filename,
                 args.max_kb
             )))
         } else {

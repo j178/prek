@@ -1,6 +1,6 @@
 use std::fmt::Write as _;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -22,7 +22,7 @@ use crate::{git, warn_user};
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
     store: &Store,
-    config: Option<PathBuf>,
+    config: Option<Utf8PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
     hook_types: Vec<HookType>,
@@ -31,7 +31,7 @@ pub(crate) async fn install(
     allow_missing_config: bool,
     refresh: bool,
     printer: Printer,
-    git_dir: Option<&Path>,
+    git_dir: Option<&Utf8Path>,
 ) -> Result<ExitStatus> {
     if git_dir.is_none() && git::has_hooks_path_set().await? {
         anyhow::bail!(
@@ -80,7 +80,7 @@ pub(crate) async fn install(
 
 pub(crate) async fn install_hooks(
     store: &Store,
-    config: Option<PathBuf>,
+    config: Option<Utf8PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
     refresh: bool,
@@ -130,10 +130,10 @@ fn get_hook_types(project: Option<&Project>, hook_types: Vec<HookType>) -> Vec<H
 
 fn install_hook_script(
     project: Option<&Project>,
-    config: Option<PathBuf>,
+    config: Option<Utf8PathBuf>,
     selectors: Option<&Selectors>,
     hook_type: HookType,
-    hooks_path: &Path,
+    hooks_path: &Utf8Path,
     overwrite: bool,
     skip_on_missing_config: bool,
     printer: Printer,
@@ -299,7 +299,7 @@ static PRIOR_HASHES: &[&str] = &[];
 static CURRENT_HASH: &str = "182c10f181da4464a3eec51b83331688";
 
 /// Checks if the script contains any of the hashes that `prek` has used in the past.
-fn is_our_script(hook_path: &Path) -> Result<bool> {
+fn is_our_script(hook_path: &Utf8Path) -> Result<bool> {
     let content = fs_err::read_to_string(hook_path)?;
     Ok(std::iter::once(CURRENT_HASH)
         .chain(PRIOR_HASHES.iter().copied())
@@ -307,7 +307,7 @@ fn is_our_script(hook_path: &Path) -> Result<bool> {
 }
 
 pub(crate) async fn uninstall(
-    config: Option<PathBuf>,
+    config: Option<Utf8PathBuf>,
     hook_types: Vec<HookType>,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -354,8 +354,8 @@ pub(crate) async fn uninstall(
 
 pub(crate) async fn init_template_dir(
     store: &Store,
-    directory: PathBuf,
-    config: Option<PathBuf>,
+    directory: Utf8PathBuf,
+    config: Option<Utf8PathBuf>,
     hook_types: Vec<HookType>,
     requires_config: bool,
     refresh: bool,
@@ -389,7 +389,7 @@ pub(crate) async fn init_template_dir(
             "git config `init.templateDir` not set to the target directory, try `{}`",
             format!(
                 "git config --global init.templateDir '{}'",
-                directory.display()
+                directory
             )
             .cyan()
         );

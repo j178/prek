@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::env::consts::EXE_EXTENSION;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -82,7 +82,7 @@ impl LanguageImpl for Node {
         // 3. Install dependencies
         let deps = if let Some(repo) = hook.repo_path() {
             let mut deps = hook.additional_dependencies.clone();
-            deps.insert(repo.to_string_lossy().to_string());
+            deps.insert(repo.to_string());
             Cow::Owned::<FxHashSet<_>>(deps)
         } else {
             Cow::Borrowed(&hook.additional_dependencies)
@@ -130,7 +130,7 @@ impl LanguageImpl for Node {
     }
 
     async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        let node = NodeResult::from_executables(info.toolchain.clone(), PathBuf::new())
+        let node = NodeResult::from_executables(info.toolchain.clone(), Utf8PathBuf::new())
             .fill_version()
             .await
             .context("Failed to query node version")?;
@@ -149,14 +149,14 @@ impl LanguageImpl for Node {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&Path],
+        filenames: &[&Utf8Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Node must have env path");
         let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
 
         let entry = hook.entry.resolve(Some(&new_path))?;
-        let run = async move |batch: &[&Path]| {
+        let run = async move |batch: &[&Utf8Path]| {
             let mut output = Cmd::new(&entry[0], "node hook")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])

@@ -22,13 +22,17 @@
 
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
+
+use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::LazyLock;
 use tracing::{debug, error, info, trace};
 
 use anyhow::Context;
 
-pub static CWD: LazyLock<PathBuf> =
-    LazyLock::new(|| std::env::current_dir().expect("The current directory must be exist"));
+pub static CWD: LazyLock<Utf8PathBuf> = LazyLock::new(|| {
+    Utf8PathBuf::from_path_buf(std::env::current_dir().expect("The current directory must exist"))
+        .expect("Current directory path is not valid UTF-8")
+});
 
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]

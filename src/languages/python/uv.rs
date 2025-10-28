@@ -1,5 +1,5 @@
 use std::env::consts::EXE_EXTENSION;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -66,7 +66,7 @@ fn get_wheel_platform_tag() -> Result<String> {
     Ok(platform_tag.to_string())
 }
 
-fn get_uv_version(uv_path: &Path) -> Result<Version> {
+fn get_uv_version(uv_path: &Utf8Path) -> Result<Version> {
     let output = Command::new(uv_path)
         .arg("--version")
         .output()
@@ -85,7 +85,7 @@ fn get_uv_version(uv_path: &Path) -> Result<Version> {
     Version::parse(version_str).map_err(Into::into)
 }
 
-static UV_EXE: LazyLock<Option<(PathBuf, Version)>> = LazyLock::new(|| {
+static UV_EXE: LazyLock<Option<(Utf8PathBuf, Version)>> = LazyLock::new(|| {
     for uv_path in which::which_all("uv").ok()? {
         debug!("Found uv in PATH: {}", uv_path.display());
 
@@ -142,7 +142,7 @@ enum InstallSource {
 }
 
 impl InstallSource {
-    async fn install(&self, store: &Store, target: &Path) -> Result<()> {
+    async fn install(&self, store: &Store, target: &Utf8Path) -> Result<()> {
         match self {
             Self::GitHub => self.install_from_github(store, target).await,
             Self::PyPi(source) => self.install_from_pypi(store, target, source).await,
@@ -150,7 +150,7 @@ impl InstallSource {
         }
     }
 
-    async fn install_from_github(&self, store: &Store, target: &Path) -> Result<()> {
+    async fn install_from_github(&self, store: &Store, target: &Utf8Path) -> Result<()> {
         let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
         let archive_name = format!("uv-{HOST}.{ext}");
         let download_url = format!(
@@ -181,7 +181,7 @@ impl InstallSource {
     async fn install_from_pypi(
         &self,
         store: &Store,
-        target: &Path,
+        target: &Utf8Path,
         source: &PyPiMirror,
     ) -> Result<()> {
         let platform_tag = get_wheel_platform_tag()?;
@@ -235,7 +235,7 @@ impl InstallSource {
     async fn install_from_simple_api(
         &self,
         store: &Store,
-        target: &Path,
+        target: &Utf8Path,
         source: &PyPiMirror,
     ) -> Result<()> {
         // Fallback for mirrors that don't support JSON API
@@ -287,7 +287,7 @@ impl InstallSource {
     async fn download_and_extract_wheel(
         &self,
         store: &Store,
-        target: &Path,
+        target: &Utf8Path,
         filename: &str,
         download_url: &str,
     ) -> Result<()> {
@@ -328,7 +328,7 @@ impl InstallSource {
         Ok(())
     }
 
-    async fn install_from_pip(&self, target: &Path) -> Result<()> {
+    async fn install_from_pip(&self, target: &Utf8Path) -> Result<()> {
         // When running `pip install` in multiple threads, it can fail
         // without extracting files properly.
         Cmd::new("python3", "pip install uv")
@@ -368,11 +368,11 @@ impl InstallSource {
 }
 
 pub(crate) struct Uv {
-    path: PathBuf,
+    path: Utf8PathBuf,
 }
 
 impl Uv {
-    pub(crate) fn new(path: PathBuf) -> Self {
+    pub(crate) fn new(path: Utf8PathBuf) -> Self {
         Self { path }
     }
 
@@ -443,7 +443,7 @@ impl Uv {
         Ok(source)
     }
 
-    pub(crate) async fn install(store: &Store, uv_dir: &Path) -> Result<Self> {
+    pub(crate) async fn install(store: &Store, uv_dir: &Utf8Path) -> Result<Self> {
         // 1) Check `uv` alongside `prek` binary (e.g. `uv tool install prek --with uv`)
         let prek_exe = std::env::current_exe()?.canonicalize()?;
         if let Some(prek_dir) = prek_exe.parent() {

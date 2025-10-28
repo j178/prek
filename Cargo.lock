@@ -1787,6 +1787,7 @@ dependencies = [
  "async_zip",
  "axoupdater",
  "bstr",
+ "camino",
  "clap",
  "clap_complete",
  "constants",

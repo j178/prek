@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::PathBuf;
+use camino::Utf8PathBuf;
 
 use clap::ValueEnum;
 use owo_colors::OwoColorize;
@@ -28,7 +28,7 @@ struct SerializableHook {
 
 pub(crate) async fn list(
     store: &Store,
-    config: Option<PathBuf>,
+    config: Option<Utf8PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
     hook_stage: Option<Stage>,

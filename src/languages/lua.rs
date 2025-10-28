@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -18,7 +18,7 @@ pub(crate) struct Lua;
 
 pub(crate) struct LuaInfo {
     pub(crate) version: Version,
-    pub(crate) executable: std::path::PathBuf,
+    pub(crate) executable: Utf8PathBuf,
 }
 
 pub(crate) async fn query_lua_info() -> Result<LuaInfo> {
@@ -44,7 +44,7 @@ pub(crate) async fn query_lua_info() -> Result<LuaInfo> {
         .await?
         .stdout;
 
-    let executable = PathBuf::from(String::from_utf8_lossy(&stdout).trim());
+    let executable = Utf8PathBuf::from(String::from_utf8_lossy(&stdout).trim());
 
     Ok(LuaInfo {
         version,
@@ -122,7 +122,7 @@ impl LanguageImpl for Lua {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&Path],
+        filenames: &[&Utf8Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Lua must have env path");
@@ -138,7 +138,7 @@ impl LanguageImpl for Lua {
         let lua_path = Lua::get_lua_path(env_dir, &version);
         let lua_cpath = Lua::get_lua_cpath(env_dir, &version);
 
-        let run = async move |batch: &[&Path]| {
+        let run = async move |batch: &[&Utf8Path]| {
             let mut output = Cmd::new(&entry[0], "run lua command")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
@@ -171,7 +171,7 @@ impl LanguageImpl for Lua {
 }
 
 impl Lua {
-    async fn install_rockspec(env_path: &Path, root_path: &Path, rockspec: &Path) -> Result<()> {
+    async fn install_rockspec(env_path: &Utf8Path, root_path: &Utf8Path, rockspec: &Utf8Path) -> Result<()> {
         Cmd::new("luarocks", "luarocks make rockspec")
             .current_dir(root_path)
             .arg("--tree")
@@ -185,7 +185,7 @@ impl Lua {
         Ok(())
     }
 
-    async fn install_dependency(env_path: &Path, dependency: &str) -> Result<()> {
+    async fn install_dependency(env_path: &Utf8Path, dependency: &str) -> Result<()> {
         Cmd::new("luarocks", "luarocks install dependency")
             .arg("--tree")
             .arg(env_path)
@@ -198,7 +198,7 @@ impl Lua {
         Ok(())
     }
 
-    fn get_rockspec_file(root_path: &Path) -> Option<PathBuf> {
+    fn get_rockspec_file(root_path: &Utf8Path) -> Option<Utf8PathBuf> {
         if let Ok(entries) = std::fs::read_dir(root_path) {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -210,7 +210,7 @@ impl Lua {
         None
     }
 
-    fn get_lua_path(env_dir: &Path, version: &str) -> String {
+    fn get_lua_path(env_dir: &Utf8Path, version: &str) -> String {
         let share_dir = env_dir.join("share");
         format!(
             "{};{};;",
@@ -224,7 +224,7 @@ impl Lua {
         )
     }
 
-    fn get_lua_cpath(env_dir: &Path, version: &str) -> String {
+    fn get_lua_cpath(env_dir: &Utf8Path, version: &str) -> String {
         let lib_dir = env_dir.join("lib");
         let so_ext = if cfg!(windows) { "dll" } else { "so" };
         format!(

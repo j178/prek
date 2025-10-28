@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::{Arc, OnceLock};
 
 use anyhow::{Context, Result};
@@ -49,7 +49,7 @@ pub(crate) enum Error {
 pub(crate) enum Repo {
     Remote {
         /// Path to the cloned repo.
-        path: PathBuf,
+        path: Utf8PathBuf,
         url: String,
         rev: String,
         hooks: Vec<ManifestHook>,
@@ -64,7 +64,7 @@ pub(crate) enum Repo {
 
 impl Repo {
     /// Load the remote repo manifest from the path.
-    pub(crate) fn remote(url: String, rev: String, path: PathBuf) -> Result<Self, Error> {
+    pub(crate) fn remote(url: String, rev: String, path: Utf8PathBuf) -> Result<Self, Error> {
         let manifest = read_manifest(&path.join(MANIFEST_FILE)).map_err(|e| Error::Manifest {
             repo: url.to_string(),
             error: e,
@@ -92,7 +92,7 @@ impl Repo {
     }
 
     /// Get the path to the cloned repo if it is a remote repo.
-    pub(crate) fn path(&self) -> Option<&Path> {
+    pub(crate) fn path(&self) -> Option<&Utf8Path> {
         match self {
             Repo::Remote { path, .. } => Some(path),
             _ => None,
@@ -438,7 +438,7 @@ impl Hook {
     }
 
     /// Get the path to the repository that contains the hook.
-    pub(crate) fn repo_path(&self) -> Option<&Path> {
+    pub(crate) fn repo_path(&self) -> Option<&Utf8Path> {
         self.repo.path()
     }
 
@@ -447,12 +447,12 @@ impl Hook {
         if path.as_os_str().is_empty() {
             format!(".:{}", self.id)
         } else {
-            format!("{}:{}", path.display(), self.id)
+            format!("{}:{}", path, self.id)
         }
     }
 
     /// Get the path where the hook should be executed.
-    pub(crate) fn work_dir(&self) -> &Path {
+    pub(crate) fn work_dir(&self) -> &Utf8Path {
         self.project.path()
     }
 
@@ -508,7 +508,7 @@ const HOOK_MARKER: &str = ".prek-hook.json";
 
 impl InstalledHook {
     /// Get the path to the environment where the hook is installed.
-    pub(crate) fn env_path(&self) -> Option<&Path> {
+    pub(crate) fn env_path(&self) -> Option<&Utf8Path> {
         match self {
             InstalledHook::Installed { info, .. } => Some(&info.env_path),
             InstalledHook::NoNeedInstall(_) => None,
@@ -545,8 +545,8 @@ pub(crate) struct InstallInfo {
     pub(crate) language: Language,
     pub(crate) language_version: semver::Version,
     pub(crate) dependencies: FxHashSet<String>,
-    pub(crate) env_path: PathBuf,
-    pub(crate) toolchain: PathBuf,
+    pub(crate) env_path: Utf8PathBuf,
+    pub(crate) toolchain: Utf8PathBuf,
     extra: FxHashMap<String, String>,
 }
 
@@ -564,7 +564,7 @@ impl InstallInfo {
     pub(crate) fn new(
         language: Language,
         dependencies: FxHashSet<String>,
-        hooks_dir: &Path,
+        hooks_dir: &Utf8Path,
     ) -> Result<Self, Error> {
         let env_path = tempfile::Builder::new()
             .prefix(&format!("{}-", language.as_str()))
@@ -577,12 +577,12 @@ impl InstallInfo {
             dependencies,
             env_path,
             language_version: semver::Version::new(0, 0, 0),
-            toolchain: PathBuf::new(),
+            toolchain: Utf8PathBuf::new(),
             extra: FxHashMap::default(),
         })
     }
 
-    pub(crate) async fn from_env_path(path: &Path) -> Result<Self> {
+    pub(crate) async fn from_env_path(path: &Utf8Path) -> Result<Self> {
         let content = fs_err::tokio::read_to_string(path.join(HOOK_MARKER)).await?;
         let info: InstallInfo = serde_json::from_str(&content)?;
 
@@ -598,7 +598,7 @@ impl InstallInfo {
         self
     }
 
-    pub(crate) fn with_toolchain(&mut self, toolchain: PathBuf) -> &mut Self {
+    pub(crate) fn with_toolchain(&mut self, toolchain: Utf8PathBuf) -> &mut Self {
         self.toolchain = toolchain;
         self
     }

@@ -1,4 +1,4 @@
-use std::path::Path;
+use camino::Utf8Path;
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -19,7 +19,7 @@ const BLACKLIST: &[&[u8]] = &[
     b"BEGIN OpenVPN Static key V1",
 ];
 
-pub(crate) async fn detect_private_key(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn detect_private_key(hook: &Hook, filenames: &[&Utf8Path]) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
         .map(|filename| check_file(hook.project().relative_path(), filename))
         .buffered(*CONCURRENCY);
@@ -36,13 +36,13 @@ pub(crate) async fn detect_private_key(hook: &Hook, filenames: &[&Path]) -> Resu
     Ok((code, output))
 }
 
-async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, Vec<u8>)> {
     let content = fs_err::tokio::read(file_base.join(filename)).await?;
 
     // Use memchr's memmem for faster substring search
     for pattern in BLACKLIST {
         if memchr::memmem::find(&content, pattern).is_some() {
-            let error_message = format!("Private key found: {}\n", filename.display());
+            let error_message = format!("Private key found: {}\n", filename);
             return Ok((1, error_message.into_bytes()));
         }
     }
@@ -53,14 +53,14 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use camino::Utf8PathBuf;
     use tempfile::tempdir;
 
     async fn create_test_file(
         dir: &tempfile::TempDir,
         name: &str,
         content: &[u8],
-    ) -> Result<PathBuf> {
+    ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
         Ok(file_path)
@@ -71,7 +71,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"This is just a regular file\nwith some content\n";
         let file_path = create_test_file(&dir, "clean.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -82,7 +82,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----\n";
         let file_path = create_test_file(&dir, "id_rsa", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         let output_str = String::from_utf8_lossy(&output);
         assert!(output_str.contains("Private key found"));
@@ -96,7 +96,7 @@ mod tests {
         let content =
             b"Some documentation\n\nHere is a key:\n-----BEGIN RSA PRIVATE KEY-----\ndata\n";
         let file_path = create_test_file(&dir, "doc.txt", content).await?;
-        let (code, _output) = check_file(Path::new(""), &file_path).await?;
+        let (code, _output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         Ok(())
     }
@@ -106,7 +106,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"This file talks about BEGIN_RSA_PRIVATE_KEY but doesn't contain one\n";
         let file_path = create_test_file(&dir, "false_positive.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -117,7 +117,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -129,7 +129,7 @@ mod tests {
         let mut content = vec![0xFF, 0xFE, 0x00];
         content.extend_from_slice(b"BEGIN RSA PRIVATE KEY");
         let file_path = create_test_file(&dir, "binary.dat", &content).await?;
-        let (code, _output) = check_file(Path::new(""), &file_path).await?;
+        let (code, _output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         Ok(())
     }

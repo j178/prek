@@ -1,4 +1,4 @@
-use std::path::Path;
+use camino::Utf8Path;
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -6,7 +6,7 @@ use futures::StreamExt;
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
-pub(crate) async fn check_xml(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn check_xml(hook: &Hook, filenames: &[&Utf8Path]) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
         .map(async |filename| check_file(hook.project().relative_path(), filename).await)
         .buffered(*CONCURRENCY);
@@ -23,14 +23,14 @@ pub(crate) async fn check_xml(hook: &Hook, filenames: &[&Path]) -> Result<(i32, 
     Ok((code, output))
 }
 
-async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, Vec<u8>)> {
     let content = fs_err::tokio::read(file_base.join(filename)).await?;
 
     // Empty XML is invalid - should have at least one element
     if content.is_empty() {
         let error_message = format!(
             "{}: Failed to xml parse (no element found)\n",
-            filename.display()
+            filename
         );
         return Ok((1, error_message.into_bytes()));
     }
@@ -52,7 +52,7 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
                     if root_count > 1 {
                         let error_message = format!(
                             "{}: Failed to xml parse (junk after document element)\n",
-                            filename.display()
+                            filename
                         );
                         return Ok((1, error_message.into_bytes()));
                     }
@@ -63,7 +63,7 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
                 depth -= 1;
             }
             Err(e) => {
-                let error_message = format!("{}: Failed to xml parse ({e})\n", filename.display());
+                let error_message = format!("{}: Failed to xml parse ({e})\n", filename);
                 return Ok((1, error_message.into_bytes()));
             }
             Ok(_) => {}
@@ -77,14 +77,14 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use camino::Utf8PathBuf;
     use tempfile::tempdir;
 
     async fn create_test_file(
         dir: &tempfile::TempDir,
         name: &str,
         content: &[u8],
-    ) -> Result<PathBuf> {
+    ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
         Ok(file_path)
@@ -98,7 +98,7 @@ mod tests {
     <element>value</element>
 </root>"#;
         let file_path = create_test_file(&dir, "valid.xml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -112,7 +112,7 @@ mod tests {
     <element>value
 </root>"#;
         let file_path = create_test_file(&dir, "invalid.xml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         let output_str = String::from_utf8_lossy(&output);
@@ -128,7 +128,7 @@ mod tests {
     <element>value</different>
 </root>"#;
         let file_path = create_test_file(&dir, "mismatched.xml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         Ok(())
@@ -142,7 +142,7 @@ mod tests {
     <element attribute="unclosed value>text</element>
 </root>"#;
         let file_path = create_test_file(&dir, "syntax_error.xml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         Ok(())
@@ -153,7 +153,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.xml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1); // Changed from 0 to 1
         assert!(!output.is_empty()); // Changed from is_empty() to !is_empty()
         let output_str = String::from_utf8_lossy(&output);
@@ -170,7 +170,7 @@ mod tests {
     <element id="2">another value</element>
 </root>"#;
         let file_path = create_test_file(&dir, "attributes.xml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -184,7 +184,7 @@ mod tests {
     <element><![CDATA[Some <special> characters & symbols]]></element>
 </root>"#;
         let file_path = create_test_file(&dir, "cdata.xml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -200,7 +200,7 @@ mod tests {
     <!-- Another comment -->
 </root>"#;
         let file_path = create_test_file(&dir, "comments.xml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -215,7 +215,7 @@ mod tests {
     <element>value</element>
 </root>"#;
         let file_path = create_test_file(&dir, "doctype.xml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -228,7 +228,7 @@ mod tests {
 <element>value</element>
 <another>value</another>"#;
         let file_path = create_test_file(&dir, "no_root.xml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         Ok(())

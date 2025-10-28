@@ -1,6 +1,6 @@
 use std::cmp::max;
 use std::ffi::OsString;
-use std::path::Path;
+use camino::Utf8Path;
 use std::sync::LazyLock;
 
 use anstream::ColorChoice;
@@ -36,7 +36,7 @@ fn target_concurrency(serial: bool) -> usize {
 
 /// Iterator that yields partitions of filenames that fit within the maximum command line length.
 struct Partitions<'a> {
-    filenames: &'a [&'a Path],
+    filenames: &'a [&'a Utf8Path],
     current_index: usize,
     command_length: usize,
     max_per_batch: usize,
@@ -70,7 +70,7 @@ fn platform_max_cli_length() -> usize {
 }
 
 impl<'a> Partitions<'a> {
-    fn new(hook: &'a Hook, filenames: &'a [&'a Path], concurrency: usize) -> Self {
+    fn new(hook: &'a Hook, filenames: &'a [&'a Utf8Path], concurrency: usize) -> Self {
         let max_per_batch = max(4, filenames.len().div_ceil(concurrency));
         let max_cli_length = platform_max_cli_length();
 
@@ -89,7 +89,7 @@ impl<'a> Partitions<'a> {
 }
 
 impl<'a> Iterator for Partitions<'a> {
-    type Item = &'a [&'a Path];
+    type Item = &'a [&'a Utf8Path];
 
     fn next(&mut self) -> Option<Self::Item> {
         // Handle empty filenames case
@@ -129,11 +129,11 @@ impl<'a> Iterator for Partitions<'a> {
 
 pub(crate) async fn run_by_batch<T, F>(
     hook: &Hook,
-    filenames: &[&Path],
+    filenames: &[&Utf8Path],
     run: F,
 ) -> anyhow::Result<Vec<T>>
 where
-    F: for<'a> AsyncFn(&'a [&'a Path]) -> anyhow::Result<T>,
+    F: for<'a> AsyncFn(&'a [&'a Utf8Path]) -> anyhow::Result<T>,
     T: Send + 'static,
 {
     let concurrency = target_concurrency(hook.require_serial);
@@ -160,7 +160,7 @@ where
     Ok(results)
 }
 
-pub(crate) fn prepend_paths(paths: &[&Path]) -> Result<OsString, std::env::JoinPathsError> {
+pub(crate) fn prepend_paths(paths: &[&Utf8Path]) -> Result<OsString, std::env::JoinPathsError> {
     std::env::join_paths(
         paths.iter().map(|p| p.to_path_buf()).chain(
             EnvVars::var_os(EnvVars::PATH)

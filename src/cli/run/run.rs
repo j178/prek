@@ -1,6 +1,6 @@
 use std::fmt::Write as _;
 use std::io::Write;
-use std::path::PathBuf;
+use camino::Utf8PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, LazyLock};
 
@@ -34,7 +34,7 @@ use crate::{git, warn_user};
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     store: &Store,
-    config: Option<PathBuf>,
+    config: Option<Utf8PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
     hook_stage: Stage,
@@ -256,7 +256,7 @@ impl LazyInstallInfo {
                     Err(err) => {
                         warn!(
                             %err,
-                            path = %info.env_path.display(),
+                            path = %info.env_path,
                             "Skipping unhealthy installed hook"
                         );
                         false
@@ -341,7 +341,7 @@ pub async fn install_hooks(
                         debug!(
                             "Found installed environment for hook `{}` at `{}`",
                             &hook,
-                            info.env_path.display()
+                            info.env_path
                         );
                         hook_envs.push(InstalledHook::Installed { hook, info });
                         continue;
@@ -363,7 +363,7 @@ pub async fn install_hooks(
 
                     match &installed_hook {
                         InstalledHook::Installed { info, .. } => {
-                            debug!("Installed hook `{hook}` in `{}`", info.env_path.display());
+                            debug!("Installed hook `{hook}` in `{}`", info.env_path);
                         }
                         InstalledHook::NoNeedInstall { .. } => {
                             debug!("Hook `{hook}` does not need installation");
@@ -527,7 +527,7 @@ impl StatusPrinter {
 async fn run_hooks(
     workspace: &Workspace,
     hooks: &[InstalledHook],
-    filenames: Vec<PathBuf>,
+    filenames: Vec<Utf8PathBuf>,
     store: &Store,
     show_diff_on_failure: bool,
     fail_fast: bool,
@@ -750,7 +750,7 @@ async fn run_hook(
             )?;
         }
         for filename in &filenames {
-            writeln!(output, "- {}", filename.to_string_lossy())?;
+            writeln!(output, "- {}", filename)?;
         }
         (0, output)
     } else {

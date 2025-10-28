@@ -1,4 +1,4 @@
-use std::path::Path;
+use camino::Utf8Path;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -68,7 +68,7 @@ impl Implemented {
         }
     }
 
-    pub(crate) async fn run(self, hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+    pub(crate) async fn run(self, hook: &Hook, filenames: &[&Utf8Path]) -> Result<(i32, Vec<u8>)> {
         debug!("Running builtin hook: {}", hook.id);
         match self {
             Self::TrailingWhitespace => {

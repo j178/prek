@@ -1,5 +1,5 @@
 use std::env::consts::EXE_EXTENSION;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -24,10 +24,10 @@ pub(crate) struct Python;
 
 pub(crate) struct PythonInfo {
     pub(crate) version: semver::Version,
-    pub(crate) python_exec: PathBuf,
+    pub(crate) python_exec: Utf8PathBuf,
 }
 
-pub(crate) async fn query_python_info(python: &Path) -> Result<PythonInfo> {
+pub(crate) async fn query_python_info(python: &Utf8Path) -> Result<PythonInfo> {
     static QUERY_PYTHON_INFO: &str = indoc::indoc! {r#"
     import sys
     print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
@@ -55,7 +55,7 @@ pub(crate) async fn query_python_info(python: &Path) -> Result<PythonInfo> {
         .next()
         .context("Failed to get Python base_exec_prefix")?
         .to_string();
-    let python_exec = python_exec(Path::new(&base_exec_prefix));
+    let python_exec = python_exec(Utf8Path::new(&base_exec_prefix));
 
     Ok(PythonInfo {
         version,
@@ -164,14 +164,14 @@ impl LanguageImpl for Python {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&Path],
+        filenames: &[&Utf8Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Python must have env path");
         let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
         let entry = hook.entry.resolve(Some(&new_path))?;
 
-        let run = async move |batch: &[&Path]| {
+        let run = async move |batch: &[&Utf8Path]| {
             let mut output = Cmd::new(&entry[0], "python hook")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
@@ -215,7 +215,7 @@ fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
                 Some(format!("{major}.{minor}.{patch}"))
             }
             PythonRequest::Range(_, raw) => Some(raw.clone()),
-            PythonRequest::Path(path) => Some(path.to_string_lossy().to_string()),
+            PythonRequest::Path(path) => Some(path.to_string()),
         },
         _ => unreachable!(),
     }
@@ -326,7 +326,7 @@ impl Python {
     }
 }
 
-fn bin_dir(venv: &Path) -> PathBuf {
+fn bin_dir(venv: &Utf8Path) -> Utf8PathBuf {
     if cfg!(windows) {
         venv.join("Scripts")
     } else {
@@ -334,6 +334,6 @@ fn bin_dir(venv: &Path) -> PathBuf {
     }
 }
 
-pub(crate) fn python_exec(venv: &Path) -> PathBuf {
+pub(crate) fn python_exec(venv: &Utf8Path) -> Utf8PathBuf {
     bin_dir(venv).join("python").with_extension(EXE_EXTENSION)
 }

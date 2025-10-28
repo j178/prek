@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::PathBuf;
+use camino::Utf8PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -62,12 +62,12 @@ pub(crate) enum Level {
 
 enum LogFile {
     Default,
-    Path(PathBuf),
+    Path(Utf8PathBuf),
     Disabled,
 }
 
 impl LogFile {
-    fn from_args(log_file: Option<PathBuf>, no_log_file: bool) -> Self {
+    fn from_args(log_file: Option<Utf8PathBuf>, no_log_file: bool) -> Self {
         if no_log_file {
             Self::Disabled
         } else if let Some(path) = log_file {
@@ -179,7 +179,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     debug!("prek: {}", version::version());
 
     if let Some(dir) = cli.globals.cd.as_ref() {
-        debug!("Changing current directory to: `{}`", dir.display());
+        debug!("Changing current directory to: `{}`", dir);
         std::env::set_current_dir(dir)?;
     }
 

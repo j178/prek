@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::fmt::Display;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::{Arc, Mutex};
 
 use crate::hook::Hook;
@@ -40,9 +40,9 @@ pub(crate) enum SelectorSource {
 #[derive(Debug, Clone)]
 pub(crate) enum SelectorExpr {
     HookId(String),
-    ProjectPrefix(PathBuf),
+    ProjectPrefix(Utf8PathBuf),
     ProjectHook {
-        project_path: PathBuf,
+        project_path: Utf8PathBuf,
         hook_id: String,
     },
 }
@@ -143,7 +143,7 @@ impl Selectors {
     pub(crate) fn load(
         includes: &[String],
         skips: &[String],
-        workspace_root: &Path,
+        workspace_root: &Utf8Path,
     ) -> Result<Selectors, Error> {
         let includes = includes
             .iter()
@@ -256,7 +256,7 @@ impl Selectors {
         included
     }
 
-    pub(crate) fn matches_path(&self, path: &Path) -> bool {
+    pub(crate) fn matches_path(&self, path: &Utf8Path) -> bool {
         let mut usage = self.usage.lock().unwrap();
 
         let mut skipped = false;
@@ -375,7 +375,7 @@ impl SelectorUsage {
 /// Parse a single selector string into a Selection enum.
 fn parse_single_selector<FS: FileSystem>(
     input: &str,
-    workspace_root: &Path,
+    workspace_root: &Utf8Path,
     source: SelectorSource,
     fs: FS,
 ) -> Result<Selector, Error> {
@@ -464,14 +464,14 @@ fn parse_single_selector<FS: FileSystem>(
 
 /// Trait to abstract filesystem operations for easier testing.
 pub trait FileSystem: Copy {
-    fn absolute<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf>;
+    fn absolute<P: AsRef<Utf8Path>>(&self, path: P) -> std::io::Result<Utf8PathBuf>;
 }
 
 #[derive(Copy, Clone)]
 pub struct RealFileSystem;
 
 impl FileSystem for RealFileSystem {
-    fn absolute<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
+    fn absolute<P: AsRef<Utf8Path>>(&self, path: P) -> std::io::Result<Utf8PathBuf> {
         std::path::absolute(path)
     }
 }
@@ -492,9 +492,9 @@ impl FileSystem for RealFileSystem {
 /// '..' -> ''
 fn normalize_path<FS: FileSystem>(
     path: &str,
-    workspace_root: &Path,
+    workspace_root: &Utf8Path,
     fs: FS,
-) -> Result<PathBuf, Error> {
+) -> Result<Utf8PathBuf, Error> {
     let absolute_path = fs.absolute(path).map_err(|e| Error::InvalidPath {
         path: path.to_string(),
         source: anyhow!(e),
@@ -514,7 +514,7 @@ fn normalize_path<FS: FileSystem>(
 /// Parse skip selectors from CLI args and environment variables
 pub(crate) fn load_skips<FS: FileSystem>(
     cli_skips: &[String],
-    workspace_root: &Path,
+    workspace_root: &Utf8Path,
     fs: FS,
 ) -> Result<Vec<Selector>, Error> {
     let prek_skip = EnvVars::var(EnvVars::PREK_SKIP);
@@ -561,7 +561,7 @@ mod tests {
     }
 
     impl FileSystem for &MockFileSystem {
-        fn absolute<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
+        fn absolute<P: AsRef<Utf8Path>>(&self, path: P) -> std::io::Result<Utf8PathBuf> {
             let p = path.as_ref();
             if p.is_absolute() {
                 Ok(p.to_path_buf())
@@ -572,7 +572,7 @@ mod tests {
     }
 
     impl MockFileSystem {
-        fn root(&self) -> &Path {
+        fn root(&self) -> &Utf8Path {
             self.current_dir.path()
         }
     }
@@ -610,17 +610,17 @@ mod tests {
         // Test project path with slash
         let selector = parse_single_selector("src/", fs.root(), SelectorSource::CliArg, &fs)?;
         assert!(
-            matches!(selector.expr, SelectorExpr::ProjectPrefix(ref path) if path == &PathBuf::from("src"))
+            matches!(selector.expr, SelectorExpr::ProjectPrefix(ref path) if path == &Utf8PathBuf::from("src"))
         );
 
         // Test current directory
         let selector = parse_single_selector(".", fs.root(), SelectorSource::CliArg, &fs)?;
         assert!(
-            matches!(selector.expr, SelectorExpr::ProjectPrefix(ref path) if path == &PathBuf::from(""))
+            matches!(selector.expr, SelectorExpr::ProjectPrefix(ref path) if path == &Utf8PathBuf::from(""))
         );
         let selector = parse_single_selector("./", fs.root(), SelectorSource::CliArg, &fs)?;
         assert!(
-            matches!(selector.expr, SelectorExpr::ProjectPrefix(ref path) if path == &PathBuf::from(""))
+            matches!(selector.expr, SelectorExpr::ProjectPrefix(ref path) if path == &Utf8PathBuf::from(""))
         );
 
         Ok(())
@@ -636,7 +636,7 @@ mod tests {
                 project_path,
                 hook_id,
             } => {
-                assert_eq!(project_path, PathBuf::from("src"));
+                assert_eq!(project_path, Utf8PathBuf::from("src"));
                 assert_eq!(hook_id, "black");
             }
             _ => panic!("Expected ProjectHook"),
@@ -675,15 +675,15 @@ mod tests {
 
         // Test relative path
         let result = normalize_path("src", fs.root(), &fs)?;
-        assert_eq!(result, PathBuf::from("src"));
+        assert_eq!(result, Utf8PathBuf::from("src"));
 
         // Test nested path
         let result = normalize_path("src/backend", fs.root(), &fs)?;
-        assert_eq!(result, PathBuf::from("src/backend"));
+        assert_eq!(result, Utf8PathBuf::from("src/backend"));
 
         // Test current directory
         let result = normalize_path(".", fs.root(), &fs)?;
-        assert_eq!(result, PathBuf::from(""));
+        assert_eq!(result, Utf8PathBuf::from(""));
 
         // Test path outside workspace - create a temp dir outside workspace
         let outside_dir = TempDir::new()?;

@@ -1,6 +1,6 @@
 use std::fmt::Display;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::str::FromStr;
 
 use serde::Deserialize;
@@ -73,7 +73,7 @@ pub(crate) enum GoRequest {
     Major(u64),
     MajorMinor(u64, u64),
     MajorMinorPatch(u64, u64, u64),
-    Path(PathBuf),
+    Path(Utf8PathBuf),
     Range(semver::VersionReq, String),
     // TODO: support prerelease versions like `go1.20.0b1`, `go1.20rc1`
     // MajorMinorPrerelease(u64, u64, String),
@@ -103,7 +103,7 @@ impl FromStr for GoRequest {
                     .map_err(|_| Error::InvalidVersion(s.to_string()))
             })
             .or_else(|_| {
-                let path = PathBuf::from(s);
+                let path = Utf8PathBuf::from(s);
                 if path.exists() {
                     Ok(GoRequest::Path(path))
                 } else {
@@ -143,7 +143,7 @@ impl GoRequest {
         )
     }
 
-    pub(crate) fn matches(&self, version: &GoVersion, toolchain: Option<&Path>) -> bool {
+    pub(crate) fn matches(&self, version: &GoVersion, toolchain: Option<&Utf8Path>) -> bool {
         match self {
             GoRequest::Any => true,
             GoRequest::Major(major) => version.0.major == *major,

@@ -1,5 +1,5 @@
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -53,7 +53,7 @@ trait LanguageImpl {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&Path],
+        filenames: &[&Utf8Path],
         store: &Store,
     ) -> Result<(i32, Vec<u8>)>;
 }
@@ -81,7 +81,7 @@ impl LanguageImpl for Unimplemented {
     async fn run(
         &self,
         hook: &InstalledHook,
-        _filenames: &[&Path],
+        _filenames: &[&Utf8Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         anyhow::bail!(UnimplementedError(format!("{}", hook.language)))
@@ -202,7 +202,7 @@ impl Language {
     pub async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&Path],
+        filenames: &[&Utf8Path],
         store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         // fast path for hooks implemented in Rust
@@ -245,7 +245,7 @@ pub(crate) fn resolve_command(mut cmds: Vec<String>, env_path: Option<&OsStr>) -
     let cmd = &cmds[0];
     let exe_path = match which::which_in(cmd, env_path, &*CWD) {
         Ok(p) => p,
-        Err(_) => PathBuf::from(cmd),
+        Err(_) => Utf8PathBuf::from(cmd),
     };
     trace!("Resolved command: {}", exe_path.display());
 
@@ -253,14 +253,14 @@ pub(crate) fn resolve_command(mut cmds: Vec<String>, env_path: Option<&OsStr>) -
         trace!("Found shebang: {:?}", interpreter);
         // Resolve the interpreter path, convert "python3" to "python3.exe" on Windows
         if let Ok(p) = which::which_in(&interpreter[0], env_path, &*CWD) {
-            interpreter[0] = p.to_string_lossy().to_string();
+            interpreter[0] = p.to_string();
             trace!("Resolved interpreter: {}", &interpreter[0]);
         }
-        interpreter.push(exe_path.to_string_lossy().to_string());
+        interpreter.push(exe_path.to_string());
         interpreter.extend_from_slice(&cmds[1..]);
         interpreter
     } else {
-        cmds[0] = exe_path.to_string_lossy().to_string();
+        cmds[0] = exe_path.to_string();
         cmds
     }
 }
@@ -269,7 +269,7 @@ async fn download_and_extract(
     url: &str,
     filename: &str,
     store: &Store,
-    callback: impl AsyncFn(&Path) -> Result<()>,
+    callback: impl AsyncFn(&Utf8Path) -> Result<()>,
 ) -> Result<()> {
     let response = REQWEST_CLIENT
         .get(url)
@@ -345,7 +345,7 @@ fn use_native_tls() -> bool {
 
     // SSL_CERT_FILE is only respected when using native TLS
     EnvVars::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
-        let path_exists = Path::new(&path).exists();
+        let path_exists = Utf8Path::new(&path).exists();
         if !path_exists {
             warn_user_once!(
                 "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",

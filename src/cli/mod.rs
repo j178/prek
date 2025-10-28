@@ -1,5 +1,5 @@
 use std::ffi::OsString;
-use std::path::PathBuf;
+use camino::Utf8PathBuf;
 use std::process::ExitCode;
 
 use clap::builder::styling::{AnsiColor, Effects};
@@ -129,7 +129,7 @@ pub(crate) struct Cli {
 pub(crate) struct GlobalArgs {
     /// Path to alternate config file.
     #[arg(global = true, short, long)]
-    pub(crate) config: Option<PathBuf>,
+    pub(crate) config: Option<Utf8PathBuf>,
 
     /// Change to directory before running.
     #[arg(
@@ -139,7 +139,7 @@ pub(crate) struct GlobalArgs {
         value_name = "DIR",
         value_hint = ValueHint::DirPath,
     )]
-    pub(crate) cd: Option<PathBuf>,
+    pub(crate) cd: Option<Utf8PathBuf>,
 
     /// Whether to use color in output.
     #[arg(
@@ -179,7 +179,7 @@ pub(crate) struct GlobalArgs {
     /// Write trace logs to the specified file.
     /// If not specified, trace logs will be written to `$PREK_HOME/prek.log`.
     #[arg(global = true, long, value_name = "LOG_FILE", value_hint = ValueHint::FilePath)]
-    pub(crate) log_file: Option<PathBuf>,
+    pub(crate) log_file: Option<Utf8PathBuf>,
 
     /// Do not write trace logs to a log file.
     #[arg(global = true, long, overrides_with = "log_file", hide = true)]
@@ -532,14 +532,14 @@ pub(crate) struct ListArgs {
 pub(crate) struct ValidateConfigArgs {
     /// The path to the configuration file.
     #[arg(value_name = "CONFIG")]
-    pub(crate) configs: Vec<PathBuf>,
+    pub(crate) configs: Vec<Utf8PathBuf>,
 }
 
 #[derive(Debug, Args)]
 pub(crate) struct ValidateManifestArgs {
     /// The path to the manifest file.
     #[arg(value_name = "MANIFEST")]
-    pub(crate) manifests: Vec<PathBuf>,
+    pub(crate) manifests: Vec<Utf8PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -551,7 +551,7 @@ pub(crate) struct SampleConfigArgs {
         num_args = 0..=1,
         default_missing_value = CONFIG_FILE,
     )]
-    pub(crate) file: Option<PathBuf>,
+    pub(crate) file: Option<Utf8PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -609,7 +609,7 @@ pub(crate) struct HookImplArgs {
     #[arg(long)]
     pub(crate) hook_type: HookType,
     #[arg(long)]
-    pub(crate) hook_dir: PathBuf,
+    pub(crate) hook_dir: Utf8PathBuf,
     #[arg(long)]
     pub(crate) skip_on_missing_config: bool,
     /// The prek version that installs the hook.
@@ -669,7 +669,7 @@ pub(crate) struct GenerateShellCompletionArgs {
 #[derive(Debug, Args)]
 pub(crate) struct InitTemplateDirArgs {
     /// The directory in which to write the hook script.
-    pub(crate) directory: PathBuf,
+    pub(crate) directory: Utf8PathBuf,
 
     /// Assume cloned repos should have a `pre-commit` config.
     #[arg(long)]
@@ -690,7 +690,7 @@ mod tests {
     use itertools::Itertools;
     use pretty_assertions::StrComparison;
     use std::cmp::max;
-    use std::path::PathBuf;
+    use camino::Utf8PathBuf;
 
     const ROOT_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -966,7 +966,7 @@ mod tests {
 
         let reference_string = generate(Cli::command());
         let filename = "cli.md";
-        let reference_path = PathBuf::from(ROOT_DIR).join("docs").join(filename);
+        let reference_path = Utf8PathBuf::from(ROOT_DIR).join("docs").join(filename);
 
         match mode {
             Mode::DryRun => {

@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;
-use std::path::Path;
+use camino::Utf8Path;
 
 use clap::builder::StyledStr;
 use clap_complete::CompletionCandidate;
@@ -35,11 +35,11 @@ pub(crate) fn selector_completer(current: &OsStr) -> Vec<CompletionCandidate> {
 
     if path_part.contains('/') {
         // Provide subdirectory matches relative to cwd for the path prefix
-        let path_obj = Path::new(path_part);
+        let path_obj = Utf8Path::new(path_part);
         let (base_dir, shown_prefix, filter_prefix) = if path_part.ends_with('/') {
             (CWD.join(path_obj), path_part.to_string(), String::new())
         } else {
-            let parent = path_obj.parent().unwrap_or(Path::new(""));
+            let parent = path_obj.parent().unwrap_or(Utf8Path::new(""));
             let file = path_obj.file_name().and_then(OsStr::to_str).unwrap_or("");
             let shown_prefix = if parent.as_os_str().is_empty() {
                 String::new()
@@ -116,7 +116,7 @@ pub(crate) fn selector_completer(current: &OsStr) -> Vec<CompletionCandidate> {
     // If the input ends with `:`, suggest hooks for that project
     if let Some(hook_prefix) = hook_prefix_opt {
         if !path_part.is_empty() {
-            let project_dir_abs = CWD.join(Path::new(path_part));
+            let project_dir_abs = CWD.join(Utf8Path::new(path_part));
             if let Some(proj) = workspace
                 .projects()
                 .iter()
@@ -181,7 +181,7 @@ fn all_hooks(proj: &Project) -> Vec<(String, Option<String>)> {
 // List subdirectories under base that contain projects (immediate or nested),
 // derived solely from workspace discovery; always end with '/'
 fn list_subdirs(
-    base: &Path,
+    base: &Utf8Path,
     shown_prefix: &str,
     filter_prefix: &str,
     workspace: &Workspace,
@@ -222,7 +222,7 @@ fn list_subdirs(
 // List immediate child directories under `base` that are themselves project roots,
 // suggesting them as `name:` (or `shown_prefix + name + :`)
 fn list_direct_project_colons(
-    base: &Path,
+    base: &Utf8Path,
     shown_prefix: &str,
     filter_prefix: &str,
     workspace: &Workspace,

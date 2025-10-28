@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
@@ -22,9 +22,9 @@ repos:
 ";
 
 #[allow(clippy::print_stdout)]
-pub(crate) fn sample_config(file: Option<PathBuf>, printer: Printer) -> Result<ExitStatus> {
+pub(crate) fn sample_config(file: Option<Utf8PathBuf>, printer: Printer) -> Result<ExitStatus> {
     if let Some(file) = file {
-        fs_err::create_dir_all(file.parent().unwrap_or(Path::new(".")))?;
+        fs_err::create_dir_all(file.parent().unwrap_or(Utf8Path::new(".")))?;
         if file.exists() {
             anyhow::bail!("File `{}` already exists", file.simplified_display().cyan());
         }

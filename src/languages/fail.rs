@@ -1,5 +1,5 @@
 use std::io::Write;
-use std::path::Path;
+use camino::Utf8Path;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -29,13 +29,13 @@ impl LanguageImpl for Fail {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&Path],
+        filenames: &[&Utf8Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let mut out = Vec::new();
         writeln!(out, "{}\n", hook.entry.raw())?;
         for f in filenames {
-            out.extend(f.to_string_lossy().as_bytes());
+            out.extend(f.as_str().as_bytes());
             out.push(b'\n');
         }
         out.push(b'\n');

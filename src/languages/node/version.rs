@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize};
@@ -141,7 +141,7 @@ pub(crate) enum NodeRequest {
     Major(u64),
     MajorMinor(u64, u64),
     MajorMinorPatch(u64, u64, u64),
-    Path(PathBuf),
+    Path(Utf8PathBuf),
     Range(semver::VersionReq),
     // A bare `lts` request is interpreted as the latest LTS version.
     Lts,
@@ -181,7 +181,7 @@ impl FromStr for NodeRequest {
                         .map_err(|_| Error::InvalidVersion(request.to_string()))
                 })
                 .or_else(|_| {
-                    let path = PathBuf::from(request);
+                    let path = Utf8PathBuf::from(request);
                     if path.exists() {
                         Ok(NodeRequest::Path(path))
                     } else {
@@ -230,7 +230,7 @@ impl NodeRequest {
         )
     }
 
-    pub(crate) fn matches(&self, version: &NodeVersion, toolchain: Option<&Path>) -> bool {
+    pub(crate) fn matches(&self, version: &NodeVersion, toolchain: Option<&Utf8Path>) -> bool {
         match self {
             NodeRequest::Any => true,
             NodeRequest::Major(major) => version.major() == *major,
@@ -257,7 +257,7 @@ mod tests {
     use crate::config::Language;
     use crate::hook::InstallInfo;
     use rustc_hash::FxHashSet;
-    use std::path::{Path, PathBuf};
+    use camino::{Utf8Path, Utf8PathBuf};
     use std::str::FromStr;
 
     #[test]
@@ -309,10 +309,10 @@ mod tests {
     #[test]
     fn test_node_request_satisfied_by() -> anyhow::Result<()> {
         let mut install_info =
-            InstallInfo::new(Language::Node, FxHashSet::default(), Path::new("."))?;
+            InstallInfo::new(Language::Node, FxHashSet::default(), Utf8Path::new("."))?;
         install_info
             .with_language_version(semver::Version::new(12, 18, 3))
-            .with_toolchain(PathBuf::from("/usr/bin/node"))
+            .with_toolchain(Utf8PathBuf::from("/usr/bin/node"))
             .with_extra(EXTRA_KEY_LTS, "\"Argon\"");
 
         let request = NodeRequest::Major(12);
@@ -336,10 +336,10 @@ mod tests {
         let request = NodeRequest::CodeName("Boron".to_string());
         assert!(!request.satisfied_by(&install_info));
 
-        let request = NodeRequest::Path(PathBuf::from("/usr/bin/node"));
+        let request = NodeRequest::Path(Utf8PathBuf::from("/usr/bin/node"));
         assert!(request.satisfied_by(&install_info));
 
-        let request = NodeRequest::Path(PathBuf::from("/usr/bin/nodejs"));
+        let request = NodeRequest::Path(Utf8PathBuf::from("/usr/bin/nodejs"));
         assert!(!request.satisfied_by(&install_info));
 
         let request = NodeRequest::Range(semver::VersionReq::parse(">=12.18").unwrap());
