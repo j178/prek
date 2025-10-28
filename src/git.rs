@@ -33,7 +33,7 @@ pub(crate) static GIT: LazyLock<Result<Utf8PathBuf, which::Error>> =
 
 pub(crate) static GIT_ROOT: LazyLock<Result<Utf8PathBuf, Error>> = LazyLock::new(|| {
     get_root().inspect(|root| {
-        debug!("Git root: {}", root.display());
+        debug!("Git root: {}", root);
     })
 });
 

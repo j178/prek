@@ -24,7 +24,7 @@ pub(crate) fn clean(store: &Store, printer: Printer) -> Result<ExitStatus> {
     writeln!(
         printer.stdout(),
         "Cleaned `{}`",
-        store.path().display().cyan()
+        store.path().cyan()
     )?;
 
     Ok(ExitStatus::Success)

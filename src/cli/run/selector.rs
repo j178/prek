@@ -62,7 +62,7 @@ impl Display for Selector {
                 if project_path.as_os_str().is_empty() {
                     write!(f, "./")
                 } else {
-                    write!(f, "{}/", project_path.display())
+                    write!(f, "{}/", project_path)
                 }
             }
             SelectorExpr::ProjectHook {
@@ -72,7 +72,7 @@ impl Display for Selector {
                 if project_path.as_os_str().is_empty() {
                     write!(f, ".:{hook_id}")
                 } else {
-                    write!(f, "{}:{hook_id}", project_path.display())
+                    write!(f, "{}:{hook_id}", project_path)
                 }
             }
         }

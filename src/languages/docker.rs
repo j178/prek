@@ -173,7 +173,7 @@ impl Docker {
             // The `Z` option tells Docker to label the content with a private
             // unshared label. Only the current container can use a private volume.
             .arg("--volume")
-            .arg(format!("{}:/src:rw,Z", work_dir.display()))
+            .arg(format!("{}:/src:rw,Z", work_dir))
             // Run an init inside the container that forwards signals and reaps processes
             .arg("--init")
             .arg("--workdir")

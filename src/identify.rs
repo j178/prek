@@ -715,10 +715,9 @@ pub(crate) fn tags_from_path(path: &Utf8Path) -> Result<TagSet> {
 }
 
 fn tags_from_filename(filename: &Utf8Path) -> TagSet {
-    let ext = filename.extension().and_then(|ext| ext.to_str());
+    let ext = filename.extension();
     let filename = filename
         .file_name()
-        .and_then(|name| name.to_str())
         .expect("Invalid filename");
 
     let mut result = TagSet::new();

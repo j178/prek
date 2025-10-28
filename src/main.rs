@@ -300,7 +300,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }) => match cache_command {
             CacheCommand::Clean => cli::clean(&store, printer),
             CacheCommand::Dir => {
-                writeln!(printer.stdout(), "{}", store.path().display().cyan())?;
+                writeln!(printer.stdout(), "{}", store.path().cyan())?;
                 Ok(ExitStatus::Success)
             }
             CacheCommand::GC => {

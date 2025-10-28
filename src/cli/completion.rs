@@ -44,7 +44,7 @@ pub(crate) fn selector_completer(current: &OsStr) -> Vec<CompletionCandidate> {
             let shown_prefix = if parent.as_os_str().is_empty() {
                 String::new()
             } else {
-                format!("{}/", parent.display())
+                format!("{}/", parent)
             };
             (CWD.join(parent), shown_prefix, file.to_string())
         };

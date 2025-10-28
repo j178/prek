@@ -214,13 +214,13 @@ impl Lua {
         let share_dir = env_dir.join("share");
         format!(
             "{};{};;",
-            share_dir.join("lua").join(version).join("?.lua").display(),
+            share_dir.join("lua").join(version).join("?.lua"),
             share_dir
                 .join("lua")
                 .join(version)
                 .join("?")
                 .join("init.lua")
-                .display()
+                
         )
     }
 
@@ -233,7 +233,7 @@ impl Lua {
                 .join("lua")
                 .join(version)
                 .join(format!("?.{so_ext}"))
-                .display()
+                
         )
     }
 }

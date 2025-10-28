@@ -29,9 +29,7 @@ impl<'a> FilenameFilter<'a> {
     }
 
     pub(crate) fn filter(&self, filename: &Utf8Path) -> bool {
-        let Some(filename) = filename.to_str() else {
-            return false;
-        };
+        let filename = filename.as_str();
         if let Some(re) = &self.include {
             if !re.is_match(filename).unwrap_or(false) {
                 return false;

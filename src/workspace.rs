@@ -77,7 +77,7 @@ impl Display for Project {
         if self.is_root() {
             write!(f, ".")
         } else {
-            write!(f, "{}", self.relative_path.display())
+            write!(f, "{}", self.relative_path)
         }
     }
 }
@@ -138,8 +138,8 @@ impl Project {
         if main_exists && alternate_exists {
             warn_user!(
                 "Both `{main}` and `{alternate}` exist, using `{main}` only",
-                main = main.display(),
-                alternate = alternate.display()
+                main = main,
+                alternate = alternate
             );
         }
         if main_exists {
@@ -540,7 +540,7 @@ impl Workspace {
             .ok_or(MissingPreCommitConfig)?
             .to_path_buf();
 
-        debug!("Found workspace root at `{}`", workspace_root.display());
+        debug!("Found workspace root at `{}`", workspace_root);
         Ok(workspace_root)
     }
 

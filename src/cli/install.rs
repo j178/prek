@@ -149,7 +149,7 @@ fn install_hook_script(
             )?;
         } else {
             if !is_our_script(&hook_path)? {
-                let legacy_path = format!("{}.legacy", hook_path.display());
+                let legacy_path = format!("{}.legacy", hook_path);
                 fs_err::rename(&hook_path, &legacy_path)?;
                 writeln!(
                     printer.stdout(),
@@ -197,22 +197,22 @@ fn install_hook_script(
     // If neither is available, don't pass a config path (let prek find it). In this case,
     // we're different with `pre-commit` which always sets `--config=.pre-commit-config.yaml`.
     let target_info = if let Some(config) = config {
-        args.push(format!(r#"--config="{}""#, config.display()));
-        format!(" with specified config `{}`", config.display().cyan())
+        args.push(format!(r#"--config="{}""#, config));
+        format!(" with specified config `{}`", config.cyan())
     } else if let Some(project) = project {
         let project_path = project.path();
         let relative_path = project_path
             .strip_prefix(GIT_ROOT.as_ref()?)
             .unwrap_or(project_path);
         if !relative_path.as_os_str().is_empty() {
-            args.push(format!(r#"--cd="{}""#, relative_path.display()));
+            args.push(format!(r#"--cd="{}""#, relative_path));
         }
 
         if project_path == GIT_ROOT.as_ref()? {
             String::new()
         } else {
             // Show workspace path if it's not the root project.
-            format!(" for workspace `{}`", project_path.display().cyan())
+            format!(" for workspace `{}`", project_path.cyan())
         }
     } else {
         String::new()
@@ -225,7 +225,9 @@ fn install_hook_script(
     args.push(format!("--script-version={CUR_SCRIPT_VERSION}"));
 
     let prek = std::env::current_exe()?;
-    let prek = prek.simplified().display().to_string();
+    let prek = Utf8PathBuf::from_path_buf(prek)
+        .map_err(|_| anyhow::anyhow!("prek executable path is not valid UTF-8"))?;
+    let prek = prek.simplified().to_string();
     let hook_script = HOOK_TMPL
         .replace(
             "[SHEBANG]",

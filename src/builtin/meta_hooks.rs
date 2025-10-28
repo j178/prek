@@ -73,9 +73,7 @@ fn excludes_any(
     }
 
     files.iter().any(|f| {
-        let Some(f) = f.as_ref().to_str() else {
-            return false; // Skip files that cannot be converted to a string
-        };
+        let f = f.as_ref().as_str();
 
         if let Some(re) = &include {
             if !re.is_match(f).unwrap_or(false) {
@@ -159,7 +157,7 @@ pub fn identity(_hook: &Hook, filenames: &[&Utf8Path]) -> (i32, Vec<u8>) {
         0,
         filenames
             .iter()
-            .map(|f| f.to_string_lossy())
+            .map(|f| f.to_string())
             .join("\n")
             .into_bytes(),
     )
