@@ -831,8 +831,8 @@ fn gitignore_respected() -> Result<()> {
     context.setup_workspace(
         &[
             "src",
-            "node_modules/ignored",  // Should be ignored by .gitignore
-            "target/ignored",         // Should be ignored by .gitignore
+            "node_modules/ignored", // Should be ignored by .gitignore
+            "target/ignored",       // Should be ignored by .gitignore
         ],
         config,
     )?;
