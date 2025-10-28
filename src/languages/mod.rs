@@ -244,17 +244,19 @@ pub(crate) async fn extract_metadata_from_entry(hook: &mut Hook) -> Result<()> {
 pub(crate) fn resolve_command(mut cmds: Vec<String>, env_path: Option<&OsStr>) -> Vec<String> {
     let cmd = &cmds[0];
     let exe_path = match which::which_in(cmd, env_path, &*CWD) {
-        Ok(p) => p,
+        Ok(p) => Utf8PathBuf::from_path_buf(p).unwrap_or_else(|_| Utf8PathBuf::from(cmd)),
         Err(_) => Utf8PathBuf::from(cmd),
     };
-    trace!("Resolved command: {}", exe_path.display());
+    trace!("Resolved command: {}", exe_path);
 
     if let Ok(mut interpreter) = parse_shebang(&exe_path) {
         trace!("Found shebang: {:?}", interpreter);
         // Resolve the interpreter path, convert "python3" to "python3.exe" on Windows
         if let Ok(p) = which::which_in(&interpreter[0], env_path, &*CWD) {
-            interpreter[0] = p.to_string();
-            trace!("Resolved interpreter: {}", &interpreter[0]);
+            if let Ok(p) = Utf8PathBuf::from_path_buf(p) {
+                interpreter[0] = p.to_string();
+                trace!("Resolved interpreter: {}", &interpreter[0]);
+            }
         }
         interpreter.push(exe_path.to_string());
         interpreter.extend_from_slice(&cmds[1..]);

@@ -87,6 +87,7 @@ fn get_uv_version(uv_path: &Utf8Path) -> Result<Version> {
 
 static UV_EXE: LazyLock<Option<(Utf8PathBuf, Version)>> = LazyLock::new(|| {
     for uv_path in which::which_all("uv").ok()? {
+        let uv_path = Utf8PathBuf::from_path_buf(uv_path).ok()?;
         debug!("Found uv in PATH: {}", uv_path);
 
         if let Ok(version) = get_uv_version(&uv_path) {

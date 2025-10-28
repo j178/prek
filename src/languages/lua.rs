@@ -203,7 +203,7 @@ impl Lua {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().and_then(|s| s.to_str()) == Some("rockspec") {
-                    return Some(path);
+                    return Utf8PathBuf::from_path_buf(path).ok();
                 }
             }
         }

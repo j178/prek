@@ -29,7 +29,7 @@ pub(crate) enum Error {
 }
 
 pub(crate) static GIT: LazyLock<Result<Utf8PathBuf, which::Error>> =
-    LazyLock::new(|| which::which("git"));
+    LazyLock::new(|| which::which("git").and_then(|p| Utf8PathBuf::from_path_buf(p).map_err(|_| which::Error::CannotFindBinaryPath)));
 
 pub(crate) static GIT_ROOT: LazyLock<Result<Utf8PathBuf, Error>> = LazyLock::new(|| {
     get_root().inspect(|root| {

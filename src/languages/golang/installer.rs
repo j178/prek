@@ -155,7 +155,8 @@ impl GoInstaller {
             .filter_map(|entry| {
                 let dir_name = entry.file_name();
                 let version = GoVersion::from_str(&dir_name.to_string_lossy()).ok()?;
-                Some((version, entry.path()))
+                let path = Utf8PathBuf::from_path_buf(entry.path()).ok()?;
+                Some((version, path))
             })
             .sorted_unstable_by(|(a, _), (b, _)| a.cmp(b))
             .rev();

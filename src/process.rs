@@ -464,7 +464,7 @@ fn skip_args(cmd: &OsStr, cur: &OsStr, next: Option<&&OsStr>) -> usize {
 impl Display for Cmd {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(cwd) = self.get_current_dir() {
-            write!(f, "cd {} && ", cwd.to_string_lossy())?;
+            write!(f, "cd {} && ", cwd)?;
         }
         let program = self.get_program();
         let mut args = self.get_args().peekable();
