@@ -1,7 +1,7 @@
-use camino::Utf8Path;
 use std::sync::Arc;
 
 use anyhow::Result;
+use camino::Utf8Path;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};

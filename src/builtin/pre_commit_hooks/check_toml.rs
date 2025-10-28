@@ -1,6 +1,5 @@
-use camino::Utf8Path;
-
 use anyhow::Result;
+use camino::Utf8Path;
 use futures::StreamExt;
 
 use crate::hook::Hook;
@@ -33,7 +32,7 @@ async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, V
     let content_str = match std::str::from_utf8(&content) {
         Ok(s) => s,
         Err(e) => {
-            let error_message = format!("{}: Failed to decode UTF-8 ({e})\n", filename);
+            let error_message = format!("{filename}: Failed to decode UTF-8 ({e})\n");
             return Ok((1, error_message.into_bytes()));
         }
     };
@@ -45,10 +44,7 @@ async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, V
     } else {
         let mut error_messages = Vec::new();
         for error in errors {
-            error_messages.push(format!(
-                "{}: Failed to toml decode ({error})",
-                filename
-            ));
+            error_messages.push(format!("{filename}: Failed to toml decode ({error})"));
         }
         let combined_errors = error_messages.join("\n") + "\n";
         Ok((1, combined_errors.into_bytes()))
@@ -58,6 +54,7 @@ async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, V
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::path::IntoUtf8PathBuf;
     use camino::Utf8PathBuf;
     use tempfile::tempdir;
 
@@ -68,7 +65,7 @@ mod tests {
     ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
-        Ok(file_path)
+        Ok(file_path.into_utf8_path_buf())
     }
 
     #[tokio::test]

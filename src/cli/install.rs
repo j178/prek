@@ -1,10 +1,10 @@
 use std::fmt::Write as _;
 use std::io::Write;
-use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
 use bstr::ByteSlice;
+use camino::{Utf8Path, Utf8PathBuf};
 use owo_colors::OwoColorize;
 use same_file::is_same_file;
 
@@ -12,8 +12,8 @@ use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run;
 use crate::cli::run::{SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
-use crate::fs::{CWD, Simplified};
 use crate::git::{GIT_ROOT, git_cmd};
+use crate::path::{CWD, Simplified};
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
@@ -149,7 +149,7 @@ fn install_hook_script(
             )?;
         } else {
             if !is_our_script(&hook_path)? {
-                let legacy_path = format!("{}.legacy", hook_path);
+                let legacy_path = format!("{hook_path}.legacy");
                 fs_err::rename(&hook_path, &legacy_path)?;
                 writeln!(
                     printer.stdout(),
@@ -197,15 +197,15 @@ fn install_hook_script(
     // If neither is available, don't pass a config path (let prek find it). In this case,
     // we're different with `pre-commit` which always sets `--config=.pre-commit-config.yaml`.
     let target_info = if let Some(config) = config {
-        args.push(format!(r#"--config="{}""#, config));
+        args.push(format!(r#"--config="{config}""#));
         format!(" with specified config `{}`", config.cyan())
     } else if let Some(project) = project {
         let project_path = project.path();
         let relative_path = project_path
             .strip_prefix(GIT_ROOT.as_ref()?)
             .unwrap_or(project_path);
-        if !relative_path.as_os_str().is_empty() {
-            args.push(format!(r#"--cd="{}""#, relative_path));
+        if !relative_path.as_str().is_empty() {
+            args.push(format!(r#"--cd="{relative_path}""#));
         }
 
         if project_path == GIT_ROOT.as_ref()? {
@@ -389,11 +389,7 @@ pub(crate) async fn init_template_dir(
     if template_dir.is_empty() || !is_same_file(&directory, &template_dir)? {
         warn_user!(
             "git config `init.templateDir` not set to the target directory, try `{}`",
-            format!(
-                "git config --global init.templateDir '{}'",
-                directory
-            )
-            .cyan()
+            format!("git config --global init.templateDir '{directory}'").cyan()
         );
     }
 

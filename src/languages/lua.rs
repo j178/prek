@@ -1,7 +1,7 @@
-use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use constants::env_vars::EnvVars;
 use semver::Version;
 use tracing::debug;
@@ -171,7 +171,11 @@ impl LanguageImpl for Lua {
 }
 
 impl Lua {
-    async fn install_rockspec(env_path: &Utf8Path, root_path: &Utf8Path, rockspec: &Utf8Path) -> Result<()> {
+    async fn install_rockspec(
+        env_path: &Utf8Path,
+        root_path: &Utf8Path,
+        rockspec: &Utf8Path,
+    ) -> Result<()> {
         Cmd::new("luarocks", "luarocks make rockspec")
             .current_dir(root_path)
             .arg("--tree")
@@ -220,7 +224,6 @@ impl Lua {
                 .join(version)
                 .join("?")
                 .join("init.lua")
-                
         )
     }
 
@@ -233,7 +236,6 @@ impl Lua {
                 .join("lua")
                 .join(version)
                 .join(format!("?.{so_ext}"))
-                
         )
     }
 }

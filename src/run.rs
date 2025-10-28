@@ -1,6 +1,6 @@
+use camino::Utf8Path;
 use std::cmp::max;
 use std::ffi::OsString;
-use camino::Utf8Path;
 use std::sync::LazyLock;
 
 use anstream::ColorChoice;
@@ -162,7 +162,7 @@ where
 
 pub(crate) fn prepend_paths(paths: &[&Utf8Path]) -> Result<OsString, std::env::JoinPathsError> {
     std::env::join_paths(
-        paths.iter().map(|p| p.to_path_buf()).chain(
+        paths.iter().map(|p| p.as_std_path().to_path_buf()).chain(
             EnvVars::var_os(EnvVars::PATH)
                 .as_ref()
                 .iter()

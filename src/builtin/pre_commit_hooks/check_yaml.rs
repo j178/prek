@@ -1,6 +1,5 @@
-use camino::Utf8Path;
-
 use anyhow::Result;
+use camino::Utf8Path;
 use clap::Parser;
 use futures::StreamExt;
 use serde::Deserialize;
@@ -59,8 +58,7 @@ async fn check_file(
     if allow_multi_docs {
         for doc in deserializer {
             if let Err(e) = serde_yaml::Value::deserialize(doc) {
-                let error_message =
-                    format!("{}: Failed to yaml decode ({e})\n", filename);
+                let error_message = format!("{filename}: Failed to yaml decode ({e})\n");
                 return Ok((1, error_message.into_bytes()));
             }
         }
@@ -69,8 +67,7 @@ async fn check_file(
         match serde_yaml::from_slice::<serde_yaml::Value>(&content) {
             Ok(_) => Ok((0, Vec::new())),
             Err(e) => {
-                let error_message =
-                    format!("{}: Failed to yaml decode ({e})\n", filename);
+                let error_message = format!("{filename}: Failed to yaml decode ({e})\n");
                 Ok((1, error_message.into_bytes()))
             }
         }
@@ -80,6 +77,7 @@ async fn check_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::path::IntoUtf8PathBuf;
     use camino::Utf8PathBuf;
     use tempfile::tempdir;
 
@@ -90,7 +88,7 @@ mod tests {
     ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
-        Ok(file_path)
+        Ok(file_path.into_utf8_path_buf())
     }
 
     #[tokio::test]

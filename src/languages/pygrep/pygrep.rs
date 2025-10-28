@@ -1,8 +1,8 @@
-use camino::{Utf8Path, Utf8PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use constants::env_vars::EnvVars;
 use tokio::io::AsyncWriteExt;
 use tracing::debug;
@@ -11,6 +11,7 @@ use crate::cli::reporter::HookInstallReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::python::{Uv, python_exec, query_python_info};
+use crate::path::IntoUtf8PathBuf;
 use crate::process::Cmd;
 use crate::run::CONCURRENCY;
 use crate::store::{CacheBucket, Store, ToolBucket};
@@ -83,7 +84,7 @@ fn find_installed_python(python_dir: &Utf8Path) -> Option<Utf8PathBuf> {
                 .map(|name| !name.starts_with('.'))
                 .unwrap_or(true)
         })
-        .map(|entry| python_exec(&entry.path()))
+        .map(|entry| python_exec(&entry.path().into_utf8_path_buf()))
         .next()
 }
 
@@ -214,9 +215,7 @@ impl LanguageImpl for Pygrep {
 
         let write_task = tokio::spawn(async move {
             for filename in filenames {
-                stdin
-                    .write_all(format!("{}\n", filename).as_bytes())
-                    .await?;
+                stdin.write_all(format!("{filename}\n").as_bytes()).await?;
             }
             let _ = stdin.shutdown().await;
             anyhow::Ok(())

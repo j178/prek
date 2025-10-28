@@ -1,10 +1,10 @@
 use std::env::consts::EXE_EXTENSION;
-use camino::{Utf8Path, Utf8PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use camino::{Utf8Path, Utf8PathBuf};
 use http::header::ACCEPT;
 use semver::{Version, VersionReq};
 use target_lexicon::{Architecture, ArmArchitecture, HOST, OperatingSystem};
@@ -467,11 +467,7 @@ impl Uv {
 
         // 2) Check if system `uv` meets minimum version requirement
         if let Some((uv_path, version)) = UV_EXE.as_ref() {
-            trace!(
-                "Using system uv version {} at {}",
-                version,
-                uv_path
-            );
+            trace!("Using system uv version {} at {}", version, uv_path);
             return Ok(Self::new(uv_path.clone()));
         }
 

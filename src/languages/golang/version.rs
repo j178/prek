@@ -1,8 +1,8 @@
 use std::fmt::Display;
 use std::ops::Deref;
-use camino::{Utf8Path, Utf8PathBuf};
 use std::str::FromStr;
 
+use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
 use crate::hook::InstallInfo;

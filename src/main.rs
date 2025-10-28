@@ -1,11 +1,11 @@
 use std::fmt::Write;
-use camino::Utf8PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::Mutex;
 
 use anstream::{ColorChoice, StripStream, eprintln};
 use anyhow::{Context, Result};
+use camino::Utf8PathBuf;
 use clap::{CommandFactory, Parser};
 use clap_complete::CompleteEnv;
 use owo_colors::OwoColorize;
@@ -35,6 +35,7 @@ mod git;
 mod hook;
 mod identify;
 mod languages;
+mod path;
 mod printer;
 mod process;
 #[cfg(all(unix, feature = "profiler"))]

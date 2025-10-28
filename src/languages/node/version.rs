@@ -1,7 +1,7 @@
 use std::fmt::Display;
-use camino::{Utf8Path, Utf8PathBuf};
 use std::str::FromStr;
 
+use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
@@ -256,8 +256,8 @@ mod tests {
     use super::{EXTRA_KEY_LTS, NodeRequest};
     use crate::config::Language;
     use crate::hook::InstallInfo;
-    use rustc_hash::FxHashSet;
     use camino::{Utf8Path, Utf8PathBuf};
+    use rustc_hash::FxHashSet;
     use std::str::FromStr;
 
     #[test]

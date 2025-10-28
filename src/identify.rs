@@ -18,9 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+use camino::Utf8Path;
 use std::io::{BufRead, Read};
 use std::iter::FromIterator;
-use camino::Utf8Path;
 use std::sync::OnceLock;
 
 use anyhow::Result;
@@ -716,9 +716,7 @@ pub(crate) fn tags_from_path(path: &Utf8Path) -> Result<TagSet> {
 
 fn tags_from_filename(filename: &Utf8Path) -> TagSet {
     let ext = filename.extension();
-    let filename = filename
-        .file_name()
-        .expect("Invalid filename");
+    let filename = filename.file_name().expect("Invalid filename");
 
     let mut result = TagSet::new();
 
@@ -940,8 +938,9 @@ pub fn all_tags() -> &'static FxHashSet<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use crate::path::{IntoUtf8PathBuf, ToUtf8Path};
     use camino::Utf8Path;
+    use std::io::Write;
 
     fn assert_tagset(actual: &TagSet, expected: &[&'static str]) {
         let mut actual_vec: Vec<_> = actual.iter().collect();
@@ -955,12 +954,12 @@ mod tests {
     #[cfg(unix)]
     fn tags_from_path() -> anyhow::Result<()> {
         let dir = tempfile::tempdir()?;
-        let src = dir.path().join("source.txt");
-        let dest = dir.path().join("link.txt");
+        let src = dir.path().join("source.txt").into_utf8_path_buf();
+        let dest = dir.path().join("link.txt").into_utf8_path_buf();
         fs_err::File::create(&src)?;
         std::os::unix::fs::symlink(&src, &dest)?;
 
-        let tags = super::tags_from_path(dir.path())?;
+        let tags = super::tags_from_path(dir.path().to_utf8_path())?;
         assert_tagset(&tags, &["directory"]);
         let tags = super::tags_from_path(&src)?;
         assert_tagset(&tags, &["plain-text", "non-executable", "file", "text"]);
@@ -1028,7 +1027,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_shebang_nix_shell_interpreter() -> anyhow::Result<()> {
+    fn parse_shebang_nix_shell_interpreter() -> Result<()> {
         let mut file = tempfile::NamedTempFile::new()?;
         writeln!(
             file,
@@ -1041,14 +1040,14 @@ mod tests {
         )?;
         file.flush()?;
 
-        let cmd = super::parse_shebang(file.path())?;
+        let cmd = parse_shebang(file.path().to_utf8_path())?;
         assert_eq!(cmd, vec!["bash"]);
 
         Ok(())
     }
 
     #[test]
-    fn parse_shebang_nix_shell_without_interpreter() -> anyhow::Result<()> {
+    fn parse_shebang_nix_shell_without_interpreter() -> Result<()> {
         let mut file = tempfile::NamedTempFile::new()?;
         writeln!(
             file,
@@ -1060,7 +1059,7 @@ mod tests {
         )?;
         file.flush()?;
 
-        let cmd = super::parse_shebang(file.path())?;
+        let cmd = parse_shebang(file.path().to_utf8_path())?;
         assert_eq!(cmd, vec!["nix-shell", "-p", "python3"]);
 
         Ok(())

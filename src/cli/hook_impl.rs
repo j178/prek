@@ -1,18 +1,17 @@
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::Read;
-use camino::Utf8PathBuf;
 
 use anstream::eprintln;
 use anyhow::Result;
-use owo_colors::OwoColorize;
-
+use camino::Utf8PathBuf;
 use constants::env_vars::EnvVars;
+use owo_colors::OwoColorize;
 
 use crate::cli::{self, ExitStatus, RunArgs};
 use crate::config::HookType;
-use crate::fs::CWD;
 use crate::git::GIT_ROOT;
+use crate::path::CWD;
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::workspace;
@@ -71,7 +70,7 @@ pub(crate) async fn hook_impl(
                 Ok(ExitStatus::Failure)
             };
         }
-        writeln!(printer.stdout(), "Using config file: {}", config)?;
+        writeln!(printer.stdout(), "Using config file: {config}")?;
     } else {
         // Try to discover a project from current directory (after `--cd`)
         match Project::discover(config.as_deref(), &CWD) {

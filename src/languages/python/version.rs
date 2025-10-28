@@ -1,7 +1,8 @@
 //! Implement `-p <python_spec>` argument parser of `virutualenv` from
 //! <https://github.com/pypa/virtualenv/blob/216dc9f3592aa1f3345290702f0e7ba3432af3ce/src/virtualenv/discovery/py_spec.py>
-use camino::Utf8PathBuf;
 use std::str::FromStr;
+
+use camino::Utf8PathBuf;
 
 use crate::hook::InstallInfo;
 use crate::languages::version;
@@ -137,8 +138,8 @@ fn split_wheel_tag_version(mut version: Vec<u64>) -> Vec<u64> {
 mod tests {
     use super::*;
     use crate::config::Language;
-    use rustc_hash::FxHashSet;
     use camino::Utf8Path;
+    use rustc_hash::FxHashSet;
 
     #[test]
     fn test_parse_python_request() {
@@ -230,10 +231,12 @@ mod tests {
         assert!(PythonRequest::MajorMinorPatch(3, 12, 1).satisfied_by(&install_info));
         assert!(!PythonRequest::MajorMinorPatch(3, 12, 2).satisfied_by(&install_info));
         assert!(
-            PythonRequest::Path(Utf8PathBuf::from("/usr/bin/python3.12")).satisfied_by(&install_info)
+            PythonRequest::Path(Utf8PathBuf::from("/usr/bin/python3.12"))
+                .satisfied_by(&install_info)
         );
         assert!(
-            !PythonRequest::Path(Utf8PathBuf::from("/usr/bin/python3.11")).satisfied_by(&install_info)
+            !PythonRequest::Path(Utf8PathBuf::from("/usr/bin/python3.11"))
+                .satisfied_by(&install_info)
         );
 
         let range_req = semver::VersionReq::parse(">=3.12").unwrap();

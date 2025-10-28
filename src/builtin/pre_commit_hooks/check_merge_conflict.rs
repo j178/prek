@@ -116,6 +116,7 @@ async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, V
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::path::IntoUtf8PathBuf;
     use camino::Utf8PathBuf;
     use tempfile::tempdir;
 
@@ -126,7 +127,7 @@ mod tests {
     ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
-        Ok(file_path)
+        Ok(file_path.into_utf8_path_buf())
     }
 
     #[tokio::test]

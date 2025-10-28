@@ -1,18 +1,18 @@
 use std::fmt::Display;
 use std::ops::{Deref, RangeInclusive};
-use camino::Utf8Path;
 use std::str::FromStr;
 use std::sync::OnceLock;
 
 use anyhow::Result;
+use camino::Utf8Path;
 use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
 use fancy_regex::{self as regex, Regex};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_yaml::Value;
 
-use crate::fs::Simplified;
 use crate::identify;
+use crate::path::Simplified;
 use crate::version;
 use crate::warn_user;
 
@@ -838,6 +838,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::path::ToUtf8Path;
     use std::io::Write as _;
 
     #[test]
@@ -1602,7 +1603,7 @@ mod tests {
         let mut file = tempfile::NamedTempFile::new()?;
         file.write_all(yaml.as_bytes())?;
 
-        let config = read_config(file.path())?;
+        let config = read_config(file.path().to_utf8_path())?;
         insta::assert_debug_snapshot!(config, @r#"
         Config {
             repos: [

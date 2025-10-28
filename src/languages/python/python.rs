@@ -1,11 +1,10 @@
 use std::env::consts::EXE_EXTENSION;
-use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use tracing::{debug, trace};
-
+use camino::{Utf8Path, Utf8PathBuf};
 use constants::env_vars::EnvVars;
+use tracing::{debug, trace};
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::hook::InstalledHook;
@@ -92,10 +91,7 @@ impl LanguageImpl for Python {
 
         // Install dependencies
         if let Some(repo_path) = hook.repo_path() {
-            trace!(
-                "Installing dependencies from repo path: {}",
-                repo_path
-            );
+            trace!("Installing dependencies from repo path: {}", repo_path);
             uv.cmd("uv pip install", store)
                 .arg("pip")
                 .arg("install")

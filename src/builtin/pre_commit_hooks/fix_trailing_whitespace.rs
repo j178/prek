@@ -1,9 +1,9 @@
 use std::ops::Deref;
-use camino::Utf8Path;
 use std::str::FromStr;
 
 use anyhow::Result;
 use bstr::ByteSlice;
+use camino::Utf8Path;
 use clap::Parser;
 use futures::StreamExt;
 use tempfile::NamedTempFile;
@@ -164,7 +164,7 @@ async fn fix_file(
     drop(buf_reader);
     if modified {
         buf_writer.flush_to_file(&file_path).await?;
-        Ok((1, format!("Fixing {}\n", filename).into_bytes()))
+        Ok((1, format!("Fixing {filename}\n").into_bytes()))
     } else {
         drop(buf_writer);
         Ok((0, Vec::new()))
@@ -281,13 +281,14 @@ fn needs_markdown_break(is_markdown: bool, trimmed: &[u8]) -> bool {
 mod tests {
     use super::*;
 
+    use crate::path::IntoUtf8PathBuf;
     use camino::Utf8PathBuf;
     use tempfile::TempDir;
 
     async fn create_test_file(dir: &TempDir, name: &str, content: &[u8]) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
-        Ok(file_path)
+        Ok(file_path.into_utf8_path_buf())
     }
 
     #[tokio::test]

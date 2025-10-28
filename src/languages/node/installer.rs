@@ -1,11 +1,11 @@
 use std::env::consts::EXE_EXTENSION;
 use std::fmt::Display;
-use camino::{Utf8Path, Utf8PathBuf};
 use std::str::FromStr;
 use std::string::ToString;
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use constants::env_vars::EnvVars;
 use itertools::Itertools;
 use target_lexicon::{Architecture, HOST, OperatingSystem};

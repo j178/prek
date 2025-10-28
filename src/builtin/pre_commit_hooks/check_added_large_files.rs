@@ -1,5 +1,4 @@
 use camino::{Utf8Path, Utf8PathBuf};
-
 use clap::Parser;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
@@ -64,8 +63,7 @@ pub(crate) async fn check_added_large_files(
         if size > args.max_kb {
             anyhow::Ok(Some(format!(
                 "{} ({size} KB) exceeds {} KB\n",
-                filename,
-                args.max_kb
+                filename, args.max_kb
             )))
         } else {
             anyhow::Ok(None)

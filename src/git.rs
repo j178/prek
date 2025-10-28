@@ -1,11 +1,11 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
-use camino::{Utf8Path, Utf8PathBuf};
 use std::process::Stdio;
 use std::str::Utf8Error;
 use std::sync::LazyLock;
 
 use anyhow::Result;
+use camino::{Utf8Path, Utf8PathBuf};
 use rustc_hash::FxHashSet;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, warn};
@@ -28,8 +28,10 @@ pub(crate) enum Error {
     UTF8(#[from] Utf8Error),
 }
 
-pub(crate) static GIT: LazyLock<Result<Utf8PathBuf, which::Error>> =
-    LazyLock::new(|| which::which("git").and_then(|p| Utf8PathBuf::from_path_buf(p).map_err(|_| which::Error::CannotFindBinaryPath)));
+pub(crate) static GIT: LazyLock<Result<Utf8PathBuf, which::Error>> = LazyLock::new(|| {
+    which::which("git")
+        .and_then(|p| Utf8PathBuf::from_path_buf(p).map_err(|_| which::Error::CannotFindBinaryPath))
+});
 
 pub(crate) static GIT_ROOT: LazyLock<Result<Utf8PathBuf, Error>> = LazyLock::new(|| {
     get_root().inspect(|root| {

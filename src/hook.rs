@@ -1,8 +1,8 @@
+use camino::{Utf8Path, Utf8PathBuf};
 use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::{Arc, OnceLock};
 
 use anyhow::{Context, Result};
@@ -19,6 +19,7 @@ use crate::config::{
 };
 use crate::languages::version::LanguageRequest;
 use crate::languages::{extract_metadata_from_entry, resolve_command};
+use crate::path::IntoUtf8PathBuf;
 use crate::store::Store;
 use crate::workspace::Project;
 
@@ -570,7 +571,8 @@ impl InstallInfo {
             .prefix(&format!("{}-", language.as_str()))
             .rand_bytes(20)
             .tempdir_in(hooks_dir)?
-            .keep();
+            .keep()
+            .into_utf8_path_buf();
 
         Ok(Self {
             language,

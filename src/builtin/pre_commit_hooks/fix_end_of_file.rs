@@ -1,13 +1,15 @@
-use camino::Utf8Path;
-
 use anyhow::Result;
+use camino::Utf8Path;
 use futures::StreamExt;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
-pub(crate) async fn fix_end_of_file(hook: &Hook, filenames: &[&Utf8Path]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn fix_end_of_file(
+    hook: &Hook,
+    filenames: &[&Utf8Path],
+) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
         .map(async |filename| fix_file(hook.project().relative_path(), filename).await)
         .buffered(*CONCURRENCY);
@@ -44,7 +46,7 @@ async fn fix_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, Vec
             file.set_len(0).await?;
             file.flush().await?;
             file.shutdown().await?;
-            Ok((1, format!("Fixing {}\n", filename).into_bytes()))
+            Ok((1, format!("Fixing {filename}\n").into_bytes()))
         }
         (Some(pos), None) => {
             // File has some content, but no line ending at the end.
@@ -52,7 +54,7 @@ async fn fix_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, Vec
             file.write_all(b"\n").await?;
             file.flush().await?;
             file.shutdown().await?;
-            Ok((1, format!("Fixing {}\n", filename).into_bytes()))
+            Ok((1, format!("Fixing {filename}\n").into_bytes()))
         }
         (Some(pos), Some(line_ending)) => {
             // File has some content and at least one line ending.
@@ -62,7 +64,7 @@ async fn fix_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, Vec
                 return Ok((0, Vec::new()));
             }
             file.set_len(new_size).await?;
-            Ok((1, format!("Fixing {}\n", filename).into_bytes()))
+            Ok((1, format!("Fixing {filename}\n").into_bytes()))
         }
     }
 }
@@ -131,6 +133,7 @@ where
 mod tests {
     use super::*;
 
+    use crate::path::IntoUtf8PathBuf;
     use anyhow::Ok;
     use bstr::ByteSlice;
     use camino::{Utf8Path, Utf8PathBuf};
@@ -143,7 +146,7 @@ mod tests {
     ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
-        Ok(file_path)
+        Ok(file_path.into_utf8_path_buf())
     }
 
     #[tokio::test]

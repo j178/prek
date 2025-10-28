@@ -1,17 +1,16 @@
-use camino::{Utf8Path, Utf8PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
 
 use anstream::eprintln;
 use anyhow::Result;
+use camino::{Utf8Path, Utf8PathBuf};
+use constants::env_vars::EnvVars;
 use owo_colors::OwoColorize;
 use tracing::{debug, error, trace};
 
-use constants::env_vars::EnvVars;
-
 use crate::cleanup::add_cleanup;
-use crate::fs::Simplified;
 use crate::git::{self, GIT, git_cmd};
+use crate::path::Simplified;
 use crate::store::Store;
 
 static RESTORE_WORKTREE: Mutex<Option<WorkTreeKeeper>> = Mutex::new(None);

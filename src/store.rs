@@ -1,20 +1,20 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
-use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
+use camino::{Utf8Path, Utf8PathBuf};
+use constants::env_vars::EnvVars;
 use etcetera::BaseStrategy;
 use futures::StreamExt;
 use thiserror::Error;
 use tracing::{debug, warn};
 
-use constants::env_vars::EnvVars;
-
 use crate::config::RemoteRepo;
 use crate::fs::LockedFile;
 use crate::git::clone_repo;
 use crate::hook::InstallInfo;
+use crate::path::{IntoUtf8PathBuf, ToUtf8Path};
 use crate::run::CONCURRENCY;
 use crate::workspace::HookInitReporter;
 
@@ -54,7 +54,7 @@ impl Store {
         let Some(path) = path else {
             return Err(Error::HomeNotFound);
         };
-        let store = Store::from_path(path).init()?;
+        let store = Store::from_path(path.into_utf8_path_buf()).init()?;
 
         Ok(store)
     }
@@ -104,8 +104,7 @@ impl Store {
             %repo,
             "Cloning repo",
         );
-        let temp_path = Utf8Path::from_path(temp.path())
-            .ok_or_else(|| anyhow::anyhow!("Temporary directory path is not valid UTF-8"))?;
+        let temp_path = temp.path().to_utf8_path();
         clone_repo(&repo.repo, &repo.rev, temp_path).await?;
 
         // TODO: add windows retry

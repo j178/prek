@@ -1,7 +1,6 @@
-use camino::Utf8Path;
-
 use anyhow::Result;
 use bstr::ByteSlice;
+use camino::Utf8Path;
 use clap::{Parser, ValueEnum};
 use futures::StreamExt;
 use rustc_hash::FxHashMap;
@@ -41,7 +40,10 @@ enum FixMode {
     CR,
 }
 
-pub(crate) async fn mixed_line_ending(hook: &Hook, filenames: &[&Utf8Path]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn mixed_line_ending(
+    hook: &Hook,
+    filenames: &[&Utf8Path],
+) -> Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
 
     let mut results = futures::stream::iter(filenames)
@@ -61,7 +63,11 @@ pub(crate) async fn mixed_line_ending(hook: &Hook, filenames: &[&Utf8Path]) -> R
 }
 
 // Process a single file for mixed line endings
-async fn fix_file(file_base: &Utf8Path, filename: &Utf8Path, fix_mode: FixMode) -> Result<(i32, Vec<u8>)> {
+async fn fix_file(
+    file_base: &Utf8Path,
+    filename: &Utf8Path,
+    fix_mode: FixMode,
+) -> Result<(i32, Vec<u8>)> {
     let file_path = file_base.join(filename);
     let contents = fs_err::tokio::read(&file_path).await?;
 
@@ -76,10 +82,7 @@ async fn fix_file(file_base: &Utf8Path, filename: &Utf8Path, fix_mode: FixMode) 
     match fix_mode {
         FixMode::No => {
             if has_mixed_endings {
-                Ok((
-                    1,
-                    format!("{}: mixed line endings\n", filename).into_bytes(),
-                ))
+                Ok((1, format!("{filename}: mixed line endings\n").into_bytes()))
             } else {
                 Ok((0, Vec::new()))
             }
@@ -91,7 +94,7 @@ async fn fix_file(file_base: &Utf8Path, filename: &Utf8Path, fix_mode: FixMode) 
 
             let target_ending = find_most_common_ending(&counts);
             apply_line_ending(&file_path, &contents, target_ending).await?;
-            Ok((1, format!("Fixing {}\n", filename).into_bytes()))
+            Ok((1, format!("Fixing {filename}\n").into_bytes()))
         }
         _ => {
             let target_ending = match fix_mode {
@@ -104,7 +107,7 @@ async fn fix_file(file_base: &Utf8Path, filename: &Utf8Path, fix_mode: FixMode) 
 
             if needs_fixing {
                 apply_line_ending(&file_path, &contents, target_ending).await?;
-                Ok((1, format!("Fixing {}\n", filename).into_bytes()))
+                Ok((1, format!("Fixing {filename}\n").into_bytes()))
             } else {
                 Ok((0, Vec::new()))
             }
@@ -207,6 +210,7 @@ fn split_lines_with_endings(contents: &[u8]) -> Vec<&[u8]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::path::IntoUtf8PathBuf;
     use bstr::ByteSlice;
     use camino::{Utf8Path, Utf8PathBuf};
     use tempfile::tempdir;
@@ -218,7 +222,7 @@ mod tests {
     ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
-        Ok(file_path)
+        Ok(file_path.into_utf8_path_buf())
     }
 
     #[tokio::test]

@@ -1,9 +1,8 @@
 use std::ops::Deref;
-use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::Arc;
 
 use anyhow::Context;
-
+use camino::{Utf8Path, Utf8PathBuf};
 use constants::env_vars::EnvVars;
 
 use crate::cli::reporter::HookInstallReporter;

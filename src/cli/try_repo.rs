@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 use std::fmt::Write;
-use camino::{Utf8Path, Utf8PathBuf};
 
 use anyhow::{Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tempfile::TempDir;
@@ -28,7 +28,11 @@ async fn get_head_rev(repo: &Utf8Path) -> Result<String> {
     Ok(head_rev)
 }
 
-async fn clone_and_commit(repo_path: &Utf8Path, head_rev: &str, tmp_dir: &Utf8Path) -> Result<Utf8PathBuf> {
+async fn clone_and_commit(
+    repo_path: &Utf8Path,
+    head_rev: &str,
+    tmp_dir: &Utf8Path,
+) -> Result<Utf8PathBuf> {
     let shadow = tmp_dir.join("shadow-repo");
     git::git_cmd("clone shadow repo")?
         .arg("clone")

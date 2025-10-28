@@ -1,11 +1,11 @@
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use anyhow::Result;
+use camino::{Utf8Path, Utf8PathBuf};
 use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
 use futures::StreamExt;
 use ignore::WalkState;
@@ -18,9 +18,9 @@ use tracing::{debug, error, instrument};
 
 use crate::cli::run::Selectors;
 use crate::config::{self, Config, ManifestHook, read_config};
-use crate::fs::Simplified;
 use crate::git::GIT_ROOT;
 use crate::hook::{self, Hook, HookBuilder, Repo};
+use crate::path::{Simplified, ToUtf8Path};
 use crate::store::{CacheBucket, Store};
 use crate::workspace::Error::MissingPreCommitConfig;
 use crate::{git, store, warn_user};
@@ -153,7 +153,10 @@ impl Project {
     }
 
     /// Discover a project from the give path or search from the given path to the git root.
-    pub(crate) fn discover(config_file: Option<&Utf8Path>, dir: &Utf8Path) -> Result<Project, Error> {
+    pub(crate) fn discover(
+        config_file: Option<&Utf8Path>,
+        dir: &Utf8Path,
+    ) -> Result<Project, Error> {
         let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
 
         if let Some(config) = config_file {
@@ -524,7 +527,10 @@ pub(crate) struct Workspace {
 impl Workspace {
     /// Find the workspace root.
     /// `dir` must be an absolute path.
-    pub(crate) fn find_root(config_file: Option<&Utf8Path>, dir: &Utf8Path) -> Result<Utf8PathBuf, Error> {
+    pub(crate) fn find_root(
+        config_file: Option<&Utf8Path>,
+        dir: &Utf8Path,
+    ) -> Result<Utf8PathBuf, Error> {
         let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
 
         if config_file.is_some() {
@@ -649,13 +655,14 @@ impl Workspace {
                         return WalkState::Continue;
                     }
 
-                    match Project::from_directory(entry.path()) {
+                    let entry_path = entry.path().to_utf8_path();
+                    match Project::from_directory(entry_path) {
                         Ok(mut project) => {
-                            let relative_path = entry
-                                .into_path()
+                            let relative_path = entry_path
                                 .strip_prefix(root)
                                 .expect("Entry path should be relative to the root")
                                 .to_path_buf();
+
                             project.with_relative_path(relative_path);
 
                             if let Ok(projects) = projects.lock().unwrap().as_mut() {
@@ -666,8 +673,7 @@ impl Workspace {
                         Err(e) => {
                             // Exit early if the path is selected
                             if let Some(selectors) = selectors {
-                                let relative_path = entry
-                                    .path()
+                                let relative_path = entry_path
                                     .strip_prefix(root)
                                     .expect("Entry path should be relative to the root");
                                 if selectors.matches_path(relative_path) {
@@ -677,7 +683,7 @@ impl Workspace {
                             }
                             // Otherwise, just log the error and continue
                             error!(
-                                path = %entry.path().user_display(),
+                                path = %entry_path.user_display(),
                                 "Skipping project due to error: {e}"
                             );
                             return WalkState::Skip;

@@ -1,11 +1,11 @@
 use std::fmt::Write;
-use camino::{Utf8Path, Utf8PathBuf};
 
 use anyhow::Result;
+use camino::{Utf8Path, Utf8PathBuf};
 use owo_colors::OwoColorize;
 
 use crate::cli::ExitStatus;
-use crate::fs::Simplified;
+use crate::path::Simplified;
 use crate::printer::Printer;
 
 static SAMPLE_CONFIG: &str = "\
@@ -26,14 +26,14 @@ pub(crate) fn sample_config(file: Option<Utf8PathBuf>, printer: Printer) -> Resu
     if let Some(file) = file {
         fs_err::create_dir_all(file.parent().unwrap_or(Utf8Path::new(".")))?;
         if file.exists() {
-            anyhow::bail!("File `{}` already exists", file.simplified_display().cyan());
+            anyhow::bail!("File `{}` already exists", file.simplified().cyan());
         }
         fs_err::write(&file, SAMPLE_CONFIG)?;
 
         writeln!(
             printer.stdout(),
             "Written to `{}`",
-            file.simplified_display().cyan()
+            file.simplified().cyan()
         )?;
 
         return Ok(ExitStatus::Success);

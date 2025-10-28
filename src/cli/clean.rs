@@ -1,6 +1,6 @@
 use std::fmt::Write;
 use std::io;
-use camino::Utf8Path;
+use std::path::Path;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
@@ -21,11 +21,7 @@ pub(crate) fn clean(store: &Store, printer: Printer) -> Result<ExitStatus> {
     }
 
     fs_err::remove_dir_all(store.path())?;
-    writeln!(
-        printer.stdout(),
-        "Cleaned `{}`",
-        store.path().cyan()
-    )?;
+    writeln!(printer.stdout(), "Cleaned `{}`", store.path().cyan())?;
 
     Ok(ExitStatus::Success)
 }
@@ -33,7 +29,7 @@ pub(crate) fn clean(store: &Store, printer: Printer) -> Result<ExitStatus> {
 /// Add write permission to GOMODCACHE directory recursively.
 /// Go sets the permissions to read-only by default.
 #[cfg(not(windows))]
-pub fn fix_permissions<P: AsRef<Utf8Path>>(path: P) -> io::Result<()> {
+pub fn fix_permissions<P: AsRef<Path>>(path: P) -> io::Result<()> {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
 
@@ -62,7 +58,7 @@ pub fn fix_permissions<P: AsRef<Utf8Path>>(path: P) -> io::Result<()> {
 
 #[cfg(windows)]
 #[allow(clippy::unnecessary_wraps)]
-pub fn fix_permissions<P: AsRef<Utf8Path>>(_path: P) -> io::Result<()> {
+pub fn fix_permissions<P: AsRef<Path>>(_path: P) -> io::Result<()> {
     // On Windows, permissions are handled differently and this function does nothing.
     Ok(())
 }

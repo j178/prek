@@ -1,10 +1,11 @@
 use std::fmt::Write as _;
 use std::io::Write;
-use camino::Utf8PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
+use camino::Utf8PathBuf;
+use constants::env_vars::EnvVars;
 use futures::stream::{FuturesUnordered, StreamExt};
 use owo_colors::{OwoColorize, Style};
 use rand::SeedableRng;
@@ -15,16 +16,14 @@ use tokio::sync::{OnceCell, Semaphore};
 use tracing::{debug, trace, warn};
 use unicode_width::UnicodeWidthStr;
 
-use constants::env_vars::EnvVars;
-
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{CollectOptions, FileFilter, Selectors, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, Stage};
-use crate::fs::CWD;
 use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::path::CWD;
 use crate::printer::{Printer, Stdout};
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::Store;
@@ -154,12 +153,8 @@ pub(crate) async fn run(
     .await?;
 
     // Change to the workspace root directory.
-    std::env::set_current_dir(workspace.root()).with_context(|| {
-        format!(
-            "Failed to change directory to `{}`",
-            workspace.root()
-        )
-    })?;
+    std::env::set_current_dir(workspace.root())
+        .with_context(|| format!("Failed to change directory to `{}`", workspace.root()))?;
 
     run_hooks(
         &workspace,
@@ -340,8 +335,7 @@ pub async fn install_hooks(
                     if let Some(info) = matched_info {
                         debug!(
                             "Found installed environment for hook `{}` at `{}`",
-                            &hook,
-                            info.env_path
+                            &hook, info.env_path
                         );
                         hook_envs.push(InstalledHook::Installed { hook, info });
                         continue;
@@ -750,7 +744,7 @@ async fn run_hook(
             )?;
         }
         for filename in &filenames {
-            writeln!(output, "- {}", filename)?;
+            writeln!(output, "- {filename}")?;
         }
         (0, output)
     } else {

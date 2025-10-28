@@ -1,9 +1,9 @@
 use std::fmt::Write;
-use camino::{Utf8Path, Utf8PathBuf};
 use std::process::Stdio;
 
 use anyhow::{Context, Result};
 use bstr::ByteSlice;
+use camino::{Utf8Path, Utf8PathBuf};
 use constants::MANIFEST_FILE;
 use fancy_regex::Regex;
 use futures::StreamExt;
@@ -18,7 +18,7 @@ use tracing::trace;
 use crate::cli::ExitStatus;
 use crate::cli::reporter::AutoUpdateReporter;
 use crate::config::{RemoteRepo, Repo};
-use crate::fs::CWD;
+use crate::path::CWD;
 use crate::printer::Printer;
 use crate::run::CONCURRENCY;
 use crate::store::Store;
@@ -185,11 +185,7 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
     let tmp_dir_path = Utf8Path::from_path(tmp_dir.path())
         .ok_or_else(|| anyhow::anyhow!("Temporary directory path is not valid UTF-8"))?;
 
-    trace!(
-        "Cloning repository `{}` to `{}`",
-        repo.repo,
-        tmp_dir_path
-    );
+    trace!("Cloning repository `{}` to `{}`", repo.repo, tmp_dir_path);
 
     git::init_repo(repo.repo.as_str(), tmp_dir_path).await?;
     git::git_cmd("git config")?
@@ -419,7 +415,7 @@ async fn write_new_config(path: &Utf8Path, revisions: &[Option<Revision>]) -> Re
 
     fs_err::tokio::write(path, lines.join("").as_bytes())
         .await
-        .with_context(|| format!("Failed to write updated config file `{}`", path))?;
+        .with_context(|| format!("Failed to write updated config file `{path}`"))?;
 
     Ok(())
 }

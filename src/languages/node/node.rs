@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 use std::env::consts::EXE_EXTENSION;
-use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use constants::env_vars::EnvVars;
 use rustc_hash::FxHashSet;
 use tracing::debug;
@@ -75,7 +75,10 @@ impl LanguageImpl for Node {
         // Create symlink or copy on Windows
         crate::fs::create_symlink_or_copy(
             node.node().as_std_path(),
-            bin_dir.join("node").with_extension(EXE_EXTENSION).as_std_path(),
+            bin_dir
+                .join("node")
+                .with_extension(EXE_EXTENSION)
+                .as_std_path(),
         )
         .await?;
 

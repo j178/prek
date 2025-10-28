@@ -23,8 +23,6 @@ use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::path::{Component, Path, PathBuf};
 
-use camino::{Utf8Path, Utf8PathBuf};
-
 use async_compression::tokio::bufread::{GzipDecoder, XzDecoder};
 use async_zip::base::read::stream::ZipFileReader;
 use rustc_hash::FxHashSet;

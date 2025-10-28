@@ -1,8 +1,8 @@
 use std::error::Error;
 use std::iter;
-use camino::Utf8PathBuf;
 
 use anstream::eprintln;
+use camino::Utf8PathBuf;
 use owo_colors::OwoColorize;
 
 use crate::cli::ExitStatus;

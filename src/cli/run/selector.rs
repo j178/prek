@@ -1,17 +1,18 @@
 use std::borrow::Cow;
 use std::fmt::Display;
-use camino::{Utf8Path, Utf8PathBuf};
 use std::sync::{Arc, Mutex};
 
-use crate::hook::Hook;
-use crate::warn_user;
-
 use anyhow::anyhow;
+use camino::{Utf8Path, Utf8PathBuf};
 use constants::env_vars::EnvVars;
 use itertools::Itertools;
-use path_clean::PathClean;
 use rustc_hash::FxHashSet;
 use tracing::trace;
+
+use crate::hook::Hook;
+use crate::path::PathClean;
+use crate::path::ToUtf8Path;
+use crate::warn_user;
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
@@ -59,20 +60,20 @@ impl Display for Selector {
         match &self.expr {
             SelectorExpr::HookId(hook_id) => write!(f, "{hook_id}"),
             SelectorExpr::ProjectPrefix(project_path) => {
-                if project_path.as_os_str().is_empty() {
+                if project_path.as_str().is_empty() {
                     write!(f, "./")
                 } else {
-                    write!(f, "{}/", project_path)
+                    write!(f, "{project_path}/")
                 }
             }
             SelectorExpr::ProjectHook {
                 project_path,
                 hook_id,
             } => {
-                if project_path.as_os_str().is_empty() {
+                if project_path.as_str().is_empty() {
                     write!(f, ".:{hook_id}")
                 } else {
-                    write!(f, "{}:{hook_id}", project_path)
+                    write!(f, "{project_path}:{hook_id}")
                 }
             }
         }
@@ -472,7 +473,7 @@ pub struct RealFileSystem;
 
 impl FileSystem for RealFileSystem {
     fn absolute<P: AsRef<Utf8Path>>(&self, path: P) -> std::io::Result<Utf8PathBuf> {
-        std::path::absolute(path)
+        camino::absolute_utf8(path.as_ref())
     }
 }
 
@@ -508,7 +509,7 @@ fn normalize_path<FS: FileSystem>(
             source: anyhow!("path is outside the workspace root"),
         })?;
 
-    Ok(rel_path.to_path_buf())
+    Ok(rel_path.to_utf8_path().to_path_buf())
 }
 
 /// Parse skip selectors from CLI args and environment variables
@@ -554,6 +555,7 @@ fn parse_comma_separated(input: &str) -> impl Iterator<Item = &str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::path::ToUtf8Path;
     use tempfile::TempDir;
 
     struct MockFileSystem {
@@ -566,14 +568,14 @@ mod tests {
             if p.is_absolute() {
                 Ok(p.to_path_buf())
             } else {
-                Ok(self.current_dir.path().join(p))
+                Ok(self.root().join(p))
             }
         }
     }
 
     impl MockFileSystem {
         fn root(&self) -> &Utf8Path {
-            self.current_dir.path()
+            self.current_dir.path().to_utf8_path()
         }
     }
 

@@ -1,6 +1,5 @@
-use camino::Utf8Path;
-
 use anyhow::Result;
+use camino::Utf8Path;
 use futures::StreamExt;
 
 use crate::hook::Hook;
@@ -28,10 +27,7 @@ async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, V
 
     // Empty XML is invalid - should have at least one element
     if content.is_empty() {
-        let error_message = format!(
-            "{}: Failed to xml parse (no element found)\n",
-            filename
-        );
+        let error_message = format!("{filename}: Failed to xml parse (no element found)\n");
         return Ok((1, error_message.into_bytes()));
     }
 
@@ -51,8 +47,7 @@ async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, V
                     root_count += 1;
                     if root_count > 1 {
                         let error_message = format!(
-                            "{}: Failed to xml parse (junk after document element)\n",
-                            filename
+                            "{filename}: Failed to xml parse (junk after document element)\n"
                         );
                         return Ok((1, error_message.into_bytes()));
                     }
@@ -63,7 +58,7 @@ async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, V
                 depth -= 1;
             }
             Err(e) => {
-                let error_message = format!("{}: Failed to xml parse ({e})\n", filename);
+                let error_message = format!("{filename}: Failed to xml parse ({e})\n");
                 return Ok((1, error_message.into_bytes()));
             }
             Ok(_) => {}
@@ -77,6 +72,7 @@ async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, V
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::path::IntoUtf8PathBuf;
     use camino::Utf8PathBuf;
     use tempfile::tempdir;
 
@@ -87,7 +83,7 @@ mod tests {
     ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
-        Ok(file_path)
+        Ok(file_path.into_utf8_path_buf())
     }
 
     #[tokio::test]

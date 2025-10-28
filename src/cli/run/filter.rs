@@ -1,6 +1,5 @@
-use camino::{Utf8Path, Utf8PathBuf};
-
 use anyhow::{Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use fancy_regex::Regex;
 use itertools::{Either, Itertools};
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
@@ -10,12 +9,12 @@ use tracing::{debug, error};
 use constants::env_vars::EnvVars;
 
 use crate::config::Stage;
-use crate::fs::normalize_path;
 use crate::git::GIT_ROOT;
 use crate::hook::Hook;
 use crate::identify::{TagSet, tags_from_path};
+use crate::path::normalize_path;
 use crate::workspace::Project;
-use crate::{fs, git, warn_user};
+use crate::{git, warn_user};
 
 /// Filter filenames by include/exclude patterns.
 pub(crate) struct FilenameFilter<'a> {
@@ -202,7 +201,10 @@ impl CollectOptions {
 /// Get all filenames to run hooks on.
 /// Returns a list of file paths relative to the workspace root.
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn collect_files(root: &Utf8Path, opts: CollectOptions) -> Result<Vec<Utf8PathBuf>> {
+pub(crate) async fn collect_files(
+    root: &Utf8Path,
+    opts: CollectOptions,
+) -> Result<Vec<Utf8PathBuf>> {
     let CollectOptions {
         hook_stage,
         from_ref,
@@ -216,13 +218,9 @@ pub(crate) async fn collect_files(root: &Utf8Path, opts: CollectOptions) -> Resu
     let git_root = GIT_ROOT.as_ref()?;
 
     // The workspace root relative to the git root.
-    let relative_root = root.strip_prefix(git_root).with_context(|| {
-        format!(
-            "Workspace root `{}` is not under git root `{}`",
-            root,
-            git_root
-        )
-    })?;
+    let relative_root = root
+        .strip_prefix(git_root)
+        .with_context(|| format!("Workspace root `{root}` is not under git root `{git_root}`",))?;
 
     let filenames = collect_files_from_args(
         git_root,
@@ -262,7 +260,7 @@ pub(crate) async fn collect_files(root: &Utf8Path, opts: CollectOptions) -> Resu
 }
 
 fn adjust_relative_path(path: &str, new_cwd: &Utf8Path) -> Result<Utf8PathBuf, std::io::Error> {
-    fs::relative_to(std::path::absolute(path)?, new_cwd)
+    crate::path::relative_to(camino::absolute_utf8(path)?, new_cwd)
 }
 
 /// Collect files to run hooks on.
@@ -345,7 +343,8 @@ async fn collect_files_from_args(
             let dir_files = git::ls_files(git_root, &dir).await?;
             for file in dir_files {
                 let std_path = normalize_path(file.into_std_path_buf());
-                let file = Utf8PathBuf::from_path_buf(std_path).expect("normalized path should be UTF-8");
+                let file =
+                    Utf8PathBuf::from_path_buf(std_path).expect("normalized path should be UTF-8");
                 exists.insert(file);
             }
         }

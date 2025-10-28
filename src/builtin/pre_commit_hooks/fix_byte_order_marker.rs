@@ -1,7 +1,7 @@
 use std::io::Write;
-use camino::Utf8Path;
 
 use anyhow::Result;
+use camino::Utf8Path;
 use futures::StreamExt;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
@@ -85,13 +85,14 @@ async fn fix_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, Vec
 
     Ok((
         1,
-        format!("{}: removed byte-order marker\n", filename).into_bytes(),
+        format!("{filename}: removed byte-order marker\n").into_bytes(),
     ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::path::IntoUtf8PathBuf;
     use camino::Utf8PathBuf;
     use tempfile::tempdir;
 
@@ -102,7 +103,7 @@ mod tests {
     ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
-        Ok(file_path)
+        Ok(file_path.into_utf8_path_buf())
     }
 
     #[tokio::test]

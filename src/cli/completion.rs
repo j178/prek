@@ -1,12 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;
-use camino::Utf8Path;
 
+use camino::Utf8Path;
 use clap::builder::StyledStr;
 use clap_complete::CompletionCandidate;
 
 use crate::config;
-use crate::fs::CWD;
+use crate::path::CWD;
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
 
@@ -40,11 +40,11 @@ pub(crate) fn selector_completer(current: &OsStr) -> Vec<CompletionCandidate> {
             (CWD.join(path_obj), path_part.to_string(), String::new())
         } else {
             let parent = path_obj.parent().unwrap_or(Utf8Path::new(""));
-            let file = path_obj.file_name().and_then(OsStr::to_str).unwrap_or("");
-            let shown_prefix = if parent.as_os_str().is_empty() {
+            let file = path_obj.file_name().unwrap_or("");
+            let shown_prefix = if parent.as_str().is_empty() {
                 String::new()
             } else {
-                format!("{}/", parent)
+                format!("{parent}/")
             };
             (CWD.join(parent), shown_prefix, file.to_string())
         };

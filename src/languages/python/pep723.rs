@@ -19,12 +19,11 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
-
-use camino::Utf8Path;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
 use anyhow::Result;
+use camino::Utf8Path;
 use memchr::memmem::Finder;
 use serde::Deserialize;
 use tracing::trace;

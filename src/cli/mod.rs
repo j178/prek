@@ -1,7 +1,7 @@
 use std::ffi::OsString;
-use camino::Utf8PathBuf;
 use std::process::ExitCode;
 
+use camino::Utf8PathBuf;
 use clap::builder::styling::{AnsiColor, Effects};
 use clap::builder::{ArgPredicate, Styles};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
@@ -685,12 +685,12 @@ pub(crate) struct InitTemplateDirArgs {
 mod tests {
     use crate::cli::Cli;
     use anyhow::{Result, bail};
+    use camino::Utf8PathBuf;
     use clap::{Command, CommandFactory};
     use constants::env_vars::EnvVars;
     use itertools::Itertools;
     use pretty_assertions::StrComparison;
     use std::cmp::max;
-    use camino::Utf8PathBuf;
 
     const ROOT_DIR: &str = env!("CARGO_MANIFEST_DIR");
 

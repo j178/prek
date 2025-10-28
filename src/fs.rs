@@ -21,18 +21,11 @@
 // SOFTWARE.
 
 use std::fmt::Display;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use camino::{Utf8Path, Utf8PathBuf};
-use std::sync::LazyLock;
 use tracing::{debug, error, info, trace};
 
 use anyhow::Context;
-
-pub static CWD: LazyLock<Utf8PathBuf> = LazyLock::new(|| {
-    Utf8PathBuf::from_path_buf(std::env::current_dir().expect("The current directory must exist"))
-        .expect("Current directory path is not valid UTF-8")
-});
 
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
@@ -101,114 +94,6 @@ impl Drop for LockedFile {
     }
 }
 
-/// Normalizes a path to use `/` as a separator everywhere, even on platforms
-/// that recognize other characters as separators.
-#[cfg(unix)]
-pub(crate) fn normalize_path(path: PathBuf) -> PathBuf {
-    // UNIX only uses /, so we're good.
-    path
-}
-
-/// Normalizes a path to use `/` as a separator everywhere, even on platforms
-/// that recognize other characters as separators.
-#[cfg(not(unix))]
-pub(crate) fn normalize_path(path: PathBuf) -> PathBuf {
-    use std::ffi::OsString;
-    use std::path::is_separator;
-
-    let mut path = path.into_os_string().into_encoded_bytes();
-    for c in &mut path {
-        if *c == b'/' || !is_separator(char::from(*c)) {
-            continue;
-        }
-        *c = b'/';
-    }
-
-    let os_str = OsString::from(String::from_utf8_lossy(&path).to_string());
-    PathBuf::from(os_str)
-}
-
-/// Compute a path describing `path` relative to `base`.
-///
-/// `lib/python/site-packages/foo/__init__.py` and `lib/python/site-packages` -> `foo/__init__.py`
-/// `lib/marker.txt` and `lib/python/site-packages` -> `../../marker.txt`
-/// `bin/foo_launcher` and `lib/python/site-packages` -> `../../../bin/foo_launcher`
-///
-/// Returns `Err` if there is no relative path between `path` and `base` (for example, if the paths
-/// are on different drives on Windows).
-pub fn relative_to(
-    path: impl AsRef<Path>,
-    base: impl AsRef<Path>,
-) -> Result<PathBuf, std::io::Error> {
-    // Find the longest common prefix, and also return the path stripped from that prefix
-    let (stripped, common_prefix) = base
-        .as_ref()
-        .ancestors()
-        .find_map(|ancestor| {
-            // Simplifying removes the UNC path prefix on windows.
-            dunce::simplified(path.as_ref())
-                .strip_prefix(dunce::simplified(ancestor))
-                .ok()
-                .map(|stripped| (stripped, ancestor))
-        })
-        .ok_or_else(|| {
-            std::io::Error::other(format!(
-                "Trivial strip failed: {} vs. {}",
-                path.as_ref().display(),
-                base.as_ref().display()
-            ))
-        })?;
-
-    // go as many levels up as required
-    let levels_up = base.as_ref().components().count() - common_prefix.components().count();
-    let up = std::iter::repeat_n("..", levels_up).collect::<PathBuf>();
-
-    Ok(up.join(stripped))
-}
-
-pub trait Simplified {
-    /// Simplify a [`Path`].
-    ///
-    /// On Windows, this will strip the `\\?\` prefix from paths. On other platforms, it's a no-op.
-    fn simplified(&self) -> &Path;
-
-    /// Render a [`Path`] for display.
-    ///
-    /// On Windows, this will strip the `\\?\` prefix from paths. On other platforms, it's
-    /// equivalent to [`std::path::Display`].
-    fn simplified_display(&self) -> impl Display;
-
-    /// Render a [`Path`] for user-facing display.
-    ///
-    /// Like [`simplified_display`], but relativizes the path against the current working directory.
-    fn user_display(&self) -> impl Display;
-}
-
-impl<T: AsRef<Path>> Simplified for T {
-    fn simplified(&self) -> &Path {
-        dunce::simplified(self.as_ref())
-    }
-
-    fn simplified_display(&self) -> impl Display {
-        dunce::simplified(self.as_ref()).display()
-    }
-
-    fn user_display(&self) -> impl Display {
-        let path = dunce::simplified(self.as_ref());
-
-        // If current working directory is root, display the path as-is.
-        if CWD.ancestors().nth(1).is_none() {
-            return path.display();
-        }
-
-        // Attempt to strip the current working directory, then the canonicalized current working
-        // directory, in case they differ.
-        let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
-
-        path.display()
-    }
-}
-
 /// Create a symlink or copy the file on Windows.
 /// Tries symlink first, falls back to copy if symlink fails.
 pub(crate) async fn create_symlink_or_copy(source: &Path, target: &Path) -> anyhow::Result<()> {
@@ -222,7 +107,7 @@ pub(crate) async fn create_symlink_or_copy(source: &Path, target: &Path) -> anyh
         match fs_err::tokio::symlink(source, target).await {
             Ok(()) => {
                 trace!(
-                    "Created symlink from {} to {}",
+                    "Created symlink from `{}` to `{}`",
                     source.display(),
                     target.display()
                 );
@@ -230,7 +115,7 @@ pub(crate) async fn create_symlink_or_copy(source: &Path, target: &Path) -> anyh
             }
             Err(e) => {
                 trace!(
-                    "Failed to create symlink from {} to {}: {}",
+                    "Failed to create symlink from `{}` to `{}`: {}",
                     source.display(),
                     target.display(),
                     e
@@ -265,7 +150,7 @@ pub(crate) async fn create_symlink_or_copy(source: &Path, target: &Path) -> anyh
 
     // Fallback to copy
     trace!(
-        "Falling back to copy from {} to {}",
+        "Falling back to copy from `{}` to `{}`",
         source.display(),
         target.display()
     );

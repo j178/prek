@@ -29,7 +29,7 @@ async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, V
 
     // Check if it's a symlink and if it's broken
     if path.is_symlink() && !path.exists() {
-        let error_message = format!("{}: Broken symlink\n", filename);
+        let error_message = format!("{filename}: Broken symlink\n");
         return Ok((1, error_message.into_bytes()));
     }
 
@@ -39,6 +39,7 @@ async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, V
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::path::{IntoUtf8PathBuf, ToUtf8Path};
     use camino::Utf8PathBuf;
     use tempfile::tempdir;
 
@@ -49,7 +50,7 @@ mod tests {
     ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
-        Ok(file_path)
+        Ok(file_path.into_utf8_path_buf())
     }
 
     #[tokio::test]
@@ -71,7 +72,7 @@ mod tests {
         let link_path = dir.path().join("link.txt");
         tokio::fs::symlink(&target, &link_path).await?;
 
-        let (code, output) = check_file(Utf8Path::new(""), &link_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), link_path.to_utf8_path()).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -85,7 +86,7 @@ mod tests {
         let nonexistent = dir.path().join("nonexistent.txt");
         tokio::fs::symlink(&nonexistent, &link_path).await?;
 
-        let (code, output) = check_file(Utf8Path::new(""), &link_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), link_path.to_utf8_path()).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         let output_str = String::from_utf8_lossy(&output);
@@ -142,7 +143,7 @@ mod tests {
         let link_path = dir.path().join("link.txt");
         tokio::fs::symlink(&target, &link_path).await?;
 
-        let (code, output) = check_file(Utf8Path::new(""), &link_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), link_path.to_utf8_path()).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -156,7 +157,7 @@ mod tests {
         let nonexistent = dir.path().join("nonexistent.txt");
         tokio::fs::symlink(&nonexistent, &link_path).await?;
 
-        let (code, output) = check_file(Utf8Path::new(""), &link_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), link_path.to_utf8_path()).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         let output_str = String::from_utf8_lossy(&output);

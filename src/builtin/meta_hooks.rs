@@ -1,7 +1,7 @@
 use std::io::Write;
-use camino::Utf8Path;
 
 use anyhow::Result;
+use camino::Utf8Path;
 use fancy_regex::Regex;
 use itertools::Itertools;
 
@@ -157,7 +157,7 @@ pub fn identity(_hook: &Hook, filenames: &[&Utf8Path]) -> (i32, Vec<u8>) {
         0,
         filenames
             .iter()
-            .map(|f| f.to_string())
+            .map(ToString::to_string)
             .join("\n")
             .into_bytes(),
     )
@@ -186,7 +186,10 @@ mod tests {
         ));
         assert!(excludes_any(&files, None, None));
 
-        let files = vec![Utf8Path::new("html/file1.html"), Utf8Path::new("html/file2.html")];
+        let files = vec![
+            Utf8Path::new("html/file1.html"),
+            Utf8Path::new("html/file2.html"),
+        ];
         assert!(excludes_any(
             &files,
             None,

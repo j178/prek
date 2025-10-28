@@ -1,6 +1,5 @@
-use camino::Utf8Path;
-
 use anyhow::Result;
+use camino::Utf8Path;
 use futures::StreamExt;
 
 use crate::hook::Hook;
@@ -19,7 +18,10 @@ const BLACKLIST: &[&[u8]] = &[
     b"BEGIN OpenVPN Static key V1",
 ];
 
-pub(crate) async fn detect_private_key(hook: &Hook, filenames: &[&Utf8Path]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn detect_private_key(
+    hook: &Hook,
+    filenames: &[&Utf8Path],
+) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
         .map(|filename| check_file(hook.project().relative_path(), filename))
         .buffered(*CONCURRENCY);
@@ -42,7 +44,7 @@ async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, V
     // Use memchr's memmem for faster substring search
     for pattern in BLACKLIST {
         if memchr::memmem::find(&content, pattern).is_some() {
-            let error_message = format!("Private key found: {}\n", filename);
+            let error_message = format!("Private key found: {filename}\n");
             return Ok((1, error_message.into_bytes()));
         }
     }
@@ -53,6 +55,7 @@ async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, V
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::path::IntoUtf8PathBuf;
     use camino::Utf8PathBuf;
     use tempfile::tempdir;
 
@@ -63,7 +66,7 @@ mod tests {
     ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
-        Ok(file_path)
+        Ok(file_path.into_utf8_path_buf())
     }
 
     #[tokio::test]
