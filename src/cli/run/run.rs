@@ -157,7 +157,7 @@ pub(crate) async fn run(
     std::env::set_current_dir(workspace.root()).with_context(|| {
         format!(
             "Failed to change directory to `{}`",
-            workspace.root().display()
+            workspace.root()
         )
     })?;
 

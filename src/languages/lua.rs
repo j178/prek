@@ -67,7 +67,7 @@ impl LanguageImpl for Lua {
             &store.hooks_dir(),
         )?;
 
-        debug!(%hook, target = %info.env_path.display(), "Installing Lua environment");
+        debug!(%hook, target = %info.env_path, "Installing Lua environment");
 
         // Check lua and luarocks are installed.
         let lua_info = query_lua_info().await.context("Failed to query Lua info")?;
@@ -111,8 +111,8 @@ impl LanguageImpl for Lua {
         if current_lua_info.executable != info.toolchain {
             anyhow::bail!(
                 "Lua executable mismatch: expected `{}`, found `{}`",
-                info.toolchain.display(),
-                current_lua_info.executable.display()
+                info.toolchain,
+                current_lua_info.executable
             );
         }
 

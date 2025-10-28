@@ -74,8 +74,8 @@ impl LanguageImpl for Node {
         //   What about adding them to PATH directly?
         // Create symlink or copy on Windows
         crate::fs::create_symlink_or_copy(
-            node.node(),
-            &bin_dir.join("node").with_extension(EXE_EXTENSION),
+            node.node().as_std_path(),
+            bin_dir.join("node").with_extension(EXE_EXTENSION).as_std_path(),
         )
         .await?;
 

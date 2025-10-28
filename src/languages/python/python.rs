@@ -83,7 +83,7 @@ impl LanguageImpl for Python {
             &store.hooks_dir(),
         )?;
 
-        debug!(%hook, target = %info.env_path.display(), "Installing environment");
+        debug!(%hook, target = %info.env_path, "Installing environment");
 
         // Create venv (auto download Python if needed)
         Self::create_venv(&uv, store, &info, &hook.language_request)
@@ -94,7 +94,7 @@ impl LanguageImpl for Python {
         if let Some(repo_path) = hook.repo_path() {
             trace!(
                 "Installing dependencies from repo path: {}",
-                repo_path.display()
+                repo_path
             );
             uv.cmd("uv pip install", store)
                 .arg("pip")
@@ -153,8 +153,8 @@ impl LanguageImpl for Python {
         if python_info.python_exec != info.toolchain {
             anyhow::bail!(
                 "Python executable mismatch: expected {}, found {}",
-                info.toolchain.display(),
-                python_info.python_exec.display()
+                info.toolchain,
+                python_info.python_exec
             );
         }
 
@@ -237,7 +237,7 @@ impl Python {
             Ok(_) => {
                 debug!(
                     "Venv created successfully with no downloads: `{}`",
-                    info.env_path.display()
+                    info.env_path
                 );
                 Ok(())
             }
@@ -252,7 +252,7 @@ impl Python {
 
                     debug!(
                         "Retrying venv creation with managed Python downloads: `{}`",
-                        info.env_path.display()
+                        info.env_path
                     );
                     Self::create_venv_command(uv, store, info, python_request, true, true)
                         .check(true)
@@ -264,7 +264,7 @@ impl Python {
                 Err(e.into())
             }
             Err(e) => {
-                debug!("Failed to create venv `{}`: {e}", info.env_path.display());
+                debug!("Failed to create venv `{}`: {e}", info.env_path);
                 Err(e.into())
             }
         }

@@ -52,7 +52,7 @@ impl Pep723Script {
     ///
     /// See: <https://peps.python.org/pep-0723/>
     pub async fn read(file: impl AsRef<Utf8Path>) -> Result<Option<Self>, Pep723Error> {
-        let contents = fs_err::tokio::read(&file).await?;
+        let contents = fs_err::tokio::read(file.as_ref().as_std_path()).await?;
 
         // Extract the `script` tag.
         let ScriptTag {

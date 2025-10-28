@@ -27,7 +27,7 @@ pub(crate) struct NodeResult {
 
 impl Display for NodeResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}@{}", self.node.display(), self.version)?;
+        write!(f, "{}@{}", self.node, self.version)?;
         Ok(())
     }
 }
@@ -219,11 +219,11 @@ impl NodeInstaller {
 
         download_and_extract(&url, &filename, store, async |extracted| {
             if target.exists() {
-                debug!(target = %target.display(), "Removing existing node");
+                debug!(target = %target, "Removing existing node");
                 fs_err::tokio::remove_dir_all(&target).await?;
             }
 
-            debug!(?extracted, target = %target.display(), "Moving node to target");
+            debug!(?extracted, target = %target, "Moving node to target");
             // TODO: retry on Windows
             fs_err::tokio::rename(extracted, &target).await?;
 
@@ -247,8 +247,15 @@ impl NodeInstaller {
 
         // Check each node executable for a matching version, stop early if found
         for node_path in node_paths {
+            let node_path = match Utf8PathBuf::from_path_buf(node_path) {
+                Ok(path) => path,
+                Err(path) => {
+                    warn!(?path, "Node path is not valid UTF-8, skipping");
+                    continue;
+                }
+            };
             if let Some(npm_path) = Self::find_npm_in_same_directory(&node_path)? {
-                match NodeResult::from_executables(node_path, npm_path)
+                match NodeResult::from_executables(node_path.clone(), npm_path)
                     .fill_version()
                     .await
                 {
@@ -272,7 +279,7 @@ impl NodeInstaller {
                 }
             } else {
                 trace!(
-                    node = %node_path.display(),
+                    node = %node_path,
                     "No npm found in same directory as node executable"
                 );
             }
@@ -295,15 +302,15 @@ impl NodeInstaller {
             let npm_path = node_dir.join(name);
             if npm_path.try_exists()? && is_executable(&npm_path) {
                 trace!(
-                    node = %node_path.display(),
-                    npm = %npm_path.display(),
+                    node = %node_path,
+                    npm = %npm_path,
                     "Found npm in same directory as node"
                 );
                 return Ok(Some(npm_path));
             }
         }
         trace!(
-            node = %node_path.display(),
+            node = %node_path,
             "npm not found in same directory as node"
         );
         Ok(None)

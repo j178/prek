@@ -229,11 +229,11 @@ impl GoInstaller {
 
         download_and_extract(&url, &filename, store, async |extracted| {
             if target.exists() {
-                debug!(target = %target.display(), "Removing existing go");
+                debug!(target = %target, "Removing existing go");
                 fs_err::tokio::remove_dir_all(&target).await?;
             }
 
-            debug!(?extracted, target = %target.display(), "Moving go to target");
+            debug!(?extracted, target = %target, "Moving go to target");
             // TODO: retry on Windows
             fs_err::tokio::rename(extracted, &target).await?;
 
@@ -255,6 +255,13 @@ impl GoInstaller {
         };
 
         for go_path in go_paths {
+            let go_path = match Utf8PathBuf::from_path_buf(go_path) {
+                Ok(path) => path,
+                Err(path) => {
+                    warn!(?path, "Go path is not valid UTF-8, skipping");
+                    continue;
+                }
+            };
             match GoResult::from_executable(go_path, true)
                 .fill_version()
                 .await

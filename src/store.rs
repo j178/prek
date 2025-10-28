@@ -104,11 +104,13 @@ impl Store {
             %repo,
             "Cloning repo",
         );
-        clone_repo(&repo.repo, &repo.rev, temp.path()).await?;
+        let temp_path = Utf8Path::from_path(temp.path())
+            .ok_or_else(|| anyhow::anyhow!("Temporary directory path is not valid UTF-8"))?;
+        clone_repo(&repo.repo, &repo.rev, temp_path).await?;
 
         // TODO: add windows retry
         fs_err::tokio::remove_dir_all(&target).await.ok();
-        fs_err::tokio::rename(temp, &target).await?;
+        fs_err::tokio::rename(temp_path, &target).await?;
 
         let content = serde_json::to_string_pretty(&repo)?;
         fs_err::tokio::write(target.join(".prek-repo.json"), content).await?;
@@ -132,6 +134,13 @@ impl Store {
                     Ok(entry) => entry.path(),
                     Err(err) => {
                         warn!(%err, "Failed to read hook dir");
+                        return None;
+                    }
+                };
+                let path = match Utf8PathBuf::from_path_buf(path) {
+                    Ok(path) => path,
+                    Err(path) => {
+                        warn!(?path, "Hook path is not valid UTF-8, skipping");
                         return None;
                     }
                 };

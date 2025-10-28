@@ -87,7 +87,7 @@ fn get_uv_version(uv_path: &Utf8Path) -> Result<Version> {
 
 static UV_EXE: LazyLock<Option<(Utf8PathBuf, Version)>> = LazyLock::new(|| {
     for uv_path in which::which_all("uv").ok()? {
-        debug!("Found uv in PATH: {}", uv_path.display());
+        debug!("Found uv in PATH: {}", uv_path);
 
         if let Ok(version) = get_uv_version(&uv_path) {
             if UV_VERSION_RANGE.matches(&version) {
@@ -162,11 +162,11 @@ impl InstallSource {
             let target_path = target.join("uv").with_extension(EXE_EXTENSION);
 
             if target_path.exists() {
-                debug!(target = %target.display(), "Removing existing uv");
+                debug!(target = %target, "Removing existing uv");
                 fs_err::tokio::remove_dir_all(&target).await?;
             }
 
-            debug!(?source, target = %target_path.display(), "Moving uv to target");
+            debug!(?source, target = %target_path, "Moving uv to target");
             // TODO: retry on Windows
             fs_err::tokio::rename(source, target_path).await?;
 
@@ -303,11 +303,11 @@ impl InstallSource {
             // Copy the binary to the target location
             let target_path = target.join("uv").with_extension(EXE_EXTENSION);
             if target_path.exists() {
-                debug!(target = %target.display(), "Removing existing uv");
+                debug!(target = %target, "Removing existing uv");
                 fs_err::tokio::remove_dir_all(&target).await?;
             }
 
-            debug!(?extracted_uv, target = %target_path.display(), "Moving uv to target");
+            debug!(?extracted_uv, target = %target_path, "Moving uv to target");
             fs_err::tokio::rename(&extracted_uv, &target_path).await?;
 
             // Set executable permissions on Unix
@@ -446,12 +446,14 @@ impl Uv {
     pub(crate) async fn install(store: &Store, uv_dir: &Utf8Path) -> Result<Self> {
         // 1) Check `uv` alongside `prek` binary (e.g. `uv tool install prek --with uv`)
         let prek_exe = std::env::current_exe()?.canonicalize()?;
+        let prek_exe = Utf8PathBuf::from_path_buf(prek_exe)
+            .map_err(|_| anyhow::anyhow!("prek executable path is not valid UTF-8"))?;
         if let Some(prek_dir) = prek_exe.parent() {
             let uv_path = prek_dir.join("uv").with_extension(EXE_EXTENSION);
             if uv_path.is_file() {
                 if let Ok(version) = get_uv_version(&uv_path) {
                     if UV_VERSION_RANGE.matches(&version) {
-                        trace!(uv = %uv_path.display(), "Found compatible uv alongside prek binary");
+                        trace!(uv = %uv_path, "Found compatible uv alongside prek binary");
                         return Ok(Self::new(uv_path));
                     }
                     warn!(
@@ -467,7 +469,7 @@ impl Uv {
             trace!(
                 "Using system uv version {} at {}",
                 version,
-                uv_path.display()
+                uv_path
             );
             return Ok(Self::new(uv_path.clone()));
         }
@@ -476,7 +478,7 @@ impl Uv {
         let uv_path = uv_dir.join("uv").with_extension(EXE_EXTENSION);
 
         if uv_path.is_file() {
-            trace!(uv = %uv_path.display(), "Found managed uv");
+            trace!(uv = %uv_path, "Found managed uv");
             return Ok(Self::new(uv_path));
         }
 
@@ -485,7 +487,7 @@ impl Uv {
         let _lock = LockedFile::acquire(uv_dir.join(".lock"), "uv").await?;
 
         if uv_path.is_file() {
-            trace!(uv = %uv_path.display(), "Found managed uv");
+            trace!(uv = %uv_path, "Found managed uv");
             return Ok(Self::new(uv_path));
         }
 

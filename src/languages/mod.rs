@@ -298,8 +298,13 @@ async fn download_and_extract(
     archive::unpack(tarball, ext, temp_dir.path()).await?;
 
     let extracted = match archive::strip_component(temp_dir.path()) {
-        Ok(top_level) => top_level,
-        Err(archive::Error::NonSingularArchive(_)) => temp_dir.path().to_path_buf(),
+        Ok(top_level) => Utf8PathBuf::from_path_buf(top_level)
+            .map_err(|_| anyhow::anyhow!("Extracted path is not valid UTF-8"))?,
+        Err(archive::Error::NonSingularArchive(_)) => {
+            Utf8Path::from_path(temp_dir.path())
+                .ok_or_else(|| anyhow::anyhow!("Temporary directory path is not valid UTF-8"))?
+                .to_path_buf()
+        }
         Err(err) => return Err(err.into()),
     };
 
