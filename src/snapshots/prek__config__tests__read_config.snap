@@ -270,5 +270,4 @@ Config {
         true,
     ),
     minimum_prek_version: None,
-    ci: None,
 }

@@ -125,15 +125,15 @@ fn invalid_config() {
     "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Hook `trailing-whitespace` is invalid
-      caused by: Hook specified `additional_dependencies` `dotnet@6` but the language `dotnet` does not support installing dependencies for now
-    "#);
+      caused by: Hook specified `additional_dependencies: dotnet@6` but the language `dotnet` does not support installing dependencies for now
+    ");
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -147,15 +147,15 @@ fn invalid_config() {
     "});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Hook `trailing-whitespace` is invalid
-      caused by: Hook specified `language_version` `6` but the language `fail` does not install an environment
-    "#);
+      caused by: Hook specified `language_version: 6` but the language `fail` does not support toolchain installation for now
+    ");
 }
 
 /// Use same repo multiple times, with same or different revisions.

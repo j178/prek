@@ -13,7 +13,7 @@ use crate::config::Stage;
 use crate::fs::normalize_path;
 use crate::git::GIT_ROOT;
 use crate::hook::Hook;
-use crate::identify::tags_from_path;
+use crate::identify::{TagSet, tags_from_path};
 use crate::workspace::Project;
 use crate::{fs, git, warn_user};
 
@@ -66,18 +66,14 @@ impl<'a> FileTagFilter<'a> {
         }
     }
 
-    pub(crate) fn filter(&self, file_types: &[&str]) -> bool {
-        if !self.all.is_empty() && !self.all.iter().all(|t| file_types.contains(&t.as_str())) {
+    pub(crate) fn filter(&self, file_types: &TagSet) -> bool {
+        if !self.all.is_empty() && !self.all.iter().all(|t| file_types.contains(t.as_str())) {
             return false;
         }
-        if !self.any.is_empty() && !self.any.iter().any(|t| file_types.contains(&t.as_str())) {
+        if !self.any.is_empty() && !self.any.iter().any(|t| file_types.contains(t.as_str())) {
             return false;
         }
-        if self
-            .exclude
-            .iter()
-            .any(|t| file_types.contains(&t.as_str()))
-        {
+        if self.exclude.iter().any(|t| file_types.contains(t.as_str())) {
             return false;
         }
         true

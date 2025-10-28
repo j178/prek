@@ -810,3 +810,62 @@ fn workspace_no_projects() {
     error: No `.pre-commit-config.yaml` found in the current directory or parent directories in the repository
     ");
 }
+
+#[test]
+fn gitignore_respected() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let config = indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+        - id: show-cwd
+          name: Show CWD
+          language: python
+          entry: python -c 'import sys, os; print(os.getcwd()); print(sorted(sys.argv[1:]))'
+          verbose: true
+    "};
+
+    // Create a project structure with directories that should be ignored
+    context.setup_workspace(
+        &[
+            "src",
+            "node_modules/ignored", // Should be ignored by .gitignore
+            "target/ignored",       // Should be ignored by .gitignore
+        ],
+        config,
+    )?;
+
+    // Create .gitignore that ignores node_modules and target
+    context
+        .work_dir()
+        .child(".gitignore")
+        .write_str("node_modules/\ntarget/\n")?;
+
+    context.git_add(".");
+
+    // Run from the root - should not discover projects in node_modules or target
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `src`:
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+      [TEMP_DIR]/src
+      ['.pre-commit-config.yaml']
+
+    Running hooks for `.`:
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+      [TEMP_DIR]/
+      ['.gitignore', '.pre-commit-config.yaml', 'src/.pre-commit-config.yaml']
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}

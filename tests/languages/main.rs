@@ -7,6 +7,7 @@ mod docker;
 mod docker_image;
 mod fail;
 mod golang;
+mod lua;
 mod node;
 mod pygrep;
 mod python;
