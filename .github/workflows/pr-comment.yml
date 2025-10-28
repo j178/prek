@@ -7,7 +7,7 @@
 #
 # These restrictions mean that during a pull_request event triggered by a forked repository,
 # actions have no write access to GitHub resources and will fail on any attempt.
-name: PR comment (bloat check)
+name: PR comment
 on:
   workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [CI]
@@ -44,6 +44,8 @@ jobs:
         id: download
         if: steps.pr-number.outputs.pr-number
         with:
+          name: bloat-check-results|hotpath-results
+          name_is_regexp: true
           workflow: ci.yml
           pr: ${{ steps.pr-number.outputs.pr-number }}
           workflow_conclusion: completed
