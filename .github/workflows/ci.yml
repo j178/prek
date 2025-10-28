@@ -175,7 +175,7 @@ jobs:
           </details>
           """
 
-          Path("comparison.txt").write_text(comparison)
+          Path("bloat_comparison.txt").write_text(comparison)
 
       - name: Save pr-number
         run: |
@@ -190,7 +190,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: bloat-check-results
-          path: comparison.txt
+          path: bloat_comparison.txt
 
       - name: Display results (PR)
         if: github.event_name == 'pull_request'
@@ -507,7 +507,7 @@ jobs:
             cargo build --release --locked --features hotpath
 
             # Run instrumented prek (hotpath outputs to stderr by default)
-            target/release/prek run --all-files --verbose > /dev/null 2> hotpath_base.txt || true
+            target/release/prek run --all-files --verbose trailing-whitespace > /dev/null 2> hotpath_base.txt || true
 
             git checkout -
 
@@ -521,7 +521,7 @@ jobs:
           id: profile_pr
           run: |
             # Run instrumented prek (hotpath outputs to stderr by default)
-            target/release/prek run --all-files --verbose > /dev/null 2> hotpath_pr.txt || true
+            target/release/prek run --all-files --verbose trailing-whitespace > /dev/null 2> hotpath_pr.txt || true
 
             {
               echo 'output<<EOF'
