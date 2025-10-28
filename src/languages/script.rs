@@ -51,6 +51,7 @@ impl LanguageImpl for Script {
                 .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)
+                .check(false)
                 .pty_output()
                 .await?;
 

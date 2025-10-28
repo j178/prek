@@ -8,14 +8,13 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result};
 use constants::env_vars::EnvVars;
 use itertools::Itertools;
-use reqwest::Client;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
 use crate::fs::LockedFile;
-use crate::languages::download_and_extract;
 use crate::languages::node::NodeRequest;
 use crate::languages::node::version::NodeVersion;
+use crate::languages::{REQWEST_CLIENT, download_and_extract};
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -96,15 +95,11 @@ impl NodeResult {
 
 pub(crate) struct NodeInstaller {
     root: PathBuf,
-    client: Client,
 }
 
 impl NodeInstaller {
     pub(crate) fn new(root: PathBuf) -> Self {
-        Self {
-            root,
-            client: Client::new(),
-        }
+        Self { root }
     }
 
     /// Install a version of Node.js.
@@ -188,7 +183,7 @@ impl NodeInstaller {
     /// List all versions of Node.js available on the Node.js website.
     async fn list_remote_versions(&self) -> Result<Vec<NodeVersion>> {
         let url = "https://nodejs.org/dist/index.json";
-        let versions: Vec<NodeVersion> = self.client.get(url).send().await?.json().await?;
+        let versions: Vec<NodeVersion> = REQWEST_CLIENT.get(url).send().await?.json().await?;
         Ok(versions)
     }
 
@@ -222,7 +217,7 @@ impl NodeInstaller {
         let url = format!("https://nodejs.org/dist/v{}/{filename}", version.version());
         let target = self.root.join(version.to_string());
 
-        download_and_extract(&self.client, &url, &filename, store, async |extracted| {
+        download_and_extract(&url, &filename, store, async |extracted| {
             if target.exists() {
                 debug!(target = %target.display(), "Removing existing node");
                 fs_err::tokio::remove_dir_all(&target).await?;

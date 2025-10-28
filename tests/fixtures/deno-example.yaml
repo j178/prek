@@ -1,0 +1,33 @@
+default_stages: [pre-commit]
+
+repos:
+  - repo: local
+    hooks:
+      - id: deno-fmt
+        name: Deno format
+        entry: deno fmt
+        types_or: [file]
+        language: deno
+        args: [--config, deno.jsonc, --permit-no-files]
+      - id: deno-lint
+        name: Deno lint
+        entry: deno lint
+        types_or: [file]
+        language: deno
+        args: [--config, deno.jsonc, --permit-no-files, --fix]
+
+  - repo: local
+    hooks:
+      - id: eslint
+        name: ESLint
+        language: deno
+        types: [file]
+        entry: deno run -A npm:eslint@9.37.0 --fix --config eslint.config.js
+        files: \.(js|ts|svelte)$
+        additional_dependencies:
+          - npm:eslint@9.37.0
+          - npm:eslint-plugin-svelte
+          - npm:svelte
+          - npm:typescript
+          - npm:typescript-eslint
+          - 'npm:@stylistic/eslint-plugin'

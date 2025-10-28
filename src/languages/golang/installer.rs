@@ -7,7 +7,6 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result};
 use constants::env_vars::EnvVars;
 use itertools::Itertools;
-use reqwest::Client;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
@@ -100,15 +99,11 @@ impl GoResult {
 
 pub(crate) struct GoInstaller {
     root: PathBuf,
-    client: Client,
 }
 
 impl GoInstaller {
     pub(crate) fn new(root: PathBuf) -> Self {
-        Self {
-            root,
-            client: Client::new(),
-        }
+        Self { root }
     }
 
     pub(crate) async fn install(
@@ -232,7 +227,7 @@ impl GoInstaller {
         let url = format!("https://go.dev/dl/{filename}");
         let target = self.root.join(version.to_string());
 
-        download_and_extract(&self.client, &url, &filename, store, async |extracted| {
+        download_and_extract(&url, &filename, store, async |extracted| {
             if target.exists() {
                 debug!(target = %target.display(), "Removing existing go");
                 fs_err::tokio::remove_dir_all(&target).await?;

@@ -1,8 +1,9 @@
 <div align="center">
 
-# prek
-
-<img width="220" alt="prek" src="./docs/assets/logo.webp" />
+<h1>
+  <img width="180" alt="prek" src="./docs/assets/logo.webp" />
+  <br/>prek
+</h1>
 
 [![CI](https://github.com/j178/prek/actions/workflows/ci.yml/badge.svg)](https://github.com/j178/prek/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/github/j178/prek/graph/badge.svg?token=MP6TY24F43)](https://codecov.io/github/j178/prek)

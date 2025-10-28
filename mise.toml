@@ -47,6 +47,10 @@ description = "Generate CLI reference"
 run = "cargo test --bin prek cli::tests::generate_cli_reference -- --exact"
 env = { PREK_GENERATE = "1" }
 
+[tasks.build-docs]
+description = "Build documentation"
+run = "uv tool run --with-requirements docs/requirements.txt mkdocs serve"
+
 [tasks.release]
 description = "Prepare for a release"
 run = """

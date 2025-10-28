@@ -38,7 +38,7 @@ pub(crate) async fn query_lua_info() -> Result<LuaInfo> {
 
     let stdout = Cmd::new("luarocks", "get lua executable")
         .arg("config")
-        .arg("LUA")
+        .arg("variables.LUA")
         .check(true)
         .output()
         .await?

@@ -223,8 +223,8 @@ fn lua_environment() {
     lua......................................................................Passed
     - hook id: lua
     - duration: [TIME]
-      LUA_PATH:	[HOME]/hooks/lua-[HASH]/share/lua/5.4\?.lua;[HOME]/hooks/lua-[HASH]/share/lua/5.4\?/init.lua
-      LUA_CPATH:	[HOME]/hooks/lua-[HASH]/lib/lua/5.4\?.dll
+      LUA_PATH:	[HOME]/hooks/lua-[HASH]/share/lua/5.4\?.lua;[HOME]/hooks/lua-[HASH]/share/lua/5.4\?/init.lua;;
+      LUA_CPATH:	[HOME]/hooks/lua-[HASH]/lib/lua/5.4\?.dll;;
 
     ----- stderr -----
     "#);

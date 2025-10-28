@@ -65,6 +65,37 @@ main()
 - When both `language_version` (in config) and `requires-python` (in script) are set, `language_version` takes precedence
 - Only `dependencies` and `requires-python` fields are supported; other metadata like `tool.uv` is ignored
 
+### Deno
+
+`prek` automatically installs Deno from GitHub releases and creates isolated dependency environments:
+
+- Automatically downloads and installs requested Deno versions from GitHub releases
+- Falls back to system-installed Deno if it matches the requested version
+- Creates isolated `DENO_DIR` for dependency caching
+- Supports `additional_dependencies` with `npm:` and `jsr:` specifiers via `deno add`
+- Copies repository `deno.json` if present for local repos
+- Supports `language_version` for specifying Deno versions (e.g., `1.40`, `1.40.0`, `>= 1.40`)
+
+**Example:**
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: deno-fmt
+        name: Deno format
+        language: deno
+        entry: deno fmt
+        types_or: [typescript, javascript]
+        language_version: "1.40"  # Optional: specify Deno version
+      - id: custom-linter
+        language: deno
+        entry: deno run -A npm:eslint
+        additional_dependencies:
+          - npm:eslint@9
+          - npm:typescript-eslint
+```
+
 ## Command line interface
 
 ### `prek run`
