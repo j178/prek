@@ -19,12 +19,101 @@
 // THE SOFTWARE.
 
 use std::io::{BufRead, Read};
+use std::iter::FromIterator;
 use std::path::Path;
 use std::sync::OnceLock;
-use std::vec;
 
 use anyhow::Result;
 use rustc_hash::{FxHashMap, FxHashSet};
+use smallvec::SmallVec;
+
+#[derive(Clone, Default)]
+pub(crate) struct TagSet(SmallVec<[&'static str; 8]>);
+
+impl TagSet {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn insert(&mut self, tag: &'static str) -> bool {
+        if self.0.contains(&tag) {
+            false
+        } else {
+            self.0.push(tag);
+            true
+        }
+    }
+
+    fn extend_from_iter<I>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = &'static str>,
+    {
+        for tag in iter {
+            self.insert(tag);
+        }
+    }
+
+    pub(crate) fn contains(&self, needle: &str) -> bool {
+        self.0.contains(&needle)
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &'static str> + '_ {
+        self.0.iter().copied()
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn with_added(mut self, extra: &[&'static str]) -> Self {
+        self.extend_from_iter(extra.iter().copied());
+        self
+    }
+}
+
+impl Extend<&'static str> for TagSet {
+    fn extend<I: IntoIterator<Item = &'static str>>(&mut self, iter: I) {
+        self.extend_from_iter(iter);
+    }
+}
+
+impl FromIterator<&'static str> for TagSet {
+    fn from_iter<I: IntoIterator<Item = &'static str>>(iter: I) -> Self {
+        let mut set = TagSet::new();
+        set.extend(iter);
+        set
+    }
+}
+
+impl<const N: usize> From<[&'static str; N]> for TagSet {
+    fn from(tags: [&'static str; N]) -> Self {
+        tags.into_iter().collect()
+    }
+}
+
+#[derive(Default)]
+struct TagMap(FxHashMap<&'static str, TagSet>);
+
+impl TagMap {
+    fn get(&self, key: &str) -> Option<&TagSet> {
+        self.0.get(key)
+    }
+
+    fn insert(&mut self, key: &'static str, value: TagSet) {
+        self.0.insert(key, value);
+    }
+
+    fn clone_key(&self, key: &str) -> TagSet {
+        self.0
+            .get(key)
+            .cloned()
+            .unwrap_or_else(|| panic!("TagMap missing key: {key}"))
+    }
+
+    fn values(&self) -> impl Iterator<Item = &TagSet> {
+        self.0.values()
+    }
+}
 
 mod tags {
     pub const DIRECTORY: &str = "directory";
@@ -40,663 +129,506 @@ mod tags {
     pub const BINARY: &str = "binary";
 }
 
-fn by_extension() -> &'static FxHashMap<&'static str, Vec<&'static str>> {
-    static EXTENSIONS: OnceLock<FxHashMap<&'static str, Vec<&'static str>>> = OnceLock::new();
+fn by_extension() -> &'static TagMap {
+    static EXTENSIONS: OnceLock<TagMap> = OnceLock::new();
     EXTENSIONS.get_or_init(|| {
-        let mut map = FxHashMap::default();
-        map.insert("adoc", vec!["text", "asciidoc"]);
-        map.insert("ai", vec!["binary", "adobe-illustrator"]);
-        map.insert("aj", vec!["text", "aspectj"]);
-        map.insert("asciidoc", vec!["text", "asciidoc"]);
-        map.insert("apinotes", vec!["text", "apinotes"]);
-        map.insert("asar", vec!["binary", "asar"]);
-        map.insert("astro", vec!["text", "astro"]);
-        map.insert("avif", vec!["binary", "image", "avif"]);
-        map.insert("avsc", vec!["text", "avro-schema"]);
-        map.insert("bash", vec!["text", "shell", "bash"]);
-        map.insert("bat", vec!["text", "batch"]);
-        map.insert("bats", vec!["text", "shell", "bash", "bats"]);
-        map.insert("bazel", vec!["text", "bazel"]);
-        map.insert("beancount", vec!["text", "beancount"]);
-        map.insert("bib", vec!["text", "bib"]);
-        map.insert("bmp", vec!["binary", "image", "bitmap"]);
-        map.insert("bz2", vec!["binary", "bzip2"]);
-        map.insert("bzl", vec!["text", "bazel"]);
-        map.insert("c", vec!["text", "c"]);
-        map.insert("c++", vec!["text", "c++"]);
-        map.insert("c++m", vec!["text", "c++"]);
-        map.insert("cc", vec!["text", "c++"]);
-        map.insert("ccm", vec!["text", "c++"]);
-        map.insert("cfg", vec!["text"]);
-        map.insert("chs", vec!["text", "c2hs"]);
-        map.insert("cjs", vec!["text", "javascript"]);
-        map.insert("clj", vec!["text", "clojure"]);
-        map.insert("cljc", vec!["text", "clojure"]);
-        map.insert("cljs", vec!["text", "clojure", "clojurescript"]);
-        map.insert("cmake", vec!["text", "cmake"]);
-        map.insert("cnf", vec!["text"]);
-        map.insert("coffee", vec!["text", "coffee"]);
-        map.insert("conf", vec!["text"]);
-        map.insert("cpp", vec!["text", "c++"]);
-        map.insert("cppm", vec!["text", "c++"]);
-        map.insert("cr", vec!["text", "crystal"]);
-        map.insert("crt", vec!["text", "pem"]);
-        map.insert("cs", vec!["text", "c#"]);
-        map.insert("csproj", vec!["text", "xml", "csproj"]);
-        map.insert("csh", vec!["text", "shell", "csh"]);
-        map.insert("cson", vec!["text", "cson"]);
-        map.insert("css", vec!["text", "css"]);
-        map.insert("csv", vec!["text", "csv"]);
-        map.insert("cu", vec!["text", "cuda"]);
-        map.insert("cue", vec!["text", "cue"]);
-        map.insert("cuh", vec!["text", "cuda"]);
-        map.insert("cxx", vec!["text", "c++"]);
-        map.insert("cxxm", vec!["text", "c++"]);
-        map.insert("cylc", vec!["text", "cylc"]);
-        map.insert("dart", vec!["text", "dart"]);
-        map.insert("dbc", vec!["text", "dbc"]);
-        map.insert("def", vec!["text", "def"]);
-        map.insert("dll", vec!["binary"]);
-        map.insert("dtd", vec!["text", "dtd"]);
-        map.insert("ear", vec!["binary", "zip", "jar"]);
-        map.insert("edn", vec!["text", "clojure", "edn"]);
-        map.insert("ejs", vec!["text", "ejs"]);
-        map.insert("ejson", vec!["text", "json", "ejson"]);
-        map.insert("env", vec!["text", "dotenv"]);
-        map.insert("eot", vec!["binary", "eot"]);
-        map.insert("eps", vec!["binary", "eps"]);
-        map.insert("erb", vec!["text", "erb"]);
-        map.insert("erl", vec!["text", "erlang"]);
-        map.insert("ex", vec!["text", "elixir"]);
-        map.insert("exe", vec!["binary"]);
-        map.insert("exs", vec!["text", "elixir"]);
-        map.insert("eyaml", vec!["text", "yaml"]);
-        map.insert("f03", vec!["text", "fortran"]);
-        map.insert("f08", vec!["text", "fortran"]);
-        map.insert("f90", vec!["text", "fortran"]);
-        map.insert("f95", vec!["text", "fortran"]);
-        map.insert("feature", vec!["text", "gherkin"]);
-        map.insert("fish", vec!["text", "fish"]);
-        map.insert("fits", vec!["binary", "fits"]);
-        map.insert("gd", vec!["text", "gdscript"]);
-        map.insert("gemspec", vec!["text", "ruby"]);
-        map.insert("geojson", vec!["text", "geojson", "json"]);
-        map.insert("ggb", vec!["binary", "zip", "ggb"]);
-        map.insert("gif", vec!["binary", "image", "gif"]);
-        map.insert("go", vec!["text", "go"]);
-        map.insert("gotmpl", vec!["text", "gotmpl"]);
-        map.insert("gpx", vec!["text", "gpx", "xml"]);
-        map.insert("graphql", vec!["text", "graphql"]);
-        map.insert("gradle", vec!["text", "groovy"]);
-        map.insert("groovy", vec!["text", "groovy"]);
-        map.insert("gyb", vec!["text", "gyb"]);
-        map.insert("gyp", vec!["text", "gyp", "python"]);
-        map.insert("gypi", vec!["text", "gyp", "python"]);
-        map.insert("gz", vec!["binary", "gzip"]);
-        map.insert("h", vec!["text", "header", "c", "c++"]);
-        map.insert("hbs", vec!["text", "handlebars"]);
-        map.insert("hcl", vec!["text", "hcl"]);
-        map.insert("hh", vec!["text", "header", "c++"]);
-        map.insert("hpp", vec!["text", "header", "c++"]);
-        map.insert("hrl", vec!["text", "erlang"]);
-        map.insert("hs", vec!["text", "haskell"]);
-        map.insert("htm", vec!["text", "html"]);
-        map.insert("html", vec!["text", "html"]);
-        map.insert("hxx", vec!["text", "header", "c++"]);
-        map.insert("icns", vec!["binary", "icns"]);
-        map.insert("ico", vec!["binary", "icon"]);
-        map.insert("ics", vec!["text", "icalendar"]);
-        map.insert("idl", vec!["text", "idl"]);
-        map.insert("idr", vec!["text", "idris"]);
-        map.insert("inc", vec!["text", "inc"]);
-        map.insert("ini", vec!["text", "ini"]);
-        map.insert("inl", vec!["text", "inl", "c++"]);
-        map.insert("ino", vec!["text", "ino", "c++"]);
-        map.insert("inx", vec!["text", "xml", "inx"]);
-        map.insert("ipynb", vec!["text", "jupyter", "json"]);
-        map.insert("ixx", vec!["text", "c++"]);
-        map.insert("j2", vec!["text", "jinja"]);
-        map.insert("jade", vec!["text", "jade"]);
-        map.insert("jar", vec!["binary", "zip", "jar"]);
-        map.insert("java", vec!["text", "java"]);
-        map.insert("jenkins", vec!["text", "groovy", "jenkins"]);
-        map.insert("jenkinsfile", vec!["text", "groovy", "jenkins"]);
-        map.insert("jinja", vec!["text", "jinja"]);
-        map.insert("jinja2", vec!["text", "jinja"]);
-        map.insert("jl", vec!["text", "julia"]);
-        map.insert("jpeg", vec!["binary", "image", "jpeg"]);
-        map.insert("jpg", vec!["binary", "image", "jpeg"]);
-        map.insert("js", vec!["text", "javascript"]);
-        map.insert("json", vec!["text", "json"]);
-        map.insert("jsonld", vec!["text", "json", "jsonld"]);
-        map.insert("jsonnet", vec!["text", "jsonnet"]);
-        map.insert("json5", vec!["text", "json5"]);
-        map.insert("jsx", vec!["text", "jsx"]);
-        map.insert("key", vec!["text", "pem"]);
-        map.insert("kml", vec!["text", "kml", "xml"]);
-        map.insert("kt", vec!["text", "kotlin"]);
-        map.insert("kts", vec!["text", "kotlin"]);
-        map.insert("lean", vec!["text", "lean"]);
-        map.insert("lektorproject", vec!["text", "ini", "lektorproject"]);
-        map.insert("less", vec!["text", "less"]);
-        map.insert("lfm", vec!["text", "lazarus", "lazarus-form"]);
-        map.insert("lhs", vec!["text", "literate-haskell"]);
-        map.insert("libsonnet", vec!["text", "jsonnet"]);
-        map.insert("lidr", vec!["text", "idris"]);
-        map.insert("liquid", vec!["text", "liquid"]);
-        map.insert("lpi", vec!["text", "lazarus", "xml"]);
-        map.insert("lpr", vec!["text", "lazarus", "pascal"]);
-        map.insert("lr", vec!["text", "lektor"]);
-        map.insert("lua", vec!["text", "lua"]);
-        map.insert("m", vec!["text", "objective-c"]);
-        map.insert("m4", vec!["text", "m4"]);
-        map.insert("make", vec!["text", "makefile"]);
-        map.insert("manifest", vec!["text", "manifest"]);
-        map.insert("map", vec!["text", "map"]);
-        map.insert("markdown", vec!["text", "markdown"]);
-        map.insert("md", vec!["text", "markdown"]);
-        map.insert("mdx", vec!["text", "mdx"]);
-        map.insert("meson", vec!["text", "meson"]);
-        map.insert("metal", vec!["text", "metal"]);
-        map.insert("mib", vec!["text", "mib"]);
-        map.insert("mjs", vec!["text", "javascript"]);
-        map.insert("mk", vec!["text", "makefile"]);
-        map.insert("ml", vec!["text", "ocaml"]);
-        map.insert("mli", vec!["text", "ocaml"]);
-        map.insert("mm", vec!["text", "c++", "objective-c++"]);
-        map.insert("modulemap", vec!["text", "modulemap"]);
-        map.insert("mscx", vec!["text", "xml", "musescore"]);
-        map.insert("mscz", vec!["binary", "zip", "musescore"]);
-        map.insert("mustache", vec!["text", "mustache"]);
-        map.insert("myst", vec!["text", "myst"]);
-        map.insert("ngdoc", vec!["text", "ngdoc"]);
-        map.insert("nim", vec!["text", "nim"]);
-        map.insert("nims", vec!["text", "nim"]);
-        map.insert("nimble", vec!["text", "nimble"]);
-        map.insert("nix", vec!["text", "nix"]);
-        map.insert("njk", vec!["text", "nunjucks"]);
-        map.insert("otf", vec!["binary", "otf"]);
-        map.insert("p12", vec!["binary", "p12"]);
-        map.insert("pas", vec!["text", "pascal"]);
-        map.insert("patch", vec!["text", "diff"]);
-        map.insert("pdf", vec!["binary", "pdf"]);
-        map.insert("pem", vec!["text", "pem"]);
-        map.insert("php", vec!["text", "php"]);
-        map.insert("php4", vec!["text", "php"]);
-        map.insert("php5", vec!["text", "php"]);
-        map.insert("phtml", vec!["text", "php"]);
-        map.insert("pl", vec!["text", "perl"]);
-        map.insert("plantuml", vec!["text", "plantuml"]);
-        map.insert("pm", vec!["text", "perl"]);
-        map.insert("png", vec!["binary", "image", "png"]);
-        map.insert("po", vec!["text", "pofile"]);
-        map.insert("pom", vec!["pom", "text", "xml"]);
-        map.insert("pp", vec!["text", "puppet"]);
-        map.insert("prisma", vec!["text", "prisma"]);
-        map.insert("properties", vec!["text", "java-properties"]);
-        map.insert("proto", vec!["text", "proto"]);
-        map.insert("ps1", vec!["text", "powershell"]);
-        map.insert("pug", vec!["text", "pug"]);
-        map.insert("puml", vec!["text", "plantuml"]);
-        map.insert("purs", vec!["text", "purescript"]);
-        map.insert("pxd", vec!["text", "cython"]);
-        map.insert("pxi", vec!["text", "cython"]);
-        map.insert("py", vec!["text", "python"]);
-        map.insert("pyi", vec!["text", "pyi"]);
-        map.insert("pyproj", vec!["text", "xml", "pyproj"]);
-        map.insert("pyt", vec!["text", "python"]);
-        map.insert("pyx", vec!["text", "cython"]);
-        map.insert("pyz", vec!["binary", "pyz"]);
-        map.insert("pyzw", vec!["binary", "pyz"]);
-        map.insert("qml", vec!["text", "qml"]);
-        map.insert("r", vec!["text", "r"]);
-        map.insert("rake", vec!["text", "ruby"]);
-        map.insert("rb", vec!["text", "ruby"]);
-        map.insert("resx", vec!["text", "resx", "xml"]);
-        map.insert("rng", vec!["text", "xml", "relax-ng"]);
-        map.insert("rs", vec!["text", "rust"]);
-        map.insert("rst", vec!["text", "rst"]);
-        map.insert("s", vec!["text", "asm"]);
-        map.insert("sass", vec!["text", "sass"]);
-        map.insert("sbt", vec!["text", "sbt", "scala"]);
-        map.insert("sc", vec!["text", "scala"]);
-        map.insert("scala", vec!["text", "scala"]);
-        map.insert("scm", vec!["text", "scheme"]);
-        map.insert("scss", vec!["text", "scss"]);
-        map.insert("sh", vec!["text", "shell"]);
-        map.insert("sln", vec!["text", "sln"]);
-        map.insert("sls", vec!["text", "salt"]);
-        map.insert("so", vec!["binary"]);
-        map.insert("sol", vec!["text", "solidity"]);
-        map.insert("spec", vec!["text", "spec"]);
-        map.insert("sql", vec!["text", "sql"]);
-        map.insert("ss", vec!["text", "scheme"]);
-        map.insert("sty", vec!["text", "tex"]);
-        map.insert("styl", vec!["text", "stylus"]);
-        map.insert("sv", vec!["text", "system-verilog"]);
-        map.insert("svelte", vec!["text", "svelte"]);
-        map.insert("svg", vec!["text", "image", "svg", "xml"]);
-        map.insert("svh", vec!["text", "system-verilog"]);
-        map.insert("swf", vec!["binary", "swf"]);
-        map.insert("swift", vec!["text", "swift"]);
-        map.insert("swiftdeps", vec!["text", "swiftdeps"]);
-        map.insert("tac", vec!["text", "twisted", "python"]);
-        map.insert("tar", vec!["binary", "tar"]);
-        map.insert("tex", vec!["text", "tex"]);
-        map.insert("textproto", vec!["text", "textproto"]);
-        map.insert("tf", vec!["text", "terraform"]);
-        map.insert("tfvars", vec!["text", "terraform"]);
-        map.insert("tgz", vec!["binary", "gzip"]);
-        map.insert("thrift", vec!["text", "thrift"]);
-        map.insert("tiff", vec!["binary", "image", "tiff"]);
-        map.insert("toml", vec!["text", "toml"]);
-        map.insert("ts", vec!["text", "ts"]);
-        map.insert("tsv", vec!["text", "tsv"]);
-        map.insert("tsx", vec!["text", "tsx"]);
-        map.insert("ttf", vec!["binary", "ttf"]);
-        map.insert("twig", vec!["text", "twig"]);
-        map.insert("txsprofile", vec!["text", "ini", "txsprofile"]);
-        map.insert("txt", vec!["text", "plain-text"]);
-        map.insert("txtpb", vec!["text", "textproto"]);
-        map.insert("urdf", vec!["text", "xml", "urdf"]);
-        map.insert("v", vec!["text", "verilog"]);
-        map.insert("vb", vec!["text", "vb"]);
-        map.insert("vbproj", vec!["text", "xml", "vbproj"]);
-        map.insert("vcxproj", vec!["text", "xml", "vcxproj"]);
-        map.insert("vdx", vec!["text", "vdx"]);
-        map.insert("vh", vec!["text", "verilog"]);
-        map.insert("vhd", vec!["text", "vhdl"]);
-        map.insert("vim", vec!["text", "vim"]);
-        map.insert("vtl", vec!["text", "vtl"]);
-        map.insert("vue", vec!["text", "vue"]);
-        map.insert("war", vec!["binary", "zip", "jar"]);
-        map.insert("wav", vec!["binary", "audio", "wav"]);
-        map.insert("webp", vec!["binary", "image", "webp"]);
-        map.insert("whl", vec!["binary", "wheel", "zip"]);
-        map.insert("wkt", vec!["text", "wkt"]);
-        map.insert("woff", vec!["binary", "woff"]);
-        map.insert("woff2", vec!["binary", "woff2"]);
-        map.insert("wsgi", vec!["text", "wsgi", "python"]);
-        map.insert("xhtml", vec!["text", "xml", "html", "xhtml"]);
-        map.insert("xacro", vec!["text", "xml", "urdf", "xacro"]);
-        map.insert("xctestplan", vec!["text", "json"]);
-        map.insert("xml", vec!["text", "xml"]);
-        map.insert("xq", vec!["text", "xquery"]);
-        map.insert("xql", vec!["text", "xquery"]);
-        map.insert("xqm", vec!["text", "xquery"]);
-        map.insert("xqu", vec!["text", "xquery"]);
-        map.insert("xquery", vec!["text", "xquery"]);
-        map.insert("xqy", vec!["text", "xquery"]);
-        map.insert("xsd", vec!["text", "xml", "xsd"]);
-        map.insert("xsl", vec!["text", "xml", "xsl"]);
-        map.insert("yaml", vec!["text", "yaml"]);
-        map.insert("yamlld", vec!["text", "yaml", "yamlld"]);
-        map.insert("yang", vec!["text", "yang"]);
-        map.insert("yin", vec!["text", "xml", "yin"]);
-        map.insert("yml", vec!["text", "yaml"]);
-        map.insert("zcml", vec!["text", "xml", "zcml"]);
-        map.insert("zig", vec!["text", "zig"]);
-        map.insert("zip", vec!["binary", "zip"]);
-        map.insert("zpt", vec!["text", "zpt"]);
-        map.insert("zsh", vec!["text", "shell", "zsh"]);
-        map.insert("plist", vec!["plist"]);
-        map.insert("ppm", vec!["image", "ppm"]);
+        let mut map = TagMap::default();
+        map.insert("adoc", TagSet::from([tags::TEXT, "asciidoc"]));
+        map.insert("ai", TagSet::from([tags::BINARY, "adobe-illustrator"]));
+        map.insert("aj", TagSet::from([tags::TEXT, "aspectj"]));
+        map.insert("asciidoc", TagSet::from([tags::TEXT, "asciidoc"]));
+        map.insert("apinotes", TagSet::from([tags::TEXT, "apinotes"]));
+        map.insert("asar", TagSet::from([tags::BINARY, "asar"]));
+        map.insert("astro", TagSet::from([tags::TEXT, "astro"]));
+        map.insert("avif", TagSet::from([tags::BINARY, "image", "avif"]));
+        map.insert("avsc", TagSet::from([tags::TEXT, "avro-schema"]));
+        map.insert("bash", TagSet::from([tags::TEXT, "shell", "bash"]));
+        map.insert("bat", TagSet::from([tags::TEXT, "batch"]));
+        map.insert("bats", TagSet::from([tags::TEXT, "shell", "bash", "bats"]));
+        map.insert("bazel", TagSet::from([tags::TEXT, "bazel"]));
+        map.insert("beancount", TagSet::from([tags::TEXT, "beancount"]));
+        map.insert("bib", TagSet::from([tags::TEXT, "bib"]));
+        map.insert("bmp", TagSet::from([tags::BINARY, "image", "bitmap"]));
+        map.insert("bz2", TagSet::from([tags::BINARY, "bzip2"]));
+        map.insert("bzl", TagSet::from([tags::TEXT, "bazel"]));
+        map.insert("c", TagSet::from([tags::TEXT, "c"]));
+        map.insert("c++", TagSet::from([tags::TEXT, "c++"]));
+        map.insert("c++m", TagSet::from([tags::TEXT, "c++"]));
+        map.insert("cc", TagSet::from([tags::TEXT, "c++"]));
+        map.insert("ccm", TagSet::from([tags::TEXT, "c++"]));
+        map.insert("cfg", TagSet::from([tags::TEXT]));
+        map.insert("chs", TagSet::from([tags::TEXT, "c2hs"]));
+        map.insert("cjs", TagSet::from([tags::TEXT, "javascript"]));
+        map.insert("clj", TagSet::from([tags::TEXT, "clojure"]));
+        map.insert("cljc", TagSet::from([tags::TEXT, "clojure"]));
+        map.insert(
+            "cljs",
+            TagSet::from([tags::TEXT, "clojure", "clojurescript"]),
+        );
+        map.insert("cmake", TagSet::from([tags::TEXT, "cmake"]));
+        map.insert("cnf", TagSet::from([tags::TEXT]));
+        map.insert("coffee", TagSet::from([tags::TEXT, "coffee"]));
+        map.insert("conf", TagSet::from([tags::TEXT]));
+        map.insert("cpp", TagSet::from([tags::TEXT, "c++"]));
+        map.insert("cppm", TagSet::from([tags::TEXT, "c++"]));
+        map.insert("cr", TagSet::from([tags::TEXT, "crystal"]));
+        map.insert("crt", TagSet::from([tags::TEXT, "pem"]));
+        map.insert("cs", TagSet::from([tags::TEXT, "c#"]));
+        map.insert("csproj", TagSet::from([tags::TEXT, "xml", "csproj"]));
+        map.insert("csh", TagSet::from([tags::TEXT, "shell", "csh"]));
+        map.insert("cson", TagSet::from([tags::TEXT, "cson"]));
+        map.insert("css", TagSet::from([tags::TEXT, "css"]));
+        map.insert("csv", TagSet::from([tags::TEXT, "csv"]));
+        map.insert("cu", TagSet::from([tags::TEXT, "cuda"]));
+        map.insert("cue", TagSet::from([tags::TEXT, "cue"]));
+        map.insert("cuh", TagSet::from([tags::TEXT, "cuda"]));
+        map.insert("cxx", TagSet::from([tags::TEXT, "c++"]));
+        map.insert("cxxm", TagSet::from([tags::TEXT, "c++"]));
+        map.insert("cylc", TagSet::from([tags::TEXT, "cylc"]));
+        map.insert("dart", TagSet::from([tags::TEXT, "dart"]));
+        map.insert("dbc", TagSet::from([tags::TEXT, "dbc"]));
+        map.insert("def", TagSet::from([tags::TEXT, "def"]));
+        map.insert("dll", TagSet::from([tags::BINARY]));
+        map.insert("dtd", TagSet::from([tags::TEXT, "dtd"]));
+        map.insert("ear", TagSet::from([tags::BINARY, "zip", "jar"]));
+        map.insert("edn", TagSet::from([tags::TEXT, "clojure", "edn"]));
+        map.insert("ejs", TagSet::from([tags::TEXT, "ejs"]));
+        map.insert("ejson", TagSet::from([tags::TEXT, "json", "ejson"]));
+        map.insert("env", TagSet::from([tags::TEXT, "dotenv"]));
+        map.insert("eot", TagSet::from([tags::BINARY, "eot"]));
+        map.insert("eps", TagSet::from([tags::BINARY, "eps"]));
+        map.insert("erb", TagSet::from([tags::TEXT, "erb"]));
+        map.insert("erl", TagSet::from([tags::TEXT, "erlang"]));
+        map.insert("ex", TagSet::from([tags::TEXT, "elixir"]));
+        map.insert("exe", TagSet::from([tags::BINARY]));
+        map.insert("exs", TagSet::from([tags::TEXT, "elixir"]));
+        map.insert("eyaml", TagSet::from([tags::TEXT, "yaml"]));
+        map.insert("f03", TagSet::from([tags::TEXT, "fortran"]));
+        map.insert("f08", TagSet::from([tags::TEXT, "fortran"]));
+        map.insert("f90", TagSet::from([tags::TEXT, "fortran"]));
+        map.insert("f95", TagSet::from([tags::TEXT, "fortran"]));
+        map.insert("feature", TagSet::from([tags::TEXT, "gherkin"]));
+        map.insert("fish", TagSet::from([tags::TEXT, "fish"]));
+        map.insert("fits", TagSet::from([tags::BINARY, "fits"]));
+        map.insert("gd", TagSet::from([tags::TEXT, "gdscript"]));
+        map.insert("gemspec", TagSet::from([tags::TEXT, "ruby"]));
+        map.insert("geojson", TagSet::from([tags::TEXT, "geojson", "json"]));
+        map.insert("ggb", TagSet::from([tags::BINARY, "zip", "ggb"]));
+        map.insert("gif", TagSet::from([tags::BINARY, "image", "gif"]));
+        map.insert("go", TagSet::from([tags::TEXT, "go"]));
+        map.insert("gotmpl", TagSet::from([tags::TEXT, "gotmpl"]));
+        map.insert("gpx", TagSet::from([tags::TEXT, "gpx", "xml"]));
+        map.insert("graphql", TagSet::from([tags::TEXT, "graphql"]));
+        map.insert("gradle", TagSet::from([tags::TEXT, "groovy"]));
+        map.insert("groovy", TagSet::from([tags::TEXT, "groovy"]));
+        map.insert("gyb", TagSet::from([tags::TEXT, "gyb"]));
+        map.insert("gyp", TagSet::from([tags::TEXT, "gyp", "python"]));
+        map.insert("gypi", TagSet::from([tags::TEXT, "gyp", "python"]));
+        map.insert("gz", TagSet::from([tags::BINARY, "gzip"]));
+        map.insert("h", TagSet::from([tags::TEXT, "header", "c", "c++"]));
+        map.insert("hbs", TagSet::from([tags::TEXT, "handlebars"]));
+        map.insert("hcl", TagSet::from([tags::TEXT, "hcl"]));
+        map.insert("hh", TagSet::from([tags::TEXT, "header", "c++"]));
+        map.insert("hpp", TagSet::from([tags::TEXT, "header", "c++"]));
+        map.insert("hrl", TagSet::from([tags::TEXT, "erlang"]));
+        map.insert("hs", TagSet::from([tags::TEXT, "haskell"]));
+        map.insert("htm", TagSet::from([tags::TEXT, "html"]));
+        map.insert("html", TagSet::from([tags::TEXT, "html"]));
+        map.insert("hxx", TagSet::from([tags::TEXT, "header", "c++"]));
+        map.insert("icns", TagSet::from([tags::BINARY, "icns"]));
+        map.insert("ico", TagSet::from([tags::BINARY, "icon"]));
+        map.insert("ics", TagSet::from([tags::TEXT, "icalendar"]));
+        map.insert("idl", TagSet::from([tags::TEXT, "idl"]));
+        map.insert("idr", TagSet::from([tags::TEXT, "idris"]));
+        map.insert("inc", TagSet::from([tags::TEXT, "inc"]));
+        map.insert("ini", TagSet::from([tags::TEXT, "ini"]));
+        map.insert("inl", TagSet::from([tags::TEXT, "inl", "c++"]));
+        map.insert("ino", TagSet::from([tags::TEXT, "ino", "c++"]));
+        map.insert("inx", TagSet::from([tags::TEXT, "xml", "inx"]));
+        map.insert("ipynb", TagSet::from([tags::TEXT, "jupyter", "json"]));
+        map.insert("ixx", TagSet::from([tags::TEXT, "c++"]));
+        map.insert("j2", TagSet::from([tags::TEXT, "jinja"]));
+        map.insert("jade", TagSet::from([tags::TEXT, "jade"]));
+        map.insert("jar", TagSet::from([tags::BINARY, "zip", "jar"]));
+        map.insert("java", TagSet::from([tags::TEXT, "java"]));
+        map.insert("jenkins", TagSet::from([tags::TEXT, "groovy", "jenkins"]));
+        map.insert(
+            "jenkinsfile",
+            TagSet::from([tags::TEXT, "groovy", "jenkins"]),
+        );
+        map.insert("jinja", TagSet::from([tags::TEXT, "jinja"]));
+        map.insert("jinja2", TagSet::from([tags::TEXT, "jinja"]));
+        map.insert("jl", TagSet::from([tags::TEXT, "julia"]));
+        map.insert("jpeg", TagSet::from([tags::BINARY, "image", "jpeg"]));
+        map.insert("jpg", TagSet::from([tags::BINARY, "image", "jpeg"]));
+        map.insert("js", TagSet::from([tags::TEXT, "javascript"]));
+        map.insert("json", TagSet::from([tags::TEXT, "json"]));
+        map.insert("json5", TagSet::from([tags::TEXT, "json5"]));
+        map.insert("jsonld", TagSet::from([tags::TEXT, "json", "jsonld"]));
+        map.insert("jsonnet", TagSet::from([tags::TEXT, "jsonnet"]));
+        map.insert("jsx", TagSet::from([tags::TEXT, "jsx"]));
+        map.insert("key", TagSet::from([tags::TEXT, "pem"]));
+        map.insert("kml", TagSet::from([tags::TEXT, "kml", "xml"]));
+        map.insert("kt", TagSet::from([tags::TEXT, "kotlin"]));
+        map.insert("kts", TagSet::from([tags::TEXT, "kotlin"]));
+        map.insert("lean", TagSet::from([tags::TEXT, "lean"]));
+        map.insert(
+            "lektorproject",
+            TagSet::from([tags::TEXT, "ini", "lektorproject"]),
+        );
+        map.insert("less", TagSet::from([tags::TEXT, "less"]));
+        map.insert("lfm", TagSet::from([tags::TEXT, "lazarus", "lazarus-form"]));
+        map.insert("lhs", TagSet::from([tags::TEXT, "literate-haskell"]));
+        map.insert("libsonnet", TagSet::from([tags::TEXT, "jsonnet"]));
+        map.insert("lidr", TagSet::from([tags::TEXT, "idris"]));
+        map.insert("liquid", TagSet::from([tags::TEXT, "liquid"]));
+        map.insert("lpi", TagSet::from([tags::TEXT, "lazarus", "xml"]));
+        map.insert("lpr", TagSet::from([tags::TEXT, "lazarus", "pascal"]));
+        map.insert("lr", TagSet::from([tags::TEXT, "lektor"]));
+        map.insert("lua", TagSet::from([tags::TEXT, "lua"]));
+        map.insert("m", TagSet::from([tags::TEXT, "objective-c"]));
+        map.insert("m4", TagSet::from([tags::TEXT, "m4"]));
+        map.insert("make", TagSet::from([tags::TEXT, "makefile"]));
+        map.insert("manifest", TagSet::from([tags::TEXT, "manifest"]));
+        map.insert("map", TagSet::from([tags::TEXT, "map"]));
+        map.insert("markdown", TagSet::from([tags::TEXT, "markdown"]));
+        map.insert("md", TagSet::from([tags::TEXT, "markdown"]));
+        map.insert("mdx", TagSet::from([tags::TEXT, "mdx"]));
+        map.insert("meson", TagSet::from([tags::TEXT, "meson"]));
+        map.insert("metal", TagSet::from([tags::TEXT, "metal"]));
+        map.insert("mib", TagSet::from([tags::TEXT, "mib"]));
+        map.insert("mjs", TagSet::from([tags::TEXT, "javascript"]));
+        map.insert("mk", TagSet::from([tags::TEXT, "makefile"]));
+        map.insert("ml", TagSet::from([tags::TEXT, "ocaml"]));
+        map.insert("mli", TagSet::from([tags::TEXT, "ocaml"]));
+        map.insert("mm", TagSet::from([tags::TEXT, "c++", "objective-c++"]));
+        map.insert("modulemap", TagSet::from([tags::TEXT, "modulemap"]));
+        map.insert("mscx", TagSet::from([tags::TEXT, "xml", "musescore"]));
+        map.insert("mscz", TagSet::from([tags::BINARY, "zip", "musescore"]));
+        map.insert("mustache", TagSet::from([tags::TEXT, "mustache"]));
+        map.insert("myst", TagSet::from([tags::TEXT, "myst"]));
+        map.insert("ngdoc", TagSet::from([tags::TEXT, "ngdoc"]));
+        map.insert("nim", TagSet::from([tags::TEXT, "nim"]));
+        map.insert("nimble", TagSet::from([tags::TEXT, "nimble"]));
+        map.insert("nims", TagSet::from([tags::TEXT, "nim"]));
+        map.insert("nix", TagSet::from([tags::TEXT, "nix"]));
+        map.insert("njk", TagSet::from([tags::TEXT, "nunjucks"]));
+        map.insert("otf", TagSet::from([tags::BINARY, "otf"]));
+        map.insert("p12", TagSet::from([tags::BINARY, "p12"]));
+        map.insert("pas", TagSet::from([tags::TEXT, "pascal"]));
+        map.insert("patch", TagSet::from([tags::TEXT, "diff"]));
+        map.insert("pdf", TagSet::from([tags::BINARY, "pdf"]));
+        map.insert("pem", TagSet::from([tags::TEXT, "pem"]));
+        map.insert("php", TagSet::from([tags::TEXT, "php"]));
+        map.insert("php4", TagSet::from([tags::TEXT, "php"]));
+        map.insert("php5", TagSet::from([tags::TEXT, "php"]));
+        map.insert("phtml", TagSet::from([tags::TEXT, "php"]));
+        map.insert("pl", TagSet::from([tags::TEXT, "perl"]));
+        map.insert("plantuml", TagSet::from([tags::TEXT, "plantuml"]));
+        map.insert("pm", TagSet::from([tags::TEXT, "perl"]));
+        map.insert("png", TagSet::from([tags::BINARY, "image", "png"]));
+        map.insert("po", TagSet::from([tags::TEXT, "pofile"]));
+        map.insert("pom", TagSet::from(["pom", tags::TEXT, "xml"]));
+        map.insert("pp", TagSet::from([tags::TEXT, "puppet"]));
+        map.insert("prisma", TagSet::from([tags::TEXT, "prisma"]));
+        map.insert("properties", TagSet::from([tags::TEXT, "java-properties"]));
+        map.insert("proto", TagSet::from([tags::TEXT, "proto"]));
+        map.insert("ps1", TagSet::from([tags::TEXT, "powershell"]));
+        map.insert("pug", TagSet::from([tags::TEXT, "pug"]));
+        map.insert("puml", TagSet::from([tags::TEXT, "plantuml"]));
+        map.insert("purs", TagSet::from([tags::TEXT, "purescript"]));
+        map.insert("pxd", TagSet::from([tags::TEXT, "cython"]));
+        map.insert("pxi", TagSet::from([tags::TEXT, "cython"]));
+        map.insert("py", TagSet::from([tags::TEXT, "python"]));
+        map.insert("pyi", TagSet::from([tags::TEXT, "pyi"]));
+        map.insert("pyproj", TagSet::from([tags::TEXT, "xml", "pyproj"]));
+        map.insert("pyt", TagSet::from([tags::TEXT, "python"]));
+        map.insert("pyx", TagSet::from([tags::TEXT, "cython"]));
+        map.insert("pyz", TagSet::from([tags::BINARY, "pyz"]));
+        map.insert("pyzw", TagSet::from([tags::BINARY, "pyz"]));
+        map.insert("qml", TagSet::from([tags::TEXT, "qml"]));
+        map.insert("r", TagSet::from([tags::TEXT, "r"]));
+        map.insert("rake", TagSet::from([tags::TEXT, "ruby"]));
+        map.insert("rb", TagSet::from([tags::TEXT, "ruby"]));
+        map.insert("resx", TagSet::from([tags::TEXT, "resx", "xml"]));
+        map.insert("rng", TagSet::from([tags::TEXT, "xml", "relax-ng"]));
+        map.insert("rs", TagSet::from([tags::TEXT, "rust"]));
+        map.insert("rst", TagSet::from([tags::TEXT, "rst"]));
+        map.insert("s", TagSet::from([tags::TEXT, "asm"]));
+        map.insert("sass", TagSet::from([tags::TEXT, "sass"]));
+        map.insert("sbt", TagSet::from([tags::TEXT, "sbt", "scala"]));
+        map.insert("sc", TagSet::from([tags::TEXT, "scala"]));
+        map.insert("scala", TagSet::from([tags::TEXT, "scala"]));
+        map.insert("scm", TagSet::from([tags::TEXT, "scheme"]));
+        map.insert("scss", TagSet::from([tags::TEXT, "scss"]));
+        map.insert("sh", TagSet::from([tags::TEXT, "shell"]));
+        map.insert("sln", TagSet::from([tags::TEXT, "sln"]));
+        map.insert("sls", TagSet::from([tags::TEXT, "salt"]));
+        map.insert("so", TagSet::from([tags::BINARY]));
+        map.insert("sol", TagSet::from([tags::TEXT, "solidity"]));
+        map.insert("spec", TagSet::from([tags::TEXT, "spec"]));
+        map.insert("sql", TagSet::from([tags::TEXT, "sql"]));
+        map.insert("ss", TagSet::from([tags::TEXT, "scheme"]));
+        map.insert("sty", TagSet::from([tags::TEXT, "tex"]));
+        map.insert("styl", TagSet::from([tags::TEXT, "stylus"]));
+        map.insert("sv", TagSet::from([tags::TEXT, "system-verilog"]));
+        map.insert("svelte", TagSet::from([tags::TEXT, "svelte"]));
+        map.insert("svg", TagSet::from([tags::TEXT, "image", "svg", "xml"]));
+        map.insert("svh", TagSet::from([tags::TEXT, "system-verilog"]));
+        map.insert("swf", TagSet::from([tags::BINARY, "swf"]));
+        map.insert("swift", TagSet::from([tags::TEXT, "swift"]));
+        map.insert("swiftdeps", TagSet::from([tags::TEXT, "swiftdeps"]));
+        map.insert("tac", TagSet::from([tags::TEXT, "twisted", "python"]));
+        map.insert("tar", TagSet::from([tags::BINARY, "tar"]));
+        map.insert("tex", TagSet::from([tags::TEXT, "tex"]));
+        map.insert("textproto", TagSet::from([tags::TEXT, "textproto"]));
+        map.insert("tf", TagSet::from([tags::TEXT, "terraform"]));
+        map.insert("tfvars", TagSet::from([tags::TEXT, "terraform"]));
+        map.insert("tgz", TagSet::from([tags::BINARY, "gzip"]));
+        map.insert("thrift", TagSet::from([tags::TEXT, "thrift"]));
+        map.insert("tiff", TagSet::from([tags::BINARY, "image", "tiff"]));
+        map.insert("toml", TagSet::from([tags::TEXT, "toml"]));
+        map.insert("ts", TagSet::from([tags::TEXT, "ts"]));
+        map.insert("tsv", TagSet::from([tags::TEXT, "tsv"]));
+        map.insert("tsx", TagSet::from([tags::TEXT, "tsx"]));
+        map.insert("ttf", TagSet::from([tags::BINARY, "ttf"]));
+        map.insert("twig", TagSet::from([tags::TEXT, "twig"]));
+        map.insert(
+            "txsprofile",
+            TagSet::from([tags::TEXT, "ini", "txsprofile"]),
+        );
+        map.insert("txt", TagSet::from([tags::TEXT, "plain-text"]));
+        map.insert("txtpb", TagSet::from([tags::TEXT, "textproto"]));
+        map.insert("urdf", TagSet::from([tags::TEXT, "xml", "urdf"]));
+        map.insert("v", TagSet::from([tags::TEXT, "verilog"]));
+        map.insert("vb", TagSet::from([tags::TEXT, "vb"]));
+        map.insert("vbproj", TagSet::from([tags::TEXT, "xml", "vbproj"]));
+        map.insert("vcxproj", TagSet::from([tags::TEXT, "xml", "vcxproj"]));
+        map.insert("vdx", TagSet::from([tags::TEXT, "vdx"]));
+        map.insert("vh", TagSet::from([tags::TEXT, "verilog"]));
+        map.insert("vhd", TagSet::from([tags::TEXT, "vhdl"]));
+        map.insert("vim", TagSet::from([tags::TEXT, "vim"]));
+        map.insert("vtl", TagSet::from([tags::TEXT, "vtl"]));
+        map.insert("vue", TagSet::from([tags::TEXT, "vue"]));
+        map.insert("war", TagSet::from([tags::BINARY, "zip", "jar"]));
+        map.insert("wav", TagSet::from([tags::BINARY, "audio", "wav"]));
+        map.insert("webp", TagSet::from([tags::BINARY, "image", "webp"]));
+        map.insert("whl", TagSet::from([tags::BINARY, "wheel", "zip"]));
+        map.insert("wkt", TagSet::from([tags::TEXT, "wkt"]));
+        map.insert("woff", TagSet::from([tags::BINARY, "woff"]));
+        map.insert("woff2", TagSet::from([tags::BINARY, "woff2"]));
+        map.insert("wsgi", TagSet::from([tags::TEXT, "wsgi", "python"]));
+        map.insert("xacro", TagSet::from([tags::TEXT, "xml", "urdf", "xacro"]));
+        map.insert("xctestplan", TagSet::from([tags::TEXT, "json"]));
+        map.insert("xhtml", TagSet::from([tags::TEXT, "xml", "html", "xhtml"]));
+        map.insert("xml", TagSet::from([tags::TEXT, "xml"]));
+        map.insert("xq", TagSet::from([tags::TEXT, "xquery"]));
+        map.insert("xql", TagSet::from([tags::TEXT, "xquery"]));
+        map.insert("xqm", TagSet::from([tags::TEXT, "xquery"]));
+        map.insert("xqu", TagSet::from([tags::TEXT, "xquery"]));
+        map.insert("xquery", TagSet::from([tags::TEXT, "xquery"]));
+        map.insert("xqy", TagSet::from([tags::TEXT, "xquery"]));
+        map.insert("xsd", TagSet::from([tags::TEXT, "xml", "xsd"]));
+        map.insert("xsl", TagSet::from([tags::TEXT, "xml", "xsl"]));
+        map.insert("yaml", TagSet::from([tags::TEXT, "yaml"]));
+        map.insert("yamlld", TagSet::from([tags::TEXT, "yaml", "yamlld"]));
+        map.insert("yang", TagSet::from([tags::TEXT, "yang"]));
+        map.insert("yin", TagSet::from([tags::TEXT, "xml", "yin"]));
+        map.insert("yml", TagSet::from([tags::TEXT, "yaml"]));
+        map.insert("zcml", TagSet::from([tags::TEXT, "xml", "zcml"]));
+        map.insert("zig", TagSet::from([tags::TEXT, "zig"]));
+        map.insert("zip", TagSet::from([tags::BINARY, "zip"]));
+        map.insert("zpt", TagSet::from([tags::TEXT, "zpt"]));
+        map.insert("zsh", TagSet::from([tags::TEXT, "shell", "zsh"]));
+        map.insert("plist", TagSet::from(["plist"]));
+        map.insert("ppm", TagSet::from(["image", "ppm"]));
+
         map
     })
 }
 
-fn by_filename() -> &'static FxHashMap<&'static str, &'static [&'static str]> {
-    static FILENAMES: OnceLock<FxHashMap<&'static str, &'static [&'static str]>> = OnceLock::new();
+fn by_filename() -> &'static TagMap {
+    static FILENAMES: OnceLock<TagMap> = OnceLock::new();
     FILENAMES.get_or_init(|| {
-        let mut map = FxHashMap::<_, &'static [&'static str]>::default();
         let extensions = by_extension();
+        let mut map = TagMap::default();
 
-        map.insert(".ansible-lint", &extensions["yaml"]);
+        map.insert(".ansible-lint", extensions.clone_key("yaml"));
         map.insert(
             ".babelrc",
-            Box::leak(
-                extensions["json"]
-                    .iter()
-                    .chain(&["babelrc"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("json").with_added(&["babelrc"]),
         );
-        map.insert(".bash_aliases", &extensions["bash"]);
-        map.insert(".bash_profile", &extensions["bash"]);
-        map.insert(".bashrc", &extensions["bash"]);
-        map.insert(
-            ".bazelrc",
-            Box::leak(vec!["text", "bazelrc"].into_boxed_slice()),
-        );
+        map.insert(".bash_aliases", extensions.clone_key("bash"));
+        map.insert(".bash_profile", extensions.clone_key("bash"));
+        map.insert(".bashrc", extensions.clone_key("bash"));
+        map.insert(".bazelrc", TagSet::from([tags::TEXT, "bazelrc"]));
         map.insert(
             ".bowerrc",
-            Box::leak(
-                extensions["json"]
-                    .iter()
-                    .chain(&["bowerrc"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("json").with_added(&["bowerrc"]),
         );
         map.insert(
             ".browserslistrc",
-            Box::leak(vec!["text", "browserslistrc"].into_boxed_slice()),
+            TagSet::from([tags::TEXT, "browserslistrc"]),
         );
-        map.insert(".clang-format", &extensions["yaml"]);
-        map.insert(".clang-tidy", &extensions["yaml"]);
+        map.insert(".clang-format", extensions.clone_key("yaml"));
+        map.insert(".clang-tidy", extensions.clone_key("yaml"));
         map.insert(
             ".codespellrc",
-            Box::leak(
-                extensions["ini"]
-                    .iter()
-                    .chain(&["codespellrc"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("ini").with_added(&["codespellrc"]),
         );
         map.insert(
             ".coveragerc",
-            Box::leak(
-                extensions["ini"]
-                    .iter()
-                    .chain(&["coveragerc"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("ini").with_added(&["coveragerc"]),
         );
-        map.insert(".cshrc", &extensions["csh"]);
+        map.insert(".cshrc", extensions.clone_key("csh"));
         map.insert(
             ".csslintrc",
-            Box::leak(
-                extensions["json"]
-                    .iter()
-                    .chain(&["csslintrc"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("json").with_added(&["csslintrc"]),
         );
-        map.insert(
-            ".dockerignore",
-            Box::leak(vec!["text", "dockerignore"].into_boxed_slice()),
-        );
-        map.insert(
-            ".editorconfig",
-            Box::leak(vec!["text", "editorconfig"].into_boxed_slice()),
-        );
+        map.insert(".dockerignore", TagSet::from([tags::TEXT, "dockerignore"]));
+        map.insert(".editorconfig", TagSet::from([tags::TEXT, "editorconfig"]));
         map.insert(
             ".flake8",
-            Box::leak(
-                extensions["ini"]
-                    .iter()
-                    .chain(&["flake8"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("ini").with_added(&["flake8"]),
         );
         map.insert(
             ".gitattributes",
-            Box::leak(vec!["text", "gitattributes"].into_boxed_slice()),
+            TagSet::from([tags::TEXT, "gitattributes"]),
         );
         map.insert(
             ".gitconfig",
-            Box::leak(
-                extensions["ini"]
-                    .iter()
-                    .chain(&["gitconfig"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("ini").with_added(&["gitconfig"]),
         );
-        map.insert(
-            ".gitignore",
-            Box::leak(vec!["text", "gitignore"].into_boxed_slice()),
-        );
+        map.insert(".gitignore", TagSet::from([tags::TEXT, "gitignore"]));
         map.insert(
             ".gitlint",
-            Box::leak(
-                extensions["ini"]
-                    .iter()
-                    .chain(&["gitlint"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("ini").with_added(&["gitlint"]),
         );
-        map.insert(
-            ".gitmodules",
-            Box::leak(vec!["text", "gitmodules"].into_boxed_slice()),
-        );
-        map.insert(
-            ".hgrc",
-            Box::leak(
-                extensions["ini"]
-                    .iter()
-                    .chain(&["hgrc"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
-        );
+        map.insert(".gitmodules", TagSet::from([tags::TEXT, "gitmodules"]));
+        map.insert(".hgrc", extensions.clone_key("ini").with_added(&["hgrc"]));
         map.insert(
             ".isort.cfg",
-            Box::leak(
-                extensions["ini"]
-                    .iter()
-                    .chain(&["isort"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("ini").with_added(&["isort"]),
         );
         map.insert(
             ".jshintrc",
-            Box::leak(
-                extensions["json"]
-                    .iter()
-                    .chain(&["jshintrc"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("json").with_added(&["jshintrc"]),
         );
-        map.insert(
-            ".mailmap",
-            Box::leak(vec!["text", "mailmap"].into_boxed_slice()),
-        );
+        map.insert(".mailmap", TagSet::from([tags::TEXT, "mailmap"]));
         map.insert(
             ".mention-bot",
-            Box::leak(
-                extensions["json"]
-                    .iter()
-                    .chain(&["mention-bot"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("json").with_added(&["mention-bot"]),
         );
-        map.insert(
-            ".npmignore",
-            Box::leak(vec!["text", "npmignore"].into_boxed_slice()),
-        );
-        map.insert(
-            ".pdbrc",
-            Box::leak(
-                extensions["py"]
-                    .iter()
-                    .chain(&["pdbrc"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
-        );
+        map.insert(".npmignore", TagSet::from([tags::TEXT, "npmignore"]));
+        map.insert(".pdbrc", extensions.clone_key("py").with_added(&["pdbrc"]));
         map.insert(
             ".prettierignore",
-            Box::leak(vec!["text", "gitignore", "prettierignore"].into_boxed_slice()),
+            TagSet::from([tags::TEXT, "gitignore", "prettierignore"]),
         );
         map.insert(
             ".pypirc",
-            Box::leak(
-                extensions["ini"]
-                    .iter()
-                    .chain(&["pypirc"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("ini").with_added(&["pypirc"]),
         );
-        map.insert(".rstcheck.cfg", &extensions["ini"]);
+        map.insert(".rstcheck.cfg", extensions.clone_key("ini"));
         map.insert(
             ".salt-lint",
-            Box::leak(
-                extensions["yaml"]
-                    .iter()
-                    .chain(&["salt-lint"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("yaml").with_added(&["salt-lint"]),
         );
         map.insert(
             ".yamllint",
-            Box::leak(
-                extensions["yaml"]
-                    .iter()
-                    .chain(&["yamllint"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("yaml").with_added(&["yamllint"]),
         );
-        map.insert(".zlogin", &extensions["zsh"]);
-        map.insert(".zlogout", &extensions["zsh"]);
-        map.insert(".zprofile", &extensions["zsh"]);
-        map.insert(".zshrc", &extensions["zsh"]);
-        map.insert(".zshenv", &extensions["zsh"]);
-        map.insert("AUTHORS", &extensions["txt"]);
-        map.insert("BUILD", &extensions["bzl"]);
+        map.insert(".zlogin", extensions.clone_key("zsh"));
+        map.insert(".zlogout", extensions.clone_key("zsh"));
+        map.insert(".zprofile", extensions.clone_key("zsh"));
+        map.insert(".zshrc", extensions.clone_key("zsh"));
+        map.insert(".zshenv", extensions.clone_key("zsh"));
+
+        map.insert("AUTHORS", extensions.clone_key("txt"));
+        map.insert("BUILD", extensions.clone_key("bzl"));
         map.insert(
             "Cargo.toml",
-            Box::leak(
-                extensions["toml"]
-                    .iter()
-                    .chain(&["cargo"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("toml").with_added(&["cargo"]),
         );
         map.insert(
             "Cargo.lock",
-            Box::leak(
-                extensions["toml"]
-                    .iter()
-                    .chain(&["cargo-lock"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("toml").with_added(&["cargo-lock"]),
         );
-        map.insert("CMakeLists.txt", &extensions["cmake"]);
-        map.insert("CHANGELOG", &extensions["txt"]);
-        map.insert("config.ru", &extensions["rb"]);
-        map.insert(
-            "Containerfile",
-            Box::leak(vec!["text", "dockerfile"].into_boxed_slice()),
-        );
-        map.insert("CONTRIBUTING", &extensions["txt"]);
-        map.insert("copy.bara.sky", &extensions["bzl"]);
-        map.insert("COPYING", &extensions["txt"]);
-        map.insert(
-            "Dockerfile",
-            Box::leak(vec!["text", "dockerfile"].into_boxed_slice()),
-        );
-        map.insert("Gemfile", &extensions["rb"]);
-        map.insert("Gemfile.lock", Box::leak(vec!["text"].into_boxed_slice()));
-        map.insert("GNUmakefile", &extensions["mk"]);
-        map.insert(
-            "go.mod",
-            Box::leak(vec!["text", "go-mod"].into_boxed_slice()),
-        );
-        map.insert(
-            "go.sum",
-            Box::leak(vec!["text", "go-sum"].into_boxed_slice()),
-        );
-        map.insert("Jenkinsfile", &extensions["jenkins"]);
-        map.insert("LICENSE", &extensions["txt"]);
-        map.insert("MAINTAINERS", &extensions["txt"]);
-        map.insert("Makefile", &extensions["mk"]);
-        map.insert("meson.build", &extensions["meson"]);
-        map.insert("meson_options.txt", &extensions["meson"]);
-        map.insert("makefile", &extensions["mk"]);
-        map.insert("NEWS", &extensions["txt"]);
-        map.insert("NOTICE", &extensions["txt"]);
-        map.insert("PATENTS", &extensions["txt"]);
-        map.insert("Pipfile", &extensions["toml"]);
-        map.insert("Pipfile.lock", &extensions["json"]);
+        map.insert("CMakeLists.txt", extensions.clone_key("cmake"));
+        map.insert("CHANGELOG", extensions.clone_key("txt"));
+        map.insert("config.ru", extensions.clone_key("rb"));
+        map.insert("Containerfile", TagSet::from([tags::TEXT, "dockerfile"]));
+        map.insert("CONTRIBUTING", extensions.clone_key("txt"));
+        map.insert("copy.bara.sky", extensions.clone_key("bzl"));
+        map.insert("COPYING", extensions.clone_key("txt"));
+        map.insert("Dockerfile", TagSet::from([tags::TEXT, "dockerfile"]));
+        map.insert("Gemfile", extensions.clone_key("rb"));
+        map.insert("Gemfile.lock", TagSet::from([tags::TEXT]));
+        map.insert("GNUmakefile", extensions.clone_key("mk"));
+        map.insert("go.mod", TagSet::from([tags::TEXT, "go-mod"]));
+        map.insert("go.sum", TagSet::from([tags::TEXT, "go-sum"]));
+        map.insert("Jenkinsfile", extensions.clone_key("jenkins"));
+        map.insert("LICENSE", extensions.clone_key("txt"));
+        map.insert("MAINTAINERS", extensions.clone_key("txt"));
+        map.insert("Makefile", extensions.clone_key("mk"));
+        map.insert("meson.build", extensions.clone_key("meson"));
+        map.insert("meson_options.txt", extensions.clone_key("meson"));
+        map.insert("makefile", extensions.clone_key("mk"));
+        map.insert("NEWS", extensions.clone_key("txt"));
+        map.insert("NOTICE", extensions.clone_key("txt"));
+        map.insert("PATENTS", extensions.clone_key("txt"));
+        map.insert("Pipfile", extensions.clone_key("toml"));
+        map.insert("Pipfile.lock", extensions.clone_key("json"));
         map.insert(
             "PKGBUILD",
-            Box::leak(vec!["text", "bash", "pkgbuild", "alpm"].into_boxed_slice()),
+            TagSet::from([tags::TEXT, "bash", "pkgbuild", "alpm"]),
         );
-        map.insert("poetry.lock", &extensions["toml"]);
-        map.insert("pom.xml", &extensions["pom"]);
+        map.insert("poetry.lock", extensions.clone_key("toml"));
+        map.insert("pom.xml", extensions.clone_key("pom"));
         map.insert(
             "pylintrc",
-            Box::leak(
-                extensions["ini"]
-                    .iter()
-                    .chain(&["pylintrc"])
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
+            extensions.clone_key("ini").with_added(&["pylintrc"]),
         );
-        map.insert("README", &extensions["txt"]);
-        map.insert("Rakefile", &extensions["rb"]);
-        map.insert("rebar.config", &extensions["erl"]);
-        map.insert("setup.cfg", &extensions["ini"]);
-        map.insert("sys.config", &extensions["erl"]);
-        map.insert("sys.config.src", &extensions["erl"]);
-        map.insert("Vagrantfile", &extensions["rb"]);
-        map.insert("WORKSPACE", &extensions["bzl"]);
-        map.insert("wscript", &extensions["py"]);
+        map.insert("README", extensions.clone_key("txt"));
+        map.insert("Rakefile", extensions.clone_key("rb"));
+        map.insert("rebar.config", extensions.clone_key("erl"));
+        map.insert("setup.cfg", extensions.clone_key("ini"));
+        map.insert("sys.config", extensions.clone_key("erl"));
+        map.insert("sys.config.src", extensions.clone_key("erl"));
+        map.insert("Vagrantfile", extensions.clone_key("rb"));
+        map.insert("WORKSPACE", extensions.clone_key("bzl"));
+        map.insert("wscript", extensions.clone_key("py"));
+
         map
     })
 }
 
-fn by_interpreter() -> &'static FxHashMap<&'static str, Vec<&'static str>> {
-    static INTERPRETERS: OnceLock<FxHashMap<&'static str, Vec<&'static str>>> = OnceLock::new();
+fn by_interpreter() -> &'static TagMap {
+    static INTERPRETERS: OnceLock<TagMap> = OnceLock::new();
     INTERPRETERS.get_or_init(|| {
-        let mut map = FxHashMap::default();
-        map.insert("ash", vec!["shell", "ash"]);
-        map.insert("awk", vec!["awk"]);
-        map.insert("bash", vec!["shell", "bash"]);
-        map.insert("bats", vec!["shell", "bash", "bats"]);
-        map.insert("cbsd", vec!["shell", "cbsd"]);
-        map.insert("csh", vec!["shell", "csh"]);
-        map.insert("dash", vec!["shell", "dash"]);
-        map.insert("expect", vec!["expect"]);
-        map.insert("ksh", vec!["shell", "ksh"]);
-        map.insert("node", vec!["javascript"]);
-        map.insert("nodejs", vec!["javascript"]);
-        map.insert("perl", vec!["perl"]);
-        map.insert("php", vec!["php"]);
-        map.insert("php7", vec!["php", "php7"]);
-        map.insert("php8", vec!["php", "php8"]);
-        map.insert("python", vec!["python"]);
-        map.insert("python2", vec!["python", "python2"]);
-        map.insert("python3", vec!["python", "python3"]);
-        map.insert("ruby", vec!["ruby"]);
-        map.insert("sh", vec!["shell", "sh"]);
-        map.insert("tcsh", vec!["shell", "tcsh"]);
-        map.insert("zsh", vec!["shell", "zsh"]);
+        let mut map = TagMap::default();
+        map.insert("ash", TagSet::from(["shell", "ash"]));
+        map.insert("awk", TagSet::from(["awk"]));
+        map.insert("bash", TagSet::from(["shell", "bash"]));
+        map.insert("bats", TagSet::from(["shell", "bash", "bats"]));
+        map.insert("cbsd", TagSet::from(["shell", "cbsd"]));
+        map.insert("csh", TagSet::from(["shell", "csh"]));
+        map.insert("dash", TagSet::from(["shell", "dash"]));
+        map.insert("expect", TagSet::from(["expect"]));
+        map.insert("ksh", TagSet::from(["shell", "ksh"]));
+        map.insert("node", TagSet::from(["javascript"]));
+        map.insert("nodejs", TagSet::from(["javascript"]));
+        map.insert("perl", TagSet::from(["perl"]));
+        map.insert("php", TagSet::from(["php"]));
+        map.insert("php7", TagSet::from(["php", "php7"]));
+        map.insert("php8", TagSet::from(["php", "php8"]));
+        map.insert("python", TagSet::from(["python"]));
+        map.insert("python2", TagSet::from(["python", "python2"]));
+        map.insert("python3", TagSet::from(["python", "python3"]));
+        map.insert("ruby", TagSet::from(["ruby"]));
+        map.insert("sh", TagSet::from(["shell", "sh"]));
+        map.insert("tcsh", TagSet::from(["shell", "tcsh"]));
+        map.insert("zsh", TagSet::from(["shell", "zsh"]));
         map
     })
 }
@@ -716,29 +648,30 @@ fn is_encoding_tag(tag: &str) -> bool {
     matches!(tag, tags::TEXT | tags::BINARY)
 }
 
-pub(crate) fn tags_from_path(path: &Path) -> Result<Vec<&str>> {
+/// Identify tags for a file at the given path.
+pub(crate) fn tags_from_path(path: &Path) -> Result<TagSet> {
     let metadata = std::fs::symlink_metadata(path)?;
     if metadata.is_dir() {
-        return Ok(vec![tags::DIRECTORY]);
+        return Ok(TagSet::from([tags::DIRECTORY]));
     } else if metadata.is_symlink() {
-        return Ok(vec![tags::SYMLINK]);
+        return Ok(TagSet::from([tags::SYMLINK]));
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::FileTypeExt;
         let file_type = metadata.file_type();
         if file_type.is_socket() {
-            return Ok(vec![tags::SOCKET]);
+            return Ok(TagSet::from([tags::SOCKET]));
         } else if file_type.is_fifo() {
-            return Ok(vec![tags::FIFO]);
+            return Ok(TagSet::from([tags::FIFO]));
         } else if file_type.is_block_device() {
-            return Ok(vec![tags::BLOCK_DEVICE]);
+            return Ok(TagSet::from([tags::BLOCK_DEVICE]));
         } else if file_type.is_char_device() {
-            return Ok(vec![tags::CHARACTER_DEVICE]);
+            return Ok(TagSet::from([tags::CHARACTER_DEVICE]));
         }
     };
 
-    let mut tags = FxHashSet::default();
+    let mut tags = TagSet::new();
     tags.insert(tags::FILE);
 
     let executable;
@@ -761,14 +694,16 @@ pub(crate) fn tags_from_path(path: &Path) -> Result<Vec<&str>> {
         tags.insert(tags::NON_EXECUTABLE);
     }
 
-    tags.extend(tags_from_filename(path));
+    let filename_tags = tags_from_filename(path);
+    tags.extend(filename_tags.iter());
     if executable {
         if let Ok(shebang) = parse_shebang(path) {
-            tags.extend(tags_from_interpreter(&shebang[0]));
+            let interpreter_tags = tags_from_interpreter(shebang[0].as_str());
+            tags.extend(interpreter_tags.iter());
         }
     }
 
-    if !tags.iter().any(|&tag| is_encoding_tag(tag)) {
+    if !tags.iter().any(is_encoding_tag) {
         if is_text_file(path) {
             tags.insert(tags::TEXT);
         } else {
@@ -776,28 +711,26 @@ pub(crate) fn tags_from_path(path: &Path) -> Result<Vec<&str>> {
         }
     }
 
-    Ok(tags.into_iter().collect())
+    Ok(tags)
 }
 
-fn tags_from_filename(filename: &Path) -> Vec<&str> {
+fn tags_from_filename(filename: &Path) -> TagSet {
     let ext = filename.extension().and_then(|ext| ext.to_str());
     let filename = filename
         .file_name()
         .and_then(|name| name.to_str())
         .expect("Invalid filename");
 
-    let mut result = FxHashSet::default();
+    let mut result = TagSet::new();
 
     if let Some(tags) = by_filename().get(filename) {
-        for tag in *tags {
-            result.insert(*tag);
-        }
+        result.extend(tags.iter());
     }
     if result.is_empty() {
         // # Allow e.g. "Dockerfile.xenial" to match "Dockerfile".
         if let Some(name) = filename.split('.').next() {
             if let Some(tags) = by_filename().get(name) {
-                result.extend(&**tags);
+                result.extend(tags.iter());
             }
         }
     }
@@ -805,14 +738,14 @@ fn tags_from_filename(filename: &Path) -> Vec<&str> {
     if let Some(ext) = ext {
         let ext = ext.to_lowercase();
         if let Some(tags) = by_extension().get(ext.as_str()) {
-            result.extend(tags);
+            result.extend(tags.iter());
         }
     }
 
-    result.into_iter().collect()
+    result
 }
 
-fn tags_from_interpreter(interpreter: &str) -> Vec<&'static str> {
+fn tags_from_interpreter(interpreter: &str) -> TagSet {
     let mut name = interpreter
         .rfind('/')
         .map(|pos| &interpreter[pos + 1..])
@@ -831,7 +764,7 @@ fn tags_from_interpreter(interpreter: &str) -> Vec<&'static str> {
         }
     }
 
-    Vec::new()
+    TagSet::new()
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -971,7 +904,6 @@ pub fn all_tags() -> &'static FxHashSet<&'static str> {
     ALL_TAGS.get_or_init(|| {
         let mut tags_set = FxHashSet::default();
 
-        // Add basic tags
         tags_set.insert(tags::DIRECTORY);
         tags_set.insert(tags::SYMLINK);
         tags_set.insert(tags::SOCKET);
@@ -984,21 +916,21 @@ pub fn all_tags() -> &'static FxHashSet<&'static str> {
         tags_set.insert(tags::TEXT);
         tags_set.insert(tags::BINARY);
 
-        for tags_vec in by_extension().values() {
-            for tag in tags_vec {
-                tags_set.insert(*tag);
+        for tags in by_extension().values() {
+            for tag in tags.iter() {
+                tags_set.insert(tag);
             }
         }
 
-        for tags_slice in by_filename().values() {
-            for tag in *tags_slice {
-                tags_set.insert(*tag);
+        for tags in by_filename().values() {
+            for tag in tags.iter() {
+                tags_set.insert(tag);
             }
         }
 
-        for tags_vec in by_interpreter().values() {
-            for tag in tags_vec {
-                tags_set.insert(*tag);
+        for tags in by_interpreter().values() {
+            for tag in tags.iter() {
+                tags_set.insert(tag);
             }
         }
 
@@ -1008,8 +940,17 @@ pub fn all_tags() -> &'static FxHashSet<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::io::Write;
     use std::path::Path;
+
+    fn assert_tagset(actual: &TagSet, expected: &[&'static str]) {
+        let mut actual_vec: Vec<_> = actual.iter().collect();
+        actual_vec.sort_unstable();
+        let mut expected_vec = expected.to_vec();
+        expected_vec.sort_unstable();
+        assert_eq!(actual_vec, expected_vec);
+    }
 
     #[test]
     #[cfg(unix)]
@@ -1021,11 +962,11 @@ mod tests {
         std::os::unix::fs::symlink(&src, &dest)?;
 
         let tags = super::tags_from_path(dir.path())?;
-        assert_eq!(tags, vec!["directory"]);
+        assert_tagset(&tags, &["directory"]);
         let tags = super::tags_from_path(&src)?;
-        assert_eq!(tags, vec!["plain-text", "non-executable", "file", "text"]);
+        assert_tagset(&tags, &["plain-text", "non-executable", "file", "text"]);
         let tags = super::tags_from_path(&dest)?;
-        assert_eq!(tags, vec!["symlink"]);
+        assert_tagset(&tags, &["symlink"]);
 
         Ok(())
     }
@@ -1038,9 +979,9 @@ mod tests {
         fs_err::File::create(&src)?;
 
         let tags = super::tags_from_path(dir.path())?;
-        assert_eq!(tags, vec!["directory"]);
+        assert_tagset(&tags, &["directory"]);
         let tags = super::tags_from_path(&src)?;
-        assert_eq!(tags, vec!["plain-text", "executable", "file", "text"]);
+        assert_tagset(&tags, &["plain-text", "executable", "file", "text"]);
 
         Ok(())
     }
@@ -1048,43 +989,43 @@ mod tests {
     #[test]
     fn tags_from_filename() {
         let tags = super::tags_from_filename(Path::new("test.py"));
-        assert_eq!(tags, vec!["python", "text"]);
+        assert_tagset(&tags, &["python", "text"]);
 
         let tags = super::tags_from_filename(Path::new("data.json"));
-        assert_eq!(tags, vec!["json", "text"]);
+        assert_tagset(&tags, &["json", "text"]);
 
         let tags = super::tags_from_filename(Path::new("Pipfile"));
-        assert_eq!(tags, vec!["toml", "text"]);
+        assert_tagset(&tags, &["toml", "text"]);
 
         let tags = super::tags_from_filename(Path::new("Pipfile.lock"));
-        assert_eq!(tags, vec!["json", "text"]);
+        assert_tagset(&tags, &["json", "text"]);
 
         let tags = super::tags_from_filename(Path::new("file.pdf"));
-        assert_eq!(tags, vec!["pdf", "binary"]);
+        assert_tagset(&tags, &["pdf", "binary"]);
 
         let tags = super::tags_from_filename(Path::new("FILE.PDF"));
-        assert_eq!(tags, vec!["pdf", "binary"]);
+        assert_tagset(&tags, &["pdf", "binary"]);
     }
 
     #[test]
     fn tags_from_interpreter() {
         let tags = super::tags_from_interpreter("/usr/bin/python3");
-        assert_eq!(tags, vec!["python", "python3"]);
+        assert_tagset(&tags, &["python", "python3"]);
 
         let tags = super::tags_from_interpreter("/usr/bin/python3.12");
-        assert_eq!(tags, vec!["python", "python3"]);
+        assert_tagset(&tags, &["python", "python3"]);
 
         let tags = super::tags_from_interpreter("/usr/bin/python3.12.3");
-        assert_eq!(tags, vec!["python", "python3"]);
+        assert_tagset(&tags, &["python", "python3"]);
 
         let tags = super::tags_from_interpreter("python");
-        assert_eq!(tags, vec!["python"]);
+        assert_tagset(&tags, &["python"]);
 
         let tags = super::tags_from_interpreter("sh");
-        assert_eq!(tags, vec!["shell", "sh"]);
+        assert_tagset(&tags, &["shell", "sh"]);
 
         let tags = super::tags_from_interpreter("invalid");
-        assert_eq!(tags, Vec::<&str>::new());
+        assert!(tags.is_empty());
     }
 
     #[test]

@@ -1829,6 +1829,7 @@ dependencies = [
  "serde_stacker",
  "serde_yaml",
  "shlex",
+ "smallvec",
  "target-lexicon",
  "tempfile",
  "textwrap",
