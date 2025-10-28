@@ -201,6 +201,7 @@ impl CollectOptions {
 /// Get all filenames to run hooks on.
 /// Returns a list of file paths relative to the workspace root.
 #[allow(clippy::too_many_arguments)]
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub(crate) async fn collect_files(
     root: &Utf8Path,
     opts: CollectOptions,

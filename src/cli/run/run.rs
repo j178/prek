@@ -31,6 +31,7 @@ use crate::workspace::{Project, Workspace};
 use crate::{git, warn_user};
 
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub(crate) async fn run(
     store: &Store,
     config: Option<Utf8PathBuf>,
@@ -262,6 +263,7 @@ impl LazyInstallInfo {
     }
 }
 
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub async fn install_hooks(
     hooks: Vec<Arc<Hook>>,
     store: &Store,
@@ -518,6 +520,7 @@ impl StatusPrinter {
 
 /// Run all hooks.
 #[allow(clippy::fn_params_excessive_bools)]
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 async fn run_hooks(
     workspace: &Workspace,
     hooks: &[InstalledHook],
@@ -679,6 +682,7 @@ struct RunResult {
     file_modified: bool,
 }
 
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 async fn run_hook(
     hook: &InstalledHook,
     filter: &FileFilter<'_>,
