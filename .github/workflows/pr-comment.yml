@@ -78,7 +78,7 @@ jobs:
             const hotpathExists = comments.find((comment) => comment.body?.includes(hotpathMarker));
 
             try {
-              const bloatComparison = await fs.promises.readFile('bloat_comparison.txt', 'utf8');
+              const bloatComparison = await fs.promises.readFile('bloat-check-results/bloat_comparison.txt', 'utf8');
               const bloatBody = `${bloatMarker}\n${bloatComparison}`;
 
               if (bloatExists) {
@@ -102,7 +102,7 @@ jobs:
             }
 
             try {
-              const hotpathComparison = await fs.promises.readFile('hotpath_comparison.txt', 'utf8');
+              const hotpathComparison = await fs.promises.readFile('hotpath-results/hotpath_comparison.txt', 'utf8');
               const hotpathBody = `${hotpathMarker}\n${hotpathComparison}`;
 
               if (hotpathExists) {
