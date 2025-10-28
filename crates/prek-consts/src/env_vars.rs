@@ -31,6 +31,7 @@ impl EnvVars {
         "PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT";
     pub const PREK_INTERNAL__GO_BINARY_NAME: &'static str = "PREK_INTERNAL__GO_BINARY_NAME";
     pub const PREK_INTERNAL__NODE_BINARY_NAME: &'static str = "PREK_INTERNAL__NODE_BINARY_NAME";
+    pub const PREK_INTERNAL__RUST_BINARY_NAME: &'static str = "PREK_INTERNAL__RUST_BINARY_NAME";
     pub const PREK_GENERATE: &'static str = "PREK_GENERATE";
 
     // Python & uv related
@@ -63,6 +64,11 @@ impl EnvVars {
     pub const GEM_PATH: &'static str = "GEM_PATH";
     pub const BUNDLE_IGNORE_CONFIG: &'static str = "BUNDLE_IGNORE_CONFIG";
     pub const BUNDLE_GEMFILE: &'static str = "BUNDLE_GEMFILE";
+
+    // Rust related
+    pub const RUSTUP_TOOLCHAIN: &'static str = "RUSTUP_TOOLCHAIN";
+    pub const CARGO_HOME: &'static str = "CARGO_HOME";
+    pub const RUSTUP_HOME: &'static str = "RUSTUP_HOME";
 }
 
 impl EnvVars {

@@ -12,6 +12,7 @@ mod node;
 mod pygrep;
 mod python;
 mod ruby;
+mod rust;
 mod script;
 mod unimplemented;
 mod unsupported;

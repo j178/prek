@@ -206,16 +206,18 @@ pub(crate) enum ToolBucket {
     Node,
     Go,
     Ruby,
+    Rust,
 }
 
 impl ToolBucket {
     pub(crate) fn as_str(&self) -> &str {
         match self {
-            ToolBucket::Uv => "uv",
-            ToolBucket::Python => "python",
-            ToolBucket::Node => "node",
             ToolBucket::Go => "go",
+            ToolBucket::Node => "node",
+            ToolBucket::Python => "python",
             ToolBucket::Ruby => "ruby",
+            ToolBucket::Rust => "rust",
+            ToolBucket::Uv => "uv",
         }
     }
 }
@@ -225,16 +227,18 @@ pub(crate) enum CacheBucket {
     Uv,
     Go,
     Python,
+    Rust,
     Prek,
 }
 
 impl CacheBucket {
     pub(crate) fn as_str(&self) -> &str {
         match self {
-            CacheBucket::Uv => "uv",
             CacheBucket::Go => "go",
-            CacheBucket::Python => "python",
             CacheBucket::Prek => "prek",
+            CacheBucket::Python => "python",
+            CacheBucket::Rust => "rust",
+            CacheBucket::Uv => "uv",
         }
     }
 }

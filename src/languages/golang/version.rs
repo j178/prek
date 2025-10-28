@@ -8,7 +8,7 @@ use serde::Deserialize;
 use crate::hook::InstallInfo;
 use crate::languages::version::{Error, try_into_u64_slice};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub(crate) struct GoVersion(semver::Version);
 
 impl Default for GoVersion {
@@ -28,21 +28,6 @@ impl Deref for GoVersion {
 impl Display for GoVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-impl<'de> Deserialize<'de> for GoVersion {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct _Version {
-            version: String,
-        }
-
-        let v = _Version::deserialize(deserializer)?;
-        v.version.parse().map_err(serde::de::Error::custom)
     }
 }
 
