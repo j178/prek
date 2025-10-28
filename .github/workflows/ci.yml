@@ -196,7 +196,7 @@ jobs:
 
       - name: Display results (PR)
         if: github.event_name == 'pull_request'
-        run: cat comparison.txt >> $GITHUB_STEP_SUMMARY
+        run: cat bloat_comparison.txt >> $GITHUB_STEP_SUMMARY
 
       - name: Display results (Push)
         if: github.event_name == 'push'
