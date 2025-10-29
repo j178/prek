@@ -146,7 +146,7 @@ jobs:
           # Extract timing metrics from HEAD (PR branch)
           {
             echo 'metrics<<EOF'
-            cargo run --release --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
+            cargo run --profile profiling --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
             echo 'EOF'
           } >> $GITHUB_OUTPUT
 
@@ -156,7 +156,7 @@ jobs:
           # Extract allocation metrics from HEAD (PR branch)
           {
             echo 'metrics<<EOF'
-            cargo run --release --locked --features hotpath,hotpath-ci,hotpath-alloc-count-total -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
+            cargo run --profile profiling --locked --features hotpath,hotpath-ci,hotpath-alloc-count-total -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
             echo 'EOF'
           } >> $GITHUB_OUTPUT
 
@@ -170,7 +170,7 @@ jobs:
           # Extract timing metrics from base branch
           {
             echo 'metrics<<EOF'
-            cargo run --release --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
+            cargo run --profile profiling --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
             echo 'EOF'
           } >> $GITHUB_OUTPUT
 
@@ -180,7 +180,7 @@ jobs:
           # Extract allocation metrics from base branch
           {
             echo 'metrics<<EOF'
-            cargo run --release --locked --features hotpath,hotpath-ci,hotpath-alloc-count-total -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
+            cargo run --profile profiling --locked --features hotpath,hotpath-ci,hotpath-alloc-count-total -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
             echo 'EOF'
           } >> $GITHUB_OUTPUT
 
