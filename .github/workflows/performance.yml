@@ -33,17 +33,11 @@ jobs:
         with:
           tool: cargo-bloat
 
-      - name: Build PR branch
-        id: bloat_pr
+      - name: Build head branch
+        id: bloat_head
         run: |
-          # Build PR branch
-          cargo bloat --release | tee bloat_pr.txt >&1 || true
-
-          {
-            echo 'output<<EOF'
-            cat bloat_pr.txt
-            echo 'EOF'
-          } >> $GITHUB_OUTPUT
+          # Build head branch
+          cargo bloat --release | tee bloat_head.txt >&1
 
       - name: Checkout base
         run: |
@@ -53,16 +47,9 @@ jobs:
         id: bloat_base
         run: |
           # Build base branch
-          cargo bloat --release | tee bloat_base.txt >&1 || true
-
-          {
-            echo 'output<<EOF'
-            cat bloat_base.txt
-            echo 'EOF'
-          } >> $GITHUB_OUTPUT
+          cargo bloat --release | tee bloat_base.txt >&1
 
       - name: Compare bloat results
-        id: compare
         shell: python
         run: |
           import re
@@ -77,24 +64,24 @@ jobs:
               size = value * multipliers.get(unit, 1)
               return size, f"{value} {unit}"
 
-          pr_text = Path('bloat_pr.txt').read_text()
+          head_text = Path('bloat_head.txt').read_text()
           base_text = Path('bloat_base.txt').read_text()
 
-          pr_bytes, pr_size = parse_size(pr_text)
+          head_bytes, head_size = parse_size(head_text)
           base_bytes, base_size = parse_size(base_text)
 
-          pct_change = ((pr_bytes - base_bytes) / base_bytes) * 100
+          pct_change = ((head_bytes - base_bytes) / base_bytes) * 100
           pct_display = f"{pct_change:+.2f}%"
           comparison = f"""\
           ### 📦 Cargo Bloat Comparison
-          **Binary size change:** {pct_display} ({base_size} → {pr_size})
+          **Binary size change:** {pct_display} ({base_size} → {head_size})
 
           <details>
             <summary>Expand for cargo-bloat output</summary>
 
-          #### PR Branch Results
+          #### Head Branch Results
           ```
-          {pr_text}
+          {head_text}
           ```
 
           #### Base Branch Results
@@ -144,21 +131,13 @@ jobs:
         id: head_timing_metrics
         run: |
           # Extract timing metrics from HEAD (PR branch)
-          {
-            echo 'metrics<<EOF'
-            cargo run --profile profiling --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
-            echo 'EOF'
-          } > head-timing.json
+          cargo run --profile profiling --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"' > head-timing.json
 
       - name: Profile head allocations
         id: head_alloc_metrics
         run: |
           # Extract allocation metrics from HEAD (PR branch)
-          {
-            echo 'metrics<<EOF'
-            cargo run --profile profiling --locked --features hotpath,hotpath-ci,hotpath-alloc-count-total -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
-            echo 'EOF'
-          } > head-alloc.json
+          cargo run --profile profiling --locked --features hotpath,hotpath-ci,hotpath-alloc-count-total -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"' > head-alloc.json
 
       - name: Checkout base
         run: |
@@ -168,21 +147,13 @@ jobs:
         id: base_timing_metrics
         run: |
           # Extract timing metrics from base branch
-          {
-            echo 'metrics<<EOF'
-            cargo run --profile profiling --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
-            echo 'EOF'
-          } > base-timing.json
+          cargo run --profile profiling --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"' > base-timing.json
 
       - name: Profile base allocations
         id: base_alloc_metrics
         run: |
           # Extract allocation metrics from base branch
-          {
-            echo 'metrics<<EOF'
-            cargo run --profile profiling --locked --features hotpath,hotpath-ci,hotpath-alloc-count-total -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
-            echo 'EOF'
-          } > base-alloc.json
+          cargo run --profile profiling --locked --features hotpath,hotpath-ci,hotpath-alloc-count-total -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"' > base-alloc.json
 
       - name: Save hotpath comparison results
         run: |
