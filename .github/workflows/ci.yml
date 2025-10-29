@@ -201,7 +201,7 @@ jobs:
           luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
 
       - name: "Install Ruby"
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@4ff6f3611a42bc75eee1e5138240eb1613f48c8f # v1.267.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
 
@@ -279,7 +279,7 @@ jobs:
           luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
 
       - name: "Install Ruby"
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@4ff6f3611a42bc75eee1e5138240eb1613f48c8f # v1.267.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
 
@@ -358,7 +358,7 @@ jobs:
           luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
 
       - name: "Install Ruby"
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@4ff6f3611a42bc75eee1e5138240eb1613f48c8f # v1.267.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
 
