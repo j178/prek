@@ -33,7 +33,13 @@ profiler = ["dep:pprof", "profiler-flamegraph"]
 profiler-flamegraph = ["pprof/flamegraph"]
 # Enable docker related tests in integration tests
 docker = []
+# Enable hotpath profiling
 hotpath = ["dep:hotpath", "hotpath/hotpath"]
+hotpath-alloc-bytes-total = ["hotpath/hotpath-alloc-bytes-total"]
+hotpath-alloc-count-total = ["hotpath/hotpath-alloc-count-total"]
+hotpath-alloc-self = ["hotpath/hotpath-alloc-self"]
+hotpath-ci = ["hotpath/hotpath-ci"]
+hotpath-off = ["hotpath/hotpath-off"]
 
 [dependencies]
 anstream = { version = "0.6.15" }
@@ -168,10 +174,12 @@ edn = "edn"
 styl = "styl"
 jod = "jod"
 
-[profile.bench]
-opt-level = 3
-debug = true # used by the profiler
-strip = false # keep symbols for the profiler
+[profile.profiling]
+inherits = "release"
+strip = false
+debug = "full"
+lto = false
+codegen-units = 16
 
 [profile.release]
 # Enable Full LTO for the best optimizations

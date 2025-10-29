@@ -1,0 +1,171 @@
+name: Performance
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions: {}
+
+env:
+  UV_VERSION: "0.8.22"
+  NODE_VERSION: "20"
+  GO_VERSION: "1.24"
+  PYTHON_VERSION: "3.12"
+  LUA_VERSION: "5.4"
+  LUAROCKS_VERSION: "3.12.2"
+
+jobs:
+  bloat-check:
+    runs-on: ubuntu-latest
+    name: "cargo | bloat check"
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+      - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+      - uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
+        with:
+          tool: cargo-bloat
+
+      - name: Build head branch
+        id: bloat_head
+        run: |
+          # Build head branch
+          cargo bloat --release | tee bloat_head.txt >&1
+
+      - name: Checkout base
+        run: |
+          git checkout ${{ github.event.pull_request.base.sha }}
+
+      - name: Build base branch
+        id: bloat_base
+        run: |
+          # Build base branch
+          cargo bloat --release | tee bloat_base.txt >&1
+
+      - name: Compare bloat results
+        shell: python
+        run: |
+          import re
+          from pathlib import Path
+
+          def parse_size(text):
+              match = re.search(r'\.text section size.*?([\d.]+)\s*([KMGT]i?B)', text)
+              if not match:
+                  raise ValueError("Could not find .text section size")
+              value, unit = float(match.group(1)), match.group(2)
+              multipliers = {'B': 1, 'KiB': 1024, 'MiB': 1024**2, 'GiB': 1024**3, 'TiB': 1024**4}
+              size = value * multipliers.get(unit, 1)
+              return size, f"{value} {unit}"
+
+          head_text = Path('bloat_head.txt').read_text()
+          base_text = Path('bloat_base.txt').read_text()
+
+          head_bytes, head_size = parse_size(head_text)
+          base_bytes, base_size = parse_size(base_text)
+
+          pct_change = ((head_bytes - base_bytes) / base_bytes) * 100
+          pct_display = f"{pct_change:+.2f}%"
+          comparison = f"""\
+          ### 📦 Cargo Bloat Comparison
+          **Binary size change:** {pct_display} ({base_size} → {head_size})
+
+          <details>
+            <summary>Expand for cargo-bloat output</summary>
+
+          #### Head Branch Results
+          ```
+          {head_text}
+          ```
+
+          #### Base Branch Results
+          ```
+          {base_text}
+          ```
+          </details>
+          """
+
+          Path("bloat-comparison.txt").write_text(comparison)
+
+      - name: Save bloat check results
+        run: |
+          mkdir -p /tmp/bloat-check
+          echo ${{ github.event.pull_request.number }} > /tmp/bloat-check/pr-number.txt
+          mv bloat-comparison.txt /tmp/bloat-check/bloat-comparison.txt
+
+      - name: Upload bloat results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bloat-check-results
+          path: /tmp/bloat-check
+
+  hotpath-profile:
+    runs-on: ubuntu-latest
+    name: "cargo | hotpath profiling"
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+      - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4 # v6.7.0
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: "Install Python"
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Profile head timings
+        id: head_timing_metrics
+        run: |
+          # Extract timing metrics from HEAD (PR branch)
+          cargo run --profile profiling --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"' > head-timing.json
+
+      - name: Profile head allocations
+        id: head_alloc_metrics
+        run: |
+          # Extract allocation metrics from HEAD (PR branch)
+          cargo run --profile profiling --locked --features hotpath,hotpath-ci,hotpath-alloc-count-total -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"' > head-alloc.json
+
+      - name: Checkout base
+        run: |
+          git checkout ${{ github.event.pull_request.base.sha }}
+
+      - name: Profile base timings
+        id: base_timing_metrics
+        run: |
+          # Extract timing metrics from base branch
+          cargo run --profile profiling --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"' > base-timing.json
+
+      - name: Profile base allocations
+        id: base_alloc_metrics
+        run: |
+          # Extract allocation metrics from base branch
+          cargo run --profile profiling --locked --features hotpath,hotpath-ci,hotpath-alloc-count-total -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"' > base-alloc.json
+
+      - name: Save hotpath comparison results
+        run: |
+          mkdir -p /tmp/hotpath
+          echo ${{ github.event.pull_request.number }} > /tmp/hotpath/pr-number.txt
+          mv head-timing.json /tmp/hotpath/head-timing.json
+          mv head-alloc.json /tmp/hotpath/head-alloc.json
+          mv base-timing.json /tmp/hotpath/base-timing.json
+          mv base-alloc.json /tmp/hotpath/base-alloc.json
+
+      - name: Upload hotpath results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: hotpath-results
+          path: /tmp/hotpath
