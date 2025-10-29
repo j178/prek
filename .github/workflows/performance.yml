@@ -128,13 +128,13 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Profile head timings
-        id: head_timing_metrics
         run: |
           # Extract timing metrics from HEAD (PR branch)
+          # Run first to setup caches
+          cargo run --profile profiling --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace
           cargo run --profile profiling --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"' > head-timing.json
 
       - name: Profile head allocations
-        id: head_alloc_metrics
         run: |
           # Extract allocation metrics from HEAD (PR branch)
           cargo run --profile profiling --locked --features hotpath,hotpath-ci,hotpath-alloc-count-total -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"' > head-alloc.json
@@ -144,13 +144,13 @@ jobs:
           git checkout ${{ github.event.pull_request.base.sha }}
 
       - name: Profile base timings
-        id: base_timing_metrics
         run: |
           # Extract timing metrics from base branch
+          # Run first to setup caches
+          cargo run --profile profiling --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace
           cargo run --profile profiling --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"' > base-timing.json
 
       - name: Profile base allocations
-        id: base_alloc_metrics
         run: |
           # Extract allocation metrics from base branch
           cargo run --profile profiling --locked --features hotpath,hotpath-ci,hotpath-alloc-count-total -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"' > base-alloc.json
