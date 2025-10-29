@@ -82,7 +82,6 @@ impl Store {
     }
 
     /// Clone a remote repo into the store.
-    #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub(crate) async fn clone_repo(
         &self,
         repo: &RemoteRepo,

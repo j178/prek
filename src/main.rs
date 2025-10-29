@@ -415,12 +415,6 @@ fn main() -> ExitCode {
         Err(err) => err.exit(),
     };
 
-    #[cfg(feature = "hotpath")]
-    let _hotpath_guard = hotpath::GuardBuilder::new("prek")
-        .percentiles(&[95, 99])
-        .format(hotpath::Format::Table)
-        .build();
-
     #[cfg(all(unix, feature = "profiler"))]
     let _profiler_guard = profiler::start_profiling();
 

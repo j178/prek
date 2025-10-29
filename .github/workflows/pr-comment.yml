@@ -1,4 +1,4 @@
-# This workflow comments on a PR with the results of the `cargo bloat check` and `hotpath profiling` performed in the CI workflow.
+# This workflow comments on a PR with the results of the `cargo bloat check` performed in the performance workflow.
 # This is a workaround for the limitations imposed by GitHub Actions on workflows triggered by pull requests from forked repositories.
 
 # The restrictions apply to the pull_request event triggered by a fork opening a pull request in the upstream repository.
@@ -69,48 +69,3 @@ jobs:
                 body,
               });
             }
-
-  hotpath-comment:
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-    steps:
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
-        with:
-          name: hotpath-results
-          path: /tmp/hotpath/
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id || github.event.inputs.workflow_run_id }}
-
-      - name: Install hotpath
-        uses: taiki-e/install-action@5ab30948b991e8d6aa5a6c1e33c6aea130c6de65 # v2.62.12
-        with:
-          tool: hotpath
-
-      - name: Post PR comment - timing mode
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          HEAD_METRICS=$(cat /tmp/hotpath/head-timing.json)
-          BASE_METRICS=$(cat /tmp/hotpath/base-timing.json)
-          PR_NUMBER=$(cat /tmp/hotpath/pr-number.txt)
-          hotpath profile-pr \
-            --head-metrics "$HEAD_METRICS" \
-            --base-metrics "$BASE_METRICS" \
-            --github-token "$GH_TOKEN" \
-            --pr-number "$PR_NUMBER"
-
-      - name: Post PR comment - alloc mode
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          HEAD_METRICS=$(cat /tmp/hotpath/head-alloc.json)
-          BASE_METRICS=$(cat /tmp/hotpath/base-alloc.json)
-          PR_NUMBER=$(cat /tmp/hotpath/pr-number.txt)
-          hotpath profile-pr \
-            --head-metrics "$HEAD_METRICS" \
-            --base-metrics "$BASE_METRICS" \
-            --github-token "$GH_TOKEN" \
-            --pr-number "$PR_NUMBER"
