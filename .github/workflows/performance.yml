@@ -148,7 +148,7 @@ jobs:
             echo 'metrics<<EOF'
             cargo run --profile profiling --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
             echo 'EOF'
-          } >> $GITHUB_OUTPUT
+          } > head-timing.json
 
       - name: Profile head allocations
         id: head_alloc_metrics
@@ -158,7 +158,7 @@ jobs:
             echo 'metrics<<EOF'
             cargo run --profile profiling --locked --features hotpath,hotpath-ci,hotpath-alloc-count-total -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
             echo 'EOF'
-          } >> $GITHUB_OUTPUT
+          } > head-alloc.json
 
       - name: Checkout base
         run: |
@@ -172,7 +172,7 @@ jobs:
             echo 'metrics<<EOF'
             cargo run --profile profiling --locked --features hotpath,hotpath-ci -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
             echo 'EOF'
-          } >> $GITHUB_OUTPUT
+          } > base-timing.json
 
       - name: Profile base allocations
         id: base_alloc_metrics
@@ -182,16 +182,16 @@ jobs:
             echo 'metrics<<EOF'
             cargo run --profile profiling --locked --features hotpath,hotpath-ci,hotpath-alloc-count-total -- --all-files trailing-whitespace | grep '^{"hotpath_profiling_mode"'
             echo 'EOF'
-          } >> $GITHUB_OUTPUT
+          } > base-alloc.json
 
       - name: Save hotpath comparison results
         run: |
           mkdir -p /tmp/hotpath
           echo ${{ github.event.pull_request.number }} > /tmp/hotpath/pr-number.txt
-          echo '${{ steps.head_timing_metrics.outputs.metrics }}' > /tmp/hotpath/head-timing.json
-          echo '${{ steps.base_timing_metrics.outputs.metrics }}' > /tmp/hotpath/base-timing.json
-          echo '${{ steps.head_alloc_metrics.outputs.metrics }}' > /tmp/hotpath/head-alloc.json
-          echo '${{ steps.base_alloc_metrics.outputs.metrics }}' > /tmp/hotpath/base-alloc.json
+          mv head-timing.json /tmp/hotpath/head-timing.json
+          mv head-alloc.json /tmp/hotpath/head-alloc.json
+          mv base-timing.json /tmp/hotpath/base-timing.json
+          mv base-alloc.json /tmp/hotpath/base-alloc.json
 
       - name: Upload hotpath results
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
