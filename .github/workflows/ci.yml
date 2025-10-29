@@ -21,6 +21,7 @@ env:
   NODE_VERSION: "20"
   GO_VERSION: "1.24"
   PYTHON_VERSION: "3.12"
+  RUBY_VERSION: "3.4"
   LUA_VERSION: "5.4"
   LUAROCKS_VERSION: "3.12.2"
 
@@ -199,6 +200,11 @@ jobs:
         with:
           luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
 
+      - name: "Install Ruby"
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ env.RUBY_VERSION }}
+
       - name: "Cargo test"
         run: |
           cargo llvm-cov nextest \
@@ -271,6 +277,11 @@ jobs:
         uses: leafo/gh-actions-luarocks@97053c556d6ce2c8e26eb7ac93743437c7af7248
         with:
           luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
+
+      - name: "Install Ruby"
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ env.RUBY_VERSION }}
 
       - name: "Cargo test"
         run: |
@@ -346,6 +357,11 @@ jobs:
         with:
           luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
 
+      - name: "Install Ruby"
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ env.RUBY_VERSION }}
+
       - name: "Find node and npm versions"
         run: |
           Get-Command node -All
@@ -354,6 +370,9 @@ jobs:
 
       - name: "Cargo test"
         run: |
+          # Remove msys64 from PATH for Rust compilation
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\msys64\\' }) -join ';'
+
           cargo llvm-cov nextest `
             --no-report `
             --workspace `

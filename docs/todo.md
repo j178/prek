@@ -23,7 +23,7 @@ The original pre-commit supports hooks written in 10+ languages. The table below
 | docker_image | ✅ Supported | — | |
 | fail | ✅ Supported | — | |
 | deno ⭐ | 🚧 WIP | — | Experimental support in `prek`; upstream `pre-commit` lacks a native `deno` language. |
-| ruby | 🚧 Planned | [#43](https://github.com/j178/prek/issues/43) | |
+| ruby | 🚧 WIP | [#43](https://github.com/j178/prek/issues/43) | `prek` does not currently support downloading new Ruby versions, but can use multiple simultaneously installed interpreters |
 | rust | 🚧 Planned | [#44](https://github.com/j178/prek/issues/44) | |
 | conda | 🚧 Planned | [#52](https://github.com/j178/prek/issues/52) | |
 | coursier | 🚧 Planned | [#53](https://github.com/j178/prek/issues/53) | |
