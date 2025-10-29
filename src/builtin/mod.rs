@@ -1,4 +1,4 @@
-use std::path::Path;
+use camino::Utf8Path;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
@@ -33,7 +33,7 @@ pub fn check_fast_path(hook: &Hook) -> bool {
 pub async fn run_fast_path(
     store: &Store,
     hook: &Hook,
-    filenames: &[&Path],
+    filenames: &[&Utf8Path],
 ) -> anyhow::Result<(i32, Vec<u8>)> {
     match hook.repo() {
         Repo::Meta { .. } => run_meta_hook(store, hook, filenames).await,
@@ -50,7 +50,7 @@ pub async fn run_fast_path(
 async fn run_meta_hook(
     store: &Store,
     hook: &Hook,
-    filenames: &[&Path],
+    filenames: &[&Utf8Path],
 ) -> anyhow::Result<(i32, Vec<u8>)> {
     match hook.id.as_str() {
         "check-hooks-apply" => meta_hooks::check_hooks_apply(store, hook, filenames).await,

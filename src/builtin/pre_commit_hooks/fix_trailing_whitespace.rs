@@ -1,9 +1,9 @@
 use std::ops::Deref;
-use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
 use bstr::ByteSlice;
+use camino::Utf8Path;
 use clap::Parser;
 use futures::StreamExt;
 use tempfile::NamedTempFile;
@@ -75,7 +75,7 @@ impl Args {
 
 pub(crate) async fn fix_trailing_whitespace(
     hook: &Hook,
-    filenames: &[&Path],
+    filenames: &[&Utf8Path],
 ) -> Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
 
@@ -113,16 +113,15 @@ pub(crate) async fn fix_trailing_whitespace(
 }
 
 async fn fix_file(
-    file_base: &Path,
-    filename: &Path,
+    file_base: &Utf8Path,
+    filename: &Utf8Path,
     chars: &[char],
     force_markdown: bool,
     markdown_exts: &[String],
 ) -> Result<(i32, Vec<u8>)> {
     let is_markdown = force_markdown || {
-        Path::new(filename)
+        Utf8Path::new(filename)
             .extension()
-            .and_then(|e| e.to_str())
             .map(|e| format!(".{}", e.to_ascii_lowercase()))
             .is_some_and(|e| markdown_exts.contains(&e))
     };
@@ -165,7 +164,7 @@ async fn fix_file(
     drop(buf_reader);
     if modified {
         buf_writer.flush_to_file(&file_path).await?;
-        Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
+        Ok((1, format!("Fixing {filename}\n").into_bytes()))
     } else {
         drop(buf_writer);
         Ok((0, Vec::new()))
@@ -174,7 +173,7 @@ async fn fix_file(
 
 trait AsyncWriteBuffer {
     async fn write(&mut self, data: &[u8]) -> Result<()>;
-    async fn flush_to_file(&mut self, filename: &Path) -> Result<()>;
+    async fn flush_to_file(&mut self, filename: &Utf8Path) -> Result<()>;
 }
 
 struct MemoryBuffer(Vec<u8>);
@@ -194,7 +193,7 @@ impl AsyncWriteBuffer for MemoryBuffer {
         Ok(())
     }
 
-    async fn flush_to_file(&mut self, filename: &Path) -> Result<()> {
+    async fn flush_to_file(&mut self, filename: &Utf8Path) -> Result<()> {
         fs_err::tokio::write(filename, &self.0).await?;
         Ok(())
     }
@@ -224,9 +223,9 @@ impl AsyncWriteBuffer for TempFileBuffer {
         Ok(())
     }
 
-    async fn flush_to_file(&mut self, filename: &Path) -> Result<()> {
+    async fn flush_to_file(&mut self, filename: &Utf8Path) -> Result<()> {
         self.buf_writer.flush().await?;
-        crate::fs::rename_or_copy(self.named_temp_file.path(), Path::new(filename)).await?;
+        crate::fs::rename_or_copy(self.named_temp_file.path(), filename.as_std_path()).await?;
         Ok(())
     }
 }
@@ -244,7 +243,7 @@ impl AsyncWriteBuffer for Buffer {
         }
     }
 
-    async fn flush_to_file(&mut self, filename: &Path) -> Result<()> {
+    async fn flush_to_file(&mut self, filename: &Utf8Path) -> Result<()> {
         match self {
             Buffer::Memory(b) => b.flush_to_file(filename).await,
             Buffer::Temp(b) => b.flush_to_file(filename).await,
@@ -282,13 +281,14 @@ fn needs_markdown_break(is_markdown: bool, trimmed: &[u8]) -> bool {
 mod tests {
     use super::*;
 
-    use std::path::PathBuf;
+    use crate::path::IntoUtf8PathBuf;
+    use camino::Utf8PathBuf;
     use tempfile::TempDir;
 
-    async fn create_test_file(dir: &TempDir, name: &str, content: &[u8]) -> Result<PathBuf> {
+    async fn create_test_file(dir: &TempDir, name: &str, content: &[u8]) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
-        Ok(file_path)
+        Ok(file_path.into_utf8_path_buf())
     }
 
     #[tokio::test]
@@ -300,7 +300,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![".md".to_string()];
 
-        let (code, msg) = fix_file(Path::new(""), &file_path, &chars, false, &md_exts).await?;
+        let (code, msg) = fix_file(Utf8Path::new(""), &file_path, &chars, false, &md_exts).await?;
 
         // modified
         assert_eq!(code, 1);
@@ -328,7 +328,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![".md".to_string()];
 
-        let (code, _msg) = fix_file(Path::new(""), &file_path, &chars, false, &md_exts).await?;
+        let (code, _msg) = fix_file(Utf8Path::new(""), &file_path, &chars, false, &md_exts).await?;
 
         // second line changed 3 -> 2 spaces, so modified
         assert_eq!(code, 1);
@@ -354,7 +354,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts: Vec<String> = vec![]; // irrelevant because force_markdown = true
 
-        let (code, _msg) = fix_file(Path::new(""), &file_path, &chars, true, &md_exts).await?;
+        let (code, _msg) = fix_file(Utf8Path::new(""), &file_path, &chars, true, &md_exts).await?;
 
         // modified because one line had 3 spaces -> reduced to 2
         assert_eq!(code, 1);
@@ -374,7 +374,7 @@ mod tests {
         let md_exts = vec![".md".to_string()];
 
         // file already trimmed -> no changes
-        let (code, msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        let (code, msg) = fix_file(Utf8Path::new(""), &path, &chars, false, &md_exts).await?;
         assert_eq!(code, 0);
         assert!(msg.is_empty());
 
@@ -391,7 +391,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![];
 
-        let (code, msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        let (code, msg) = fix_file(Utf8Path::new(""), &path, &chars, false, &md_exts).await?;
         assert_eq!(code, 0);
         assert!(msg.is_empty());
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -408,7 +408,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![".md".to_string()];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        let (code, _msg) = fix_file(Utf8Path::new(""), &path, &chars, false, &md_exts).await?;
         // trimming whitespace-only lines will change them to empty lines -> modified true
         assert_eq!(code, 1);
 
@@ -427,7 +427,7 @@ mod tests {
         let chars = vec![]; // will hit trim_ascii_end()
         let md_exts = vec![];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        let (code, _msg) = fix_file(Utf8Path::new(""), &path, &chars, false, &md_exts).await?;
         assert_eq!(code, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -445,7 +445,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![".txt".to_string()]; // treat as markdown for this test
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        let (code, _msg) = fix_file(Utf8Path::new(""), &path, &chars, false, &md_exts).await?;
         assert_eq!(code, 1);
 
         // read file and check logical lines presence (line endings may be normalized by lines())
@@ -464,7 +464,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        let (code, _msg) = fix_file(Utf8Path::new(""), &path, &chars, false, &md_exts).await?;
         assert_eq!(code, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -482,7 +482,7 @@ mod tests {
         let chars = vec!['。', '　'];
         let md_exts = vec![];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        let (code, _msg) = fix_file(Utf8Path::new(""), &path, &chars, false, &md_exts).await?;
         assert_eq!(code, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -499,7 +499,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![".md".to_string()];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        let (code, _msg) = fix_file(Utf8Path::new(""), &path, &chars, false, &md_exts).await?;
         assert_eq!(code, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -516,7 +516,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        let (code, _msg) = fix_file(Utf8Path::new(""), &path, &chars, false, &md_exts).await?;
         assert_eq!(code, 1);
 
         let content = fs_err::tokio::read_to_string(&path).await?;
@@ -534,7 +534,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec![];
 
-        let (code, msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        let (code, msg) = fix_file(Utf8Path::new(""), &path, &chars, false, &md_exts).await?;
         assert_eq!(code, 0);
         assert!(msg.is_empty());
 
@@ -552,7 +552,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts = vec!["*".to_string()];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, true, &md_exts).await?;
+        let (code, _msg) = fix_file(Utf8Path::new(""), &path, &chars, true, &md_exts).await?;
         assert_eq!(code, 1);
 
         let expected = "foo  \nbar\nbaz  \n\n\n";
@@ -569,7 +569,7 @@ mod tests {
         let chars = vec![' '];
         let md_exts = vec!["*".to_string()];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, true, &md_exts).await?;
+        let (code, _msg) = fix_file(Utf8Path::new(""), &path, &chars, true, &md_exts).await?;
         assert_eq!(code, 1);
 
         let expected = "\ta \t  \n";
@@ -586,7 +586,7 @@ mod tests {
         let chars = vec!['x'];
         let md_exts = vec![];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, true, &md_exts).await?;
+        let (code, _msg) = fix_file(Utf8Path::new(""), &path, &chars, true, &md_exts).await?;
         assert_eq!(code, 0);
 
         let expected = "a\nb\r\r\r\n";
@@ -603,7 +603,7 @@ mod tests {
         let chars = vec!['x'];
         let md_exts = vec!["md".to_string()];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, true, &md_exts).await?;
+        let (code, _msg) = fix_file(Utf8Path::new(""), &path, &chars, true, &md_exts).await?;
         assert_eq!(code, 1);
 
         let expected = "a  \n";
@@ -622,7 +622,7 @@ mod tests {
         let chars = vec![' ', '\t'];
         let md_exts: Vec<String> = vec![];
 
-        let (code, _msg) = fix_file(Path::new(""), &path, &chars, false, &md_exts).await?;
+        let (code, _msg) = fix_file(Utf8Path::new(""), &path, &chars, false, &md_exts).await?;
         assert_eq!(code, 0);
 
         let new_content = fs_err::tokio::read(&path).await?;

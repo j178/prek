@@ -1,10 +1,11 @@
 use std::fmt::Write as _;
 use std::io::Write;
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
+use camino::Utf8PathBuf;
+use constants::env_vars::EnvVars;
 use futures::stream::{FuturesUnordered, StreamExt};
 use owo_colors::{OwoColorize, Style};
 use rand::SeedableRng;
@@ -15,16 +16,14 @@ use tokio::sync::{OnceCell, Semaphore};
 use tracing::{debug, trace, warn};
 use unicode_width::UnicodeWidthStr;
 
-use constants::env_vars::EnvVars;
-
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{CollectOptions, FileFilter, Selectors, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, Stage};
-use crate::fs::CWD;
 use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::path::CWD;
 use crate::printer::{Printer, Stdout};
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::Store;
@@ -35,7 +34,7 @@ use crate::{git, warn_user};
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub(crate) async fn run(
     store: &Store,
-    config: Option<PathBuf>,
+    config: Option<Utf8PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
     hook_stage: Stage,
@@ -155,12 +154,8 @@ pub(crate) async fn run(
     .await?;
 
     // Change to the workspace root directory.
-    std::env::set_current_dir(workspace.root()).with_context(|| {
-        format!(
-            "Failed to change directory to `{}`",
-            workspace.root().display()
-        )
-    })?;
+    std::env::set_current_dir(workspace.root())
+        .with_context(|| format!("Failed to change directory to `{}`", workspace.root()))?;
 
     run_hooks(
         &workspace,
@@ -257,7 +252,7 @@ impl LazyInstallInfo {
                     Err(err) => {
                         warn!(
                             %err,
-                            path = %info.env_path.display(),
+                            path = %info.env_path,
                             "Skipping unhealthy installed hook"
                         );
                         false
@@ -342,8 +337,7 @@ pub async fn install_hooks(
                     if let Some(info) = matched_info {
                         debug!(
                             "Found installed environment for hook `{}` at `{}`",
-                            &hook,
-                            info.env_path.display()
+                            &hook, info.env_path
                         );
                         hook_envs.push(InstalledHook::Installed { hook, info });
                         continue;
@@ -365,7 +359,7 @@ pub async fn install_hooks(
 
                     match &installed_hook {
                         InstalledHook::Installed { info, .. } => {
-                            debug!("Installed hook `{hook}` in `{}`", info.env_path.display());
+                            debug!("Installed hook `{hook}` in `{}`", info.env_path);
                         }
                         InstalledHook::NoNeedInstall { .. } => {
                             debug!("Hook `{hook}` does not need installation");
@@ -530,7 +524,7 @@ impl StatusPrinter {
 async fn run_hooks(
     workspace: &Workspace,
     hooks: &[InstalledHook],
-    filenames: Vec<PathBuf>,
+    filenames: Vec<Utf8PathBuf>,
     store: &Store,
     show_diff_on_failure: bool,
     fail_fast: bool,
@@ -754,7 +748,7 @@ async fn run_hook(
             )?;
         }
         for filename in &filenames {
-            writeln!(output, "- {}", filename.to_string_lossy())?;
+            writeln!(output, "- {filename}")?;
         }
         (0, output)
     } else {

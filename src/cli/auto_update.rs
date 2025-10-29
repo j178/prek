@@ -1,9 +1,9 @@
 use std::fmt::Write;
-use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use anyhow::{Context, Result};
 use bstr::ByteSlice;
+use camino::{Utf8Path, Utf8PathBuf};
 use constants::MANIFEST_FILE;
 use fancy_regex::Regex;
 use futures::StreamExt;
@@ -18,7 +18,7 @@ use tracing::trace;
 use crate::cli::ExitStatus;
 use crate::cli::reporter::AutoUpdateReporter;
 use crate::config::{RemoteRepo, Repo};
-use crate::fs::CWD;
+use crate::path::CWD;
 use crate::printer::Printer;
 use crate::run::CONCURRENCY;
 use crate::store::Store;
@@ -33,7 +33,7 @@ struct Revision {
 
 pub(crate) async fn auto_update(
     store: &Store,
-    config: Option<PathBuf>,
+    config: Option<Utf8PathBuf>,
     filter_repos: Vec<String>,
     bleeding_edge: bool,
     freeze: bool,
@@ -182,19 +182,17 @@ pub(crate) async fn auto_update(
 
 async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Result<Revision> {
     let tmp_dir = tempfile::tempdir()?;
+    let tmp_dir_path = Utf8Path::from_path(tmp_dir.path())
+        .ok_or_else(|| anyhow::anyhow!("Temporary directory path is not valid UTF-8"))?;
 
-    trace!(
-        "Cloning repository `{}` to `{}`",
-        repo.repo,
-        tmp_dir.path().display()
-    );
+    trace!("Cloning repository `{}` to `{}`", repo.repo, tmp_dir_path);
 
-    git::init_repo(repo.repo.as_str(), tmp_dir.path()).await?;
+    git::init_repo(repo.repo.as_str(), tmp_dir_path).await?;
     git::git_cmd("git config")?
         .arg("config")
         .arg("extensions.partialClone")
         .arg("true")
-        .current_dir(tmp_dir.path())
+        .current_dir(tmp_dir_path)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -206,7 +204,7 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
         .arg("--quiet")
         .arg("--filter=blob:none")
         .arg("--tags")
-        .current_dir(tmp_dir.path())
+        .current_dir(tmp_dir_path)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -217,7 +215,7 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
         .arg("FETCH_HEAD")
         .arg("--tags") // use any tags found in refs/tags
         .check(false)
-        .current_dir(tmp_dir.path());
+        .current_dir(tmp_dir_path);
     if bleeding_edge {
         cmd.arg("--exact-match")
     } else {
@@ -228,7 +226,7 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
     let output = cmd.output().await?;
     let mut rev = if output.status.success() {
         let rev = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let rev = get_best_candidate_tag(tmp_dir.path(), &rev, &repo.rev)
+        let rev = get_best_candidate_tag(tmp_dir_path, &rev, &repo.rev)
             .await
             .unwrap_or(rev);
         trace!("Using best candidate tag `{rev}`");
@@ -240,7 +238,7 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
             .arg("rev-parse")
             .arg("FETCH_HEAD")
             .check(true)
-            .current_dir(tmp_dir.path())
+            .current_dir(tmp_dir_path)
             .output()
             .await?
             .stdout;
@@ -253,7 +251,7 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
         let exact = git::git_cmd("git rev-parse")?
             .arg("rev-parse")
             .arg(&rev)
-            .current_dir(tmp_dir.path())
+            .current_dir(tmp_dir_path)
             .output()
             .await?
             .stdout;
@@ -271,7 +269,7 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
         git::git_cmd("git show")?
             .arg("show")
             .arg(format!("{rev}:{MANIFEST_FILE}"))
-            .current_dir(tmp_dir.path())
+            .current_dir(tmp_dir_path)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
@@ -284,13 +282,13 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
         .arg(&rev)
         .arg("--")
         .arg(MANIFEST_FILE)
-        .current_dir(tmp_dir.path())
+        .current_dir(tmp_dir_path)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .await?;
 
-    let manifest = config::read_manifest(&tmp_dir.path().join(MANIFEST_FILE))?;
+    let manifest = config::read_manifest(&tmp_dir_path.join(MANIFEST_FILE))?;
     let new_hook_ids = manifest
         .hooks
         .into_iter()
@@ -320,7 +318,7 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
 /// Multiple tags can exist on an SHA. Sometimes a moving tag is attached
 /// to a version tag. Try to pick the tag that looks like a version and most similar
 /// to the current revision.
-async fn get_best_candidate_tag(repo: &Path, rev: &str, current_rev: &str) -> Result<String> {
+async fn get_best_candidate_tag(repo: &Utf8Path, rev: &str, current_rev: &str) -> Result<String> {
     let stdout = git::git_cmd("git tag")?
         .arg("tag")
         .arg("--points-at")
@@ -343,7 +341,7 @@ async fn get_best_candidate_tag(repo: &Path, rev: &str, current_rev: &str) -> Re
         .ok_or_else(|| anyhow::anyhow!("No tags found for revision {rev}"))
 }
 
-async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result<()> {
+async fn write_new_config(path: &Utf8Path, revisions: &[Option<Revision>]) -> Result<()> {
     let mut lines = fs_err::tokio::read_to_string(path)
         .await?
         .split_inclusive('\n')
@@ -369,7 +367,7 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
         anyhow::bail!(
             "Found {} `rev:` lines in `{}` but expected {}, file content may have changed",
             rev_lines.len(),
-            path.display(),
+            path,
             revisions.len()
         );
     }
@@ -417,7 +415,7 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
 
     fs_err::tokio::write(path, lines.join("").as_bytes())
         .await
-        .with_context(|| format!("Failed to write updated config file `{}`", path.display()))?;
+        .with_context(|| format!("Failed to write updated config file `{path}`"))?;
 
     Ok(())
 }

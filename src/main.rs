@@ -1,11 +1,11 @@
 use std::fmt::Write;
-use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::Mutex;
 
 use anstream::{ColorChoice, StripStream, eprintln};
 use anyhow::{Context, Result};
+use camino::Utf8PathBuf;
 use clap::{CommandFactory, Parser};
 use clap_complete::CompleteEnv;
 use owo_colors::OwoColorize;
@@ -35,6 +35,7 @@ mod git;
 mod hook;
 mod identify;
 mod languages;
+mod path;
 mod printer;
 mod process;
 #[cfg(all(unix, feature = "profiler"))]
@@ -62,12 +63,12 @@ pub(crate) enum Level {
 
 enum LogFile {
     Default,
-    Path(PathBuf),
+    Path(Utf8PathBuf),
     Disabled,
 }
 
 impl LogFile {
-    fn from_args(log_file: Option<PathBuf>, no_log_file: bool) -> Self {
+    fn from_args(log_file: Option<Utf8PathBuf>, no_log_file: bool) -> Self {
         if no_log_file {
             Self::Disabled
         } else if let Some(path) = log_file {
@@ -179,7 +180,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     debug!("prek: {}", version::version());
 
     if let Some(dir) = cli.globals.cd.as_ref() {
-        debug!("Changing current directory to: `{}`", dir.display());
+        debug!("Changing current directory to: `{}`", dir);
         std::env::set_current_dir(dir)?;
     }
 
@@ -300,7 +301,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }) => match cache_command {
             CacheCommand::Clean => cli::clean(&store, printer),
             CacheCommand::Dir => {
-                writeln!(printer.stdout(), "{}", store.path().display().cyan())?;
+                writeln!(printer.stdout(), "{}", store.path().cyan())?;
                 Ok(ExitStatus::Success)
             }
             CacheCommand::GC => {

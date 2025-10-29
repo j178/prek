@@ -24,14 +24,12 @@
 // IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-/// Adapt [axoprocess] to use [`tokio::process::Process`] instead of [`std::process::Command`].
+/// Adapted from [axoprocess] to use [`tokio::process::Process`] instead of [`std::process::Command`].
+use std::ffi::OsStr;
 use std::fmt::Display;
+use std::path::Path;
 use std::process::Output;
-use std::{
-    ffi::OsStr,
-    path::Path,
-    process::{CommandArgs, CommandEnvs, ExitStatus, Stdio},
-};
+use std::process::{CommandArgs, CommandEnvs, ExitStatus, Stdio};
 
 use owo_colors::OwoColorize;
 use thiserror::Error;
@@ -463,7 +461,7 @@ fn skip_args(cmd: &OsStr, cur: &OsStr, next: Option<&&OsStr>) -> usize {
 impl Display for Cmd {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(cwd) = self.get_current_dir() {
-            write!(f, "cd {} && ", cwd.to_string_lossy())?;
+            write!(f, "cd {} && ", cwd.display())?;
         }
         let program = self.get_program();
         let mut args = self.get_args().peekable();
@@ -484,7 +482,7 @@ impl Display for Cmd {
             }
             write!(f, " {}", arg.to_string_lossy())?;
             len += arg.len() + 1;
-            if len > 100 {
+            if len > 120 {
                 write!(f, " [...]",)?;
                 break;
             }

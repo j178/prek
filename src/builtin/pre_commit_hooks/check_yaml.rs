@@ -1,6 +1,5 @@
-use std::path::Path;
-
 use anyhow::Result;
+use camino::Utf8Path;
 use clap::Parser;
 use futures::StreamExt;
 use serde::Deserialize;
@@ -19,7 +18,7 @@ struct Args {
     r#unsafe: bool,
 }
 
-pub(crate) async fn check_yaml(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn check_yaml(hook: &Hook, filenames: &[&Utf8Path]) -> Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
 
     let mut tasks = futures::stream::iter(filenames)
@@ -46,8 +45,8 @@ pub(crate) async fn check_yaml(hook: &Hook, filenames: &[&Path]) -> Result<(i32,
 }
 
 async fn check_file(
-    file_base: &Path,
-    filename: &Path,
+    file_base: &Utf8Path,
+    filename: &Utf8Path,
     allow_multi_docs: bool,
 ) -> Result<(i32, Vec<u8>)> {
     let content = fs_err::tokio::read(file_base.join(filename)).await?;
@@ -59,8 +58,7 @@ async fn check_file(
     if allow_multi_docs {
         for doc in deserializer {
             if let Err(e) = serde_yaml::Value::deserialize(doc) {
-                let error_message =
-                    format!("{}: Failed to yaml decode ({e})\n", filename.display());
+                let error_message = format!("{filename}: Failed to yaml decode ({e})\n");
                 return Ok((1, error_message.into_bytes()));
             }
         }
@@ -69,8 +67,7 @@ async fn check_file(
         match serde_yaml::from_slice::<serde_yaml::Value>(&content) {
             Ok(_) => Ok((0, Vec::new())),
             Err(e) => {
-                let error_message =
-                    format!("{}: Failed to yaml decode ({e})\n", filename.display());
+                let error_message = format!("{filename}: Failed to yaml decode ({e})\n");
                 Ok((1, error_message.into_bytes()))
             }
         }
@@ -80,17 +77,18 @@ async fn check_file(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use crate::path::IntoUtf8PathBuf;
+    use camino::Utf8PathBuf;
     use tempfile::tempdir;
 
     async fn create_test_file(
         dir: &tempfile::TempDir,
         name: &str,
         content: &[u8],
-    ) -> Result<PathBuf> {
+    ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
-        Ok(file_path)
+        Ok(file_path.into_utf8_path_buf())
     }
 
     #[tokio::test]
@@ -100,7 +98,7 @@ mod tests {
 key2: value2
 ";
         let file_path = create_test_file(&dir, "valid.yaml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path, false).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path, false).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -113,7 +111,7 @@ key2: value2
 key2: value2: another_value
 ";
         let file_path = create_test_file(&dir, "invalid.yaml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path, false).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path, false).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         Ok(())
@@ -126,7 +124,7 @@ key2: value2: another_value
 key1: value2
 ";
         let file_path = create_test_file(&dir, "duplicate.yaml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path, false).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path, false).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         Ok(())
@@ -137,7 +135,7 @@ key1: value2
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.yaml", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path, false).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path, false).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -154,11 +152,11 @@ key2: value2
 ";
         let file_path = create_test_file(&dir, "multi.yaml", content).await?;
 
-        let (code, output) = check_file(Path::new(""), &file_path, false).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path, false).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
 
-        let (code, output) = check_file(Path::new(""), &file_path, true).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path, true).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())

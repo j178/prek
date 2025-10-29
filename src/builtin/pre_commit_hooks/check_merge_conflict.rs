@@ -1,4 +1,4 @@
-use std::path::Path;
+use camino::Utf8Path;
 
 use anyhow::Result;
 use clap::Parser;
@@ -28,7 +28,7 @@ struct Args {
 
 pub(crate) async fn check_merge_conflict(
     hook: &Hook,
-    filenames: &[&Path],
+    filenames: &[&Utf8Path],
 ) -> Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
 
@@ -71,7 +71,7 @@ async fn is_in_merge() -> Result<bool> {
     Ok(merge_head_exists || rebase_apply_exists || rebase_merge_exists)
 }
 
-async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, Vec<u8>)> {
     let file_path = file_base.join(filename);
     let file = fs_err::tokio::File::open(&file_path).await?;
     let mut reader = tokio::io::BufReader::new(file);
@@ -96,7 +96,7 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
                 let pattern_str = String::from_utf8_lossy(pattern_display);
                 let error_message = format!(
                     "{}:{}: Merge conflict string {:?} found\n",
-                    filename.display(),
+                    filename,
                     line_number,
                     pattern_str.as_ref()
                 );
@@ -116,17 +116,18 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use crate::path::IntoUtf8PathBuf;
+    use camino::Utf8PathBuf;
     use tempfile::tempdir;
 
     async fn create_test_file(
         dir: &tempfile::TempDir,
         name: &str,
         content: &[u8],
-    ) -> Result<PathBuf> {
+    ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
-        Ok(file_path)
+        Ok(file_path.into_utf8_path_buf())
     }
 
     #[tokio::test]
@@ -134,7 +135,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"This is a normal file\nWith no conflict markers\n";
         let file_path = create_test_file(&dir, "clean.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -145,7 +146,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Some content\n<<<<<<< HEAD\nConflicting line\n";
         let file_path = create_test_file(&dir, "conflict.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         let output_str = String::from_utf8_lossy(&output);
@@ -159,7 +160,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Some content\n======= \nConflicting line\n";
         let file_path = create_test_file(&dir, "conflict.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         let output_str = String::from_utf8_lossy(&output);
@@ -172,7 +173,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Some content\n>>>>>>> branch\nMore content\n";
         let file_path = create_test_file(&dir, "conflict.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         let output_str = String::from_utf8_lossy(&output);
@@ -185,7 +186,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Before conflict\n<<<<<<< HEAD\nOur changes\n=======\nTheir changes\n>>>>>>> branch\nAfter conflict\n";
         let file_path = create_test_file(&dir, "conflict.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         let output_str = String::from_utf8_lossy(&output);
@@ -201,7 +202,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Some content <<<<<<< HEAD\n";
         let file_path = create_test_file(&dir, "no_conflict.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         // Should not detect conflict since marker is not at line start
         assert_eq!(code, 0);
         assert!(output.is_empty());
@@ -213,7 +214,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Some content\r\n=======\r\nConflicting line\r\n";
         let file_path = create_test_file(&dir, "conflict_crlf.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         Ok(())
@@ -224,7 +225,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"Some content\n=======\nConflicting line\n";
         let file_path = create_test_file(&dir, "conflict_lf.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         Ok(())
@@ -235,7 +236,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
         Ok(())
@@ -246,7 +247,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"<<<<<<< HEAD\nFirst\n=======\nSecond\n>>>>>>> branch\nMiddle\n<<<<<<< HEAD\nThird\n=======\nFourth\n>>>>>>> other\n";
         let file_path = create_test_file(&dir, "multiple.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         let output_str = String::from_utf8_lossy(&output);
         // Should find all markers from both conflicts (one per line with marker)
@@ -261,7 +262,7 @@ mod tests {
         let mut content = vec![0xFF, 0xFE, 0xFD];
         content.extend_from_slice(b"\n<<<<<<< HEAD\n");
         let file_path = create_test_file(&dir, "binary.bin", &content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
         Ok(())

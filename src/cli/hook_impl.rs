@@ -1,18 +1,17 @@
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::Read;
-use std::path::PathBuf;
 
 use anstream::eprintln;
 use anyhow::Result;
-use owo_colors::OwoColorize;
-
+use camino::Utf8PathBuf;
 use constants::env_vars::EnvVars;
+use owo_colors::OwoColorize;
 
 use crate::cli::{self, ExitStatus, RunArgs};
 use crate::config::HookType;
-use crate::fs::CWD;
 use crate::git::GIT_ROOT;
+use crate::path::CWD;
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::workspace;
@@ -21,11 +20,11 @@ use crate::{git, warn_user};
 
 pub(crate) async fn hook_impl(
     store: &Store,
-    config: Option<PathBuf>,
+    config: Option<Utf8PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
     hook_type: HookType,
-    _hook_dir: PathBuf,
+    _hook_dir: Utf8PathBuf,
     skip_on_missing_config: bool,
     script_version: Option<usize>,
     args: Vec<OsString>,
@@ -64,14 +63,14 @@ pub(crate) async fn hook_impl(
                 eprintln!(
                     "{}: config file not found: `{}`",
                     "error".red().bold(),
-                    config.display().cyan()
+                    config.cyan()
                 );
                 warn_for_no_config();
 
                 Ok(ExitStatus::Failure)
             };
         }
-        writeln!(printer.stdout(), "Using config file: {}", config.display())?;
+        writeln!(printer.stdout(), "Using config file: {config}")?;
     } else {
         // Try to discover a project from current directory (after `--cd`)
         match Project::discover(config.as_deref(), &CWD) {
@@ -90,7 +89,7 @@ pub(crate) async fn hook_impl(
                     writeln!(
                         printer.stdout(),
                         "Running in workspace: `{}`",
-                        project.path().display().cyan()
+                        project.path().cyan()
                     )?;
                 }
             }

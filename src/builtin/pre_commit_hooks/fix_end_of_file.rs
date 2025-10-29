@@ -1,13 +1,15 @@
-use std::path::Path;
-
 use anyhow::Result;
+use camino::Utf8Path;
 use futures::StreamExt;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
-pub(crate) async fn fix_end_of_file(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn fix_end_of_file(
+    hook: &Hook,
+    filenames: &[&Utf8Path],
+) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
         .map(async |filename| fix_file(hook.project().relative_path(), filename).await)
         .buffered(*CONCURRENCY);
@@ -24,7 +26,7 @@ pub(crate) async fn fix_end_of_file(hook: &Hook, filenames: &[&Path]) -> Result<
     Ok((code, output))
 }
 
-async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+async fn fix_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, Vec<u8>)> {
     let file_path = file_base.join(filename);
     let mut file = fs_err::tokio::OpenOptions::new()
         .read(true)
@@ -44,7 +46,7 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
             file.set_len(0).await?;
             file.flush().await?;
             file.shutdown().await?;
-            Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
+            Ok((1, format!("Fixing {filename}\n").into_bytes()))
         }
         (Some(pos), None) => {
             // File has some content, but no line ending at the end.
@@ -52,7 +54,7 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
             file.write_all(b"\n").await?;
             file.flush().await?;
             file.shutdown().await?;
-            Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
+            Ok((1, format!("Fixing {filename}\n").into_bytes()))
         }
         (Some(pos), Some(line_ending)) => {
             // File has some content and at least one line ending.
@@ -62,7 +64,7 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
                 return Ok((0, Vec::new()));
             }
             file.set_len(new_size).await?;
-            Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
+            Ok((1, format!("Fixing {filename}\n").into_bytes()))
         }
     }
 }
@@ -131,19 +133,20 @@ where
 mod tests {
     use super::*;
 
+    use crate::path::IntoUtf8PathBuf;
     use anyhow::Ok;
     use bstr::ByteSlice;
-    use std::path::{Path, PathBuf};
+    use camino::{Utf8Path, Utf8PathBuf};
     use tempfile::tempdir;
 
     async fn create_test_file(
         dir: &tempfile::TempDir,
         name: &str,
         content: &[u8],
-    ) -> Result<PathBuf> {
+    ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
-        Ok(file_path)
+        Ok(file_path.into_utf8_path_buf())
     }
 
     #[tokio::test]
@@ -156,7 +159,7 @@ mod tests {
 
         let content = b"line1\nline2\nline3";
         let file_path = create_test_file(&dir, "unix_no_eof.txt", content).await?;
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1, "Should fix the file");
         assert!(output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
@@ -164,7 +167,7 @@ mod tests {
 
         let content = b"line1\r\nline2\nline3\r\nline4";
         let file_path = create_test_file(&dir, "mixed.txt", content).await?;
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1, "Should fix the file");
         assert!(output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
@@ -172,7 +175,7 @@ mod tests {
 
         let content = b"line1\r\nline2\r\nline3";
         let file_path = create_test_file(&dir, "windows_no_eof.txt", content).await?;
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1, "Should fix the file");
         assert!(output.as_bytes().contains_str("Fixing"));
         let new_content = fs_err::tokio::read(&file_path).await?;
@@ -188,7 +191,7 @@ mod tests {
         let content = b"line1\r\nline2\r\nline3\r\n";
         let file_path = create_test_file(&dir, "windows_with_eof.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
 
         assert_eq!(code, 0, "Should not change the file");
         assert!(output.is_empty());
@@ -206,7 +209,7 @@ mod tests {
         let content = b"line1\nline2\nline3\n";
         let file_path = create_test_file(&dir, "unix_with_eof.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
 
         assert_eq!(code, 0, "Should not change the file");
         assert!(output.is_empty());
@@ -224,7 +227,7 @@ mod tests {
         let content = b"";
         let file_path = create_test_file(&dir, "empty.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
 
         assert_eq!(code, 0, "Should not change empty file");
         assert!(output.is_empty());
@@ -242,7 +245,7 @@ mod tests {
         let content = b"line1\nline2\n\n\n\n";
         let file_path = create_test_file(&dir, "excess_newlines.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
 
         assert_eq!(code, 1, "Should fix the file");
         assert!(output.as_bytes().contains_str("Fixing"));
@@ -260,7 +263,7 @@ mod tests {
         let content = b"line1\r\nline2\r\n\r\n\r\n";
         let file_path = create_test_file(&dir, "excess_crlf.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
 
         assert_eq!(code, 1, "Should fix the file");
         assert!(output.as_bytes().contains_str("Fixing"));
@@ -278,7 +281,7 @@ mod tests {
         let content = b"\n\n\n\n";
         let file_path = create_test_file(&dir, "only_newlines.txt", content).await?;
 
-        let (code, output) = fix_file(Path::new(""), &file_path).await?;
+        let (code, output) = fix_file(Utf8Path::new(""), &file_path).await?;
 
         assert_eq!(code, 1, "Should fix the file");
         assert!(output.as_bytes().contains_str("Fixing"));

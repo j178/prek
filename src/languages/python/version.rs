@@ -1,7 +1,8 @@
 //! Implement `-p <python_spec>` argument parser of `virutualenv` from
 //! <https://github.com/pypa/virtualenv/blob/216dc9f3592aa1f3345290702f0e7ba3432af3ce/src/virtualenv/discovery/py_spec.py>
-use std::path::PathBuf;
 use std::str::FromStr;
+
+use camino::Utf8PathBuf;
 
 use crate::hook::InstallInfo;
 use crate::languages::version;
@@ -13,7 +14,7 @@ pub(crate) enum PythonRequest {
     Major(u64),
     MajorMinor(u64, u64),
     MajorMinorPatch(u64, u64, u64),
-    Path(PathBuf),
+    Path(Utf8PathBuf),
     Range(semver::VersionReq, String),
 }
 
@@ -57,7 +58,7 @@ impl FromStr for PythonRequest {
                 })
                 .or_else(|_| {
                     // If it doesn't match any known format, treat it as a path
-                    let path = PathBuf::from(request);
+                    let path = Utf8PathBuf::from(request);
                     if path.exists() {
                         Ok(PythonRequest::Path(path))
                     } else {
@@ -137,8 +138,8 @@ fn split_wheel_tag_version(mut version: Vec<u64>) -> Vec<u64> {
 mod tests {
     use super::*;
     use crate::config::Language;
+    use camino::Utf8Path;
     use rustc_hash::FxHashSet;
-    use std::path::Path;
 
     #[test]
     fn test_parse_python_request() {
@@ -219,10 +220,10 @@ mod tests {
     #[test]
     fn test_satisfied_by() -> anyhow::Result<()> {
         let mut install_info =
-            InstallInfo::new(Language::Python, FxHashSet::default(), Path::new("."))?;
+            InstallInfo::new(Language::Python, FxHashSet::default(), Utf8Path::new("."))?;
         install_info
             .with_language_version(semver::Version::new(3, 12, 1))
-            .with_toolchain(PathBuf::from("/usr/bin/python3.12"));
+            .with_toolchain(Utf8PathBuf::from("/usr/bin/python3.12"));
 
         assert!(PythonRequest::Any.satisfied_by(&install_info));
         assert!(PythonRequest::Major(3).satisfied_by(&install_info));
@@ -230,10 +231,12 @@ mod tests {
         assert!(PythonRequest::MajorMinorPatch(3, 12, 1).satisfied_by(&install_info));
         assert!(!PythonRequest::MajorMinorPatch(3, 12, 2).satisfied_by(&install_info));
         assert!(
-            PythonRequest::Path(PathBuf::from("/usr/bin/python3.12")).satisfied_by(&install_info)
+            PythonRequest::Path(Utf8PathBuf::from("/usr/bin/python3.12"))
+                .satisfied_by(&install_info)
         );
         assert!(
-            !PythonRequest::Path(PathBuf::from("/usr/bin/python3.11")).satisfied_by(&install_info)
+            !PythonRequest::Path(Utf8PathBuf::from("/usr/bin/python3.11"))
+                .satisfied_by(&install_info)
         );
 
         let range_req = semver::VersionReq::parse(">=3.12").unwrap();

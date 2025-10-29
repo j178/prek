@@ -1,20 +1,20 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::Write;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
+use camino::{Utf8Path, Utf8PathBuf};
+use constants::env_vars::EnvVars;
 use etcetera::BaseStrategy;
 use futures::StreamExt;
 use thiserror::Error;
 use tracing::{debug, warn};
 
-use constants::env_vars::EnvVars;
-
 use crate::config::RemoteRepo;
 use crate::fs::LockedFile;
 use crate::git::clone_repo;
 use crate::hook::InstallInfo;
+use crate::path::{IntoUtf8PathBuf, ToUtf8Path};
 use crate::run::CONCURRENCY;
 use crate::workspace::HookInitReporter;
 
@@ -33,11 +33,11 @@ pub enum Error {
 /// A store for managing repos.
 #[derive(Debug)]
 pub struct Store {
-    path: PathBuf,
+    path: Utf8PathBuf,
 }
 
 impl Store {
-    pub(crate) fn from_path(path: impl Into<PathBuf>) -> Self {
+    pub(crate) fn from_path(path: impl Into<Utf8PathBuf>) -> Self {
         Self { path: path.into() }
     }
 
@@ -54,12 +54,12 @@ impl Store {
         let Some(path) = path else {
             return Err(Error::HomeNotFound);
         };
-        let store = Store::from_path(path).init()?;
+        let store = Store::from_path(path.into_utf8_path_buf()).init()?;
 
         Ok(store)
     }
 
-    pub(crate) fn path(&self) -> &Path {
+    pub(crate) fn path(&self) -> &Utf8Path {
         self.path.as_ref()
     }
 
@@ -87,7 +87,7 @@ impl Store {
         &self,
         repo: &RemoteRepo,
         reporter: Option<&dyn HookInitReporter>,
-    ) -> Result<PathBuf, Error> {
+    ) -> Result<Utf8PathBuf, Error> {
         // Check if the repo is already cloned.
         let target = self.repo_path(repo);
         if target.join(".prek-repo.json").try_exists()? {
@@ -105,11 +105,12 @@ impl Store {
             %repo,
             "Cloning repo",
         );
-        clone_repo(&repo.repo, &repo.rev, temp.path()).await?;
+        let temp_path = temp.path().to_utf8_path();
+        clone_repo(&repo.repo, &repo.rev, temp_path).await?;
 
         // TODO: add windows retry
         fs_err::tokio::remove_dir_all(&target).await.ok();
-        fs_err::tokio::rename(temp, &target).await?;
+        fs_err::tokio::rename(temp_path, &target).await?;
 
         let content = serde_json::to_string_pretty(&repo)?;
         fs_err::tokio::write(target.join(".prek-repo.json"), content).await?;
@@ -136,10 +137,17 @@ impl Store {
                         return None;
                     }
                 };
+                let path = match Utf8PathBuf::from_path_buf(path) {
+                    Ok(path) => path,
+                    Err(path) => {
+                        warn!(?path, "Hook path is not valid UTF-8, skipping");
+                        return None;
+                    }
+                };
                 let info = match InstallInfo::from_env_path(&path).await {
                     Ok(info) => info,
                     Err(err) => {
-                        warn!(%err, path = %path.display(), "Skipping invalid installed hook");
+                        warn!(%err, path = %path, "Skipping invalid installed hook");
                         return None;
                     }
                 };
@@ -162,40 +170,40 @@ impl Store {
     }
 
     /// Returns the path to the cloned repo.
-    fn repo_path(&self, repo: &RemoteRepo) -> PathBuf {
+    fn repo_path(&self, repo: &RemoteRepo) -> Utf8PathBuf {
         let mut hasher = DefaultHasher::new();
         repo.hash(&mut hasher);
         let digest = to_hex(hasher.finish());
         self.repos_dir().join(digest)
     }
 
-    pub(crate) fn repos_dir(&self) -> PathBuf {
+    pub(crate) fn repos_dir(&self) -> Utf8PathBuf {
         self.path.join("repos")
     }
 
-    pub(crate) fn hooks_dir(&self) -> PathBuf {
+    pub(crate) fn hooks_dir(&self) -> Utf8PathBuf {
         self.path.join("hooks")
     }
 
-    pub(crate) fn patches_dir(&self) -> PathBuf {
+    pub(crate) fn patches_dir(&self) -> Utf8PathBuf {
         self.path.join("patches")
     }
 
     /// The path to the tool directory in the store.
-    pub(crate) fn tools_path(&self, tool: ToolBucket) -> PathBuf {
+    pub(crate) fn tools_path(&self, tool: ToolBucket) -> Utf8PathBuf {
         self.path.join("tools").join(tool.as_str())
     }
 
-    pub(crate) fn cache_path(&self, tool: CacheBucket) -> PathBuf {
+    pub(crate) fn cache_path(&self, tool: CacheBucket) -> Utf8PathBuf {
         self.path.join("cache").join(tool.as_str())
     }
 
     /// Scratch path for temporary files.
-    pub(crate) fn scratch_path(&self) -> PathBuf {
+    pub(crate) fn scratch_path(&self) -> Utf8PathBuf {
         self.path.join("scratch")
     }
 
-    pub(crate) fn log_file(&self) -> PathBuf {
+    pub(crate) fn log_file(&self) -> Utf8PathBuf {
         self.path.join("prek.log")
     }
 }

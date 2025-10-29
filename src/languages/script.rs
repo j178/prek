@@ -1,7 +1,7 @@
-use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
+use camino::Utf8Path;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::hook::InstalledHook;
@@ -31,7 +31,7 @@ impl LanguageImpl for Script {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&Path],
+        filenames: &[&Utf8Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         // For `language: script`, the `entry[0]` is a script path.
@@ -42,10 +42,10 @@ impl LanguageImpl for Script {
         let mut split = hook.entry.split()?;
 
         let cmd = repo_path.join(&split[0]);
-        split[0] = cmd.to_string_lossy().to_string();
+        split[0] = cmd.to_string();
         let entry = resolve_command(split, None);
 
-        let run = async move |batch: &[&Path]| {
+        let run = async move |batch: &[&Utf8Path]| {
             let mut output = Cmd::new(&entry[0], "run script command")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])

@@ -1,8 +1,8 @@
-use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use constants::env_vars::EnvVars;
 use tokio::io::AsyncWriteExt;
 use tracing::debug;
@@ -11,6 +11,7 @@ use crate::cli::reporter::HookInstallReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::python::{Uv, python_exec, query_python_info};
+use crate::path::IntoUtf8PathBuf;
 use crate::process::Cmd;
 use crate::run::CONCURRENCY;
 use crate::store::{CacheBucket, Store, ToolBucket};
@@ -69,7 +70,7 @@ const INSTALL_PYTHON_VERSION: &str = "3.13";
 
 pub(crate) struct Pygrep;
 
-fn find_installed_python(python_dir: &Path) -> Option<PathBuf> {
+fn find_installed_python(python_dir: &Utf8Path) -> Option<Utf8PathBuf> {
     fs_err::read_dir(python_dir)
         .ok()
         .into_iter()
@@ -83,7 +84,7 @@ fn find_installed_python(python_dir: &Path) -> Option<PathBuf> {
                 .map(|name| !name.starts_with('.'))
                 .unwrap_or(true)
         })
-        .map(|entry| python_exec(&entry.path()))
+        .map(|entry| python_exec(&entry.path().into_utf8_path_buf()))
         .next()
 }
 
@@ -125,7 +126,7 @@ impl LanguageImpl for Pygrep {
                 .output()
                 .await?;
             if output.status.success() {
-                python = Some(PathBuf::from(
+                python = Some(Utf8PathBuf::from(
                     String::from_utf8_lossy(&output.stdout).trim(),
                 ));
             } else {
@@ -180,7 +181,7 @@ impl LanguageImpl for Pygrep {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&Path],
+        filenames: &[&Utf8Path],
         store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let info = hook.install_info().expect("Pygrep hook must be installed");
@@ -210,13 +211,11 @@ impl LanguageImpl for Pygrep {
 
         let mut stdin = cmd.stdin.take().context("Failed to take stdin")?;
         // TODO: avoid this clone if possible.
-        let filenames: Vec<_> = filenames.iter().map(PathBuf::from).collect();
+        let filenames: Vec<_> = filenames.iter().map(Utf8PathBuf::from).collect();
 
         let write_task = tokio::spawn(async move {
             for filename in filenames {
-                stdin
-                    .write_all(format!("{}\n", filename.display()).as_bytes())
-                    .await?;
+                stdin.write_all(format!("{filename}\n").as_bytes()).await?;
             }
             let _ = stdin.shutdown().await;
             anyhow::Ok(())

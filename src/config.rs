@@ -1,18 +1,18 @@
 use std::fmt::Display;
 use std::ops::{Deref, RangeInclusive};
-use std::path::Path;
 use std::str::FromStr;
 use std::sync::OnceLock;
 
 use anyhow::Result;
+use camino::Utf8Path;
 use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
 use fancy_regex::{self as regex, Regex};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_yaml::Value;
 
-use crate::fs::Simplified;
 use crate::identify;
+use crate::path::Simplified;
 use crate::version;
 use crate::warn_user;
 
@@ -726,7 +726,7 @@ pub enum Error {
 const EXPECTED_UNUSED: &[&str] = &["minimum_pre_commit_version", "ci"];
 
 /// Read the configuration file from the given path.
-pub fn read_config(path: &Path) -> Result<Config, Error> {
+pub fn read_config(path: &Utf8Path) -> Result<Config, Error> {
     let content = match fs_err::read_to_string(path) {
         Ok(content) => content,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -753,7 +753,7 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
     if !unused.is_empty() {
         warn_user!(
             "Ignored unexpected keys in `{}`: {}",
-            path.display().cyan(),
+            path.cyan(),
             unused
                 .into_iter()
                 .map(|key| format!("`{}`", key.yellow()))
@@ -803,7 +803,7 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
 }
 
 /// Read the manifest file from the given path.
-pub fn read_manifest(path: &Path) -> Result<Manifest, Error> {
+pub fn read_manifest(path: &Utf8Path) -> Result<Manifest, Error> {
     let content = fs_err::read_to_string(path)?;
     let manifest = serde_yaml::from_str(&content)
         .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
@@ -838,6 +838,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::path::ToUtf8Path;
     use std::io::Write as _;
 
     #[test]
@@ -1407,14 +1408,14 @@ mod tests {
 
     #[test]
     fn test_read_config() -> Result<()> {
-        let config = read_config(Path::new("tests/fixtures/uv-pre-commit-config.yaml"))?;
+        let config = read_config(Utf8Path::new("tests/fixtures/uv-pre-commit-config.yaml"))?;
         insta::assert_debug_snapshot!(config);
         Ok(())
     }
 
     #[test]
     fn test_read_manifest() -> Result<()> {
-        let manifest = read_manifest(Path::new("tests/fixtures/uv-pre-commit-hooks.yaml"))?;
+        let manifest = read_manifest(Utf8Path::new("tests/fixtures/uv-pre-commit-hooks.yaml"))?;
         insta::assert_debug_snapshot!(manifest);
         Ok(())
     }
@@ -1602,7 +1603,7 @@ mod tests {
         let mut file = tempfile::NamedTempFile::new()?;
         file.write_all(yaml.as_bytes())?;
 
-        let config = read_config(file.path())?;
+        let config = read_config(file.path().to_utf8_path())?;
         insta::assert_debug_snapshot!(config, @r#"
         Config {
             repos: [

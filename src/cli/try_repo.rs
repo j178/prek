@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 use std::fmt::Write;
-use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tempfile::TempDir;
@@ -16,7 +16,7 @@ use crate::printer::Printer;
 use crate::store::Store;
 use crate::warn_user;
 
-async fn get_head_rev(repo: &Path) -> Result<String> {
+async fn get_head_rev(repo: &Utf8Path) -> Result<String> {
     let head_rev = git::git_cmd("get head rev")?
         .arg("rev-parse")
         .arg("HEAD")
@@ -28,7 +28,11 @@ async fn get_head_rev(repo: &Path) -> Result<String> {
     Ok(head_rev)
 }
 
-async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> Result<PathBuf> {
+async fn clone_and_commit(
+    repo_path: &Utf8Path,
+    head_rev: &str,
+    tmp_dir: &Utf8Path,
+) -> Result<Utf8PathBuf> {
     let shadow = tmp_dir.join("shadow-repo");
     git::git_cmd("clone shadow repo")?
         .arg("clone")
@@ -92,9 +96,9 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
 async fn prepare_repo_and_rev<'a>(
     repo: &'a str,
     rev: Option<&'a str>,
-    tmp_dir: &'a Path,
+    tmp_dir: &std::path::Path,
 ) -> Result<(Cow<'a, str>, String)> {
-    let repo_path = Path::new(repo);
+    let repo_path = Utf8Path::new(repo);
     let is_local = repo_path.is_dir();
 
     // If rev is provided, use it directly.
@@ -127,16 +131,18 @@ async fn prepare_repo_and_rev<'a>(
     // If repo is a local repo with uncommitted changes, create a shadow repo to commit the changes.
     if is_local && git::has_diff("HEAD", repo_path).await? {
         warn_user!("Creating temporary repo with uncommitted changes...");
-        let shadow = clone_and_commit(repo_path, &head_rev, tmp_dir).await?;
+        let tmp_dir_utf8 = Utf8Path::from_path(tmp_dir)
+            .ok_or_else(|| anyhow::anyhow!("Temporary directory path is not valid UTF-8"))?;
+        let shadow = clone_and_commit(repo_path, &head_rev, tmp_dir_utf8).await?;
         let head_rev = get_head_rev(&shadow).await?;
-        Ok((Cow::Owned(shadow.to_string_lossy().to_string()), head_rev))
+        Ok((Cow::Owned(shadow.to_string()), head_rev))
     } else {
         Ok((Cow::Borrowed(repo), head_rev))
     }
 }
 
 pub(crate) async fn try_repo(
-    config: Option<PathBuf>,
+    config: Option<Utf8PathBuf>,
     repo: String,
     rev: Option<String>,
     run_args: crate::cli::RunArgs,
@@ -155,7 +161,9 @@ pub(crate) async fn try_repo(
         .await
         .context("Failed to determine repository and revision")?;
 
-    let store = Store::from_path(tmp_dir.path()).init()?;
+    let tmp_path = Utf8Path::from_path(tmp_dir.path())
+        .ok_or_else(|| anyhow::anyhow!("Temporary directory path is not valid UTF-8"))?;
+    let store = Store::from_path(tmp_path).init()?;
     let repo_clone_path = store
         .clone_repo(
             &config::RemoteRepo {
@@ -189,7 +197,7 @@ pub(crate) async fn try_repo(
         hooks_str = hooks_str,
     };
 
-    let config_file = tmp_dir.path().join(constants::CONFIG_FILE);
+    let config_file = tmp_path.join(constants::CONFIG_FILE);
     fs_err::tokio::write(&config_file, &config_str).await?;
 
     writeln!(printer.stdout(), "{}", "Using config:".cyan().bold())?;

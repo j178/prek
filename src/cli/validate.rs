@@ -1,14 +1,14 @@
 use std::error::Error;
 use std::iter;
-use std::path::PathBuf;
 
 use anstream::eprintln;
+use camino::Utf8PathBuf;
 use owo_colors::OwoColorize;
 
 use crate::cli::ExitStatus;
 use crate::config::{read_config, read_manifest};
 
-pub(crate) fn validate_configs(configs: Vec<PathBuf>) -> ExitStatus {
+pub(crate) fn validate_configs(configs: Vec<Utf8PathBuf>) -> ExitStatus {
     let mut status = ExitStatus::Success;
 
     for config in configs {
@@ -24,7 +24,7 @@ pub(crate) fn validate_configs(configs: Vec<PathBuf>) -> ExitStatus {
     status
 }
 
-pub(crate) fn validate_manifest(configs: Vec<PathBuf>) -> ExitStatus {
+pub(crate) fn validate_manifest(configs: Vec<Utf8PathBuf>) -> ExitStatus {
     let mut status = ExitStatus::Success;
 
     for config in configs {

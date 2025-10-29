@@ -1,10 +1,10 @@
 use std::env::consts::EXE_EXTENSION;
 use std::fmt::Display;
-use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use constants::env_vars::EnvVars;
 use itertools::Itertools;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
@@ -20,14 +20,14 @@ use crate::process::Cmd;
 use crate::store::Store;
 
 pub(crate) struct GoResult {
-    path: PathBuf,
+    path: Utf8PathBuf,
     version: GoVersion,
     from_system: bool,
 }
 
 impl Display for GoResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}@{}", self.path.display(), self.version)?;
+        write!(f, "{}@{}", self.path, self.version)?;
         Ok(())
     }
 }
@@ -42,7 +42,7 @@ static GO_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
 });
 
 impl GoResult {
-    fn from_executable(path: PathBuf, from_system: bool) -> Self {
+    fn from_executable(path: Utf8PathBuf, from_system: bool) -> Self {
         Self {
             path,
             from_system,
@@ -50,12 +50,12 @@ impl GoResult {
         }
     }
 
-    pub(crate) fn from_dir(dir: &Path, from_system: bool) -> Self {
+    pub(crate) fn from_dir(dir: &Utf8Path, from_system: bool) -> Self {
         let go = bin_dir(dir).join("go").with_extension(EXE_EXTENSION);
         Self::from_executable(go, from_system)
     }
 
-    pub(crate) fn bin(&self) -> &Path {
+    pub(crate) fn bin(&self) -> &Utf8Path {
         &self.path
     }
 
@@ -98,11 +98,11 @@ impl GoResult {
 }
 
 pub(crate) struct GoInstaller {
-    root: PathBuf,
+    root: Utf8PathBuf,
 }
 
 impl GoInstaller {
-    pub(crate) fn new(root: PathBuf) -> Self {
+    pub(crate) fn new(root: Utf8PathBuf) -> Self {
         Self { root }
     }
 
@@ -155,7 +155,8 @@ impl GoInstaller {
             .filter_map(|entry| {
                 let dir_name = entry.file_name();
                 let version = GoVersion::from_str(&dir_name.to_string_lossy()).ok()?;
-                Some((version, entry.path()))
+                let path = Utf8PathBuf::from_path_buf(entry.path()).ok()?;
+                Some((version, path))
             })
             .sorted_unstable_by(|(a, _), (b, _)| a.cmp(b))
             .rev();
@@ -229,11 +230,11 @@ impl GoInstaller {
 
         download_and_extract(&url, &filename, store, async |extracted| {
             if target.exists() {
-                debug!(target = %target.display(), "Removing existing go");
+                debug!(target = %target, "Removing existing go");
                 fs_err::tokio::remove_dir_all(&target).await?;
             }
 
-            debug!(?extracted, target = %target.display(), "Moving go to target");
+            debug!(?extracted, target = %target, "Moving go to target");
             // TODO: retry on Windows
             fs_err::tokio::rename(extracted, &target).await?;
 
@@ -255,6 +256,13 @@ impl GoInstaller {
         };
 
         for go_path in go_paths {
+            let go_path = match Utf8PathBuf::from_path_buf(go_path) {
+                Ok(path) => path,
+                Err(path) => {
+                    warn!(?path, "Go path is not valid UTF-8, skipping");
+                    continue;
+                }
+            };
             match GoResult::from_executable(go_path, true)
                 .fill_version()
                 .await

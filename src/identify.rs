@@ -18,9 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+use camino::Utf8Path;
 use std::io::{BufRead, Read};
 use std::iter::FromIterator;
-use std::path::Path;
 use std::sync::OnceLock;
 
 use anyhow::Result;
@@ -649,7 +649,7 @@ fn is_encoding_tag(tag: &str) -> bool {
 }
 
 /// Identify tags for a file at the given path.
-pub(crate) fn tags_from_path(path: &Path) -> Result<TagSet> {
+pub(crate) fn tags_from_path(path: &Utf8Path) -> Result<TagSet> {
     let metadata = std::fs::symlink_metadata(path)?;
     if metadata.is_dir() {
         return Ok(TagSet::from([tags::DIRECTORY]));
@@ -714,12 +714,9 @@ pub(crate) fn tags_from_path(path: &Path) -> Result<TagSet> {
     Ok(tags)
 }
 
-fn tags_from_filename(filename: &Path) -> TagSet {
-    let ext = filename.extension().and_then(|ext| ext.to_str());
-    let filename = filename
-        .file_name()
-        .and_then(|name| name.to_str())
-        .expect("Invalid filename");
+fn tags_from_filename(filename: &Utf8Path) -> TagSet {
+    let ext = filename.extension();
+    let filename = filename.file_name().expect("Invalid filename");
 
     let mut result = TagSet::new();
 
@@ -832,7 +829,7 @@ fn parse_nix_shebang<R: BufRead>(reader: &mut R, mut cmd: Vec<String>) -> Vec<St
     cmd
 }
 
-pub(crate) fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
+pub(crate) fn parse_shebang(path: &Utf8Path) -> Result<Vec<String>, ShebangError> {
     let file = std::fs::File::open(path)?;
     let mut reader = std::io::BufReader::new(file);
     let mut line = String::new();
@@ -883,7 +880,7 @@ fn is_text_char(b: u8) -> bool {
 ///
 /// This is roughly based on libmagic's binary/text detection:
 /// <https://github.com/file/file/blob/df74b09b9027676088c797528edcaae5a9ce9ad0/src/encoding.c#L203-L228>
-fn is_text_file(path: &Path) -> bool {
+fn is_text_file(path: &Utf8Path) -> bool {
     let mut buffer = [0; 1024];
     let Ok(mut file) = fs_err::File::open(path) else {
         return false;
@@ -941,8 +938,9 @@ pub fn all_tags() -> &'static FxHashSet<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::path::{IntoUtf8PathBuf, ToUtf8Path};
+    use camino::Utf8Path;
     use std::io::Write;
-    use std::path::Path;
 
     fn assert_tagset(actual: &TagSet, expected: &[&'static str]) {
         let mut actual_vec: Vec<_> = actual.iter().collect();
@@ -956,12 +954,12 @@ mod tests {
     #[cfg(unix)]
     fn tags_from_path() -> anyhow::Result<()> {
         let dir = tempfile::tempdir()?;
-        let src = dir.path().join("source.txt");
-        let dest = dir.path().join("link.txt");
+        let src = dir.path().join("source.txt").into_utf8_path_buf();
+        let dest = dir.path().join("link.txt").into_utf8_path_buf();
         fs_err::File::create(&src)?;
         std::os::unix::fs::symlink(&src, &dest)?;
 
-        let tags = super::tags_from_path(dir.path())?;
+        let tags = super::tags_from_path(dir.path().to_utf8_path())?;
         assert_tagset(&tags, &["directory"]);
         let tags = super::tags_from_path(&src)?;
         assert_tagset(&tags, &["plain-text", "non-executable", "file", "text"]);
@@ -975,10 +973,10 @@ mod tests {
     #[cfg(windows)]
     fn tags_from_path() -> anyhow::Result<()> {
         let dir = tempfile::tempdir()?;
-        let src = dir.path().join("source.txt");
+        let src = dir.path().join("source.txt").into_utf8_path_buf();
         fs_err::File::create(&src)?;
 
-        let tags = super::tags_from_path(dir.path())?;
+        let tags = super::tags_from_path(dir.path().to_utf8_path())?;
         assert_tagset(&tags, &["directory"]);
         let tags = super::tags_from_path(&src)?;
         assert_tagset(&tags, &["plain-text", "executable", "file", "text"]);
@@ -988,22 +986,22 @@ mod tests {
 
     #[test]
     fn tags_from_filename() {
-        let tags = super::tags_from_filename(Path::new("test.py"));
+        let tags = super::tags_from_filename(Utf8Path::new("test.py"));
         assert_tagset(&tags, &["python", "text"]);
 
-        let tags = super::tags_from_filename(Path::new("data.json"));
+        let tags = super::tags_from_filename(Utf8Path::new("data.json"));
         assert_tagset(&tags, &["json", "text"]);
 
-        let tags = super::tags_from_filename(Path::new("Pipfile"));
+        let tags = super::tags_from_filename(Utf8Path::new("Pipfile"));
         assert_tagset(&tags, &["toml", "text"]);
 
-        let tags = super::tags_from_filename(Path::new("Pipfile.lock"));
+        let tags = super::tags_from_filename(Utf8Path::new("Pipfile.lock"));
         assert_tagset(&tags, &["json", "text"]);
 
-        let tags = super::tags_from_filename(Path::new("file.pdf"));
+        let tags = super::tags_from_filename(Utf8Path::new("file.pdf"));
         assert_tagset(&tags, &["pdf", "binary"]);
 
-        let tags = super::tags_from_filename(Path::new("FILE.PDF"));
+        let tags = super::tags_from_filename(Utf8Path::new("FILE.PDF"));
         assert_tagset(&tags, &["pdf", "binary"]);
     }
 
@@ -1029,7 +1027,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_shebang_nix_shell_interpreter() -> anyhow::Result<()> {
+    fn parse_shebang_nix_shell_interpreter() -> Result<()> {
         let mut file = tempfile::NamedTempFile::new()?;
         writeln!(
             file,
@@ -1042,14 +1040,14 @@ mod tests {
         )?;
         file.flush()?;
 
-        let cmd = super::parse_shebang(file.path())?;
+        let cmd = parse_shebang(file.path().to_utf8_path())?;
         assert_eq!(cmd, vec!["bash"]);
 
         Ok(())
     }
 
     #[test]
-    fn parse_shebang_nix_shell_without_interpreter() -> anyhow::Result<()> {
+    fn parse_shebang_nix_shell_without_interpreter() -> Result<()> {
         let mut file = tempfile::NamedTempFile::new()?;
         writeln!(
             file,
@@ -1061,7 +1059,7 @@ mod tests {
         )?;
         file.flush()?;
 
-        let cmd = super::parse_shebang(file.path())?;
+        let cmd = parse_shebang(file.path().to_utf8_path())?;
         assert_eq!(cmd, vec!["nix-shell", "-p", "python3"]);
 
         Ok(())

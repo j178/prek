@@ -1,8 +1,8 @@
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use constants::env_vars::EnvVars;
 use futures::TryStreamExt;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -11,9 +11,9 @@ use tracing::{debug, error, trace};
 use crate::archive::ArchiveExtension;
 use crate::cli::reporter::HookInstallReporter;
 use crate::config::Language;
-use crate::fs::{CWD, Simplified};
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::identify::parse_shebang;
+use crate::path::{CWD, IntoUtf8PathBuf, Simplified};
 use crate::store::Store;
 use crate::version::version;
 use crate::{archive, builtin, warn_user_once};
@@ -53,7 +53,7 @@ trait LanguageImpl {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&Path],
+        filenames: &[&Utf8Path],
         store: &Store,
     ) -> Result<(i32, Vec<u8>)>;
 }
@@ -81,7 +81,7 @@ impl LanguageImpl for Unimplemented {
     async fn run(
         &self,
         hook: &InstalledHook,
-        _filenames: &[&Path],
+        _filenames: &[&Utf8Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         anyhow::bail!(UnimplementedError(format!("{}", hook.language)))
@@ -202,7 +202,7 @@ impl Language {
     pub async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&Path],
+        filenames: &[&Utf8Path],
         store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         // fast path for hooks implemented in Rust
@@ -244,23 +244,25 @@ pub(crate) async fn extract_metadata_from_entry(hook: &mut Hook) -> Result<()> {
 pub(crate) fn resolve_command(mut cmds: Vec<String>, env_path: Option<&OsStr>) -> Vec<String> {
     let cmd = &cmds[0];
     let exe_path = match which::which_in(cmd, env_path, &*CWD) {
-        Ok(p) => p,
-        Err(_) => PathBuf::from(cmd),
+        Ok(p) => Utf8PathBuf::from_path_buf(p).unwrap_or_else(|_| Utf8PathBuf::from(cmd)),
+        Err(_) => Utf8PathBuf::from(cmd),
     };
-    trace!("Resolved command: {}", exe_path.display());
+    trace!("Resolved command: {}", exe_path);
 
     if let Ok(mut interpreter) = parse_shebang(&exe_path) {
         trace!("Found shebang: {:?}", interpreter);
         // Resolve the interpreter path, convert "python3" to "python3.exe" on Windows
         if let Ok(p) = which::which_in(&interpreter[0], env_path, &*CWD) {
-            interpreter[0] = p.to_string_lossy().to_string();
-            trace!("Resolved interpreter: {}", &interpreter[0]);
+            if let Ok(p) = Utf8PathBuf::from_path_buf(p) {
+                interpreter[0] = p.to_string();
+                trace!("Resolved interpreter: {}", &interpreter[0]);
+            }
         }
-        interpreter.push(exe_path.to_string_lossy().to_string());
+        interpreter.push(exe_path.to_string());
         interpreter.extend_from_slice(&cmds[1..]);
         interpreter
     } else {
-        cmds[0] = exe_path.to_string_lossy().to_string();
+        cmds[0] = exe_path.to_string();
         cmds
     }
 }
@@ -269,7 +271,7 @@ async fn download_and_extract(
     url: &str,
     filename: &str,
     store: &Store,
-    callback: impl AsyncFn(&Path) -> Result<()>,
+    callback: impl AsyncFn(&Utf8Path) -> Result<()>,
 ) -> Result<()> {
     let response = REQWEST_CLIENT
         .get(url)
@@ -298,8 +300,10 @@ async fn download_and_extract(
     archive::unpack(tarball, ext, temp_dir.path()).await?;
 
     let extracted = match archive::strip_component(temp_dir.path()) {
-        Ok(top_level) => top_level,
-        Err(archive::Error::NonSingularArchive(_)) => temp_dir.path().to_path_buf(),
+        Ok(top_level) => top_level.into_utf8_path_buf(),
+        Err(archive::Error::NonSingularArchive(_)) => {
+            temp_dir.path().to_path_buf().into_utf8_path_buf()
+        }
         Err(err) => return Err(err.into()),
     };
 
@@ -344,12 +348,13 @@ fn use_native_tls() -> bool {
     }
 
     // SSL_CERT_FILE is only respected when using native TLS
-    EnvVars::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
-        let path_exists = Path::new(&path).exists();
+    EnvVars::var(EnvVars::SSL_CERT_FILE).is_ok_and(|path| {
+        let path = Utf8PathBuf::from(path);
+        let path_exists = path.exists();
         if !path_exists {
             warn_user_once!(
                 "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
-                path.simplified_display().cyan()
+                path.simplified().cyan()
             );
         }
         path_exists

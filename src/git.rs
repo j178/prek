@@ -1,11 +1,11 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::str::Utf8Error;
 use std::sync::LazyLock;
 
 use anyhow::Result;
+use camino::{Utf8Path, Utf8PathBuf};
 use rustc_hash::FxHashSet;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, warn};
@@ -28,12 +28,14 @@ pub(crate) enum Error {
     UTF8(#[from] Utf8Error),
 }
 
-pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
-    LazyLock::new(|| which::which("git"));
+pub(crate) static GIT: LazyLock<Result<Utf8PathBuf, which::Error>> = LazyLock::new(|| {
+    which::which("git")
+        .and_then(|p| Utf8PathBuf::from_path_buf(p).map_err(|_| which::Error::CannotFindBinaryPath))
+});
 
-pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| {
+pub(crate) static GIT_ROOT: LazyLock<Result<Utf8PathBuf, Error>> = LazyLock::new(|| {
     get_root().inspect(|root| {
-        debug!("Git root: {}", root.display());
+        debug!("Git root: {}", root);
     })
 });
 
@@ -73,14 +75,14 @@ pub(crate) fn git_cmd(summary: &str) -> Result<Cmd, Error> {
     Ok(cmd)
 }
 
-fn zsplit(s: &[u8]) -> Result<Vec<PathBuf>, Utf8Error> {
+fn zsplit(s: &[u8]) -> Result<Vec<Utf8PathBuf>, Utf8Error> {
     s.split(|&b| b == b'\0')
         .filter(|slice| !slice.is_empty())
-        .map(|slice| str::from_utf8(slice).map(PathBuf::from))
+        .map(|slice| str::from_utf8(slice).map(Utf8PathBuf::from))
         .collect()
 }
 
-pub(crate) async fn intent_to_add_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
+pub(crate) async fn intent_to_add_files(root: &Utf8Path) -> Result<Vec<Utf8PathBuf>, Error> {
     let output = git_cmd("get intent to add files")?
         .arg("diff")
         .arg("--no-ext-diff")
@@ -99,8 +101,8 @@ pub(crate) async fn intent_to_add_files(root: &Path) -> Result<Vec<PathBuf>, Err
 pub(crate) async fn get_changed_files(
     old: &str,
     new: &str,
-    root: &Path,
-) -> Result<Vec<PathBuf>, Error> {
+    root: &Utf8Path,
+) -> Result<Vec<Utf8PathBuf>, Error> {
     let output = git_cmd("get changed files")?
         .arg("diff")
         .arg("--name-only")
@@ -116,7 +118,7 @@ pub(crate) async fn get_changed_files(
     Ok(zsplit(&output.stdout)?)
 }
 
-pub(crate) async fn ls_files(cwd: &Path, path: &Path) -> Result<Vec<PathBuf>, Error> {
+pub(crate) async fn ls_files(cwd: &Utf8Path, path: &Utf8Path) -> Result<Vec<Utf8PathBuf>, Error> {
     let output = git_cmd("get git all files")?
         .current_dir(cwd)
         .arg("ls-files")
@@ -130,19 +132,19 @@ pub(crate) async fn ls_files(cwd: &Path, path: &Path) -> Result<Vec<PathBuf>, Er
     Ok(zsplit(&output.stdout)?)
 }
 
-pub(crate) async fn get_git_dir() -> Result<PathBuf, Error> {
+pub(crate) async fn get_git_dir() -> Result<Utf8PathBuf, Error> {
     let output = git_cmd("get git dir")?
         .arg("rev-parse")
         .arg("--git-dir")
         .check(true)
         .output()
         .await?;
-    Ok(PathBuf::from(
+    Ok(Utf8PathBuf::from(
         String::from_utf8_lossy(&output.stdout).trim_ascii(),
     ))
 }
 
-pub(crate) async fn get_git_common_dir() -> Result<PathBuf, Error> {
+pub(crate) async fn get_git_common_dir() -> Result<Utf8PathBuf, Error> {
     let output = git_cmd("get git common dir")?
         .arg("rev-parse")
         .arg("--git-common-dir")
@@ -152,13 +154,13 @@ pub(crate) async fn get_git_common_dir() -> Result<PathBuf, Error> {
     if output.stdout.trim_ascii().is_empty() {
         Ok(get_git_dir().await?)
     } else {
-        Ok(PathBuf::from(
+        Ok(Utf8PathBuf::from(
             String::from_utf8_lossy(&output.stdout).trim_ascii(),
         ))
     }
 }
 
-pub(crate) async fn get_staged_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
+pub(crate) async fn get_staged_files(root: &Utf8Path) -> Result<Vec<Utf8PathBuf>, Error> {
     let output = git_cmd("get staged files")?
         .current_dir(root)
         .arg("diff")
@@ -173,7 +175,7 @@ pub(crate) async fn get_staged_files(root: &Path) -> Result<Vec<PathBuf>, Error>
     Ok(zsplit(&output.stdout)?)
 }
 
-pub(crate) async fn files_not_staged(files: &[&Path]) -> Result<Vec<PathBuf>> {
+pub(crate) async fn files_not_staged(files: &[&Utf8Path]) -> Result<Vec<Utf8PathBuf>> {
     let output = git_cmd("git diff")?
         .arg("diff")
         .arg("--exit-code")
@@ -202,7 +204,7 @@ pub(crate) async fn has_unmerged_paths() -> Result<bool, Error> {
     Ok(!output.stdout.trim_ascii().is_empty())
 }
 
-pub(crate) async fn has_diff(rev: &str, path: &Path) -> Result<bool> {
+pub(crate) async fn has_diff(rev: &str, path: &Utf8Path) -> Result<bool> {
     let status = git_cmd("check diff")?
         .arg("diff")
         .arg("--quiet")
@@ -219,7 +221,7 @@ pub(crate) async fn is_in_merge_conflict() -> Result<bool, Error> {
     Ok(git_dir.join("MERGE_HEAD").try_exists()? && git_dir.join("MERGE_MSG").try_exists()?)
 }
 
-pub(crate) async fn get_conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
+pub(crate) async fn get_conflicted_files(root: &Utf8Path) -> Result<Vec<Utf8PathBuf>, Error> {
     let tree = git_cmd("git write-tree")?
         .arg("write-tree")
         .check(true)
@@ -244,12 +246,12 @@ pub(crate) async fn get_conflicted_files(root: &Path) -> Result<Vec<PathBuf>, Er
     Ok(zsplit(&output.stdout)?
         .into_iter()
         .chain(parse_merge_msg_for_conflicts().await?)
-        .collect::<HashSet<PathBuf>>()
+        .collect::<HashSet<Utf8PathBuf>>()
         .into_iter()
         .collect())
 }
 
-async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>, Error> {
+async fn parse_merge_msg_for_conflicts() -> Result<Vec<Utf8PathBuf>, Error> {
     let git_dir = get_git_dir().await?;
     let merge_msg = git_dir.join("MERGE_MSG");
     let content = fs_err::tokio::read_to_string(&merge_msg).await?;
@@ -258,13 +260,13 @@ async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>, Error> {
         // Conflicted files start with tabs
         .filter(|line| line.starts_with('\t') || line.starts_with("#\t"))
         .map(|line| line.trim_start_matches('#').trim().to_string())
-        .map(PathBuf::from)
+        .map(Utf8PathBuf::from)
         .collect();
 
     Ok(conflicts)
 }
 
-pub(crate) async fn get_diff(path: &Path) -> Result<Vec<u8>, Error> {
+pub(crate) async fn get_diff(path: &Utf8Path) -> Result<Vec<u8>, Error> {
     let output = git_cmd("git diff")?
         .arg("diff")
         .arg("--no-ext-diff") // Disable external diff drivers
@@ -294,7 +296,7 @@ pub(crate) async fn write_tree() -> Result<String, Error> {
 }
 
 /// Get the path of the top-level directory of the working tree.
-pub(crate) fn get_root() -> Result<PathBuf, Error> {
+pub(crate) fn get_root() -> Result<Utf8PathBuf, Error> {
     let git = GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?;
     let output = std::process::Command::new(git)
         .arg("rev-parse")
@@ -310,13 +312,13 @@ pub(crate) fn get_root() -> Result<PathBuf, Error> {
         }));
     }
 
-    Ok(PathBuf::from(
+    Ok(Utf8PathBuf::from(
         String::from_utf8_lossy(&output.stdout).trim_ascii(),
     ))
 }
 
-pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
-    let url = if Path::new(url).is_dir() {
+pub(crate) async fn init_repo(url: &str, path: &Utf8Path) -> Result<(), Error> {
+    let url = if Utf8Path::new(url).is_dir() {
         // If the URL is a local path, convert it to an absolute path
         Cow::Owned(std::path::absolute(url)?.to_string_lossy().to_string())
     } else {
@@ -346,7 +348,7 @@ pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
+async fn shallow_clone(rev: &str, path: &Utf8Path) -> Result<(), Error> {
     git_cmd("git shallow clone")?
         .current_dir(path)
         .arg("-c")
@@ -386,7 +388,7 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
+async fn full_clone(rev: &str, path: &Utf8Path) -> Result<(), Error> {
     git_cmd("git full clone")?
         .current_dir(path)
         .arg("fetch")
@@ -420,7 +422,7 @@ async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-pub(crate) async fn clone_repo(url: &str, rev: &str, path: &Path) -> Result<(), Error> {
+pub(crate) async fn clone_repo(url: &str, rev: &str, path: &Utf8Path) -> Result<(), Error> {
     init_repo(url, path).await?;
 
     if let Err(err) = shallow_clone(rev, path).await {
@@ -446,7 +448,7 @@ pub(crate) async fn has_hooks_path_set() -> Result<bool> {
     }
 }
 
-pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<FxHashSet<PathBuf>, Error> {
+pub(crate) async fn get_lfs_files(paths: &[&Utf8Path]) -> Result<FxHashSet<Utf8PathBuf>, Error> {
     if paths.is_empty() {
         return Ok(FxHashSet::default());
     }
@@ -467,7 +469,7 @@ pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<FxHashSet<PathBuf>,
 
     let writer = async move {
         for path in paths {
-            stdin.write_all(path.to_string_lossy().as_bytes()).await?;
+            stdin.write_all(path.as_str().as_bytes()).await?;
             stdin.write_all(b"\0").await?;
         }
         stdin.shutdown().await?;
@@ -500,7 +502,7 @@ pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<FxHashSet<PathBuf>,
             break;
         };
         if value == "lfs" {
-            lfs_files.insert(PathBuf::from(file));
+            lfs_files.insert(Utf8PathBuf::from(file));
         }
     }
 

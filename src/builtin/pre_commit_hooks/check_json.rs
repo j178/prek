@@ -1,4 +1,4 @@
-use std::path::Path;
+use camino::Utf8Path;
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -18,7 +18,7 @@ enum JsonValue {
     Null,
 }
 
-pub(crate) async fn check_json(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn check_json(hook: &Hook, filenames: &[&Utf8Path]) -> Result<(i32, Vec<u8>)> {
     let mut tasks = futures::stream::iter(filenames)
         .map(async |filename| check_file(hook.project().relative_path(), filename).await)
         .buffered(*CONCURRENCY);
@@ -35,7 +35,7 @@ pub(crate) async fn check_json(hook: &Hook, filenames: &[&Path]) -> Result<(i32,
     Ok((code, output))
 }
 
-async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+async fn check_file(file_base: &Utf8Path, filename: &Utf8Path) -> Result<(i32, Vec<u8>)> {
     let file_path = file_base.join(filename);
     let content = fs_err::tokio::read(file_path).await?;
     if content.is_empty() {
@@ -53,7 +53,7 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
             Ok((0, Vec::new()))
         }
         Err(e) => {
-            let error_message = format!("{}: Failed to json decode ({e})\n", filename.display());
+            let error_message = format!("{filename}: Failed to json decode ({e})\n");
             Ok((1, error_message.into_bytes()))
         }
     }
@@ -151,17 +151,18 @@ impl<'de> Deserialize<'de> for JsonValue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::{Path, PathBuf};
+    use crate::path::IntoUtf8PathBuf;
+    use camino::{Utf8Path, Utf8PathBuf};
     use tempfile::tempdir;
 
     async fn create_test_file(
         dir: &tempfile::TempDir,
         name: &str,
         content: &[u8],
-    ) -> Result<PathBuf> {
+    ) -> Result<Utf8PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
-        Ok(file_path)
+        Ok(file_path.into_utf8_path_buf())
     }
 
     #[tokio::test]
@@ -169,7 +170,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"{"key1": "value1", "key2": "value2"}"#;
         let file_path = create_test_file(&dir, "valid.json", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
 
@@ -181,7 +182,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"{"key1": "value1", "key2": "value2""#;
         let file_path = create_test_file(&dir, "invalid.json", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
 
@@ -193,7 +194,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"{"key1": "value1", "key1": "value2"}"#;
         let file_path = create_test_file(&dir, "duplicate.json", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
 
@@ -205,7 +206,7 @@ mod tests {
         let dir = tempdir()?;
         let content = b"";
         let file_path = create_test_file(&dir, "empty.json", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
 
@@ -217,7 +218,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"[{"key1": "value1"}, {"key2": "value2"}]"#;
         let file_path = create_test_file(&dir, "valid_array.json", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
 
@@ -229,7 +230,7 @@ mod tests {
         let dir = tempdir()?;
         let content = br#"{"key1": "value1", "key2": {"nested_key": 1, "nested_key": 2}}"#;
         let file_path = create_test_file(&dir, "nested_duplicate.json", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
 
@@ -246,7 +247,7 @@ mod tests {
         }
 
         let file_path = create_test_file(&dir, "deeply_nested.json", json.as_bytes()).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        let (code, output) = check_file(Utf8Path::new(""), &file_path).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
 

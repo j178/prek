@@ -1,11 +1,10 @@
 use std::env::consts::EXE_EXTENSION;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use tracing::{debug, trace};
-
+use camino::{Utf8Path, Utf8PathBuf};
 use constants::env_vars::EnvVars;
+use tracing::{debug, trace};
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::hook::InstalledHook;
@@ -24,10 +23,10 @@ pub(crate) struct Python;
 
 pub(crate) struct PythonInfo {
     pub(crate) version: semver::Version,
-    pub(crate) python_exec: PathBuf,
+    pub(crate) python_exec: Utf8PathBuf,
 }
 
-pub(crate) async fn query_python_info(python: &Path) -> Result<PythonInfo> {
+pub(crate) async fn query_python_info(python: &Utf8Path) -> Result<PythonInfo> {
     static QUERY_PYTHON_INFO: &str = indoc::indoc! {r#"
     import sys
     print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
@@ -55,7 +54,7 @@ pub(crate) async fn query_python_info(python: &Path) -> Result<PythonInfo> {
         .next()
         .context("Failed to get Python base_exec_prefix")?
         .to_string();
-    let python_exec = python_exec(Path::new(&base_exec_prefix));
+    let python_exec = python_exec(Utf8Path::new(&base_exec_prefix));
 
     Ok(PythonInfo {
         version,
@@ -83,7 +82,7 @@ impl LanguageImpl for Python {
             &store.hooks_dir(),
         )?;
 
-        debug!(%hook, target = %info.env_path.display(), "Installing environment");
+        debug!(%hook, target = %info.env_path, "Installing environment");
 
         // Create venv (auto download Python if needed)
         Self::create_venv(&uv, store, &info, &hook.language_request)
@@ -92,10 +91,7 @@ impl LanguageImpl for Python {
 
         // Install dependencies
         if let Some(repo_path) = hook.repo_path() {
-            trace!(
-                "Installing dependencies from repo path: {}",
-                repo_path.display()
-            );
+            trace!("Installing dependencies from repo path: {}", repo_path);
             uv.cmd("uv pip install", store)
                 .arg("pip")
                 .arg("install")
@@ -153,8 +149,8 @@ impl LanguageImpl for Python {
         if python_info.python_exec != info.toolchain {
             anyhow::bail!(
                 "Python executable mismatch: expected {}, found {}",
-                info.toolchain.display(),
-                python_info.python_exec.display()
+                info.toolchain,
+                python_info.python_exec
             );
         }
 
@@ -164,14 +160,14 @@ impl LanguageImpl for Python {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&Path],
+        filenames: &[&Utf8Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Python must have env path");
         let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
         let entry = hook.entry.resolve(Some(&new_path))?;
 
-        let run = async move |batch: &[&Path]| {
+        let run = async move |batch: &[&Utf8Path]| {
             let mut output = Cmd::new(&entry[0], "python hook")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
@@ -215,7 +211,7 @@ fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
                 Some(format!("{major}.{minor}.{patch}"))
             }
             PythonRequest::Range(_, raw) => Some(raw.clone()),
-            PythonRequest::Path(path) => Some(path.to_string_lossy().to_string()),
+            PythonRequest::Path(path) => Some(path.to_string()),
         },
         _ => unreachable!(),
     }
@@ -237,7 +233,7 @@ impl Python {
             Ok(_) => {
                 debug!(
                     "Venv created successfully with no downloads: `{}`",
-                    info.env_path.display()
+                    info.env_path
                 );
                 Ok(())
             }
@@ -252,7 +248,7 @@ impl Python {
 
                     debug!(
                         "Retrying venv creation with managed Python downloads: `{}`",
-                        info.env_path.display()
+                        info.env_path
                     );
                     Self::create_venv_command(uv, store, info, python_request, true, true)
                         .check(true)
@@ -264,7 +260,7 @@ impl Python {
                 Err(e.into())
             }
             Err(e) => {
-                debug!("Failed to create venv `{}`: {e}", info.env_path.display());
+                debug!("Failed to create venv `{}`: {e}", info.env_path);
                 Err(e.into())
             }
         }
@@ -326,7 +322,7 @@ impl Python {
     }
 }
 
-fn bin_dir(venv: &Path) -> PathBuf {
+fn bin_dir(venv: &Utf8Path) -> Utf8PathBuf {
     if cfg!(windows) {
         venv.join("Scripts")
     } else {
@@ -334,6 +330,6 @@ fn bin_dir(venv: &Path) -> PathBuf {
     }
 }
 
-pub(crate) fn python_exec(venv: &Path) -> PathBuf {
+pub(crate) fn python_exec(venv: &Utf8Path) -> Utf8PathBuf {
     bin_dir(venv).join("python").with_extension(EXE_EXTENSION)
 }

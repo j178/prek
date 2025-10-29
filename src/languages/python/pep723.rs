@@ -19,12 +19,11 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
-
-use std::path::Path;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
 use anyhow::Result;
+use camino::Utf8Path;
 use memchr::memmem::Finder;
 use serde::Deserialize;
 use tracing::trace;
@@ -51,8 +50,8 @@ impl Pep723Script {
     /// Returns `None` if the file is missing a PEP 723 metadata block.
     ///
     /// See: <https://peps.python.org/pep-0723/>
-    pub async fn read(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
-        let contents = fs_err::tokio::read(&file).await?;
+    pub async fn read(file: impl AsRef<Utf8Path>) -> Result<Option<Self>, Pep723Error> {
+        let contents = fs_err::tokio::read(file.as_ref().as_std_path()).await?;
 
         // Extract the `script` tag.
         let ScriptTag {

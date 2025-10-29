@@ -21,11 +21,7 @@ pub(crate) fn clean(store: &Store, printer: Printer) -> Result<ExitStatus> {
     }
 
     fs_err::remove_dir_all(store.path())?;
-    writeln!(
-        printer.stdout(),
-        "Cleaned `{}`",
-        store.path().display().cyan()
-    )?;
+    writeln!(printer.stdout(), "Cleaned `{}`", store.path().cyan())?;
 
     Ok(ExitStatus::Success)
 }

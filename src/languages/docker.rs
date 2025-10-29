@@ -2,10 +2,10 @@ use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
+use camino::Utf8Path;
 use fancy_regex::Regex;
 use tracing::trace;
 
@@ -133,16 +133,16 @@ impl Docker {
     }
 
     /// Get the path of the current directory in the host.
-    fn get_docker_path(path: &Path) -> Result<Cow<'_, Path>> {
+    fn get_docker_path(path: &Utf8Path) -> Result<Cow<'_, Utf8Path>> {
         let mounts = CONTAINER_MOUNTS.as_ref()?;
 
         for mount in mounts {
             if let Ok(suffix) = path.strip_prefix(&mount.destination) {
                 if suffix.components().next().is_none() {
                     // Exact match
-                    return Ok(Path::new(&mount.source).into());
+                    return Ok(Utf8Path::new(&mount.source).into());
                 }
-                let path = Path::new(&mount.source).join(suffix);
+                let path = Utf8Path::new(&mount.source).join(suffix);
                 return Ok(path.into());
             }
         }
@@ -150,7 +150,7 @@ impl Docker {
         Ok(path.into())
     }
 
-    pub(crate) fn docker_run_cmd(work_dir: &Path) -> Result<Cmd> {
+    pub(crate) fn docker_run_cmd(work_dir: &Utf8Path) -> Result<Cmd> {
         let mut command = Cmd::new("docker", "run container");
         command.arg("run").arg("--rm");
 
@@ -173,7 +173,7 @@ impl Docker {
             // The `Z` option tells Docker to label the content with a private
             // unshared label. Only the current container can use a private volume.
             .arg("--volume")
-            .arg(format!("{}:/src:rw,Z", work_dir.display()))
+            .arg(format!("{work_dir}:/src:rw,Z"))
             // Run an init inside the container that forwards signals and reaps processes
             .arg("--init")
             .arg("--workdir")
@@ -218,7 +218,7 @@ impl LanguageImpl for Docker {
     async fn run(
         &self,
         hook: &InstalledHook,
-        filenames: &[&Path],
+        filenames: &[&Utf8Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let docker_tag = Docker::build_docker_image(hook, false)
@@ -226,7 +226,7 @@ impl LanguageImpl for Docker {
             .context("Failed to build docker image")?;
         let entry = hook.entry.resolve(None)?;
 
-        let run = async move |batch: &[&Path]| {
+        let run = async move |batch: &[&Utf8Path]| {
             // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
             let mut cmd = Docker::docker_run_cmd(hook.work_dir())?;
             let mut output = cmd

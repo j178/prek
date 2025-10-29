@@ -1,29 +1,28 @@
-use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
 
 use anstream::eprintln;
 use anyhow::Result;
+use camino::{Utf8Path, Utf8PathBuf};
+use constants::env_vars::EnvVars;
 use owo_colors::OwoColorize;
 use tracing::{debug, error, trace};
 
-use constants::env_vars::EnvVars;
-
 use crate::cleanup::add_cleanup;
-use crate::fs::Simplified;
 use crate::git::{self, GIT, git_cmd};
+use crate::path::Simplified;
 use crate::store::Store;
 
 static RESTORE_WORKTREE: Mutex<Option<WorkTreeKeeper>> = Mutex::new(None);
 
-struct IntentToAddKeeper(Vec<PathBuf>);
+struct IntentToAddKeeper(Vec<Utf8PathBuf>);
 struct WorkingTreeKeeper {
-    root: PathBuf,
-    patch: Option<PathBuf>,
+    root: Utf8PathBuf,
+    patch: Option<Utf8PathBuf>,
 }
 
 impl IntentToAddKeeper {
-    async fn clean(root: &Path) -> Result<Self> {
+    async fn clean(root: &Utf8Path) -> Result<Self> {
         let files = git::intent_to_add_files(root).await?;
         if files.is_empty() {
             return Ok(Self(vec![]));
@@ -73,7 +72,7 @@ impl Drop for IntentToAddKeeper {
 }
 
 impl WorkingTreeKeeper {
-    async fn clean(root: &Path, patch_dir: &Path) -> Result<Self> {
+    async fn clean(root: &Utf8Path, patch_dir: &Utf8Path) -> Result<Self> {
         let tree = git::write_tree().await?;
 
         let mut cmd = git_cmd("git diff-index")?;
@@ -143,7 +142,7 @@ impl WorkingTreeKeeper {
         }
     }
 
-    fn checkout_working_tree(root: &Path) -> Result<()> {
+    fn checkout_working_tree(root: &Utf8Path) -> Result<()> {
         let output = Command::new(GIT.as_ref()?)
             .arg("-c")
             .arg("submodule.recurse=0")
@@ -162,7 +161,7 @@ impl WorkingTreeKeeper {
         }
     }
 
-    fn git_apply(patch: &Path) -> Result<()> {
+    fn git_apply(patch: &Utf8Path) -> Result<()> {
         let output = Command::new(GIT.as_ref()?)
             .arg("apply")
             .arg("--whitespace=nowarn")
@@ -240,7 +239,7 @@ impl Drop for RestoreGuard {
 impl WorkTreeKeeper {
     /// Clear intent-to-add changes from the index and clear the non-staged changes from the working directory.
     /// Restore them when the instance is dropped.
-    pub async fn clean(store: &Store, root: &Path) -> Result<RestoreGuard> {
+    pub async fn clean(store: &Store, root: &Utf8Path) -> Result<RestoreGuard> {
         let cleaner = Self {
             intent_to_add: Some(IntentToAddKeeper::clean(root).await?),
             working_tree: Some(WorkingTreeKeeper::clean(root, &store.patches_dir()).await?),

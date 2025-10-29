@@ -1,6 +1,6 @@
 use std::fmt::Write;
-use std::path::PathBuf;
 
+use camino::Utf8PathBuf;
 use clap::ValueEnum;
 use owo_colors::OwoColorize;
 use serde::Serialize;
@@ -9,8 +9,8 @@ use crate::cli::reporter::HookInitReporter;
 use crate::cli::run::Selectors;
 use crate::cli::{ExitStatus, ListOutputFormat};
 use crate::config::{Language, Stage};
-use crate::fs::CWD;
 use crate::hook;
+use crate::path::CWD;
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::workspace::Workspace;
@@ -28,7 +28,7 @@ struct SerializableHook {
 
 pub(crate) async fn list(
     store: &Store,
-    config: Option<PathBuf>,
+    config: Option<Utf8PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
     hook_stage: Option<Stage>,

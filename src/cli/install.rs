@@ -1,10 +1,10 @@
 use std::fmt::Write as _;
 use std::io::Write;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
 use bstr::ByteSlice;
+use camino::{Utf8Path, Utf8PathBuf};
 use owo_colors::OwoColorize;
 use same_file::is_same_file;
 
@@ -12,8 +12,8 @@ use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run;
 use crate::cli::run::{SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
-use crate::fs::{CWD, Simplified};
 use crate::git::{GIT_ROOT, git_cmd};
+use crate::path::{CWD, Simplified};
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
@@ -22,7 +22,7 @@ use crate::{git, warn_user};
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
     store: &Store,
-    config: Option<PathBuf>,
+    config: Option<Utf8PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
     hook_types: Vec<HookType>,
@@ -31,7 +31,7 @@ pub(crate) async fn install(
     allow_missing_config: bool,
     refresh: bool,
     printer: Printer,
-    git_dir: Option<&Path>,
+    git_dir: Option<&Utf8Path>,
 ) -> Result<ExitStatus> {
     if git_dir.is_none() && git::has_hooks_path_set().await? {
         anyhow::bail!(
@@ -80,7 +80,7 @@ pub(crate) async fn install(
 
 pub(crate) async fn install_hooks(
     store: &Store,
-    config: Option<PathBuf>,
+    config: Option<Utf8PathBuf>,
     includes: Vec<String>,
     skips: Vec<String>,
     refresh: bool,
@@ -130,10 +130,10 @@ fn get_hook_types(project: Option<&Project>, hook_types: Vec<HookType>) -> Vec<H
 
 fn install_hook_script(
     project: Option<&Project>,
-    config: Option<PathBuf>,
+    config: Option<Utf8PathBuf>,
     selectors: Option<&Selectors>,
     hook_type: HookType,
-    hooks_path: &Path,
+    hooks_path: &Utf8Path,
     overwrite: bool,
     skip_on_missing_config: bool,
     printer: Printer,
@@ -149,7 +149,7 @@ fn install_hook_script(
             )?;
         } else {
             if !is_our_script(&hook_path)? {
-                let legacy_path = format!("{}.legacy", hook_path.display());
+                let legacy_path = format!("{hook_path}.legacy");
                 fs_err::rename(&hook_path, &legacy_path)?;
                 writeln!(
                     printer.stdout(),
@@ -197,22 +197,22 @@ fn install_hook_script(
     // If neither is available, don't pass a config path (let prek find it). In this case,
     // we're different with `pre-commit` which always sets `--config=.pre-commit-config.yaml`.
     let target_info = if let Some(config) = config {
-        args.push(format!(r#"--config="{}""#, config.display()));
-        format!(" with specified config `{}`", config.display().cyan())
+        args.push(format!(r#"--config="{config}""#));
+        format!(" with specified config `{}`", config.cyan())
     } else if let Some(project) = project {
         let project_path = project.path();
         let relative_path = project_path
             .strip_prefix(GIT_ROOT.as_ref()?)
             .unwrap_or(project_path);
-        if !relative_path.as_os_str().is_empty() {
-            args.push(format!(r#"--cd="{}""#, relative_path.display()));
+        if !relative_path.as_str().is_empty() {
+            args.push(format!(r#"--cd="{relative_path}""#));
         }
 
         if project_path == GIT_ROOT.as_ref()? {
             String::new()
         } else {
             // Show workspace path if it's not the root project.
-            format!(" for workspace `{}`", project_path.display().cyan())
+            format!(" for workspace `{}`", project_path.cyan())
         }
     } else {
         String::new()
@@ -225,7 +225,9 @@ fn install_hook_script(
     args.push(format!("--script-version={CUR_SCRIPT_VERSION}"));
 
     let prek = std::env::current_exe()?;
-    let prek = prek.simplified().display().to_string();
+    let prek = Utf8PathBuf::from_path_buf(prek)
+        .map_err(|_| anyhow::anyhow!("prek executable path is not valid UTF-8"))?;
+    let prek = prek.simplified().to_string();
     let hook_script = HOOK_TMPL
         .replace(
             "[SHEBANG]",
@@ -299,7 +301,7 @@ static PRIOR_HASHES: &[&str] = &[];
 static CURRENT_HASH: &str = "182c10f181da4464a3eec51b83331688";
 
 /// Checks if the script contains any of the hashes that `prek` has used in the past.
-fn is_our_script(hook_path: &Path) -> Result<bool> {
+fn is_our_script(hook_path: &Utf8Path) -> Result<bool> {
     let content = fs_err::read_to_string(hook_path)?;
     Ok(std::iter::once(CURRENT_HASH)
         .chain(PRIOR_HASHES.iter().copied())
@@ -307,7 +309,7 @@ fn is_our_script(hook_path: &Path) -> Result<bool> {
 }
 
 pub(crate) async fn uninstall(
-    config: Option<PathBuf>,
+    config: Option<Utf8PathBuf>,
     hook_types: Vec<HookType>,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -354,8 +356,8 @@ pub(crate) async fn uninstall(
 
 pub(crate) async fn init_template_dir(
     store: &Store,
-    directory: PathBuf,
-    config: Option<PathBuf>,
+    directory: Utf8PathBuf,
+    config: Option<Utf8PathBuf>,
     hook_types: Vec<HookType>,
     requires_config: bool,
     refresh: bool,
@@ -387,11 +389,7 @@ pub(crate) async fn init_template_dir(
     if template_dir.is_empty() || !is_same_file(&directory, &template_dir)? {
         warn_user!(
             "git config `init.templateDir` not set to the target directory, try `{}`",
-            format!(
-                "git config --global init.templateDir '{}'",
-                directory.display()
-            )
-            .cyan()
+            format!("git config --global init.templateDir '{directory}'").cyan()
         );
     }
 

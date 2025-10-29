@@ -1,7 +1,7 @@
 use std::io::Write;
-use std::path::Path;
 
 use anyhow::Result;
+use camino::Utf8Path;
 use fancy_regex::Regex;
 use itertools::Itertools;
 
@@ -22,7 +22,7 @@ use crate::workspace::Project;
 pub(crate) async fn check_hooks_apply(
     store: &Store,
     hook: &Hook,
-    filenames: &[&Path],
+    filenames: &[&Utf8Path],
 ) -> Result<(i32, Vec<u8>)> {
     let relative_path = hook.project().relative_path();
     // Collect all files in the project
@@ -64,7 +64,7 @@ pub(crate) async fn check_hooks_apply(
 
 // Returns true if the exclude pattern matches any files matching the include pattern.
 fn excludes_any(
-    files: &[impl AsRef<Path>],
+    files: &[impl AsRef<Utf8Path>],
     include: Option<&Regex>,
     exclude: Option<&Regex>,
 ) -> bool {
@@ -73,9 +73,7 @@ fn excludes_any(
     }
 
     files.iter().any(|f| {
-        let Some(f) = f.as_ref().to_str() else {
-            return false; // Skip files that cannot be converted to a string
-        };
+        let f = f.as_ref().as_str();
 
         if let Some(re) = &include {
             if !re.is_match(f).unwrap_or(false) {
@@ -94,7 +92,7 @@ fn excludes_any(
 /// Ensures that exclude directives apply to any file in the repository.
 pub(crate) async fn check_useless_excludes(
     hook: &Hook,
-    filenames: &[&Path],
+    filenames: &[&Utf8Path],
 ) -> Result<(i32, Vec<u8>)> {
     let relative_path = hook.project().relative_path();
     let input = collect_files(hook.work_dir(), CollectOptions::all_files()).await?;
@@ -154,12 +152,12 @@ pub(crate) async fn check_useless_excludes(
 }
 
 /// Prints all arguments passed to the hook. Useful for debugging.
-pub fn identity(_hook: &Hook, filenames: &[&Path]) -> (i32, Vec<u8>) {
+pub fn identity(_hook: &Hook, filenames: &[&Utf8Path]) -> (i32, Vec<u8>) {
     (
         0,
         filenames
             .iter()
-            .map(|f| f.to_string_lossy())
+            .map(ToString::to_string)
             .join("\n")
             .into_bytes(),
     )
@@ -172,9 +170,9 @@ mod tests {
     #[test]
     fn test_excludes_any() {
         let files = vec![
-            Path::new("file1.txt"),
-            Path::new("file2.txt"),
-            Path::new("file3.txt"),
+            Utf8Path::new("file1.txt"),
+            Utf8Path::new("file2.txt"),
+            Utf8Path::new("file3.txt"),
         ];
         assert!(excludes_any(
             &files,
@@ -188,7 +186,10 @@ mod tests {
         ));
         assert!(excludes_any(&files, None, None));
 
-        let files = vec![Path::new("html/file1.html"), Path::new("html/file2.html")];
+        let files = vec![
+            Utf8Path::new("html/file1.html"),
+            Utf8Path::new("html/file2.html"),
+        ];
         assert!(excludes_any(
             &files,
             None,
