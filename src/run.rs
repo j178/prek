@@ -107,7 +107,6 @@ impl<'a> Iterator for Partitions<'a> {
 
         while self.current_index < self.filenames.len() {
             let filename = self.filenames[self.current_index];
-            // Avoid allocation by computing length directly
             let length = filename.as_os_str().len() + 1;
 
             if current_length + length > self.max_cli_length

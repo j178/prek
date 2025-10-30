@@ -746,12 +746,10 @@ fn tags_from_filename(filename: &Path) -> TagSet {
     if let Some(ext) = ext {
         // Check if extension is already lowercase to avoid allocation
         if ext.chars().all(|c| !c.is_uppercase()) {
-            // Fast path: no allocation needed
             if let Some(tags) = by_extension().get(ext) {
                 result.extend(tags.iter());
             }
         } else {
-            // Slow path: need to lowercase
             let ext_lower = ext.to_lowercase();
             if let Some(tags) = by_extension().get(ext_lower.as_str()) {
                 result.extend(tags.iter());
@@ -890,8 +888,7 @@ pub(crate) fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
     Ok(cmd)
 }
 
-// Lookup table for text character detection - 256 bits (32 bytes) instead of 256 bytes
-// Much faster than multiple range checks and more memory efficient
+// Lookup table for text character detection.
 static IS_TEXT_CHAR: [u32; 8] = {
     let mut table = [0u32; 8];
     let mut i = 0;
@@ -899,9 +896,8 @@ static IS_TEXT_CHAR: [u32; 8] = {
         // Printable ASCII (0x20..0x7F)
         // High bit set (>= 0x80)
         // Control characters: 7, 8, 9, 10, 11, 12, 13, 27
-        let is_text = (i >= 0x20 && i < 0x7F)
-            || i >= 0x80
-            || matches!(i, 7 | 8 | 9 | 10 | 11 | 12 | 13 | 27);
+        let is_text =
+            (i >= 0x20 && i < 0x7F) || i >= 0x80 || matches!(i, 7 | 8 | 9 | 10 | 11 | 12 | 13 | 27);
         if is_text {
             table[i / 32] |= 1 << (i % 32);
         }
