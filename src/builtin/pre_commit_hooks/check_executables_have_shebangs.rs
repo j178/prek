@@ -22,7 +22,7 @@ pub(crate) async fn check_executables_have_shebangs(
         .await?
         .stdout;
 
-    let tracks_executable_bit = std::str::from_utf8(&stdout)?.trim() != "false";
+    let tracks_executable_bit = dbg!(std::str::from_utf8(&stdout)?.trim()) != "false";
     let file_base = hook.project().relative_path();
 
     let (code, output) = if tracks_executable_bit {
