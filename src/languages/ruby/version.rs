@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use crate::hook::InstallInfo;
-use crate::languages::version::Error;
+use crate::languages::version::{Error, try_into_u64_slice};
 
 /// Ruby version request parsed from `language_version` field
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -38,27 +38,24 @@ impl FromStr for RubyRequest {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Empty/default
-        if s.is_empty() || s == "default" {
-            return Ok(Self::Any);
-        }
-
-        // "system" specified explicitly
-        if s == "system" {
+        if s.is_empty() {
             return Ok(Self::Any);
         }
 
         // Strip "ruby-" prefix if present
-        let version_part = s.strip_prefix("ruby").unwrap_or(s);
-        let version_part = version_part.strip_prefix('-').unwrap_or(version_part);
+        if let Some(version_part) = s.strip_prefix("ruby") {
+            let version_part = version_part.strip_prefix('-').unwrap_or(version_part);
+            if version_part.is_empty() {
+                return Ok(Self::Any);
+            }
+
+            // Only allow version numbers after "ruby" prefix
+            return Self::parse_version_numbers(version_part, s);
+        }
 
         // Try parsing as version numbers (any of one to three parts)
-        if let Ok(parts) = parse_version_parts(version_part) {
-            return Ok(match parts.as_slice() {
-                [major] => Self::Major(*major),
-                [major, minor] => Self::MajorMinor(*major, *minor),
-                [major, minor, patch] => Self::Exact(*major, *minor, *patch),
-                _ => return Err(Error::InvalidVersion(s.to_string())),
-            });
+        if let Ok(req) = Self::parse_version_numbers(s, s) {
+            return Ok(req);
         }
 
         // Try parsing as semver range
@@ -80,6 +77,22 @@ impl RubyRequest {
     /// Check if this request accepts any Ruby version
     pub(crate) fn is_any(&self) -> bool {
         matches!(self, Self::Any)
+    }
+
+    /// Parse version numbers into appropriate `RubyRequest` variants
+    fn parse_version_numbers(
+        version_str: &str,
+        original_request: &str,
+    ) -> Result<RubyRequest, Error> {
+        let parts = try_into_u64_slice(version_str)
+            .map_err(|_| Error::InvalidVersion(original_request.to_string()))?;
+
+        match parts.as_slice() {
+            [major] => Ok(RubyRequest::Major(*major)),
+            [major, minor] => Ok(RubyRequest::MajorMinor(*major, *minor)),
+            [major, minor, patch] => Ok(RubyRequest::Exact(*major, *minor, *patch)),
+            _ => Err(Error::InvalidVersion(original_request.to_string())),
+        }
     }
 
     /// Check if this request matches a Ruby version during installation search
@@ -109,20 +122,17 @@ impl RubyRequest {
     }
 }
 
-fn parse_version_parts(s: &str) -> Result<Vec<u64>, std::num::ParseIntError> {
-    s.split('.').map(str::parse::<u64>).collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Language;
+    use rustc_hash::FxHashSet;
+    use std::path::Path;
 
     #[test]
     fn test_parse_ruby_request() {
         // Empty/default
         assert_eq!(RubyRequest::from_str("").unwrap(), RubyRequest::Any);
-        assert_eq!(RubyRequest::from_str("default").unwrap(), RubyRequest::Any);
-        assert_eq!(RubyRequest::from_str("system").unwrap(), RubyRequest::Any);
 
         // Exact versions
         assert_eq!(
@@ -156,15 +166,11 @@ mod tests {
             RubyRequest::from_str(">=3.2, <4.0").unwrap(),
             RubyRequest::Range(_, _)
         ));
+        assert!(RubyRequest::from_str("ruby>=3.2, <4.0").is_err());
     }
 
     #[test]
     fn test_version_matching() -> anyhow::Result<()> {
-        use std::path::Path;
-
-        use crate::config::Language;
-        use rustc_hash::FxHashSet;
-
         let mut install_info =
             InstallInfo::new(Language::Ruby, FxHashSet::default(), Path::new("."))?;
         install_info
@@ -183,7 +189,7 @@ mod tests {
         assert!(!RubyRequest::Path(PathBuf::from("/usr/bin/ruby3.2")).satisfied_by(&install_info));
 
         // Test range matching
-        let req = semver::VersionReq::parse(">=3.2, <4.0").unwrap();
+        let req = semver::VersionReq::parse(">=3.2, <4.0")?;
         assert!(
             RubyRequest::Range(req.clone(), ">=3.2, <4.0".to_string()).satisfied_by(&install_info)
         );
