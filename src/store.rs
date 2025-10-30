@@ -205,6 +205,7 @@ pub(crate) enum ToolBucket {
     Python,
     Node,
     Go,
+    Ruby,
 }
 
 impl ToolBucket {
@@ -214,6 +215,7 @@ impl ToolBucket {
             ToolBucket::Python => "python",
             ToolBucket::Node => "node",
             ToolBucket::Go => "go",
+            ToolBucket::Ruby => "ruby",
         }
     }
 }

@@ -6,6 +6,7 @@ pub struct EnvVars;
 
 impl EnvVars {
     pub const PATH: &'static str = "PATH";
+    pub const HOME: &'static str = "HOME";
     pub const CI: &'static str = "CI";
 
     pub const SKIP: &'static str = "SKIP";
@@ -51,6 +52,12 @@ impl EnvVars {
     // Lua related
     pub const LUA_PATH: &'static str = "LUA_PATH";
     pub const LUA_CPATH: &'static str = "LUA_CPATH";
+
+    // Ruby related
+    pub const GEM_HOME: &'static str = "GEM_HOME";
+    pub const GEM_PATH: &'static str = "GEM_PATH";
+    pub const BUNDLE_IGNORE_CONFIG: &'static str = "BUNDLE_IGNORE_CONFIG";
+    pub const BUNDLE_GEMFILE: &'static str = "BUNDLE_GEMFILE";
 }
 
 impl EnvVars {

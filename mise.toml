@@ -14,6 +14,7 @@ prek = "latest"
 python = ["3.12"]
 node = ["20"]
 go = ["1.24"]
+ruby = ["3.4"]
 
 [tasks.lint]
 description = "Run formatting and linting"

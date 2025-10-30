@@ -5,6 +5,7 @@ use crate::hook::InstallInfo;
 use crate::languages::golang::GoRequest;
 use crate::languages::node::NodeRequest;
 use crate::languages::python::PythonRequest;
+use crate::languages::ruby::RubyRequest;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
@@ -18,6 +19,7 @@ pub(crate) enum LanguageRequest {
     Python(PythonRequest),
     Node(NodeRequest),
     Golang(GoRequest),
+    Ruby(RubyRequest),
     // TODO: all other languages default to semver for now.
     Semver(SemverRequest),
 }
@@ -29,6 +31,7 @@ impl LanguageRequest {
             LanguageRequest::Python(req) => req.is_any(),
             LanguageRequest::Node(req) => req.is_any(),
             LanguageRequest::Golang(req) => req.is_any(),
+            LanguageRequest::Ruby(req) => req.is_any(),
             LanguageRequest::Semver(_) => false,
         }
     }
@@ -67,6 +70,7 @@ impl LanguageRequest {
             Language::Python => Self::Python(request.parse()?),
             Language::Node => Self::Node(request.parse()?),
             Language::Golang => Self::Golang(request.parse()?),
+            Language::Ruby => Self::Ruby(request.parse()?),
             _ => Self::Semver(request.parse()?),
         })
     }
@@ -77,6 +81,7 @@ impl LanguageRequest {
             LanguageRequest::Python(req) => req.satisfied_by(install_info),
             LanguageRequest::Node(req) => req.satisfied_by(install_info),
             LanguageRequest::Golang(req) => req.satisfied_by(install_info),
+            LanguageRequest::Ruby(req) => req.satisfied_by(install_info),
             LanguageRequest::Semver(req) => req.satisfied_by(install_info),
         }
     }
