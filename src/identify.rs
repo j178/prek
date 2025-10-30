@@ -890,17 +890,21 @@ pub(crate) fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
     Ok(cmd)
 }
 
-// Lookup table for text character detection - much faster than multiple range checks
-static IS_TEXT_CHAR: [bool; 256] = {
-    let mut table = [false; 256];
+// Lookup table for text character detection - 256 bits (32 bytes) instead of 256 bytes
+// Much faster than multiple range checks and more memory efficient
+static IS_TEXT_CHAR: [u32; 8] = {
+    let mut table = [0u32; 8];
     let mut i = 0;
     while i < 256 {
         // Printable ASCII (0x20..0x7F)
         // High bit set (>= 0x80)
         // Control characters: 7, 8, 9, 10, 11, 12, 13, 27
-        table[i] = (i >= 0x20 && i < 0x7F)
+        let is_text = (i >= 0x20 && i < 0x7F)
             || i >= 0x80
             || matches!(i, 7 | 8 | 9 | 10 | 11 | 12 | 13 | 27);
+        if is_text {
+            table[i / 32] |= 1 << (i % 32);
+        }
         i += 1;
     }
     table
@@ -908,7 +912,8 @@ static IS_TEXT_CHAR: [bool; 256] = {
 
 #[inline]
 fn is_text_char(b: u8) -> bool {
-    IS_TEXT_CHAR[b as usize]
+    let idx = b as usize;
+    (IS_TEXT_CHAR[idx / 32] & (1 << (idx % 32))) != 0
 }
 
 /// Return whether the first KB of contents seems to be binary.
