@@ -31,12 +31,10 @@ use smallvec::SmallVec;
 pub(crate) struct TagSet(SmallVec<[&'static str; 8]>);
 
 impl TagSet {
-    #[inline]
     fn new() -> Self {
         Self::default()
     }
 
-    #[inline]
     fn insert(&mut self, tag: &'static str) -> bool {
         if self.0.contains(&tag) {
             false
@@ -55,17 +53,14 @@ impl TagSet {
         }
     }
 
-    #[inline]
     pub(crate) fn contains(&self, needle: &str) -> bool {
         self.0.contains(&needle)
     }
 
-    #[inline]
     pub(crate) fn iter(&self) -> impl Iterator<Item = &'static str> + '_ {
         self.0.iter().copied()
     }
 
-    #[inline]
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -638,7 +633,6 @@ fn by_interpreter() -> &'static TagMap {
     })
 }
 
-#[inline]
 fn is_type_tag(tag: &str) -> bool {
     matches!(
         tag,
@@ -646,12 +640,10 @@ fn is_type_tag(tag: &str) -> bool {
     )
 }
 
-#[inline]
 fn is_mode_tag(tag: &str) -> bool {
     matches!(tag, tags::EXECUTABLE | tags::NON_EXECUTABLE)
 }
 
-#[inline]
 fn is_encoding_tag(tag: &str) -> bool {
     matches!(tag, tags::TEXT | tags::BINARY)
 }
@@ -745,12 +737,12 @@ fn tags_from_filename(filename: &Path) -> TagSet {
 
     if let Some(ext) = ext {
         // Check if extension is already lowercase to avoid allocation
-        if ext.chars().all(|c| !c.is_uppercase()) {
+        if ext.chars().all(|c| c.is_ascii_lowercase()) {
             if let Some(tags) = by_extension().get(ext) {
                 result.extend(tags.iter());
             }
         } else {
-            let ext_lower = ext.to_lowercase();
+            let ext_lower = ext.to_ascii_lowercase();
             if let Some(tags) = by_extension().get(ext_lower.as_str()) {
                 result.extend(tags.iter());
             }
@@ -906,7 +898,6 @@ static IS_TEXT_CHAR: [u32; 8] = {
     table
 };
 
-#[inline]
 fn is_text_char(b: u8) -> bool {
     let idx = b as usize;
     (IS_TEXT_CHAR[idx / 32] & (1 << (idx % 32))) != 0

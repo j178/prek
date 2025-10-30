@@ -24,7 +24,6 @@ pub(crate) struct FilenameFilter<'a> {
 }
 
 impl<'a> FilenameFilter<'a> {
-    #[inline]
     pub(crate) fn new(include: Option<&'a Regex>, exclude: Option<&'a Regex>) -> Self {
         Self { include, exclude }
     }
@@ -46,7 +45,6 @@ impl<'a> FilenameFilter<'a> {
         true
     }
 
-    #[inline]
     pub(crate) fn for_hook(hook: &'a Hook) -> Self {
         Self::new(hook.files.as_deref(), hook.exclude.as_deref())
     }
@@ -60,7 +58,6 @@ pub(crate) struct FileTagFilter<'a> {
 }
 
 impl<'a> FileTagFilter<'a> {
-    #[inline]
     fn new(types: &'a [String], types_or: &'a [String], exclude_types: &'a [String]) -> Self {
         Self {
             all: types,
@@ -69,7 +66,6 @@ impl<'a> FileTagFilter<'a> {
         }
     }
 
-    #[inline]
     pub(crate) fn filter(&self, file_types: &TagSet) -> bool {
         if !self.all.is_empty() && !self.all.iter().all(|t| file_types.contains(t.as_str())) {
             return false;
@@ -83,7 +79,6 @@ impl<'a> FileTagFilter<'a> {
         true
     }
 
-    #[inline]
     pub(crate) fn for_hook(hook: &'a Hook) -> Self {
         Self::new(&hook.types, &hook.types_or, &hook.exclude_types)
     }
