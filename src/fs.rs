@@ -126,8 +126,7 @@ pub(crate) fn normalize_path(path: PathBuf) -> PathBuf {
         Err(e) => {
             // Fallback to lossy conversion if not valid UTF-8
             let path = e.into_bytes();
-            let os_str = OsString::from(String::from_utf8_lossy(&path).into_owned());
-            PathBuf::from(os_str)
+            PathBuf::from(OsString::from(String::from_utf8_lossy(&path).as_ref()))
         }
     }
 }
