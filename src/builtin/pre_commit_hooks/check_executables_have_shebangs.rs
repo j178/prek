@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use futures::StreamExt;
 use owo_colors::OwoColorize;
@@ -24,23 +24,27 @@ pub(crate) async fn check_executables_have_shebangs(
 
     let tracks_executable_bit = std::str::from_utf8(&stdout)?.trim() != "false";
     let file_base = hook.project().relative_path();
-    let file_paths: Vec<_> = filenames.iter().map(|p| file_base.join(p)).collect();
 
     let (code, output) = if tracks_executable_bit {
-        // Unix-like OS with executable bit tracking, use OS level check
-        os_check_shebangs(&file_paths).await?
+        // core.fileMode=true means the platform honors the executable bit, so trust the FS metadata.
+        // The `executables-have-shebangs` hook already restricts inputs to executable text files (`types: [text, executable]`).
+        os_check_shebangs(file_base, filenames).await?
     } else {
         // If on win32 use git to check executable bit
-        git_check_shebangs().await?
+        git_check_shebangs(file_base, filenames).await?
     };
 
     Ok((code, output))
 }
 
-async fn os_check_shebangs(paths: &[PathBuf]) -> Result<(i32, Vec<u8>), anyhow::Error> {
+async fn os_check_shebangs(
+    file_base: &Path,
+    paths: &[&Path],
+) -> Result<(i32, Vec<u8>), anyhow::Error> {
     let mut tasks = futures::stream::iter(paths)
         .map(|file| async move {
-            let has_shebang = file_has_shebang(file).await?;
+            let file_path = file_base.join(file);
+            let has_shebang = file_has_shebang(&file_path).await?;
             if has_shebang {
                 anyhow::Ok((0, Vec::new()))
             } else {
@@ -80,12 +84,16 @@ fn print_shebang_warning(path: &Path) -> String {
     )
 }
 
-async fn git_check_shebangs() -> Result<(i32, Vec<u8>), anyhow::Error> {
+async fn git_check_shebangs(
+    file_base: &Path,
+    filenames: &[&Path],
+) -> Result<(i32, Vec<u8>), anyhow::Error> {
     let output = git::git_cmd("git ls-files")?
         .arg("ls-files")
         // Show staged contents' mode bits, object name and stage number in the output.
         .arg("--stage")
         .arg("--")
+        .args(filenames)
         .check(true)
         .output()
         .await?;
@@ -98,23 +106,26 @@ async fn git_check_shebangs() -> Result<(i32, Vec<u8>), anyhow::Error> {
         let mut parts = entry.split('\t');
         let metadata = parts.next()?;
         let file_name = parts.next()?;
-        let mode = metadata.split_whitespace().next().unwrap_or("");
+        let mode = metadata.split_whitespace().next()?;
         let is_executable = mode
             .chars()
             .rev()
             .take(3)
             .any(|c| EXECUTABLE_VALUES.contains(&c));
-        Some((file_name.to_string(), is_executable))
+        Some((file_name, is_executable))
     });
 
     let mut tasks = futures::stream::iter(entries)
         .map(|(file_name, is_executable)| async move {
             if is_executable {
-                let has_shebang = file_has_shebang(Path::new(&file_name)).await?;
+                let has_shebang = file_has_shebang(Path::new(file_name)).await?;
                 if has_shebang {
                     anyhow::Ok((0, Vec::new()))
                 } else {
-                    let msg = print_shebang_warning(Path::new(&file_name));
+                    let stripped = Path::new(file_name)
+                        .strip_prefix(file_base)
+                        .unwrap_or(Path::new(file_name));
+                    let msg = print_shebang_warning(stripped);
                     Ok((1, msg.into_bytes()))
                 }
             } else {
@@ -203,8 +214,8 @@ mod tests {
     async fn test_os_check_shebangs_with_shebang() -> Result<(), anyhow::Error> {
         let file = NamedTempFile::new()?;
         tokio::fs::write(file.path(), b"#!/bin/bash\necho ok\n").await?;
-        let files = vec![file.path().to_path_buf()];
-        let (code, output) = os_check_shebangs(&files).await?;
+        let files = vec![file.path()];
+        let (code, output) = os_check_shebangs(Path::new(""), &files).await?;
         assert_eq!(code, 0);
         assert!(output.is_empty());
 
@@ -215,8 +226,8 @@ mod tests {
     async fn test_os_check_shebangs_without_shebang() -> Result<(), anyhow::Error> {
         let file = NamedTempFile::new()?;
         tokio::fs::write(file.path(), b"echo ok\n").await?;
-        let files = vec![file.path().to_path_buf()];
-        let (code, output) = os_check_shebangs(&files).await?;
+        let files = vec![file.path()];
+        let (code, output) = os_check_shebangs(Path::new(""), &files).await?;
         assert_eq!(code, 1);
         assert!(
             String::from_utf8_lossy(&output)

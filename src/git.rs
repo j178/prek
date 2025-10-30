@@ -117,7 +117,7 @@ pub(crate) async fn get_changed_files(
 }
 
 pub(crate) async fn ls_files(cwd: &Path, path: &Path) -> Result<Vec<PathBuf>, Error> {
-    let output = git_cmd("get git all files")?
+    let output = git_cmd("git ls-files")?
         .current_dir(cwd)
         .arg("ls-files")
         .arg("-z")
