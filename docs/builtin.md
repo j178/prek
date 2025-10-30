@@ -36,6 +36,7 @@ Currently, only `https://github.com/pre-commit/pre-commit-hooks` is supported. M
 - `check-merge-conflict` (Check for merge conflicts)
 - `detect-private-key` (Detect private keys)
 - `no-commit-to-branch` (Prevent committing to protected branches)
+- `check-executables-have-shebangs` (Ensures that (non-binary) executables have a shebang)
 
 Notes:
 
