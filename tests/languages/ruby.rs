@@ -668,8 +668,7 @@ fn local_hook_with_gemspec() -> anyhow::Result<()> {
         .to_string();
 
     // Configure prek to use this local repo
-    context.write_pre_commit_config(&format!(
-        indoc::indoc! {r"
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
             repos:
               - repo: {}
                 rev: {}
@@ -680,10 +679,10 @@ fn local_hook_with_gemspec() -> anyhow::Result<()> {
                     language: ruby
                     pass_filenames: false
                     always_run: true
-        "},
+        ",
         hook_repo.to_path_buf().display(),
         rev
-    ));
+    });
     context.git_add(".pre-commit-config.yaml");
 
     cmd_snapshot!(context.filters(), context.run().arg("-v"), @r#"

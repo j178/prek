@@ -1,14 +1,8 @@
-#![warn(dead_code)]
-#![warn(clippy::missing_errors_doc)]
-#![warn(clippy::missing_panics_doc)]
-#![warn(clippy::must_use_candidate)]
-#![warn(clippy::module_name_repetitions)]
-#![warn(clippy::too_many_arguments)]
-
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use constants::env_vars::EnvVars;
 use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
@@ -162,27 +156,16 @@ impl LanguageImpl for Ruby {
         // Resolve entry point
         let entry = hook.entry.resolve(Some(&new_path))?;
 
-        // Prepare environment
-        let env_vars = ruby_env_vars(&gem_home);
-        let env_removes = ruby_env_removes();
-
         // Execute in batches
         let run = async move |batch: &[&Path]| {
-            let mut cmd = Cmd::new(&entry[0], "ruby hook");
-            cmd.current_dir(hook.work_dir())
+            let mut output = Cmd::new(&entry[0], "ruby hook")
+                .current_dir(hook.work_dir())
+                .env(EnvVars::PATH, &new_path)
+                .env(EnvVars::GEM_HOME, &gem_home)
+                .env(EnvVars::BUNDLE_IGNORE_CONFIG, "1")
+                .env_remove(EnvVars::GEM_PATH)
+                .env_remove(EnvVars::BUNDLE_GEMFILE)
                 .args(&entry[1..])
-                .env("PATH", &new_path);
-
-            for (k, v) in &env_vars {
-                cmd.env(k.as_str(), v.as_str());
-            }
-
-            // Remove unwanted environment variables
-            for env_var in &env_removes {
-                cmd.env_remove(env_var);
-            }
-
-            let mut output = cmd
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
@@ -212,17 +195,4 @@ impl LanguageImpl for Ruby {
 /// Get the `GEM_HOME` path for this environment
 fn gem_home(env_path: &Path) -> PathBuf {
     env_path.join("gems")
-}
-
-/// Get environment variables for Ruby execution
-fn ruby_env_vars(gem_home: &Path) -> Vec<(String, String)> {
-    vec![
-        ("GEM_HOME".into(), gem_home.display().to_string()),
-        ("BUNDLE_IGNORE_CONFIG".into(), "1".into()),
-    ]
-}
-
-/// Get environment variables to remove for Ruby execution
-fn ruby_env_removes() -> Vec<&'static str> {
-    vec!["GEM_PATH", "BUNDLE_GEMFILE"]
 }

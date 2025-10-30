@@ -1,10 +1,3 @@
-#![warn(dead_code)]
-#![warn(clippy::missing_errors_doc)]
-#![warn(clippy::missing_panics_doc)]
-#![warn(clippy::must_use_candidate)]
-#![warn(clippy::module_name_repetitions)]
-#![warn(clippy::too_many_arguments)]
-
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 

@@ -1,16 +1,11 @@
-#![warn(dead_code)]
-#![warn(clippy::missing_errors_doc)]
-#![warn(clippy::missing_panics_doc)]
-#![warn(clippy::must_use_candidate)]
-#![warn(clippy::module_name_repetitions)]
-#![warn(clippy::too_many_arguments)]
-
 use std::env::consts::EXE_EXTENSION;
 #[cfg(not(target_os = "windows"))]
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+#[cfg(not(target_os = "windows"))]
+use constants::env_vars::EnvVars;
 use tracing::{trace, warn};
 
 use crate::languages::ruby::RubyRequest;
@@ -131,9 +126,7 @@ async fn try_ruby_path(ruby_path: &Path, request: &RubyRequest) -> Option<RubyRe
 /// Search version manager directories for suitable Ruby installations
 #[cfg(not(target_os = "windows"))]
 async fn search_version_managers(request: &RubyRequest) -> Option<RubyResult> {
-    // HOME is a standard Unix environment variable, not PREK-specific
-    #[allow(clippy::disallowed_methods)]
-    let home = std::env::var("HOME").ok()?;
+    let home = EnvVars::var(EnvVars::HOME).ok()?;
     let home_path = PathBuf::from(home);
 
     // Common version manager and Homebrew directories
@@ -200,9 +193,7 @@ async fn search_ruby_installations(dir: &Path, request: &RubyRequest) -> Option<
 /// Detect which Ruby version managers are installed
 #[cfg(not(target_os = "windows"))]
 fn detect_version_managers() -> Vec<&'static str> {
-    // HOME is a standard Unix environment variable, not PREK-specific
-    #[allow(clippy::disallowed_methods)]
-    let home = match std::env::var("HOME") {
+    let home = match EnvVars::var(EnvVars::HOME) {
         Ok(h) => PathBuf::from(h),
         Err(_) => return vec![],
     };
@@ -211,9 +202,9 @@ fn detect_version_managers() -> Vec<&'static str> {
 
     // Check for Homebrew first (most common on macOS)
     if which::which("brew").is_ok()
-        || PathBuf::from("/opt/homebrew").exists()
-        || PathBuf::from("/usr/local/Homebrew").exists()
-        || PathBuf::from("/home/linuxbrew/.linuxbrew").exists()
+        || Path::new("/opt/homebrew").exists()
+        || Path::new("/usr/local/Homebrew").exists()
+        || Path::new("/home/linuxbrew/.linuxbrew").exists()
         || home.join(".linuxbrew").exists()
     {
         managers.push("brew");

@@ -1,14 +1,8 @@
-#![warn(dead_code)]
-#![warn(clippy::missing_errors_doc)]
-#![warn(clippy::missing_panics_doc)]
-#![warn(clippy::must_use_candidate)]
-#![warn(clippy::module_name_repetitions)]
-#![warn(clippy::too_many_arguments)]
-
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use constants::env_vars::EnvVars;
 use rustc_hash::FxHashSet;
 use tracing::debug;
 
@@ -16,7 +10,7 @@ use crate::languages::ruby::installer::RubyResult;
 use crate::process::Cmd;
 
 /// Find all .gemspec files in a directory
-pub(crate) fn find_gemspecs(dir: &Path) -> Result<Vec<PathBuf>> {
+fn find_gemspecs(dir: &Path) -> Result<Vec<PathBuf>> {
     let mut gemspecs = Vec::new();
 
     for entry in fs_err::read_dir(dir)? {
@@ -36,7 +30,7 @@ pub(crate) fn find_gemspecs(dir: &Path) -> Result<Vec<PathBuf>> {
 }
 
 /// Build a gemspec into a .gem file
-pub(crate) async fn build_gemspec(ruby: &RubyResult, gemspec_path: &Path) -> Result<PathBuf> {
+async fn build_gemspec(ruby: &RubyResult, gemspec_path: &Path) -> Result<PathBuf> {
     let repo_dir = gemspec_path
         .parent()
         .context("Gemspec has no parent directory")?;
@@ -125,22 +119,15 @@ pub(crate) async fn install_gems(
         .arg("--install-dir")
         .arg(gem_home)
         .arg("--bindir")
-        .arg(gem_home.join("bin"));
-
-    // Add gem files
-    for gem_file in gem_files {
-        cmd.arg(&gem_file);
-    }
-
-    // Add additional dependencies
-    for dep in additional_dependencies {
-        cmd.arg(dep);
-    }
+        .arg(gem_home.join("bin"))
+        .args(gem_files)
+        .args(additional_dependencies);
 
     // Set environment for isolation
-    cmd.env("GEM_HOME", gem_home)
-        .env_remove("GEM_PATH")
-        .env("BUNDLE_IGNORE_CONFIG", "1");
+    cmd.env(EnvVars::GEM_HOME, gem_home)
+        .env(EnvVars::BUNDLE_IGNORE_CONFIG, "1")
+        .env_remove(EnvVars::GEM_PATH)
+        .env_remove(EnvVars::BUNDLE_GEMFILE);
 
     debug!("Installing gems to {}", gem_home.display());
 
