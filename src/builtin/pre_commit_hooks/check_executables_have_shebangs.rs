@@ -103,16 +103,17 @@ async fn git_check_shebangs(
         if entry.is_empty() {
             return None;
         }
+        dbg!(entry);
         let mut parts = entry.split('\t');
         let metadata = parts.next()?;
         let file_name = parts.next()?;
-        let mode = metadata.split_whitespace().next()?;
+        let mode = dbg!(metadata.split_whitespace().next()?);
         let is_executable = mode
             .chars()
             .rev()
             .take(3)
             .any(|c| EXECUTABLE_VALUES.contains(&c));
-        Some((file_name, is_executable))
+        Some(dbg!((file_name, is_executable)))
     });
 
     let mut tasks = futures::stream::iter(entries)

@@ -1633,7 +1633,7 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
 
 #[cfg(windows)]
 #[test]
-fn check_executables_have_shebangs() -> Result<()> {
+fn check_executables_have_shebangs_win() -> Result<()> {
     use std::process::Command;
     let context = TestContext::new();
     context.init_project();
@@ -1786,7 +1786,7 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
 
 #[cfg(windows)]
 #[test]
-fn check_executables_have_shebangs_various_cases() -> Result<()> {
+fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
     use std::process::Command;
     let context = TestContext::new();
     context.init_project();
