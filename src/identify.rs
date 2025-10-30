@@ -31,10 +31,12 @@ use smallvec::SmallVec;
 pub(crate) struct TagSet(SmallVec<[&'static str; 8]>);
 
 impl TagSet {
+    #[inline]
     fn new() -> Self {
         Self::default()
     }
 
+    #[inline]
     fn insert(&mut self, tag: &'static str) -> bool {
         if self.0.contains(&tag) {
             false
@@ -53,14 +55,17 @@ impl TagSet {
         }
     }
 
+    #[inline]
     pub(crate) fn contains(&self, needle: &str) -> bool {
         self.0.contains(&needle)
     }
 
+    #[inline]
     pub(crate) fn iter(&self) -> impl Iterator<Item = &'static str> + '_ {
         self.0.iter().copied()
     }
 
+    #[inline]
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -633,6 +638,7 @@ fn by_interpreter() -> &'static TagMap {
     })
 }
 
+#[inline]
 fn is_type_tag(tag: &str) -> bool {
     matches!(
         tag,
@@ -640,10 +646,12 @@ fn is_type_tag(tag: &str) -> bool {
     )
 }
 
+#[inline]
 fn is_mode_tag(tag: &str) -> bool {
     matches!(tag, tags::EXECUTABLE | tags::NON_EXECUTABLE)
 }
 
+#[inline]
 fn is_encoding_tag(tag: &str) -> bool {
     matches!(tag, tags::TEXT | tags::BINARY)
 }
@@ -736,9 +744,18 @@ fn tags_from_filename(filename: &Path) -> TagSet {
     }
 
     if let Some(ext) = ext {
-        let ext = ext.to_lowercase();
-        if let Some(tags) = by_extension().get(ext.as_str()) {
-            result.extend(tags.iter());
+        // Check if extension is already lowercase to avoid allocation
+        if ext.chars().all(|c| !c.is_uppercase()) {
+            // Fast path: no allocation needed
+            if let Some(tags) = by_extension().get(ext) {
+                result.extend(tags.iter());
+            }
+        } else {
+            // Slow path: need to lowercase
+            let ext_lower = ext.to_lowercase();
+            if let Some(tags) = by_extension().get(ext_lower.as_str()) {
+                result.extend(tags.iter());
+            }
         }
     }
 
@@ -873,10 +890,25 @@ pub(crate) fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
     Ok(cmd)
 }
 
+// Lookup table for text character detection - much faster than multiple range checks
+static IS_TEXT_CHAR: [bool; 256] = {
+    let mut table = [false; 256];
+    let mut i = 0;
+    while i < 256 {
+        // Printable ASCII (0x20..0x7F)
+        // High bit set (>= 0x80)
+        // Control characters: 7, 8, 9, 10, 11, 12, 13, 27
+        table[i] = (i >= 0x20 && i < 0x7F)
+            || i >= 0x80
+            || matches!(i, 7 | 8 | 9 | 10 | 11 | 12 | 13 | 27);
+        i += 1;
+    }
+    table
+};
+
+#[inline]
 fn is_text_char(b: u8) -> bool {
-    (0x20..0x7F).contains(&b) // Printable ASCII
-        || b >= 0x80 // High bit set
-        || [7, 8, 9, 10, 11, 12, 13, 27].contains(&b) // Control characters
+    IS_TEXT_CHAR[b as usize]
 }
 
 /// Return whether the first KB of contents seems to be binary.
