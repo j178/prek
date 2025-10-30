@@ -22,7 +22,7 @@ pub(crate) async fn check_executables_have_shebangs(
         .await?
         .stdout;
 
-    let tracks_executable_bit = dbg!(std::str::from_utf8(&stdout)?.trim()) != "false";
+    let tracks_executable_bit = std::str::from_utf8(&stdout)?.trim() != "false";
     let file_base = hook.project().relative_path();
 
     let (code, output) = if tracks_executable_bit {
@@ -92,6 +92,7 @@ async fn git_check_shebangs(
         .arg("ls-files")
         // Show staged contents' mode bits, object name and stage number in the output.
         .arg("--stage")
+        .arg("-z")
         .arg("--")
         .args(filenames)
         .check(true)
@@ -103,29 +104,26 @@ async fn git_check_shebangs(
         if entry.is_empty() {
             return None;
         }
-        dbg!(entry);
         let mut parts = entry.split('\t');
         let metadata = parts.next()?;
         let file_name = parts.next()?;
-        let mode = dbg!(metadata.split_whitespace().next()?);
+        let mode = metadata.split_whitespace().next()?;
         let is_executable = mode
             .chars()
             .rev()
             .take(3)
             .any(|c| EXECUTABLE_VALUES.contains(&c));
-        Some(dbg!((file_name, is_executable)))
+        Some((Path::new(file_name), is_executable))
     });
 
     let mut tasks = futures::stream::iter(entries)
         .map(|(file_name, is_executable)| async move {
             if is_executable {
-                let has_shebang = file_has_shebang(Path::new(file_name)).await?;
+                let has_shebang = file_has_shebang(file_name).await?;
                 if has_shebang {
                     anyhow::Ok((0, Vec::new()))
                 } else {
-                    let stripped = Path::new(file_name)
-                        .strip_prefix(file_base)
-                        .unwrap_or(Path::new(file_name));
+                    let stripped = file_name.strip_prefix(file_base).unwrap_or(file_name);
                     let msg = print_shebang_warning(stripped);
                     Ok((1, msg.into_bytes()))
                 }
