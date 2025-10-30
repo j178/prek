@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
-use fancy_regex::Regex;
+use lazy_regex::regex;
 use tracing::trace;
 
 use crate::cli::reporter::HookInstallReporter;
@@ -121,9 +121,9 @@ impl Docker {
     /// <https://stackoverflow.com/questions/20995351/how-can-i-get-docker-linux-container-information-from-within-the-container-itsel>
     fn current_container_id() -> Result<String> {
         // Adapted from https://github.com/open-telemetry/opentelemetry-java-instrumentation/pull/7167/files
-        let regex = Regex::new(r".*/docker/containers/([0-9a-f]{64})/.*").expect("invalid regex");
+        let regex = regex!(r".*/docker/containers/([0-9a-f]{64})/.*");
         let cgroup_path = fs::read_to_string("/proc/self/cgroup")?;
-        let Some(captures) = regex.captures(&cgroup_path)? else {
+        let Some(captures) = regex.captures(&cgroup_path) else {
             anyhow::bail!("Failed to get container id: no match found");
         };
         let Some(id) = captures.get(1).map(|m| m.as_str().to_string()) else {

@@ -251,6 +251,10 @@ impl ScriptTag {
     }
 }
 
+/// Extract PEP 723 inline metadata for `python` hooks.
+/// First part of `entry` must be a file path to the Python script.
+/// Effectively, we are implementing a new `python-script` language which works like `script`.
+/// But we don't want to introduce a new language just for this for now.
 pub(crate) async fn extract_pep723_metadata(hook: &mut Hook) -> Result<()> {
     if !hook.additional_dependencies.is_empty() {
         trace!(

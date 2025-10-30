@@ -2,11 +2,11 @@ use std::fmt::Display;
 use std::ops::{Deref, RangeInclusive};
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::OnceLock;
 
 use anyhow::Result;
 use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
-use fancy_regex::{self as regex, Regex};
+use fancy_regex::Regex;
+use lazy_regex::regex;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_yaml::Value;
@@ -524,8 +524,8 @@ impl<'de> Deserialize<'de> for MetaHook {
                     files: Some(
                         Regex::new(&format!(
                             "^{}|{}$",
-                            regex::escape(CONFIG_FILE),
-                            regex::escape(ALT_CONFIG_FILE)
+                            fancy_regex::escape(CONFIG_FILE),
+                            fancy_regex::escape(ALT_CONFIG_FILE)
                         ))
                         .map(SerdeRegex)
                         .unwrap(),
@@ -542,8 +542,8 @@ impl<'de> Deserialize<'de> for MetaHook {
                     files: Some(
                         Regex::new(&format!(
                             "^{}|{}$",
-                            regex::escape(CONFIG_FILE),
-                            regex::escape(ALT_CONFIG_FILE)
+                            fancy_regex::escape(CONFIG_FILE),
+                            fancy_regex::escape(ALT_CONFIG_FILE)
                         ))
                         .map(SerdeRegex)
                         .unwrap(),
@@ -812,9 +812,7 @@ pub fn read_manifest(path: &Path) -> Result<Manifest, Error> {
 
 /// Check if a string looks like a git SHA
 fn looks_like_sha(s: &str) -> bool {
-    static SHA_RE: OnceLock<Regex> = OnceLock::new();
-    let re = SHA_RE.get_or_init(|| Regex::new(r"^[a-fA-F0-9]+$").unwrap());
-    re.is_match(s).unwrap_or(false)
+    regex!(r"^[a-fA-F0-9]+$").is_match(s)
 }
 
 /// Deserializes a vector of strings and validates that each is a known file type tag.
