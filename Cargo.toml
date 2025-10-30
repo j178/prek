@@ -34,6 +34,11 @@ profiler-flamegraph = ["pprof/flamegraph"]
 # Enable docker related tests in integration tests
 docker = []
 
+[[bench]]
+name = "prek"
+path = "benches/prek.rs"
+harness = false
+
 [dependencies]
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.86" }
@@ -103,6 +108,7 @@ fs-err = { version = "3.1.0" }
 [dev-dependencies]
 assert_cmd = { version = "2.0.16", features = ["color"] }
 assert_fs = { version = "1.1.2" }
+divan = { package = "codspeed-divan-compat", version = "*" }
 etcetera = { version = "0.10.0" }
 insta = { version = "1.40.0", features = ["filters"] }
 insta-cmd = { version = "0.6.0" }

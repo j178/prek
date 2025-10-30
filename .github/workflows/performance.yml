@@ -2,6 +2,10 @@ name: Performance
 
 on:
   pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
@@ -14,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     name: "cargo | bloat check"
     timeout-minutes: 10
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
@@ -96,3 +101,28 @@ jobs:
         with:
           name: bloat-check-results
           path: /tmp/bloat-check
+
+  codspeed:
+      name: Run benchmarks
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+          with:
+            persist-credentials: false
+
+        - name: Setup rust toolchain, cache and cargo-codspeed binary
+          uses: moonrepo/setup-rust@ede6de059f8046a5e236c94046823e2af11ca670 # v1
+          with:
+            channel: stable
+            cache-target: release
+            bins: cargo-codspeed
+
+        - name: Build the benchmark target(s)
+          run: cargo codspeed build
+
+        - name: Run the benchmarks
+          uses: CodSpeedHQ/action@4348f634fa7309fe23aac9502e88b999ec90a164 # v4
+          with:
+            mode: instrumentation
+            run: cargo codspeed run
+            token: ${{ secrets.CODSPEED_TOKEN }}
