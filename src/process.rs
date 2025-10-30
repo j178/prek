@@ -43,7 +43,7 @@ use crate::git::GIT;
 #[derive(Debug, Error)]
 pub enum Error {
     /// The command fundamentally failed to execute (usually means it didn't exist)
-    #[error("run command `{summary}` failed")]
+    #[error("Run command `{summary}` failed")]
     Exec {
         /// Summary of what the Command was trying to do
         summary: String,
@@ -51,12 +51,12 @@ pub enum Error {
         #[source]
         cause: std::io::Error,
     },
-    #[error("command `{summary}` exited with an error:\n{error}")]
+    #[error("Command `{summary}` exited with an error:\n{error}")]
     Status { summary: String, error: StatusError },
     #[cfg(not(windows))]
-    #[error("failed to open pty")]
+    #[error("Failed to open pty")]
     Pty(#[from] pty::Error),
-    #[error("failed to setup subprocess for pty")]
+    #[error("Failed to setup subprocess for pty")]
     PtySetup(#[from] std::io::Error),
 }
 

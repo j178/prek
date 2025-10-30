@@ -8,8 +8,6 @@ use crate::git;
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
-const EXECUTABLE_VALUES: &[char] = &['1', '3', '5', '7'];
-
 pub(crate) async fn check_executables_have_shebangs(
     hook: &Hook,
     filenames: &[&Path],
@@ -107,17 +105,14 @@ async fn git_check_shebangs(
         let mut parts = entry.split('\t');
         let metadata = parts.next()?;
         let file_name = parts.next()?;
-        let mode = metadata.split_whitespace().next()?;
-        let is_executable = mode
-            .chars()
-            .rev()
-            .take(3)
-            .any(|c| EXECUTABLE_VALUES.contains(&c));
+        let mode_str = metadata.split_whitespace().next()?;
+        let mode_bits = u32::from_str_radix(mode_str, 8).ok()?;
+        let is_executable = (mode_bits & 0o111) != 0;
         Some((Path::new(file_name), is_executable))
     });
 
     let mut tasks = futures::stream::iter(entries)
-        .map(|(file_name, is_executable)| async move {
+        .map(async |(file_name, is_executable)| {
             if is_executable {
                 let has_shebang = file_has_shebang(file_name).await?;
                 if has_shebang {
