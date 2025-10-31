@@ -286,7 +286,7 @@ jobs:
   cargo-test-windows:
     runs-on: windows-latest
     name: "cargo test | windows"
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
