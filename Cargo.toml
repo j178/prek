@@ -47,7 +47,7 @@ clap_complete = { version = "4.5.37", features = ["unstable-dynamic"] }
 constants = { workspace = true }
 ctrlc = { version = "3.4.5" }
 dunce = { version = "1.0.5" }
-etcetera = { version = "0.10.0" }
+etcetera = { version = "0.11.0" }
 fancy-regex = { version = "0.16.0" }
 fs-err = { version = "3.1.0", features = ["tokio"] }
 futures = { version = "0.3.31" }
@@ -103,7 +103,7 @@ fs-err = { version = "3.1.0" }
 [dev-dependencies]
 assert_cmd = { version = "2.0.16", features = ["color"] }
 assert_fs = { version = "1.1.2" }
-etcetera = { version = "0.10.0" }
+etcetera = { version = "0.11.0" }
 insta = { version = "1.40.0", features = ["filters"] }
 insta-cmd = { version = "0.6.0" }
 markdown = { version = "1.0.0" }
