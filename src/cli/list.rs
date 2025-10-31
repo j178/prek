@@ -113,7 +113,7 @@ pub(crate) async fn list(
             let serializable_hooks: Vec<_> = filtered_hooks
                 .into_iter()
                 .map(|h| {
-                    let id = h.id.to_string();
+                    let id = h.id.clone();
                     let full_id = h.full_id();
                     let stages = match h.stages {
                         hook::Stages::All => Stage::value_variants().to_vec(),
