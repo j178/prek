@@ -66,15 +66,24 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           persist-credentials: false
+
       - name: Create Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
+
       - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          workspaces: ${{ env.PREK_WORKSPACE }}
 
       - name: "Install Rust toolchain"
         run: rustup component add clippy
 
       - name: "Clippy"
+        working-directory: ${{ env.PREK_WORKSPACE }}
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-shear:
@@ -291,10 +300,18 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           persist-credentials: false
+
       - name: Create Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
+
       - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          workspaces: ${{ env.PREK_WORKSPACE }}
 
       - name: "Install Rust toolchain"
         run: rustup component add llvm-tools-preview
@@ -335,24 +352,20 @@ jobs:
           # A dummy dependency path to enable caching of go modules.
           cache-dependency-path: LICENSE
 
-      - uses: ilammy/msvc-dev-cmd@460a772e4cf7358f9f2f23773240813e40e7a894 # windows only
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # windows only
+
       - name: "Install Lua"
-        uses: luarocks/gh-actions-lua@e6b6c28737b84871fc83110bb295a4b15f6ce52d # windows only
+        uses: luarocks/gh-actions-lua@989f8e6ffba55ce1817e236478c98558e598776c # v11
         with:
           luaVersion: ${{ env.LUA_VERSION }}
 
       - name: "Install LuaRocks"
-        uses: luarocks/gh-actions-luarocks@7c85eeff60655651b444126f2a78be784e836a0a # windows only
+        uses: luarocks/gh-actions-luarocks@7c85eeff60655651b444126f2a78be784e836a0a # v6
         with:
           luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
 
-      - name: "Find node and npm versions"
-        run: |
-          Get-Command node -All
-          Get-Command npm -All
-        shell: pwsh
-
       - name: "Cargo test"
+        working-directory: ${{ env.PREK_WORKSPACE }}
         run: |
           cargo llvm-cov nextest `
             --no-report `
