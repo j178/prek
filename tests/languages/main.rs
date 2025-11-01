@@ -11,5 +11,6 @@ mod lua;
 mod node;
 mod pygrep;
 mod python;
+mod rust;
 mod script;
 mod unimplemented;

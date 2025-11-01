@@ -5,6 +5,7 @@ use crate::hook::InstallInfo;
 use crate::languages::golang::GoRequest;
 use crate::languages::node::NodeRequest;
 use crate::languages::python::PythonRequest;
+use crate::languages::rust::RustRequest;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
@@ -15,9 +16,10 @@ pub(crate) enum Error {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum LanguageRequest {
     Any { system_only: bool },
-    Python(PythonRequest),
-    Node(NodeRequest),
     Golang(GoRequest),
+    Node(NodeRequest),
+    Python(PythonRequest),
+    Rust(RustRequest),
     // TODO: all other languages default to semver for now.
     Semver(SemverRequest),
 }
@@ -26,9 +28,10 @@ impl LanguageRequest {
     pub(crate) fn is_any(&self) -> bool {
         match self {
             LanguageRequest::Any { .. } => true,
-            LanguageRequest::Python(req) => req.is_any(),
-            LanguageRequest::Node(req) => req.is_any(),
             LanguageRequest::Golang(req) => req.is_any(),
+            LanguageRequest::Node(req) => req.is_any(),
+            LanguageRequest::Python(req) => req.is_any(),
+            LanguageRequest::Rust(req) => req.is_any(),
             LanguageRequest::Semver(_) => false,
         }
     }
@@ -64,9 +67,10 @@ impl LanguageRequest {
         }
 
         Ok(match lang {
-            Language::Python => Self::Python(request.parse()?),
-            Language::Node => Self::Node(request.parse()?),
             Language::Golang => Self::Golang(request.parse()?),
+            Language::Node => Self::Node(request.parse()?),
+            Language::Python => Self::Python(request.parse()?),
+            Language::Rust => Self::Rust(request.parse()?),
             _ => Self::Semver(request.parse()?),
         })
     }
@@ -74,9 +78,10 @@ impl LanguageRequest {
     pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
         match self {
             LanguageRequest::Any { .. } => true,
-            LanguageRequest::Python(req) => req.satisfied_by(install_info),
-            LanguageRequest::Node(req) => req.satisfied_by(install_info),
             LanguageRequest::Golang(req) => req.satisfied_by(install_info),
+            LanguageRequest::Node(req) => req.satisfied_by(install_info),
+            LanguageRequest::Python(req) => req.satisfied_by(install_info),
+            LanguageRequest::Rust(req) => req.satisfied_by(install_info),
             LanguageRequest::Semver(req) => req.satisfied_by(install_info),
         }
     }

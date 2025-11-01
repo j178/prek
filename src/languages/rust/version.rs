@@ -9,15 +9,15 @@ use crate::hook::InstallInfo;
 use crate::languages::version::{Error, try_into_u64_slice};
 
 #[derive(Debug, Clone, Deserialize)]
-pub(crate) struct GoVersion(semver::Version);
+pub(crate) struct RustVersion(semver::Version);
 
-impl Default for GoVersion {
+impl Default for RustVersion {
     fn default() -> Self {
-        GoVersion(semver::Version::new(0, 0, 0))
+        RustVersion(semver::Version::new(0, 0, 0))
     }
 }
 
-impl Deref for GoVersion {
+impl Deref for RustVersion {
     type Target = semver::Version;
 
     fn deref(&self) -> &Self::Target {
@@ -25,96 +25,88 @@ impl Deref for GoVersion {
     }
 }
 
-impl Display for GoVersion {
+impl Display for RustVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl FromStr for GoVersion {
+impl FromStr for RustVersion {
     type Err = semver::Error;
 
-    // TODO: go1.20.0b1, go1.20.0rc1?
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.strip_prefix("go").unwrap_or(s).trim();
-        semver::Version::parse(s).map(GoVersion)
+        let s = s.trim();
+        semver::Version::parse(s).map(RustVersion)
     }
 }
 
-/// `language_version` field of golang can be one of the following:
+/// `language_version` field of rust can be one of the following:
 /// `default`
 /// `system`
-/// `go`
-/// `go1.20` or `1.20`
-/// `go1.20.3` or `1.20.3`
-/// `go1.20.0b1` or `1.20.0b1`
-/// `go1.20rc1` or `1.20rc1`
-/// `go1.18beta1` or `1.18beta1`
-/// `>= 1.20, < 1.22`
-/// `local/path/to/go`
+/// `stable`
+/// `nightly`
+/// `beta`
+/// `1.70` or `1.70.0`
+/// `>= 1.70, < 1.72`
+/// `local/path/to/rust`
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) enum GoRequest {
+pub(crate) enum RustRequest {
     Any,
+    Channel(String),
     Major(u64),
     MajorMinor(u64, u64),
     MajorMinorPatch(u64, u64, u64),
     Path(PathBuf),
     Range(semver::VersionReq, String),
-    // TODO: support prerelease versions like `go1.20.0b1`, `go1.20rc1`
-    // MajorMinorPrerelease(u64, u64, String),
 }
 
-impl FromStr for GoRequest {
+impl FromStr for RustRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.is_empty() {
-            return Ok(GoRequest::Any);
+            return Ok(RustRequest::Any);
         }
 
-        // Check if it starts with "go" - parse as specific version
-        if let Some(version_part) = s.strip_prefix("go") {
-            if version_part.is_empty() {
-                return Ok(GoRequest::Any);
-            }
-
-            return Self::parse_version_numbers(version_part, s);
+        // Check for channel names
+        if s == "stable" || s == "nightly" || s == "beta" {
+            return Ok(RustRequest::Channel(s.to_string()));
         }
 
+        // Try parsing as version numbers
         Self::parse_version_numbers(s, s)
             .or_else(|_| {
                 semver::VersionReq::parse(s)
-                    .map(|version_req| GoRequest::Range(version_req, s.into()))
+                    .map(|version_req| RustRequest::Range(version_req, s.into()))
                     .map_err(|_| Error::InvalidVersion(s.to_string()))
             })
             .or_else(|_| {
                 let path = PathBuf::from(s);
                 if path.exists() {
-                    Ok(GoRequest::Path(path))
+                    Ok(RustRequest::Path(path))
                 } else {
-                    // TODO: better error message
                     Err(Error::InvalidVersion(s.to_string()))
                 }
             })
     }
 }
 
-impl GoRequest {
+impl RustRequest {
     pub(crate) fn is_any(&self) -> bool {
-        matches!(self, GoRequest::Any)
+        matches!(self, RustRequest::Any)
     }
 
     fn parse_version_numbers(
         version_str: &str,
         original_request: &str,
-    ) -> Result<GoRequest, Error> {
+    ) -> Result<RustRequest, Error> {
         let parts = try_into_u64_slice(version_str)
             .map_err(|_| Error::InvalidVersion(original_request.to_string()))?;
 
         match parts.as_slice() {
-            [major] => Ok(GoRequest::Major(*major)),
-            [major, minor] => Ok(GoRequest::MajorMinor(*major, *minor)),
-            [major, minor, patch] => Ok(GoRequest::MajorMinorPatch(*major, *minor, *patch)),
+            [major] => Ok(RustRequest::Major(*major)),
+            [major, minor] => Ok(RustRequest::MajorMinor(*major, *minor)),
+            [major, minor, patch] => Ok(RustRequest::MajorMinorPatch(*major, *minor, *patch)),
             _ => Err(Error::InvalidVersion(original_request.to_string())),
         }
     }
@@ -123,23 +115,29 @@ impl GoRequest {
         let version = &install_info.language_version;
 
         self.matches(
-            &GoVersion(version.clone()),
+            &RustVersion(version.clone()),
             Some(install_info.toolchain.as_ref()),
         )
     }
 
-    pub(crate) fn matches(&self, version: &GoVersion, toolchain: Option<&Path>) -> bool {
+    pub(crate) fn matches(&self, version: &RustVersion, toolchain: Option<&Path>) -> bool {
         match self {
-            GoRequest::Any => true,
-            GoRequest::Major(major) => version.0.major == *major,
-            GoRequest::MajorMinor(major, minor) => {
+            RustRequest::Any => true,
+            RustRequest::Channel(_requested_channel) => {
+                // Cannot match channel names against specific version numbers
+                // e.g. request "stable" against version "1.70.0"
+                // TODO: Resolve channel by querying rustup or Rust release API
+                false
+            }
+            RustRequest::Major(major) => version.0.major == *major,
+            RustRequest::MajorMinor(major, minor) => {
                 version.0.major == *major && version.0.minor == *minor
             }
-            GoRequest::MajorMinorPatch(major, minor, patch) => {
+            RustRequest::MajorMinorPatch(major, minor, patch) => {
                 version.0.major == *major && version.0.minor == *minor && version.0.patch == *patch
             }
-            GoRequest::Path(path) => toolchain.is_some_and(|t| t == path),
-            GoRequest::Range(req, _) => req.matches(&version.0),
+            RustRequest::Path(path) => toolchain.is_some_and(|t| t == path),
+            RustRequest::Range(req, _) => req.matches(&version.0),
         }
     }
 }
