@@ -22,6 +22,7 @@ impl EnvVars {
     pub const PREK_NATIVE_TLS: &'static str = "PREK_NATIVE_TLS";
     pub const SSL_CERT_FILE: &'static str = "SSL_CERT_FILE";
     pub const PREK_CONTAINER_RUNTIME: &'static str = "PREK_CONTAINER_RUNTIME";
+    pub const PREK_CONTAINER_RUNTIME_ROOTLESS: &'static str = "PREK_CONTAINER_RUNTIME_ROOTLESS";
 
     // PREK internal environment variables
     pub const PREK_INTERNAL__TEST_DIR: &'static str = "PREK_INTERNAL__TEST_DIR";

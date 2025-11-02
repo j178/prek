@@ -160,6 +160,96 @@ where
     runtime
 }
 
+static CONTAINER_RUNTIME_ROOTLESS: LazyLock<ContainerRuntimeRootless> = LazyLock::new(|| {
+    detect_container_runtime_rootless(
+        *CONTAINER_RUNTIME,
+        EnvVars::var_as_bool(EnvVars::PREK_CONTAINER_RUNTIME_ROOTLESS),
+        detect_rootless,
+        detect_rootless_command,
+    )
+});
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(crate) enum ContainerRuntimeRootless {
+    Rootless,
+    Rootful,
+}
+
+fn detect_container_runtime_rootless<DR, DRC>(
+    runtime: ContainerRuntime,
+    env_override: Option<bool>,
+    rootless: DR,
+    rootless_command: DRC,
+) -> ContainerRuntimeRootless
+where
+    DR: Fn(ContainerRuntime, DRC) -> ContainerRuntimeRootless,
+    DRC: Fn(ContainerRuntime) -> std::process::Command,
+{
+    // if env var set then return value in line with setting
+    if let Some(val) = env_override {
+        if val {
+            return ContainerRuntimeRootless::Rootless;
+        }
+        return ContainerRuntimeRootless::Rootful;
+    }
+
+    rootless(runtime, rootless_command)
+}
+
+// Attempt to detect if current runtime is rootless or not, if unable to detect for docker runtime
+// it will default to rootful and for podman runtime it will default to rootless.  This matches the
+// default installations for the respective runtimes
+fn detect_rootless<DRC>(runtime: ContainerRuntime, drc: DRC) -> ContainerRuntimeRootless
+where
+    DRC: Fn(ContainerRuntime) -> std::process::Command,
+{
+    let mut command = drc(runtime);
+
+    let output = match command.output() {
+        Ok(output) => String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .to_owned()
+            .replace('\'', ""),
+        Err(_e) => {
+            if runtime == ContainerRuntime::Podman {
+                return ContainerRuntimeRootless::Rootless;
+            }
+            return ContainerRuntimeRootless::Rootful;
+        }
+    };
+
+    match runtime {
+        ContainerRuntime::Podman => {
+            if output.eq_ignore_ascii_case("true") {
+                ContainerRuntimeRootless::Rootless
+            } else {
+                ContainerRuntimeRootless::Rootful
+            }
+        }
+        ContainerRuntime::Docker => {
+            if output.eq_ignore_ascii_case("rootless") {
+                ContainerRuntimeRootless::Rootless
+            } else {
+                ContainerRuntimeRootless::Rootful
+            }
+        }
+        ContainerRuntime::Auto => unreachable!("Auto should be resolved before use"),
+    }
+}
+
+fn detect_rootless_command(runtime: ContainerRuntime) -> std::process::Command {
+    let mut command = std::process::Command::new(runtime.cmd());
+    command.arg("info");
+    command.arg("--format");
+
+    match runtime {
+        ContainerRuntime::Podman => command.arg("'{{ .Host.Security.Rootless }}'"),
+        ContainerRuntime::Docker => command.arg("'{{ .ClientInfo.Context }}'"),
+        ContainerRuntime::Auto => unreachable!("Auto should be resolved before use"),
+    };
+    command
+}
+
 impl Docker {
     fn docker_tag(hook: &InstalledHook) -> String {
         let info = hook.install_info().expect("Docker hook must be installed");
@@ -310,10 +400,35 @@ impl Docker {
         // Run as a non-root user
         #[cfg(unix)]
         {
-            command.arg("--user");
-            command.arg(format!("{}:{}", unsafe { libc::geteuid() }, unsafe {
-                libc::getegid()
-            }));
+            let user_mapping_args = || {
+                vec![
+                    "--user".to_owned(),
+                    format!("{}:{}", unsafe { libc::geteuid() }, unsafe {
+                        libc::getegid()
+                    }),
+                ]
+            };
+
+            // If runtime is rootful set user to non-root user id matching
+            // current user id
+            if *CONTAINER_RUNTIME_ROOTLESS == ContainerRuntimeRootless::Rootful {
+                command.args(user_mapping_args());
+            }
+
+            // If rootless and runtime is podman, set user to non-root use id matching
+            // current user id and add additional --userns param to map the user id correctly
+            if *CONTAINER_RUNTIME == ContainerRuntime::Podman
+                && *CONTAINER_RUNTIME_ROOTLESS == ContainerRuntimeRootless::Rootless
+            {
+                command.args(user_mapping_args());
+                command.arg("--userns");
+                command.arg("keep-id");
+            }
+
+            // if neither match of the above match then we are running docker in rootless mode,
+            // when this is true do not perform any user mapping as it will cause permission
+            // problems with bind mounted files.  in this state root:root inside the container is
+            // the same as current uid:gid on the host - see subuid / subgid
         }
 
         let work_dir = Self::get_docker_path(work_dir)?;
@@ -412,6 +527,11 @@ impl LanguageImpl for Docker {
 
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
+    use std::ffi::OsStr;
+
+    use crate::languages::docker::ContainerRuntimeRootless;
+
     use super::{ContainerRuntime, Docker};
     use std::io::Write;
 
@@ -639,6 +759,135 @@ mod tests {
         assert_eq!(
             runtime_with(Some("invalid"), false, false),
             ContainerRuntime::Docker
+        );
+    }
+
+    #[test]
+    fn test_detect_rootless_command() {
+        // Verify command docker
+        let command = super::detect_rootless_command(ContainerRuntime::Docker);
+        let args: Vec<&OsStr> = command.get_args().collect();
+        assert_eq!(command.get_program(), "docker");
+        assert_eq!(args, &["info", "--format", "'{{ .ClientInfo.Context }}'"]);
+
+        // Verify command podman
+        let command = super::detect_rootless_command(ContainerRuntime::Podman);
+        let args: Vec<&OsStr> = command.get_args().collect();
+        assert_eq!(command.get_program(), "podman");
+        assert_eq!(
+            args,
+            &["info", "--format", "'{{ .Host.Security.Rootless }}'"]
+        );
+    }
+
+    #[test]
+    fn detect_rootless_runtime() {
+        fn rootless(runtime: ContainerRuntime) -> std::process::Command {
+            let mut command = std::process::Command::new("echo");
+            match runtime {
+                ContainerRuntime::Docker => command.arg("'rootless'"),
+                ContainerRuntime::Podman => command.arg("'true'"),
+                ContainerRuntime::Auto => unreachable!("Auto should be resolved before use"),
+            };
+            command
+        }
+
+        fn rootful(runtime: ContainerRuntime) -> std::process::Command {
+            let mut command = std::process::Command::new("echo");
+            match runtime {
+                ContainerRuntime::Docker => command.arg("'root'"),
+                ContainerRuntime::Podman => command.arg("'false'"),
+                ContainerRuntime::Auto => unreachable!("Auto should be resolved before use"),
+            };
+            command
+        }
+
+        // podman detect rootless
+        assert_eq!(
+            super::detect_container_runtime_rootless(
+                ContainerRuntime::Podman,
+                None,
+                super::detect_rootless,
+                rootless
+            ),
+            ContainerRuntimeRootless::Rootless
+        );
+
+        // podman detect rootful
+        assert_eq!(
+            super::detect_container_runtime_rootless(
+                ContainerRuntime::Podman,
+                None,
+                super::detect_rootless,
+                rootful
+            ),
+            ContainerRuntimeRootless::Rootful
+        );
+
+        // docker detect rootless
+        assert_eq!(
+            super::detect_container_runtime_rootless(
+                ContainerRuntime::Docker,
+                None,
+                super::detect_rootless,
+                rootless
+            ),
+            ContainerRuntimeRootless::Rootless
+        );
+
+        // docker detect rootful
+        assert_eq!(
+            super::detect_container_runtime_rootless(
+                ContainerRuntime::Docker,
+                None,
+                super::detect_rootless,
+                rootful
+            ),
+            ContainerRuntimeRootless::Rootful
+        );
+
+        // podman force rootless
+        assert_eq!(
+            super::detect_container_runtime_rootless(
+                ContainerRuntime::Podman,
+                Some(true),
+                super::detect_rootless,
+                rootful
+            ),
+            ContainerRuntimeRootless::Rootless
+        );
+
+        // docker force rootless
+        assert_eq!(
+            super::detect_container_runtime_rootless(
+                ContainerRuntime::Docker,
+                Some(true),
+                super::detect_rootless,
+                rootful
+            ),
+            ContainerRuntimeRootless::Rootless
+        );
+
+        // podman force root
+        assert_eq!(
+            super::detect_container_runtime_rootless(
+                ContainerRuntime::Podman,
+                Some(false),
+                super::detect_rootless,
+                rootless
+            ),
+            ContainerRuntimeRootless::Rootful
+        );
+
+        // docker force root
+        assert_eq!(
+            super::detect_container_runtime_rootless(
+                ContainerRuntime::Docker,
+                Some(false),
+                super::detect_rootless,
+                rootful
+            ),
+            ContainerRuntimeRootless::Rootful
         );
     }
 }
