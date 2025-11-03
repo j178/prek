@@ -4,9 +4,9 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
-use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use fancy_regex::Regex;
 use lazy_regex::regex;
+use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_yaml::Value;

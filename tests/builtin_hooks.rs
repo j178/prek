@@ -3,8 +3,8 @@ use std::os::unix::fs::PermissionsExt;
 
 use anyhow::Result;
 use assert_fs::prelude::*;
-use prek_consts::CONFIG_FILE;
 use insta::assert_snapshot;
+use prek_consts::CONFIG_FILE;
 
 use crate::common::{TestContext, cmd_snapshot};
 

@@ -4,10 +4,10 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use prek_consts::env_vars::EnvVars;
-use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+use prek_consts::env_vars::EnvVars;
+use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 
 use crate::common::{TestContext, cmd_snapshot};
 

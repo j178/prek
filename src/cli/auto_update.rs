@@ -4,11 +4,11 @@ use std::process::Stdio;
 
 use anyhow::{Context, Result};
 use bstr::ByteSlice;
-use prek_consts::MANIFEST_FILE;
 use futures::StreamExt;
 use itertools::Itertools;
 use lazy_regex::regex;
 use owo_colors::OwoColorize;
+use prek_consts::MANIFEST_FILE;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use serde::Serializer;

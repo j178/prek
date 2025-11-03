@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use prek_consts::env_vars::EnvVars;
 use futures::TryStreamExt;
+use prek_consts::env_vars::EnvVars;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, error, trace};
 

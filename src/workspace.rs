@@ -6,11 +6,11 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use anyhow::Result;
-use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use futures::StreamExt;
 use ignore::WalkState;
 use itertools::zip_eq;
 use owo_colors::OwoColorize;
+use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

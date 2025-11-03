@@ -686,8 +686,8 @@ mod tests {
     use crate::cli::Cli;
     use anyhow::{Result, bail};
     use clap::{Command, CommandFactory};
-    use prek_consts::env_vars::EnvVars;
     use itertools::Itertools;
+    use prek_consts::env_vars::EnvVars;
     use pretty_assertions::StrComparison;
     use std::cmp::max;
     use std::path::PathBuf;
