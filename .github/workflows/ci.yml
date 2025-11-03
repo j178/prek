@@ -96,7 +96,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@81ecf985428d5c2ea81dbf079bceca32bc9604ab # v2.62.43
+        uses: taiki-e/install-action@81ee1d48d9194cdcab880cbdc7d36e87d39874cb # v2.62.45
         with:
           tool: cargo-shear
       - run: cargo shear
@@ -116,12 +116,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@81ecf985428d5c2ea81dbf079bceca32bc9604ab # v2.62.43
+        uses: taiki-e/install-action@81ee1d48d9194cdcab880cbdc7d36e87d39874cb # v2.62.45
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@81ecf985428d5c2ea81dbf079bceca32bc9604ab # v2.62.43
+        uses: taiki-e/install-action@81ee1d48d9194cdcab880cbdc7d36e87d39874cb # v2.62.45
         with:
           tool: cargo-llvm-cov
 
@@ -165,12 +165,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@81ecf985428d5c2ea81dbf079bceca32bc9604ab # v2.62.43
+        uses: taiki-e/install-action@81ee1d48d9194cdcab880cbdc7d36e87d39874cb # v2.62.45
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@81ecf985428d5c2ea81dbf079bceca32bc9604ab # v2.62.43
+        uses: taiki-e/install-action@81ee1d48d9194cdcab880cbdc7d36e87d39874cb # v2.62.45
         with:
           tool: cargo-llvm-cov
 
@@ -248,7 +248,7 @@ jobs:
         run: rustup show
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@81ecf985428d5c2ea81dbf079bceca32bc9604ab # v2.62.43
+        uses: taiki-e/install-action@81ee1d48d9194cdcab880cbdc7d36e87d39874cb # v2.62.45
         with:
           tool: cargo-nextest
 
@@ -328,12 +328,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@81ecf985428d5c2ea81dbf079bceca32bc9604ab # v2.62.43
+        uses: taiki-e/install-action@81ee1d48d9194cdcab880cbdc7d36e87d39874cb # v2.62.45
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@81ecf985428d5c2ea81dbf079bceca32bc9604ab # v2.62.43
+        uses: taiki-e/install-action@81ee1d48d9194cdcab880cbdc7d36e87d39874cb # v2.62.45
         with:
           tool: cargo-llvm-cov
 
