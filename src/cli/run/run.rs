@@ -15,7 +15,7 @@ use tokio::sync::{OnceCell, Semaphore};
 use tracing::{debug, trace, warn};
 use unicode_width::UnicodeWidthStr;
 
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;

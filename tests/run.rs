@@ -4,8 +4,8 @@ use std::process::Command;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use constants::env_vars::EnvVars;
-use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
+use prek_consts::env_vars::EnvVars;
+use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 

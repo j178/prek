@@ -8,7 +8,7 @@ homepage = "https://prek.j178.dev/"
 license = "MIT"
 
 [workspace.dependencies]
-constants = { path = "lib/constants" }
+prek-consts = { path = "lib/prek-consts" }
 serde_yaml = { version = "0.9.34" }
 thiserror = { version = "2.0.11" }
 tracing = { version = "0.1.40" }
@@ -46,7 +46,7 @@ axoupdater = { version = "0.9.0", default-features = false, features = ["github_
 bstr = { version = "1.11.0" }
 clap = { version = "4.5.16", features = ["derive", "env", "string", "wrap_help"] }
 clap_complete = { version = "4.5.37", features = ["unstable-dynamic"] }
-constants = { workspace = true }
+prek-consts = { workspace = true }
 ctrlc = { version = "3.4.5" }
 dunce = { version = "1.0.5" }
 etcetera = { version = "0.11.0" }

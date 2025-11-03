@@ -8,7 +8,7 @@ mod unix {
     use super::*;
 
     use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-    use constants::CONFIG_FILE;
+    use prek_consts::CONFIG_FILE;
     use std::os::unix::fs::PermissionsExt;
 
     #[test]

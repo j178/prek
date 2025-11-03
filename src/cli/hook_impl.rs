@@ -7,7 +7,7 @@ use anstream::eprintln;
 use anyhow::Result;
 use owo_colors::OwoColorize;
 
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 
 use crate::cli::{self, ExitStatus, RunArgs};
 use crate::config::HookType;

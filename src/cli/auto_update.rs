@@ -4,7 +4,7 @@ use std::process::Stdio;
 
 use anyhow::{Context, Result};
 use bstr::ByteSlice;
-use constants::MANIFEST_FILE;
+use prek_consts::MANIFEST_FILE;
 use futures::StreamExt;
 use itertools::Itertools;
 use lazy_regex::regex;

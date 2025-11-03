@@ -11,7 +11,7 @@ use target_lexicon::{Architecture, ArmArchitecture, HOST, OperatingSystem};
 use tokio::task::JoinSet;
 use tracing::{debug, trace, warn};
 
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 
 use crate::fs::LockedFile;
 use crate::languages::{REQWEST_CLIENT, download_and_extract};

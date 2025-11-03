@@ -1,4 +1,4 @@
-use constants::CONFIG_FILE;
+use prek_consts::CONFIG_FILE;
 
 use crate::common::{TestContext, cmd_snapshot};
 

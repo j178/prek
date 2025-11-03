@@ -7,7 +7,7 @@ use anstream::ColorChoice;
 use futures::StreamExt;
 use tracing::trace;
 
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 
 use crate::hook::Hook;
 

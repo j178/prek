@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 use rustc_hash::FxHashSet;
 use tracing::debug;
 

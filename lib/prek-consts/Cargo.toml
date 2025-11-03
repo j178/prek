@@ -1,5 +1,5 @@
 [package]
-name = "constants"
+name = "prek-consts"
 version = "0.0.1"
 repository = { workspace = true }
 edition = { workspace = true }

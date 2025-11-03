@@ -6,7 +6,7 @@ use std::string::ToString;
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 use itertools::Itertools;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};

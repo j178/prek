@@ -7,7 +7,7 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::{debug, error, trace};
 
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 
 use crate::cleanup::add_cleanup;
 use crate::fs::Simplified;

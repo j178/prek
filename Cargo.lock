@@ -485,13 +485,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "constants"
-version = "0.0.1"
-dependencies = [
- "tracing",
-]
-
-[[package]]
 name = "core-foundation"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1831,7 +1824,6 @@ dependencies = [
  "bstr",
  "clap",
  "clap_complete",
- "constants",
  "ctrlc",
  "dunce",
  "etcetera",
@@ -1856,6 +1848,7 @@ dependencies = [
  "path-clean",
  "pprof",
  "predicates",
+ "prek-consts",
  "prek-pty",
  "prek-yaml",
  "pretty_assertions",
@@ -1886,6 +1879,13 @@ dependencies = [
  "unicode-width 0.2.2",
  "url",
  "which",
+]
+
+[[package]]
+name = "prek-consts"
+version = "0.0.1"
+dependencies = [
+ "tracing",
 ]
 
 [[package]]

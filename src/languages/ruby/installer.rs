@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 #[cfg(not(target_os = "windows"))]
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 use tracing::{trace, warn};
 
 use crate::languages::ruby::RubyRequest;

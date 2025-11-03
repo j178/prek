@@ -7,7 +7,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use rustc_hash::FxHashSet;
 use tracing::{debug, error};
 
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 
 use crate::config::Stage;
 use crate::fs::normalize_path;

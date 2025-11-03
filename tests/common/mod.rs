@@ -9,8 +9,8 @@ use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir};
 use etcetera::BaseStrategy;
 use rustc_hash::FxHashSet;
 
-use constants::CONFIG_FILE;
-use constants::env_vars::EnvVars;
+use prek_consts::CONFIG_FILE;
+use prek_consts::env_vars::EnvVars;
 
 pub struct TestContext {
     temp_dir: ChildPath,

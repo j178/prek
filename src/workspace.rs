@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use anyhow::Result;
-use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
+use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use futures::StreamExt;
 use ignore::WalkState;
 use itertools::zip_eq;

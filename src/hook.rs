@@ -7,7 +7,7 @@ use std::sync::{Arc, OnceLock};
 
 use anyhow::{Context, Result};
 use clap::ValueEnum;
-use constants::MANIFEST_FILE;
+use prek_consts::MANIFEST_FILE;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

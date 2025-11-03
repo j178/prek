@@ -4,7 +4,7 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
-use constants::CONFIG_FILE;
+use prek_consts::CONFIG_FILE;
 use insta::assert_snapshot;
 
 use crate::common::{TestContext, cmd_snapshot};

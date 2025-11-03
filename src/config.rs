@@ -4,7 +4,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
-use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
+use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use fancy_regex::Regex;
 use lazy_regex::regex;
 use rustc_hash::FxHashMap;

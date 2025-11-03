@@ -7,7 +7,7 @@ use std::process::Command;
 
 use crate::common::{TestContext, cmd_snapshot};
 use assert_fs::fixture::ChildPath;
-use constants::MANIFEST_FILE;
+use prek_consts::MANIFEST_FILE;
 
 fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
     let repo_dir = context.home_dir().child(format!("test-repos/{repo_name}"));

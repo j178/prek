@@ -9,7 +9,7 @@ use futures::StreamExt;
 use thiserror::Error;
 use tracing::{debug, warn};
 
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 
 use crate::config::RemoteRepo;
 use crate::fs::LockedFile;

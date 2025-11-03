@@ -2,7 +2,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 
 use crate::builtin::pre_commit_hooks::{Implemented, is_pre_commit_hooks};
 use crate::hook::{Hook, Repo};
