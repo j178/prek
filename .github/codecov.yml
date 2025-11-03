@@ -16,3 +16,4 @@ ignore:
   - "examples/**/*"
   - "target/**/*"
   - "lib/pty/**/*"
+  - "lib/prek-yaml/**/*"

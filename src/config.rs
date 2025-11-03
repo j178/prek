@@ -10,7 +10,6 @@ use lazy_regex::regex;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_yaml::Value;
-use yaml_merge_keys::merge_keys_serde;
 
 use crate::fs::Simplified;
 use crate::identify;
@@ -643,7 +642,7 @@ impl<'de> Deserialize<'de> for Repo {
         struct RepoWire {
             repo: RepoLocation,
             #[serde(flatten)]
-            rest: serde_yaml::Value,
+            rest: Value,
         }
 
         let RepoWire { repo, rest } = RepoWire::deserialize(deserializer)?;
@@ -723,7 +722,7 @@ pub enum Error {
     Yaml(String, #[source] serde_yaml::Error),
 
     #[error("Failed to merge keys in `{0}`")]
-    YamlMerge(String, #[source] yaml_merge_keys::MergeKeyError),
+    YamlMerge(String, #[source] prek_yaml::MergeKeyError),
 }
 
 /// Keys that prek does not use.
@@ -742,8 +741,8 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
     let yaml: Value = serde_yaml::from_str(&content)
         .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
 
-    let yaml =
-        merge_keys_serde(yaml).map_err(|e| Error::YamlMerge(path.user_display().to_string(), e))?;
+    let yaml = prek_yaml::merge_keys(yaml)
+        .map_err(|e| Error::YamlMerge(path.user_display().to_string(), e))?;
 
     let mut unused = Vec::new();
     let config: Config = serde_ignored::deserialize(yaml, |path| {
