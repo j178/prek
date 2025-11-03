@@ -7,10 +7,10 @@ use std::process::Command;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir};
 use etcetera::BaseStrategy;
-use rustc_hash::FxHashSet;
-
+use lazy_regex::regex;
 use prek_consts::CONFIG_FILE;
 use prek_consts::env_vars::EnvVars;
+use rustc_hash::FxHashSet;
 
 pub struct TestContext {
     temp_dir: ChildPath,

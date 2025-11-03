@@ -9,6 +9,9 @@ license = "MIT"
 
 [workspace.dependencies]
 prek-consts = { path = "crates/prek-consts" }
+prek-yaml = { path = "crates/prek-yaml" }
+prek-pty = { path = "crates/prek-pty" }
+
 serde_yaml = { version = "0.9.34" }
 thiserror = { version = "2.0.11" }
 tracing = { version = "0.1.40" }
@@ -31,17 +34,19 @@ default = ["docker"]
 # and should be left unselected when building prek for package managers.
 self-update = ["axoupdater"]
 # Enable the profiler for benchmarking
-profiler = ["dep:pprof", "profiler-flamegraph"]
-profiler-flamegraph = ["pprof/flamegraph"]
+profiler = ["dep:pprof", "pprof/flamegraph"]
 # Enable docker related tests in integration tests
 docker = []
 
 [dependencies]
+prek-consts = { workspace = true }
+prek-yaml = { workspace = true }
+
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.86" }
 astral-tokio-tar = { version = "0.5.1" }
 async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
-async_zip = { git = "https://github.com/astral-sh/rs-async-zip", rev = "c909fda63fcafe4af496a07bfda28a5aae97e58d", features = ["deflate", "tokio"] }
+async_zip = { version = "0.0.18", features = ["deflate", "tokio"] }
 axoupdater = { version = "0.9.0", default-features = false, features = ["github_releases"], optional = true }
 bstr = { version = "1.11.0" }
 clap = { version = "4.5.16", features = ["derive", "env", "string", "wrap_help"] }
@@ -66,7 +71,7 @@ liblzma = { version = "*", features = ["static"] }
 memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
 path-clean = { version = "1.0.1" }
-quick-xml = { version = "0.38" }
+quick-xml = { version = "0.38.3" }
 rand = { version = "0.9.0" }
 rayon = { version = "1.10.0" }
 reqwest = { version = "0.12.9", default-features = false, features = ["http2", "stream", "json", "rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
@@ -92,13 +97,11 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 unicode-width = { version = "0.2.0" }
 url = { version = "2.5.2", features = ["serde"] }
 which = { version = "8.0.0" }
-prek-consts = { workspace = true }
-prek-yaml = { path = "crates/prek-yaml" }
 
 [target.'cfg(unix)'.dependencies]
 libc = { version = "0.2.164" }
 pprof = { version = "0.15.0", optional = true }
-prek-pty = { path = "crates/prek-pty" }
+prek-pty = { workspace = true }
 
 [build-dependencies]
 fs-err = { version = "3.1.0" }
@@ -106,14 +109,11 @@ fs-err = { version = "3.1.0" }
 [dev-dependencies]
 assert_cmd = { version = "2.0.16", features = ["color"] }
 assert_fs = { version = "1.1.2" }
-etcetera = { version = "0.11.0" }
 insta = { version = "1.40.0", features = ["filters"] }
 insta-cmd = { version = "0.6.0" }
 markdown = { version = "1.0.0" }
 predicates = { version = "3.1.2" }
 pretty_assertions = { version = "1.4.1" }
-regex = { version = "1.11.0" }
-tempfile = { version = "3.13.0" }
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }{ archive-suffix }"
