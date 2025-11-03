@@ -180,46 +180,46 @@ fn set_env_vars(from_ref: Option<&String>, to_ref: Option<&String>, args: &RunEx
     unsafe {
         std::env::set_var("PRE_COMMIT", "1");
 
-        if let Some(ref source) = args.prepare_commit_message_source {
-            std::env::set_var("PRE_COMMIT_COMMIT_MSG_SOURCE", source.clone());
+        if let Some(source) = &args.prepare_commit_message_source {
+            std::env::set_var("PRE_COMMIT_COMMIT_MSG_SOURCE", source);
         }
-        if let Some(ref object) = args.commit_object_name {
-            std::env::set_var("PRE_COMMIT_COMMIT_OBJECT_NAME", object.clone());
+        if let Some(object) = &args.commit_object_name {
+            std::env::set_var("PRE_COMMIT_COMMIT_OBJECT_NAME", object);
         }
         if let Some(from_ref) = from_ref {
-            std::env::set_var("PRE_COMMIT_ORIGIN", from_ref.clone());
-            std::env::set_var("PRE_COMMIT_FROM_REF", from_ref.clone());
+            std::env::set_var("PRE_COMMIT_ORIGIN", from_ref);
+            std::env::set_var("PRE_COMMIT_FROM_REF", from_ref);
         }
         if let Some(to_ref) = to_ref {
-            std::env::set_var("PRE_COMMIT_SOURCE", to_ref.clone());
-            std::env::set_var("PRE_COMMIT_TO_REF", to_ref.clone());
+            std::env::set_var("PRE_COMMIT_SOURCE", to_ref);
+            std::env::set_var("PRE_COMMIT_TO_REF", to_ref);
         }
-        if let Some(ref upstream) = args.pre_rebase_upstream {
-            std::env::set_var("PRE_COMMIT_PRE_REBASE_UPSTREAM", upstream.clone());
+        if let Some(upstream) = &args.pre_rebase_upstream {
+            std::env::set_var("PRE_COMMIT_PRE_REBASE_UPSTREAM", upstream);
         }
-        if let Some(ref branch) = args.pre_rebase_branch {
-            std::env::set_var("PRE_COMMIT_PRE_REBASE_BRANCH", branch.clone());
+        if let Some(branch) = &args.pre_rebase_branch {
+            std::env::set_var("PRE_COMMIT_PRE_REBASE_BRANCH", branch);
         }
-        if let Some(ref branch) = args.local_branch {
-            std::env::set_var("PRE_COMMIT_LOCAL_BRANCH", branch.clone());
+        if let Some(branch) = &args.local_branch {
+            std::env::set_var("PRE_COMMIT_LOCAL_BRANCH", branch);
         }
-        if let Some(ref branch) = args.remote_branch {
-            std::env::set_var("PRE_COMMIT_REMOTE_BRANCH", branch.clone());
+        if let Some(branch) = &args.remote_branch {
+            std::env::set_var("PRE_COMMIT_REMOTE_BRANCH", branch);
         }
-        if let Some(ref name) = args.remote_name {
-            std::env::set_var("PRE_COMMIT_REMOTE_NAME", name.clone());
+        if let Some(name) = &args.remote_name {
+            std::env::set_var("PRE_COMMIT_REMOTE_NAME", name);
         }
-        if let Some(ref url) = args.remote_url {
-            std::env::set_var("PRE_COMMIT_REMOTE_URL", url.clone());
+        if let Some(url) = &args.remote_url {
+            std::env::set_var("PRE_COMMIT_REMOTE_URL", url);
         }
-        if let Some(ref checkout) = args.checkout_type {
-            std::env::set_var("PRE_COMMIT_CHECKOUT_TYPE", checkout.clone());
+        if let Some(checkout) = &args.checkout_type {
+            std::env::set_var("PRE_COMMIT_CHECKOUT_TYPE", checkout);
         }
         if args.is_squash_merge {
             std::env::set_var("PRE_COMMIT_SQUASH_MERGE", "1");
         }
-        if let Some(ref command) = args.rewrite_command {
-            std::env::set_var("PRE_COMMIT_REWRITE_COMMAND", command.clone());
+        if let Some(command) = &args.rewrite_command {
+            std::env::set_var("PRE_COMMIT_REWRITE_COMMAND", command);
         }
     }
 }

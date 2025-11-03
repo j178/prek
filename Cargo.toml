@@ -47,7 +47,7 @@ clap_complete = { version = "4.5.37", features = ["unstable-dynamic"] }
 constants = { workspace = true }
 ctrlc = { version = "3.4.5" }
 dunce = { version = "1.0.5" }
-etcetera = { version = "0.10.0" }
+etcetera = { version = "0.11.0" }
 fancy-regex = { version = "0.16.0" }
 fs-err = { version = "3.1.0", features = ["tokio"] }
 futures = { version = "0.3.31" }
@@ -57,6 +57,7 @@ ignore = { version = "0.4.23" }
 indicatif = { version = "0.18.0" }
 indoc = { version = "2.0.5" }
 itertools = { version = "0.14.0" }
+lazy-regex = { version = "3.4.2" }
 levenshtein = { version = "1.0.5" }
 # Enable static linking for liblzma
 # This is required for the `xz` feature in `async-compression`
@@ -90,6 +91,7 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 unicode-width = { version = "0.2.0" }
 url = { version = "2.5.2", features = ["serde"] }
 which = { version = "8.0.0" }
+yaml-merge-keys = { version = "0.8.2", features = ["serde_yaml"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { version = "0.2.164" }
@@ -102,7 +104,7 @@ fs-err = { version = "3.1.0" }
 [dev-dependencies]
 assert_cmd = { version = "2.0.16", features = ["color"] }
 assert_fs = { version = "1.1.2" }
-etcetera = { version = "0.10.0" }
+etcetera = { version = "0.11.0" }
 insta = { version = "1.40.0", features = ["filters"] }
 insta-cmd = { version = "0.6.0" }
 markdown = { version = "1.0.0" }

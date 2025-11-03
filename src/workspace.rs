@@ -250,7 +250,7 @@ impl Project {
                 .map(async |repo_config| {
                     let path = store.clone_repo(repo_config, reporter).await.map_err(|e| {
                         Error::Store {
-                            repo: repo_config.repo.to_string(),
+                            repo: repo_config.repo.clone(),
                             error: Box::new(e),
                         }
                     })?;
@@ -752,7 +752,7 @@ impl Workspace {
                         .clone_repo(&repo_config, reporter)
                         .await
                         .map_err(|e| Error::Store {
-                            repo: repo_config.repo.to_string(),
+                            repo: repo_config.repo.clone(),
                             error: Box::new(e),
                         })?;
 

@@ -5,9 +5,9 @@ use std::process::Stdio;
 use anyhow::{Context, Result};
 use bstr::ByteSlice;
 use constants::MANIFEST_FILE;
-use fancy_regex::Regex;
 use futures::StreamExt;
 use itertools::Itertools;
+use lazy_regex::regex;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
@@ -350,14 +350,13 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
         .map(ToString::to_string)
         .collect::<Vec<_>>();
 
-    let rev_regex = Regex::new(r#"^(\s+)rev:(\s*)(['"]?)([^\s#]+)(.*)(\r?\n)$"#)
-        .expect("Failed to compile regex");
+    let rev_regex = regex!(r#"^(\s+)rev:(\s*)(['"]?)([^\s#]+)(.*)(\r?\n)$"#);
 
     let rev_lines = lines
         .iter()
         .enumerate()
         .filter_map(|(line_no, line)| {
-            if let Ok(true) = rev_regex.is_match(line) {
+            if rev_regex.is_match(line) {
                 Some(line_no)
             } else {
                 None
@@ -394,8 +393,7 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
 
         let caps = rev_regex
             .captures(&lines[*line_no])
-            .expect("Invalid regex")
-            .expect("Failed to capture revision line");
+            .context("Failed to capture rev line")?;
 
         let comment = if let Some(frozen) = &revision.frozen {
             format!("  # frozen: {frozen}")

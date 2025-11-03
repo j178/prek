@@ -2,14 +2,15 @@ use std::fmt::Display;
 use std::ops::{Deref, RangeInclusive};
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::OnceLock;
 
 use anyhow::Result;
 use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
-use fancy_regex::{self as regex, Regex};
+use fancy_regex::Regex;
+use lazy_regex::regex;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_yaml::Value;
+use yaml_merge_keys::merge_keys_serde;
 
 use crate::fs::Simplified;
 use crate::identify;
@@ -524,8 +525,8 @@ impl<'de> Deserialize<'de> for MetaHook {
                     files: Some(
                         Regex::new(&format!(
                             "^{}|{}$",
-                            regex::escape(CONFIG_FILE),
-                            regex::escape(ALT_CONFIG_FILE)
+                            fancy_regex::escape(CONFIG_FILE),
+                            fancy_regex::escape(ALT_CONFIG_FILE)
                         ))
                         .map(SerdeRegex)
                         .unwrap(),
@@ -542,8 +543,8 @@ impl<'de> Deserialize<'de> for MetaHook {
                     files: Some(
                         Regex::new(&format!(
                             "^{}|{}$",
-                            regex::escape(CONFIG_FILE),
-                            regex::escape(ALT_CONFIG_FILE)
+                            fancy_regex::escape(CONFIG_FILE),
+                            fancy_regex::escape(ALT_CONFIG_FILE)
                         ))
                         .map(SerdeRegex)
                         .unwrap(),
@@ -720,6 +721,9 @@ pub enum Error {
 
     #[error("Failed to parse `{0}`")]
     Yaml(String, #[source] serde_yaml::Error),
+
+    #[error("Failed to merge keys in `{0}`")]
+    YamlMerge(String, #[source] yaml_merge_keys::MergeKeyError),
 }
 
 /// Keys that prek does not use.
@@ -735,11 +739,11 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
         Err(e) => return Err(e.into()),
     };
 
-    let mut yaml: Value = serde_yaml::from_str(&content)
+    let yaml: Value = serde_yaml::from_str(&content)
         .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
 
-    yaml.apply_merge()
-        .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
+    let yaml =
+        merge_keys_serde(yaml).map_err(|e| Error::YamlMerge(path.user_display().to_string(), e))?;
 
     let mut unused = Vec::new();
     let config: Config = serde_ignored::deserialize(yaml, |path| {
@@ -812,9 +816,7 @@ pub fn read_manifest(path: &Path) -> Result<Manifest, Error> {
 
 /// Check if a string looks like a git SHA
 fn looks_like_sha(s: &str) -> bool {
-    static SHA_RE: OnceLock<Regex> = OnceLock::new();
-    let re = SHA_RE.get_or_init(|| Regex::new(r"^[a-fA-F0-9]+$").unwrap());
-    re.is_match(s).unwrap_or(false)
+    regex!(r"^[a-fA-F0-9]+$").is_match(s)
 }
 
 /// Deserializes a vector of strings and validates that each is a known file type tag.
@@ -1667,6 +1669,88 @@ mod tests {
                                     log_file: None,
                                     require_serial: None,
                                     stages: None,
+                                    verbose: None,
+                                    minimum_prek_version: None,
+                                },
+                            },
+                        ],
+                    },
+                ),
+            ],
+            default_install_hook_types: None,
+            default_language_version: None,
+            default_stages: None,
+            files: None,
+            exclude: None,
+            fail_fast: None,
+            minimum_prek_version: None,
+        }
+        "#);
+
+        Ok(())
+    }
+
+    #[test]
+    fn read_config_with_nested_merge_keys() -> Result<()> {
+        let yaml = indoc::indoc! {r"
+            local: &local
+              language: system
+              pass_filenames: false
+              require_serial: true
+
+            local-commit: &local-commit
+              <<: *local
+              stages: [pre-commit]
+
+            repos:
+            - repo: local
+              hooks:
+              - id: test-yaml
+                name: Test YAML compatibility
+                entry: prek --help
+                <<: *local-commit
+        "};
+
+        let mut file = tempfile::NamedTempFile::new()?;
+        file.write_all(yaml.as_bytes())?;
+
+        let config = read_config(file.path())?;
+        insta::assert_debug_snapshot!(config, @r#"
+        Config {
+            repos: [
+                Local(
+                    LocalRepo {
+                        hooks: [
+                            ManifestHook {
+                                id: "test-yaml",
+                                name: "Test YAML compatibility",
+                                entry: "prek --help",
+                                language: System,
+                                options: HookOptions {
+                                    alias: None,
+                                    files: None,
+                                    exclude: None,
+                                    types: None,
+                                    types_or: None,
+                                    exclude_types: None,
+                                    additional_dependencies: None,
+                                    args: None,
+                                    always_run: None,
+                                    fail_fast: None,
+                                    pass_filenames: Some(
+                                        false,
+                                    ),
+                                    description: None,
+                                    language_version: None,
+                                    log_file: None,
+                                    require_serial: Some(
+                                        true,
+                                    ),
+                                    stages: Some(
+                                        [
+                                            PreCommit,
+                                        ],
+                                    ),
                                     verbose: None,
                                     minimum_prek_version: None,
                                 },

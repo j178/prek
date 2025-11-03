@@ -85,7 +85,7 @@ fn run_in_non_git_repo() {
     ----- stdout -----
 
     ----- stderr -----
-    error: command `get git root` exited with an error:
+    error: Command `get git root` exited with an error:
 
     [status]
     exit status: 128
@@ -1238,7 +1238,7 @@ fn init_nonexistent_repo() {
 
     ----- stderr -----
     error: Failed to initialize repo `https://notexistentatallnevergonnahappen.com/nonexistent/repo`
-      caused by: command `git full clone` exited with an error:
+      caused by: Command `git full clone` exited with an error:
 
     [status]
     exit status: 128

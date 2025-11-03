@@ -66,7 +66,7 @@ impl Repo {
     /// Load the remote repo manifest from the path.
     pub(crate) fn remote(url: String, rev: String, path: PathBuf) -> Result<Self, Error> {
         let manifest = read_manifest(&path.join(MANIFEST_FILE)).map_err(|e| Error::Manifest {
-            repo: url.to_string(),
+            repo: url.clone(),
             error: e,
         })?;
         let hooks = manifest.hooks;
