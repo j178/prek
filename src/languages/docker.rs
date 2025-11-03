@@ -2,11 +2,12 @@ use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use lazy_regex::regex;
+use prek_consts::env_vars::EnvVars;
 use tracing::trace;
 
 use crate::cli::reporter::HookInstallReporter;
@@ -63,6 +64,34 @@ static CONTAINER_MOUNTS: LazyLock<Result<Vec<Mount>, Error>> = LazyLock::new(|| 
     Ok(mounts)
 });
 
+static CONTAINER_RUNTIME: LazyLock<anyhow::Result<String>> =
+    LazyLock::new(|| detect_container_runtime(which::which("podman"), which::which("docker")));
+
+// Detect container runtime provider, prioritise docker over podman if
+// both are on the path, unless PREK_CONTAINER_RUNTIME is set to podman | docker
+// to override detection.
+// if no runtime can be detected Error returned.
+fn detect_container_runtime(
+    podman: Result<PathBuf, which::Error>,
+    docker: Result<PathBuf, which::Error>,
+) -> Result<String> {
+    if let Some(val) = EnvVars::var_os(EnvVars::PREK_CONTAINER_RUNTIME)
+        && let Some(val) = val.to_ascii_lowercase().to_str()
+    {
+        if val == "docker" || val == "podman" {
+            return Ok(val.to_owned());
+        }
+    }
+
+    if let Ok(_p) = docker {
+        return Ok("docker".to_owned());
+    } else if let Ok(_p) = podman {
+        return Ok("podman".to_owned());
+    }
+
+    bail!("No container runtime detected");
+}
+
 impl Docker {
     fn docker_tag(hook: &InstalledHook) -> String {
         let info = hook.install_info().expect("Docker hook must be installed");
@@ -79,7 +108,8 @@ impl Docker {
         };
 
         let tag = Self::docker_tag(hook);
-        let mut cmd = Cmd::new("docker", "build docker image");
+        let container_runtime = CONTAINER_RUNTIME.as_ref().map_err(|e| anyhow!(e))?.as_str();
+        let mut cmd = Cmd::new(container_runtime, "build docker image");
         let cmd = cmd
             .arg("build")
             .arg("--tag")
@@ -203,7 +233,8 @@ impl Docker {
     }
 
     pub(crate) fn docker_run_cmd(work_dir: &Path) -> Result<Cmd> {
-        let mut command = Cmd::new("docker", "run container");
+        let container_runtime = CONTAINER_RUNTIME.as_ref().map_err(|e| anyhow!(e))?.as_str();
+        let mut command = Cmd::new(container_runtime, "run container");
         command.arg("run").arg("--rm");
 
         if *USE_COLOR {
@@ -315,8 +346,14 @@ impl LanguageImpl for Docker {
 
 #[cfg(test)]
 mod tests {
+    use crate::languages::docker::detect_container_runtime;
+
     use super::Docker;
+    use prek_consts::env_vars::EnvVars;
+    use pretty_assertions::assert_str_eq;
+    use std::env;
     use std::io::Write;
+    use std::path::PathBuf;
 
     // Real-world inspired samples captured from Docker hosts.
     const CONTAINER_ID_V1: &str =
@@ -415,5 +452,109 @@ mod tests {
         assert!(result.is_err());
 
         Ok(())
+    }
+
+    #[test]
+    fn test_detect_docker_only_runtime() {
+        let docker: Result<PathBuf, which::Error> = Ok(PathBuf::from("found"));
+        let podman: Result<PathBuf, which::Error> = Err(which::Error::CannotFindBinaryPath);
+
+        unsafe {
+            env::remove_var(EnvVars::PREK_CONTAINER_RUNTIME);
+        }
+
+        let result = detect_container_runtime(podman, docker).unwrap();
+        assert_str_eq!(result.as_str(), "docker");
+    }
+
+    #[test]
+    fn test_detect_podman_only_runtime() {
+        let docker: Result<PathBuf, which::Error> = Err(which::Error::CannotFindBinaryPath);
+        let podman: Result<PathBuf, which::Error> = Ok(PathBuf::from("found"));
+
+        unsafe {
+            env::remove_var(EnvVars::PREK_CONTAINER_RUNTIME);
+        }
+
+        let result = detect_container_runtime(podman, docker).unwrap();
+        assert_str_eq!(result.as_str(), "podman");
+    }
+
+    #[test]
+    fn test_detect_docker_both_runtime() {
+        let docker: Result<PathBuf, which::Error> = Ok(PathBuf::from("found"));
+        let podman: Result<PathBuf, which::Error> = Ok(PathBuf::from("found"));
+
+        unsafe {
+            env::remove_var(EnvVars::PREK_CONTAINER_RUNTIME);
+        }
+
+        let result = detect_container_runtime(podman, docker).unwrap();
+        assert_str_eq!(result.as_str(), "docker");
+    }
+
+    #[test]
+    fn test_select_podman_runtime() {
+        let docker: Result<PathBuf, which::Error> = Err(which::Error::CannotFindBinaryPath);
+        let podman: Result<PathBuf, which::Error> = Err(which::Error::CannotFindBinaryPath);
+
+        unsafe {
+            env::set_var(EnvVars::PREK_CONTAINER_RUNTIME, "podman");
+        }
+
+        let result = detect_container_runtime(podman, docker).unwrap();
+        assert_str_eq!(result.as_str(), "podman");
+    }
+
+    #[test]
+    fn test_select_docker_runtime() {
+        let docker: Result<PathBuf, which::Error> = Err(which::Error::CannotFindBinaryPath);
+        let podman: Result<PathBuf, which::Error> = Err(which::Error::CannotFindBinaryPath);
+
+        unsafe {
+            env::set_var(EnvVars::PREK_CONTAINER_RUNTIME, "docker");
+        }
+
+        let result = detect_container_runtime(podman, docker).unwrap();
+        assert_str_eq!(result.as_str(), "docker");
+    }
+
+    #[test]
+    fn test_select_podman_runtime_mixed_case() {
+        let docker: Result<PathBuf, which::Error> = Err(which::Error::CannotFindBinaryPath);
+        let podman: Result<PathBuf, which::Error> = Err(which::Error::CannotFindBinaryPath);
+
+        unsafe {
+            env::set_var(EnvVars::PREK_CONTAINER_RUNTIME, "PoDmAn");
+        }
+
+        let result = detect_container_runtime(podman, docker).unwrap();
+        assert_str_eq!(result.as_str(), "podman");
+    }
+
+    #[test]
+    fn test_select_docker_runtime_mixed_case() {
+        let docker: Result<PathBuf, which::Error> = Err(which::Error::CannotFindBinaryPath);
+        let podman: Result<PathBuf, which::Error> = Err(which::Error::CannotFindBinaryPath);
+
+        unsafe {
+            env::set_var(EnvVars::PREK_CONTAINER_RUNTIME, "DoCkEr");
+        }
+
+        let result = detect_container_runtime(podman, docker).unwrap();
+        assert_str_eq!(result.as_str(), "docker");
+    }
+
+    #[test]
+    fn test_select_runtime_bad_value() {
+        let docker: Result<PathBuf, which::Error> = Err(which::Error::CannotFindBinaryPath);
+        let podman: Result<PathBuf, which::Error> = Err(which::Error::CannotFindBinaryPath);
+
+        unsafe {
+            env::set_var(EnvVars::PREK_CONTAINER_RUNTIME, "rubbish");
+        }
+
+        let result = detect_container_runtime(podman, docker);
+        assert!(result.is_err());
     }
 }

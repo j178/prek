@@ -29,9 +29,9 @@ Specify the minimum required version of prek for the configuration. If the insta
 
 Example:
 
-  ```yaml
-  minimum_prek_version: '0.2.0'
-  ```
+```yaml
+minimum_prek_version: "0.2.0"
+```
 
 The original `minimum_pre_commit_version` option has no effect and gets ignored in prek.
 
@@ -47,18 +47,19 @@ Prek supports the following environment variables:
 - `PREK_NO_FAST_PATH` — Disable Rust-native built-in hooks; always use the original hook implementation. See [Built-in Fast Hooks](builtin.md) for details.
 
 - `PREK_UV_SOURCE` — Control how uv (Python package installer) is installed. Options:
+  - `github` (download from GitHub releases)
+  - `pypi` (install from PyPI)
+  - `tuna` (use Tsinghua University mirror)
+  - `aliyun` (use Alibaba Cloud mirror)
+  - `tencent` (use Tencent Cloud mirror)
+  - `pip` (install via pip)
+  - a custom PyPI mirror URL
 
-    - `github` (download from GitHub releases)
-    - `pypi` (install from PyPI)
-    - `tuna` (use Tsinghua University mirror)
-    - `aliyun` (use Alibaba Cloud mirror)
-    - `tencent` (use Tencent Cloud mirror)
-    - `pip` (install via pip)
-    - a custom PyPI mirror URL
-
-    If not set, prek automatically selects the best available source.
+  If not set, prek automatically selects the best available source.
 
 - `PREK_NATIVE_TLS` - Use system's trusted store instead of the bundled `webpki-roots` crate.
+
+- `PREK_CONTAINER_RUNTIME` - Overrides container runtime detection and used container runtime specified, supported values `docker` or `podman`.
 
 Compatibility fallbacks:
 
