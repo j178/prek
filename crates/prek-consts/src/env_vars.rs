@@ -91,11 +91,83 @@ impl EnvVars {
         }
     }
 
+    /// Read an environment var and parse as bool
+    pub fn var_as_bool(name: &str) -> Option<bool> {
+        if let Some(val) = EnvVars::var_os(name)
+            && let Some(val) = val.to_str()
+            && let Some(val) = EnvVars::parse_boolish(val)
+        {
+            Some(val)
+        } else {
+            None
+        }
+    }
+
+    /// Parse a boolean from a string.
+    ///
+    /// Adapted from Clap's `BoolishValueParser` which is dual licensed under the MIT and Apache-2.0.
+    /// See `clap_builder/src/util/str_to_bool.rs`
+    pub fn parse_boolish(val: &str) -> Option<bool> {
+        // True values are `y`, `yes`, `t`, `true`, `on`, and `1`.
+        const TRUE_LITERALS: [&str; 6] = ["y", "yes", "t", "true", "on", "1"];
+
+        // False values are `n`, `no`, `f`, `false`, `off`, and `0`.
+        const FALSE_LITERALS: [&str; 6] = ["n", "no", "f", "false", "off", "0"];
+
+        let val = val.to_lowercase();
+        let pat = val.as_str();
+        if TRUE_LITERALS.contains(&pat) {
+            Some(true)
+        } else if FALSE_LITERALS.contains(&pat) {
+            Some(false)
+        } else {
+            None
+        }
+    }
+
     fn pre_commit_name(name: &str) -> Option<&str> {
         match name {
             Self::PREK_ALLOW_NO_CONFIG => Some(Self::PRE_COMMIT_ALLOW_NO_CONFIG),
             Self::PREK_NO_CONCURRENCY => Some(Self::PRE_COMMIT_NO_CONCURRENCY),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::EnvVars;
+
+    #[test]
+    fn test_parse_boolish() {
+        let true_values = ["y", "yes", "t", "true", "on", "1"];
+        let false_values = ["n", "no", "f", "false", "off", "0"];
+        for val in true_values {
+            assert_eq!(
+                EnvVars::parse_boolish(val),
+                Some(true),
+                "Failed to parse {val}"
+            );
+            assert_eq!(
+                EnvVars::parse_boolish(&val.to_uppercase()),
+                Some(true),
+                "Failed to parse {val}",
+            );
+        }
+        for val in false_values {
+            assert_eq!(
+                EnvVars::parse_boolish(val),
+                Some(false),
+                "Failed to parse {val}"
+            );
+            assert_eq!(
+                EnvVars::parse_boolish(&val.to_uppercase()),
+                Some(false),
+                "Failed to parse {val}",
+            );
+        }
+        assert_eq!(EnvVars::parse_boolish("maybe"), None);
+        assert_eq!(EnvVars::parse_boolish(""), None);
+        assert_eq!(EnvVars::parse_boolish("123"), None);
     }
 }

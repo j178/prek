@@ -339,10 +339,7 @@ fn create_reqwest_client(native_tls: bool) -> reqwest::Client {
 }
 
 fn use_native_tls() -> bool {
-    if let Some(val) = EnvVars::var_os(EnvVars::PREK_NATIVE_TLS)
-        && let Some(val) = val.to_str()
-        && let Some(val) = parse_boolish(val)
-    {
+    if let Some(val) = EnvVars::var_as_bool(EnvVars::PREK_NATIVE_TLS) {
         return val;
     }
 
@@ -359,57 +356,8 @@ fn use_native_tls() -> bool {
     })
 }
 
-/// Parse a boolean from a string.
-///
-/// Adapted from Clap's `BoolishValueParser` which is dual licensed under the MIT and Apache-2.0.
-/// See `clap_builder/src/util/str_to_bool.rs`
-fn parse_boolish(val: &str) -> Option<bool> {
-    // True values are `y`, `yes`, `t`, `true`, `on`, and `1`.
-    const TRUE_LITERALS: [&str; 6] = ["y", "yes", "t", "true", "on", "1"];
-
-    // False values are `n`, `no`, `f`, `false`, `off`, and `0`.
-    const FALSE_LITERALS: [&str; 6] = ["n", "no", "f", "false", "off", "0"];
-
-    let val = val.to_lowercase();
-    let pat = val.as_str();
-    if TRUE_LITERALS.contains(&pat) {
-        Some(true)
-    } else if FALSE_LITERALS.contains(&pat) {
-        Some(false)
-    } else {
-        None
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::parse_boolish;
-
-    #[test]
-    fn test_parse_boolish() {
-        let true_values = ["y", "yes", "t", "true", "on", "1"];
-        let false_values = ["n", "no", "f", "false", "off", "0"];
-        for val in true_values {
-            assert_eq!(parse_boolish(val), Some(true), "Failed to parse {val}");
-            assert_eq!(
-                parse_boolish(&val.to_uppercase()),
-                Some(true),
-                "Failed to parse {val}",
-            );
-        }
-        for val in false_values {
-            assert_eq!(parse_boolish(val), Some(false), "Failed to parse {val}");
-            assert_eq!(
-                parse_boolish(&val.to_uppercase()),
-                Some(false),
-                "Failed to parse {val}",
-            );
-        }
-        assert_eq!(parse_boolish("maybe"), None);
-        assert_eq!(parse_boolish(""), None);
-        assert_eq!(parse_boolish("123"), None);
-    }
-
     #[tokio::test]
     async fn test_native_tls() {
         let client = super::create_reqwest_client(true);
