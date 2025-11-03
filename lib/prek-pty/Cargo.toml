@@ -1,5 +1,5 @@
 [package]
-name = "pty"
+name = "prek-pty"
 version = "0.0.1"
 repository = { workspace = true }
 edition = { workspace = true }

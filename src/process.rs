@@ -25,13 +25,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 /// Adapt [axoprocess] to use [`tokio::process::Process`] instead of [`std::process::Command`].
+use std::ffi::OsStr;
 use std::fmt::Display;
+use std::path::Path;
 use std::process::Output;
-use std::{
-    ffi::OsStr,
-    path::Path,
-    process::{CommandArgs, CommandEnvs, ExitStatus, Stdio},
-};
+use std::process::{CommandArgs, CommandEnvs, ExitStatus, Stdio};
 
 use owo_colors::OwoColorize;
 use thiserror::Error;
@@ -55,7 +53,7 @@ pub enum Error {
     Status { summary: String, error: StatusError },
     #[cfg(not(windows))]
     #[error("Failed to open pty")]
-    Pty(#[from] pty::Error),
+    Pty(#[from] prek_pty::Error),
     #[error("Failed to setup subprocess for pty")]
     PtySetup(#[from] std::io::Error),
 }
@@ -184,7 +182,7 @@ impl Cmd {
 
     #[cfg(windows)]
     pub async fn pty_output(&mut self) -> Result<Output, Error> {
-        return self.output().await;
+        self.output().await
     }
 
     #[cfg(not(windows))]
@@ -196,7 +194,7 @@ impl Cmd {
             return self.output().await;
         }
 
-        let (mut pty, pts) = pty::open()?;
+        let (mut pty, pts) = prek_pty::open()?;
         let (stdin, stdout, stderr) = pts.setup_subprocess()?;
 
         self.inner.stdin(stdin);

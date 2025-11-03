@@ -1856,9 +1856,9 @@ dependencies = [
  "path-clean",
  "pprof",
  "predicates",
+ "prek-pty",
  "prek-yaml",
  "pretty_assertions",
- "pty",
  "quick-xml 0.38.3",
  "rand",
  "rayon",
@@ -1886,6 +1886,14 @@ dependencies = [
  "unicode-width 0.2.2",
  "url",
  "which",
+]
+
+[[package]]
+name = "prek-pty"
+version = "0.0.1"
+dependencies = [
+ "rustix",
+ "tokio",
 ]
 
 [[package]]
@@ -1922,14 +1930,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e66fcd288453b748497d8fb18bccc83a16b0518e3906d4b8df0a8d42d93dbb1c"
 dependencies = [
  "cc",
-]
-
-[[package]]
-name = "pty"
-version = "0.0.1"
-dependencies = [
- "rustix",
- "tokio",
 ]
 
 [[package]]

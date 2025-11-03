@@ -98,7 +98,7 @@ prek-yaml = { path = "lib/prek-yaml" }
 [target.'cfg(unix)'.dependencies]
 libc = { version = "0.2.164" }
 pprof = { version = "0.15.0", optional = true }
-pty = { path = "lib/pty" }
+prek-pty = { path = "lib/prek-pty" }
 
 [build-dependencies]
 fs-err = { version = "3.1.0" }
