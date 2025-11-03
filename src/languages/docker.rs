@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
+use std::io::Read;
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
@@ -42,7 +43,7 @@ static CONTAINER_MOUNTS: LazyLock<Result<Vec<Mount>, Error>> = LazyLock::new(|| 
         return Ok(vec![]);
     }
 
-    let Ok(container_id) = Docker::current_container_id() else {
+    let Ok(container_id) = Docker::current_container_id(None, None) else {
         return Ok(vec![]);
     };
 
@@ -119,13 +120,40 @@ impl Docker {
     ///
     /// There are no reliable way to get the container id inside container, see
     /// <https://stackoverflow.com/questions/20995351/how-can-i-get-docker-linux-container-information-from-within-the-container-itsel>
-    fn current_container_id() -> Result<String> {
+    /// uses /proc/self/cgroup for cgroup v1
+    /// uses /proc/self/mountinfo for cgroup v2
+    fn current_container_id(
+        cgroup: Option<fs::File>,
+        mountinfo: Option<fs::File>,
+    ) -> Result<String> {
         // Adapted from https://github.com/open-telemetry/opentelemetry-java-instrumentation/pull/7167/files
-        let regex = regex!(r".*/docker/containers/([0-9a-f]{64})/.*");
-        let cgroup_path = fs::read_to_string("/proc/self/cgroup")?;
-        let Some(captures) = regex.captures(&cgroup_path) else {
-            anyhow::bail!("Failed to get container id: no match found");
+        let regex = regex!(r".*/([0-9a-f]{64}).*");
+
+        let cgroup_path = if let Some(mut file) = cgroup {
+            let mut buffer: Vec<u8> = Vec::new();
+            file.read_to_end(&mut buffer)?;
+            String::from_utf8(buffer)?
+        } else {
+            fs::read_to_string("/proc/self/cgroup")?
         };
+
+        let mount_info = if let Some(mut file) = mountinfo {
+            let mut buffer: Vec<u8> = Vec::new();
+            file.read_to_end(&mut buffer)?;
+            String::from_utf8(buffer)?
+        } else {
+            fs::read_to_string("/proc/self/mountinfo")?
+        };
+
+        // mountinfo seems to be more reliable when running in a container using cgroups v2
+        let captures = if let Some(captures) = regex.captures(&cgroup_path) {
+            captures
+        } else if let Some(captures) = regex.captures(&mount_info) {
+            captures
+        } else {
+            anyhow::bail!("Failed to get container id: no match found regex point");
+        };
+
         let Some(id) = captures.get(1).map(|m| m.as_str().to_string()) else {
             anyhow::bail!("Failed to get container id: no capture found");
         };
@@ -258,5 +286,90 @@ impl LanguageImpl for Docker {
         }
 
         Ok((combined_status, combined_output))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::io::{Seek, Write};
+
+    use pretty_assertions::assert_str_eq;
+
+    use super::*;
+
+    #[test]
+    fn test_detect_dind_no_match() {
+        let mut cgroup = tempfile::tempfile().expect("cannot create tempfile");
+        let mut mountinfo = tempfile::tempfile().expect("cannot create tempfile");
+        cgroup.write_all(b"0::/\n").expect("cannot write data");
+        mountinfo
+            .write_all(
+                br"
+1338 1104 0:90 /asound /proc/asound ro,nosuid,nodev,noexec,relatime - proc proc rw
+1339 1104 0:90 /bus /proc/bus ro,nosuid,nodev,noexec,relatime - proc proc rw
+1340 1104 0:90 /fs /proc/fs ro,nosuid,nodev,noexec,relatime - proc proc rw
+1341 1104 0:90 /irq /proc/irq ro,nosuid,nodev,noexec,relatime - proc proc rw
+1342 1104 0:90 /sys /proc/sys ro,nosuid,nodev,noexec,relatime - proc proc rw
+1343 1104 0:90 /sysrq-trigger /proc/sysrq-trigger ro,nosuid,nodev,noexec,relatime - proc proc rw
+        ",
+            )
+            .expect("cannot write data");
+
+        cgroup.rewind().expect("could not rewind file");
+        mountinfo.rewind().expect("could not rewind file");
+        assert!(Docker::current_container_id(Some(cgroup), Some(mountinfo)).is_err());
+    }
+
+    #[test]
+    fn test_detect_dind_cgroup_v1() {
+        let mut cgroup = tempfile::tempfile().expect("cannot create tempfile");
+        let mut mountinfo = tempfile::tempfile().expect("cannot create tempfile");
+        cgroup
+            .write_all(
+                br"
+3:cpu:/docker/7be92808767a667f35c8505cbf40d14e931ef6db5b0210329cf193b15ba9d605
+2:cpuset:/docker/7be92808767a667f35c8505cbf40d14e931ef6db5b0210329cf193b15ba9d605
+1:name=openrc:/docker
+            ",
+            )
+            .expect("could not write to file");
+        cgroup.rewind().expect("could not rewind file");
+
+        mountinfo.write_all(br"
+1087 1093 0:106 /containers/overlay-containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc0/userdata/resolv.conf /etc/resolv.conf rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=3256724k,nr_inodes=814181,mode=700,uid=1000,gid=1000,inode64
+1088 1093 0:106 /containers/overlay-containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc0/userdata/hosts /etc/hosts rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=3256724k,nr_inodes=814181,mode=700,uid=1000,gid=1000,inode64
+1090 1093 0:106 /containers/overlay-containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc0/userdata/.containerenv /run/.containerenv rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=3256724k,nr_inodes=814181,mode=700,uid=1000,gid=1000,inode64
+1091 1093 0:106 /containers/overlay-containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc0/userdata/run/secrets /run/secrets rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=3256724k,nr_inodes=814181,mode=700,uid=1000,gid=1000,inode64
+1092 1093 0:106 /containers/overlay-containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc0/userdata/hostname /etc/hostname rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=3256724k,nr_inodes=814181,mode=700,uid=1000,gid=1000,inode64
+        ").expect("could not write to file");
+        mountinfo.rewind().expect("could not rewind file");
+
+        let container_id = Docker::current_container_id(Some(cgroup), Some(mountinfo)).unwrap();
+        assert_str_eq!(
+            container_id.as_str(),
+            "7be92808767a667f35c8505cbf40d14e931ef6db5b0210329cf193b15ba9d605"
+        );
+    }
+
+    #[test]
+    fn test_detect_dind_cgroup_v2() {
+        let mut cgroup = tempfile::tempfile().expect("cannot create tempfile");
+        let mut mountinfo = tempfile::tempfile().expect("cannot create tempfile");
+        cgroup.write_all(b"0::/\n").expect("cannot write data");
+        mountinfo.write_all(br"
+1087 1093 0:106 /containers/overlay-containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc0/userdata/resolv.conf /etc/resolv.conf rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=3256724k,nr_inodes=814181,mode=700,uid=1000,gid=1000,inode64
+1088 1093 0:106 /containers/overlay-containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc0/userdata/hosts /etc/hosts rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=3256724k,nr_inodes=814181,mode=700,uid=1000,gid=1000,inode64
+1090 1093 0:106 /containers/overlay-containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc0/userdata/.containerenv /run/.containerenv rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=3256724k,nr_inodes=814181,mode=700,uid=1000,gid=1000,inode64
+1091 1093 0:106 /containers/overlay-containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc0/userdata/run/secrets /run/secrets rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=3256724k,nr_inodes=814181,mode=700,uid=1000,gid=1000,inode64
+1092 1093 0:106 /containers/overlay-containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc0/userdata/hostname /etc/hostname rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=3256724k,nr_inodes=814181,mode=700,uid=1000,gid=1000,inode64
+        ").expect("cannot write data");
+
+        cgroup.rewind().expect("could not rewind file");
+        mountinfo.rewind().expect("could not rewind file");
+        let container_id = Docker::current_container_id(Some(cgroup), Some(mountinfo)).unwrap();
+        assert_str_eq!(
+            container_id.as_str(),
+            "6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc0"
+        );
     }
 }
