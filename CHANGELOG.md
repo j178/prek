@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.2.13
+
+Released on 2025-11-04.
+
+### Enhancements
+
+- Add Ruby support (no download support yet) ([#993](https://github.com/j178/prek/pull/993))
+- Implement `check-executables-have-shebangs` as builtin-hook ([#924](https://github.com/j178/prek/pull/924))
+- Improve container id detection ([#1031](https://github.com/j178/prek/pull/1031))
+
+### Performance
+
+- Optimize hot paths: reduce allocations ([#997](https://github.com/j178/prek/pull/997))
+- Refactor `identify` using smallvec ([#982](https://github.com/j178/prek/pull/982))
+
+### Bug fixes
+
+- Fix YAML with nested merge keys ([#1020](https://github.com/j178/prek/pull/1020))
+- Treat every file as executable on Windows to keep compatibility with pre-commit ([#980](https://github.com/j178/prek/pull/980))
+
+### Documentation
+
+- Document that .gitignore is respected by default during workspace discovery ([#983](https://github.com/j178/prek/pull/983))
+- Update project stability status ([#1005](https://github.com/j178/prek/pull/1005))
+- Add FastMCP to "who is using prek" ([#1034](https://github.com/j178/prek/pull/1034))
+- Add attrs to "who is using prek" ([#981](https://github.com/j178/prek/pull/981))
+
+### Contributors
+
+- @my1e5
+- @j178
+- @zzstoatzz
+- @lmmx
+- @feliblo
+- @yihong0618
+- @st1971
+- @is-alnilam
+
 ## 0.2.12
 
 Released on 2025-10-27.
