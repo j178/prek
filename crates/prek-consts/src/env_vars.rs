@@ -91,7 +91,7 @@ impl EnvVars {
         }
     }
 
-    /// Read an environment var and parse as bool
+    /// Read an environment var and parse as bool.
     pub fn var_as_bool(name: &str) -> Option<bool> {
         if let Some(val) = EnvVars::var_os(name)
             && let Some(val) = val.to_str()
@@ -143,28 +143,12 @@ mod tests {
         let true_values = ["y", "yes", "t", "true", "on", "1"];
         let false_values = ["n", "no", "f", "false", "off", "0"];
         for val in true_values {
-            assert_eq!(
-                EnvVars::parse_boolish(val),
-                Some(true),
-                "Failed to parse {val}"
-            );
-            assert_eq!(
-                EnvVars::parse_boolish(&val.to_uppercase()),
-                Some(true),
-                "Failed to parse {val}",
-            );
+            assert_eq!(EnvVars::parse_boolish(val), Some(true),);
+            assert_eq!(EnvVars::parse_boolish(&val.to_uppercase()), Some(true),);
         }
         for val in false_values {
-            assert_eq!(
-                EnvVars::parse_boolish(val),
-                Some(false),
-                "Failed to parse {val}"
-            );
-            assert_eq!(
-                EnvVars::parse_boolish(&val.to_uppercase()),
-                Some(false),
-                "Failed to parse {val}",
-            );
+            assert_eq!(EnvVars::parse_boolish(val), Some(false),);
+            assert_eq!(EnvVars::parse_boolish(&val.to_uppercase()), Some(false),);
         }
         assert_eq!(EnvVars::parse_boolish("maybe"), None);
         assert_eq!(EnvVars::parse_boolish(""), None);
