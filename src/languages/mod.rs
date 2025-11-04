@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use constants::env_vars::EnvVars;
 use futures::TryStreamExt;
+use prek_consts::env_vars::EnvVars;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, error, trace};
 
@@ -26,6 +26,7 @@ mod lua;
 mod node;
 mod pygrep;
 mod python;
+mod ruby;
 mod script;
 mod system;
 pub mod version;
@@ -33,6 +34,7 @@ pub mod version;
 static GOLANG: golang::Golang = golang::Golang;
 static PYTHON: python::Python = python::Python;
 static NODE: node::Node = node::Node;
+static RUBY: ruby::Ruby = ruby::Ruby;
 static SYSTEM: system::System = system::System;
 static FAIL: fail::Fail = fail::Fail;
 static DOCKER: docker::Docker = docker::Docker;
@@ -49,7 +51,9 @@ trait LanguageImpl {
         store: &Store,
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook>;
+
     async fn check_health(&self, info: &InstallInfo) -> Result<()>;
+
     async fn run(
         &self,
         hook: &InstalledHook,
@@ -117,6 +121,7 @@ impl Language {
             Self::Golang
                 | Self::Python
                 | Self::Node
+                | Self::Ruby
                 | Self::System
                 | Self::Fail
                 | Self::Docker
@@ -172,6 +177,7 @@ impl Language {
             Self::Golang => GOLANG.install(hook, store, reporter).await,
             Self::Python => PYTHON.install(hook, store, reporter).await,
             Self::Node => NODE.install(hook, store, reporter).await,
+            Self::Ruby => RUBY.install(hook, store, reporter).await,
             Self::System => SYSTEM.install(hook, store, reporter).await,
             Self::Fail => FAIL.install(hook, store, reporter).await,
             Self::Docker => DOCKER.install(hook, store, reporter).await,
@@ -188,6 +194,7 @@ impl Language {
             Self::Golang => GOLANG.check_health(info).await,
             Self::Python => PYTHON.check_health(info).await,
             Self::Node => NODE.check_health(info).await,
+            Self::Ruby => RUBY.check_health(info).await,
             Self::System => SYSTEM.check_health(info).await,
             Self::Fail => FAIL.check_health(info).await,
             Self::Docker => DOCKER.check_health(info).await,
@@ -214,6 +221,7 @@ impl Language {
             Self::Golang => GOLANG.run(hook, filenames, store).await,
             Self::Python => PYTHON.run(hook, filenames, store).await,
             Self::Node => NODE.run(hook, filenames, store).await,
+            Self::Ruby => RUBY.run(hook, filenames, store).await,
             Self::System => SYSTEM.run(hook, filenames, store).await,
             Self::Fail => FAIL.run(hook, filenames, store).await,
             Self::Docker => DOCKER.run(hook, filenames, store).await,
@@ -227,40 +235,35 @@ impl Language {
 }
 
 /// Try to extract metadata from the given hook entry if possible.
-///
-/// Currently, only PEP 723 inline metadata for `python` hooks is supported.
-/// First part of `entry` must be a file path to the Python script.
-/// Effectively, we are implementing a new `python-script` language which works like `script`.
-/// But we don't want to introduce a new language just for this for now.
 pub(crate) async fn extract_metadata_from_entry(hook: &mut Hook) -> Result<()> {
-    // Only support `python` hooks for now.
-    if hook.language == Language::Python {
-        return python::extract_pep723_metadata(hook).await;
+    match hook.language {
+        Language::Python => python::extract_pep723_metadata(hook).await,
+        Language::Golang => golang::extract_go_mod_metadata(hook).await,
+        _ => Ok(()),
     }
-
-    Ok(())
 }
 
-pub(crate) fn resolve_command(mut cmds: Vec<String>, env_path: Option<&OsStr>) -> Vec<String> {
-    let cmd = &cmds[0];
-    let exe_path = match which::which_in(cmd, env_path, &*CWD) {
+/// Resolve the actual process invocation, honoring shebangs and PATH lookups.
+pub(crate) fn resolve_command(mut cmds: Vec<String>, paths: Option<&OsStr>) -> Vec<String> {
+    let candidate = &cmds[0];
+    let resolved_binary = match which::which_in(candidate, paths, &*CWD) {
         Ok(p) => p,
-        Err(_) => PathBuf::from(cmd),
+        Err(_) => PathBuf::from(candidate),
     };
-    trace!("Resolved command: {}", exe_path.display());
+    trace!("Resolved command: {}", resolved_binary.display());
 
-    if let Ok(mut interpreter) = parse_shebang(&exe_path) {
-        trace!("Found shebang: {:?}", interpreter);
+    if let Ok(mut shebang_argv) = parse_shebang(&resolved_binary) {
+        trace!("Found shebang: {:?}", shebang_argv);
         // Resolve the interpreter path, convert "python3" to "python3.exe" on Windows
-        if let Ok(p) = which::which_in(&interpreter[0], env_path, &*CWD) {
-            interpreter[0] = p.to_string_lossy().to_string();
-            trace!("Resolved interpreter: {}", &interpreter[0]);
+        if let Ok(p) = which::which_in(&shebang_argv[0], paths, &*CWD) {
+            shebang_argv[0] = p.to_string_lossy().to_string();
+            trace!("Resolved interpreter: {}", &shebang_argv[0]);
         }
-        interpreter.push(exe_path.to_string_lossy().to_string());
-        interpreter.extend_from_slice(&cmds[1..]);
-        interpreter
+        shebang_argv.push(resolved_binary.to_string_lossy().to_string());
+        shebang_argv.extend_from_slice(&cmds[1..]);
+        shebang_argv
     } else {
-        cmds[0] = exe_path.to_string_lossy().to_string();
+        cmds[0] = resolved_binary.to_string_lossy().to_string();
         cmds
     }
 }
@@ -336,10 +339,7 @@ fn create_reqwest_client(native_tls: bool) -> reqwest::Client {
 }
 
 fn use_native_tls() -> bool {
-    if let Some(val) = EnvVars::var_os(EnvVars::PREK_NATIVE_TLS)
-        && let Some(val) = val.to_str()
-        && let Some(val) = parse_boolish(val)
-    {
+    if let Some(val) = EnvVars::var_as_bool(EnvVars::PREK_NATIVE_TLS) {
         return val;
     }
 
@@ -356,57 +356,8 @@ fn use_native_tls() -> bool {
     })
 }
 
-/// Parse a boolean from a string.
-///
-/// Adapted from Clap's `BoolishValueParser` which is dual licensed under the MIT and Apache-2.0.
-/// See `clap_builder/src/util/str_to_bool.rs`
-fn parse_boolish(val: &str) -> Option<bool> {
-    // True values are `y`, `yes`, `t`, `true`, `on`, and `1`.
-    const TRUE_LITERALS: [&str; 6] = ["y", "yes", "t", "true", "on", "1"];
-
-    // False values are `n`, `no`, `f`, `false`, `off`, and `0`.
-    const FALSE_LITERALS: [&str; 6] = ["n", "no", "f", "false", "off", "0"];
-
-    let val = val.to_lowercase();
-    let pat = val.as_str();
-    if TRUE_LITERALS.contains(&pat) {
-        Some(true)
-    } else if FALSE_LITERALS.contains(&pat) {
-        Some(false)
-    } else {
-        None
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::parse_boolish;
-
-    #[test]
-    fn test_parse_boolish() {
-        let true_values = ["y", "yes", "t", "true", "on", "1"];
-        let false_values = ["n", "no", "f", "false", "off", "0"];
-        for val in true_values {
-            assert_eq!(parse_boolish(val), Some(true), "Failed to parse {val}");
-            assert_eq!(
-                parse_boolish(&val.to_uppercase()),
-                Some(true),
-                "Failed to parse {val}",
-            );
-        }
-        for val in false_values {
-            assert_eq!(parse_boolish(val), Some(false), "Failed to parse {val}");
-            assert_eq!(
-                parse_boolish(&val.to_uppercase()),
-                Some(false),
-                "Failed to parse {val}",
-            );
-        }
-        assert_eq!(parse_boolish("maybe"), None);
-        assert_eq!(parse_boolish(""), None);
-        assert_eq!(parse_boolish("123"), None);
-    }
-
     #[tokio::test]
     async fn test_native_tls() {
         let client = super::create_reqwest_client(true);

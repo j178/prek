@@ -3,7 +3,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 use tokio::io::AsyncWriteExt;
 use tracing::debug;
 

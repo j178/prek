@@ -25,13 +25,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 /// Adapt [axoprocess] to use [`tokio::process::Process`] instead of [`std::process::Command`].
+use std::ffi::OsStr;
 use std::fmt::Display;
+use std::path::Path;
 use std::process::Output;
-use std::{
-    ffi::OsStr,
-    path::Path,
-    process::{CommandArgs, CommandEnvs, ExitStatus, Stdio},
-};
+use std::process::{CommandArgs, CommandEnvs, ExitStatus, Stdio};
 
 use owo_colors::OwoColorize;
 use thiserror::Error;
@@ -43,7 +41,7 @@ use crate::git::GIT;
 #[derive(Debug, Error)]
 pub enum Error {
     /// The command fundamentally failed to execute (usually means it didn't exist)
-    #[error("run command `{summary}` failed")]
+    #[error("Run command `{summary}` failed")]
     Exec {
         /// Summary of what the Command was trying to do
         summary: String,
@@ -51,12 +49,12 @@ pub enum Error {
         #[source]
         cause: std::io::Error,
     },
-    #[error("command `{summary}` exited with an error:\n{error}")]
+    #[error("Command `{summary}` exited with an error:\n{error}")]
     Status { summary: String, error: StatusError },
     #[cfg(not(windows))]
-    #[error("failed to open pty")]
-    Pty(#[from] pty::Error),
-    #[error("failed to setup subprocess for pty")]
+    #[error("Failed to open pty")]
+    Pty(#[from] prek_pty::Error),
+    #[error("Failed to setup subprocess for pty")]
     PtySetup(#[from] std::io::Error),
 }
 
@@ -184,7 +182,7 @@ impl Cmd {
 
     #[cfg(windows)]
     pub async fn pty_output(&mut self) -> Result<Output, Error> {
-        return self.output().await;
+        self.output().await
     }
 
     #[cfg(not(windows))]
@@ -196,7 +194,7 @@ impl Cmd {
             return self.output().await;
         }
 
-        let (mut pty, pts) = pty::open()?;
+        let (mut pty, pts) = prek_pty::open()?;
         let (stdin, stdout, stderr) = pts.setup_subprocess()?;
 
         self.inner.stdin(stdin);

@@ -6,11 +6,11 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use anyhow::Result;
-use constants::{ALT_CONFIG_FILE, CONFIG_FILE};
 use futures::StreamExt;
 use ignore::WalkState;
 use itertools::zip_eq;
 use owo_colors::OwoColorize;
+use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -250,7 +250,7 @@ impl Project {
                 .map(async |repo_config| {
                     let path = store.clone_repo(repo_config, reporter).await.map_err(|e| {
                         Error::Store {
-                            repo: repo_config.repo.to_string(),
+                            repo: repo_config.repo.clone(),
                             error: Box::new(e),
                         }
                     })?;
@@ -752,7 +752,7 @@ impl Workspace {
                         .clone_repo(&repo_config, reporter)
                         .await
                         .map_err(|e| Error::Store {
-                            repo: repo_config.repo.to_string(),
+                            repo: repo_config.repo.clone(),
                             error: Box::new(e),
                         })?;
 

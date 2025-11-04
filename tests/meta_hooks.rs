@@ -3,7 +3,7 @@ mod common;
 use crate::common::{TestContext, cmd_snapshot};
 
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-use constants::CONFIG_FILE;
+use prek_consts::CONFIG_FILE;
 
 #[test]
 fn meta_hooks() -> anyhow::Result<()> {

@@ -65,6 +65,12 @@ main()
 - When both `language_version` (in config) and `requires-python` (in script) are set, `language_version` takes precedence
 - Only `dependencies` and `requires-python` fields are supported; other metadata like `tool.uv` is ignored
 
+### Ruby
+
+`prek` does not currently support installing a new version of Ruby to run Ruby hooks. All versions of Ruby found in the system PATH will be considered based on their version, and common locations used by Ruby version managers (such as `rvm`, `rbenv`, `mise`, `asdf`, and `homebrew`) will be also be checked. `language_version` can be used to specify the required Ruby version, and the hook will fail if a suitable Ruby version is not found.
+
+Gems specified in hook gemspec files and `additional_dependencies` will be installed into an isolated gemset for Ruby hooks. This gemset will be shared between hooks that use the same Ruby version and have the same set of dependencies, including across different repositories.
+
 ## Command line interface
 
 ### `prek run`

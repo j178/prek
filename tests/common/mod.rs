@@ -9,8 +9,8 @@ use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir};
 use etcetera::BaseStrategy;
 use rustc_hash::FxHashSet;
 
-use constants::CONFIG_FILE;
-use constants::env_vars::EnvVars;
+use prek_consts::CONFIG_FILE;
+use prek_consts::env_vars::EnvVars;
 
 pub struct TestContext {
     temp_dir: ChildPath,
@@ -50,9 +50,9 @@ impl TestContext {
                 .map(|pattern| (pattern, "[HOME]/".to_string())),
         );
 
-        let current_exe = assert_cmd::cargo::cargo_bin("prek");
+        let current_exe = assert_cmd::cargo::cargo_bin!("prek");
         filters.extend(
-            Self::path_patterns(&current_exe)
+            Self::path_patterns(current_exe)
                 .into_iter()
                 .map(|pattern| (pattern, "[CURRENT_EXE]".to_string())),
         );
@@ -122,7 +122,7 @@ impl TestContext {
             cmd.env(EnvVars::PRE_COMMIT_HOME, &**self.home_dir());
             cmd
         } else {
-            let bin = assert_cmd::cargo::cargo_bin("prek");
+            let bin = assert_cmd::cargo::cargo_bin!("prek");
             let mut cmd = Command::new(bin);
             cmd.current_dir(self.work_dir());
             cmd.env(EnvVars::PREK_HOME, &**self.home_dir());

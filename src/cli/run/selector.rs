@@ -7,9 +7,9 @@ use crate::hook::Hook;
 use crate::warn_user;
 
 use anyhow::anyhow;
-use constants::env_vars::EnvVars;
 use itertools::Itertools;
 use path_clean::PathClean;
+use prek_consts::env_vars::EnvVars;
 use rustc_hash::FxHashSet;
 use tracing::trace;
 

@@ -120,8 +120,13 @@ pub(crate) fn normalize_path(path: PathBuf) -> PathBuf {
         *c = b'/';
     }
 
-    let os_str = OsString::from(String::from_utf8_lossy(&path).to_string());
-    PathBuf::from(os_str)
+    match String::from_utf8(path) {
+        Ok(s) => PathBuf::from(s),
+        Err(e) => {
+            let path = e.into_bytes();
+            PathBuf::from(OsString::from(String::from_utf8_lossy(&path).as_ref()))
+        }
+    }
 }
 
 /// Compute a path describing `path` relative to `base`.

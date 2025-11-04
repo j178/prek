@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};

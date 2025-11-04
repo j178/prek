@@ -1,6 +1,6 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -200,7 +200,7 @@ fn can_not_download() {
     ----- stderr -----
     error: Failed to install hook `less-than-3.6`
       caused by: Failed to create Python virtual environment
-      caused by: command `create venv` exited with an error:
+      caused by: Command `create venv` exited with an error:
 
     [status]
     exit status: 2

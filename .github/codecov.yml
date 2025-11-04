@@ -15,4 +15,5 @@ ignore:
   - "tests/**/*"
   - "examples/**/*"
   - "target/**/*"
-  - "lib/pty/**/*"
+  - "crates/prek-pty/**/*"
+  - "crates/prek-yaml/**/*"

@@ -7,7 +7,7 @@ use anstream::ColorChoice;
 use futures::StreamExt;
 use tracing::trace;
 
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 
 use crate::hook::Hook;
 
@@ -107,7 +107,7 @@ impl<'a> Iterator for Partitions<'a> {
 
         while self.current_index < self.filenames.len() {
             let filename = self.filenames[self.current_index];
-            let length = filename.to_string_lossy().len() + 1;
+            let length = filename.as_os_str().len() + 1;
 
             if current_length + length > self.max_cli_length
                 || self.current_index - start_index >= self.max_per_batch

@@ -2,8 +2,8 @@ mod common;
 
 use anyhow::Result;
 use assert_fs::fixture::{FileWriteStr, PathChild};
-use constants::env_vars::EnvVars;
 use indoc::indoc;
+use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot};
 

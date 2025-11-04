@@ -11,7 +11,7 @@ use target_lexicon::{Architecture, ArmArchitecture, HOST, OperatingSystem};
 use tokio::task::JoinSet;
 use tracing::{debug, trace, warn};
 
-use constants::env_vars::EnvVars;
+use prek_consts::env_vars::EnvVars;
 
 use crate::fs::LockedFile;
 use crate::languages::{REQWEST_CLIENT, download_and_extract};
@@ -20,7 +20,7 @@ use crate::store::{CacheBucket, Store};
 use crate::version;
 
 // The version range of `uv` we will install. Should update periodically.
-const CUR_UV_VERSION: &str = "0.9.0";
+const CUR_UV_VERSION: &str = "0.9.7";
 static UV_VERSION_RANGE: LazyLock<VersionReq> =
     LazyLock::new(|| VersionReq::parse(">=0.7.0, <0.10.0").unwrap());
 

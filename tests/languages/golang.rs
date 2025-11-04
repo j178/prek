@@ -2,8 +2,8 @@ use std::process::Command;
 
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-use constants::env_vars::EnvVars;
-use constants::{CONFIG_FILE, MANIFEST_FILE};
+use prek_consts::env_vars::EnvVars;
+use prek_consts::{CONFIG_FILE, MANIFEST_FILE};
 
 use crate::common::{TestContext, cmd_snapshot};
 

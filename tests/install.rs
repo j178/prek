@@ -2,10 +2,10 @@ use crate::common::{TestContext, cmd_snapshot};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-use constants::CONFIG_FILE;
-use constants::env_vars::EnvVars;
 use indoc::indoc;
 use insta::assert_snapshot;
+use prek_consts::CONFIG_FILE;
+use prek_consts::env_vars::EnvVars;
 
 mod common;
 
