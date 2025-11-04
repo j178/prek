@@ -177,9 +177,9 @@ impl Docker {
     fn container_id_from_cgroup_v2(mount_info: impl AsRef<Path>) -> Result<String> {
         let content =
             fs::read_to_string(mount_info).context("Failed to read cgroup v2 mount info")?;
-        regex!(r".*/docker/containers/([0-9a-f]{64})/.*")
+        regex!(r".*/(containers|overlay-containers)/([0-9a-f]{64})/.*")
             .captures(&content)
-            .and_then(|caps| caps.get(1))
+            .and_then(|caps| caps.get(2))
             .map(|m| m.as_str().to_owned())
             .context("Failed to find Docker container id in cgroup v2 mount info")
     }
@@ -370,6 +370,48 @@ mod tests {
             assert_eq!(actual, expected);
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn container_id_from_cgroup_v2() -> anyhow::Result<()> {
+        for (sample, expected) in [
+            // Docker rootful container
+            (
+                r"402 401 0:45 /var/lib/docker/containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc0/hostname /etc/hostname rw,nosuid,nodev,relatime - tmpfs tmpfs rw,size=65536k,mode=755
+403 401 0:45 /var/lib/docker/containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc0/resolv.conf /etc/resolv.conf rw,nosuid,nodev,relatime - tmpfs tmpfs rw,size=65536k,mode=755
+",
+                "6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc0",
+            ),
+            // Docker rootless container
+            (
+                r"402 401 0:45 /home/testuser/.local/share/docker/containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc1/hostname /etc/hostname rw,nosuid,nodev,relatime - tmpfs tmpfs rw,size=65536k,mode=755
+403 401 0:45 /home/testuser/.local/share/docker/containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc1/resolv.conf /etc/resolv.conf rw,nosuid,nodev,relatime - tmpfs tmpfs rw,size=65536k,mode=755
+",
+                "6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc1",
+            ),
+            // Podman rootful container
+            (
+                r"1099 1105 0:107 /containers/storage/overlay-containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc2/userdata/hostname /etc/hostname rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=3256724k,nr_inodes=814181,mode=700,uid=1000,gid=1000,inode64
+1100 1105 0:107 /containers/storage/overlay-containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc2/userdata/resolv.conf /etc/resolv.conf rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=3256724k,nr_inodes=814181,mode=700,uid=1000,gid=1000,inode64
+",
+                "6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc2",
+            ),
+            // Podman rootless container
+            (
+                r"1099 1105 0:107 /containers/overlay-containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc3/userdata/hostname /etc/hostname rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=3256724k,nr_inodes=814181,mode=700,uid=1000,gid=1000,inode64
+1100 1105 0:107 /containers/overlay-containers/6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc3/userdata/resolv.conf /etc/resolv.conf rw,nosuid,nodev,relatime - tmpfs tmpfs rw,seclabel,size=3256724k,nr_inodes=814181,mode=700,uid=1000,gid=1000,inode64
+",
+                "6d81fc3a1c26e24a27803e263d534be37c821e390521961a77f782c46fd85bc3",
+            ),
+        ] {
+            let mut mountinfo_file = tempfile::NamedTempFile::new()?;
+            mountinfo_file.write_all(sample.as_bytes())?;
+            mountinfo_file.flush()?;
+
+            let actual = Docker::container_id_from_cgroup_v2(mountinfo_file.path())?;
+            assert_eq!(actual, expected);
+        }
         Ok(())
     }
 
