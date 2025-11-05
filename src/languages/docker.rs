@@ -168,10 +168,10 @@ impl Docker {
             last_section[start_idx..end_idx].to_string()
         };
 
-        if container_id.is_empty() || container_id.chars().any(|c| !c.is_ascii_hexdigit()) {
-            return None;
+        if container_id.len() == 64 && container_id.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Some(container_id);
         }
-        Some(container_id)
+        None
     }
 
     fn container_id_from_cgroup_v2(mount_info: impl AsRef<Path>) -> Result<String> {
@@ -338,8 +338,8 @@ mod tests {
             (CGROUP_V1_SAMPLE, CONTAINER_ID_V1),
             // with prefix and suffix
             (
-                "13:name=systemd:/podruntime/docker/kubepods/crio-dc679f8a8319c8cf7d38e1adf263bc08d23.stuff",
-                "dc679f8a8319c8cf7d38e1adf263bc08d23",
+                "13:name=systemd:/podruntime/docker/kubepods/crio-dc679f8a8319c8cf7d38e1adf263bc08d234f0749ea715fb6ca3bb259db69956.stuff",
+                "dc679f8a8319c8cf7d38e1adf263bc08d234f0749ea715fb6ca3bb259db69956",
             ),
             // just container id
             (
@@ -348,8 +348,8 @@ mod tests {
             ),
             // with prefix
             (
-                "//\n1:name=systemd:/podruntime/docker/kubepods/docker-dc579f8a8319c8cf7d38e1adf263bc08d23",
-                "dc579f8a8319c8cf7d38e1adf263bc08d23",
+                "//\n1:name=systemd:/podruntime/docker/kubepods/docker-dc579f8a8319c8cf7d38e1adf263bc08d230600179b07acfd7eaf9646778dc31",
+                "dc579f8a8319c8cf7d38e1adf263bc08d230600179b07acfd7eaf9646778dc31",
             ),
             // with two dashes in prefix
             (
@@ -368,6 +368,27 @@ mod tests {
 
             let actual = Docker::container_id_from_cgroup_v1(cgroup_file.path())?;
             assert_eq!(actual, expected);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_container_id_from_cgroup_v1() -> anyhow::Result<()> {
+        for sample in [
+            // Too short
+            "9:cpuset:/system.slice/docker-7be92808767a667f35c8505cbf40d14e931ef6db5b0210329cf193b15ba9d60.scope",
+            // Non-hex characters
+            "9:cpuset:/system.slice/docker-7be92808767a667f35c8505cbf40d14e931ef6db5b0210329cf193b15ba9d6g0.scope",
+            // No container id
+            "9:cpuset:/system.slice/docker-.scope",
+        ] {
+            let mut cgroup_file = tempfile::NamedTempFile::new()?;
+            cgroup_file.write_all(sample.as_bytes())?;
+            cgroup_file.flush()?;
+
+            let result = Docker::container_id_from_cgroup_v1(cgroup_file.path());
+            assert!(result.is_err());
         }
 
         Ok(())
