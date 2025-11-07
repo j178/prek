@@ -108,7 +108,7 @@ impl EnvVars {
     ///
     /// Adapted from Clap's `BoolishValueParser` which is dual licensed under the MIT and Apache-2.0.
     /// See `clap_builder/src/util/str_to_bool.rs`
-    pub fn parse_boolish(val: &str) -> Option<bool> {
+    fn parse_boolish(val: &str) -> Option<bool> {
         // True values are `y`, `yes`, `t`, `true`, `on`, and `1`.
         const TRUE_LITERALS: [&str; 6] = ["y", "yes", "t", "true", "on", "1"];
 
