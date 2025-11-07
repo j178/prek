@@ -290,6 +290,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [attrs](https://github.com/python-attrs/attrs/commit/c95b177682e76a63478d29d040f9cb36a8d31915#diff-ef2cef9f88b4fe09ca3082140e67f5ad34fb65fb6e228f119d3812261ae51449)
 - [FastMCP](https://github.com/jlowin/fastmcp/pull/2309)
 - [iceberg-python](https://github.com/apache/iceberg-python/pull/2533)
+- [msgspec](https://github.com/jcrist/msgspec/pull/918)
 
 <!-- why:end -->
 
