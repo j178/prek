@@ -153,7 +153,7 @@ fn install_hook_script(
                 fs_err::rename(&hook_path, &legacy_path)?;
                 writeln!(
                     printer.stdout(),
-                    "Hook already exists at `{}`, move it to `{}`",
+                    "Hook already exists at `{}`, moved it to `{}`",
                     hook_path.user_display().cyan(),
                     legacy_path.user_display().yellow()
                 )?;
