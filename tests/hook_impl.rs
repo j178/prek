@@ -353,6 +353,8 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
     ----- stdout -----
     prek installed at `../.git/hooks/pre-commit` for workspace `[TEMP_DIR]/project2`
 
+    hint: this hook installed for `[TEMP_DIR]/project2` only; run `prek install` from `[TEMP_DIR]/` to install for the entire repo.
+
     ----- stderr -----
     ");
 
@@ -420,6 +422,8 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
     exit_code: 0
     ----- stdout -----
     prek installed at `../.git/hooks/pre-commit` for workspace `[TEMP_DIR]/project2`
+
+    hint: this hook installed for `[TEMP_DIR]/project2` only; run `prek install` from `[TEMP_DIR]/` to install for the entire repo.
 
     ----- stderr -----
     ");
