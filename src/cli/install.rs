@@ -192,31 +192,36 @@ fn install_hook_script(
 
     args.push(format!("--hook-type={}", hook_type.as_str()));
 
+    let git_root = GIT_ROOT.as_ref()?;
+    let mut hint = format!("prek installed at `{}`", hook_path.user_display().cyan());
+
     // Prefer explicit config path if given (non-workspace mode).
     // Otherwise, use the config path from the discovered project (workspace mode).
     // If neither is available, don't pass a config path (let prek find it). In this case,
     // we're different with `pre-commit` which always sets `--config=.pre-commit-config.yaml`.
-    let target_info = if let Some(config) = config {
+    if let Some(config) = config {
         args.push(format!(r#"--config="{}""#, config.display()));
-        format!(" with specified config `{}`", config.display().cyan())
+
+        write!(hint, " with specified config `{}`", config.display().cyan())?;
     } else if let Some(project) = project {
         let project_path = project.path();
-        let relative_path = project_path
-            .strip_prefix(GIT_ROOT.as_ref()?)
-            .unwrap_or(project_path);
+        let relative_path = project_path.strip_prefix(git_root).unwrap_or(project_path);
         if !relative_path.as_os_str().is_empty() {
             args.push(format!(r#"--cd="{}""#, relative_path.display()));
         }
 
-        if project_path == GIT_ROOT.as_ref()? {
-            String::new()
-        } else {
-            // Show workspace path if it's not the root project.
-            format!(" for workspace `{}`", project_path.display().cyan())
+        // Show workspace path if it's not the root project.
+        if project_path != git_root {
+            writeln!(hint, " for workspace `{}`", project_path.display().cyan())?;
+            write!(
+                hint,
+                "\n{} this hook installed for `{}` only; run `prek install` from `{}` to install for the entire repo.",
+                "hint:".bold().yellow(),
+                project_path.display().cyan(),
+                git_root.display().cyan()
+            )?;
         }
-    } else {
-        String::new()
-    };
+    }
 
     if skip_on_missing_config {
         args.push("--skip-on-missing-config".to_string());
@@ -225,7 +230,7 @@ fn install_hook_script(
     args.push(format!("--script-version={CUR_SCRIPT_VERSION}"));
 
     let prek = std::env::current_exe()?;
-    let prek = prek.simplified().display().to_string();
+    let prek = prek.simplified_display().to_string();
     let hook_script = HOOK_TMPL
         .replace(
             "[SHEBANG]",
@@ -254,11 +259,7 @@ fn install_hook_script(
         fs_err::set_permissions(&hook_path, perms)?;
     }
 
-    writeln!(
-        printer.stdout(),
-        "prek installed at `{}`{target_info}",
-        hook_path.user_display().cyan(),
-    )?;
+    writeln!(printer.stdout(), "{hint}")?;
 
     Ok(())
 }

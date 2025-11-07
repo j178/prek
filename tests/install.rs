@@ -632,6 +632,8 @@ fn workspace_install() -> anyhow::Result<()> {
     ----- stdout -----
     prek installed at `../.git/hooks/pre-commit` for workspace `[TEMP_DIR]/project3`
 
+    hint: this hook installed for `[TEMP_DIR]/project3` only; run `prek install` from `[TEMP_DIR]/` to install for the entire repo.
+
     ----- stderr -----
     ");
 
