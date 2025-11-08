@@ -807,7 +807,9 @@ fn workspace_no_projects() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `.pre-commit-config.yaml` found in the current directory or parent directories in the repository
+    error: No `.pre-commit-config.yaml` found in the current directory or parent directories.
+
+    hint: If you just added one, rerun your command with the `--refresh` flag to rescan the workspace.
     ");
 }
 

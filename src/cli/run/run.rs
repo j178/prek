@@ -103,6 +103,15 @@ pub(crate) async fn run(
             "{}: No hooks found after filtering with the given selectors",
             "error".red().bold(),
         )?;
+        if selectors.has_project_selectors() {
+            writeln!(
+                printer.stderr(),
+                "\n{} If you just added new `{}`, try rerun your command with the `{}` flag to rescan the workspace.",
+                "hint:".bold().yellow(),
+                ".pre-commit-config.yaml".cyan(),
+                "--refresh".cyan(),
+            )?;
+        }
         return Ok(ExitStatus::Failure);
     }
 

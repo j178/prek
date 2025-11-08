@@ -37,7 +37,8 @@ pub(crate) enum Error {
     Git(#[from] anyhow::Error),
 
     #[error(
-        "No `.pre-commit-config.yaml` found in the current directory or parent directories in the repository"
+        "No `.pre-commit-config.yaml` found in the current directory or parent directories.\n\n{} If you just added one, rerun your command with the `--refresh` flag to rescan the workspace.",
+        "hint:".yellow().bold(),
     )]
     MissingPreCommitConfig,
 

@@ -193,6 +193,15 @@ impl Selectors {
         &self.skips
     }
 
+    pub(crate) fn has_project_selectors(&self) -> bool {
+        self.includes.iter().any(|include| {
+            matches!(
+                include.expr,
+                SelectorExpr::ProjectPrefix(_) | SelectorExpr::ProjectHook { .. }
+            )
+        })
+    }
+
     /// Check if a hook matches any of the selection criteria.
     pub(crate) fn matches_hook(&self, hook: &Hook) -> bool {
         let mut usage = self.usage.lock().unwrap();
