@@ -60,7 +60,7 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-clippy-windows:
-    timeout-minutes: 15
+    timeout-minutes: 10
     runs-on: windows-latest
     name: "cargo clippy | windows"
     steps:
@@ -303,9 +303,10 @@ jobs:
             -j 8 \
             --final-status-level slow
 
-  cargo-test-windows:
+
+  cargo-test-windows-build-artifacts:
     runs-on: windows-latest
-    name: "cargo test | windows"
+    name: "cargo test | windows (build artifacts)"
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
@@ -316,7 +317,7 @@ jobs:
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
-      - name: Copy Git Repo to Dev Drive
+      - name: "Copy Git Repo to Dev Drive"
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
 
@@ -331,6 +332,50 @@ jobs:
         uses: taiki-e/install-action@81ee1d48d9194cdcab880cbdc7d36e87d39874cb # v2.62.45
         with:
           tool: cargo-nextest
+
+      - name: "Build and archive tests"
+        working-directory: ${{ env.PREK_WORKSPACE }}
+        run: cargo nextest archive --archive-file nextest-archive.tar.zst
+
+      - name: Upload archive to workflow
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: nextest-archive
+          path: ${{ env.PREK_WORKSPACE }}/nextest-archive.tar.zst
+
+  cargo-test-windows:
+    runs-on: windows-latest
+    name: "cargo test | windows (${{ matrix.partition }}/2)"
+    needs: cargo-test-windows-build-artifacts
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        partition: [ 1, 2 ]
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          persist-credentials: false
+
+      - name: Create Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
+
+      - name: "Install Rust toolchain"
+        run: rustup component add llvm-tools-preview
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@81ee1d48d9194cdcab880cbdc7d36e87d39874cb # v2.62.45
+        with:
+          tool: cargo-nextest
+
+      - name: Download test artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: nextest-archive
 
       - name: "Install cargo-llvm-cov"
         uses: taiki-e/install-action@81ee1d48d9194cdcab880cbdc7d36e87d39874cb # v2.62.45
@@ -391,6 +436,8 @@ jobs:
           cargo llvm-cov nextest `
             --no-report `
             --workspace `
+            --archive-file nextest-archive.tar.zst `
+            --partition count:${{ matrix.partition }}/2 `
             --status-level skip `
             --failure-output immediate `
             --no-fail-fast `
