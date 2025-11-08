@@ -332,6 +332,17 @@ pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
         .output()
         .await?;
 
+    // Unset `extensions.objectFormat` if set, just follow what hash the remote uses.
+    git_cmd("unset git extension.objectFormat")?
+        .current_dir(path)
+        .arg("config")
+        .arg("--unset")
+        .arg("extensions.objectFormat")
+        .remove_git_env()
+        .check(false) // ignore error if not set
+        .output()
+        .await?;
+
     git_cmd("add git remote")?
         .current_dir(path)
         .arg("remote")
