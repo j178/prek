@@ -49,12 +49,6 @@
       // Pin GitHub Actions to immutable SHAs
       pinDigests: true
     },
-    // Group all pre-commit updates in examples/ together
-    {
-      groupName: 'pre-commit (examples)',
-      matchManagers: ['pre-commit'],
-      matchPaths: ['examples/**']
-    },
     {
       groupName: 'pre-commit',
       matchManagers: ['pre-commit'],
