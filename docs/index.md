@@ -10,10 +10,11 @@
   end="<!-- description:end -->"
 %}
 
-!!! warning "Not production-ready yet"
-    prek is not production-ready yet. Some subcommands and languages are not implemented. See the current gaps for drop-in parity on the [TODO page](./todo.md).
+!!! note
 
-    But it's already being adopted by [some projects](#who-is-using-prek) like Airflow, please give it a try - we'd love your feedback!
+    Although prek is pretty new, it’s already powering real‑world projects like [Airflow](https://github.com/apache/airflow), and more projects are picking it up—see [Who is using prek?](#who-is-using-prek). If you’re looking for an alternative to `pre-commit`, please give it a try—we’d love your feedback!
+
+    Please note that some subcommands and languages are still missing for full drop‑in parity with `pre-commit`. Track the remaining gaps here: [TODO](https://prek.j178.dev/todo/).
 
 {%
   include-markdown "../README.md"
