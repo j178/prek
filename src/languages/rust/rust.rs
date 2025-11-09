@@ -12,11 +12,13 @@ use crate::cli::reporter::HookInstallReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::rust::RustRequest;
-use crate::languages::rust::installer::{RustInstaller, rustup_home_dir};
+use crate::languages::rust::installer::RustInstaller;
+use crate::languages::rust::rustup::Rustup;
+use crate::languages::rust::version::EXTRA_KEY_CHANNEL;
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
 use crate::run::{prepend_paths, run_by_batch};
-use crate::store::{Store, ToolBucket};
+use crate::store::{CacheBucket, Store, ToolBucket};
 
 fn format_cargo_dependency(dep: &str) -> String {
     let (name, version) = dep.split_once(':').unwrap_or((dep, ""));
@@ -141,8 +143,10 @@ impl LanguageImpl for Rust {
         let progress = reporter.on_install_start(&hook);
 
         // 1. Install Rust
-        let rust_dir = store.tools_path(ToolBucket::Rust);
-        let installer = RustInstaller::new(rust_dir);
+        let cargo_home = store.cache_path(CacheBucket::Cargo);
+        let rustup_dir = store.tools_path(ToolBucket::Rustup);
+        let rustup = Rustup::install(store, &rustup_dir).await?;
+        let installer = RustInstaller::new(rustup);
 
         let (version, allows_download) = match &hook.language_request {
             LanguageRequest::Any { system_only } => (&RustRequest::Any, !system_only),
@@ -151,7 +155,7 @@ impl LanguageImpl for Rust {
         };
 
         let rust = installer
-            .install(store, version, allows_download)
+            .install(version, allows_download)
             .await
             .context("Failed to install rust")?;
 
@@ -160,17 +164,17 @@ impl LanguageImpl for Rust {
             hook.dependencies().clone(),
             &store.hooks_dir(),
         )?;
-        info.with_toolchain(rust.bin().to_path_buf())
+        info.with_toolchain(rust.toolchain().to_path_buf())
             .with_language_version(rust.version().deref().clone());
 
         // Store the channel name for cache matching
         match version {
             RustRequest::Channel(channel) => {
-                info.with_extra("rust_channel", channel);
+                info.with_extra(EXTRA_KEY_CHANNEL, &channel.to_string());
             }
             RustRequest::Any => {
                 // Any resolves to "stable" in resolve_version
-                info.with_extra("rust_channel", "stable");
+                info.with_extra(EXTRA_KEY_CHANNEL, "stable");
             }
             _ => {}
         }
@@ -179,8 +183,6 @@ impl LanguageImpl for Rust {
         fs_err::tokio::create_dir_all(bin_dir(&info.env_path)).await?;
 
         // 3. Install dependencies
-        let cargo_home = &info.env_path;
-
         // Split dependencies by cli: prefix
         let (cli_deps, lib_deps): (Vec<_>, Vec<_>) =
             hook.additional_dependencies.iter().partition_map(|dep| {
@@ -205,10 +207,10 @@ impl LanguageImpl for Rust {
                 // For single packages without lib deps, use cargo install directly
                 Cmd::new("cargo", "install local")
                     .args(["install", "--bins", "--root"])
-                    .arg(cargo_home)
+                    .arg(&info.env_path)
                     .args(["--path", "."])
                     .current_dir(&package_dir)
-                    .env(EnvVars::CARGO_HOME, cargo_home)
+                    .env(EnvVars::CARGO_HOME, &cargo_home)
                     .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
                     .remove_git_env()
                     .check(true)
@@ -225,7 +227,7 @@ impl LanguageImpl for Rust {
                     .arg("--target-dir")
                     .arg(&target_dir)
                     .current_dir(repo)
-                    .env(EnvVars::CARGO_HOME, cargo_home)
+                    .env(EnvVars::CARGO_HOME, &cargo_home)
                     .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
                     .remove_git_env()
                     .check(true)
@@ -278,7 +280,7 @@ impl LanguageImpl for Rust {
                     cmd.arg(format_cargo_dependency(dep.as_str()));
                 }
                 cmd.current_dir(&manifest_dir)
-                    .env(EnvVars::CARGO_HOME, cargo_home)
+                    .env(EnvVars::CARGO_HOME, &cargo_home)
                     .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
                     .remove_git_env()
                     .check(true)
@@ -301,7 +303,7 @@ impl LanguageImpl for Rust {
                 }
 
                 cmd.current_dir(&package_dir)
-                    .env(EnvVars::CARGO_HOME, cargo_home)
+                    .env(EnvVars::CARGO_HOME, &cargo_home)
                     .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
                     .remove_git_env()
                     .check(true)
@@ -318,12 +320,12 @@ impl LanguageImpl for Rust {
             let (package, version) = cli_dep.split_once(':').unwrap_or((cli_dep, ""));
             let mut cmd = Cmd::new("cargo", "install cli dep");
             cmd.args(["install", "--bins", "--root"])
-                .arg(cargo_home)
+                .arg(&info.env_path)
                 .arg(package);
             if !version.is_empty() {
                 cmd.args(["--version", version]);
             }
-            cmd.env(EnvVars::CARGO_HOME, cargo_home)
+            cmd.env(EnvVars::CARGO_HOME, &cargo_home)
                 .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
                 .remove_git_env()
                 .check(true)
@@ -355,24 +357,10 @@ impl LanguageImpl for Rust {
         let info = hook.install_info().expect("Rust hook must be installed");
 
         let rust_bin = bin_dir(env_dir);
-        let rust_tools = store.tools_path(ToolBucket::Rust);
-        let rustc_bin = info.toolchain.parent().expect("Rust bin should exist");
+        let cargo_home = store.cache_path(CacheBucket::Cargo);
+        let rustc_bin = bin_dir(&info.toolchain);
 
-        // Determine if this is a managed (non-system) Rust installation
-        let rust_envs = if rustc_bin.starts_with(&rust_tools) {
-            let toolchain = info.language_version.to_string();
-            // Get the toolchain directory (parent of bin/)
-            let toolchain_dir = rustc_bin.parent().expect("Toolchain dir should exist");
-            let rustup_home = rustup_home_dir(toolchain_dir);
-            vec![
-                (EnvVars::RUSTUP_TOOLCHAIN, PathBuf::from(toolchain)),
-                (EnvVars::RUSTUP_HOME, rustup_home),
-            ]
-        } else {
-            vec![]
-        };
-
-        let new_path = prepend_paths(&[&rust_bin, rustc_bin]).context("Failed to join PATH")?;
+        let new_path = prepend_paths(&[&rust_bin, &rustc_bin]).context("Failed to join PATH")?;
 
         let entry = hook.entry.resolve(Some(&new_path))?;
         let run = async |batch: &[&Path]| {
@@ -380,9 +368,8 @@ impl LanguageImpl for Rust {
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
-                .env(EnvVars::CARGO_HOME, env_dir)
+                .env(EnvVars::CARGO_HOME, &cargo_home)
                 .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
-                .envs(rust_envs.iter().cloned())
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
