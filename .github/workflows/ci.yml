@@ -229,7 +229,7 @@ jobs:
             --status-level skip \
             --failure-output immediate \
             --no-fail-fast \
-            -j 8 \
+            -j 12 \
             --final-status-level slow
 
           cargo llvm-cov report --lcov --output-path lcov.info
@@ -309,7 +309,7 @@ jobs:
             --status-level skip \
             --failure-output immediate \
             --no-fail-fast \
-            -j 8 \
+            -j 12 \
             --final-status-level slow
 
   cargo-test-windows:
@@ -404,7 +404,7 @@ jobs:
             --status-level skip `
             --failure-output immediate `
             --no-fail-fast `
-            -j 8 `
+            -j 12 `
             --final-status-level slow
 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
