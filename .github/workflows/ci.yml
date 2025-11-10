@@ -53,6 +53,8 @@ jobs:
           persist-credentials: false
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: "Install Rust toolchain"
         run: rustup component add clippy
@@ -79,6 +81,7 @@ jobs:
       - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
         with:
           workspaces: ${{ env.PREK_WORKSPACE }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: "Install Rust toolchain"
         run: rustup component add clippy
@@ -111,6 +114,8 @@ jobs:
           persist-credentials: false
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: "Install Rust toolchain"
         run: rustup component add llvm-tools-preview
@@ -160,6 +165,8 @@ jobs:
           persist-credentials: false
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: "Install Rust toolchain"
         run: rustup component add llvm-tools-preview
@@ -243,6 +250,8 @@ jobs:
           persist-credentials: false
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: "Install Rust toolchain"
         run: rustup show
@@ -323,6 +332,7 @@ jobs:
       - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
         with:
           workspaces: ${{ env.PREK_WORKSPACE }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: "Install Rust toolchain"
         run: rustup component add llvm-tools-preview
