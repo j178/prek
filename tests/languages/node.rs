@@ -1,8 +1,8 @@
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::fixture::PathChild;
 use prek_consts::env_vars::EnvVars;
 
-use crate::common::{TestContext, cmd_snapshot, remove_bin_from_path};
+use crate::common::{TestContext, cmd_snapshot};
 
 /// Test `language_version` parsing and auto downloading works correctly.
 /// We use `setup-node` action to install node 20 in CI, so node 19 should be downloaded by prek.
@@ -186,50 +186,4 @@ fn additional_dependencies() {
 
     ----- stderr -----
     "###);
-}
-
-/// Test `https://github.com/thlorenz/doctoc` works correctly with prek.
-/// Previously, prek did not install its dependencies correctly.
-#[ignore = "slow and flaky"]
-#[test]
-fn doctoc() -> anyhow::Result<()> {
-    let context = TestContext::new();
-    context.init_project();
-    context.write_pre_commit_config(indoc::indoc! {r"
-        repos:
-          - repo: https://github.com/thlorenz/doctoc
-            rev: v2.2.0
-            hooks:
-              - id: doctoc
-                name: Add TOC for Markdown
-    "});
-    context.work_dir().child("README.md").write_str(
-        "# Hello World\n\nThis is a test file.\n\n## Subsection\n\nMore content here.\n",
-    )?;
-    context.git_add(".");
-
-    #[allow(clippy::disallowed_methods)]
-    let new_path = remove_bin_from_path("node", None)?;
-
-    // Set PATH to . to mask the system installed node,
-    // ensure that `npm` runs correctly.
-    cmd_snapshot!(context.filters(), context.run().env("PATH", new_path), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-    Add TOC for Markdown.....................................................Failed
-    - hook id: doctoc
-    - files were modified by this hook
-      DocToccing single file "README.md" for github.com.
-
-      ==================
-
-      "README.md" will be updated
-
-      Everything is OK.
-
-    ----- stderr -----
-    "#);
-
-    Ok(())
 }

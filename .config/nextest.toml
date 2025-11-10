@@ -3,3 +3,8 @@
 filter = 'binary_id(prek::languages) and test(node::)'
 retries = 2
 slow-timeout = { period = "30s", terminate-after = 3 }
+
+# Run slow tests first
+[[profile.default.overrides]]
+filter = 'binary_id(prek::languages) and (test(golang::) or test(lua::) or test(node::))'
+priority = 100
