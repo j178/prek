@@ -120,7 +120,6 @@ mod tests {
     use super::*;
     use crate::config::Language;
     use rustc_hash::FxHashSet;
-    use std::path::Path;
 
     #[test]
     fn test_parse_ruby_request() {
@@ -164,8 +163,9 @@ mod tests {
 
     #[test]
     fn test_version_matching() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
         let mut install_info =
-            InstallInfo::new(Language::Ruby, FxHashSet::default(), Path::new("."))?;
+            InstallInfo::new(Language::Ruby, FxHashSet::default(), temp_dir.path())?;
         install_info
             .with_language_version(semver::Version::new(3, 3, 6))
             .with_toolchain(PathBuf::from("/usr/bin/ruby"));
@@ -187,8 +187,9 @@ mod tests {
             RubyRequest::Range(req.clone(), ">=3.2, <4.0".to_string()).satisfied_by(&install_info)
         );
 
+        let temp_dir_old = tempfile::tempdir()?;
         let mut install_info_old =
-            InstallInfo::new(Language::Ruby, FxHashSet::default(), Path::new("."))?;
+            InstallInfo::new(Language::Ruby, FxHashSet::default(), temp_dir_old.path())?;
         install_info_old
             .with_language_version(semver::Version::new(3, 1, 0))
             .with_toolchain(PathBuf::from("/usr/bin/ruby3.1"));
