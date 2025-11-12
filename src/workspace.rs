@@ -218,21 +218,27 @@ impl Project {
         // Check if the repo URL is a local path
         let repo_path = Path::new(&repo.repo);
         
-        // If the path exists as a directory or is a relative path, normalize it
-        if repo_path.is_relative() && (repo_path.exists() || repo_path.components().any(|_| true)) {
-            // Resolve the relative path from the config file's directory
+        // Only normalize if:
+        // 1. The path is relative (not absolute, not a URL)
+        // 2. When resolved from config_dir, it points to an existing directory
+        // This ensures we only normalize actual local repository paths
+        if repo_path.is_relative() {
             let normalized_path = config_dir.join(&repo.repo);
             
-            // Create a new RemoteRepo with the normalized path
-            let normalized_repo = config::RemoteRepo {
-                repo: normalized_path.to_string_lossy().to_string(),
-                rev: repo.rev.clone(),
-                hooks: repo.hooks.clone(),
-            };
-            Cow::Owned(normalized_repo)
-        } else {
-            Cow::Borrowed(repo)
+            // Only apply normalization if the path exists as a directory
+            // This avoids breaking URL-like paths or paths that should be resolved elsewhere
+            if normalized_path.is_dir() {
+                // Create a new RemoteRepo with the normalized path
+                let normalized_repo = config::RemoteRepo {
+                    repo: normalized_path.to_string_lossy().to_string(),
+                    rev: repo.rev.clone(),
+                    hooks: repo.hooks.clone(),
+                };
+                return Cow::Owned(normalized_repo);
+            }
         }
+        
+        Cow::Borrowed(repo)
     }
 
     /// Initialize the project, cloning the repository and preparing hooks.
