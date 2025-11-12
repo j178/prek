@@ -213,32 +213,31 @@ impl Project {
         self.idx
     }
 
-    /// Normalize a repo path if it's relative, resolving it from the config file's directory.
-    fn normalize_repo_path<'a>(repo: &'a config::RemoteRepo, config_dir: &Path) -> Cow<'a, config::RemoteRepo> {
-        // Check if the repo URL is a local path
-        let repo_path = Path::new(&repo.repo);
+    /// Resolve the clone URL for a remote repository.
+    /// 
+    /// If the repo path is relative and points to an existing directory when resolved
+    /// from the config file's directory, returns the normalized absolute path.
+    /// Otherwise, returns the original repo URL unchanged.
+    pub(crate) fn resolve_repo_url<'a>(&self, repo_url: &'a str) -> Cow<'a, str> {
+        let repo_path = Path::new(repo_url);
         
         // Only normalize if:
         // 1. The path is relative (not absolute, not a URL)
         // 2. When resolved from config_dir, it points to an existing directory
         // This ensures we only normalize actual local repository paths
         if repo_path.is_relative() {
-            let normalized_path = config_dir.join(&repo.repo);
+            let config_dir = self.config_path.parent()
+                .expect("config file must have a parent directory");
+            let normalized_path = config_dir.join(repo_url);
             
             // Only apply normalization if the path exists as a directory
             // This avoids breaking URL-like paths or paths that should be resolved elsewhere
             if normalized_path.is_dir() {
-                // Create a new RemoteRepo with the normalized path
-                let normalized_repo = config::RemoteRepo {
-                    repo: normalized_path.to_string_lossy().to_string(),
-                    rev: repo.rev.clone(),
-                    hooks: repo.hooks.clone(),
-                };
-                return Cow::Owned(normalized_repo);
+                return Cow::Owned(normalized_path.to_string_lossy().to_string());
             }
         }
         
-        Cow::Borrowed(repo)
+        Cow::Borrowed(repo_url)
     }
 
     /// Initialize the project, cloning the repository and preparing hooks.
@@ -267,10 +266,6 @@ impl Project {
 
         let mut seen = FxHashSet::default();
 
-        // Get the directory containing the config file for path normalization
-        let config_dir = self.config_path.parent()
-            .expect("config file must have a parent directory");
-
         // Prepare remote repos in parallel.
         let remotes_iter = self.config.repos.iter().filter_map(|repo| match repo {
             // Deduplicate remote repos.
@@ -281,10 +276,19 @@ impl Project {
         let mut tasks =
             futures::stream::iter(remotes_iter)
                 .map(async |repo_config| {
-                    // Normalize the repo URL if it's a relative path
-                    let normalized_repo = Self::normalize_repo_path(repo_config, config_dir);
+                    // Resolve the repo URL (normalizes relative paths)
+                    let resolved_url = self.resolve_repo_url(&repo_config.repo);
+                    let resolved_repo = if matches!(resolved_url, Cow::Owned(_)) {
+                        Cow::Owned(config::RemoteRepo {
+                            repo: resolved_url.into_owned(),
+                            rev: repo_config.rev.clone(),
+                            hooks: repo_config.hooks.clone(),
+                        })
+                    } else {
+                        Cow::Borrowed(repo_config)
+                    };
                     
-                    let path = store.clone_repo(&normalized_repo, reporter).await.map_err(|e| {
+                    let path = store.clone_repo(resolved_repo.as_ref(), reporter).await.map_err(|e| {
                         Error::Store {
                             repo: repo_config.repo.clone(),
                             error: Box::new(e),
@@ -775,27 +779,34 @@ impl Workspace {
                 .projects
                 .iter()
                 .flat_map(|proj| {
-                    let config_dir = proj.config_path.parent()
-                        .expect("config file must have a parent directory");
                     proj.config.repos.iter().filter_map(move |repo| match repo {
                         config::Repo::Remote(repo) => {
-                            // Normalize the repo path based on the project's config directory
-                            let normalized = Project::normalize_repo_path(repo, config_dir).into_owned();
-                            Some((repo.clone(), normalized))
+                            // Resolve the repo URL using the project's context
+                            let resolved_url = proj.resolve_repo_url(&repo.repo);
+                            let resolved_repo = if matches!(resolved_url, Cow::Owned(_)) {
+                                Cow::Owned(config::RemoteRepo {
+                                    repo: resolved_url.into_owned(),
+                                    rev: repo.rev.clone(),
+                                    hooks: repo.hooks.clone(),
+                                })
+                            } else {
+                                Cow::Borrowed(repo)
+                            };
+                            Some((repo.clone(), resolved_repo.into_owned()))
                         }
                         _ => None,
                     })
                 })
-                .filter(|(_original_repo, normalized_repo)| {
-                    // Use the normalized repo for deduplication
-                    seen.insert(normalized_repo.clone())
+                .filter(|(_original_repo, resolved_repo)| {
+                    // Use the resolved repo for deduplication
+                    seen.insert(resolved_repo.clone())
                 })
                 .collect();
 
             let mut tasks = futures::stream::iter(remotes_iter)
-                .map(async |(original_repo, normalized_repo)| {
+                .map(async |(original_repo, resolved_repo)| {
                     let path = store
-                        .clone_repo(&normalized_repo, reporter)
+                        .clone_repo(&resolved_repo, reporter)
                         .await
                         .map_err(|e| Error::Store {
                             repo: original_repo.repo.clone(),
