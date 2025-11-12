@@ -291,6 +291,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [FastMCP](https://github.com/jlowin/fastmcp/pull/2309)
 - [iceberg-python](https://github.com/apache/iceberg-python/pull/2533)
 - [msgspec](https://github.com/jcrist/msgspec/pull/918)
+- [humanize](https://github.com/python-humanize/humanize/pull/276)
 
 <!-- why:end -->
 
