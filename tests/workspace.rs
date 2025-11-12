@@ -871,3 +871,41 @@ fn gitignore_respected() -> Result<()> {
 
     Ok(())
 }
+
+/// Tests that `--files` arguments references files in other projects, should be filtered out properly.
+#[test]
+fn reference_files_across_projects() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let config = indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+        - id: echo
+          name: echo
+          language: system
+          entry: echo
+          verbose: true
+    "};
+
+    // Create a project structure with directories that should be ignored
+    context.setup_workspace(&["frontend", "backend"], config)?;
+
+    let cwd = context.work_dir();
+    cwd.child("backend/app.py")
+        .write_str("print('Hello from backend')")?;
+    context.git_add(".");
+    // Run with --files referencing a file in another project
+    cmd_snapshot!(context.filters(), context.run().current_dir(cwd.child("frontend")).arg("--files").arg("../backend/app.py").arg("../backend/non-exist.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo.................................................(no files to check)Skipped
+
+    ----- stderr -----
+    warning: This file does not exist and will be ignored: `../backend/non-exist.py`
+    ");
+
+    Ok(())
+}

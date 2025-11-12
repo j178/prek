@@ -1297,15 +1297,15 @@ fn types_directory() -> Result<()> {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context.filters(), context.run().arg("--files").arg("non-exist-files"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--files").arg("non-exist-files"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     directory............................................(no files to check)Skipped
 
     ----- stderr -----
-    warning: This file does not exist, it will be ignored: `non-exist-files`
-    "#);
+    warning: This file does not exist and will be ignored: `non-exist-files`
+    ");
     Ok(())
 }
 

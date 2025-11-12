@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use fancy_regex::Regex;
 use itertools::{Either, Itertools};
+use path_clean::PathClean;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use rustc_hash::FxHashSet;
 use tracing::{debug, error};
@@ -10,7 +11,6 @@ use tracing::{debug, error};
 use prek_consts::env_vars::EnvVars;
 
 use crate::config::Stage;
-use crate::fs::normalize_path;
 use crate::git::GIT_ROOT;
 use crate::hook::Hook;
 use crate::identify::{TagSet, tags_from_path};
@@ -246,7 +246,7 @@ pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<V
             // Only keep files under the workspace root.
             filename
                 .strip_prefix(relative_root)
-                .map(|p| normalize_path(p.to_path_buf()))
+                .map(|p| fs::normalize_path(p.to_path_buf()))
                 .ok()
         })
         .collect::<Vec<_>>();
@@ -260,7 +260,8 @@ pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<V
 }
 
 fn adjust_relative_path(path: &str, new_cwd: &Path) -> Result<PathBuf, std::io::Error> {
-    fs::relative_to(std::path::absolute(path)?, new_cwd)
+    let absolute = std::path::absolute(path)?.clean();
+    fs::relative_to(absolute, new_cwd)
 }
 
 /// Collect files to run hooks on.
@@ -317,12 +318,12 @@ async fn collect_files_from_args(
         if !non_exists.is_empty() {
             if non_exists.len() == 1 {
                 warn_user!(
-                    "This file does not exist, it will be ignored: `{}`",
+                    "This file does not exist and will be ignored: `{}`",
                     non_exists[0]
                 );
             } else {
                 warn_user!(
-                    "These files do not exist, they will be ignored: `{}`",
+                    "These files do not exist and will be ignored: `{}`",
                     non_exists.join(", ")
                 );
             }
@@ -330,14 +331,14 @@ async fn collect_files_from_args(
 
         let mut exists = exists
             .into_iter()
-            .map(|filename| adjust_relative_path(&filename, git_root).map(normalize_path))
+            .map(|filename| adjust_relative_path(&filename, git_root).map(fs::normalize_path))
             .collect::<Result<FxHashSet<_>, _>>()?;
 
         for dir in directories {
             let dir = adjust_relative_path(&dir, git_root)?;
             let dir_files = git::ls_files(git_root, &dir).await?;
             for file in dir_files {
-                let file = normalize_path(file);
+                let file = fs::normalize_path(file);
                 exists.insert(file);
             }
         }

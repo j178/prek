@@ -220,7 +220,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             .await
         }
         Command::InstallHooks(args) => {
-            // TODO: add selectors?
             cli::install_hooks(
                 &store,
                 cli.globals.config,

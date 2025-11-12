@@ -481,7 +481,7 @@ pub struct RealFileSystem;
 
 impl FileSystem for RealFileSystem {
     fn absolute<P: AsRef<Path>>(&self, path: P) -> std::io::Result<PathBuf> {
-        std::path::absolute(path)
+        Ok(std::path::absolute(path)?.clean())
     }
 }
 
