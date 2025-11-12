@@ -175,14 +175,16 @@ prek --version
 <summary>Nix</summary>
 
 <!-- nix-install:start -->
-prek is [available in Nix as `prek`](https://search.nixos.org/packages?channel=unstable&show=prek&query=prek).
+prek is available via [Nixpkgs](https://search.nixos.org/packages?channel=unstable&show=prek&query=prek).
 
 ```shell
 # Choose what's appropriate for your use case.
 # One-off in a shell:
 nix-shell -p prek
+
 # NixOS or non-NixOS without flakes:
 nix-env -iA nixos.prek
+
 # Non-NixOS with flakes:
 nix profile install nixpkgs#prek
 ```
@@ -194,13 +196,25 @@ nix profile install nixpkgs#prek
 <summary>Conda</summary>
 
 <!-- conda-forge-install:start -->
-prek is [available as `prek` via conda-forge](https://anaconda.org/conda-forge/prek).
+prek is available as `prek` via [conda-forge](https://anaconda.org/conda-forge/prek).
 
 ```shell
 conda install conda-forge::prek
 ```
 <!-- conda-forge-install:end -->
 
+</details>
+
+<details>
+<summary>Scoop (Windows)</summary>
+
+<!-- scoop-install:start -->
+prek is available via [Scoop](https://scoop.sh/#/apps?q=prek).
+
+```powershell
+scoop install main/prek
+```
+<!-- scoop-install:end -->
 </details>
 
 <details>

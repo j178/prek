@@ -72,6 +72,14 @@ The standalone installer automatically downloads and installs the correct binary
   end="<!-- conda-forge-install:end -->"
 %}
 
+### Scoop (Windows)
+
+{%
+  include-markdown "../README.md"
+  start="<!-- scoop-install:start -->"
+  end="<!-- scoop-install:end -->"
+%}
+
 ### Install from Pre-Built Binaries
 
 {%
