@@ -213,6 +213,33 @@ impl Project {
         self.idx
     }
 
+    /// Resolve the clone URL for a remote repository.
+    /// 
+    /// If the repo path is relative and points to an existing directory when resolved
+    /// from the config file's directory, returns the normalized absolute path.
+    /// Otherwise, returns the original repo URL unchanged.
+    pub(crate) fn resolve_repo_url<'a>(&self, repo_url: &'a str) -> Cow<'a, str> {
+        let repo_path = Path::new(repo_url);
+        
+        // Only normalize if:
+        // 1. The path is relative (not absolute, not a URL)
+        // 2. When resolved from config_dir, it points to an existing directory
+        // This ensures we only normalize actual local repository paths
+        if repo_path.is_relative() {
+            let config_dir = self.config_path.parent()
+                .expect("config file must have a parent directory");
+            let normalized_path = config_dir.join(repo_url);
+            
+            // Only apply normalization if the path exists as a directory
+            // This avoids breaking URL-like paths or paths that should be resolved elsewhere
+            if normalized_path.is_dir() {
+                return Cow::Owned(normalized_path.to_string_lossy().to_string());
+            }
+        }
+        
+        Cow::Borrowed(repo_url)
+    }
+
     /// Initialize the project, cloning the repository and preparing hooks.
     pub(crate) async fn init_hooks(
         &mut self,
@@ -249,7 +276,19 @@ impl Project {
         let mut tasks =
             futures::stream::iter(remotes_iter)
                 .map(async |repo_config| {
-                    let path = store.clone_repo(repo_config, reporter).await.map_err(|e| {
+                    // Resolve the repo URL (normalizes relative paths)
+                    let resolved_url = self.resolve_repo_url(&repo_config.repo);
+                    let resolved_repo = if matches!(resolved_url, Cow::Owned(_)) {
+                        Cow::Owned(config::RemoteRepo {
+                            repo: resolved_url.into_owned(),
+                            rev: repo_config.rev.clone(),
+                            hooks: repo_config.hooks.clone(),
+                        })
+                    } else {
+                        Cow::Borrowed(repo_config)
+                    };
+                    
+                    let path = store.clone_repo(resolved_repo.as_ref(), reporter).await.map_err(|e| {
                         Error::Store {
                             repo: repo_config.repo.clone(),
                             error: Box::new(e),
@@ -735,37 +774,54 @@ impl Workspace {
 
             let mut seen = FxHashSet::default();
 
-            // Prepare remote repos in parallel.
-            let remotes_iter = self
+            // Prepare remote repos in parallel with their project context
+            let remotes_iter: Vec<_> = self
                 .projects
                 .iter()
-                .flat_map(|proj| proj.config.repos.iter())
-                .filter_map(|repo| match repo {
-                    // Deduplicate remote repos.
-                    config::Repo::Remote(repo) if seen.insert(repo) => Some(repo),
-                    _ => None,
+                .flat_map(|proj| {
+                    proj.config.repos.iter().filter_map(move |repo| match repo {
+                        config::Repo::Remote(repo) => {
+                            // Resolve the repo URL using the project's context
+                            let resolved_url = proj.resolve_repo_url(&repo.repo);
+                            let resolved_repo = if matches!(resolved_url, Cow::Owned(_)) {
+                                Cow::Owned(config::RemoteRepo {
+                                    repo: resolved_url.into_owned(),
+                                    rev: repo.rev.clone(),
+                                    hooks: repo.hooks.clone(),
+                                })
+                            } else {
+                                Cow::Borrowed(repo)
+                            };
+                            Some((repo.clone(), resolved_repo.into_owned()))
+                        }
+                        _ => None,
+                    })
                 })
-                .cloned(); // TODO: avoid clone
+                .filter(|(_original_repo, resolved_repo)| {
+                    // Use the resolved repo for deduplication
+                    seen.insert(resolved_repo.clone())
+                })
+                .collect();
 
             let mut tasks = futures::stream::iter(remotes_iter)
-                .map(async |repo_config| {
+                .map(async |(original_repo, resolved_repo)| {
                     let path = store
-                        .clone_repo(&repo_config, reporter)
+                        .clone_repo(&resolved_repo, reporter)
                         .await
                         .map_err(|e| Error::Store {
-                            repo: repo_config.repo.clone(),
+                            repo: original_repo.repo.clone(),
                             error: Box::new(e),
                         })?;
 
                     let repo = Arc::new(Repo::remote(
-                        repo_config.repo.clone(),
-                        repo_config.rev.clone(),
+                        original_repo.repo.clone(),
+                        original_repo.rev.clone(),
                         path,
                     )?);
                     remote_repos
                         .lock()
                         .unwrap()
-                        .insert(repo_config, repo.clone());
+                        .insert(original_repo, repo.clone());
 
                     Ok::<(), Error>(())
                 })
