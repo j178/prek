@@ -213,6 +213,28 @@ impl Project {
         self.idx
     }
 
+    /// Normalize a repo path if it's relative, resolving it from the config file's directory.
+    fn normalize_repo_path<'a>(repo: &'a config::RemoteRepo, config_dir: &Path) -> Cow<'a, config::RemoteRepo> {
+        // Check if the repo URL is a local path
+        let repo_path = Path::new(&repo.repo);
+        
+        // If the path exists as a directory or is a relative path, normalize it
+        if repo_path.is_relative() && (repo_path.exists() || repo_path.components().any(|_| true)) {
+            // Resolve the relative path from the config file's directory
+            let normalized_path = config_dir.join(&repo.repo);
+            
+            // Create a new RemoteRepo with the normalized path
+            let normalized_repo = config::RemoteRepo {
+                repo: normalized_path.to_string_lossy().to_string(),
+                rev: repo.rev.clone(),
+                hooks: repo.hooks.clone(),
+            };
+            Cow::Owned(normalized_repo)
+        } else {
+            Cow::Borrowed(repo)
+        }
+    }
+
     /// Initialize the project, cloning the repository and preparing hooks.
     pub(crate) async fn init_hooks(
         &mut self,
@@ -239,6 +261,10 @@ impl Project {
 
         let mut seen = FxHashSet::default();
 
+        // Get the directory containing the config file for path normalization
+        let config_dir = self.config_path.parent()
+            .expect("config file must have a parent directory");
+
         // Prepare remote repos in parallel.
         let remotes_iter = self.config.repos.iter().filter_map(|repo| match repo {
             // Deduplicate remote repos.
@@ -249,7 +275,10 @@ impl Project {
         let mut tasks =
             futures::stream::iter(remotes_iter)
                 .map(async |repo_config| {
-                    let path = store.clone_repo(repo_config, reporter).await.map_err(|e| {
+                    // Normalize the repo URL if it's a relative path
+                    let normalized_repo = Self::normalize_repo_path(repo_config, config_dir);
+                    
+                    let path = store.clone_repo(&normalized_repo, reporter).await.map_err(|e| {
                         Error::Store {
                             repo: repo_config.repo.clone(),
                             error: Box::new(e),
@@ -735,37 +764,47 @@ impl Workspace {
 
             let mut seen = FxHashSet::default();
 
-            // Prepare remote repos in parallel.
-            let remotes_iter = self
+            // Prepare remote repos in parallel with their project context
+            let remotes_iter: Vec<_> = self
                 .projects
                 .iter()
-                .flat_map(|proj| proj.config.repos.iter())
-                .filter_map(|repo| match repo {
-                    // Deduplicate remote repos.
-                    config::Repo::Remote(repo) if seen.insert(repo) => Some(repo),
-                    _ => None,
+                .flat_map(|proj| {
+                    let config_dir = proj.config_path.parent()
+                        .expect("config file must have a parent directory");
+                    proj.config.repos.iter().filter_map(move |repo| match repo {
+                        config::Repo::Remote(repo) => {
+                            // Normalize the repo path based on the project's config directory
+                            let normalized = Project::normalize_repo_path(repo, config_dir).into_owned();
+                            Some((repo.clone(), normalized))
+                        }
+                        _ => None,
+                    })
                 })
-                .cloned(); // TODO: avoid clone
+                .filter(|(_original_repo, normalized_repo)| {
+                    // Use the normalized repo for deduplication
+                    seen.insert(normalized_repo.clone())
+                })
+                .collect();
 
             let mut tasks = futures::stream::iter(remotes_iter)
-                .map(async |repo_config| {
+                .map(async |(original_repo, normalized_repo)| {
                     let path = store
-                        .clone_repo(&repo_config, reporter)
+                        .clone_repo(&normalized_repo, reporter)
                         .await
                         .map_err(|e| Error::Store {
-                            repo: repo_config.repo.clone(),
+                            repo: original_repo.repo.clone(),
                             error: Box::new(e),
                         })?;
 
                     let repo = Arc::new(Repo::remote(
-                        repo_config.repo.clone(),
-                        repo_config.rev.clone(),
+                        original_repo.repo.clone(),
+                        original_repo.rev.clone(),
                         path,
                     )?);
                     remote_repos
                         .lock()
                         .unwrap()
-                        .insert(repo_config, repo.clone());
+                        .insert(original_repo, repo.clone());
 
                     Ok::<(), Error>(())
                 })

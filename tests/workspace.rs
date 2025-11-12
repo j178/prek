@@ -871,3 +871,130 @@ fn gitignore_respected() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn relative_repo_path_resolution() -> Result<()> {
+    use std::process::Command;
+    use assert_fs::fixture::{PathChild, FileWriteStr, PathCreateDir};
+    use assert_cmd::assert::OutputAssertExt;
+    use prek_consts::MANIFEST_FILE;
+    
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+    context.disable_auto_crlf();
+
+    // Create a local hook repository at the root level
+    let hook_repo = context.work_dir().child("hook-repo");
+    hook_repo.create_dir_all()?;
+
+    Command::new("git")
+        .arg("init")
+        .current_dir(&hook_repo)
+        .assert()
+        .success();
+
+    Command::new("git")
+        .arg("config")
+        .arg("user.name")
+        .arg("Prek Test")
+        .current_dir(&hook_repo)
+        .assert()
+        .success();
+    
+    Command::new("git")
+        .arg("config")
+        .arg("user.email")
+        .arg("test@prek.dev")
+        .current_dir(&hook_repo)
+        .assert()
+        .success();
+        
+    Command::new("git")
+        .arg("config")
+        .arg("core.autocrlf")
+        .arg("false")
+        .current_dir(&hook_repo)
+        .assert()
+        .success();
+
+    hook_repo.child(MANIFEST_FILE).write_str(indoc! {r"
+        - id: test-hook
+          name: Test Hook  
+          entry: echo test
+          language: system
+    "})?;
+
+    Command::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&hook_repo)
+        .assert()
+        .success();
+
+    Command::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg("Initial commit")
+        .current_dir(&hook_repo)
+        .assert()
+        .success();
+
+    // Get the commit SHA
+    let output = Command::new("git")
+        .arg("rev-parse")
+        .arg("HEAD")
+        .current_dir(&hook_repo)
+        .output()?;
+    let commit_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    // Create a subdirectory project that references the hook repo with a relative path
+    let subproject = context.work_dir().child("subproject");
+    subproject.create_dir_all()?;
+
+    // Write a config that uses a relative path to the hook repo
+    // From subproject/, ../hook-repo should resolve correctly
+    subproject.child(".pre-commit-config.yaml").write_str(&format!(
+        indoc! {r"
+        repos:
+          - repo: ../hook-repo
+            rev: {}
+            hooks:
+              - id: test-hook
+                always_run: true
+    "}, commit_sha))?;
+
+    // Create a test file in the subproject
+    subproject.child("test.txt").write_str("test content")?;
+    
+    // Add a root config as well, otherwise discovery will fail
+    context.write_pre_commit_config(indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: noop
+                name: Noop
+                entry: echo noop
+                language: system
+                always_run: true
+    "});
+
+    context.git_add(".");
+
+    // Run from the root directory - the relative path should resolve from subproject/.pre-commit-config.yaml location
+    // The test verifies that ../hook-repo is correctly resolved relative to subproject/, not the CWD
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `subproject`:
+    Test Hook................................................................Passed
+
+    Running hooks for `.`:
+    Noop.....................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
