@@ -97,11 +97,12 @@ impl LanguageImpl for Python {
                 repo_path.display()
             );
             uv.cmd("uv pip install", store)
+                .arg("--directory")
+                .arg(repo_path)
                 .arg("pip")
                 .arg("install")
                 .arg(".")
                 .args(&hook.additional_dependencies)
-                .current_dir(repo_path)
                 .env("VIRTUAL_ENV", &info.env_path)
                 .check(true)
                 .output()
