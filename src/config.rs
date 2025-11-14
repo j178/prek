@@ -9,7 +9,6 @@ use lazy_regex::regex;
 use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_yaml::Value;
 
 use crate::fs::Simplified;
 use crate::identify;
@@ -294,6 +293,8 @@ pub struct Config {
     /// The minimum version of prek required to run this configuration.
     #[serde(deserialize_with = "deserialize_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
+
+    _unused: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -719,10 +720,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("Failed to parse `{0}`")]
-    Yaml(String, #[source] serde_yaml::Error),
-
-    #[error("Failed to merge keys in `{0}`")]
-    YamlMerge(String, #[source] prek_yaml::MergeKeyError),
+    Yaml(String, #[source] serde_saphyr::Error),
 }
 
 /// Keys that prek does not use.
@@ -738,20 +736,9 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
         Err(e) => return Err(e.into()),
     };
 
-    let yaml: Value = serde_yaml::from_str(&content)
-        .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
-
-    let yaml = prek_yaml::merge_keys(yaml)
-        .map_err(|e| Error::YamlMerge(path.user_display().to_string(), e))?;
-
-    let mut unused = Vec::new();
-    let config: Config = serde_ignored::deserialize(yaml, |path| {
-        let key = path.to_string();
-        if !EXPECTED_UNUSED.contains(&key.as_str()) {
-            unused.push(key);
-        }
-    })
-    .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
+    let config: Config = serde_saphyr::from_str(&content).map_err(|e| {
+        Error::Yaml(path.user_display().to_string(), e)
+    })?;
 
     if !unused.is_empty() {
         warn_user!(
