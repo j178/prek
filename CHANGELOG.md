@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.2.14
+
+Released on 2025-11-14.
+
+### Enhancements
+
+- Support `PREK_CONTAINER_RUNTIME=podman` to override container runtime ([#1033](https://github.com/j178/prek/pull/1033))
+- Support rootless container runtime ([#1018](https://github.com/j178/prek/issues/1018))
+- Support `language: unsupported` and `language: unsupported_script` introduced in pre-commit v4.4 ([#1073](https://github.com/j178/prek/pull/1073))
+- Tweak to regex used for mountinfo ([#1037](https://github.com/j178/prek/pull/1037))
+
+### Bug fixes
+
+- Fix `--files` argument - files referencing other projects aren’t being filtered ([#1064](https://github.com/j178/prek/pull/1064))
+- Unset `objectFormat` in `git init` ([#1048](https://github.com/j178/prek/pull/1048))
+
+### Documentation
+
+- Add scoop to installation ([#1067](https://github.com/j178/prek/pull/1067))
+- Document workspace file visibility constraints ([#1071](https://github.com/j178/prek/pull/1071))
+- Add `iceberg-python`, `msgspec` and `humanize` to "who is using prek" ([#1039](https://github.com/j178/prek/pull/1039), [#1042](https://github.com/j178/prek/pull/1042), [#1063](https://github.com/j178/prek/pull/1063))
+
+### Other changes
+
+- Add a hint to install when running inside a sub-project ([#1045](https://github.com/j178/prek/pull/1045))
+- Add a hint to use `--refresh` when no configuration found ([#1046](https://github.com/j178/prek/pull/1046))
+- Run uv pip install from the current directory ([#1069](https://github.com/j178/prek/pull/1069))
+
+### Contributors
+
+- @zzstoatzz
+- @st1971
+- @yihong0618
+- @j178
+- @copilot-swe-agent
+- @idlsoft
+
 ## 0.2.13
 
 Released on 2025-11-04.
