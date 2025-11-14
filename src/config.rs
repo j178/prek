@@ -74,7 +74,9 @@ pub enum Language {
     Rust,
     Swift,
     Pygrep,
+    #[serde(alias = "unsupported_script")]
     Script,
+    #[serde(alias = "unsupported")]
     System,
 }
 
