@@ -1,10 +1,10 @@
-use crate::common::{TestContext, cmd_snapshot};
-use assert_fs::fixture::{FileWriteStr, PathChild};
-
 /// Test `language: unsupported` and `language: unsupported_script` works.
 #[cfg(unix)]
 #[test]
 fn unsupported_language() -> anyhow::Result<()> {
+    use crate::common::{TestContext, cmd_snapshot};
+    use assert_fs::fixture::{FileWriteStr, PathChild};
+
     let context = TestContext::new();
     context.init_project();
     context.write_pre_commit_config(indoc::indoc! {r"
