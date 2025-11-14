@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
-use std::fmt::Display;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
@@ -22,14 +22,6 @@ use crate::store::Store;
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Docker;
 
-#[derive(serde::Deserialize, Debug)]
-struct Mount {
-    #[serde(rename = "Source")]
-    source: String,
-    #[serde(rename = "Destination")]
-    destination: String,
-}
-
 #[derive(Debug, thiserror::Error)]
 enum Error {
     #[error("Failed to parse docker inspect output: {0}")]
@@ -39,126 +31,276 @@ enum Error {
     Process(#[from] std::io::Error),
 }
 
-static CONTAINER_MOUNTS: LazyLock<Result<Vec<Mount>, Error>> = LazyLock::new(|| {
-    if !Docker::is_in_docker() {
-        trace!("Not in Docker");
-        return Ok(vec![]);
+/// Check if the current process is running inside a Docker container.
+/// see <https://stackoverflow.com/questions/23513045/how-to-check-if-a-process-is-running-inside-docker-container>
+fn is_in_docker() -> bool {
+    if fs::metadata("/.dockerenv").is_ok() || fs::metadata("/run/.containerenv").is_ok() {
+        return true;
     }
+    false
+}
 
-    let Ok(container_id) = Docker::current_container_id() else {
-        return Ok(vec![]);
+/// Get container id the process is running in.
+///
+/// There are no reliable way to get the container id inside container, see
+/// <https://stackoverflow.com/questions/20995351/how-can-i-get-docker-linux-container-information-from-within-the-container-itsel>
+/// for details.
+///
+/// Adapted from <https://github.com/open-telemetry/opentelemetry-java-instrumentation/pull/7167/files>
+/// Uses `/proc/self/cgroup` for cgroup v1,
+/// uses `/proc/self/mountinfo` for cgroup v2
+fn current_container_id() -> Result<String> {
+    current_container_id_from_paths("/proc/self/cgroup", "/proc/self/mountinfo")
+}
+
+fn current_container_id_from_paths(
+    cgroup_path: impl AsRef<Path>,
+    mountinfo_path: impl AsRef<Path>,
+) -> Result<String> {
+    if let Ok(container_id) = container_id_from_cgroup_v1(cgroup_path) {
+        return Ok(container_id);
+    }
+    container_id_from_cgroup_v2(mountinfo_path)
+}
+
+fn container_id_from_cgroup_v1(cgroup: impl AsRef<Path>) -> Result<String> {
+    let content = fs::read_to_string(cgroup).context("Failed to read cgroup v1 info")?;
+    content
+        .lines()
+        .find_map(parse_id_from_line)
+        .context("Failed to detect Docker container id from cgroup v1")
+}
+
+fn parse_id_from_line(line: &str) -> Option<String> {
+    let last_slash_idx = line.rfind('/')?;
+
+    let last_section = &line[last_slash_idx + 1..];
+
+    let container_id = if let Some(colon_idx) = last_section.rfind(':') {
+        // Since containerd v1.5.0+, containerId is divided by the last colon when the
+        // cgroupDriver is systemd:
+        // https://github.com/containerd/containerd/blob/release/1.5/pkg/cri/server/helpers_linux.go#L64
+        last_section[colon_idx + 1..].to_string()
+    } else {
+        let start_idx = last_section.rfind('-').map(|i| i + 1).unwrap_or(0);
+        let end_idx = last_section.rfind('.').unwrap_or(last_section.len());
+
+        if start_idx > end_idx {
+            return None;
+        }
+
+        last_section[start_idx..end_idx].to_string()
     };
 
-    trace!(?container_id, "Get docker container id");
+    if container_id.len() == 64 && container_id.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Some(container_id);
+    }
+    None
+}
 
-    let output = std::process::Command::new("docker")
-        .arg("inspect")
-        .arg("--format")
-        .arg("'{{json .Mounts}}'")
-        .arg(&container_id)
-        .output()?
-        .stdout;
-    let stdout = String::from_utf8_lossy(&output);
-    let stdout = stdout.trim().trim_matches('\'');
-    let mounts: Vec<Mount> = serde_json::from_str(stdout)?;
-    trace!(?mounts, "Get docker mounts");
+fn container_id_from_cgroup_v2(mount_info: impl AsRef<Path>) -> Result<String> {
+    let content = fs::read_to_string(mount_info).context("Failed to read cgroup v2 mount info")?;
+    regex!(r".*/(containers|overlay-containers)/([0-9a-f]{64})/.*")
+        .captures(&content)
+        .and_then(|caps| caps.get(2))
+        .map(|m| m.as_str().to_owned())
+        .context("Failed to find Docker container id in cgroup v2 mount info")
+}
 
-    Ok(mounts)
-});
-
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
-pub(crate) enum ContainerRuntime {
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum RuntimeKind {
     Auto,
-    #[default]
     Docker,
     Podman,
 }
 
-impl FromStr for ContainerRuntime {
+impl FromStr for RuntimeKind {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_str() {
-            "docker" => Ok(ContainerRuntime::Docker),
-            "podman" => Ok(ContainerRuntime::Podman),
-            "auto" => Ok(ContainerRuntime::Auto),
+            "docker" => Ok(RuntimeKind::Docker),
+            "podman" => Ok(RuntimeKind::Podman),
+            "auto" => Ok(RuntimeKind::Auto),
             _ => Err(format!("Invalid container runtime: {s}")),
         }
     }
 }
 
-impl ContainerRuntime {
+#[derive(serde::Deserialize, Debug)]
+struct Mount {
+    #[serde(rename = "Source")]
+    source: String,
+    #[serde(rename = "Destination")]
+    destination: String,
+}
+
+impl RuntimeKind {
     fn cmd(&self) -> &str {
         match self {
-            ContainerRuntime::Docker => "docker",
-            ContainerRuntime::Podman => "podman",
-            ContainerRuntime::Auto => unreachable!("Auto should be resolved before use"),
+            RuntimeKind::Docker => "docker",
+            RuntimeKind::Podman => "podman",
+            RuntimeKind::Auto => unreachable!("Auto should be resolved before use"),
         }
     }
-}
 
-impl Display for ContainerRuntime {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    /// Detect if the current runtime is rootless.
+    fn detect_rootless(self) -> Result<bool> {
         match self {
-            ContainerRuntime::Docker => write!(f, "docker"),
-            ContainerRuntime::Podman => write!(f, "podman"),
-            ContainerRuntime::Auto => write!(f, "auto"),
+            RuntimeKind::Docker => {
+                let output = Command::new(self.cmd())
+                    .arg("info")
+                    .arg("--format")
+                    .arg("'{{ .SecurityOptions }}'")
+                    .output()?;
+
+                let stdout = str::from_utf8(&output.stdout)?;
+                Ok(stdout.contains("name=rootless"))
+            }
+            RuntimeKind::Podman => {
+                let output = Command::new(self.cmd())
+                    .arg("info")
+                    .arg("--format")
+                    .arg("'{{ .Host.Security.Rootless }}'")
+                    .output()?;
+
+                let stdout = str::from_utf8(&output.stdout)?;
+                Ok(stdout.eq_ignore_ascii_case("true"))
+            }
+            RuntimeKind::Auto => unreachable!("Auto should be resolved before use"),
         }
+    }
+
+    /// List the mounts of the current container.
+    fn list_mounts(self) -> Result<Vec<Mount>> {
+        if !is_in_docker() {
+            anyhow::bail!("Not in a container");
+        }
+
+        let container_id = current_container_id()?;
+        trace!(?container_id, "In Docker container");
+
+        let output = Command::new(self.cmd())
+            .arg("inspect")
+            .arg("--format")
+            .arg("'{{json .Mounts}}'")
+            .arg(&container_id)
+            .output()?
+            .stdout;
+        let stdout = String::from_utf8_lossy(&output);
+        let stdout = stdout.trim().trim_matches('\'');
+        let mounts: Vec<Mount> = serde_json::from_str(stdout)?;
+
+        trace!(?mounts, "Get docker mounts");
+        Ok(mounts)
     }
 }
 
-static CONTAINER_RUNTIME: LazyLock<ContainerRuntime> = LazyLock::new(|| {
-    detect_container_runtime(
-        EnvVars::var(EnvVars::PREK_CONTAINER_RUNTIME).ok(),
-        || which::which("docker").is_ok(),
-        || which::which("podman").is_ok(),
-    )
-});
+struct ContainerRuntimeInfo {
+    runtime: RuntimeKind,
+    rootless: bool,
+    mounts: Vec<Mount>,
+}
 
-/// Detect container runtime provider, prioritise docker over podman if
-/// both are on the path, unless `PREK_CONTAINER_RUNTIME` is set to override detection.
-fn detect_container_runtime<DF, PF>(
-    env_override: Option<String>,
-    docker_available: DF,
-    podman_available: PF,
-) -> ContainerRuntime
-where
-    DF: Fn() -> bool,
-    PF: Fn() -> bool,
-{
-    if let Some(val) = env_override {
-        match ContainerRuntime::from_str(&val) {
-            Ok(runtime) => {
-                if runtime != ContainerRuntime::Auto {
-                    debug!(
-                        "Container runtime overridden by {}={}",
+impl ContainerRuntimeInfo {
+    /// Detect container runtime provider, prioritise docker over podman if
+    /// both are on the path, unless `PREK_CONTAINER_RUNTIME` is set to override detection.
+    fn resolve_runtime_kind<DF, PF>(
+        env_override: Option<String>,
+        docker_available: DF,
+        podman_available: PF,
+    ) -> RuntimeKind
+    where
+        DF: Fn() -> bool,
+        PF: Fn() -> bool,
+    {
+        if let Some(val) = env_override {
+            match RuntimeKind::from_str(&val) {
+                Ok(runtime) => {
+                    if runtime != RuntimeKind::Auto {
+                        debug!(
+                            "Container runtime overridden by {}={}",
+                            EnvVars::PREK_CONTAINER_RUNTIME,
+                            val
+                        );
+                        return runtime;
+                    }
+                }
+                Err(_) => {
+                    warn!(
+                        "Invalid value for {}: {}, falling back to auto detection",
                         EnvVars::PREK_CONTAINER_RUNTIME,
                         val
                     );
-                    return runtime;
                 }
             }
-            Err(_) => {
-                warn!(
-                    "Invalid value for {}: {}, falling back to auto detection",
-                    EnvVars::PREK_CONTAINER_RUNTIME,
-                    val
-                );
-            }
+        }
+
+        if docker_available() {
+            return RuntimeKind::Docker;
+        }
+        if podman_available() {
+            return RuntimeKind::Podman;
+        }
+
+        debug!("No container runtime found on PATH, defaulting to docker");
+        RuntimeKind::Docker
+    }
+
+    fn detect_runtime() -> Self {
+        let runtime = Self::resolve_runtime_kind(
+            EnvVars::var(EnvVars::PREK_CONTAINER_RUNTIME).ok(),
+            || which::which("docker").is_ok(),
+            || which::which("podman").is_ok(),
+        );
+        let rootless = runtime.detect_rootless().unwrap_or_else(|e| {
+            warn!("Failed to detect if container runtime is rootless: {e}, defaulting to rootful");
+            false
+        });
+        let mounts = runtime.list_mounts().unwrap_or_else(|e| {
+            warn!("Failed to get container mounts: {e}, assuming no mounts");
+            vec![]
+        });
+
+        Self {
+            runtime,
+            rootless,
+            mounts,
         }
     }
 
-    if docker_available() {
-        return ContainerRuntime::Docker;
-    }
-    if podman_available() {
-        return ContainerRuntime::Podman;
+    /// Get the command name of the container runtime.
+    fn cmd(&self) -> &str {
+        self.runtime.cmd()
     }
 
-    let runtime = ContainerRuntime::default();
-    debug!("No container runtime found on PATH, defaulting to {runtime}");
-    runtime
+    fn is_rootless(&self) -> bool {
+        self.rootless
+    }
+
+    fn is_podman(&self) -> bool {
+        self.runtime == RuntimeKind::Podman
+    }
+
+    /// Get the path of the current directory in the host.
+    fn map_to_host_path<'a>(&self, path: &'a Path) -> Cow<'a, Path> {
+        for mount in &self.mounts {
+            if let Ok(suffix) = path.strip_prefix(&mount.destination) {
+                if suffix.components().next().is_none() {
+                    // Exact match
+                    return Cow::Owned(PathBuf::from(&mount.source));
+                }
+                let path = Path::new(&mount.source).join(suffix);
+                return Cow::Owned(path);
+            }
+        }
+
+        Cow::Borrowed(path)
+    }
 }
+
+static CONTAINER_RUNTIME: LazyLock<ContainerRuntimeInfo> =
+    LazyLock::new(ContainerRuntimeInfo::detect_runtime);
 
 impl Docker {
     fn docker_tag(hook: &InstalledHook) -> String {
@@ -204,102 +346,7 @@ impl Docker {
         Ok(tag)
     }
 
-    /// Check if the current process is running inside a Docker container.
-    /// see <https://stackoverflow.com/questions/23513045/how-to-check-if-a-process-is-running-inside-docker-container>
-    fn is_in_docker() -> bool {
-        if fs::metadata("/.dockerenv").is_ok() || fs::metadata("/run/.containerenv").is_ok() {
-            return true;
-        }
-        false
-    }
-
-    /// Get container id the process is running in.
-    ///
-    /// There are no reliable way to get the container id inside container, see
-    /// <https://stackoverflow.com/questions/20995351/how-can-i-get-docker-linux-container-information-from-within-the-container-itsel>
-    /// for details.
-    ///
-    /// Adapted from <https://github.com/open-telemetry/opentelemetry-java-instrumentation/pull/7167/files>
-    /// Uses `/proc/self/cgroup` for cgroup v1,
-    /// uses `/proc/self/mountinfo` for cgroup v2
-    fn current_container_id() -> Result<String> {
-        Self::current_container_id_from_paths("/proc/self/cgroup", "/proc/self/mountinfo")
-    }
-
-    fn current_container_id_from_paths(
-        cgroup_path: impl AsRef<Path>,
-        mountinfo_path: impl AsRef<Path>,
-    ) -> Result<String> {
-        if let Ok(container_id) = Self::container_id_from_cgroup_v1(cgroup_path) {
-            return Ok(container_id);
-        }
-        Self::container_id_from_cgroup_v2(mountinfo_path)
-    }
-
-    fn container_id_from_cgroup_v1(cgroup: impl AsRef<Path>) -> Result<String> {
-        let content = fs::read_to_string(cgroup).context("Failed to read cgroup v1 info")?;
-        content
-            .lines()
-            .find_map(Docker::parse_id_from_line)
-            .context("Failed to detect Docker container id from cgroup v1")
-    }
-
-    fn parse_id_from_line(line: &str) -> Option<String> {
-        let last_slash_idx = line.rfind('/')?;
-
-        let last_section = &line[last_slash_idx + 1..];
-
-        let container_id = if let Some(colon_idx) = last_section.rfind(':') {
-            // Since containerd v1.5.0+, containerId is divided by the last colon when the
-            // cgroupDriver is systemd:
-            // https://github.com/containerd/containerd/blob/release/1.5/pkg/cri/server/helpers_linux.go#L64
-            last_section[colon_idx + 1..].to_string()
-        } else {
-            let start_idx = last_section.rfind('-').map(|i| i + 1).unwrap_or(0);
-            let end_idx = last_section.rfind('.').unwrap_or(last_section.len());
-
-            if start_idx > end_idx {
-                return None;
-            }
-
-            last_section[start_idx..end_idx].to_string()
-        };
-
-        if container_id.len() == 64 && container_id.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Some(container_id);
-        }
-        None
-    }
-
-    fn container_id_from_cgroup_v2(mount_info: impl AsRef<Path>) -> Result<String> {
-        let content =
-            fs::read_to_string(mount_info).context("Failed to read cgroup v2 mount info")?;
-        regex!(r".*/(containers|overlay-containers)/([0-9a-f]{64})/.*")
-            .captures(&content)
-            .and_then(|caps| caps.get(2))
-            .map(|m| m.as_str().to_owned())
-            .context("Failed to find Docker container id in cgroup v2 mount info")
-    }
-
-    /// Get the path of the current directory in the host.
-    fn get_docker_path(path: &Path) -> Result<Cow<'_, Path>> {
-        let mounts = CONTAINER_MOUNTS.as_ref()?;
-
-        for mount in mounts {
-            if let Ok(suffix) = path.strip_prefix(&mount.destination) {
-                if suffix.components().next().is_none() {
-                    // Exact match
-                    return Ok(Path::new(&mount.source).into());
-                }
-                let path = Path::new(&mount.source).join(suffix);
-                return Ok(path.into());
-            }
-        }
-
-        Ok(path.into())
-    }
-
-    pub(crate) fn docker_run_cmd(work_dir: &Path) -> Result<Cmd> {
+    pub(crate) fn docker_run_cmd(work_dir: &Path) -> Cmd {
         let mut command = Cmd::new(CONTAINER_RUNTIME.cmd(), "run container");
         command.arg("run").arg("--rm");
 
@@ -310,13 +357,28 @@ impl Docker {
         // Run as a non-root user
         #[cfg(unix)]
         {
-            command.arg("--user");
-            command.arg(format!("{}:{}", unsafe { libc::geteuid() }, unsafe {
-                libc::getegid()
-            }));
+            let add_user_args = |cmd: &mut Cmd| {
+                let uid = unsafe { libc::geteuid() };
+                let gid = unsafe { libc::getegid() };
+                cmd.arg("--user").arg(format!("{uid}:{gid}"));
+            };
+
+            // If runtime is rootful, set user to non-root user id matching current user id.
+            if !CONTAINER_RUNTIME.is_rootless() {
+                add_user_args(&mut command);
+            } else if CONTAINER_RUNTIME.is_podman() {
+                // For rootless podman, set user to non-root use id matching
+                // current user id and add additional `--userns` param to map the user id correctly.
+                add_user_args(&mut command);
+                command.arg("--userns").arg("keep-id");
+            }
+
+            // Otherwise (rootless Docker): do nothing as it will cause permission
+            // problems with bind mounted files.  In this state, `root:root` inside the container is
+            // the same as current `uid:gid` on the host - see subuid / subgid.
         }
 
-        let work_dir = Self::get_docker_path(work_dir)?;
+        let work_dir = CONTAINER_RUNTIME.map_to_host_path(work_dir);
         command
             // https://docs.docker.com/engine/reference/commandline/run/#mount-volumes-from-container-volumes-from
             // The `Z` option tells Docker to label the content with a private
@@ -328,7 +390,7 @@ impl Docker {
             .arg("--workdir")
             .arg("/src");
 
-        Ok(command)
+        command
     }
 }
 
@@ -377,7 +439,7 @@ impl LanguageImpl for Docker {
 
         let run = async move |batch: &[&Path]| {
             // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
-            let mut cmd = Docker::docker_run_cmd(hook.work_dir())?;
+            let mut cmd = Docker::docker_run_cmd(hook.work_dir());
             let mut output = cmd
                 .current_dir(hook.work_dir())
                 .arg("--entrypoint")
@@ -412,10 +474,10 @@ impl LanguageImpl for Docker {
 
 #[cfg(test)]
 mod tests {
-    use super::{ContainerRuntime, Docker};
+    use super::*;
+    use pretty_assertions::assert_eq;
     use std::io::Write;
 
-    // Real-world inspired samples captured from Docker hosts.
     const CONTAINER_ID_V1: &str =
         "7be92808767a667f35c8505cbf40d14e931ef6db5b0210329cf193b15ba9d605";
     const CGROUP_V1_SAMPLE: &str = r"9:cpuset:/system.slice/docker-7be92808767a667f35c8505cbf40d14e931ef6db5b0210329cf193b15ba9d605.scope
@@ -429,7 +491,7 @@ mod tests {
 ";
 
     #[test]
-    fn container_id_from_cgroup_v1() -> anyhow::Result<()> {
+    fn test_container_id_from_cgroup_v1() -> anyhow::Result<()> {
         for (sample, expected) in [
             // with suffix
             (CGROUP_V1_SAMPLE, CONTAINER_ID_V1),
@@ -463,7 +525,7 @@ mod tests {
             cgroup_file.write_all(sample.as_bytes())?;
             cgroup_file.flush()?;
 
-            let actual = Docker::container_id_from_cgroup_v1(cgroup_file.path())?;
+            let actual = container_id_from_cgroup_v1(cgroup_file.path())?;
             assert_eq!(actual, expected);
         }
 
@@ -484,7 +546,7 @@ mod tests {
             cgroup_file.write_all(sample.as_bytes())?;
             cgroup_file.flush()?;
 
-            let result = Docker::container_id_from_cgroup_v1(cgroup_file.path());
+            let result = container_id_from_cgroup_v1(cgroup_file.path());
             assert!(result.is_err());
         }
 
@@ -492,7 +554,7 @@ mod tests {
     }
 
     #[test]
-    fn container_id_from_cgroup_v2() -> anyhow::Result<()> {
+    fn test_container_id_from_cgroup_v2() -> anyhow::Result<()> {
         for (sample, expected) in [
             // Docker rootful container
             (
@@ -527,14 +589,14 @@ mod tests {
             mountinfo_file.write_all(sample.as_bytes())?;
             mountinfo_file.flush()?;
 
-            let actual = Docker::container_id_from_cgroup_v2(mountinfo_file.path())?;
+            let actual = container_id_from_cgroup_v2(mountinfo_file.path())?;
             assert_eq!(actual, expected);
         }
         Ok(())
     }
 
     #[test]
-    fn current_container_id_prefers_cgroup_v1_samples() -> anyhow::Result<()> {
+    fn test_current_container_id_prefers_cgroup_v1() -> anyhow::Result<()> {
         let mut cgroup_file = tempfile::NamedTempFile::new()?;
         let mut mountinfo_file = tempfile::NamedTempFile::new()?;
         cgroup_file.write_all(CGROUP_V1_SAMPLE.as_bytes())?;
@@ -543,13 +605,13 @@ mod tests {
         mountinfo_file.flush()?;
 
         let container_id =
-            Docker::current_container_id_from_paths(cgroup_file.path(), mountinfo_file.path())?;
+            current_container_id_from_paths(cgroup_file.path(), mountinfo_file.path())?;
         assert_eq!(container_id, CONTAINER_ID_V1);
         Ok(())
     }
 
     #[test]
-    fn current_container_id_falls_back_to_cgroup_v2_samples() -> anyhow::Result<()> {
+    fn test_current_container_id_falls_back_to_cgroup_v2() -> anyhow::Result<()> {
         let mut cgroup_file = tempfile::NamedTempFile::new()?;
         let mut mountinfo_file = tempfile::NamedTempFile::new()?;
         cgroup_file.write_all(b"0::/\n")?; // No cgroup v1 container id available.
@@ -558,20 +620,19 @@ mod tests {
         mountinfo_file.flush()?;
 
         let container_id =
-            Docker::current_container_id_from_paths(cgroup_file.path(), mountinfo_file.path())?;
+            current_container_id_from_paths(cgroup_file.path(), mountinfo_file.path())?;
         assert_eq!(container_id, CONTAINER_ID_V2);
         Ok(())
     }
 
     #[test]
-    fn current_container_id_errors_when_no_match() -> anyhow::Result<()> {
+    fn test_current_container_id_errors_when_no_match() -> anyhow::Result<()> {
         let cgroup_file = tempfile::NamedTempFile::new()?;
         let mut mountinfo_file = tempfile::NamedTempFile::new()?;
         mountinfo_file.write_all(b"501 500 0:45 /proc /proc rw\n")?;
         mountinfo_file.flush()?;
 
-        let result =
-            Docker::current_container_id_from_paths(cgroup_file.path(), mountinfo_file.path());
+        let result = current_container_id_from_paths(cgroup_file.path(), mountinfo_file.path());
         assert!(result.is_err());
 
         Ok(())
@@ -583,62 +644,53 @@ mod tests {
             env_override: Option<&str>,
             docker_available: bool,
             podman_available: bool,
-        ) -> ContainerRuntime {
-            super::detect_container_runtime(
+        ) -> RuntimeKind {
+            ContainerRuntimeInfo::resolve_runtime_kind(
                 env_override.map(ToString::to_string),
                 || docker_available,
                 || podman_available,
             )
         }
 
-        assert_eq!(runtime_with(None, true, false), ContainerRuntime::Docker);
-        assert_eq!(runtime_with(None, false, true), ContainerRuntime::Podman);
-        assert_eq!(
-            runtime_with(None, false, false),
-            ContainerRuntime::default()
-        );
+        assert_eq!(runtime_with(None, true, false), RuntimeKind::Docker);
+        assert_eq!(runtime_with(None, false, true), RuntimeKind::Podman);
+        assert_eq!(runtime_with(None, false, false), RuntimeKind::Docker);
 
-        assert_eq!(
-            runtime_with(Some("auto"), true, false),
-            ContainerRuntime::Docker
-        );
-        assert_eq!(
-            runtime_with(Some("auto"), false, true),
-            ContainerRuntime::Podman
-        );
+        assert_eq!(runtime_with(Some("auto"), true, false), RuntimeKind::Docker);
+        assert_eq!(runtime_with(Some("auto"), false, true), RuntimeKind::Podman);
         assert_eq!(
             runtime_with(Some("auto"), false, false),
-            ContainerRuntime::default()
+            RuntimeKind::Docker
         );
 
         assert_eq!(
             runtime_with(Some("docker"), true, false),
-            ContainerRuntime::Docker
+            RuntimeKind::Docker
         );
         assert_eq!(
             runtime_with(Some("docker"), false, true),
-            ContainerRuntime::Docker
+            RuntimeKind::Docker
         );
         assert_eq!(
             runtime_with(Some("DOCKER"), false, false),
-            ContainerRuntime::Docker
+            RuntimeKind::Docker
         );
         assert_eq!(
             runtime_with(Some("podman"), true, false),
-            ContainerRuntime::Podman
+            RuntimeKind::Podman
         );
         assert_eq!(
             runtime_with(Some("podman"), false, true),
-            ContainerRuntime::Podman
+            RuntimeKind::Podman
         );
         assert_eq!(
             runtime_with(Some("podman"), false, false),
-            ContainerRuntime::Podman
+            RuntimeKind::Podman
         );
 
         assert_eq!(
             runtime_with(Some("invalid"), false, false),
-            ContainerRuntime::Docker
+            RuntimeKind::Docker
         );
     }
 }
