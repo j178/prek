@@ -1,31 +1,8 @@
 use anyhow::Result;
 use assert_cmd::Command;
 use assert_fs::fixture::{FileWriteStr, PathChild};
-use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot};
-
-fn detect_container_runtime() -> Result<String> {
-    // When in test read the variable value from a file not from the environment
-    if let Ok(runtime) = EnvVars::var(EnvVars::PREK_CONTAINER_RUNTIME) {
-        if runtime.eq("podman") || runtime.eq("docker") {
-            return Ok(runtime);
-        }
-    }
-
-    let podman = which::which("podman");
-    let docker = which::which("docker");
-
-    if let Ok(_p) = docker {
-        return Ok("docker".to_string());
-    }
-
-    if let Ok(_p) = podman {
-        return Ok("podman".to_string());
-    }
-
-    anyhow::bail!("No container runtime selected")
-}
 
 #[test]
 fn docker_image() -> Result<()> {
@@ -41,7 +18,7 @@ fn docker_image() -> Result<()> {
     "})?;
 
     // Use fully qualified image name for Podman/Docker compatibility
-    Command::new(detect_container_runtime()?)
+    Command::new("docker")
         .args(["pull", "docker.io/zricethezav/gitleaks:v8.21.2"])
         .assert()
         .success();
