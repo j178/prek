@@ -35,8 +35,9 @@ pub(crate) async fn install(
 ) -> Result<ExitStatus> {
     if git_dir.is_none() && git::has_hooks_path_set().await? {
         anyhow::bail!(
-            "Cowardly refusing to install hooks with `core.hooksPath` set.\nhint: `{}` to fix this",
-            "git config --unset-all core.hooksPath".cyan()
+            "Cowardly refusing to install hooks with `core.hooksPath` set.\nhint: Run these commands to remove core.hooksPath:\nhint:   {}\nhint:   {}",
+            "git config --unset-all --local core.hooksPath".cyan(),
+            "git config --unset-all --global core.hooksPath".cyan()
         );
     }
 
