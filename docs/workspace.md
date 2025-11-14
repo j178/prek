@@ -67,6 +67,12 @@ When running in workspace mode:
 2. **Apply global filters**: Files are filtered based on include/exclude patterns from the workspace root config
 3. **Distribute to projects**: Each project receives a subset of files based on its location
 
+#### File Visibility Constraints
+
+**Important**: Each project can only see and process files within its own directory tree. This is a fundamental design principle of workspace mode that ensures proper isolation between projects.
+
+A hook defined in `frontend/.pre-commit-config.yaml` can only match files under the `frontend/` directory—it cannot reference files from sibling directories like `backend/`. If hooks need to reference files across multiple projects, move the hook configuration to a common ancestor directory (e.g., the workspace root).
+
 ### Hook Execution
 
 For each project:
@@ -74,64 +80,6 @@ For each project:
 1. **Scope to project directory**: Hooks run within their project's root directory
 2. **Filter files**: Only files within the project's directory tree are passed to its hooks
 3. **Independent execution**: Each project's hooks run independently with their own environment
-
-### File Visibility Constraints
-
-**Important**: Each project can only see and process files within its own directory tree. This is a fundamental design principle of workspace mode that ensures proper isolation between projects.
-
-**What this means:**
-
-- A hook defined in `frontend/.pre-commit-config.yaml` can only match files under the `frontend/` directory
-- The `files` pattern in a hook configuration is evaluated relative to files within that project's scope
-- You **cannot** use a hook in one project to monitor or process files from a sibling or parent directory
-
-**Example of what won't work:**
-
-```text
-repo/
-├── frontend/
-│   ├── .pre-commit-config.yaml
-│   └── package.json
-└── backend/
-    └── src/somefile.json
-```
-
-In `frontend/.pre-commit-config.yaml`:
-
-```yaml
-- id: watch-backend
-  name: Watch backend files
-  entry: npm run something
-  language: system
-  files: .*backend/src/somefile\.json$  # ❌ This won't work!
-```
-
-This configuration won't work because the `frontend` project cannot see files in the `backend` directory. Even though you can manually run the hook with `prek run watch-backend --files ../backend/src/somefile.json`, the hook will not be triggered automatically during normal `prek run` execution.
-
-**Solution**: If hooks need to reference files across multiple projects, move the hook configuration to a common ancestor directory. For example:
-
-```text
-repo/
-├── .pre-commit-config.yaml  # ✅ Define cross-project hooks here
-├── frontend/
-│   ├── .pre-commit-config.yaml
-│   └── package.json
-└── backend/
-    └── src/somefile.json
-```
-
-In `.pre-commit-config.yaml` (root):
-
-```yaml
-- id: watch-backend
-  name: Watch backend files
-  entry: npm run something
-  language: system
-  files: backend/src/somefile\.json$  # ✅ Works from root!
-  pass_filenames: false
-```
-
-By placing the hook at the workspace root, it has visibility into all files within the workspace, including both `frontend/` and `backend/` directories.
 
 ### Execution Order
 
