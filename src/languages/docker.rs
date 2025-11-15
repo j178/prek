@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -303,21 +304,28 @@ static CONTAINER_RUNTIME: LazyLock<ContainerRuntimeInfo> =
     LazyLock::new(ContainerRuntimeInfo::detect_runtime);
 
 impl Docker {
-    fn docker_tag(hook: &InstalledHook) -> String {
-        let info = hook.install_info().expect("Docker hook must be installed");
-
+    fn docker_tag(info: &InstallInfo) -> String {
         let mut hasher = DefaultHasher::new();
-        info.hash(&mut hasher);
+
+        info.language.hash(&mut hasher);
+        info.language_version.hash(&mut hasher);
+        let deps = info.dependencies.iter().collect::<BTreeSet<&String>>();
+        deps.hash(&mut hasher);
+
         let digest = hex::encode(hasher.finish().to_le_bytes());
         format!("prek-{digest}")
     }
 
-    async fn build_docker_image(hook: &InstalledHook, pull: bool) -> Result<String> {
+    async fn build_docker_image(
+        hook: &Hook,
+        install_info: &InstallInfo,
+        pull: bool,
+    ) -> Result<String> {
         let Some(src) = hook.repo_path() else {
             anyhow::bail!("Language `docker` cannot work with `local` repository");
         };
 
-        let tag = Self::docker_tag(hook);
+        let tag = Self::docker_tag(install_info);
         let mut cmd = Cmd::new(CONTAINER_RUNTIME.cmd(), "build docker image");
         let cmd = cmd
             .arg("build")
@@ -403,23 +411,24 @@ impl LanguageImpl for Docker {
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
 
-        let info = InstallInfo::new(
+        let mut info = InstallInfo::new(
             hook.language,
             hook.dependencies().clone(),
             &store.hooks_dir(),
         )?;
-        let installed_hook = InstalledHook::Installed {
-            hook,
-            info: Arc::new(info),
-        };
 
-        Docker::build_docker_image(&installed_hook, true)
+        Docker::build_docker_image(&hook, &info, true)
             .await
             .context("Failed to build docker image")?;
 
+        info.persist_env_path();
+
         reporter.on_install_complete(progress);
 
-        Ok(installed_hook)
+        Ok(InstalledHook::Installed {
+            hook,
+            info: Arc::new(info),
+        })
     }
 
     async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
@@ -432,9 +441,13 @@ impl LanguageImpl for Docker {
         filenames: &[&Path],
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
-        let docker_tag = Docker::build_docker_image(hook, false)
-            .await
-            .context("Failed to build docker image")?;
+        let docker_tag = Docker::build_docker_image(
+            hook,
+            hook.install_info().expect("Docker env must be installed"),
+            false,
+        )
+        .await
+        .context("Failed to build docker image")?;
         let entry = hook.entry.resolve(None)?;
 
         let run = async move |batch: &[&Path]| {

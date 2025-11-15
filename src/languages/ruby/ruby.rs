@@ -84,6 +84,8 @@ impl LanguageImpl for Ruby {
         .await
         .context("Failed to install gems")?;
 
+        info.persist_env_path();
+
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {

@@ -187,15 +187,13 @@ mod tests {
             RubyRequest::Range(req.clone(), ">=3.2, <4.0".to_string()).satisfied_by(&install_info)
         );
 
-        let temp_dir_old = tempfile::tempdir()?;
-        let mut install_info_old =
-            InstallInfo::new(Language::Ruby, FxHashSet::default(), temp_dir_old.path())?;
-        install_info_old
+        let temp_dir = tempfile::tempdir()?;
+        let mut install_info =
+            InstallInfo::new(Language::Ruby, FxHashSet::default(), temp_dir.path())?;
+        install_info
             .with_language_version(semver::Version::new(3, 1, 0))
             .with_toolchain(PathBuf::from("/usr/bin/ruby3.1"));
-        assert!(
-            !RubyRequest::Range(req, ">=3.2, <4.0".to_string()).satisfied_by(&install_info_old)
-        );
+        assert!(!RubyRequest::Range(req, ">=3.2, <4.0".to_string()).satisfied_by(&install_info));
 
         Ok(())
     }

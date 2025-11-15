@@ -129,6 +129,8 @@ impl LanguageImpl for Python {
         info.with_language_version(python_info.version)
             .with_toolchain(python_info.python_exec);
 
+        info.persist_env_path();
+
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {

@@ -1,6 +1,5 @@
 use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
-use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
@@ -10,6 +9,7 @@ use clap::ValueEnum;
 use prek_consts::MANIFEST_FILE;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
+use tempfile::TempDir;
 use thiserror::Error;
 use tracing::{error, trace};
 
@@ -540,7 +540,7 @@ impl InstalledHook {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct InstallInfo {
     pub(crate) language: Language,
     pub(crate) language_version: semver::Version,
@@ -548,15 +548,21 @@ pub(crate) struct InstallInfo {
     pub(crate) env_path: PathBuf,
     pub(crate) toolchain: PathBuf,
     extra: FxHashMap<String, String>,
+    #[serde(skip, default)]
+    temp_dir: Option<TempDir>,
 }
 
-impl Hash for InstallInfo {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.language.hash(state);
-        self.language_version.hash(state);
-        let mut deps = self.dependencies.iter().collect::<Vec<_>>();
-        deps.sort_unstable();
-        deps.hash(state);
+impl Clone for InstallInfo {
+    fn clone(&self) -> Self {
+        Self {
+            language: self.language,
+            language_version: self.language_version.clone(),
+            dependencies: self.dependencies.clone(),
+            env_path: self.env_path.clone(),
+            toolchain: self.toolchain.clone(),
+            extra: self.extra.clone(),
+            temp_dir: None,
+        }
     }
 }
 
@@ -569,17 +575,23 @@ impl InstallInfo {
         let env_path = tempfile::Builder::new()
             .prefix(&format!("{}-", language.as_str()))
             .rand_bytes(20)
-            .tempdir_in(hooks_dir)?
-            .keep();
+            .tempdir_in(hooks_dir)?;
 
         Ok(Self {
             language,
             dependencies,
-            env_path,
+            env_path: env_path.path().to_path_buf(),
             language_version: semver::Version::new(0, 0, 0),
             toolchain: PathBuf::new(),
             extra: FxHashMap::default(),
+            temp_dir: Some(env_path),
         })
+    }
+
+    pub(crate) fn persist_env_path(&mut self) {
+        if let Some(temp_dir) = self.temp_dir.take() {
+            self.env_path = temp_dir.keep();
+        }
     }
 
     pub(crate) async fn from_env_path(path: &Path) -> Result<Self> {

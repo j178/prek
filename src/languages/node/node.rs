@@ -121,6 +121,8 @@ impl LanguageImpl for Node {
                 .await?;
         }
 
+        info.persist_env_path();
+
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {

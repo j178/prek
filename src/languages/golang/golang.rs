@@ -101,6 +101,8 @@ impl LanguageImpl for Golang {
             cmd.arg(dep).remove_git_env().check(true).output().await?;
         }
 
+        info.persist_env_path();
+
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {

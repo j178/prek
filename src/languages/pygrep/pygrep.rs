@@ -161,6 +161,8 @@ impl LanguageImpl for Pygrep {
         )?;
         info.with_toolchain(python);
 
+        info.persist_env_path();
+
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {

@@ -87,6 +87,8 @@ impl LanguageImpl for Lua {
         info.with_toolchain(lua_info.executable)
             .with_language_version(lua_info.version);
 
+        info.persist_env_path();
+
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
