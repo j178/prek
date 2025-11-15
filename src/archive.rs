@@ -241,6 +241,10 @@ pub async fn unzip<R: AsyncRead + Unpin>(reader: R, target: impl AsRef<Path>) ->
             fs_err::tokio::set_permissions(&path, Permissions::from_mode(mode)).await?;
         }
     }
+    #[cfg(not(unix))]
+    {
+        let _ = offset;
+    }
 
     Ok(())
 }
