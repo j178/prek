@@ -96,7 +96,6 @@ toml = { version = "0.9.5", default-features = false, features = ["fast_hash", "
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 unicode-width = { version = "0.2.0" }
-url = { version = "2.5.2", features = ["serde"] }
 which = { version = "8.0.0" }
 
 [target.'cfg(unix)'.dependencies]

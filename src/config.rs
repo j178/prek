@@ -304,14 +304,12 @@ pub enum RepoLocation {
     Remote(String),
 }
 
-impl FromStr for RepoLocation {
-    type Err = url::ParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "local" => Ok(RepoLocation::Local),
-            "meta" => Ok(RepoLocation::Meta),
-            _ => Ok(RepoLocation::Remote(s.to_string())),
+impl From<String> for RepoLocation {
+    fn from(s: String) -> Self {
+        match s.as_str() {
+            "local" => RepoLocation::Local,
+            "meta" => RepoLocation::Meta,
+            _ => RepoLocation::Remote(s),
         }
     }
 }
@@ -322,7 +320,7 @@ impl<'de> Deserialize<'de> for RepoLocation {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        RepoLocation::from_str(&s).map_err(serde::de::Error::custom)
+        Ok(RepoLocation::from(s))
     }
 }
 
