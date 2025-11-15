@@ -9,6 +9,9 @@ license = "MIT"
 
 [workspace.dependencies]
 prek-consts = { path = "crates/prek-consts" }
+prek-pty = { path = "crates/prek-pty" }
+prek-yaml = { path = "crates/prek-yaml" }
+
 serde_yaml = { version = "0.9.34" }
 thiserror = { version = "2.0.11" }
 tracing = { version = "0.1.40" }
@@ -37,11 +40,14 @@ profiler-flamegraph = ["pprof/flamegraph"]
 docker = []
 
 [dependencies]
+prek-consts = { workspace = true }
+prek-yaml = { workspace = true }
+
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.86" }
-astral-tokio-tar = { version = "0.5.1" }
+tokio-tar = { version = "0.5.1", package = "astral-tokio-tar" }
 async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
-async_zip = { git = "https://github.com/astral-sh/rs-async-zip", rev = "c909fda63fcafe4af496a07bfda28a5aae97e58d", features = ["deflate", "tokio"] }
+async_zip = { version = "0.0.17", package = "astral_async_zip", features = ["deflate", "tokio"] }
 axoupdater = { version = "0.9.0", default-features = false, features = ["github_releases"], optional = true }
 bstr = { version = "1.11.0" }
 clap = { version = "4.5.16", features = ["derive", "env", "string", "wrap_help"] }
@@ -92,13 +98,12 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 unicode-width = { version = "0.2.0" }
 url = { version = "2.5.2", features = ["serde"] }
 which = { version = "8.0.0" }
-prek-consts = { workspace = true }
-prek-yaml = { path = "crates/prek-yaml" }
 
 [target.'cfg(unix)'.dependencies]
+prek-pty = { workspace = true }
+
 libc = { version = "0.2.164" }
 pprof = { version = "0.15.0", optional = true }
-prek-pty = { path = "crates/prek-pty" }
 
 [build-dependencies]
 fs-err = { version = "3.1.0" }

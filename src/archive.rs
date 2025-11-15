@@ -28,7 +28,7 @@ use async_zip::base::read::stream::ZipFileReader;
 use rustc_hash::FxHashSet;
 use tokio::io::{AsyncRead, BufReader};
 use tokio_tar::ArchiveBuilder;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::warn;
 
 #[derive(Debug, thiserror::Error)]
@@ -153,10 +153,11 @@ pub async fn unzip<R: AsyncRead + Unpin>(reader: R, target: impl AsRef<Path>) ->
     }
 
     let target = target.as_ref();
-    let mut reader = BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let mut zip = ZipFileReader::with_tokio(&mut reader);
+    let mut reader = futures::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader.compat());
+    let mut zip = ZipFileReader::new(&mut reader);
 
     let mut directories = FxHashSet::default();
+    let mut offset = 0;
 
     while let Some(mut entry) = zip.next_with_entry().await? {
         // Construct the (expected) path to the file on-disk.
@@ -168,9 +169,14 @@ pub async fn unzip<R: AsyncRead + Unpin>(reader: R, target: impl AsRef<Path>) ->
 
             // Close current file prior to proceeding, as per:
             // https://docs.rs/async_zip/0.0.16/async_zip/base/read/stream/
-            zip = entry.skip().await?;
+            (.., zip) = entry.skip().await?;
+
+            // Store the current offset.
+            offset = zip.offset();
+
             continue;
         };
+
         let path = target.join(path);
         let is_dir = entry.reader().entry().dir()?;
 
@@ -200,7 +206,10 @@ pub async fn unzip<R: AsyncRead + Unpin>(reader: R, target: impl AsRef<Path>) ->
 
         // Close current file prior to proceeding, as per:
         // https://docs.rs/async_zip/0.0.16/async_zip/base/read/stream/
-        zip = entry.skip().await?;
+        (.., zip) = entry.skip().await?;
+
+        // Store the current offset.
+        offset = zip.offset();
     }
 
     // On Unix, we need to set file permissions, which are stored in the central directory, at the
@@ -209,13 +218,12 @@ pub async fn unzip<R: AsyncRead + Unpin>(reader: R, target: impl AsRef<Path>) ->
     #[cfg(unix)]
     {
         use async_zip::base::read::cd::CentralDirectoryReader;
+        use async_zip::base::read::cd::Entry;
         use std::fs::Permissions;
         use std::os::unix::fs::PermissionsExt;
-        use tokio_util::compat::TokioAsyncReadCompatExt;
 
-        let mut reader = reader.compat();
-        let mut directory = CentralDirectoryReader::new(&mut reader);
-        while let Some(entry) = directory.next().await? {
+        let mut directory = CentralDirectoryReader::new(&mut reader, offset);
+        while let Entry::CentralDirectoryEntry(entry) = directory.next().await? {
             if entry.dir()? {
                 continue;
             }
