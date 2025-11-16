@@ -4,17 +4,17 @@ version = "0.2.14"
 description = "Better `pre-commit`, re-engineered in Rust"
 authors = [{ name = "j178", email = "hi@j178.dev" }]
 requires-python = ">=3.8"
-keywords = [ "pre-commit", "git", "hooks" ]
+keywords = ["pre-commit", "git", "hooks"]
 readme = "README.md"
 license = { file = "LICENSE" }
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
-  "Environment :: Console",
-  "Intended Audience :: Developers",
-  "Operating System :: OS Independent",
-  "License :: OSI Approved :: MIT License",
-  "Programming Language :: Rust",
-  "Topic :: Software Development :: Quality Assurance"
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Rust",
+    "Topic :: Software Development :: Quality Assurance"
 ]
 
 [project.urls]
@@ -30,7 +30,7 @@ build-backend = "maturin"
 [tool.maturin]
 bindings = "bin"
 include = [
-  { path = "licenses/*", format = ["wheel", "sdist"]}
+    { path = "licenses/*", format = ["wheel", "sdist"] }
 ]
 
 [tool.rooster]
@@ -49,10 +49,13 @@ changelog_sections.__unknown__ = "Other changes"
 changelog_contributors = true
 
 version_files = [
-  "pyproject.toml",
-  "Cargo.toml",
-  "README.md",
-  "docs/installation.md",
+    "pyproject.toml",
+    # Replace the `workspace.package.version` field in the Cargo.toml
+    { path = "Cargo.toml", format = "cargo", field = "workspace.package.version" },
+    # Bump versions of dependent crates
+    { target = "Cargo.toml", match = "^(prek-consts|prek-pty)"},
+    "README.md",
+    "docs/installation.md",
 ]
 
 [tool.uv]

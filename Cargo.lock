@@ -1930,14 +1930,14 @@ dependencies = [
 
 [[package]]
 name = "prek-consts"
-version = "0.0.1"
+version = "0.2.14"
 dependencies = [
  "tracing",
 ]
 
 [[package]]
 name = "prek-pty"
-version = "0.0.1"
+version = "0.2.14"
 dependencies = [
  "rustix",
  "tokio",

@@ -2,14 +2,15 @@
 members = ["crates/*"]
 
 [workspace.package]
+version = "0.2.14"
 edition = "2024"
 repository = "https://github.com/j178/prek"
 homepage = "https://prek.j178.dev/"
 license = "MIT"
 
 [workspace.dependencies]
-prek-consts = { path = "crates/prek-consts", version = "0.0.1" }
-prek-pty = { path = "crates/prek-pty", version = "0.0.1" }
+prek-consts = { path = "crates/prek-consts", version = "0.2.14" }
+prek-pty = { path = "crates/prek-pty", version = "0.2.14" }
 
 rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
 serde-saphyr = { version = "0.0.7" }
@@ -19,9 +20,9 @@ tracing = { version = "0.1.40" }
 
 [package]
 name = "prek"
-version = "0.2.14"
 authors = ["j178 <hi@j178.dev>"]
 description = "Better `pre-commit`, re-engineered in Rust"
+version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
 edition = { workspace = true }
@@ -33,7 +34,7 @@ default-run = "prek"
 default = ["docker"]
 # Adds self-update functionality. This feature is only enabled for prek built binarys
 # and should be left unselected when building prek for package managers.
-self-update = ["axoupdater"]
+self-update = ["dep:axoupdater"]
 # Enable the profiler for benchmarking
 profiler = ["dep:pprof", "pprof/flamegraph"]
 # Enable docker related tests in integration tests
@@ -44,7 +45,6 @@ prek-consts = { workspace = true }
 
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.86" }
-tokio-tar = { version = "0.5.1", package = "astral-tokio-tar" }
 async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
 async_zip = { version = "0.0.17", package = "astral_async_zip", features = ["deflate", "tokio"] }
 axoupdater = { version = "0.9.0", default-features = false, features = ["github_releases"], optional = true }
@@ -89,6 +89,7 @@ tempfile = { version = "3.13.0" }
 textwrap = { version = "0.16.1" }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-tar = { version = "0.5.1", package = "astral-tokio-tar" }
 tokio-util = { version = "0.7.13" }
 toml = { version = "0.9.5", default-features = false, features = ["fast_hash", "parse", "preserve_order", "serde"] }
 tracing = { workspace = true }
