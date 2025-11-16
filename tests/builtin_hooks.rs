@@ -109,18 +109,18 @@ fn check_yaml_hook() -> Result<()> {
     context.git_add(".");
 
     // First run: hooks should fail
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     check yaml...............................................................Failed
     - hook id: check-yaml
     - exit code: 1
-      duplicate.yaml: Failed to yaml decode (duplicate entry with key "a")
-      invalid.yaml: Failed to yaml decode (mapping values are not allowed in this context at line 1 column 5)
+      duplicate.yaml: Failed to yaml decode (duplicate mapping key: a at line 2, column 1)
+      invalid.yaml: Failed to yaml decode (mapping values are not allowed in this context at line 1, column 5)
 
     ----- stderr -----
-    "#);
+    ");
 
     // Fix the files
     cwd.child("invalid.yaml").write_str("a:\n  b: c")?;
@@ -174,7 +174,7 @@ fn check_yaml_multiple_document() -> Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -182,10 +182,10 @@ fn check_yaml_multiple_document() -> Result<()> {
     Rust version.............................................................Failed
     - hook id: check-yaml
     - exit code: 1
-      multiple.yaml: Failed to yaml decode (deserializing from YAML containing more than one document is not supported)
+      multiple.yaml: Failed to yaml decode (multiple YAML documents detected; use from_multiple or from_multiple_with_options at line 4, column 1)
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -554,7 +554,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     context.git_add(".");
 
     // First run: expect failures and auto-fixes where applicable.
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -588,8 +588,8 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     check yaml...............................................................Failed
     - hook id: check-yaml
     - exit code: 1
-      duplicate.yaml: Failed to yaml decode (duplicate entry with key "a")
-      invalid.yaml: Failed to yaml decode (mapping values are not allowed in this context at line 1 column 5)
+      duplicate.yaml: Failed to yaml decode (duplicate mapping key: a at line 2, column 1)
+      invalid.yaml: Failed to yaml decode (mapping values are not allowed in this context at line 1, column 5)
     check json...............................................................Failed
     - hook id: check-json
     - exit code: 1
@@ -627,7 +627,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
       app/trailing_ws.txt
 
     ----- stderr -----
-    "#);
+    ");
 
     // Fix YAML and JSON issues, then stage.
     app.child("invalid.yaml").write_str("a:\n  b: c")?;

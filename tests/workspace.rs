@@ -765,7 +765,7 @@ fn skips() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse `project3/.pre-commit-config.yaml`
-      caused by: did not find expected node content at line 2 column 1, while parsing a flow node
+      caused by: while parsing a node, did not find expected node content at line 2, column 1
     ");
 
     // Should skip the invalid config

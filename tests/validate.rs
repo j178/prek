@@ -105,15 +105,15 @@ fn validate_manifest() -> anyhow::Result<()> {
         "})?;
 
     // Validate multiple files.
-    cmd_snapshot!(context.filters(), context.validate_manifest().arg(".pre-commit-hooks.yaml").arg("hooks-1.yaml"), @r#"
+    cmd_snapshot!(context.filters(), context.validate_manifest().arg(".pre-commit-hooks.yaml").arg("hooks-1.yaml"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to parse `hooks-1.yaml`
-      caused by: .[0]: missing field `entry` at line 1 column 5
-    "#);
+      caused by: missing field `entry`
+    ");
 
     Ok(())
 }
@@ -137,12 +137,12 @@ fn unexpected_keys_warning() {
     "});
 
     // TODO: warning about `unexpected_key_in_hook` currently not working
-    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @r#"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: Ignored unexpected keys in `.pre-commit-config.yaml`: `unexpected_key`, `another_unknown`
-    "#);
+    warning: Ignored unexpected keys in `.pre-commit-config.yaml`: `another_unknown`, `unexpected_key`
+    ");
 }

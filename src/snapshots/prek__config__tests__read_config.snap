@@ -270,4 +270,5 @@ Config {
         true,
     ),
     minimum_prek_version: None,
+    _unused_keys: {},
 }
