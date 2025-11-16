@@ -67,7 +67,7 @@ lazy-regex = { version = "3.4.2" }
 levenshtein = { version = "1.0.5" }
 # Enable static linking for liblzma
 # This is required for the `xz` feature in `async-compression`
-liblzma = { version = "*", features = ["static"] }
+liblzma = { version = "0.4.5", features = ["static"] }
 memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
 path-clean = { version = "1.0.1" }
