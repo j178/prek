@@ -56,6 +56,6 @@ run = "uv tool run --with-requirements docs/requirements.txt mkdocs serve"
 description = "Prepare for a release"
 run = """
 git checkout -b bump
-uvx --from 'rooster @ git+https://github.com/j178/rooster@f95f64a' --python 3.13 -- rooster release
+uvx --from 'rooster @ git+https://github.com/j178/rooster@747d16f' --python 3.13 -- rooster release
 cargo update
 """

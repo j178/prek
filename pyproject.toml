@@ -53,7 +53,7 @@ version_files = [
     # Replace the `workspace.package.version` field in the Cargo.toml
     { path = "Cargo.toml", format = "cargo", field = "workspace.package.version" },
     # Bump versions of dependent crates
-    { target = "Cargo.toml", match = "^(prek-consts|prek-pty)"},
+    { target = "Cargo.toml", match = "^(prek-consts|prek-pty)", version_format = "cargo" },
     "README.md",
     "docs/installation.md",
 ]
