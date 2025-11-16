@@ -126,7 +126,7 @@ mise use prek
 Install pre-compiled binaries from GitHub using [cargo-binstall](https://github.com/cargo-bins/cargo-binstall):
 
 ```bash
-cargo binstall prek --git https://github.com/j178/prek
+cargo binstall prek
 ```
 <!-- cargo-binstall:end -->
 
@@ -139,7 +139,7 @@ cargo binstall prek --git https://github.com/j178/prek
 Build from source using Cargo (Rust 1.89+ is required):
 
 ```bash
-cargo install --locked --git https://github.com/j178/prek
+cargo install --locked prek
 ```
 <!-- cargo-install:end -->
 

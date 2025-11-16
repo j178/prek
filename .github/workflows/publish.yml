@@ -1,4 +1,4 @@
-# Publish a release to PyPI and crates.io.
+# Publish a release to PyPI, crates.io and npmjs registry.
 #
 # Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a publish job
 # within `cargo-dist`.
@@ -12,6 +12,31 @@ on:
         type: string
 
 jobs:
+  crates-publish:
+    name: Upload to crates.io
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+    permissions:
+      # For crates.io's trusted publishing.
+      id-token: write
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          persist-credentials: false
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+      - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+      - name: "Install Rust toolchain"
+        run: rustup show
+      - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec # v1.0.3
+        id: auth
+      - name: "Publish to crates.io"
+        run: cargo publish --workspace --verbose
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
   pypi-publish:
     name: Upload to PyPI
     runs-on: ubuntu-latest
