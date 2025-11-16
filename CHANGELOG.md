@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.15-alpha.1
+
+Released on 2025-11-16.
+
+### Enhancements
+
+- Clean up hook environments when install fails ([#1085](https://github.com/j178/prek/pull/1085))
+- Prepare for publishing to crates.io ([#1088](https://github.com/j178/prek/pull/1088))
+- Replace `serde-yaml` with `serde_saphyr` ([#1087](https://github.com/j178/prek/pull/1087))
+
+### Contributors
+
+- @j178
+
 ## 0.2.14
 
 Released on 2025-11-14.
