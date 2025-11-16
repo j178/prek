@@ -6,8 +6,8 @@ edition = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
-tokio = { version = "1.47.1", features = ["fs", "process", "net"] }
+rustix = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true

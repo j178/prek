@@ -10,10 +10,11 @@ license = "MIT"
 [workspace.dependencies]
 prek-consts = { path = "crates/prek-consts" }
 prek-pty = { path = "crates/prek-pty" }
-prek-yaml = { path = "crates/prek-yaml" }
 
+rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
 serde-saphyr = { version = "0.0.7" }
 thiserror = { version = "2.0.11" }
+tokio = { version = "1.47.1", features = ["fs", "process", "rt", "sync", "macros"] }
 tracing = { version = "0.1.40" }
 
 [package]
@@ -34,8 +35,7 @@ default = ["docker"]
 # and should be left unselected when building prek for package managers.
 self-update = ["axoupdater"]
 # Enable the profiler for benchmarking
-profiler = ["dep:pprof", "profiler-flamegraph"]
-profiler-flamegraph = ["pprof/flamegraph"]
+profiler = ["dep:pprof", "pprof/flamegraph"]
 # Enable docker related tests in integration tests
 docker = []
 
@@ -88,7 +88,7 @@ target-lexicon = { version = "0.13.0" }
 tempfile = { version = "3.13.0" }
 textwrap = { version = "0.16.1" }
 thiserror = { workspace = true }
-tokio = { version = "1.47.1", features = ["fs", "process", "rt", "sync", "macros"] }
+tokio = { workspace = true }
 tokio-util = { version = "0.7.13" }
 toml = { version = "0.9.5", default-features = false, features = ["fast_hash", "parse", "preserve_order", "serde"] }
 tracing = { workspace = true }

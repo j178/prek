@@ -294,6 +294,7 @@ pub struct Config {
     #[serde(deserialize_with = "deserialize_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
 
+    #[serde(flatten)]
     _unused: serde_json::Value,
 }
 
@@ -322,22 +323,6 @@ impl<'de> Deserialize<'de> for RepoLocation {
     {
         let s = String::deserialize(deserializer)?;
         Ok(RepoLocation::from(s))
-    }
-}
-
-impl RepoLocation {
-    pub fn as_str(&self) -> &str {
-        match self {
-            RepoLocation::Local => "local",
-            RepoLocation::Meta => "meta",
-            RepoLocation::Remote(url) => url.as_str(),
-        }
-    }
-}
-
-impl Display for RepoLocation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
     }
 }
 
@@ -584,6 +569,7 @@ pub struct RemoteRepo {
     pub hooks: Vec<RemoteHook>,
 }
 
+// TODO: resolve if `repo` is a local relative path before comparing
 impl PartialEq for RemoteRepo {
     fn eq(&self, other: &Self) -> bool {
         self.repo == other.repo && self.rev == other.rev
