@@ -1861,7 +1861,7 @@ dependencies = [
 
 [[package]]
 name = "prek"
-version = "0.2.15-alpha.2"
+version = "0.2.15-alpha.3"
 dependencies = [
  "anstream",
  "anyhow",
@@ -1930,14 +1930,14 @@ dependencies = [
 
 [[package]]
 name = "prek-consts"
-version = "0.2.15-alpha.2"
+version = "0.2.15-alpha.3"
 dependencies = [
  "tracing",
 ]
 
 [[package]]
 name = "prek-pty"
-version = "0.2.15-alpha.2"
+version = "0.2.15-alpha.3"
 dependencies = [
  "rustix",
  "tokio",
