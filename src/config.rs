@@ -875,6 +875,7 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
+                _unused_keys: {},
             },
         )
         "#);
@@ -890,11 +891,17 @@ mod tests {
                       - rust
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         Err(
-            Error("repos: Invalid local repo: unknown field `rev`, expected `hooks`", line: 2, column: 3),
+            Message {
+                msg: "Invalid local repo: missing field `entry`",
+                location: Location {
+                    row: 0,
+                    column: 0,
+                },
+            },
         )
-        "###);
+        "#);
 
         // Remote hook should have `rev`.
         let yaml = indoc::indoc! {r"
@@ -951,6 +958,7 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
+                _unused_keys: {},
             },
         )
         "#);
@@ -962,11 +970,17 @@ mod tests {
                   - id: typos
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         Err(
-            Error("repos: Invalid remote repo: missing field `rev`", line: 2, column: 3),
+            Message {
+                msg: "Invalid remote repo: missing field `rev`",
+                location: Location {
+                    row: 0,
+                    column: 0,
+                },
+            },
         )
-        "###);
+        "#);
     }
 
     #[test]
@@ -981,11 +995,17 @@ mod tests {
                     alias: typo
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         Err(
-            Error("repos: Invalid remote repo: missing field `id`", line: 2, column: 3),
+            Message {
+                msg: "Invalid remote repo: missing field `id`",
+                location: Location {
+                    row: 0,
+                    column: 0,
+                },
+            },
         )
-        "###);
+        "#);
 
         // Local hook should have `id`, `name`, and `entry` and `language`.
         let yaml = indoc::indoc! { r"
@@ -999,11 +1019,17 @@ mod tests {
                       - rust
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         Err(
-            Error("repos: Invalid local repo: missing field `language`", line: 2, column: 3),
+            Message {
+                msg: "Invalid local repo: missing field `language`",
+                location: Location {
+                    row: 0,
+                    column: 0,
+                },
+            },
         )
-        "###);
+        "#);
 
         let yaml = indoc::indoc! { r"
             repos:
@@ -1059,6 +1085,7 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
+                _unused_keys: {},
             },
         )
         "#);
@@ -1076,11 +1103,17 @@ mod tests {
                     alias: typo
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         Err(
-            Error("repos: Invalid meta repo: unknown field `rev`, expected `hooks`", line: 2, column: 3),
+            Message {
+                msg: "Invalid meta repo: missing field `id`",
+                location: Location {
+                    row: 0,
+                    column: 0,
+                },
+            },
         )
-        "###);
+        "#);
 
         // Invalid meta hook id
         let yaml = indoc::indoc! { r"
@@ -1090,11 +1123,17 @@ mod tests {
                   - id: hello
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         Err(
-            Error("repos: Invalid meta repo: Unknown meta hook id", line: 2, column: 3),
+            Message {
+                msg: "Invalid meta repo: Unknown meta hook id",
+                location: Location {
+                    row: 0,
+                    column: 0,
+                },
+            },
         )
-        "###);
+        "#);
 
         // Invalid language
         let yaml = indoc::indoc! { r"
@@ -1105,11 +1144,17 @@ mod tests {
                     language: python
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         Err(
-            Error("repos: Invalid meta repo: language must be system for meta hook", line: 2, column: 3),
+            Message {
+                msg: "Invalid meta repo: language must be system for meta hook",
+                location: Location {
+                    row: 0,
+                    column: 0,
+                },
+            },
         )
-        "###);
+        "#);
 
         // Invalid entry
         let yaml = indoc::indoc! { r"
@@ -1120,11 +1165,17 @@ mod tests {
                     entry: echo hell world
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         Err(
-            Error("repos: Invalid meta repo: entry is not allowed for meta hook", line: 2, column: 3),
+            Message {
+                msg: "Invalid meta repo: entry is not allowed for meta hook",
+                location: Location {
+                    row: 0,
+                    column: 0,
+                },
+            },
         )
-        "###);
+        "#);
 
         // Valid meta hook
         let yaml = indoc::indoc! { r"
@@ -1248,6 +1299,7 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
+                _unused_keys: {},
             },
         )
         "#);
@@ -1378,6 +1430,7 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
+                _unused_keys: {},
             },
         )
         "#);
