@@ -1,9 +1,9 @@
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use anyhow::{Context, Result};
-use bstr::ByteSlice;
 use futures::StreamExt;
 use itertools::Itertools;
 use lazy_regex::regex;
@@ -11,8 +11,6 @@ use owo_colors::OwoColorize;
 use prek_consts::MANIFEST_FILE;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
-use serde::Serializer;
-use serde::ser::SerializeMap;
 use tracing::trace;
 
 use crate::cli::ExitStatus;
@@ -379,15 +377,11 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
             continue;
         };
 
-        let mut new_rev = Vec::new();
-        let mut serializer = serde_yaml::Serializer::new(&mut new_rev);
-        serializer
-            .serialize_map(Some(1))?
-            .serialize_entry("rev", &revision.rev)?;
-        serializer.end()?;
+        let new_rev: HashMap<String, String> =
+            HashMap::from([("rev".to_string(), revision.rev.clone())]);
+        let new_rev = serde_saphyr::to_string(&new_rev)?;
 
         let (_, new_rev) = new_rev
-            .to_str()?
             .split_once(':')
             .expect("Failed to split serialized revision");
 

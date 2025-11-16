@@ -23,22 +23,14 @@ pub(crate) fn finish_profiling(profiler_guard: Option<pprof::ProfilerGuard>) {
         .build()
     {
         Ok(report) => {
-            #[cfg(feature = "profiler-flamegraph")]
-            {
-                let random = rand::random::<u64>();
-                let file = fs_err::File::create(format!(
-                    "{}.{random}.flamegraph.svg",
-                    env!("CARGO_PKG_NAME"),
-                ))
-                .expect("Failed to create flamegraph file");
-                if let Err(e) = report.flamegraph(file) {
-                    error!("failed to create flamegraph file: {e}");
-                }
-            }
-
-            #[cfg(not(feature = "profiler-flamegraph"))]
-            {
-                info!("profiling report: {:?}", &report);
+            let random = rand::random::<u64>();
+            let file = fs_err::File::create(format!(
+                "{}.{random}.flamegraph.svg",
+                env!("CARGO_PKG_NAME"),
+            ))
+            .expect("Failed to create flamegraph file");
+            if let Err(e) = report.flamegraph(file) {
+                error!("failed to create flamegraph file: {e}");
             }
         }
         Err(e) => {

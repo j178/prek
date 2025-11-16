@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::ops::{Deref, RangeInclusive};
 use std::path::Path;
@@ -5,7 +6,9 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use fancy_regex::Regex;
+use itertools::Itertools;
 use lazy_regex::regex;
+use owo_colors::OwoColorize;
 use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -294,8 +297,9 @@ pub struct Config {
     #[serde(deserialize_with = "deserialize_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
 
+    #[serde(skip_serializing)]
     #[serde(flatten)]
-    _unused: serde_json::Value,
+    _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -565,7 +569,7 @@ impl From<MetaHook> for ManifestHook {
 pub struct RemoteRepo {
     pub repo: String,
     pub rev: String,
-    #[serde(skip)]
+    #[serde(skip_serializing)]
     pub hooks: Vec<RemoteHook>,
 }
 
@@ -629,7 +633,7 @@ impl<'de> Deserialize<'de> for Repo {
         struct RepoWire {
             repo: RepoLocation,
             #[serde(flatten)]
-            rest: Value,
+            rest: serde_json::Value,
         }
 
         let RepoWire { repo, rest } = RepoWire::deserialize(deserializer)?;
@@ -722,19 +726,19 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
         Err(e) => return Err(e.into()),
     };
 
-    let config: Config = serde_saphyr::from_str(&content).map_err(|e| {
-        Error::Yaml(path.user_display().to_string(), e)
-    })?;
+    let config: Config = serde_saphyr::from_str(&content)
+        .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
 
-    if !unused.is_empty() {
+    let unused_keys = config
+        ._unused_keys
+        .keys()
+        .filter(|key| !EXPECTED_UNUSED.contains(&key.as_str()))
+        .map(|key| format!("`{}`", key.yellow()))
+        .join(", ");
+    if !unused_keys.is_empty() {
         warn_user!(
-            "Ignored unexpected keys in `{}`: {}",
-            path.display().cyan(),
-            unused
-                .into_iter()
-                .map(|key| format!("`{}`", key.yellow()))
-                .collect::<Vec<_>>()
-                .join(", ")
+            "Ignored unexpected keys in `{}`: {unused_keys}",
+            path.display().cyan()
         );
     }
 
