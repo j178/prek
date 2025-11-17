@@ -52,7 +52,7 @@ fn validate_config() -> anyhow::Result<()> {
 
     ----- stderr -----
     error: Failed to parse `config-1.yaml`
-      caused by: Invalid remote repo: missing field `rev`
+      caused by: invalid remote repo: missing field `rev`
     ");
 
     Ok(())
