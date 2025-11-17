@@ -1,14 +1,23 @@
 # Changelog
 
-## 0.2.15-alpha.3
+## 0.2.15
 
-Released on 2025-11-16.
+Released on 2025-11-17.
+
+### Highlights
+
+prek is now available on crates.io! You can build prek from source via `cargo install prek` or `cargo binstall prek`, for more details see [Installation](https://prek.j178.dev/installation/#build-from-source).
 
 ### Enhancements
 
 - Clean up hook environments when install fails ([#1085](https://github.com/j178/prek/pull/1085))
-- Prepare for publishing to crates.io ([#1088](https://github.com/j178/prek/pull/1088))
+- Prepare for publishing prek to crates.io ([#1088](https://github.com/j178/prek/pull/1088))
 - Replace `serde-yaml` with `serde_saphyr` ([#1087](https://github.com/j178/prek/pull/1087))
+- Warn unexpected keys in repo and hook level ([#1096](https://github.com/j178/prek/pull/1096))
+
+### Bug fixes
+
+- Fix `prek init-template-dir` fails in non-git repo ([#1093](https://github.com/j178/prek/pull/1093))
 
 ### Contributors
 
