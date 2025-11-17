@@ -11,7 +11,7 @@ use lazy_regex::regex;
 use owo_colors::OwoColorize;
 use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use rustc_hash::FxHashMap;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::fs::Simplified;
 use crate::identify;
@@ -43,15 +43,6 @@ impl<'de> Deserialize<'de> for SerdeRegex {
         Regex::new(&s)
             .map(SerdeRegex)
             .map_err(serde::de::Error::custom)
-    }
-}
-
-impl Serialize for SerdeRegex {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(self.0.as_str())
     }
 }
 
@@ -247,31 +238,6 @@ impl Stage {
     }
 }
 
-fn deserialize_minimum_version<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-    if s.is_empty() {
-        return Ok(None);
-    }
-
-    let version = s
-        .parse::<semver::Version>()
-        .map_err(serde::de::Error::custom)?;
-    let cur_version = version::version()
-        .version
-        .parse::<semver::Version>()
-        .expect("Invalid prek version");
-    if version > cur_version {
-        return Err(serde::de::Error::custom(format!(
-            "Required minimum prek version `{version}` is greater than current version `{cur_version}`. Please consider updating prek.",
-        )));
-    }
-
-    Ok(Some(s))
-}
-
 // TODO: warn deprecated stage
 // TODO: warn sensible regex
 #[derive(Debug, Clone, Deserialize)]
@@ -294,7 +260,7 @@ pub struct Config {
     /// Default is false.
     pub fail_fast: Option<bool>,
     /// The minimum version of prek required to run this configuration.
-    #[serde(deserialize_with = "deserialize_minimum_version", default)]
+    #[serde(deserialize_with = "deserialize_and_validate_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
 
     #[serde(skip_serializing)]
@@ -384,7 +350,7 @@ pub struct HookOptions {
     /// Default is false.
     pub verbose: Option<bool>,
     /// The minimum version of prek required to run this hook.
-    #[serde(deserialize_with = "deserialize_minimum_version", default)]
+    #[serde(deserialize_with = "deserialize_and_validate_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
 }
 
@@ -492,15 +458,15 @@ impl<'de> Deserialize<'de> for MetaHook {
         let hook = RemoteHook::deserialize(deserializer)?;
 
         let id = MetaHookID::from_str(&hook.id)
-            .map_err(|()| serde::de::Error::custom("Unknown meta hook id"))?;
+            .map_err(|()| serde::de::Error::custom(format!("unknown meta hook id `{}`", &hook.id)))?;
         if hook.language.is_some_and(|l| l != Language::System) {
             return Err(serde::de::Error::custom(
-                "language must be system for meta hook",
+                "language must be `system` for meta hooks",
             ));
         }
         if hook.entry.is_some() {
             return Err(serde::de::Error::custom(
-                "entry is not allowed for meta hook",
+                "entry is not allowed for meta hooks",
             ));
         }
 
@@ -647,7 +613,7 @@ impl<'de> Deserialize<'de> for Repo {
                     hooks: Vec<RemoteHook>,
                 }
                 let _RemoteRepo { rev, hooks } = _RemoteRepo::deserialize(rest)
-                    .map_err(|e| serde::de::Error::custom(format!("Invalid remote repo: {e}")))?;
+                    .map_err(|e| serde::de::Error::custom(format!("invalid remote repo: {e}")))?;
 
                 Ok(Repo::Remote(RemoteRepo {
                     repo: url,
@@ -662,7 +628,7 @@ impl<'de> Deserialize<'de> for Repo {
                     hooks: Vec<LocalHook>,
                 }
                 let _LocalRepo { hooks } = _LocalRepo::deserialize(rest)
-                    .map_err(|e| serde::de::Error::custom(format!("Invalid local repo: {e}")))?;
+                    .map_err(|e| serde::de::Error::custom(format!("invalid local repo: {e}")))?;
                 Ok(Repo::Local(LocalRepo { hooks }))
             }
             RepoLocation::Meta => {
@@ -672,7 +638,7 @@ impl<'de> Deserialize<'de> for Repo {
                     hooks: Vec<MetaHook>,
                 }
                 let _MetaRepo { hooks } = _MetaRepo::deserialize(rest)
-                    .map_err(|e| serde::de::Error::custom(format!("Invalid meta repo: {e}")))?;
+                    .map_err(|e| serde::de::Error::custom(format!("invalid meta repo: {e}")))?;
                 Ok(Repo::Meta(MetaRepo { hooks }))
             }
         }
@@ -795,6 +761,33 @@ fn looks_like_sha(s: &str) -> bool {
     regex!(r"^[a-fA-F0-9]+$").is_match(s)
 }
 
+fn deserialize_and_validate_minimum_version<'de, D>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if s.is_empty() {
+        return Ok(None);
+    }
+
+    let version = s
+        .parse::<semver::Version>()
+        .map_err(serde::de::Error::custom)?;
+    let cur_version = version::version()
+        .version
+        .parse::<semver::Version>()
+        .expect("Invalid prek version");
+    if version > cur_version {
+        return Err(serde::de::Error::custom(format!(
+            "Required minimum prek version `{version}` is greater than current version `{cur_version}`. Please consider updating prek.",
+        )));
+    }
+
+    Ok(Some(s))
+}
+
 /// Deserializes a vector of strings and validates that each is a known file type tag.
 fn deserialize_and_validate_tags<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
 where
@@ -891,17 +884,7 @@ mod tests {
                       - rust
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r#"
-        Err(
-            Message {
-                msg: "Invalid local repo: missing field `entry`",
-                location: Location {
-                    row: 0,
-                    column: 0,
-                },
-            },
-        )
-        "#);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid local repo: missing field `entry`");
 
         // Remote hook should have `rev`.
         let yaml = indoc::indoc! {r"
@@ -970,17 +953,7 @@ mod tests {
                   - id: typos
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r#"
-        Err(
-            Message {
-                msg: "Invalid remote repo: missing field `rev`",
-                location: Location {
-                    row: 0,
-                    column: 0,
-                },
-            },
-        )
-        "#);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid remote repo: missing field `rev`");
     }
 
     #[test]
@@ -995,17 +968,7 @@ mod tests {
                     alias: typo
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r#"
-        Err(
-            Message {
-                msg: "Invalid remote repo: missing field `id`",
-                location: Location {
-                    row: 0,
-                    column: 0,
-                },
-            },
-        )
-        "#);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid remote repo: missing field `id`");
 
         // Local hook should have `id`, `name`, and `entry` and `language`.
         let yaml = indoc::indoc! { r"
@@ -1019,17 +982,7 @@ mod tests {
                       - rust
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r#"
-        Err(
-            Message {
-                msg: "Invalid local repo: missing field `language`",
-                location: Location {
-                    row: 0,
-                    column: 0,
-                },
-            },
-        )
-        "#);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid local repo: missing field `language`");
 
         let yaml = indoc::indoc! { r"
             repos:
@@ -1103,17 +1056,7 @@ mod tests {
                     alias: typo
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r#"
-        Err(
-            Message {
-                msg: "Invalid meta repo: missing field `id`",
-                location: Location {
-                    row: 0,
-                    column: 0,
-                },
-            },
-        )
-        "#);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid meta repo: missing field `id`");
 
         // Invalid meta hook id
         let yaml = indoc::indoc! { r"
@@ -1123,17 +1066,7 @@ mod tests {
                   - id: hello
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r#"
-        Err(
-            Message {
-                msg: "Invalid meta repo: Unknown meta hook id",
-                location: Location {
-                    row: 0,
-                    column: 0,
-                },
-            },
-        )
-        "#);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid meta repo: unknown meta hook id `hello`");
 
         // Invalid language
         let yaml = indoc::indoc! { r"
@@ -1144,17 +1077,7 @@ mod tests {
                     language: python
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r#"
-        Err(
-            Message {
-                msg: "Invalid meta repo: language must be system for meta hook",
-                location: Location {
-                    row: 0,
-                    column: 0,
-                },
-            },
-        )
-        "#);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid meta repo: language must be `system` for meta hooks");
 
         // Invalid entry
         let yaml = indoc::indoc! { r"
@@ -1165,17 +1088,7 @@ mod tests {
                     entry: echo hell world
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r#"
-        Err(
-            Message {
-                msg: "Invalid meta repo: entry is not allowed for meta hook",
-                location: Location {
-                    row: 0,
-                    column: 0,
-                },
-            },
-        )
-        "#);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid meta repo: entry is not allowed for meta hooks");
 
         // Valid meta hook
         let yaml = indoc::indoc! { r"
