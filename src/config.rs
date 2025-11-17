@@ -299,9 +299,6 @@ pub struct HookOptions {
     /// Print the output of the hook even if it passes.
     /// Default is false.
     pub verbose: Option<bool>,
-    /// The minimum version of prek required to run this hook.
-    #[serde(deserialize_with = "deserialize_and_validate_minimum_version", default)]
-    pub minimum_prek_version: Option<String>,
     #[serde(skip_serializing)]
     #[serde(flatten)]
     _unused_keys: BTreeMap<String, serde_json::Value>,
@@ -337,7 +334,6 @@ impl HookOptions {
             require_serial,
             stages,
             verbose,
-            minimum_prek_version,
         );
     }
 }
@@ -918,7 +914,6 @@ mod tests {
                                         require_serial: None,
                                         stages: None,
                                         verbose: None,
-                                        minimum_prek_version: None,
                                         _unused_keys: {},
                                     },
                                 },
@@ -993,7 +988,6 @@ mod tests {
                                         require_serial: None,
                                         stages: None,
                                         verbose: None,
-                                        minimum_prek_version: None,
                                         _unused_keys: {},
                                     },
                                 },
@@ -1093,7 +1087,6 @@ mod tests {
                                         require_serial: None,
                                         stages: None,
                                         verbose: None,
-                                        minimum_prek_version: None,
                                         _unused_keys: {},
                                     },
                                 },
@@ -1207,7 +1200,6 @@ mod tests {
                                             require_serial: None,
                                             stages: None,
                                             verbose: None,
-                                            minimum_prek_version: None,
                                             _unused_keys: {},
                                         },
                                     },
@@ -1240,7 +1232,6 @@ mod tests {
                                             require_serial: None,
                                             stages: None,
                                             verbose: None,
-                                            minimum_prek_version: None,
                                             _unused_keys: {},
                                         },
                                     },
@@ -1271,7 +1262,6 @@ mod tests {
                                             verbose: Some(
                                                 true,
                                             ),
-                                            minimum_prek_version: None,
                                             _unused_keys: {},
                                         },
                                     },
@@ -1350,7 +1340,6 @@ mod tests {
                                         require_serial: None,
                                         stages: None,
                                         verbose: None,
-                                        minimum_prek_version: None,
                                         _unused_keys: {},
                                     },
                                 },
@@ -1379,7 +1368,6 @@ mod tests {
                                         require_serial: None,
                                         stages: None,
                                         verbose: None,
-                                        minimum_prek_version: None,
                                         _unused_keys: {},
                                     },
                                 },
@@ -1408,7 +1396,6 @@ mod tests {
                                         require_serial: None,
                                         stages: None,
                                         verbose: None,
-                                        minimum_prek_version: None,
                                         _unused_keys: {},
                                     },
                                 },
@@ -1487,20 +1474,6 @@ mod tests {
                     entry: echo test
                     language: system
             minimum_prek_version: '10.0.0'
-        "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
-        assert!(result.is_err());
-
-        // Test that valid minimum_prek_version field works in hook config
-        let yaml = indoc::indoc! {r"
-            repos:
-              - repo: local
-                hooks:
-                  - id: test-hook
-                    name: Test Hook
-                    entry: echo test
-                    language: system
-                    minimum_prek_version: '10.0.0'
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
         assert!(result.is_err());
@@ -1663,7 +1636,6 @@ mod tests {
                                     require_serial: None,
                                     stages: None,
                                     verbose: None,
-                                    minimum_prek_version: None,
                                     _unused_keys: {},
                                 },
                             },
@@ -1695,7 +1667,6 @@ mod tests {
                                     require_serial: None,
                                     stages: None,
                                     verbose: None,
-                                    minimum_prek_version: None,
                                     _unused_keys: {},
                                 },
                             },
@@ -1781,7 +1752,6 @@ mod tests {
                                         ],
                                     ),
                                     verbose: None,
-                                    minimum_prek_version: None,
                                     _unused_keys: {},
                                 },
                             },
