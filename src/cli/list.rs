@@ -1,6 +1,7 @@
 use std::fmt::Write;
 use std::path::PathBuf;
 
+use anyhow::Context;
 use clap::ValueEnum;
 use owo_colors::OwoColorize;
 use serde::Serialize;
@@ -45,7 +46,10 @@ pub(crate) async fn list(
 
     let reporter = HookInitReporter::from(printer);
     let lock = store.lock_async().await?;
-    let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
+    let hooks = workspace
+        .init_hooks(store, Some(&reporter))
+        .await
+        .context("Failed to init hooks")?;
 
     drop(lock);
 

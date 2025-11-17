@@ -116,7 +116,7 @@ impl WorkingTreeKeeper {
                 );
                 let patch_path = patch_dir.join(&patch_name);
 
-                trace!("Unstaged changes detected");
+                debug!("Unstaged changes detected");
                 eprintln!(
                     "{}",
                     format!(
@@ -130,7 +130,7 @@ impl WorkingTreeKeeper {
                 fs_err::write(&patch_path, output.stdout)?;
 
                 // Clean the working tree
-                trace!("Cleaning working tree");
+                debug!("Cleaning working tree");
                 Self::checkout_working_tree(root)?;
 
                 Ok(Self {

@@ -150,15 +150,16 @@ fn invalid_version() {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Hook `local` is invalid
+    error: Failed to init hooks
+      caused by: Invalid hook `local`
       caused by: Invalid `language_version` value: `invalid-version`
-    "#);
+    ");
 }
 
 /// Request a version that neither can be found nor downloaded.

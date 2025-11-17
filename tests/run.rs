@@ -131,7 +131,8 @@ fn invalid_config() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Hook `trailing-whitespace` is invalid
+    error: Failed to init hooks
+      caused by: Invalid hook `trailing-whitespace`
       caused by: Hook specified `additional_dependencies: dotnet@6` but the language `dotnet` does not support installing dependencies for now
     ");
 
@@ -153,7 +154,8 @@ fn invalid_config() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Hook `trailing-whitespace` is invalid
+    error: Failed to init hooks
+      caused by: Invalid hook `trailing-whitespace`
       caused by: Hook specified `language_version: 6` but the language `fail` does not support toolchain installation for now
     ");
 }
@@ -1199,7 +1201,7 @@ fn invalid_entry() {
     entry....................................................................
     ----- stderr -----
     error: Failed to run hook `entry`
-      caused by: Hook `entry` is invalid
+      caused by: Invalid hook `entry`
       caused by: Failed to parse entry `"` as commands
     "#);
 }
@@ -1237,7 +1239,8 @@ fn init_nonexistent_repo() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to initialize repo `https://notexistentatallnevergonnahappen.com/nonexistent/repo`
+    error: Failed to init hooks
+      caused by: Failed to initialize repo `https://notexistentatallnevergonnahappen.com/nonexistent/repo`
       caused by: Command `git full clone` exited with an error:
 
     [status]

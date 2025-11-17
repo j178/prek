@@ -27,7 +27,7 @@ pub(crate) enum Error {
     #[error(transparent)]
     Config(#[from] config::Error),
 
-    #[error("Hook `{hook}` is invalid")]
+    #[error("Invalid hook `{hook}`")]
     Hook {
         hook: String,
         #[source]

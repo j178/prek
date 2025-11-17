@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bstr::ByteSlice;
 use owo_colors::OwoColorize;
 use same_file::is_same_file;
@@ -95,7 +95,10 @@ pub(crate) async fn install_hooks(
     let reporter = HookInitReporter::from(printer);
     let _lock = store.lock_async().await?;
 
-    let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
+    let hooks = workspace
+        .init_hooks(store, Some(&reporter))
+        .await
+        .context("Failed to init hooks")?;
     let filtered_hooks: Vec<_> = hooks
         .into_iter()
         .filter(|h| selectors.matches_hook(h))

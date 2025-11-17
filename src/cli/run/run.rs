@@ -88,7 +88,10 @@ pub(crate) async fn run(
     let reporter = HookInitReporter::from(printer);
     let lock = store.lock_async().await?;
 
-    let hooks = workspace.init_hooks(store, Some(&reporter)).await?;
+    let hooks = workspace
+        .init_hooks(store, Some(&reporter))
+        .await
+        .context("Failed to init hooks")?;
     let filtered_hooks: Vec<_> = hooks
         .into_iter()
         .filter(|h| selectors.matches_hook(h))
@@ -143,7 +146,11 @@ pub(crate) async fn run(
     // Clear any unstaged changes from the git working directory.
     let mut _guard = None;
     if should_stash {
-        _guard = Some(WorkTreeKeeper::clean(store, workspace.root()).await?);
+        _guard = Some(
+            WorkTreeKeeper::clean(store, workspace.root())
+                .await
+                .context("Failed to clean work tree")?,
+        );
     }
 
     set_env_vars(from_ref.as_ref(), to_ref.as_ref(), &extra_args);
@@ -160,7 +167,8 @@ pub(crate) async fn run(
             commit_msg_filename: extra_args.commit_msg_filename,
         },
     )
-    .await?;
+    .await
+    .context("Failed to collect files")?;
 
     // Change to the workspace root directory.
     std::env::set_current_dir(workspace.root()).with_context(|| {

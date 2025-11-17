@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use fancy_regex::Regex;
 use itertools::Itertools;
 
@@ -38,7 +38,10 @@ pub(crate) async fn check_hooks_apply(
         let mut project = Project::from_config_file(path.into(), None)?;
         project.with_relative_path(relative_path.to_path_buf());
 
-        let project_hooks = project.init_hooks(store, None).await?;
+        let project_hooks = project
+            .init_hooks(store, None)
+            .await
+            .context("Failed to init hooks")?;
         let filter = FileFilter::for_project(input.iter(), &project);
 
         for project_hook in project_hooks {

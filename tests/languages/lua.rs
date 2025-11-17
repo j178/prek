@@ -75,7 +75,8 @@ fn language_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Hook `local` is invalid
+    error: Failed to init hooks
+      caused by: Invalid hook `local`
       caused by: Hook specified `language_version: 5.4` but the language `lua` does not support toolchain installation for now
     ");
 }
