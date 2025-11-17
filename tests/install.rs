@@ -558,6 +558,22 @@ fn init_template_dir() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Tests `prek init-template-dir` in a non-git repository.
+#[test]
+fn init_template_dir_non_git_repo() {
+    let context = TestContext::new();
+
+    cmd_snapshot!(context.filters(), context.command().arg("init-template-dir").arg(".git"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    warning: git config `init.templateDir` not set to the target directory, try `git config --global init.templateDir '.git'`
+    "#);
+}
+
 #[test]
 fn workspace_install() -> anyhow::Result<()> {
     let context = TestContext::new();

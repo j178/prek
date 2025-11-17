@@ -193,7 +193,6 @@ fn install_hook_script(
 
     args.push(format!("--hook-type={}", hook_type.as_str()));
 
-    let git_root = GIT_ROOT.as_ref()?;
     let mut hint = format!("prek installed at `{}`", hook_path.user_display().cyan());
 
     // Prefer explicit config path if given (non-workspace mode).
@@ -205,6 +204,7 @@ fn install_hook_script(
 
         write!(hint, " with specified config `{}`", config.display().cyan())?;
     } else if let Some(project) = project {
+        let git_root = GIT_ROOT.as_ref()?;
         let project_path = project.path();
         let relative_path = project_path.strip_prefix(git_root).unwrap_or(project_path);
         if !relative_path.as_os_str().is_empty() {
