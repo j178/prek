@@ -8,7 +8,6 @@ use std::sync::LazyLock;
 use anyhow::Result;
 use fancy_regex::Regex;
 use itertools::Itertools;
-use owo_colors::OwoColorize;
 use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -303,6 +302,9 @@ pub struct HookOptions {
     /// The minimum version of prek required to run this hook.
     #[serde(deserialize_with = "deserialize_and_validate_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
+    #[serde(skip_serializing)]
+    #[serde(flatten)]
+    _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
 impl HookOptions {
@@ -490,12 +492,25 @@ impl From<MetaHook> for ManifestHook {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct RemoteRepo {
     pub repo: String,
     pub rev: String,
     #[serde(skip_serializing)]
     pub hooks: Vec<RemoteHook>,
+    #[serde(skip_serializing)]
+    #[serde(flatten)]
+    _unused_keys: BTreeMap<String, serde_json::Value>,
+}
+
+impl RemoteRepo {
+    pub fn new(repo: String, rev: String, hooks: Vec<RemoteHook>) -> Self {
+        Self {
+            repo,
+            rev,
+            hooks,
+            _unused_keys: BTreeMap::new(),
+        }
+    }
 }
 
 // TODO: resolve if `repo` is a local relative path before comparing
@@ -521,10 +536,12 @@ impl Display for RemoteRepo {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct LocalRepo {
     pub repo: String,
     pub hooks: Vec<LocalHook>,
+    #[serde(skip_serializing)]
+    #[serde(flatten)]
+    _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
 impl Display for LocalRepo {
@@ -534,10 +551,12 @@ impl Display for LocalRepo {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct MetaRepo {
     pub repo: String,
     pub hooks: Vec<MetaHook>,
+    #[serde(skip_serializing)]
+    #[serde(flatten)]
+    _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
 impl Display for MetaRepo {
@@ -568,17 +587,17 @@ impl<'de> Deserialize<'de> for Repo {
         match repo_location {
             "local" => {
                 let repo = LocalRepo::deserialize(repo_wire)
-                    .map_err(|e| serde::de::Error::custom(format!("invalid local repo: {e}")))?;
+                    .map_err(|e| serde::de::Error::custom(format!("Invalid local repo: {e}")))?;
                 Ok(Repo::Local(repo))
             }
             "meta" => {
                 let repo = MetaRepo::deserialize(repo_wire)
-                    .map_err(|e| serde::de::Error::custom(format!("invalid meta repo: {e}")))?;
+                    .map_err(|e| serde::de::Error::custom(format!("Invalid meta repo: {e}")))?;
                 Ok(Repo::Meta(repo))
             }
             _ => {
                 let repo = RemoteRepo::deserialize(repo_wire)
-                    .map_err(|e| serde::de::Error::custom(format!("invalid remote repo: {e}")))?;
+                    .map_err(|e| serde::de::Error::custom(format!("Invalid remote repo: {e}")))?;
 
                 Ok(Repo::Remote(repo))
             }
@@ -586,7 +605,6 @@ impl<'de> Deserialize<'de> for Repo {
     }
 }
 
-// TODO: warn deprecated stage
 // TODO: warn sensible regex
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -631,6 +649,112 @@ pub enum Error {
 /// Keys that prek does not use.
 const EXPECTED_UNUSED: &[&str] = &["minimum_pre_commit_version", "ci"];
 
+fn push_unused_paths<'a, I>(acc: &mut Vec<String>, prefix: &str, keys: I)
+where
+    I: Iterator<Item = &'a str>,
+{
+    for key in keys {
+        let path = if prefix.is_empty() {
+            key.to_string()
+        } else {
+            format!("{prefix}.{key}")
+        };
+        acc.push(path);
+    }
+}
+
+fn collect_unused_paths(config: &Config) -> Vec<String> {
+    let mut paths = Vec::new();
+
+    push_unused_paths(
+        &mut paths,
+        "",
+        config._unused_keys.keys().filter_map(|key| {
+            let key = key.as_str();
+            (!EXPECTED_UNUSED.contains(&key)).then_some(key)
+        }),
+    );
+
+    for (repo_idx, repo) in config.repos.iter().enumerate() {
+        let repo_prefix = format!("repos[{repo_idx}]");
+        match repo {
+            Repo::Remote(remote) => {
+                push_unused_paths(
+                    &mut paths,
+                    &repo_prefix,
+                    remote._unused_keys.keys().map(String::as_str),
+                );
+                for (hook_idx, hook) in remote.hooks.iter().enumerate() {
+                    let hook_prefix = format!("{repo_prefix}.hooks[{hook_idx}]");
+                    push_unused_paths(
+                        &mut paths,
+                        &hook_prefix,
+                        hook.options._unused_keys.keys().map(String::as_str),
+                    );
+                }
+            }
+            Repo::Local(local) => {
+                push_unused_paths(
+                    &mut paths,
+                    &repo_prefix,
+                    local._unused_keys.keys().map(String::as_str),
+                );
+                for (hook_idx, hook) in local.hooks.iter().enumerate() {
+                    let hook_prefix = format!("{repo_prefix}.hooks[{hook_idx}]");
+                    push_unused_paths(
+                        &mut paths,
+                        &hook_prefix,
+                        hook.options._unused_keys.keys().map(String::as_str),
+                    );
+                }
+            }
+            Repo::Meta(meta) => {
+                push_unused_paths(
+                    &mut paths,
+                    &repo_prefix,
+                    meta._unused_keys.keys().map(String::as_str),
+                );
+                for (hook_idx, hook) in meta.hooks.iter().enumerate() {
+                    let hook_prefix = format!("{repo_prefix}.hooks[{hook_idx}]");
+                    push_unused_paths(
+                        &mut paths,
+                        &hook_prefix,
+                        hook.0.options._unused_keys.keys().map(String::as_str),
+                    );
+                }
+            }
+        }
+    }
+
+    paths
+}
+
+fn warn_unused_paths(path: &Path, entries: &[String]) {
+    if entries.is_empty() {
+        return;
+    }
+
+    if entries.len() < 4 {
+        let inline = entries
+            .iter()
+            .map(|entry| format!("`{}`", entry.yellow()))
+            .join(", ");
+        warn_user!(
+            "Ignored unexpected keys in `{}`: {inline}",
+            path.display().cyan()
+        );
+    } else {
+        let list = entries
+            .iter()
+            .map(|entry| format!("  - `{}`", entry.yellow()))
+            .join("\n");
+        warn_user!(
+            "Ignored unexpected keys in `{}`:\n{list}",
+            path.display().cyan()
+        );
+    }
+}
+
 /// Read the configuration file from the given path.
 pub fn read_config(path: &Path) -> Result<Config, Error> {
     let content = match fs_err::read_to_string(path) {
@@ -644,18 +768,8 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
     let config: Config = serde_saphyr::from_str(&content)
         .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
 
-    let unused_keys = config
-        ._unused_keys
-        .keys()
-        .filter(|key| !EXPECTED_UNUSED.contains(&key.as_str()))
-        .map(|key| format!("`{}`", key.yellow()))
-        .join(", ");
-    if !unused_keys.is_empty() {
-        warn_user!(
-            "Ignored unexpected keys in `{}`: {unused_keys}",
-            path.display().cyan()
-        );
-    }
+    let unused_paths = collect_unused_paths(&config);
+    warn_unused_paths(path, &unused_paths);
 
     // Check for mutable revs and warn the user.
     let repos_has_mutable_rev = config
@@ -805,9 +919,11 @@ mod tests {
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
+                                        _unused_keys: {},
                                     },
                                 },
                             ],
+                            _unused_keys: {},
                         },
                     ),
                 ],
@@ -834,7 +950,7 @@ mod tests {
                       - rust
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid local repo: missing field `entry`");
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid local repo: missing field `entry`");
 
         // Remote hook should have `rev`.
         let yaml = indoc::indoc! {r"
@@ -878,9 +994,11 @@ mod tests {
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
+                                        _unused_keys: {},
                                     },
                                 },
                             ],
+                            _unused_keys: {},
                         },
                     ),
                 ],
@@ -903,7 +1021,7 @@ mod tests {
                   - id: typos
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid remote repo: missing field `rev`");
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid remote repo: missing field `rev`");
     }
 
     #[test]
@@ -918,7 +1036,7 @@ mod tests {
                     alias: typo
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid remote repo: missing field `id`");
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid remote repo: missing field `id`");
 
         // Local hook should have `id`, `name`, and `entry` and `language`.
         let yaml = indoc::indoc! { r"
@@ -932,7 +1050,7 @@ mod tests {
                       - rust
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid local repo: missing field `language`");
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid local repo: missing field `language`");
 
         let yaml = indoc::indoc! { r"
             repos:
@@ -976,9 +1094,11 @@ mod tests {
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
+                                        _unused_keys: {},
                                     },
                                 },
                             ],
+                            _unused_keys: {},
                         },
                     ),
                 ],
@@ -1007,7 +1127,7 @@ mod tests {
                     alias: typo
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid meta repo: missing field `id`");
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid meta repo: missing field `id`");
 
         // Invalid meta hook id
         let yaml = indoc::indoc! { r"
@@ -1017,7 +1137,7 @@ mod tests {
                   - id: hello
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid meta repo: unknown meta hook id `hello`");
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid meta repo: unknown meta hook id `hello`");
 
         // Invalid language
         let yaml = indoc::indoc! { r"
@@ -1028,7 +1148,7 @@ mod tests {
                     language: python
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid meta repo: language must be `system` for meta hooks");
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid meta repo: language must be `system` for meta hooks");
 
         // Invalid entry
         let yaml = indoc::indoc! { r"
@@ -1039,7 +1159,7 @@ mod tests {
                     entry: echo hell world
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"invalid meta repo: entry is not allowed for meta hooks");
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid meta repo: entry is not allowed for meta hooks");
 
         // Valid meta hook
         let yaml = indoc::indoc! { r"
@@ -1088,6 +1208,7 @@ mod tests {
                                             stages: None,
                                             verbose: None,
                                             minimum_prek_version: None,
+                                            _unused_keys: {},
                                         },
                                     },
                                 ),
@@ -1120,6 +1241,7 @@ mod tests {
                                             stages: None,
                                             verbose: None,
                                             minimum_prek_version: None,
+                                            _unused_keys: {},
                                         },
                                     },
                                 ),
@@ -1150,10 +1272,12 @@ mod tests {
                                                 true,
                                             ),
                                             minimum_prek_version: None,
+                                            _unused_keys: {},
                                         },
                                     },
                                 ),
                             ],
+                            _unused_keys: {},
                         },
                     ),
                 ],
@@ -1227,6 +1351,7 @@ mod tests {
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
+                                        _unused_keys: {},
                                     },
                                 },
                                 ManifestHook {
@@ -1255,6 +1380,7 @@ mod tests {
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
+                                        _unused_keys: {},
                                     },
                                 },
                                 ManifestHook {
@@ -1283,9 +1409,11 @@ mod tests {
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
+                                        _unused_keys: {},
                                     },
                                 },
                             ],
+                            _unused_keys: {},
                         },
                     ),
                 ],
@@ -1536,6 +1664,7 @@ mod tests {
                                     stages: None,
                                     verbose: None,
                                     minimum_prek_version: None,
+                                    _unused_keys: {},
                                 },
                             },
                             ManifestHook {
@@ -1567,9 +1696,11 @@ mod tests {
                                     stages: None,
                                     verbose: None,
                                     minimum_prek_version: None,
+                                    _unused_keys: {},
                                 },
                             },
                         ],
+                        _unused_keys: {},
                     },
                 ),
             ],
@@ -1651,9 +1782,11 @@ mod tests {
                                     ),
                                     verbose: None,
                                     minimum_prek_version: None,
+                                    _unused_keys: {},
                                 },
                             },
                         ],
+                        _unused_keys: {},
                     },
                 ),
             ],

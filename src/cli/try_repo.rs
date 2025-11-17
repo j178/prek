@@ -158,11 +158,7 @@ pub(crate) async fn try_repo(
     let store = Store::from_path(tmp_dir.path()).init()?;
     let repo_clone_path = store
         .clone_repo(
-            &config::RemoteRepo {
-                repo: repo_path.to_string(),
-                rev: rev.clone(),
-                hooks: vec![],
-            },
+            &config::RemoteRepo::new(repo_path.to_string(), rev.clone(), vec![]),
             None,
         )
         .await?;
