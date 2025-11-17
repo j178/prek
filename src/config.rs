@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::ops::{Deref, RangeInclusive};
@@ -490,41 +489,8 @@ impl From<MetaHook> for ManifestHook {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RepoLocation {
-    Local,
-    Meta,
-    Remote(String),
-}
-
-impl From<String> for RepoLocation {
-    fn from(s: String) -> Self {
-        RepoLocation::from_cow(Cow::Owned(s))
-    }
-}
-
-impl RepoLocation {
-    fn from_cow(value: Cow<'_, str>) -> Self {
-        match value.as_ref() {
-            "local" => RepoLocation::Local,
-            "meta" => RepoLocation::Meta,
-            _ => RepoLocation::Remote(value.into_owned()),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for RepoLocation {
-    fn deserialize<D>(deserializer: D) -> Result<RepoLocation, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = Cow::<str>::deserialize(deserializer)?;
-        Ok(RepoLocation::from_cow(s))
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RemoteRepo {
     pub repo: String,
     pub rev: String,
@@ -554,8 +520,10 @@ impl Display for RemoteRepo {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LocalRepo {
+    pub repo: String,
     pub hooks: Vec<LocalHook>,
 }
 
@@ -565,8 +533,10 @@ impl Display for LocalRepo {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MetaRepo {
+    pub repo: String,
     pub hooks: Vec<MetaHook>,
 }
 
@@ -574,25 +544,6 @@ impl Display for MetaRepo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("meta")
     }
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RemoteRepoWire {
-    rev: String,
-    hooks: Vec<RemoteHook>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LocalRepoWire {
-    hooks: Vec<LocalHook>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct MetaRepoWire {
-    hooks: Vec<MetaHook>,
 }
 
 #[derive(Debug, Clone)]
@@ -607,35 +558,29 @@ impl<'de> Deserialize<'de> for Repo {
     where
         D: Deserializer<'de>,
     {
-        #[derive(Deserialize)]
-        struct RepoWire {
-            repo: RepoLocation,
-            #[serde(flatten)]
-            rest: serde_json::Value,
-        }
+        let repo_wire = serde_json::Value::deserialize(deserializer)?;
+        let repo_location = repo_wire
+            .get("repo")
+            .ok_or_else(|| serde::de::Error::missing_field("repo"))?
+            .as_str()
+            .ok_or_else(|| serde::de::Error::custom("repo must be a string"))?;
 
-        let RepoWire { repo, rest } = RepoWire::deserialize(deserializer)?;
-
-        match repo {
-            RepoLocation::Remote(url) => {
-                let RemoteRepoWire { rev, hooks } = RemoteRepoWire::deserialize(rest)
+        match repo_location {
+            "local" => {
+                let repo = LocalRepo::deserialize(repo_wire)
+                    .map_err(|e| serde::de::Error::custom(format!("invalid local repo: {e}")))?;
+                Ok(Repo::Local(repo))
+            }
+            "meta" => {
+                let repo = MetaRepo::deserialize(repo_wire)
+                    .map_err(|e| serde::de::Error::custom(format!("invalid meta repo: {e}")))?;
+                Ok(Repo::Meta(repo))
+            }
+            _ => {
+                let repo = RemoteRepo::deserialize(repo_wire)
                     .map_err(|e| serde::de::Error::custom(format!("invalid remote repo: {e}")))?;
 
-                Ok(Repo::Remote(RemoteRepo {
-                    repo: url,
-                    rev,
-                    hooks,
-                }))
-            }
-            RepoLocation::Local => {
-                let LocalRepoWire { hooks } = LocalRepoWire::deserialize(rest)
-                    .map_err(|e| serde::de::Error::custom(format!("invalid local repo: {e}")))?;
-                Ok(Repo::Local(LocalRepo { hooks }))
-            }
-            RepoLocation::Meta => {
-                let MetaRepoWire { hooks } = MetaRepoWire::deserialize(rest)
-                    .map_err(|e| serde::de::Error::custom(format!("invalid meta repo: {e}")))?;
-                Ok(Repo::Meta(MetaRepo { hooks }))
+                Ok(Repo::Remote(repo))
             }
         }
     }
@@ -834,6 +779,7 @@ mod tests {
                 repos: [
                     Local(
                         LocalRepo {
+                            repo: "local",
                             hooks: [
                                 ManifestHook {
                                     id: "cargo-fmt",
@@ -1004,6 +950,7 @@ mod tests {
                 repos: [
                     Local(
                         LocalRepo {
+                            repo: "local",
                             hooks: [
                                 ManifestHook {
                                     id: "cargo-fmt",
@@ -1110,6 +1057,7 @@ mod tests {
                 repos: [
                     Meta(
                         MetaRepo {
+                            repo: "meta",
                             hooks: [
                                 MetaHook(
                                     ManifestHook {
@@ -1251,6 +1199,7 @@ mod tests {
                 repos: [
                     Local(
                         LocalRepo {
+                            repo: "local",
                             hooks: [
                                 ManifestHook {
                                     id: "hook-1",
@@ -1556,6 +1505,7 @@ mod tests {
             repos: [
                 Local(
                     LocalRepo {
+                        repo: "local",
                         hooks: [
                             ManifestHook {
                                 id: "mypy-local",
@@ -1667,6 +1617,7 @@ mod tests {
             repos: [
                 Local(
                     LocalRepo {
+                        repo: "local",
                         hooks: [
                             ManifestHook {
                                 id: "test-yaml",
