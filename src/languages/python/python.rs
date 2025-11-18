@@ -103,7 +103,11 @@ impl LanguageImpl for Python {
                 .arg("install")
                 .arg(".")
                 .args(&hook.additional_dependencies)
-                .env("VIRTUAL_ENV", &info.env_path)
+                .env(EnvVars::VIRTUAL_ENV, &info.env_path)
+                // Make sure uv uses the venv's python
+                .env_remove(EnvVars::UV_PYTHON)
+                .env_remove(EnvVars::UV_MANAGED_PYTHON)
+                .env_remove(EnvVars::UV_NO_MANAGED_PYTHON)
                 .check(true)
                 .output()
                 .await?;
@@ -113,7 +117,11 @@ impl LanguageImpl for Python {
                 .arg("pip")
                 .arg("install")
                 .args(&hook.additional_dependencies)
-                .env("VIRTUAL_ENV", &info.env_path)
+                .env(EnvVars::VIRTUAL_ENV, &info.env_path)
+                // Make sure uv uses the venv's python
+                .env_remove(EnvVars::UV_PYTHON)
+                .env_remove(EnvVars::UV_MANAGED_PYTHON)
+                .env_remove(EnvVars::UV_NO_MANAGED_PYTHON)
                 .check(true)
                 .output()
                 .await?;
@@ -178,9 +186,9 @@ impl LanguageImpl for Python {
             let mut output = Cmd::new(&entry[0], "python hook")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
-                .env("VIRTUAL_ENV", env_dir)
-                .env("PATH", &new_path)
-                .env_remove("PYTHONHOME")
+                .env(EnvVars::VIRTUAL_ENV, env_dir)
+                .env(EnvVars::PATH, &new_path)
+                .env_remove(EnvVars::PYTHONHOME)
                 .args(&hook.args)
                 .args(batch)
                 .check(false)

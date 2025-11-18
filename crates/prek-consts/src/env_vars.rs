@@ -33,7 +33,10 @@ impl EnvVars {
     pub const PREK_INTERNAL__NODE_BINARY_NAME: &'static str = "PREK_INTERNAL__NODE_BINARY_NAME";
     pub const PREK_GENERATE: &'static str = "PREK_GENERATE";
 
-    // UV related
+    // Python & uv related
+    pub const VIRTUAL_ENV: &'static str = "VIRTUAL_ENV";
+    pub const PYTHONHOME: &'static str = "PYTHONHOME";
+    pub const UV_PYTHON: &'static str = "UV_PYTHON";
     pub const UV_CACHE_DIR: &'static str = "UV_CACHE_DIR";
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
     pub const UV_MANAGED_PYTHON: &'static str = "UV_MANAGED_PYTHON";
