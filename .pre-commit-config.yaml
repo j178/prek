@@ -9,6 +9,7 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      - id: check-yaml
       - id: trailing-whitespace
       - id: end-of-file-fixer
         exclude: docs/cli.md # Exclude generated doc
