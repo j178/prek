@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.17
+
+Released on 2025-11-18.
+
+### Bug fixes
+
+- Revert back to use `serde_yaml` again ([#1112](https://github.com/j178/prek/pull/1112))
+
+### Contributors
+
+- @j178
+
 ## 0.2.16
 
 Released on 2025-11-18.
