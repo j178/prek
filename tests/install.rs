@@ -572,6 +572,26 @@ fn init_template_dir_non_git_repo() {
     ----- stderr -----
     warning: git config `init.templateDir` not set to the target directory, try `git config --global init.templateDir '.git'`
     "#);
+
+    context.write_pre_commit_config(indoc::indoc! {"
+        default_install_hook_types:
+          - pre-commit
+          - commit-msg
+          - pre-push
+        repos:
+    "});
+    cmd_snapshot!(context.filters(), context.command().arg("init-template-dir").arg("-c").arg(context.work_dir().join(CONFIG_FILE)).arg(".git"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Overwriting existing hook at `.git/hooks/pre-commit`
+    prek installed at `.git/hooks/pre-commit` with specified config `[TEMP_DIR]/.pre-commit-config.yaml`
+    prek installed at `.git/hooks/commit-msg` with specified config `[TEMP_DIR]/.pre-commit-config.yaml`
+    prek installed at `.git/hooks/pre-push` with specified config `[TEMP_DIR]/.pre-commit-config.yaml`
+
+    ----- stderr -----
+    warning: git config `init.templateDir` not set to the target directory, try `git config --global init.templateDir '.git'`
+    ");
 }
 
 #[test]
