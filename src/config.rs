@@ -1796,4 +1796,29 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_list_with_unindented_square() {
+        let yaml = indoc::indoc! {r#"
+        repos:
+          - repo: https://github.com/pre-commit/mirrors-mypy
+            rev: v1.18.2
+            hooks:
+              - id: mypy
+                exclude: tests/data
+                args: [ "--pretty", "--show-error-codes" ]
+                additional_dependencies: [
+                  'keyring==24.2.0',
+                  'nox==2024.03.02',
+                  'pytest',
+                  'types-docutils==0.20.0.3',
+                  'types-setuptools==68.2.0.0',
+                  'types-freezegun==1.1.10',
+                  'types-pyyaml==6.0.12.12',
+                  'typing-extensions',
+                ]
+        "#};
+        let result = serde_yaml::from_str::<Config>(yaml);
+        assert!(result.is_ok());
+    }
 }
