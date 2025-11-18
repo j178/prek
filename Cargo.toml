@@ -2,15 +2,15 @@
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.2.15"
+version = "0.2.16"
 edition = "2024"
 repository = "https://github.com/j178/prek"
 homepage = "https://prek.j178.dev/"
 license = "MIT"
 
 [workspace.dependencies]
-prek-consts = { path = "crates/prek-consts", version = "0.2.15" }
-prek-pty = { path = "crates/prek-pty", version = "0.2.15" }
+prek-consts = { path = "crates/prek-consts", version = "0.2.16" }
+prek-pty = { path = "crates/prek-pty", version = "0.2.16" }
 
 rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
 serde-saphyr = { version = "0.0.8" }

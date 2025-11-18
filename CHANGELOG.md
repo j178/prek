@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.16
+
+Released on 2025-11-18.
+
+### Bug fixes
+
+- Disallow hook-level `minimum_prek_version` ([#1101](https://github.com/j178/prek/pull/1101))
+- Do not require a project in `prek init-template-dir` ([#1109](https://github.com/j178/prek/pull/1109))
+- Make sure `uv pip install` uses the Python from virtualenv ([#1108](https://github.com/j178/prek/pull/1108))
+- Restore using `serde_yaml` in `check-yaml` hook ([#1106](https://github.com/j178/prek/pull/1106))
+
+### Contributors
+
+- @j178
+
 ## 0.2.15
 
 Released on 2025-11-17.
