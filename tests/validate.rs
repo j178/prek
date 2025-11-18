@@ -112,7 +112,7 @@ fn validate_manifest() -> anyhow::Result<()> {
 
     ----- stderr -----
     error: Failed to parse `hooks-1.yaml`
-      caused by: missing field `entry`
+      caused by: .[0]: missing field `entry` at line 1 column 5
     ");
 
     Ok(())

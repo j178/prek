@@ -13,7 +13,6 @@ prek-consts = { path = "crates/prek-consts", version = "0.2.16" }
 prek-pty = { path = "crates/prek-pty", version = "0.2.16" }
 
 rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
-serde-saphyr = { version = "0.0.8" }
 thiserror = { version = "2.0.11" }
 tokio = { version = "1.47.1", features = ["fs", "process", "rt", "sync", "macros", "net"] }
 tracing = { version = "0.1.40" }
@@ -81,7 +80,6 @@ semver = { version = "1.0.24", features = ["serde"] }
 serde = { version = "1.0.210", features = ["derive"] }
 serde_json = { version = "1.0.132", features = ["unbounded_depth"] }
 serde_stacker = { version = "0.1.12" }
-serde-saphyr = { workspace = true }
 serde_yaml = { version = "0.9.34" }
 shlex = { version = "1.3.0" }
 smallvec = { version = "1.15.1" }

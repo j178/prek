@@ -13,9 +13,9 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::fs::Simplified;
-use crate::identify;
 use crate::version;
 use crate::warn_user;
+use crate::{identify, yaml};
 
 #[derive(Clone)]
 pub struct SerdeRegex(Regex);
@@ -639,7 +639,10 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("Failed to parse `{0}`")]
-    Yaml(String, #[source] serde_saphyr::Error),
+    Yaml(String, #[source] serde_yaml::Error),
+
+    #[error("Failed to merge keys in `{0}`")]
+    YamlMerge(String, #[source] yaml::MergeKeyError),
 }
 
 /// Keys that prek does not use.
@@ -761,7 +764,13 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
         Err(e) => return Err(e.into()),
     };
 
-    let config: Config = serde_saphyr::from_str(&content)
+    let config: serde_yaml::Value = serde_yaml::from_str(&content)
+        .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
+
+    let config = yaml::merge_keys(config)
+        .map_err(|e| Error::YamlMerge(path.user_display().to_string(), e))?;
+
+    let config: Config = serde_yaml::from_value(config)
         .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
 
     let unused_paths = collect_unused_paths(&config);
@@ -810,7 +819,7 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
 /// Read the manifest file from the given path.
 pub fn read_manifest(path: &Path) -> Result<Manifest, Error> {
     let content = fs_err::read_to_string(path)?;
-    let manifest = serde_saphyr::from_str(&content)
+    let manifest = serde_yaml::from_str(&content)
         .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
     Ok(manifest)
 }
@@ -882,7 +891,7 @@ mod tests {
                     entry: cargo fmt --
                     language: system
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
             Config {
@@ -944,8 +953,8 @@ mod tests {
                     types:
                       - rust
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid local repo: missing field `entry`");
+        let result = serde_yaml::from_str::<Config>(yaml);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid local repo: missing field `entry` at line 2 column 3");
 
         // Remote hook should have `rev`.
         let yaml = indoc::indoc! {r"
@@ -955,7 +964,7 @@ mod tests {
                 hooks:
                   - id: typos
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
             Config {
@@ -1014,8 +1023,8 @@ mod tests {
                 hooks:
                   - id: typos
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid remote repo: missing field `rev`");
+        let result = serde_yaml::from_str::<Config>(yaml);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid remote repo: missing field `rev` at line 2 column 3");
     }
 
     #[test]
@@ -1029,8 +1038,8 @@ mod tests {
                   - name: typos
                     alias: typo
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid remote repo: missing field `id`");
+        let result = serde_yaml::from_str::<Config>(yaml);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid remote repo: missing field `id` at line 2 column 3");
 
         // Local hook should have `id`, `name`, and `entry` and `language`.
         let yaml = indoc::indoc! { r"
@@ -1043,8 +1052,8 @@ mod tests {
                     types:
                       - rust
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid local repo: missing field `language`");
+        let result = serde_yaml::from_str::<Config>(yaml);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid local repo: missing field `language` at line 2 column 3");
 
         let yaml = indoc::indoc! { r"
             repos:
@@ -1055,7 +1064,7 @@ mod tests {
                     entry: cargo fmt
                     language: rust
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
             Config {
@@ -1119,8 +1128,8 @@ mod tests {
                   - name: typos
                     alias: typo
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid meta repo: missing field `id`");
+        let result = serde_yaml::from_str::<Config>(yaml);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid meta repo: missing field `id` at line 2 column 3");
 
         // Invalid meta hook id
         let yaml = indoc::indoc! { r"
@@ -1129,8 +1138,8 @@ mod tests {
                 hooks:
                   - id: hello
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid meta repo: unknown meta hook id `hello`");
+        let result = serde_yaml::from_str::<Config>(yaml);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid meta repo: unknown meta hook id `hello` at line 2 column 3");
 
         // Invalid language
         let yaml = indoc::indoc! { r"
@@ -1140,8 +1149,8 @@ mod tests {
                   - id: check-hooks-apply
                     language: python
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid meta repo: language must be `system` for meta hooks");
+        let result = serde_yaml::from_str::<Config>(yaml);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid meta repo: language must be `system` for meta hooks at line 2 column 3");
 
         // Invalid entry
         let yaml = indoc::indoc! { r"
@@ -1151,8 +1160,8 @@ mod tests {
                   - id: check-hooks-apply
                     entry: echo hell world
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"Invalid meta repo: entry is not allowed for meta hooks");
+        let result = serde_yaml::from_str::<Config>(yaml);
+        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid meta repo: entry is not allowed for meta hooks at line 2 column 3");
 
         // Valid meta hook
         let yaml = indoc::indoc! { r"
@@ -1163,7 +1172,7 @@ mod tests {
                   - id: check-useless-excludes
                   - id: identity
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
             Config {
@@ -1306,7 +1315,7 @@ mod tests {
                     language: system
                     language_version: '3.8'
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
             Config {
@@ -1443,7 +1452,7 @@ mod tests {
                     entry: echo test
                     language: system
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         assert!(result.is_ok());
         let config = result.unwrap();
         assert!(config.minimum_prek_version.is_none());
@@ -1459,7 +1468,7 @@ mod tests {
                     language: system
             minimum_prek_version: ''
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         assert!(result.is_ok());
         let config = result.unwrap();
         assert!(config.minimum_prek_version.is_none());
@@ -1475,7 +1484,7 @@ mod tests {
                     language: system
             minimum_prek_version: '10.0.0'
         "};
-        let result = serde_saphyr::from_str::<Config>(yaml);
+        let result = serde_yaml::from_str::<Config>(yaml);
         assert!(result.is_err());
     }
 
@@ -1494,7 +1503,7 @@ mod tests {
                     types_or: [text, binary]
                     exclude_types: [symlink]
         ";
-        let result = serde_saphyr::from_str::<Config>(yaml_valid);
+        let result = serde_yaml::from_str::<Config>(yaml_valid);
         assert!(result.is_ok(), "Should parse valid tags successfully");
 
         // Empty lists and missing keys should also be fine
@@ -1510,7 +1519,7 @@ mod tests {
                     exclude_types: []
                     # types_or is missing, which is also valid
         ";
-        let result_empty = serde_saphyr::from_str::<Config>(yaml_empty);
+        let result_empty = serde_yaml::from_str::<Config>(yaml_empty);
         assert!(
             result_empty.is_ok(),
             "Should parse empty/missing tags successfully"
@@ -1527,7 +1536,7 @@ mod tests {
                     language: system
                     types: [pythoon] # Deliberate typo
         ";
-        let result_invalid_types = serde_saphyr::from_str::<Config>(yaml_invalid_types);
+        let result_invalid_types = serde_yaml::from_str::<Config>(yaml_invalid_types);
         assert!(result_invalid_types.is_err());
 
         assert!(
@@ -1548,7 +1557,7 @@ mod tests {
                     language: system
                     types_or: [invalidtag]
         ";
-        let result_invalid_types_or = serde_saphyr::from_str::<Config>(yaml_invalid_types_or);
+        let result_invalid_types_or = serde_yaml::from_str::<Config>(yaml_invalid_types_or);
         assert!(result_invalid_types_or.is_err());
         assert!(
             result_invalid_types_or
@@ -1569,7 +1578,7 @@ mod tests {
                     exclude_types: [not-a-real-tag]
         ";
         let result_invalid_exclude_types =
-            serde_saphyr::from_str::<Config>(yaml_invalid_exclude_types);
+            serde_yaml::from_str::<Config>(yaml_invalid_exclude_types);
         assert!(result_invalid_exclude_types.is_err());
         assert!(
             result_invalid_exclude_types

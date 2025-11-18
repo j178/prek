@@ -924,13 +924,13 @@ fn quoting_float_like_version_number() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r#"
+            assert_snapshot!(context.read(CONFIG_FILE), @r"
             repos:
               - repo: [HOME]/test-repos/test-repo
-                rev: "0.50"
+                rev: '0.50'
                 hooks:
                   - id: test-hook
-            "#);
+            ");
         }
     );
 
