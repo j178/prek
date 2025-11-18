@@ -6,6 +6,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use bstr::ByteSlice;
 use owo_colors::OwoColorize;
+use prek_consts::CONFIG_FILE;
 use same_file::is_same_file;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
@@ -43,7 +44,7 @@ pub(crate) async fn install(
     }
 
     let project = Project::discover(config.as_deref(), &CWD).ok();
-    let hook_types = get_hook_types(config.as_deref(), hook_types);
+    let hook_types = get_hook_types(project.as_ref(), config.as_deref(), hook_types);
 
     let hooks_path = if let Some(dir) = git_dir {
         dir.join("hooks")
@@ -112,12 +113,25 @@ pub(crate) async fn install_hooks(
     Ok(ExitStatus::Success)
 }
 
-fn get_hook_types(config: Option<&Path>, hook_types: Vec<HookType>) -> Vec<HookType> {
+fn get_hook_types(
+    project: Option<&Project>,
+    config: Option<&Path>,
+    hook_types: Vec<HookType>,
+) -> Vec<HookType> {
     let mut hook_types = if hook_types.is_empty() {
-        config
-            .and_then(|p| read_config(p).ok())
-            .and_then(|cfg| cfg.default_install_hook_types)
-            .unwrap_or_default()
+        if let Some(project) = project {
+            project
+                .config()
+                .default_install_hook_types
+                .clone()
+                .unwrap_or_default()
+        } else {
+            let config = config.unwrap_or(Path::new(CONFIG_FILE));
+            read_config(config)
+                .ok()
+                .and_then(|cfg| cfg.default_install_hook_types.clone())
+                .unwrap_or_default()
+        }
     } else {
         hook_types
     };
@@ -312,9 +326,10 @@ pub(crate) async fn uninstall(
     hook_types: Vec<HookType>,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let project = Project::discover(config.as_deref(), &CWD).ok();
     let hooks_path = git::get_git_common_dir().await?.join("hooks");
 
-    for hook_type in get_hook_types(config.as_deref(), hook_types) {
+    for hook_type in get_hook_types(project.as_ref(), config.as_deref(), hook_types) {
         let hook_path = hooks_path.join(hook_type.as_str());
         let legacy_path = hooks_path.join(format!("{}.legacy", hook_type.as_str()));
 
