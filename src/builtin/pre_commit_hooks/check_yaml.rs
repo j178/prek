@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use clap::Parser;
 use futures::StreamExt;
-use saphyr::LoadableYamlNode;
+use serde::Deserialize;
 
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
@@ -54,22 +54,24 @@ async fn check_file(
     if content.is_empty() {
         return Ok((0, Vec::new()));
     }
-    let content = String::from_utf8(content)?;
 
-    match saphyr::Yaml::load_from_str(&content) {
-        Err(e) => {
-            let error_message = format!("{}: Failed to yaml decode ({e})\n", filename.display());
-            Ok((1, error_message.into_bytes()))
+    let deserializer = serde_yaml::Deserializer::from_slice(&content);
+    if allow_multi_docs {
+        for doc in deserializer {
+            if let Err(e) = serde_yaml::Value::deserialize(doc) {
+                let error_message =
+                    format!("{}: Failed to yaml decode ({e})\n", filename.display());
+                return Ok((1, error_message.into_bytes()));
+            }
         }
-        Ok(docs) => {
-            if !allow_multi_docs && docs.len() > 1 {
-                let error_message = format!(
-                    "{}: Multiple YAML documents found, but multi-documents are not allowed\n",
-                    filename.display()
-                );
+        Ok((0, Vec::new()))
+    } else {
+        match serde_yaml::from_slice::<serde_yaml::Value>(&content) {
+            Ok(_) => Ok((0, Vec::new())),
+            Err(e) => {
+                let error_message =
+                    format!("{}: Failed to yaml decode ({e})\n", filename.display());
                 Ok((1, error_message.into_bytes()))
-            } else {
-                Ok((0, Vec::new()))
             }
         }
     }
