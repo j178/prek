@@ -383,10 +383,17 @@ impl Entry {
 
     /// Split the entry into a list of commands.
     pub(crate) fn split(&self) -> Result<Vec<String>, Error> {
-        shlex::split(&self.entry).ok_or_else(|| Error::Hook {
+        let splits = shlex::split(&self.entry).ok_or_else(|| Error::Hook {
             hook: self.hook.clone(),
             error: anyhow::anyhow!("Failed to parse entry `{}` as commands", &self.entry),
-        })
+        })?;
+        if splits.is_empty() {
+            return Err(Error::Hook {
+                hook: self.hook.clone(),
+                error: anyhow::anyhow!("Failed to parse entry: entry is empty"),
+            });
+        }
+        Ok(splits)
     }
 
     /// Get the original entry string.

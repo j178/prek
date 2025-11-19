@@ -409,6 +409,9 @@ impl<'de> Deserialize<'de> for MetaHook {
             ));
         }
 
+        if let Some(name) = &hook_options.name {
+            meta_hook.0.name.clone_from(name);
+        }
         meta_hook.0.options.update(&hook_options.options);
 
         Ok(meta_hook)
@@ -447,6 +450,9 @@ impl<'de> Deserialize<'de> for BuiltinHook {
             ));
         }
 
+        if let Some(name) = &hook_options.name {
+            builtin_hook.0.name.clone_from(name);
+        }
         builtin_hook.0.options.update(&hook_options.options);
 
         Ok(builtin_hook)

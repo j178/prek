@@ -2426,3 +2426,33 @@ fn system_language_version() {
     ----- stderr -----
     ");
 }
+
+/// Tests that empty `entry` field.
+#[test]
+fn empty_entry() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: python
+                entry: ''
+                pass_filenames: false
+   "});
+    context.git_add(".");
+
+    // Go and Node can't be found, `system` must fail.
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+    local....................................................................
+    ----- stderr -----
+    error: Failed to run hook `local`
+      caused by: Invalid hook `local`
+      caused by: Failed to parse entry: entry is empty
+    ");
+}

@@ -93,7 +93,7 @@ impl BuiltinHook {
                 id: "trailing-whitespace".to_string(),
                 name: "trim trailing whitespace".to_string(),
                 language: Language::Python,
-                entry: String::new(),
+                entry: "trailing-whitespace-fixer".to_string(),
                 options: HookOptions {
                     description: Some("trims trailing whitespace.".to_string()),
                     types: Some(vec!["text".to_string()]),
@@ -105,7 +105,7 @@ impl BuiltinHook {
                 id: "check-added-large-files".to_string(),
                 name: "check for added large files".to_string(),
                 language: Language::Python,
-                entry: String::new(),
+                entry: "check-added-large-files".to_string(),
                 options: HookOptions {
                     description: Some("prevents giant files from being committed.".to_string()),
                     stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
@@ -116,7 +116,7 @@ impl BuiltinHook {
                 id: "end-of-file-fixer".to_string(),
                 name: "fix end of files".to_string(),
                 language: Language::Python,
-                entry: String::new(),
+                entry: "end-of-file-fixer".to_string(),
                 options: HookOptions {
                     description: Some(
                         "ensures that a file is either empty, or ends with one newline."
@@ -131,7 +131,7 @@ impl BuiltinHook {
                 id: "fix-byte-order-marker".to_string(),
                 name: "fix utf-8 byte order marker".to_string(),
                 language: Language::Python,
-                entry: String::new(),
+                entry: "fix-byte-order-marker".to_string(),
                 options: HookOptions {
                     description: Some("removes utf-8 byte order marker.".to_string()),
                     types: Some(vec!["text".to_string()]),
@@ -142,7 +142,7 @@ impl BuiltinHook {
                 id: "check-json".to_string(),
                 name: "check json".to_string(),
                 language: Language::Python,
-                entry: String::new(),
+                entry: "check-json".to_string(),
                 options: HookOptions {
                     description: Some("checks json files for parseable syntax.".to_string()),
                     types: Some(vec!["json".to_string()]),
@@ -153,7 +153,7 @@ impl BuiltinHook {
                 id: "check-symlinks".to_string(),
                 name: "check for broken symlinks".to_string(),
                 language: Language::Python,
-                entry: String::new(),
+                entry: "check-symlinks".to_string(),
                 options: HookOptions {
                     description: Some(
                         "checks for symlinks which do not point to anything.".to_string(),
@@ -166,7 +166,7 @@ impl BuiltinHook {
                 id: "check-merge-conflict".to_string(),
                 name: "check for merge conflicts".to_string(),
                 language: Language::Python,
-                entry: String::new(),
+                entry: "check-merge-conflict".to_string(),
                 options: HookOptions {
                     description: Some(
                         "checks for files that contain merge conflict strings.".to_string(),
@@ -179,7 +179,7 @@ impl BuiltinHook {
                 id: "check-toml".to_string(),
                 name: "check toml".to_string(),
                 language: Language::Python,
-                entry: String::new(),
+                entry: "check-toml".to_string(),
                 options: HookOptions {
                     description: Some("checks toml files for parseable syntax.".to_string()),
                     types: Some(vec!["toml".to_string()]),
@@ -190,7 +190,7 @@ impl BuiltinHook {
                 id: "check-xml".to_string(),
                 name: "check xml".to_string(),
                 language: Language::Python,
-                entry: String::new(),
+                entry: "check-xml".to_string(),
                 options: HookOptions {
                     description: Some("checks xml files for parseable syntax.".to_string()),
                     types: Some(vec!["xml".to_string()]),
@@ -201,7 +201,7 @@ impl BuiltinHook {
                 id: "check-yaml".to_string(),
                 name: "check yaml".to_string(),
                 language: Language::Python,
-                entry: String::new(),
+                entry: "check-yaml".to_string(),
                 options: HookOptions {
                     description: Some("checks yaml files for parseable syntax.".to_string()),
                     types: Some(vec!["yaml".to_string()]),
@@ -212,7 +212,7 @@ impl BuiltinHook {
                 id: "mixed-line-ending".to_string(),
                 name: "mixed line ending".to_string(),
                 language: Language::Python,
-                entry: String::new(),
+                entry: "mixed-line-ending".to_string(),
                 options: HookOptions {
                     description: Some("replaces or checks mixed line ending.".to_string()),
                     types: Some(vec!["text".to_string()]),
@@ -223,7 +223,7 @@ impl BuiltinHook {
                 id: "detect-private-key".to_string(),
                 name: "detect private key".to_string(),
                 language: Language::Python,
-                entry: String::new(),
+                entry: "detect-private-key".to_string(),
                 options: HookOptions {
                     description: Some("detects the presence of private keys.".to_string()),
                     types: Some(vec!["text".to_string()]),
@@ -234,7 +234,7 @@ impl BuiltinHook {
                 id: "no-commit-to-branch".to_string(),
                 name: "don't commit to branch".to_string(),
                 language: Language::Python,
-                entry: String::new(),
+                entry: "no-commit-to-branch".to_string(),
                 options: HookOptions {
                     pass_filenames: Some(false),
                     always_run: Some(true),
@@ -245,7 +245,7 @@ impl BuiltinHook {
                 id: "check-executables-have-shebangs".to_string(),
                 name: "check that executables have shebangs".to_string(),
                 language: Language::Python,
-                entry: String::new(),
+                entry: "check-executables-have-shebangs".to_string(),
                 options: HookOptions {
                     description: Some(
                         "ensures that (non-binary) executables have a shebang.".to_string(),
