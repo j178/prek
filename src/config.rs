@@ -18,7 +18,7 @@ use crate::warn_user;
 use crate::{identify, yaml};
 
 #[derive(Clone)]
-pub struct SerdeRegex(Regex);
+pub(crate) struct SerdeRegex(Regex);
 
 impl Deref for SerdeRegex {
     type Target = Regex;
@@ -116,7 +116,7 @@ impl Display for Language {
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
-pub enum HookType {
+pub(crate) enum HookType {
     CommitMsg,
     PostCheckout,
     PostCommit,
@@ -173,7 +173,7 @@ impl Display for HookType {
     Debug, Clone, Copy, PartialEq, Eq, Default, Hash, Deserialize, Serialize, clap::ValueEnum,
 )]
 #[serde(rename_all = "kebab-case")]
-pub enum Stage {
+pub(crate) enum Stage {
     Manual,
     CommitMsg,
     PostCheckout,
@@ -248,7 +248,7 @@ impl Stage {
 
 /// Common hook options.
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct HookOptions {
+pub(crate) struct HookOptions {
     /// Not documented in the official docs.
     pub alias: Option<String>,
     /// The pattern of files to run on.
@@ -340,7 +340,7 @@ impl HookOptions {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct ManifestHook {
+pub(crate) struct ManifestHook {
     /// The id of the hook.
     pub id: String,
     /// The name of the hook.
@@ -356,7 +356,7 @@ pub struct ManifestHook {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(transparent)]
-pub struct Manifest {
+pub(crate) struct Manifest {
     pub hooks: Vec<ManifestHook>,
 }
 
@@ -365,7 +365,7 @@ pub struct Manifest {
 /// All keys in manifest hook dict are valid in a config hook dict, but are optional.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct RemoteHook {
+pub(crate) struct RemoteHook {
     /// The id of the hook.
     pub id: String,
     /// Override the name of the hook.
@@ -381,11 +381,11 @@ pub struct RemoteHook {
 /// A local hook in the configuration file.
 ///
 /// It's the same as the manifest hook definition.
-pub type LocalHook = ManifestHook;
+pub(crate) type LocalHook = ManifestHook;
 
 #[derive(Debug, Copy, Clone, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum MetaHookID {
+pub(crate) enum MetaHookID {
     CheckHooksApply,
     CheckUselessExcludes,
     Identity,
@@ -419,7 +419,7 @@ impl FromStr for MetaHookID {
 ///
 /// It's the same as the manifest hook definition but with only a few predefined id allowed.
 #[derive(Debug, Clone)]
-pub struct MetaHook(pub(crate) ManifestHook);
+pub(crate) struct MetaHook(pub(crate) ManifestHook);
 
 impl<'de> Deserialize<'de> for MetaHook {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -488,7 +488,7 @@ impl From<MetaHook> for ManifestHook {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RemoteRepo {
+pub(crate) struct RemoteRepo {
     pub repo: String,
     pub rev: String,
     #[serde(skip_serializing)]
@@ -532,7 +532,7 @@ impl Display for RemoteRepo {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct LocalRepo {
+pub(crate) struct LocalRepo {
     pub repo: String,
     pub hooks: Vec<LocalHook>,
     #[serde(skip_serializing)]
@@ -547,7 +547,7 @@ impl Display for LocalRepo {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct MetaRepo {
+pub(crate) struct MetaRepo {
     pub repo: String,
     pub hooks: Vec<MetaHook>,
     #[serde(skip_serializing)]
@@ -562,7 +562,7 @@ impl Display for MetaRepo {
 }
 
 #[derive(Debug, Clone)]
-pub enum Repo {
+pub(crate) enum Repo {
     Remote(RemoteRepo),
     Local(LocalRepo),
     Meta(MetaRepo),
@@ -604,7 +604,7 @@ impl<'de> Deserialize<'de> for Repo {
 // TODO: warn sensible regex
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct Config {
+pub(crate) struct Config {
     pub repos: Vec<Repo>,
     /// A list of `--hook-types` which will be used by default when running `prek install`.
     /// Default is `[pre-commit]`.
@@ -631,7 +631,7 @@ pub struct Config {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub(crate) enum Error {
     #[error("Config file not found: {0}")]
     NotFound(String),
 
@@ -755,7 +755,7 @@ fn warn_unused_paths(path: &Path, entries: &[String]) {
 }
 
 /// Read the configuration file from the given path.
-pub fn read_config(path: &Path) -> Result<Config, Error> {
+pub(crate) fn load_config(path: &Path) -> Result<Config, Error> {
     let content = match fs_err::read_to_string(path) {
         Ok(content) => content,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -772,6 +772,13 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
 
     let config: Config = serde_yaml::from_value(config)
         .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
+
+    Ok(config)
+}
+
+/// Read the configuration file from the given path, and warn about certain issues.
+pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
+    let config = load_config(path)?;
 
     let unused_paths = collect_unused_paths(&config);
     warn_unused_paths(path, &unused_paths);
@@ -817,7 +824,7 @@ pub fn read_config(path: &Path) -> Result<Config, Error> {
 }
 
 /// Read the manifest file from the given path.
-pub fn read_manifest(path: &Path) -> Result<Manifest, Error> {
+pub(crate) fn read_manifest(path: &Path) -> Result<Manifest, Error> {
     let content = fs_err::read_to_string(path)?;
     let manifest = serde_yaml::from_str(&content)
         .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;

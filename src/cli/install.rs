@@ -6,14 +6,14 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use bstr::ByteSlice;
 use owo_colors::OwoColorize;
-use prek_consts::CONFIG_FILE;
+use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use same_file::is_same_file;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run;
 use crate::cli::run::{SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
-use crate::config::read_config;
+use crate::config::load_config;
 use crate::fs::{CWD, Simplified};
 use crate::git::{GIT_ROOT, git_cmd};
 use crate::printer::Printer;
@@ -44,7 +44,7 @@ pub(crate) async fn install(
     }
 
     let project = Project::discover(config.as_deref(), &CWD).ok();
-    let hook_types = get_hook_types(project.as_ref(), config.as_deref(), hook_types);
+    let hook_types = get_hook_types(hook_types, project.as_ref(), config.as_deref());
 
     let hooks_path = if let Some(dir) = git_dir {
         dir.join("hooks")
@@ -114,26 +114,32 @@ pub(crate) async fn install_hooks(
 }
 
 fn get_hook_types(
+    mut hook_types: Vec<HookType>,
     project: Option<&Project>,
     config: Option<&Path>,
-    hook_types: Vec<HookType>,
 ) -> Vec<HookType> {
-    let mut hook_types = if hook_types.is_empty() {
-        if let Some(project) = project {
-            project
-                .config()
-                .default_install_hook_types
-                .clone()
-                .unwrap_or_default()
-        } else {
-            let config = config.unwrap_or(Path::new(CONFIG_FILE));
-            read_config(config)
-                .ok()
-                .and_then(|cfg| cfg.default_install_hook_types.clone())
-                .unwrap_or_default()
-        }
+    if !hook_types.is_empty() {
+        return hook_types;
+    }
+
+    hook_types = if let Some(project) = project {
+        project
+            .config()
+            .default_install_hook_types
+            .clone()
+            .unwrap_or_default()
     } else {
-        hook_types
+        let fallbacks = [CONFIG_FILE, ALT_CONFIG_FILE]
+            .iter()
+            .map(Path::new)
+            .filter(|p| p.exists());
+        config
+            .into_iter()
+            .chain(fallbacks)
+            .next()
+            .and_then(|p| load_config(p).ok())
+            .and_then(|cfg| cfg.default_install_hook_types.clone())
+            .unwrap_or_default()
     };
     if hook_types.is_empty() {
         hook_types = vec![HookType::PreCommit];
@@ -329,7 +335,7 @@ pub(crate) async fn uninstall(
     let project = Project::discover(config.as_deref(), &CWD).ok();
     let hooks_path = git::get_git_common_dir().await?.join("hooks");
 
-    for hook_type in get_hook_types(project.as_ref(), config.as_deref(), hook_types) {
+    for hook_type in get_hook_types(hook_types, project.as_ref(), config.as_deref()) {
         let hook_path = hooks_path.join(hook_type.as_str());
         let legacy_path = hooks_path.join(format!("{}.legacy", hook_type.as_str()));
 
