@@ -24,7 +24,7 @@ use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, Stage};
 use crate::fs::CWD;
 use crate::git::GIT_ROOT;
-use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::printer::{Printer, Stdout};
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::Store;
@@ -332,6 +332,15 @@ pub async fn install_hooks(
                 let mut newly_installed = Vec::new();
 
                 for hook in hooks {
+                    if matches!(hook.repo(), Repo::Meta { .. } | Repo::Builtin { .. }) {
+                        debug!(
+                            "Hook `{}` is a meta or builtin hook, no installation needed",
+                            &hook
+                        );
+                        hook_envs.push(InstalledHook::NoNeedInstall(hook));
+                        continue;
+                    }
+
                     let mut matched_info = None;
 
                     for env in &newly_installed {
@@ -365,7 +374,6 @@ pub async fn install_hooks(
                     }
 
                     let _permit = semaphore.acquire().await.unwrap();
-                    debug!("No matching environment found for hook `{hook}`, installing...");
 
                     let installed_hook = hook
                         .language

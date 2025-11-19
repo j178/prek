@@ -10,6 +10,40 @@ use crate::common::{TestContext, cmd_snapshot};
 
 mod common;
 
+/// Tests that `repo: builtin` hooks doesn't create hook env.
+#[test]
+fn builtin_hooks_not_create_env() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: end-of-file-fixer
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    fix end of files.........................................................Passed
+
+    ----- stderr -----
+    ");
+
+    let hooks_dir = context
+        .home_dir()
+        .join("hooks")
+        .read_dir()
+        .into_iter()
+        .flatten()
+        .flatten()
+        .collect::<Vec<_>>();
+    assert_eq!(hooks_dir.len(), 0);
+}
+
 #[test]
 fn end_of_file_fixer_hook() -> Result<()> {
     let context = TestContext::new();
