@@ -273,6 +273,7 @@ prek self update
 - Repositories are cloned in parallel, and hooks are installed in parallel if their dependencies are disjoint.
 - It uses [`uv`](https://github.com/astral-sh/uv) for creating Python virtualenvs and installing dependencies, which is known for its speed and efficiency.
 - It implements some common hooks in Rust, [built in prek](https://prek.j178.dev/builtin/), which are faster than their Python counterparts.
+- It supports `repo: builtin` for offline, zero-setup hooks, which is not available in `pre-commit`.
 
 ### prek provides a better user experience
 

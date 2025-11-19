@@ -395,7 +395,7 @@ impl<'de> Deserialize<'de> for MetaHook {
     {
         let hook_options = RemoteHook::deserialize(deserializer)?;
         let mut meta_hook = MetaHook::from_id(&hook_options.id).map_err(|()| {
-            serde::de::Error::custom(format!("Unknown meta hook id `{}`", &hook_options.id))
+            serde::de::Error::custom(format!("unknown meta hook id `{}`", &hook_options.id))
         })?;
 
         if hook_options.language.is_some_and(|l| l != Language::System) {
@@ -433,17 +433,17 @@ impl<'de> Deserialize<'de> for BuiltinHook {
     {
         let hook_options = RemoteHook::deserialize(deserializer)?;
         let mut builtin_hook = BuiltinHook::from_id(&hook_options.id).map_err(|()| {
-            serde::de::Error::custom(format!("Unknown builtin hook id `{}`", &hook_options.id))
+            serde::de::Error::custom(format!("unknown builtin hook id `{}`", &hook_options.id))
         })?;
 
         if hook_options.language.is_some_and(|l| l != Language::System) {
             return Err(serde::de::Error::custom(
-                "language must be `system` for meta hooks",
+                "language must be `system` for builtin hooks",
             ));
         }
         if hook_options.entry.is_some() {
             return Err(serde::de::Error::custom(
-                "entry is not allowed for meta hooks",
+                "entry is not allowed for builtin hooks",
             ));
         }
 

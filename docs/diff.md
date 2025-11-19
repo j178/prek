@@ -4,6 +4,7 @@
 
 - `prek` supports both `.pre-commit-config.yaml` and `.pre-commit-config.yml` configuration files.
 - `prek` implements some common hooks from `pre-commit-hooks` in Rust for better performance.
+- `prek` supports `repo: builtin` for offline, zero-setup hooks.
 - `prek` uses `~/.cache/prek` as the default cache directory for repos, environments and toolchains.
 - `prek` decoupled hook environment from their repositories, allowing shared toolchains and environments across hooks.
 - `prek` supports `language_version` as a semver specifier and automatically installs the required toolchains.
