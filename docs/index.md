@@ -12,7 +12,7 @@
 
 !!! note
 
-    Although prek is pretty new, it’s already powering real‑world projects like [Airflow](https://github.com/apache/airflow), and more projects are picking it up—see [Who is using prek?](#who-is-using-prek). If you’re looking for an alternative to `pre-commit`, please give it a try—we’d love your feedback!
+    Although prek is pretty new, it’s already powering real‑world projects like [Apache Airflow](https://github.com/apache/airflow), and more projects are picking it up—see [Who is using prek?](#who-is-using-prek). If you’re looking for an alternative to `pre-commit`, please give it a try—we’d love your feedback!
 
     Please note that some subcommands and languages are still missing for full drop‑in parity with `pre-commit`. Track the remaining gaps here: [TODO](https://prek.j178.dev/todo/).
 

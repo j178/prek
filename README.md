@@ -23,7 +23,7 @@ while also providing some additional long-requested features.
 <!-- description:end -->
 
 > [!NOTE]
-> Although prek is pretty new, it’s already powering real‑world projects like [Airflow](https://github.com/apache/airflow), and more projects are picking it up—see [Who is using prek?](#who-is-using-prek). If you’re looking for an alternative to `pre-commit`, please give it a try—we’d love your feedback!
+> Although prek is pretty new, it’s already powering real‑world projects like [Apache Airflow](https://github.com/apache/airflow), and more projects are picking it up—see [Who is using prek?](#who-is-using-prek). If you’re looking for an alternative to `pre-commit`, please give it a try—we’d love your feedback!
 >
 > Please note that some subcommands and languages are still missing for full drop‑in parity with `pre-commit`. Track the remaining gaps here: [TODO](https://prek.j178.dev/todo/).
 
@@ -292,7 +292,7 @@ For more detailed improvements prek offers, take a look at [Difference from pre-
 
 prek is pretty new, but it is already being used or recommend by some projects and organizations:
 
-- [Airflow](https://github.com/apache/airflow/issues/44995)
+- [Apache Airflow](https://github.com/apache/airflow/issues/44995)
 - [PDM](https://github.com/pdm-project/pdm/pull/3593)
 - [basedpyright](https://github.com/DetachHead/basedpyright/pull/1413)
 - [OpenLineage](https://github.com/OpenLineage/OpenLineage/pull/3965)

@@ -19,7 +19,7 @@ RAM: 18GB
 
 ## Cold installation
 
-Here is a benchmark of installing hooks from [Airflow](https://github.com/apache/airflow), which has a large and complex pre-commit configuration.
+Here is a benchmark of installing hooks from [Apache Airflow](https://github.com/apache/airflow), which has a large and complex pre-commit configuration.
 
 Steps:
 
