@@ -14,8 +14,8 @@ use thiserror::Error;
 use tracing::{error, trace};
 
 use crate::config::{
-    self, Config, HookOptions, Language, LocalHook, ManifestHook, MetaHook, RemoteHook, SerdeRegex,
-    Stage, read_manifest,
+    self, BuiltinHook, Config, HookOptions, Language, LocalHook, ManifestHook, MetaHook,
+    RemoteHook, SerdeRegex, Stage, read_manifest,
 };
 use crate::languages::version::LanguageRequest;
 use crate::languages::{extract_metadata_from_entry, resolve_command};
@@ -60,6 +60,9 @@ pub(crate) enum Repo {
     Meta {
         hooks: Vec<ManifestHook>,
     },
+    Builtin {
+        hooks: Vec<ManifestHook>,
+    },
 }
 
 impl Repo {
@@ -91,6 +94,13 @@ impl Repo {
         }
     }
 
+    /// Construct a builtin repo.
+    pub(crate) fn builtin(hooks: Vec<BuiltinHook>) -> Self {
+        Self::Builtin {
+            hooks: hooks.into_iter().map(ManifestHook::from).collect(),
+        }
+    }
+
     /// Get the path to the cloned repo if it is a remote repo.
     pub(crate) fn path(&self) -> Option<&Path> {
         match self {
@@ -105,17 +115,19 @@ impl Repo {
             Repo::Remote { hooks, .. } => hooks,
             Repo::Local { hooks } => hooks,
             Repo::Meta { hooks } => hooks,
+            Repo::Builtin { hooks } => hooks,
         };
         hooks.iter().find(|hook| hook.id == id)
     }
 }
 
 impl Display for Repo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Repo::Remote { url, rev, .. } => write!(f, "{url}@{rev}"),
             Repo::Local { .. } => write!(f, "local"),
             Repo::Meta { .. } => write!(f, "meta"),
+            Repo::Builtin { .. } => write!(f, "builtin"),
         }
     }
 }

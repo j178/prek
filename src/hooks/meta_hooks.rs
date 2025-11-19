@@ -1,12 +1,13 @@
 use std::io::Write;
 use std::path::Path;
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use fancy_regex::Regex;
 use itertools::Itertools;
 
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
-use crate::config::{self, HookOptions, Language};
+use crate::config::{self, CONFIG_FILE_REGEX, HookOptions, Language, ManifestHook, MetaHook};
 use crate::hook::Hook;
 use crate::store::Store;
 use crate::workspace::Project;
@@ -17,6 +18,83 @@ use crate::workspace::Project;
 // we need to adjust the paths by prepending the project relative path.
 // When matching files (files or exclude), we need to match against the filenames
 // relative to the project root.
+
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum MetaHooks {
+    CheckHooksApply,
+    CheckUselessExcludes,
+    Identity,
+}
+
+impl FromStr for MetaHooks {
+    type Err = ();
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "check-hooks-apply" => Ok(Self::CheckHooksApply),
+            "check-useless-excludes" => Ok(Self::CheckUselessExcludes),
+            "identity" => Ok(Self::Identity),
+            _ => Err(()),
+        }
+    }
+}
+
+impl MetaHooks {
+    pub(crate) async fn run(
+        self,
+        store: &Store,
+        hook: &Hook,
+        filenames: &[&Path],
+    ) -> Result<(i32, Vec<u8>)> {
+        match self {
+            Self::CheckHooksApply => check_hooks_apply(store, hook, filenames).await,
+            Self::CheckUselessExcludes => check_useless_excludes(hook, filenames).await,
+            Self::Identity => Ok(identity(hook, filenames)),
+        }
+    }
+}
+
+impl MetaHook {
+    pub(crate) fn from_id(id: &str) -> Result<Self, ()> {
+        let config_file_regex = CONFIG_FILE_REGEX.clone();
+        let hook_id = MetaHooks::from_str(id)?;
+
+        let hook = match hook_id {
+            MetaHooks::CheckHooksApply => ManifestHook {
+                id: "check-hooks-apply".to_string(),
+                name: "Check hooks apply".to_string(),
+                language: Language::System,
+                entry: String::new(),
+                options: HookOptions {
+                    files: Some(config_file_regex),
+                    ..Default::default()
+                },
+            },
+            MetaHooks::CheckUselessExcludes => ManifestHook {
+                id: "check-useless-excludes".to_string(),
+                name: "Check useless excludes".to_string(),
+                language: Language::System,
+                entry: String::new(),
+                options: HookOptions {
+                    files: Some(config_file_regex),
+                    ..Default::default()
+                },
+            },
+            MetaHooks::Identity => ManifestHook {
+                id: "identity".to_string(),
+                name: "identity".to_string(),
+                language: Language::System,
+                entry: String::new(),
+                options: HookOptions {
+                    verbose: Some(true),
+                    ..Default::default()
+                },
+            },
+        };
+
+        Ok(MetaHook(hook))
+    }
+}
 
 /// Ensures that the configured hooks apply to at least one file in the repository.
 pub(crate) async fn check_hooks_apply(
@@ -128,6 +206,9 @@ pub(crate) async fn check_useless_excludes(
                 config::Repo::Remote(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
                 config::Repo::Local(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
                 config::Repo::Meta(r) => Box::new(r.hooks.iter().map(|h| (&h.0.id, &h.0.options))),
+                config::Repo::Builtin(r) => {
+                    Box::new(r.hooks.iter().map(|h| (&h.0.id, &h.0.options)))
+                }
             };
 
             for (hook_id, opts) in hooks_iter {

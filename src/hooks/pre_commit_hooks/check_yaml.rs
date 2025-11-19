@@ -15,8 +15,9 @@ use crate::run::CONCURRENCY;
 struct Args {
     #[arg(long, short = 'm', alias = "multi")]
     allow_multiple_documents: bool,
-    #[arg(long)]
-    r#unsafe: bool,
+    // `--unsafe` flag is not supported yet.
+    // #[arg(long)]
+    // r#unsafe: bool,
 }
 
 pub(crate) async fn check_yaml(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {

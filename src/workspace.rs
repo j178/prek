@@ -293,6 +293,10 @@ impl Project {
                     let repo = Repo::meta(repo.hooks.clone());
                     repos.push(Arc::new(repo));
                 }
+                config::Repo::Builtin(repo) => {
+                    let repo = Repo::builtin(repo.hooks.clone());
+                    repos.push(Arc::new(repo));
+                }
             }
         }
 
@@ -339,6 +343,18 @@ impl Project {
                     }
                 }
                 config::Repo::Meta(repo_config) => {
+                    for hook_config in &repo_config.hooks {
+                        let repo = Arc::clone(repo);
+                        let hook_config = ManifestHook::from(hook_config.clone());
+                        let mut builder =
+                            HookBuilder::new(self.clone(), repo, hook_config, hooks.len());
+                        builder.combine(&self.config);
+
+                        let hook = builder.build().await?;
+                        hooks.push(hook);
+                    }
+                }
+                config::Repo::Builtin(repo_config) => {
                     for hook_config in &repo_config.hooks {
                         let repo = Arc::clone(repo);
                         let hook_config = ManifestHook::from(hook_config.clone());
@@ -795,6 +811,10 @@ impl Workspace {
                     }
                     config::Repo::Meta(repo) => {
                         let repo = Repo::meta(repo.hooks.clone());
+                        repos.push(Arc::new(repo));
+                    }
+                    config::Repo::Builtin(repo) => {
+                        let repo = Repo::builtin(repo.hooks.clone());
                         repos.push(Arc::new(repo));
                     }
                 }

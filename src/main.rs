@@ -26,13 +26,13 @@ use crate::run::USE_COLOR;
 use crate::store::Store;
 
 mod archive;
-mod builtin;
 mod cleanup;
 mod cli;
 mod config;
 mod fs;
 mod git;
 mod hook;
+mod hooks;
 mod identify;
 mod languages;
 mod printer;

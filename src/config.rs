@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::ops::{Deref, RangeInclusive};
 use std::path::Path;
-use std::str::FromStr;
 use std::sync::LazyLock;
 
 use anyhow::Result;
@@ -45,7 +44,7 @@ impl<'de> Deserialize<'de> for SerdeRegex {
     }
 }
 
-static CONFIG_FILE_REGEX: LazyLock<SerdeRegex> = LazyLock::new(|| {
+pub(crate) static CONFIG_FILE_REGEX: LazyLock<SerdeRegex> = LazyLock::new(|| {
     let pattern = format!(
         "^{}|{}$",
         fancy_regex::escape(CONFIG_FILE),
@@ -301,7 +300,7 @@ pub(crate) struct HookOptions {
     pub verbose: Option<bool>,
     #[serde(skip_serializing)]
     #[serde(flatten)]
-    _unused_keys: BTreeMap<String, serde_json::Value>,
+    pub _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
 impl HookOptions {
@@ -383,38 +382,6 @@ pub(crate) struct RemoteHook {
 /// It's the same as the manifest hook definition.
 pub(crate) type LocalHook = ManifestHook;
 
-#[derive(Debug, Copy, Clone, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) enum MetaHookID {
-    CheckHooksApply,
-    CheckUselessExcludes,
-    Identity,
-}
-
-impl Display for MetaHookID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = match self {
-            MetaHookID::CheckHooksApply => "check-hooks-apply",
-            MetaHookID::CheckUselessExcludes => "check-useless-excludes",
-            MetaHookID::Identity => "identity",
-        };
-        f.write_str(name)
-    }
-}
-
-impl FromStr for MetaHookID {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "check-hooks-apply" => Ok(MetaHookID::CheckHooksApply),
-            "check-useless-excludes" => Ok(MetaHookID::CheckUselessExcludes),
-            "identity" => Ok(MetaHookID::Identity),
-            _ => Err(()),
-        }
-    }
-}
-
 /// A meta hook predefined in pre-commit.
 ///
 /// It's the same as the manifest hook definition but with only a few predefined id allowed.
@@ -426,63 +393,68 @@ impl<'de> Deserialize<'de> for MetaHook {
     where
         D: Deserializer<'de>,
     {
-        let hook = RemoteHook::deserialize(deserializer)?;
-
-        let id = MetaHookID::from_str(&hook.id).map_err(|()| {
-            serde::de::Error::custom(format!("unknown meta hook id `{}`", &hook.id))
+        let hook_options = RemoteHook::deserialize(deserializer)?;
+        let mut meta_hook = MetaHook::from_id(&hook_options.id).map_err(|()| {
+            serde::de::Error::custom(format!("Unknown meta hook id `{}`", &hook_options.id))
         })?;
-        if hook.language.is_some_and(|l| l != Language::System) {
+
+        if hook_options.language.is_some_and(|l| l != Language::System) {
             return Err(serde::de::Error::custom(
                 "language must be `system` for meta hooks",
             ));
         }
-        if hook.entry.is_some() {
+        if hook_options.entry.is_some() {
             return Err(serde::de::Error::custom(
                 "entry is not allowed for meta hooks",
             ));
         }
 
-        let mut defaults = match id {
-            MetaHookID::CheckHooksApply => ManifestHook {
-                id: MetaHookID::CheckHooksApply.to_string(),
-                name: "Check hooks apply".to_string(),
-                language: Language::System,
-                entry: String::new(),
-                options: HookOptions {
-                    files: Some(CONFIG_FILE_REGEX.clone()),
-                    ..Default::default()
-                },
-            },
-            MetaHookID::CheckUselessExcludes => ManifestHook {
-                id: MetaHookID::CheckUselessExcludes.to_string(),
-                name: "Check useless excludes".to_string(),
-                language: Language::System,
-                entry: String::new(),
-                options: HookOptions {
-                    files: Some(CONFIG_FILE_REGEX.clone()),
-                    ..Default::default()
-                },
-            },
-            MetaHookID::Identity => ManifestHook {
-                id: MetaHookID::Identity.to_string(),
-                name: "identity".to_string(),
-                language: Language::System,
-                entry: String::new(),
-                options: HookOptions {
-                    verbose: Some(true),
-                    ..Default::default()
-                },
-            },
-        };
+        meta_hook.0.options.update(&hook_options.options);
 
-        defaults.options.update(&hook.options);
-
-        Ok(MetaHook(defaults))
+        Ok(meta_hook)
     }
 }
 
 impl From<MetaHook> for ManifestHook {
     fn from(hook: MetaHook) -> Self {
+        hook.0
+    }
+}
+
+/// A builtin hook predefined in prek.
+/// Basically the same as meta hooks, but defined under `builtin` repo, and do other non-meta checks.
+#[derive(Debug, Clone)]
+pub(crate) struct BuiltinHook(pub(crate) ManifestHook);
+
+impl<'de> Deserialize<'de> for BuiltinHook {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let hook_options = RemoteHook::deserialize(deserializer)?;
+        let mut builtin_hook = BuiltinHook::from_id(&hook_options.id).map_err(|()| {
+            serde::de::Error::custom(format!("Unknown builtin hook id `{}`", &hook_options.id))
+        })?;
+
+        if hook_options.language.is_some_and(|l| l != Language::System) {
+            return Err(serde::de::Error::custom(
+                "language must be `system` for meta hooks",
+            ));
+        }
+        if hook_options.entry.is_some() {
+            return Err(serde::de::Error::custom(
+                "entry is not allowed for meta hooks",
+            ));
+        }
+
+        builtin_hook.0.options.update(&hook_options.options);
+
+        Ok(builtin_hook)
+    }
+}
+
+impl From<BuiltinHook> for ManifestHook {
+    fn from(hook: BuiltinHook) -> Self {
         hook.0
     }
 }
@@ -561,11 +533,21 @@ impl Display for MetaRepo {
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct BuiltinRepo {
+    pub repo: String,
+    pub hooks: Vec<BuiltinHook>,
+    #[serde(skip_serializing)]
+    #[serde(flatten)]
+    _unused_keys: BTreeMap<String, serde_json::Value>,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum Repo {
     Remote(RemoteRepo),
     Local(LocalRepo),
     Meta(MetaRepo),
+    Builtin(BuiltinRepo),
 }
 
 impl<'de> Deserialize<'de> for Repo {
@@ -590,6 +572,11 @@ impl<'de> Deserialize<'de> for Repo {
                 let repo = MetaRepo::deserialize(repo_wire)
                     .map_err(|e| serde::de::Error::custom(format!("Invalid meta repo: {e}")))?;
                 Ok(Repo::Meta(repo))
+            }
+            "builtin" => {
+                let repo = BuiltinRepo::deserialize(repo_wire)
+                    .map_err(|e| serde::de::Error::custom(format!("Invalid builtin repo: {e}")))?;
+                Ok(Repo::Builtin(repo))
             }
             _ => {
                 let repo = RemoteRepo::deserialize(repo_wire)
@@ -714,6 +701,21 @@ fn collect_unused_paths(config: &Config) -> Vec<String> {
                     meta._unused_keys.keys().map(String::as_str),
                 );
                 for (hook_idx, hook) in meta.hooks.iter().enumerate() {
+                    let hook_prefix = format!("{repo_prefix}.hooks[{hook_idx}]");
+                    push_unused_paths(
+                        &mut paths,
+                        &hook_prefix,
+                        hook.0.options._unused_keys.keys().map(String::as_str),
+                    );
+                }
+            }
+            Repo::Builtin(builtin) => {
+                push_unused_paths(
+                    &mut paths,
+                    &repo_prefix,
+                    builtin._unused_keys.keys().map(String::as_str),
+                );
+                for (hook_idx, hook) in builtin.hooks.iter().enumerate() {
                     let hook_prefix = format!("{repo_prefix}.hooks[{hook_idx}]");
                     push_unused_paths(
                         &mut paths,

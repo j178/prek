@@ -1,5 +1,6 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -12,11 +13,11 @@ use crate::archive::ArchiveExtension;
 use crate::cli::reporter::HookInstallReporter;
 use crate::config::Language;
 use crate::fs::{CWD, Simplified};
-use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::identify::parse_shebang;
 use crate::store::Store;
 use crate::version::version;
-use crate::{archive, builtin, warn_user_once};
+use crate::{archive, hooks, warn_user_once};
 
 mod docker;
 mod docker_image;
@@ -212,9 +213,26 @@ impl Language {
         filenames: &[&Path],
         store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
-        // fast path for hooks implemented in Rust
-        if builtin::check_fast_path(hook) {
-            return builtin::run_fast_path(store, hook, filenames).await;
+        match hook.repo() {
+            Repo::Meta { .. } => {
+                return hooks::MetaHooks::from_str(&hook.id)
+                    .unwrap()
+                    .run(store, hook, filenames)
+                    .await;
+            }
+            Repo::Builtin { .. } => {
+                return hooks::BuiltinHooks::from_str(&hook.id)
+                    .unwrap()
+                    .run(store, hook, filenames)
+                    .await;
+            }
+            Repo::Remote { .. } => {
+                // Fast path for hooks implemented in Rust
+                if hooks::check_fast_path(hook) {
+                    return hooks::run_fast_path(store, hook, filenames).await;
+                }
+            }
+            Repo::Local { .. } => {}
         }
 
         match self {

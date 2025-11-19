@@ -173,6 +173,11 @@ fn all_hooks(proj: &Project) -> Vec<(String, Option<String>)> {
                     out.push((h.0.id.clone(), Some(h.0.name.clone())));
                 }
             }
+            config::Repo::Builtin(cfg) => {
+                for h in &cfg.hooks {
+                    out.push((h.0.id.clone(), Some(h.0.name.clone())));
+                }
+            }
         }
     }
     out
