@@ -317,6 +317,7 @@ impl HookBuilder {
             log_file: options.log_file,
             require_serial: options.require_serial.expect("require_serial not set"),
             verbose: options.verbose.expect("verbose not set"),
+            minimum_prek_version: options.minimum_prek_version,
         };
 
         if let Err(err) = extract_metadata_from_entry(&mut hook).await {
@@ -433,6 +434,7 @@ pub(crate) struct Hook {
     pub require_serial: bool,
     pub stages: Stages,
     pub verbose: bool,
+    pub minimum_prek_version: Option<String>,
 }
 
 impl Display for Hook {
