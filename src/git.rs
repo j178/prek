@@ -584,3 +584,23 @@ pub(crate) async fn get_parent_commit(commit: &str) -> Result<Option<String>, Er
         Ok(None)
     }
 }
+
+/// Return a list of absolute paths of all git submodules in the repository.
+pub(crate) fn list_submodules(git_root: &Path) -> Result<Vec<PathBuf>, Error> {
+    let git = GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?;
+    let output = std::process::Command::new(git)
+        .current_dir(git_root)
+        .arg("config")
+        .arg("--file")
+        .arg(".gitmodules")
+        .arg("--get-regexp")
+        .arg(r"^submodule\..*\.path$")
+        .output()?;
+
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .trim_ascii()
+        .lines()
+        .filter_map(|line| line.split_whitespace().nth(1))
+        .map(|submodule| git_root.join(submodule))
+        .collect())
+}

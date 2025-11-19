@@ -92,7 +92,7 @@ impl PartialEq for Project {
 impl Eq for Project {}
 
 impl Hash for Project {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         self.config_path.hash(state);
     }
 }
@@ -650,7 +650,8 @@ impl Workspace {
     ) -> Result<Vec<Arc<Project>>, Error> {
         let projects = Mutex::new(Ok(Vec::new()));
 
-        let submodules = git::list_submodules(root).unwrap_or_default();
+        let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
+        let submodules = git::list_submodules(git_root).unwrap_or_default();
 
         ignore::WalkBuilder::new(root)
             .follow_links(false)
@@ -668,7 +669,7 @@ impl Workspace {
                         return WalkState::Continue;
                     }
                     // Skip git submodules
-                    if submodules.contains(&entry.path().simplified()) && entry.path() != root {
+                    if submodules.iter().any(|submodule| submodule == entry.path()) {
                         trace!(
                             path = %entry.path().user_display(),
                             "Skipping git submodule"

@@ -34,6 +34,22 @@ impl TestContext {
         let temp_dir = ChildPath::new(root.path()).child("temp");
         fs_err::create_dir_all(&temp_dir).expect("Failed to create test working directory");
 
+        Self::from_root(root, temp_dir)
+    }
+
+    pub fn new_at(path: PathBuf) -> Self {
+        let bucket = Self::test_bucket_dir();
+        fs_err::create_dir_all(&bucket).expect("Failed to create test bucket");
+
+        let root = tempfile::TempDir::new_in(bucket).expect("Failed to create test root directory");
+
+        let temp_dir = ChildPath::new(path);
+        fs_err::create_dir_all(&temp_dir).expect("Failed to create test working directory");
+
+        Self::from_root(root, temp_dir)
+    }
+
+    fn from_root(root: tempfile::TempDir, temp_dir: ChildPath) -> Self {
         let home_dir = ChildPath::new(root.path()).child("home");
         fs_err::create_dir_all(&home_dir).expect("Failed to create test home directory");
 
