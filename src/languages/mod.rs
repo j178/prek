@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use futures::TryStreamExt;
 use prek_consts::env_vars::EnvVars;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, error, trace};
+use tracing::{debug, error, instrument, trace};
 
 use crate::archive::ArchiveExtension;
 use crate::cli::reporter::HookInstallReporter;
@@ -207,6 +207,7 @@ impl Language {
         }
     }
 
+    #[instrument(level = "trace", skip_all, fields(hook_id = %hook.id, language = %hook.language))]
     pub async fn run(
         &self,
         hook: &InstalledHook,

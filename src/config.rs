@@ -10,6 +10,7 @@ use itertools::Itertools;
 use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize};
+use tracing::instrument;
 
 use crate::fs::Simplified;
 use crate::version;
@@ -789,6 +790,7 @@ pub(crate) fn load_config(path: &Path) -> Result<Config, Error> {
 }
 
 /// Read the configuration file from the given path, and warn about certain issues.
+#[instrument(level = "trace")]
 pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
     let config = load_config(path)?;
 

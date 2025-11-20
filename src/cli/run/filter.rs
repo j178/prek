@@ -6,7 +6,7 @@ use itertools::{Either, Itertools};
 use path_clean::PathClean;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use rustc_hash::FxHashSet;
-use tracing::{debug, error};
+use tracing::{debug, error, instrument};
 
 use prek_consts::env_vars::EnvVars;
 
@@ -91,6 +91,7 @@ pub(crate) struct FileFilter<'a> {
 
 impl<'a> FileFilter<'a> {
     // Here, `filenames` are paths relative to the workspace root.
+    #[instrument(level = "trace", skip_all, fields(project = %project))]
     pub(crate) fn for_project<I>(filenames: I, project: &'a Project) -> Self
     where
         I: Iterator<Item = &'a PathBuf> + Send,
@@ -148,6 +149,7 @@ impl<'a> FileFilter<'a> {
     }
 
     /// Filter filenames by file patterns and tags for a specific hook.
+    #[instrument(level = "trace", skip_all, fields(hook = ?hook.id))]
     pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&Path> {
         // Filter by hook `files` and `exclude` patterns.
         let filter = FilenameFilter::for_hook(hook);
@@ -203,7 +205,7 @@ impl CollectOptions {
 
 /// Get all filenames to run hooks on.
 /// Returns a list of file paths relative to the workspace root.
-#[allow(clippy::too_many_arguments)]
+#[instrument(level = "trace", skip_all)]
 pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<Vec<PathBuf>> {
     let CollectOptions {
         hook_stage,
