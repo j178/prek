@@ -669,7 +669,10 @@ impl Workspace {
                         return WalkState::Continue;
                     }
                     // Skip git submodules
-                    if submodules.iter().any(|submodule| submodule == entry.path()) {
+                    if submodules
+                        .iter()
+                        .any(|submodule| entry.path().starts_with(submodule))
+                    {
                         trace!(
                             path = %entry.path().user_display(),
                             "Skipping git submodule"

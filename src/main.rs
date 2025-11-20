@@ -97,7 +97,6 @@ fn setup_logging(level: Level, log_file: LogFile, store: &Store) -> Result<()> {
         .context("Invalid RUST_LOG directive")?;
     let stderr_format = tracing_subscriber::fmt::format()
         .with_target(false)
-        .without_time()
         .with_ansi(*USE_COLOR);
     let stderr_layer = tracing_subscriber::fmt::layer()
         .with_span_events(FmtSpan::CLOSE)
