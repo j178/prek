@@ -838,8 +838,8 @@ async fn run_hook(
             } else {
                 writeln!(
                     stdout,
-                    "{}",
-                    textwrap::indent(&String::from_utf8_lossy(output), "  ").dimmed()
+                    "\n{}",
+                    textwrap::indent(&String::from_utf8_lossy(output), "  ")
                 )?;
             }
         }
