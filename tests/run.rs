@@ -37,7 +37,7 @@ fn run_basic() -> Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -45,18 +45,20 @@ fn run_basic() -> Result<()> {
     - hook id: trailing-whitespace
     - exit code: 1
     - files were modified by this hook
+
       Fixing main.py
     fix end of files.........................................................Failed
     - hook id: end-of-file-fixer
     - exit code: 1
     - files were modified by this hook
+
       Fixing valid.json
       Fixing invalid.json
       Fixing main.py
     check json...............................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     context.git_add(".");
 
@@ -189,7 +191,7 @@ fn same_repo() -> Result<()> {
     cwd.child("main.py").write_str(r#"print "abc"  "#)?;
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -197,12 +199,13 @@ fn same_repo() -> Result<()> {
     - hook id: trailing-whitespace
     - exit code: 1
     - files were modified by this hook
+
       Fixing main.py
     trim trailing whitespace.................................................Passed
     trim trailing whitespace.................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -610,22 +613,24 @@ fn files_and_exclude() -> Result<()> {
     "});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     trailing whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
+
       ['file.txt']
     fix end of files.........................................................Failed
     - hook id: end-of-file-fixer
     - exit code: 1
+
       ['file.txt']
     check json...........................................(no files to check)Skipped
 
     ----- stderr -----
-    "#);
+    ");
 
     // Override hook level files and exclude.
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -650,7 +655,7 @@ fn files_and_exclude() -> Result<()> {
     "});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -658,14 +663,16 @@ fn files_and_exclude() -> Result<()> {
     fix end of files.........................................................Failed
     - hook id: end-of-file-fixer
     - exit code: 1
+
       ['file.txt']
     check json...............................................................Failed
     - hook id: check-json
     - exit code: 1
+
       ['file.txt']
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -716,26 +723,29 @@ fn file_types() -> Result<()> {
     "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
+
       ['json.json']
     trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
+
       ['main.py', 'json.json']
     trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
+
       ['file.txt', '.pre-commit-config.yaml', 'main.py']
     trailing-whitespace..................................(no files to check)Skipped
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -775,21 +785,23 @@ fn fail_fast() {
     "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
+
       Fixing files
     trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
+
       Fixing files
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 /// Test --fail-fast CLI flag stops execution after first failure.
@@ -815,30 +827,32 @@ fn fail_fast_cli_flag() {
     "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     failing-hook.............................................................Failed
     - hook id: failing-hook
     - exit code: 1
+
       Failed
     passing-hook.............................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
-    cmd_snapshot!(context.filters(), context.run().arg("--fail-fast"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--fail-fast"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     failing-hook.............................................................Failed
     - hook id: failing-hook
     - exit code: 1
+
       Failed
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 /// Run from a subdirectory. File arguments should be fixed to be relative to the root.
@@ -865,29 +879,31 @@ fn subdirectory() -> Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run().current_dir(&child).arg("--files").arg("file.txt"), @r#"
+    cmd_snapshot!(context.filters(), context.run().current_dir(&child).arg("--files").arg("file.txt"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
+
       foo/bar/baz/file.txt
 
     ----- stderr -----
-    "#);
+    ");
 
-    cmd_snapshot!(context.filters(), context.run().arg("--cd").arg(&*child).arg("--files").arg("file.txt"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--cd").arg(&*child).arg("--files").arg("file.txt"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     trailing-whitespace......................................................Failed
     - hook id: trailing-whitespace
     - exit code: 1
+
       foo/bar/baz/file.txt
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -944,17 +960,18 @@ fn pass_env_vars() {
                 always_run: true
     "#});
 
-    cmd_snapshot!(context.filters(), context.run(), @r###"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     Pass environment.........................................................Failed
     - hook id: env-vars
     - exit code: 1
+
       1
 
     ----- stderr -----
-    "###);
+    ");
 }
 
 #[test]
@@ -998,6 +1015,7 @@ fn staged_files_only() -> Result<()> {
     trailing-whitespace......................................................Passed
     - hook id: trailing-whitespace
     - duration: [TIME]
+
       Hello, world!
 
     ----- stderr -----
@@ -1130,17 +1148,18 @@ fn merge_conflicts() -> Result<()> {
 
     // Fix the conflict and run again.
     context.git_add(".");
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     trailing-whitespace......................................................Passed
     - hook id: trailing-whitespace
     - duration: [TIME]
+
       ['.pre-commit-config.yaml', 'file.txt']
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -1163,17 +1182,18 @@ fn local_python_hook() {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     local-python-hook........................................................Failed
     - hook id: local-python-hook
     - exit code: 1
+
       Hello, world!
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 /// Invalid `entry`
@@ -1344,7 +1364,7 @@ fn run_last_commit() -> Result<()> {
 
     // Run with --last-commit should only check files from the last commit
     // This should only process file1.txt and file3.txt, NOT file2.txt
-    cmd_snapshot!(context.filters(), context.run().arg("--last-commit"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--last-commit"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1352,15 +1372,17 @@ fn run_last_commit() -> Result<()> {
     - hook id: trailing-whitespace
     - exit code: 1
     - files were modified by this hook
+
       Fixing file1.txt
     fix end of files.........................................................Failed
     - hook id: end-of-file-fixer
     - exit code: 1
     - files were modified by this hook
+
       Fixing file3.txt
 
     ----- stderr -----
-    "#);
+    ");
 
     // Now reset the files to their problematic state for comparison
     cwd.child("file1.txt").write_str("Hello, world!   \n")?; // trailing whitespace
@@ -1368,7 +1390,7 @@ fn run_last_commit() -> Result<()> {
 
     // Run with --all-files should check ALL files including file2.txt
     // This demonstrates that file2.txt was indeed filtered out in the previous test
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1376,16 +1398,18 @@ fn run_last_commit() -> Result<()> {
     - hook id: trailing-whitespace
     - exit code: 1
     - files were modified by this hook
+
       Fixing file1.txt
       Fixing file2.txt
     fix end of files.........................................................Failed
     - hook id: end-of-file-fixer
     - exit code: 1
     - files were modified by this hook
+
       Fixing file3.txt
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -1411,17 +1435,18 @@ fn run_multiple_files() -> Result<()> {
     cwd.child("file2.txt").write_str("Hello, world!")?;
     context.git_add(".");
     // `--files` with multiple files
-    cmd_snapshot!(context.filters(), context.run().arg("--files").arg("file1.txt").arg("file2.txt"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--files").arg("file1.txt").arg("file2.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     multiple-files...........................................................Passed
     - hook id: multiple-files
     - duration: [TIME]
+
       file2.txt file1.txt
 
     ----- stderr -----
-    "#);
+    ");
     Ok(())
 }
 
@@ -1442,17 +1467,18 @@ fn run_no_files() {
     "});
     context.git_add(".");
     // `--files` with no files
-    cmd_snapshot!(context.filters(), context.run().arg("--files"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--files"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     no-files.................................................................Passed
     - hook id: no-files
     - duration: [TIME]
+
       .pre-commit-config.yaml
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 /// Test `prek run --directory` flags.
@@ -1479,43 +1505,46 @@ fn run_directory() -> Result<()> {
     context.git_add(".");
 
     // one `--directory`
-    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     directory................................................................Passed
     - hook id: directory
     - duration: [TIME]
+
       dir1/file.txt
 
     ----- stderr -----
-    "#);
+    ");
 
     // repeated `--directory`
-    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--directory").arg("dir1"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--directory").arg("dir1"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     directory................................................................Passed
     - hook id: directory
     - duration: [TIME]
+
       dir1/file.txt
 
     ----- stderr -----
-    "#);
+    ");
 
     // multiple `--directory`
-    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--directory").arg("dir2"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--directory").arg("dir2"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     directory................................................................Passed
     - hook id: directory
     - duration: [TIME]
+
       dir2/file.txt dir1/file.txt
 
     ----- stderr -----
-    "#);
+    ");
 
     // non-existing directory
     cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("non-existing-dir"), @r#"
@@ -1528,53 +1557,57 @@ fn run_directory() -> Result<()> {
     "#);
 
     // `--directory` with `--files`
-    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--files").arg("dir1/file.txt"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--files").arg("dir1/file.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     directory................................................................Passed
     - hook id: directory
     - duration: [TIME]
+
       dir1/file.txt
 
     ----- stderr -----
-    "#);
-    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--files").arg("dir2/file.txt"), @r#"
+    ");
+    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--files").arg("dir2/file.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     directory................................................................Passed
     - hook id: directory
     - duration: [TIME]
+
       dir2/file.txt dir1/file.txt
 
     ----- stderr -----
-    "#);
+    ");
 
     // run `--directory` inside a subdirectory
-    cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("dir1")).arg("--directory").arg("."), @r#"
+    cmd_snapshot!(context.filters(), context.run().current_dir(cwd.join("dir1")).arg("--directory").arg("."), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     directory................................................................Passed
     - hook id: directory
     - duration: [TIME]
+
       dir1/file.txt
 
     ----- stderr -----
-    "#);
+    ");
 
-    cmd_snapshot!(context.filters(), context.run().arg("--cd").arg("dir1").arg("--directory").arg("."), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--cd").arg("dir1").arg("--directory").arg("."), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     directory................................................................Passed
     - hook id: directory
     - duration: [TIME]
+
       dir1/file.txt
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -1648,30 +1681,32 @@ fn color() -> Result<()> {
 
     // Run default. In integration tests, we don't have a TTY.
     // So this prints without color.
-    cmd_snapshot!(context.filters(), context.run(), @r#"
-  success: true
-  exit_code: 0
-  ----- stdout -----
-  color....................................................................Passed
-  - hook id: color
-  - duration: [TIME]
-    Hello, world!
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    color....................................................................Passed
+    - hook id: color
+    - duration: [TIME]
 
-  ----- stderr -----
-  "#);
+      Hello, world!
+
+    ----- stderr -----
+    ");
 
     // Force color output
-    cmd_snapshot!(context.filters(), context.run().arg("--color=always"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--color=always"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     color....................................................................[42mPassed[49m
     [2m- hook id: color[0m
     [2m- duration: [TIME][0m
-    [2m  [1;32mHello, world![0m[0m
+
+      [1;32mHello, world![0m
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -1705,17 +1740,18 @@ fn shebang_script() -> Result<()> {
     "});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     shebang-script...........................................................Passed
     - hook id: shebang-script
     - duration: [TIME]
+
       Hello, world!
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -1773,7 +1809,7 @@ fn git_commit_a() -> Result<()> {
         .chain([(r"\[master \w{7}\]", r"[master COMMIT]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters, commit, @r#"
+    cmd_snapshot!(filters, commit, @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1784,8 +1820,9 @@ fn git_commit_a() -> Result<()> {
     echo.....................................................................Passed
     - hook id: echo
     - duration: [TIME]
+
       file.txt
-    "#);
+    ");
 
     Ok(())
 }
@@ -1981,6 +2018,7 @@ fn reuse_env() -> Result<()> {
     flake8...................................................................Failed
     - hook id: flake8
     - exit code: 1
+
       err.py:1:1: EM101 Exceptions must not use a string literal; assign to a variable first
 
     ----- stderr -----
@@ -2034,6 +2072,7 @@ fn dry_run() {
     fail.....................................................................Dry Run
     - hook id: fail
     - duration: [TIME]
+
       `fail` would be run on 1 files:
       - .pre-commit-config.yaml
 
@@ -2068,6 +2107,7 @@ fn alternate_config_file() -> Result<()> {
     local-python-hook........................................................Passed
     - hook id: local-python-hook
     - duration: [TIME]
+
       Hello, world!
 
     ----- stderr -----
@@ -2094,6 +2134,7 @@ fn alternate_config_file() -> Result<()> {
     local-python-hook........................................................Passed
     - hook id: local-python-hook
     - duration: [TIME]
+
       Hello, world!
 
     ----- stderr -----
@@ -2281,6 +2322,7 @@ fn run_quiet() {
     fail.....................................................................Failed
     - hook id: fail
     - exit code: 1
+
       fail
 
       .pre-commit-config.yaml
@@ -2322,6 +2364,7 @@ fn run_log_file() {
     fail.....................................................................Failed
     - hook id: fail
     - exit code: 1
+
       fail
 
       .pre-commit-config.yaml
@@ -2341,6 +2384,7 @@ fn run_log_file() {
     fail.....................................................................Failed
     - hook id: fail
     - exit code: 1
+
       fail
 
       .pre-commit-config.yaml

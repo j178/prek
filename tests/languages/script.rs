@@ -25,13 +25,14 @@ mod unix {
         "});
         context.git_add(".");
 
-        cmd_snapshot!(context.filters(), context.run(), @r##"
+        cmd_snapshot!(context.filters(), context.run(), @r#"
         success: true
         exit_code: 0
         ----- stdout -----
         echo.....................................................................Passed
         - hook id: echo
         - duration: [TIME]
+
           .pre-commit-config.yaml
 
         ----- stderr -----
@@ -40,7 +41,7 @@ mod unix {
         Mutable references are never updated after first install and are not supported.
         See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details.
         Hint: `prek autoupdate` often fixes this",
-        "##);
+        "#);
     }
 
     #[test]
@@ -93,12 +94,14 @@ mod unix {
         script...................................................................Passed
         - hook id: script
         - duration: [TIME]
+
           Hello, World from child!
 
         Running hooks for `.`:
         script...................................................................Passed
         - hook id: script
         - duration: [TIME]
+
           Hello, World!
 
         ----- stderr -----
@@ -111,6 +114,7 @@ mod unix {
         script...................................................................Passed
         - hook id: script
         - duration: [TIME]
+
           Hello, World from child!
 
         ----- stderr -----
@@ -143,17 +147,18 @@ mod unix {
 
         context.git_add(".");
 
-        cmd_snapshot!(context.filters(), context.run(), @r#"
+        cmd_snapshot!(context.filters(), context.run(), @r"
         success: true
         exit_code: 0
         ----- stdout -----
         echo.....................................................................Passed
         - hook id: echo
         - duration: [TIME]
+
           Hello, World!
 
         ----- stderr -----
-        "#);
+        ");
 
         Ok(())
     }
@@ -184,17 +189,18 @@ fn windows_script_run() -> Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     echo.....................................................................Passed
     - hook id: echo
     - duration: [TIME]
+
       Hello, World!
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }

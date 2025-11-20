@@ -28,30 +28,32 @@ fn basic_case_sensitive() -> Result<()> {
         "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     check-todo...............................................................Failed
     - hook id: check-todo
     - exit code: 1
+
       test.py:1:TODO: implement this
 
     ----- stderr -----
-    "#);
+    ");
 
     // Run again to ensure `health_check` works correctly.
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     check-todo...............................................................Failed
     - hook id: check-todo
     - exit code: 1
+
       test.py:1:TODO: implement this
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -81,18 +83,19 @@ fn case_insensitive() -> Result<()> {
         "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r##"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     check-todo-insensitive...................................................Failed
     - hook id: check-todo-insensitive
     - exit code: 1
+
       test.py:1:TODO: implement this
       test.py:3:# todo: fix later
 
     ----- stderr -----
-    "##);
+    ");
 
     Ok(())
 }
@@ -128,6 +131,7 @@ fn multiline_mode() -> Result<()> {
     check-multiline-docstring................................................Failed
     - hook id: check-multiline-docstring
     - exit code: 1
+
       test.py:2:    """A function
           with multiline docstring
           """
@@ -162,17 +166,18 @@ fn negate_mode() -> Result<()> {
         "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     no-todo..................................................................Failed
     - hook id: no-todo
     - exit code: 1
+
       good.py
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -203,17 +208,18 @@ fn negate_multiline_mode() -> Result<()> {
         "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     check-no-multiline-docstring.............................................Failed
     - hook id: check-no-multiline-docstring
     - exit code: 1
+
       no_pattern.py
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -274,17 +280,18 @@ fn python_regex_quirks() -> Result<()> {
         "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     function-with-args.......................................................Failed
     - hook id: function-with-args
     - exit code: 1
+
       test.py:1:def function(arg1, arg2):
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -312,18 +319,19 @@ fn complex_regex_patterns() -> Result<()> {
         "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     direct-imports...........................................................Failed
     - hook id: direct-imports
     - exit code: 1
+
       test.py:1:import sys
       test.py:3:import json
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -351,19 +359,20 @@ fn case_insensitive_multiline() -> Result<()> {
         "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r##"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     check-todos..............................................................Failed
     - hook id: check-todos
     - exit code: 1
+
       test.py:1:# TODO: fix this
       def function():
           # todo: implement
 
     ----- stderr -----
-    "##);
+    ");
 
     Ok(())
 }

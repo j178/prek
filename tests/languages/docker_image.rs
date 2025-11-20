@@ -48,6 +48,7 @@ fn docker_image() -> Result<()> {
     Detect hardcoded secrets.................................................Failed
     - hook id: gitleaks-docker
     - exit code: 1
+
       Finding:     aws_access_key_id = REDACTED
       Secret:      REDACTED
       RuleID:      generic-api-key

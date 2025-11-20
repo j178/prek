@@ -44,7 +44,7 @@ fn hook_impl() {
     ----- stderr -----
     "#);
 
-    cmd_snapshot!(context.filters(), commit, @r#"
+    cmd_snapshot!(context.filters(), commit, @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -53,10 +53,11 @@ fn hook_impl() {
     fail.....................................................................Failed
     - hook id: fail
     - exit code: 1
+
       always fail
 
       .pre-commit-config.yaml
-    "#);
+    ");
 }
 
 #[test]
@@ -241,6 +242,7 @@ fn run_worktree() -> anyhow::Result<()> {
     fail.....................................................................Failed
     - hook id: fail
     - exit code: 1
+
       always fail
     ");
 
@@ -306,18 +308,21 @@ fn workspace_hook_impl_root() -> anyhow::Result<()> {
     Test Hook................................................................Passed
     - hook id: test-hook
     - duration: [TIME]
+
       cwd: [TEMP_DIR]/project2
 
     Running hooks for `project3`:
     Test Hook................................................................Passed
     - hook id: test-hook
     - duration: [TIME]
+
       cwd: [TEMP_DIR]/project3
 
     Running hooks for `.`:
     Test Hook................................................................Passed
     - hook id: test-hook
     - duration: [TIME]
+
       cwd: [TEMP_DIR]/
     ");
 
@@ -386,6 +391,7 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
     Test Hook................................................................Passed
     - hook id: test-hook
     - duration: [TIME]
+
       cwd: [TEMP_DIR]/project2
     ");
 
@@ -579,6 +585,7 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     fail.....................................................................Failed
     - hook id: fail
     - exit code: 1
+
       fail
 
       .pre-commit-config.yaml
@@ -646,6 +653,7 @@ fn workspace_hook_impl_with_selectors() -> anyhow::Result<()> {
     Test Hook................................................................Passed
     - hook id: test-hook
     - duration: [TIME]
+
       cwd: [TEMP_DIR]/project2
     ");
 

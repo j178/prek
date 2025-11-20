@@ -27,19 +27,20 @@ fn fail() -> Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     changelogs must be rst...................................................Failed
     - hook id: changelogs-rst
     - exit code: 1
+
       changelog filenames must end in .rst
 
       changelog/changelog.md
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }

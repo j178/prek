@@ -59,14 +59,17 @@ fn system_ruby() {
     ruby-version.............................................................Passed
     - hook id: ruby-version
     - duration: [TIME]
+
       ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
     ruby-version-unspecified.................................................Passed
     - hook id: ruby-version-unspecified
     - duration: [TIME]
+
       ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
     ruby-version-path........................................................Passed
     - hook id: ruby-version-path
     - duration: [TIME]
+
       ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
 
     ----- stderr -----
@@ -101,17 +104,18 @@ fn language_version_default() {
     .chain(context.filters())
     .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters, context.run().arg("-v"), @r#"
+    cmd_snapshot!(filters, context.run().arg("-v"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     ruby-default.............................................................Passed
     - hook id: ruby-default
     - duration: [TIME]
+
       ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 /// Test basic Ruby hook with a specified (and available) version of Ruby
@@ -176,22 +180,27 @@ fn specific_ruby_available() {
     ruby-version-prefixed....................................................Passed
     - hook id: ruby-version-prefixed
     - duration: [TIME]
+
       ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
     ruby-version.............................................................Passed
     - hook id: ruby-version
     - duration: [TIME]
+
       ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
     ruby-version-range-min...................................................Passed
     - hook id: ruby-version-range-min
     - duration: [TIME]
+
       ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
     ruby-version-range-max...................................................Passed
     - hook id: ruby-version-range-max
     - duration: [TIME]
+
       ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
     ruby-version-constrained-range...........................................Passed
     - hook id: ruby-version-constrained-range
     - duration: [TIME]
+
       ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
 
     ----- stderr -----
@@ -309,11 +318,11 @@ fn additional_gem_dependencies() -> anyhow::Result<()> {
     let filters = [
         // Normalize unpinned rspec version (only for test-gem-require, not test-gem-require-versioned)
         (
-            r"(- hook id: test-gem-require\n- duration: .*?\n)  \d+\.\d+\.\d+",
+            r"(- hook id: test-gem-require\n- duration: .*?\n\n)  \d+\.\d+\.\d+",
             "$1  X.Y.Z",
         ),
         // Normalize Ruby internal paths
-        (r"<internal:[^>]+>", "<internal:[RUBY_LIB]>"),
+        (r"<internal:[^>]+>:\d+:in", "<internal:[RUBY_LIB]>:[X]:in"),
     ]
     .into_iter()
     .chain(context.filters())
@@ -326,17 +335,20 @@ fn additional_gem_dependencies() -> anyhow::Result<()> {
     test-gem-require.........................................................Passed
     - hook id: test-gem-require
     - duration: [TIME]
+
       X.Y.Z
     test-gem-require-versioned...............................................Passed
     - hook id: test-gem-require-versioned
     - duration: [TIME]
+
       3.12.0
     test-gem-require-missing.................................................Failed
     - hook id: test-gem-require-missing
     - duration: [TIME]
     - exit code: 1
-      <internal:[RUBY_LIB]>:136:in 'Kernel#require': cannot load such file -- rspec (LoadError)
-      	from <internal:[RUBY_LIB]>:136:in 'Kernel#require'
+
+      <internal:[RUBY_LIB]>:[X]:in 'Kernel#require': cannot load such file -- rspec (LoadError)
+      	from <internal:[RUBY_LIB]>:[X]:in 'Kernel#require'
       	from test_script.rb:1:in '<main>'
 
     ----- stderr -----
@@ -403,17 +415,18 @@ fn gemspec_workflow() -> anyhow::Result<()> {
     "});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run().arg("-v"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("-v"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     test-gemspec.............................................................Passed
     - hook id: test-gemspec
     - duration: [TIME]
+
       Hello from TestGem
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -685,17 +698,18 @@ fn local_hook_with_gemspec() -> anyhow::Result<()> {
     });
     context.git_add(".pre-commit-config.yaml");
 
-    cmd_snapshot!(context.filters(), context.run().arg("-v"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("-v"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     my-hook..................................................................Passed
     - hook id: my-hook
     - duration: [TIME]
+
       Hook executed from gem!
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -744,6 +758,7 @@ fn native_gem_dependency() -> anyhow::Result<()> {
     test-native-gem..........................................................Passed
     - hook id: test-native-gem
     - duration: [TIME]
+
       MessagePack native extension working!
       Packed size: 21 bytes
 
@@ -803,6 +818,7 @@ fn process_files() -> anyhow::Result<()> {
     check-ruby-files.........................................................Passed
     - hook id: check-ruby-files
     - duration: [TIME]
+
       OK: check_ruby.rb
       OK: test.rb
 

@@ -74,26 +74,32 @@ fn language_version() -> anyhow::Result<()> {
     node.....................................................................Passed
     - hook id: node
     - duration: [TIME]
+
       v20.X.X
     node.....................................................................Passed
     - hook id: node
     - duration: [TIME]
+
       v20.X.X
     node.....................................................................Passed
     - hook id: node
     - duration: [TIME]
+
       v19.X.X
     node.....................................................................Passed
     - hook id: node
     - duration: [TIME]
+
       v19.X.X
     node.....................................................................Passed
     - hook id: node
     - duration: [TIME]
+
       v19.X.X
     node.....................................................................Passed
     - hook id: node
     - duration: [TIME]
+
       v20.X.X
 
     ----- stderr -----
@@ -148,13 +154,14 @@ fn additional_dependencies() {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r###"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     node.....................................................................Passed
     - hook id: node
     - duration: [TIME]
+
       ______________
       < Hello World! >
        --------------
@@ -165,16 +172,17 @@ fn additional_dependencies() {
                       ||     ||
 
     ----- stderr -----
-    "###);
+    ");
 
     // Run again to check `health_check` works correctly.
-    cmd_snapshot!(context.filters(), context.run(), @r###"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     node.....................................................................Passed
     - hook id: node
     - duration: [TIME]
+
       ______________
       < Hello World! >
        --------------
@@ -185,7 +193,7 @@ fn additional_dependencies() {
                       ||     ||
 
     ----- stderr -----
-    "###);
+    ");
 }
 
 /// Test `https://github.com/thlorenz/doctoc` works correctly with prek.

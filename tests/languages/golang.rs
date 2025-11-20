@@ -85,26 +85,32 @@ fn language_version() -> anyhow::Result<()> {
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
+
       go version go1.24.X [OS]/[ARCH]
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
+
       go version go1.24.X [OS]/[ARCH]
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
+
       go version go1.23.X [OS]/[ARCH]
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
+
       go version go1.23.X [OS]/[ARCH]
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
+
       go version go1.23.X [OS]/[ARCH]
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
+
       go version go1.24.X [OS]/[ARCH]
 
     ----- stderr -----
@@ -161,6 +167,7 @@ fn remote_hook() {
     echo.....................................................................Passed
     - hook id: echo
     - duration: [TIME]
+
       .pre-commit-config.yaml
 
     ----- stderr -----
@@ -190,6 +197,7 @@ fn remote_hook() {
     golang...................................................................Passed
     - hook id: golang
     - duration: [TIME]
+
       usage: gofumpt [flags] [path ...]
       	-version  show version and exit
 
@@ -224,6 +232,7 @@ fn remote_hook() {
     echo.....................................................................Passed
     - hook id: echo
     - duration: [TIME]
+
       .pre-commit-config.yaml
 
     ----- stderr -----
@@ -307,6 +316,7 @@ fn local_additional_deps() -> anyhow::Result<()> {
     go-hook..................................................................Passed
     - hook id: go-hook
     - duration: [TIME]
+
       Hello, Utility!
 
     ----- stderr -----

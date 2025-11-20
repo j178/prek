@@ -74,30 +74,37 @@ fn language_version() -> anyhow::Result<()> {
     python3..................................................................Passed
     - hook id: python3
     - duration: [TIME]
+
       Hello, World!
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
+
       (3, 12)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
+
       (3, 12)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
+
       (3, 12)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
+
       (3, 12)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
+
       (3, 12)
     python3.12...............................................................Passed
     - hook id: python3.12
     - duration: [TIME]
+
       (3, 11)
 
     ----- stderr -----
@@ -234,17 +241,18 @@ fn additional_dependencies() {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     local....................................................................Passed
     - hook id: local
     - duration: [TIME]
+
       Hello, world!
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 /// Ensure that stderr from hooks is captured and shown to the user.
@@ -270,17 +278,18 @@ fn hook_stderr() -> anyhow::Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     local....................................................................Failed
     - hook id: local
     - exit code: 1
+
       How are you
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -325,21 +334,23 @@ fn pep723_script() -> anyhow::Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     other-hook...............................................................Passed
     - hook id: other-hook
     - duration: [TIME]
+
       hello from other-hook
     local....................................................................Passed
     - hook id: local
     - duration: [TIME]
+
       hello world
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }

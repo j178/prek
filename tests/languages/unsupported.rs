@@ -38,10 +38,12 @@ fn unsupported_language() -> anyhow::Result<()> {
     unsupported..............................................................Passed
     - hook id: unsupported
     - duration: [TIME]
+
       script.sh .pre-commit-config.yaml
     unsupported-script.......................................................Passed
     - hook id: unsupported-script
     - duration: [TIME]
+
       Hello, World!
 
     ----- stderr -----

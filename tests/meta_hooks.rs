@@ -38,21 +38,24 @@ fn meta_hooks() -> anyhow::Result<()> {
     "});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     Check hooks apply........................................................Failed
     - hook id: check-hooks-apply
     - exit code: 1
+
       match-no-files does not apply to this repository
     Check useless excludes...................................................Failed
     - hook id: check-useless-excludes
     - exit code: 1
+
       The exclude pattern `$nonexistent^` for `useless-exclude` does not match any files
     identity.................................................................Passed
     - hook id: identity
     - duration: [TIME]
+
       file.txt
       .pre-commit-config.yaml
       valid.json
@@ -62,7 +65,7 @@ fn meta_hooks() -> anyhow::Result<()> {
     useless exclude..........................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -103,17 +106,18 @@ fn check_useless_excludes_remote() -> anyhow::Result<()> {
 
     context.write_pre_commit_config(&pre_commit_config);
     context.git_add(".");
-    cmd_snapshot!(context.filters(), context.run().arg("check-useless-excludes"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("check-useless-excludes"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     Check useless excludes...................................................Failed
     - hook id: check-useless-excludes
     - exit code: 1
+
       The exclude pattern `^useless/$` for `echo` does not match any files
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -162,14 +166,17 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
     Check hooks apply........................................................Failed
     - hook id: check-hooks-apply
     - exit code: 1
+
       match-no-files does not apply to this repository
     Check useless excludes...................................................Failed
     - hook id: check-useless-excludes
     - exit code: 1
+
       The exclude pattern `$nonexistent^` for `useless-exclude` does not match any files
     identity.................................................................Passed
     - hook id: identity
     - duration: [TIME]
+
       file.txt
       .pre-commit-config.yaml
       valid.json

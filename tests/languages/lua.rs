@@ -22,30 +22,32 @@ fn health_check() {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     lua......................................................................Passed
     - hook id: lua
     - duration: [TIME]
+
       Hello from Lua!
 
     ----- stderr -----
-    "#);
+    ");
 
     // Run again to check `health_check` works correctly.
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     lua......................................................................Passed
     - hook id: lua
     - duration: [TIME]
+
       Hello from Lua!
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 /// Test specifying `language_version` for Lua hooks which is not supported for now.
@@ -104,17 +106,18 @@ fn hook_stderr() -> anyhow::Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
     local....................................................................Failed
     - hook id: local
     - exit code: 1
+
       How are you
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -164,6 +167,7 @@ fn script_with_files() -> anyhow::Result<()> {
     lua......................................................................Passed
     - hook id: lua
     - duration: [TIME]
+
       Processing file:	script.lua
       Processing file:	.pre-commit-config.yaml
       Processing file:	test2.lua
@@ -210,6 +214,7 @@ fn lua_environment() {
     lua......................................................................Passed
     - hook id: lua
     - duration: [TIME]
+
       LUA_PATH:	[HOME]/hooks/lua-[HASH]/share/lua/5.4/?.lua;[HOME]/hooks/lua-[HASH]/share/lua/5.4/?/init.lua;;
       LUA_CPATH:	[HOME]/hooks/lua-[HASH]/lib/lua/5.4/?.so;;
 
@@ -224,6 +229,7 @@ fn lua_environment() {
     lua......................................................................Passed
     - hook id: lua
     - duration: [TIME]
+
       LUA_PATH:	[HOME]/hooks/lua-[HASH]/share/lua/5.4\?.lua;[HOME]/hooks/lua-[HASH]/share/lua/5.4\?/init.lua;;
       LUA_CPATH:	[HOME]/hooks/lua-[HASH]/lib/lua/5.4\?.dll;;
 
@@ -253,17 +259,18 @@ fn additional_dependencies() {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     lua......................................................................Passed
     - hook id: lua
     - duration: [TIME]
+
       LuaFileSystem module loaded successfully
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 /// Test remote Lua hook from GitHub repository.
@@ -284,15 +291,16 @@ fn remote_hook() {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     lua-hooks................................................................Passed
     - hook id: lua-hooks
     - duration: [TIME]
+
       this is a lua remote hook
 
     ----- stderr -----
-    "#);
+    ");
 }

@@ -28,6 +28,7 @@ fn docker() {
     Hello World..............................................................Passed
     - hook id: hello-world
     - duration: [TIME]
+
       Hello, world! .pre-commit-config.yaml
 
     ----- stderr -----
@@ -64,18 +65,21 @@ fn workspace_docker() -> anyhow::Result<()> {
     Hello World..............................................................Passed
     - hook id: hello-world
     - duration: [TIME]
+
       project1.txt .pre-commit-config.yaml
 
     Running hooks for `project2`:
     Hello World..............................................................Passed
     - hook id: hello-world
     - duration: [TIME]
+
       project2.txt .pre-commit-config.yaml
 
     Running hooks for `.`:
     Hello World..............................................................Passed
     - hook id: hello-world
     - duration: [TIME]
+
       project1/.pre-commit-config.yaml .pre-commit-config.yaml project2/project2.txt project1/project1.txt
       project2/.pre-commit-config.yaml
 
