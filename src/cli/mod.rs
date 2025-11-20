@@ -82,16 +82,6 @@ pub enum ColorChoice {
     Never,
 }
 
-impl From<ColorChoice> for anstream::ColorChoice {
-    fn from(value: ColorChoice) -> Self {
-        match value {
-            ColorChoice::Auto => Self::Auto,
-            ColorChoice::Always => Self::Always,
-            ColorChoice::Never => Self::Never,
-        }
-    }
-}
-
 const STYLES: Styles = Styles::styled()
     .header(AnsiColor::Green.on_default().effects(Effects::BOLD))
     .usage(AnsiColor::Green.on_default().effects(Effects::BOLD))

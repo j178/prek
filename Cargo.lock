@@ -1828,6 +1828,7 @@ name = "prek"
 version = "0.2.17"
 dependencies = [
  "anstream",
+ "anstyle-query",
  "anyhow",
  "assert_cmd",
  "assert_fs",

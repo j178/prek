@@ -4,20 +4,58 @@ use std::path::Path;
 use std::sync::LazyLock;
 
 use anstream::ColorChoice;
+use anstream::stream::IsTerminal;
 use futures::StreamExt;
+use prek_consts::env_vars::EnvVars;
 use tracing::trace;
 
-use prek_consts::env_vars::EnvVars;
-
+use crate::cli;
 use crate::hook::Hook;
 
-pub(crate) static USE_COLOR: LazyLock<bool> = LazyLock::new(|| {
-    match anstream::Stderr::choice(&std::io::stderr()) {
-        ColorChoice::Always | ColorChoice::AlwaysAnsi => true,
-        ColorChoice::Never => false,
-        // We just asked anstream for a choice, that can't be auto
-        ColorChoice::Auto => unreachable!(),
+fn detect_color_choice(color: cli::ColorChoice) -> bool {
+    match color {
+        cli::ColorChoice::Always => true,
+        cli::ColorChoice::Never => false,
+        cli::ColorChoice::Auto => {
+            let mut term_supports_color = anstyle_query::term_supports_color();
+            if !term_supports_color {
+                if let Some(enabled) = anstyle_query::windows::enable_ansi_colors() {
+                    term_supports_color = enabled;
+                }
+            }
+
+            // Inline the logic from `anstream::choice()`.
+            let clicolor = anstyle_query::clicolor();
+            let clicolor_enabled = clicolor.unwrap_or(false);
+            let clicolor_disabled = !clicolor.unwrap_or(true);
+            if anstyle_query::no_color() {
+                false
+            } else if anstyle_query::clicolor_force() {
+                true
+            } else if clicolor_disabled {
+                false
+            } else {
+                std::io::stderr().is_terminal()
+                    && (term_supports_color || clicolor_enabled || anstyle_query::is_ci())
+            }
+        }
     }
+}
+
+pub(crate) fn write_color_choice(choice: cli::ColorChoice) {
+    let enabled = detect_color_choice(choice);
+
+    ColorChoice::write_global(if enabled {
+        ColorChoice::Always
+    } else {
+        ColorChoice::Never
+    });
+}
+
+pub(crate) static USE_COLOR: LazyLock<bool> = LazyLock::new(|| match ColorChoice::global() {
+    ColorChoice::Always | ColorChoice::AlwaysAnsi => true,
+    ColorChoice::Never => false,
+    ColorChoice::Auto => unreachable!(),
 });
 
 pub(crate) static CONCURRENCY: LazyLock<usize> = LazyLock::new(|| {

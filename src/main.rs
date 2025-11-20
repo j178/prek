@@ -4,7 +4,7 @@ use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::Mutex;
 
-use anstream::{ColorChoice, StripStream, eprintln};
+use anstream::{StripStream, eprintln};
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use clap_complete::CompleteEnv;
@@ -22,7 +22,7 @@ use crate::cli::{CacheCommand, CacheNamespace, Cli, Command, ExitStatus};
 #[cfg(feature = "self-update")]
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::printer::Printer;
-use crate::run::USE_COLOR;
+use crate::run::{USE_COLOR, write_color_choice};
 use crate::store::Store;
 
 mod archive;
@@ -138,7 +138,7 @@ fn setup_logging(level: Level, log_file: LogFile, store: &Store) -> Result<()> {
 }
 
 async fn run(mut cli: Cli) -> Result<ExitStatus> {
-    ColorChoice::write_global(cli.globals.color.into());
+    write_color_choice(cli.globals.color);
 
     let store = Store::from_settings()?;
     let log_file = LogFile::from_args(cli.globals.log_file.clone(), cli.globals.no_log_file);
