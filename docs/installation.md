@@ -127,7 +127,7 @@ COMPLETE=bash prek > /etc/bash_completion.d/prek
 ### Zsh
 
 ```bash
-COMPLETE=zsh prek completion > "${fpath[1]}/_prek"
+COMPLETE=zsh prek > "${fpath[1]}/_prek"
 ```
 
 ### Fish
