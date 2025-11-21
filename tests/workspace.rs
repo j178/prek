@@ -1112,7 +1112,10 @@ fn deduplicate_files() -> Result<()> {
         .write_str(config_without_dedup)?;
 
     // Create test files
-    context.work_dir().child("src/backend/test.py").write_str("")?;
+    context
+        .work_dir()
+        .child("src/backend/test.py")
+        .write_str("")?;
     context.work_dir().child("src/test.py").write_str("")?;
     context.work_dir().child("test.py").write_str("")?;
     context.git_add(".");
