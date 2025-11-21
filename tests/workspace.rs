@@ -1141,8 +1141,8 @@ fn deduplicate_files() -> Result<()> {
     - duration: [TIME]
 
       Processing 2 files
-        - backend/test.py
         - test.py
+        - backend/test.py
 
     Running hooks for `.`:
     Show Files...............................................................Passed
