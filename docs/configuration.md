@@ -35,6 +35,25 @@ Example:
 
 The original `minimum_pre_commit_version` option has no effect and gets ignored in prek.
 
+### `deduplicate_files`
+
+*Only applies in workspace mode with nested projects.*
+
+By default, files in subprojects are processed multiple times - once for each project in the hierarchy that contains them. Setting `deduplicate_files: true` ensures each file is processed only once by the deepest project that contains it.
+
+Example:
+
+  ```yaml
+  deduplicate_files: true
+  repos:
+    - repo: https://github.com/astral-sh/ruff-pre-commit
+      rev: v0.8.4
+      hooks:
+        - id: ruff
+  ```
+
+For more details and examples, see [Workspace Mode - File Processing Behavior](workspace.md#file-processing-behavior).
+
 ## Environment variables
 
 Prek supports the following environment variables:

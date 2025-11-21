@@ -622,6 +622,10 @@ pub(crate) struct Config {
     /// The minimum version of prek required to run this configuration.
     #[serde(deserialize_with = "deserialize_and_validate_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
+    /// Set to true to process files only once in workspace mode (starting from the deepest project).
+    /// When false (default), files in subprojects are processed multiple times - once for each
+    /// project in the hierarchy that contains them.
+    pub deduplicate_files: Option<bool>,
 
     #[serde(skip_serializing)]
     #[serde(flatten)]
