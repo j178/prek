@@ -1073,6 +1073,7 @@ fn deduplicate_files() -> Result<()> {
 
     // Create a hook that shows which files it processes
     let config_without_dedup = indoc! {r#"
+    exclude: '\.pre-commit-config\.yaml$'
     repos:
       - repo: local
         hooks:
@@ -1086,6 +1087,7 @@ fn deduplicate_files() -> Result<()> {
 
     let config_with_dedup = indoc! {r#"
     deduplicate_files: true
+    exclude: '\.pre-commit-config\.yaml$'
     repos:
       - repo: local
         hooks:
