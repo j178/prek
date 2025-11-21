@@ -1072,19 +1072,19 @@ fn deduplicate_files() -> Result<()> {
     context.init_project();
 
     // Create a hook that shows which files it processes
-    let config_without_dedup = indoc! {r"
+    let config_without_dedup = indoc! {r#"
     repos:
       - repo: local
         hooks:
         - id: show-files
           name: Show Files
           language: python
-          entry: python -c 'import sys; print(f\"Processing {len(sys.argv[1:])} files\"); [print(f\"  - {f}\") for f in sys.argv[1:]]'
+          entry: python -c 'import sys; print("Processing {} files".format(len(sys.argv[1:]))); [print("  - {}".format(f)) for f in sys.argv[1:]]'
           pass_filenames: true
           verbose: true
-    "};
+    "#};
 
-    let config_with_dedup = indoc! {r"
+    let config_with_dedup = indoc! {r#"
     deduplicate_files: true
     repos:
       - repo: local
@@ -1092,10 +1092,10 @@ fn deduplicate_files() -> Result<()> {
         - id: show-files
           name: Show Files
           language: python
-          entry: python -c 'import sys; print(f\"Processing {len(sys.argv[1:])} files\"); [print(f\"  - {f}\") for f in sys.argv[1:]]'
+          entry: python -c 'import sys; print("Processing {} files".format(len(sys.argv[1:]))); [print("  - {}".format(f)) for f in sys.argv[1:]]'
           pass_filenames: true
           verbose: true
-    "};
+    "#};
 
     // Setup workspace with nested projects
     context
