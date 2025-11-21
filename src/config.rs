@@ -935,6 +935,7 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
+                deduplicate_files: None,
                 _unused_keys: {},
             },
         )
@@ -1010,6 +1011,7 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
+                deduplicate_files: None,
                 _unused_keys: {},
             },
         )
@@ -1110,6 +1112,7 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
+                deduplicate_files: None,
                 _unused_keys: {},
             },
         )
@@ -1289,6 +1292,7 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
+                deduplicate_files: None,
                 _unused_keys: {},
             },
         )
@@ -1425,6 +1429,7 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
+                deduplicate_files: None,
                 _unused_keys: {},
             },
         )
@@ -1711,6 +1716,7 @@ mod tests {
             exclude: None,
             fail_fast: None,
             minimum_prek_version: None,
+            deduplicate_files: None,
             _unused_keys: {},
         }
         "#);
@@ -1797,6 +1803,7 @@ mod tests {
             exclude: None,
             fail_fast: None,
             minimum_prek_version: None,
+            deduplicate_files: None,
             _unused_keys: {
                 "local": Object {
                     "language": String("system"),
