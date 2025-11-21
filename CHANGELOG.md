@@ -4,6 +4,14 @@
 
 Released on 2025-11-21.
 
+### Highlights
+
+In this release, prek adds a new special repo type `repo: builtin` that lets you use built‑in hooks.
+It basically gives you another way to use the existing built‑in fast path for pre‑commit‑hooks, but without needing to point to an external repo.
+Since prek doesn’t have to clone anything or set up a virtual environment, `repo: builtin` hooks work even in air‑gapped environments.
+
+For more details, see: https://prek.j178.dev/builtin/
+
 ### Enhancements
 
 - Add support `repo: builtin` ([#1118](https://github.com/j178/prek/pull/1118))
