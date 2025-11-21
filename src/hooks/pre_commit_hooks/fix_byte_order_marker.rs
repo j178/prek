@@ -1,9 +1,8 @@
-use std::io::Write;
 use std::path::Path;
 
 use anyhow::Result;
 use futures::StreamExt;
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio::io::AsyncReadExt;
 
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
@@ -34,54 +33,18 @@ pub(crate) async fn fix_byte_order_marker(
 async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
     let file_path = file_base.join(filename);
 
-    // First, just peek at the first 3 bytes to check for BOM
     let mut file = fs_err::tokio::File::open(&file_path).await?;
     let mut bom_buffer = [0u8; 3];
 
-    // Read up to 3 bytes (file might be shorter)
     let bytes_read = file.read(&mut bom_buffer).await?;
 
-    // If file is too short or doesn't start with BOM, no changes needed
     if bytes_read < 3 || bom_buffer != UTF8_BOM {
         return Ok((0, Vec::new()));
     }
 
-    // File has BOM - now we need to remove it
-    let metadata = file.metadata().await?;
-    let file_size = metadata.len();
-
-    if file_size == 3 {
-        // File is only BOM, just truncate it
-        drop(file);
-        fs_err::tokio::write(&file_path, b"").await?;
-    } else if file_size <= 64 * 1024 {
-        // For small files (≤64KB), use the simple approach
-        drop(file);
-        let content = fs_err::tokio::read(&file_path).await?;
-        fs_err::tokio::write(&file_path, &content[3..]).await?;
-    } else {
-        // For large files, use streaming to avoid loading everything into memory
-        // Create a unique temporary filename in the scratch directory
-        let mut temp_file = tempfile::NamedTempFile::new()?;
-
-        // Reset to position 3 (after BOM)
-        file.seek(std::io::SeekFrom::Start(3)).await?;
-
-        let mut buffer = vec![0u8; BUFFER_SIZE];
-
-        loop {
-            let bytes_read = file.read(&mut buffer).await?;
-            if bytes_read == 0 {
-                break;
-            }
-            temp_file.write_all(&buffer[..bytes_read])?;
-        }
-
-        drop(file);
-        temp_file.flush()?;
-
-        crate::fs::rename_or_copy(&temp_file.into_temp_path(), &file_path).await?;
-    }
+    let mut content = Vec::new();
+    file.read_to_end(&mut content).await?;
+    fs_err::tokio::write(&file_path, &content).await?;
 
     Ok((
         1,
