@@ -1065,3 +1065,138 @@ fn submodule_discovery() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn deduplicate_files() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Create a hook that shows which files it processes
+    let config_without_dedup = indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+        - id: show-files
+          name: Show Files
+          language: python
+          entry: python -c 'import sys; print(f\"Processing {len(sys.argv[1:])} files\"); [print(f\"  - {f}\") for f in sys.argv[1:]]'
+          pass_filenames: true
+          verbose: true
+    "};
+
+    let config_with_dedup = indoc! {r"
+    deduplicate_files: true
+    repos:
+      - repo: local
+        hooks:
+        - id: show-files
+          name: Show Files
+          language: python
+          entry: python -c 'import sys; print(f\"Processing {len(sys.argv[1:])} files\"); [print(f\"  - {f}\") for f in sys.argv[1:]]'
+          pass_filenames: true
+          verbose: true
+    "};
+
+    // Setup workspace with nested projects
+    context
+        .work_dir()
+        .child("src/backend/.pre-commit-config.yaml")
+        .write_str(config_without_dedup)?;
+    context
+        .work_dir()
+        .child("src/.pre-commit-config.yaml")
+        .write_str(config_without_dedup)?;
+    context
+        .work_dir()
+        .child(".pre-commit-config.yaml")
+        .write_str(config_without_dedup)?;
+
+    // Create test files
+    context.work_dir().child("src/backend/test.py").write_str("")?;
+    context.work_dir().child("src/test.py").write_str("")?;
+    context.work_dir().child("test.py").write_str("")?;
+    context.git_add(".");
+
+    // Without deduplication: files in subprojects are processed multiple times
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `src/backend`:
+    Show Files...............................................................Passed
+    - hook id: show-files
+    - duration: [TIME]
+
+      Processing 1 files
+        - test.py
+
+    Running hooks for `src`:
+    Show Files...............................................................Passed
+    - hook id: show-files
+    - duration: [TIME]
+
+      Processing 2 files
+        - backend/test.py
+        - test.py
+
+    Running hooks for `.`:
+    Show Files...............................................................Passed
+    - hook id: show-files
+    - duration: [TIME]
+
+      Processing 3 files
+        - src/backend/test.py
+        - src/test.py
+        - test.py
+
+    ----- stderr -----
+    ");
+
+    // Enable deduplication
+    context
+        .work_dir()
+        .child("src/backend/.pre-commit-config.yaml")
+        .write_str(config_with_dedup)?;
+    context
+        .work_dir()
+        .child("src/.pre-commit-config.yaml")
+        .write_str(config_with_dedup)?;
+    context
+        .work_dir()
+        .child(".pre-commit-config.yaml")
+        .write_str(config_with_dedup)?;
+
+    // With deduplication: each file is processed only once (by the deepest project)
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--refresh"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `src/backend`:
+    Show Files...............................................................Passed
+    - hook id: show-files
+    - duration: [TIME]
+
+      Processing 1 files
+        - test.py
+
+    Running hooks for `src`:
+    Show Files...............................................................Passed
+    - hook id: show-files
+    - duration: [TIME]
+
+      Processing 1 files
+        - test.py
+
+    Running hooks for `.`:
+    Show Files...............................................................Passed
+    - hook id: show-files
+    - duration: [TIME]
+
+      Processing 1 files
+        - test.py
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}

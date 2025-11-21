@@ -87,7 +87,11 @@ pub(crate) struct FileFilter<'a> {
 impl<'a> FileFilter<'a> {
     // Here, `filenames` are paths relative to the workspace root.
     #[instrument(level = "trace", skip_all, fields(project = %project))]
-    pub(crate) fn for_project<I>(filenames: I, project: &'a Project) -> Self
+    pub(crate) fn for_project<I>(
+        filenames: I,
+        project: &'a Project,
+        processed_files: Option<&FxHashSet<&Path>>,
+    ) -> Self
     where
         I: Iterator<Item = &'a PathBuf> + Send,
     {
@@ -100,8 +104,15 @@ impl<'a> FileFilter<'a> {
         let filenames = filenames
             .map(PathBuf::as_path)
             // Collect files that are inside the hook project directory.
-            .filter(|filename| filename.starts_with(project.relative_path()))
-            .filter(|filename| filter.filter(filename))
+            .filter(|(_, filename)| filename.starts_with(project.relative_path()))
+            // Skip files that have already been processed (if deduplication is enabled).
+            .filter(|(_, filename)| {
+                if let Some(processed) = processed_files {
+                    !processed.contains(filename)
+                } else {
+                    true
+                }
+            })
             .collect::<Vec<_>>();
 
         Self {
@@ -112,6 +123,10 @@ impl<'a> FileFilter<'a> {
 
     pub(crate) fn len(&self) -> usize {
         self.filenames.len()
+    }
+
+    pub(crate) fn filenames(&self) -> &[&'a Path] {
+        &self.filenames
     }
 
     /// Filter filenames by type tags for a specific hook.

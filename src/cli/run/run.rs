@@ -585,6 +585,14 @@ async fn run_hooks(
     let mut file_modified = false;
     let mut has_unimplemented = false;
 
+    // Check if any project wants to deduplicate files
+    let deduplicate_files = project_to_hooks
+        .iter()
+        .any(|(project, _)| project.config().deduplicate_files.unwrap_or(false));
+
+    // Track already-processed files when deduplicate_files is enabled
+    let mut processed_files: rustc_hash::FxHashSet<&Path> = rustc_hash::FxHashSet::default();
+
     // Hooks might modify the files, so they must be run sequentially.
     'outer: for (_, mut hooks) in project_to_hooks {
         hooks.sort_by_key(|h| h.idx);
@@ -604,11 +612,26 @@ async fn run_hooks(
         // CLI flag overrides config setting
         let fail_fast = fail_fast || project.config().fail_fast.unwrap_or(false);
 
-        let filter = FileFilter::for_project(filenames.iter(), project);
+        let filter = FileFilter::for_project(
+            filenames.iter(),
+            project,
+            if deduplicate_files {
+                Some(&processed_files)
+            } else {
+                None
+            },
+        );
         trace!(
             "Files for project `{project}` after filtered: {}",
             filter.len()
         );
+
+        // Add newly processed files to the set
+        if deduplicate_files {
+            for file in filter.filenames() {
+                processed_files.insert(file);
+            }
+        }
 
         for hook in hooks {
             let result = run_hook(hook, &filter, store, diff, verbose, dry_run, &printer).await?;

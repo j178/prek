@@ -120,7 +120,7 @@ pub(crate) async fn check_hooks_apply(
             .init_hooks(store, None)
             .await
             .context("Failed to init hooks")?;
-        let filter = FileFilter::for_project(input.iter(), &project);
+        let filter = FileFilter::for_project(input.iter(), &project, None);
 
         for project_hook in project_hooks {
             if project_hook.always_run || matches!(project_hook.language, Language::Fail) {
@@ -199,7 +199,7 @@ pub(crate) async fn check_useless_excludes(
             )?;
         }
 
-        let filter = FileFilter::for_project(input.iter(), &project);
+        let filter = FileFilter::for_project(input.iter(), &project, None);
 
         for repo in &config.repos {
             let hooks_iter: Box<dyn Iterator<Item = (&String, &HookOptions)>> = match repo {
