@@ -34,7 +34,7 @@ impl LanguageImpl for DockerImage {
         _store: &Store,
     ) -> Result<(i32, Vec<u8>)> {
         let entry = hook.entry.resolve(None)?;
-        let run = async move |batch: &[&Path]| {
+        let run = async |batch: &[&Path]| {
             let mut cmd = Docker::docker_run_cmd(hook.work_dir());
             let mut output = cmd
                 .current_dir(hook.work_dir())
@@ -50,7 +50,7 @@ impl LanguageImpl for DockerImage {
             anyhow::Ok((code, output.stdout))
         };
 
-        let results = run_by_batch(hook, filenames, run).await?;
+        let results = run_by_batch(hook, filenames, &entry, run).await?;
 
         // Collect results
         let mut combined_status = 0;

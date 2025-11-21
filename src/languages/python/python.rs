@@ -182,7 +182,7 @@ impl LanguageImpl for Python {
         let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
         let entry = hook.entry.resolve(Some(&new_path))?;
 
-        let run = async move |batch: &[&Path]| {
+        let run = async |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "python hook")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
@@ -200,7 +200,7 @@ impl LanguageImpl for Python {
             anyhow::Ok((code, output.stdout))
         };
 
-        let results = run_by_batch(hook, filenames, run).await?;
+        let results = run_by_batch(hook, filenames, &entry, run).await?;
 
         // Collect results
         let mut combined_status = 0;
