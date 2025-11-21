@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.2.18
+
+Released on 2025-11-21.
+
+### Highlights
+
+In this release, prek adds a new special repo type `repo: builtin` that lets you use built‑in hooks.
+It basically gives you another way to use the existing built‑in fast path for pre‑commit‑hooks, but without needing to point to an external repo.
+Since prek doesn’t have to clone anything or set up a virtual environment, `repo: builtin` hooks work even in air‑gapped environments.
+
+For more details, see: https://prek.j178.dev/builtin/
+
+### Enhancements
+
+- Add support `repo: builtin` ([#1118](https://github.com/j178/prek/pull/1118))
+- Enable virtual terminal processing on Windows ([#1123](https://github.com/j178/prek/pull/1123))
+
+### Bug fixes
+
+- Do not recurse into submodules during workspace discovery ([#1121](https://github.com/j178/prek/pull/1121))
+- Do not dim the hook output ([#1126](https://github.com/j178/prek/pull/1126))
+- Further reduce max cli length for cmd.exe on Windows ([#1131](https://github.com/j178/prek/pull/1131))
+- Revert "Disallow hook-level `minimum_prek_version` (#1101)" ([#1120](https://github.com/j178/prek/pull/1120))
+
+### Other changes
+
+- docs: refer airflow as Apache Airflow ([#1116](https://github.com/j178/prek/pull/1116))
+
+### Contributors
+
+- @j178
+- @Lee-W
+
 ## 0.2.17
 
 Released on 2025-11-18.
