@@ -108,11 +108,29 @@ fn platform_max_cli_length() -> usize {
 }
 
 impl<'a> Partitions<'a> {
-    fn new(hook: &'a Hook, filenames: &'a [&'a Path], concurrency: usize) -> Self {
+    fn new(
+        hook: &'a Hook,
+        entry: &'a [String],
+        filenames: &'a [&'a Path],
+        concurrency: usize,
+    ) -> Self {
         let max_per_batch = max(4, filenames.len().div_ceil(concurrency));
-        let max_cli_length = platform_max_cli_length();
+        let mut max_cli_length = platform_max_cli_length();
 
-        let command_length = hook.entry.raw().len()
+        let entry_lower = &entry[0].to_ascii_lowercase();
+        if cfg!(windows)
+            && [".bat", ".cmd"]
+                .iter()
+                .any(|ext| entry_lower.ends_with(ext))
+        {
+            // Reduce max length for batch files on Windows due to cmd.exe limitations.
+            // 1024 is additionally subtracted to give headroom for further
+            // expansion inside the batch file.
+            max_cli_length = 8192 - 1024;
+        }
+
+        let command_length = entry.iter().map(String::len).sum::<usize>()
+            + entry.len()
             + hook.args.iter().map(String::len).sum::<usize>()
             + hook.args.len();
 
@@ -168,6 +186,7 @@ impl<'a> Iterator for Partitions<'a> {
 pub(crate) async fn run_by_batch<T, F>(
     hook: &Hook,
     filenames: &[&Path],
+    entry: &[String],
     run: F,
 ) -> anyhow::Result<Vec<T>>
 where
@@ -177,7 +196,7 @@ where
     let concurrency = target_concurrency(hook.require_serial);
 
     // Split files into batches
-    let partitions = Partitions::new(hook, filenames, concurrency);
+    let partitions = Partitions::new(hook, entry, filenames, concurrency);
     trace!(
         total_files = filenames.len(),
         concurrency = concurrency,

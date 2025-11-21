@@ -139,7 +139,7 @@ impl LanguageImpl for Golang {
         let new_path = prepend_paths(&[&go_bin, go_root_bin]).context("Failed to join PATH")?;
 
         let entry = hook.entry.resolve(Some(&new_path))?;
-        let run = async move |batch: &[&Path]| {
+        let run = async |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "go hook")
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
@@ -158,7 +158,7 @@ impl LanguageImpl for Golang {
             anyhow::Ok((code, output.stdout))
         };
 
-        let results = run_by_batch(hook, filenames, run).await?;
+        let results = run_by_batch(hook, filenames, &entry, run).await?;
 
         let mut combined_status = 0;
         let mut combined_output = Vec::new();
