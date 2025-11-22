@@ -5,7 +5,7 @@ use fancy_regex::Regex;
 use itertools::{Either, Itertools};
 use path_clean::PathClean;
 use prek_consts::env_vars::EnvVars;
-use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::FxHashSet;
 use tracing::{debug, error, instrument};
 
@@ -144,7 +144,7 @@ impl<'a> FileFilter<'a> {
         // Filter by hook `files` and `exclude` patterns.
         let filter = FilenameFilter::new(hook.files.as_deref(), hook.exclude.as_deref());
 
-        let filenames = self.filenames.iter().filter(|filename| {
+        let filenames = self.filenames.par_iter().filter(|filename| {
             if let Ok(stripped) = filename.strip_prefix(self.filename_prefix) {
                 filter.filter(stripped)
             } else {
@@ -154,27 +154,17 @@ impl<'a> FileFilter<'a> {
 
         // Filter by hook `types`, `types_or` and `exclude_types`.
         let filter = FileTagFilter::for_hook(hook);
-        let mut filenames = filenames
-            // .par_bridge() does not guarantee the order, so we use enumerate() to add indices
-            // and restore the order later.
-            .enumerate()
-            .par_bridge()
-            .filter(|(_idx, filename)| match tags_from_path(filename) {
-                Ok(tags) => filter.filter(&tags),
-                Err(err) => {
-                    error!(filename = ?filename.display(), error = %err, "Failed to get tags");
-                    false
-                }
-            })
-            .collect::<Vec<_>>();
-
-        // Restore the order.
-        filenames.sort_by_key(|(idx, _)| *idx);
+        let filenames = filenames.filter(|filename| match tags_from_path(filename) {
+            Ok(tags) => filter.filter(&tags),
+            Err(err) => {
+                error!(filename = ?filename.display(), error = %err, "Failed to get tags");
+                false
+            }
+        });
 
         // Strip the prefix to get relative paths.
         let filenames: Vec<_> = filenames
-            .into_iter()
-            .map(|(_idx, p)| {
+            .map(|p| {
                 p.strip_prefix(self.filename_prefix)
                     .expect("Failed to strip prefix")
             })
