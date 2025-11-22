@@ -5,7 +5,7 @@ use fancy_regex::Regex;
 use itertools::{Either, Itertools};
 use path_clean::PathClean;
 use prek_consts::env_vars::EnvVars;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use rustc_hash::FxHashSet;
 use tracing::{debug, error, instrument};
 
@@ -42,10 +42,6 @@ impl<'a> FilenameFilter<'a> {
             }
         }
         true
-    }
-
-    pub(crate) fn for_hook(hook: &'a Hook) -> Self {
-        Self::new(hook.files.as_deref(), hook.exclude.as_deref())
     }
 }
 
@@ -101,19 +97,15 @@ impl<'a> FileFilter<'a> {
         );
 
         // TODO: support orphaned project, which does not share files with its parent project.
-        let mut filenames = filenames
-            .enumerate()
-            .map(|(i, p)| (i, p.as_path()))
-            .filter(|(_, filename)| filter.filter(filename))
+        let filenames = filenames
+            .map(PathBuf::as_path)
             // Collect files that are inside the hook project directory.
-            .filter(|(_, filename)| filename.starts_with(project.relative_path()))
+            .filter(|filename| filename.starts_with(project.relative_path()))
+            .filter(|filename| filter.filter(filename))
             .collect::<Vec<_>>();
 
-        // Keep filename order consistent
-        filenames.sort_by_key(|&(i, _)| i);
-
         Self {
-            filenames: filenames.into_iter().map(|(_, p)| p).collect(),
+            filenames,
             filename_prefix: project.relative_path(),
         }
     }
@@ -150,8 +142,9 @@ impl<'a> FileFilter<'a> {
     #[instrument(level = "trace", skip_all, fields(hook = ?hook.id))]
     pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&Path> {
         // Filter by hook `files` and `exclude` patterns.
-        let filter = FilenameFilter::for_hook(hook);
-        let filenames = self.filenames.par_iter().filter(|filename| {
+        let filter = FilenameFilter::new(hook.files.as_deref(), hook.exclude.as_deref());
+
+        let filenames = self.filenames.iter().filter(|filename| {
             if let Ok(stripped) = filename.strip_prefix(self.filename_prefix) {
                 filter.filter(stripped)
             } else {
@@ -161,13 +154,15 @@ impl<'a> FileFilter<'a> {
 
         // Filter by hook `types`, `types_or` and `exclude_types`.
         let filter = FileTagFilter::for_hook(hook);
-        let filenames = filenames.filter(|filename| match tags_from_path(filename) {
-            Ok(tags) => filter.filter(&tags),
-            Err(err) => {
-                error!(filename = ?filename.display(), error = %err, "Failed to get tags");
-                false
-            }
-        });
+        let filenames = filenames
+            .par_bridge()
+            .filter(|filename| match tags_from_path(filename) {
+                Ok(tags) => filter.filter(&tags),
+                Err(err) => {
+                    error!(filename = ?filename.display(), error = %err, "Failed to get tags");
+                    false
+                }
+            });
 
         // Strip the prefix to get relative paths.
         let filenames: Vec<_> = filenames
