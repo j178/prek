@@ -89,7 +89,7 @@ Projects are executed from **deepest to shallowest**:
 2. `src/`
 3. `docs/`
 4. `frontend/`
-5. `my-monorepo/` (root, last)
+5. `./` (root, last)
 
 This ensures that more specific configurations (deeper projects) take precedence over general ones.
 

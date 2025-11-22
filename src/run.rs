@@ -117,11 +117,11 @@ impl<'a> Partitions<'a> {
         let max_per_batch = max(4, filenames.len().div_ceil(concurrency));
         let mut max_cli_length = platform_max_cli_length();
 
-        let entry_lower = &entry[0].to_ascii_lowercase();
+        let cmd = Path::new(&entry[0]);
         if cfg!(windows)
-            && [".bat", ".cmd"]
-                .iter()
-                .any(|ext| entry_lower.ends_with(ext))
+            && cmd.extension().is_some_and(|ext| {
+                ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat")
+            })
         {
             // Reduce max length for batch files on Windows due to cmd.exe limitations.
             // 1024 is additionally subtracted to give headroom for further
