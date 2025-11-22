@@ -591,6 +591,10 @@ pub(crate) async fn get_parent_commit(commit: &str) -> Result<Option<String>, Er
 /// Return a list of absolute paths of all git submodules in the repository.
 #[instrument(level = "trace")]
 pub(crate) fn list_submodules(git_root: &Path) -> Result<Vec<PathBuf>, Error> {
+    if !git_root.join(".gitmodules").exists() {
+        return Ok(vec![]);
+    }
+
     let git = GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?;
     let output = std::process::Command::new(git)
         .current_dir(git_root)
