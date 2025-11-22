@@ -4,11 +4,10 @@ use anyhow::{Context, Result};
 use fancy_regex::Regex;
 use itertools::{Either, Itertools};
 use path_clean::PathClean;
-use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
+use prek_consts::env_vars::EnvVars;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::FxHashSet;
 use tracing::{debug, error, instrument};
-
-use prek_consts::env_vars::EnvVars;
 
 use crate::config::Stage;
 use crate::git::GIT_ROOT;
@@ -104,7 +103,6 @@ impl<'a> FileFilter<'a> {
         // TODO: support orphaned project, which does not share files with its parent project.
         let mut filenames = filenames
             .enumerate()
-            .par_bridge()
             .map(|(i, p)| (i, p.as_path()))
             .filter(|(_, filename)| filter.filter(filename))
             // Collect files that are inside the hook project directory.
