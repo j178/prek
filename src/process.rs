@@ -482,7 +482,7 @@ impl Display for Cmd {
             }
             write!(f, " {}", arg.to_string_lossy())?;
             len += arg.len() + 1;
-            if len > 100 {
+            if len > 120 {
                 write!(f, " [...]",)?;
                 break;
             }

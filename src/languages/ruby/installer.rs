@@ -361,11 +361,8 @@ async fn query_ruby_info(ruby_path: &Path) -> Result<(semver::Version, String)> 
         .output()
         .await?;
 
-    let output_str = String::from_utf8(output.stdout)?;
-    let mut lines = output_str.lines();
-
+    let mut lines = str::from_utf8(&output.stdout)?.lines();
     let engine = lines.next().unwrap_or("ruby").to_string();
-
     let version_str = lines.next().context("No version in Ruby output")?.trim();
 
     let version = semver::Version::parse(version_str)

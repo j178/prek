@@ -109,8 +109,8 @@ impl LanguageImpl for Ruby {
             .output()
             .await?;
 
-        let version_str = String::from_utf8(output.stdout)?.trim().to_string();
-        let actual_version = semver::Version::parse(&version_str)
+        let version_str = str::from_utf8(&output.stdout)?.trim();
+        let actual_version = semver::Version::parse(version_str)
             .with_context(|| format!("Failed to parse Ruby version: {version_str}"))?;
 
         if actual_version != info.language_version {
