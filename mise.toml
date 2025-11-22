@@ -7,14 +7,6 @@ cargo-binstall = "latest"
 # For snapshot testing
 cargo-insta = "latest"
 "cargo:cargo-nextest" = "latest"
-# For pre-commit hooks
-prek = "latest"
-
-# Toolchains used in the integration tests.
-python = ["3.12"]
-node = ["20"]
-go = ["1.24"]
-ruby = ["3.4"]
 
 [tasks.lint]
 description = "Run formatting and linting"
