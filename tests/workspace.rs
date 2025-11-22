@@ -1150,8 +1150,8 @@ fn deduplicate_files() -> Result<()> {
     - duration: [TIME]
 
       Processing 3 files
-        - src/backend/test.py
         - src/test.py
+        - src/backend/test.py
         - test.py
 
     ----- stderr -----
