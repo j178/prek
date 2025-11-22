@@ -154,19 +154,27 @@ impl<'a> FileFilter<'a> {
 
         // Filter by hook `types`, `types_or` and `exclude_types`.
         let filter = FileTagFilter::for_hook(hook);
-        let filenames = filenames
+        let mut filenames = filenames
+            // .par_bridge() does not guarantee the order, so we use enumerate() to add indices
+            // and restore the order later.
+            .enumerate()
             .par_bridge()
-            .filter(|filename| match tags_from_path(filename) {
+            .filter(|(_idx, filename)| match tags_from_path(filename) {
                 Ok(tags) => filter.filter(&tags),
                 Err(err) => {
                     error!(filename = ?filename.display(), error = %err, "Failed to get tags");
                     false
                 }
-            });
+            })
+            .collect::<Vec<_>>();
+
+        // Restore the order.
+        filenames.sort_by_key(|(idx, _)| *idx);
 
         // Strip the prefix to get relative paths.
         let filenames: Vec<_> = filenames
-            .map(|p| {
+            .into_iter()
+            .map(|(_idx, p)| {
                 p.strip_prefix(self.filename_prefix)
                     .expect("Failed to strip prefix")
             })
