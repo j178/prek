@@ -215,8 +215,8 @@ fn lua_environment() {
     - hook id: lua
     - duration: [TIME]
 
-      LUA_PATH:	[HOME]/hooks/lua-[HASH]/share/lua/5.4/?.lua;[HOME]/hooks/lua-[HASH]/share/lua/5.4/?/init.lua;;
-      LUA_CPATH:	[HOME]/hooks/lua-[HASH]/lib/lua/5.4/?.so;;
+      LUA_PATH:	[HOME]/hooks/lua-[HASH]/share/lua/5.1/?.lua;[HOME]/hooks/lua-[HASH]/share/lua/5.1/?/init.lua;;
+      LUA_CPATH:	[HOME]/hooks/lua-[HASH]/lib/lua/5.1/?.so;;
 
     ----- stderr -----
     ");

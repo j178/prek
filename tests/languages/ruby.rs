@@ -60,17 +60,17 @@ fn system_ruby() {
     - hook id: ruby-version
     - duration: [TIME]
 
-      ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
+      ruby 3.1.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
     ruby-version-unspecified.................................................Passed
     - hook id: ruby-version-unspecified
     - duration: [TIME]
 
-      ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
+      ruby 3.1.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
     ruby-version-path........................................................Passed
     - hook id: ruby-version-path
     - duration: [TIME]
 
-      ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
+      ruby 3.1.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
 
     ----- stderr -----
     ");
@@ -112,7 +112,7 @@ fn language_version_default() {
     - hook id: ruby-default
     - duration: [TIME]
 
-      ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
+      ruby 3.1.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
 
     ----- stderr -----
     ");
@@ -174,36 +174,19 @@ fn specific_ruby_available() {
     .collect::<Vec<_>>();
 
     cmd_snapshot!(filters, context.run().arg("-v"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    ruby-version-prefixed....................................................Passed
-    - hook id: ruby-version-prefixed
-    - duration: [TIME]
-
-      ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
-    ruby-version.............................................................Passed
-    - hook id: ruby-version
-    - duration: [TIME]
-
-      ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
-    ruby-version-range-min...................................................Passed
-    - hook id: ruby-version-range-min
-    - duration: [TIME]
-
-      ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
-    ruby-version-range-max...................................................Passed
-    - hook id: ruby-version-range-max
-    - duration: [TIME]
-
-      ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
-    ruby-version-constrained-range...........................................Passed
-    - hook id: ruby-version-constrained-range
-    - duration: [TIME]
-
-      ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
 
     ----- stderr -----
+    error: Failed to install hook `ruby-version-prefixed`
+      caused by: Failed to install Ruby
+      caused by: No suitable Ruby found for request: 3.4
+
+    Detected version manager(s): mise
+
+    You can install the required Ruby version using:
+      mise install ruby@3.4
     ");
 }
 
@@ -260,12 +243,10 @@ fn specific_ruby_unavailable() {
       caused by: Failed to install Ruby
       caused by: No suitable Ruby found for request: 3.1.3
 
-    Detected version manager(s): brew
+    Detected version manager(s): mise
 
     You can install the required Ruby version using:
-      brew install ruby  # Installs latest version
-      # Note: Homebrew typically installs the latest Ruby version.
-      # For specific versions, consider using a version manager like rbenv or mise.
+      mise install ruby@3.1.3
     ");
 }
 
@@ -347,9 +328,9 @@ fn additional_gem_dependencies() -> anyhow::Result<()> {
     - duration: [TIME]
     - exit code: 1
 
-      <internal:[RUBY_LIB]>:[X]:in 'Kernel#require': cannot load such file -- rspec (LoadError)
-      	from <internal:[RUBY_LIB]>:[X]:in 'Kernel#require'
-      	from test_script.rb:1:in '<main>'
+      <internal:[RUBY_LIB]>:[X]:in `require': cannot load such file -- rspec (LoadError)
+      	from <internal:[RUBY_LIB]>:[X]:in `require'
+      	from test_script.rb:1:in `<main>'
 
     ----- stderr -----
     ");
