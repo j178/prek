@@ -16,7 +16,6 @@ use crate::fs::{CWD, Simplified};
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::identify::parse_shebang;
 use crate::store::Store;
-use crate::version::version;
 use crate::{archive, hooks, warn_user_once};
 
 mod docker;

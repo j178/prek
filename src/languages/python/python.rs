@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use tracing::{debug, trace};
-
 use prek_consts::env_vars::EnvVars;
+use serde::Deserialize;
+use tracing::{debug, trace};
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::hook::InstalledHook;
@@ -28,10 +28,19 @@ pub(crate) struct PythonInfo {
 }
 
 pub(crate) async fn query_python_info(python: &Path) -> Result<PythonInfo> {
+    #[derive(Deserialize)]
+    struct QueryPythonInfo {
+        version: semver::Version,
+        base_exec_prefix: PathBuf,
+    }
+
     static QUERY_PYTHON_INFO: &str = indoc::indoc! {r#"
-    import sys
-    print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
-    print(sys.base_exec_prefix)
+    import sys, json
+    info = {
+        "version": ".".join(map(str, sys.version_info[:3])),
+        "base_exec_prefix": sys.base_exec_prefix,
+    }
+    print(json.dumps(info))
     "#};
 
     let stdout = Cmd::new(python, "python -c")
@@ -43,22 +52,12 @@ pub(crate) async fn query_python_info(python: &Path) -> Result<PythonInfo> {
         .await?
         .stdout;
 
-    let stdout = String::from_utf8(stdout).context("Failed to parse Python info output")?;
-    let mut lines = stdout.lines();
-    let version = lines
-        .next()
-        .context("Failed to get Python version")?
-        .to_string()
-        .parse()
-        .context("Failed to parse Python version")?;
-    let base_exec_prefix = lines
-        .next()
-        .context("Failed to get Python base_exec_prefix")?
-        .to_string();
-    let python_exec = python_exec(Path::new(&base_exec_prefix));
+    let info: QueryPythonInfo =
+        serde_json::from_slice(&stdout).context("Failed to parse Python info JSON")?;
+    let python_exec = python_exec(&info.base_exec_prefix);
 
     Ok(PythonInfo {
-        version,
+        version: info.version,
         python_exec,
     })
 }

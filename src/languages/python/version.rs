@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use crate::hook::InstallInfo;
-use crate::languages::version;
 use crate::languages::version::{Error, try_into_u64_slice};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,7 +32,7 @@ pub(crate) enum PythonRequest {
 /// - `/path/to/python3.12`
 // TODO: support version like `3.8b1`, `3.8rc2`, `python3.8t`, `python3.8-64`, `pypy3.8`.
 impl FromStr for PythonRequest {
-    type Err = version::Error;
+    type Err = Error;
 
     fn from_str(request: &str) -> Result<Self, Self::Err> {
         if request.is_empty() {
