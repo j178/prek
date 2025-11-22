@@ -674,67 +674,38 @@ fn collect_unused_paths(config: &Config) -> Vec<String> {
 
     for (repo_idx, repo) in config.repos.iter().enumerate() {
         let repo_prefix = format!("repos[{repo_idx}]");
-        match repo {
-            Repo::Remote(remote) => {
-                push_unused_paths(
-                    &mut paths,
-                    &repo_prefix,
-                    remote._unused_keys.keys().map(String::as_str),
-                );
-                for (hook_idx, hook) in remote.hooks.iter().enumerate() {
-                    let hook_prefix = format!("{repo_prefix}.hooks[{hook_idx}]");
-                    push_unused_paths(
-                        &mut paths,
-                        &hook_prefix,
-                        hook.options._unused_keys.keys().map(String::as_str),
-                    );
-                }
-            }
-            Repo::Local(local) => {
-                push_unused_paths(
-                    &mut paths,
-                    &repo_prefix,
-                    local._unused_keys.keys().map(String::as_str),
-                );
-                for (hook_idx, hook) in local.hooks.iter().enumerate() {
-                    let hook_prefix = format!("{repo_prefix}.hooks[{hook_idx}]");
-                    push_unused_paths(
-                        &mut paths,
-                        &hook_prefix,
-                        hook.options._unused_keys.keys().map(String::as_str),
-                    );
-                }
-            }
-            Repo::Meta(meta) => {
-                push_unused_paths(
-                    &mut paths,
-                    &repo_prefix,
-                    meta._unused_keys.keys().map(String::as_str),
-                );
-                for (hook_idx, hook) in meta.hooks.iter().enumerate() {
-                    let hook_prefix = format!("{repo_prefix}.hooks[{hook_idx}]");
-                    push_unused_paths(
-                        &mut paths,
-                        &hook_prefix,
-                        hook.0.options._unused_keys.keys().map(String::as_str),
-                    );
-                }
-            }
-            Repo::Builtin(builtin) => {
-                push_unused_paths(
-                    &mut paths,
-                    &repo_prefix,
-                    builtin._unused_keys.keys().map(String::as_str),
-                );
-                for (hook_idx, hook) in builtin.hooks.iter().enumerate() {
-                    let hook_prefix = format!("{repo_prefix}.hooks[{hook_idx}]");
-                    push_unused_paths(
-                        &mut paths,
-                        &hook_prefix,
-                        hook.0.options._unused_keys.keys().map(String::as_str),
-                    );
-                }
-            }
+        let (repo_unused_keys, hooks_options): (_, Box<dyn Iterator<Item = &HookOptions>>) =
+            match repo {
+                Repo::Remote(remote) => (
+                    &remote._unused_keys,
+                    Box::new(remote.hooks.iter().map(|h| &h.options)),
+                ),
+                Repo::Local(local) => (
+                    &local._unused_keys,
+                    Box::new(local.hooks.iter().map(|h| &h.options)),
+                ),
+                Repo::Meta(meta) => (
+                    &meta._unused_keys,
+                    Box::new(meta.hooks.iter().map(|h| &h.0.options)),
+                ),
+                Repo::Builtin(builtin) => (
+                    &builtin._unused_keys,
+                    Box::new(builtin.hooks.iter().map(|h| &h.0.options)),
+                ),
+            };
+
+        push_unused_paths(
+            &mut paths,
+            &repo_prefix,
+            repo_unused_keys.keys().map(String::as_str),
+        );
+        for (hook_idx, options) in hooks_options.enumerate() {
+            let hook_prefix = format!("{repo_prefix}.hooks[{hook_idx}]");
+            push_unused_paths(
+                &mut paths,
+                &hook_prefix,
+                options._unused_keys.keys().map(String::as_str),
+            );
         }
     }
 
