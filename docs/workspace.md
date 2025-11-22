@@ -93,7 +93,29 @@ Projects are executed from **deepest to shallowest**:
 
 This ensures that more specific configurations (deeper projects) take precedence over general ones.
 
-**Note**: Files in subprojects will be processed multiple times - once for each project in the hierarchy that contains them. For example, a file in `src/backend/` will be checked by hooks in `src/backend/`, then `src/`, then the workspace root.
+### File Processing Behavior
+
+**By default**, files in subprojects will be processed multiple times - once for each project in the hierarchy that contains them. For example, a file in `src/backend/` will be checked by hooks in `src/backend/`, then `src/`, then the workspace root.
+
+**To process files only once**, you can set `deduplicate_files: true` in your configuration. When enabled, files will only be processed by the deepest project that contains them:
+
+```yaml
+# .pre-commit-config.yaml
+deduplicate_files: true
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+```
+
+With this option:
+- Files in `src/backend/` are processed **only** by hooks in `src/backend/`
+- Files in `src/` (but not in `src/backend/`) are processed **only** by hooks in `src/`
+- Files in the root (but not in subdirectories with configs) are processed **only** by hooks in the root
+
+This can be useful to avoid redundant processing in monorepos with nested project structures.
 
 ### Example Output
 
