@@ -113,8 +113,11 @@ impl<'a> FileFilter<'a> {
             .filter(|filename| filename.starts_with(project.relative_path()))
             // Skip files that have already been consumed by subprojects.
             .filter(|filename| {
-                if orphan && let Some(consumed_files) = consumed_files.as_mut() {
-                    consumed_files.insert(filename)
+                if let Some(consumed_files) = consumed_files.as_mut() {
+                    if orphan {
+                        return consumed_files.insert(filename);
+                    }
+                    !consumed_files.contains(filename)
                 } else {
                     true
                 }

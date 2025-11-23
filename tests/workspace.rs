@@ -1184,7 +1184,7 @@ fn orphan_projects() -> Result<()> {
         .work_dir()
         .child(".pre-commit-config.yaml")
         .write_str(indoc! {r#"
-        orphan: true
+        orphan: false
         exclude: \.pre-commit-config\.yaml$
         repos:
           - repo: local
