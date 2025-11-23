@@ -33,7 +33,8 @@ pub(crate) async fn query_dart_info() -> Result<DartInfo> {
     )?;
     debug!("Found dart executable at: {}", executable.display());
 
-    let output = Cmd::new("dart", "get dart version")
+    // Use the executable path we found, not just "dart"
+    let output = Cmd::new(&executable, "get dart version")
         .arg("--version")
         .check(true)
         .output()
@@ -180,8 +181,11 @@ impl LanguageImpl for Dart {
 
 impl Dart {
     async fn install_from_pubspec(env_path: &Path, repo_path: &Path) -> Result<()> {
+        // Find dart executable
+        let dart = which::which("dart").context("Failed to locate dart executable")?;
+
         // Run `dart pub get` to install dependencies from pubspec.yaml
-        Cmd::new("dart", "dart pub get")
+        Cmd::new(&dart, "dart pub get")
             .current_dir(repo_path)
             .env(EnvVars::PUB_CACHE, env_path.to_string_lossy().as_ref())
             .arg("pub")
@@ -195,6 +199,9 @@ impl Dart {
     }
 
     async fn install_dependency(env_path: &Path, dependency: &str) -> Result<()> {
+        // Find dart executable
+        let dart = which::which("dart").context("Failed to locate dart executable")?;
+
         // Parse dependency - format is "package" or "package:version"
         let (package, version) = if let Some((pkg, ver)) = dependency.split_once(':') {
             (pkg, Some(ver))
@@ -203,7 +210,7 @@ impl Dart {
         };
 
         // Use `dart pub cache add` to add the dependency
-        let mut cmd = Cmd::new("dart", "dart pub cache add");
+        let mut cmd = Cmd::new(&dart, "dart pub cache add");
         cmd.env(EnvVars::PUB_CACHE, env_path.to_string_lossy().as_ref())
             .arg("pub")
             .arg("cache")
