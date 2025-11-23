@@ -127,7 +127,7 @@ async fn fix_file(
     let file_path = file_base.join(filename);
     let content = fs_err::tokio::read(&file_path).await?;
 
-    let mut output = Vec::new();
+    let mut output = Vec::with_capacity(content.len());
     let mut modified = false;
     for line in content.split_inclusive(|&b| b == b'\n') {
         let line_ending = detect_line_ending(line);
