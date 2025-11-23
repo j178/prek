@@ -18,6 +18,7 @@ use crate::identify::parse_shebang;
 use crate::store::Store;
 use crate::{archive, hooks, warn_user_once};
 
+mod dart;
 mod docker;
 mod docker_image;
 mod fail;
@@ -31,6 +32,7 @@ mod script;
 mod system;
 pub mod version;
 
+static DART: dart::Dart = dart::Dart;
 static GOLANG: golang::Golang = golang::Golang;
 static PYTHON: python::Python = python::Python;
 static NODE: node::Node = node::Node;
@@ -118,7 +120,8 @@ impl Language {
     pub fn supported(lang: Language) -> bool {
         matches!(
             lang,
-            Self::Golang
+            Self::Dart
+                | Self::Golang
                 | Self::Python
                 | Self::Node
                 | Self::Ruby
@@ -174,6 +177,7 @@ impl Language {
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         match self {
+            Self::Dart => DART.install(hook, store, reporter).await,
             Self::Golang => GOLANG.install(hook, store, reporter).await,
             Self::Python => PYTHON.install(hook, store, reporter).await,
             Self::Node => NODE.install(hook, store, reporter).await,
@@ -191,6 +195,7 @@ impl Language {
 
     pub async fn check_health(&self, info: &InstallInfo) -> Result<()> {
         match self {
+            Self::Dart => DART.check_health(info).await,
             Self::Golang => GOLANG.check_health(info).await,
             Self::Python => PYTHON.check_health(info).await,
             Self::Node => NODE.check_health(info).await,
@@ -236,6 +241,7 @@ impl Language {
         }
 
         match self {
+            Self::Dart => DART.run(hook, filenames, store).await,
             Self::Golang => GOLANG.run(hook, filenames, store).await,
             Self::Python => PYTHON.run(hook, filenames, store).await,
             Self::Node => NODE.run(hook, filenames, store).await,
