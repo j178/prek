@@ -47,15 +47,11 @@ pub(crate) async fn query_dart_info() -> Result<DartInfo> {
 
     // Parse output like "Dart SDK version: 3.0.0 (stable)"
     // Handle Flutter SDK which may output extra lines before the version
-    let version_line = version_output
+    let version = version_output
         .lines()
         .find(|line| line.contains("Dart SDK version:"))
-        .context("Failed to find Dart SDK version in output")?;
-
-    let version = version_line
-        .split_whitespace()
-        .nth(3)
-        .context("Failed to extract version from Dart SDK version line")?
+        .and_then(|line| line.split_whitespace().nth(3))
+        .context("Failed to extract Dart version from output")?
         .trim();
 
     let version = Version::parse(version).context("Failed to parse Dart version")?;
@@ -92,14 +88,19 @@ impl LanguageImpl for Dart {
         // Install dependencies for the remote repository.
         if let Some(repo_path) = hook.repo_path() {
             if Self::has_pubspec(repo_path) {
-                Self::install_from_pubspec(&info.env_path, repo_path).await?;
+                Self::install_from_pubspec(&dart_info.executable, &info.env_path, repo_path)
+                    .await?;
             }
         }
 
         // Install additional dependencies by creating a pubspec.yaml
         if !hook.additional_dependencies.is_empty() {
-            Self::install_additional_dependencies(&info.env_path, &hook.additional_dependencies)
-                .await?;
+            Self::install_additional_dependencies(
+                &dart_info.executable,
+                &info.env_path,
+                &hook.additional_dependencies,
+            )
+            .await?;
         }
 
         info.with_toolchain(dart_info.executable)
@@ -150,18 +151,7 @@ impl LanguageImpl for Dart {
         let entry = hook.entry.resolve(Some(&new_path))?;
 
         let pub_cache = env_dir.to_string_lossy().to_string();
-
-        // If we have a package_config.json in env_dir (from additional_dependencies),
-        // copy it to work_dir so Dart can resolve package imports
-        let env_package_config = env_dir.join(".dart_tool").join("package_config.json");
-        if env_package_config.exists() {
-            let work_dart_tool = hook.work_dir().join(".dart_tool");
-            fs_err::create_dir_all(&work_dart_tool)
-                .context("Failed to create .dart_tool directory in work_dir")?;
-            let work_package_config = work_dart_tool.join("package_config.json");
-            fs_err::copy(&env_package_config, &work_package_config)
-                .context("Failed to copy package_config.json to work_dir")?;
-        }
+        Self::setup_package_config(env_dir, hook.work_dir())?;
 
         let run = async |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "run dart command")
@@ -195,12 +185,22 @@ impl LanguageImpl for Dart {
 }
 
 impl Dart {
-    async fn install_from_pubspec(env_path: &Path, repo_path: &Path) -> Result<()> {
-        // Find dart executable
-        let dart = which::which("dart").context("Failed to locate dart executable")?;
+    fn setup_package_config(env_dir: &Path, work_dir: &Path) -> Result<()> {
+        let env_package_config = env_dir.join(".dart_tool").join("package_config.json");
+        if env_package_config.exists() {
+            let work_dart_tool = work_dir.join(".dart_tool");
+            fs_err::create_dir_all(&work_dart_tool)
+                .context("Failed to create .dart_tool directory in work_dir")?;
+            let work_package_config = work_dart_tool.join("package_config.json");
+            fs_err::copy(&env_package_config, &work_package_config)
+                .context("Failed to copy package_config.json to work_dir")?;
+        }
+        Ok(())
+    }
 
+    async fn install_from_pubspec(dart: &Path, env_path: &Path, repo_path: &Path) -> Result<()> {
         // Run `dart pub get` to install dependencies from pubspec.yaml
-        Cmd::new(&dart, "dart pub get")
+        Cmd::new(dart, "dart pub get")
             .current_dir(repo_path)
             .env(EnvVars::PUB_CACHE, env_path.to_string_lossy().as_ref())
             .arg("pub")
@@ -214,6 +214,7 @@ impl Dart {
     }
 
     async fn install_additional_dependencies(
+        dart: &Path,
         env_path: &Path,
         dependencies: &rustc_hash::FxHashSet<String>,
     ) -> Result<()> {
@@ -236,11 +237,8 @@ impl Dart {
         std::fs::write(&pubspec_path, pubspec_content)
             .context("Failed to write pubspec.yaml for additional dependencies")?;
 
-        // Find dart executable
-        let dart = which::which("dart").context("Failed to locate dart executable")?;
-
         // Run `dart pub get` to resolve and install dependencies
-        Cmd::new(&dart, "dart pub get")
+        Cmd::new(dart, "dart pub get")
             .current_dir(env_path)
             .env(EnvVars::PUB_CACHE, env_path.to_string_lossy().as_ref())
             .arg("pub")
