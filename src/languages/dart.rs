@@ -22,6 +22,17 @@ pub(crate) struct DartInfo {
 }
 
 pub(crate) async fn query_dart_info() -> Result<DartInfo> {
+    // Get the dart executable path using which crate
+    debug!("Searching for dart executable in PATH");
+    if let Ok(path_var) = std::env::var("PATH") {
+        debug!("PATH = {}", path_var);
+    }
+
+    let executable = which::which("dart").context(
+        "Failed to locate dart executable. Is Dart installed and available in PATH?"
+    )?;
+    debug!("Found dart executable at: {}", executable.display());
+
     let output = Cmd::new("dart", "get dart version")
         .arg("--version")
         .check(true)
@@ -31,6 +42,7 @@ pub(crate) async fn query_dart_info() -> Result<DartInfo> {
     // Combine stdout and stderr as dart --version may output to either
     let mut version_output = String::from_utf8_lossy(&output.stdout).to_string();
     version_output.push_str(&String::from_utf8_lossy(&output.stderr));
+    debug!("Dart version output: {}", version_output);
 
     // Parse output like "Dart SDK version: 3.0.0 (stable)"
     // Handle Flutter SDK which may output extra lines before the version
@@ -46,9 +58,7 @@ pub(crate) async fn query_dart_info() -> Result<DartInfo> {
         .trim();
 
     let version = Version::parse(version).context("Failed to parse Dart version")?;
-
-    // Get the dart executable path using which crate
-    let executable = which::which("dart").context("Failed to locate dart executable")?;
+    debug!("Parsed Dart version: {}", version);
 
     Ok(DartInfo {
         version,
