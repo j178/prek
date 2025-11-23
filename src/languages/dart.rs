@@ -22,32 +22,33 @@ pub(crate) struct DartInfo {
 }
 
 pub(crate) async fn query_dart_info() -> Result<DartInfo> {
-    let stdout = Cmd::new("dart", "get dart version")
+    let output = Cmd::new("dart", "get dart version")
         .arg("--version")
         .check(true)
         .output()
-        .await?
-        .stdout;
+        .await?;
+
+    // Combine stdout and stderr as dart --version may output to either
+    let mut version_output = String::from_utf8_lossy(&output.stdout).to_string();
+    version_output.push_str(&String::from_utf8_lossy(&output.stderr));
 
     // Parse output like "Dart SDK version: 3.0.0 (stable)"
-    let version_str = String::from_utf8_lossy(&stdout);
-    let version = version_str
+    // Handle Flutter SDK which may output extra lines before the version
+    let version_line = version_output
+        .lines()
+        .find(|line| line.contains("Dart SDK version:"))
+        .context("Failed to find Dart SDK version in output")?;
+
+    let version = version_line
         .split_whitespace()
         .nth(3)
-        .context("Failed to get Dart version")?
+        .context("Failed to extract version from Dart SDK version line")?
         .trim();
 
     let version = Version::parse(version).context("Failed to parse Dart version")?;
 
-    // Get the dart executable path
-    let stdout = Cmd::new("which", "get dart executable")
-        .arg("dart")
-        .check(true)
-        .output()
-        .await?
-        .stdout;
-
-    let executable = PathBuf::from(String::from_utf8_lossy(&stdout).trim());
+    // Get the dart executable path using which crate
+    let executable = which::which("dart").context("Failed to locate dart executable")?;
 
     Ok(DartInfo {
         version,
