@@ -191,7 +191,7 @@ fn script_with_files() -> anyhow::Result<()> {
 }
 
 /// Test Dart hook with pubspec.yaml and dependencies (from pre-commit test suite).
-/// Verifies that executables defined in pubspec.yaml are compiled to env_path/bin.
+/// Verifies that executables defined in pubspec.yaml are compiled to `env_path/bin`.
 #[test]
 fn with_pubspec_and_dependencies() -> anyhow::Result<()> {
     let context = TestContext::new();

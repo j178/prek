@@ -75,12 +75,24 @@ impl LanguageImpl for Dart {
             .await
             .context("Failed to query Dart info")?;
 
-        // Install dependencies for the remote repository.
-        if let Some(repo_path) = hook.repo_path() {
+        // Install dependencies and compile executables from pubspec.yaml.
+        // For remote hooks: use repo_path (cloned repository)
+        // For local hooks: use work_dir (user's repository)
+        let pubspec_source = if let Some(repo_path) = hook.repo_path() {
             if Self::has_pubspec(repo_path) {
-                Self::install_from_pubspec(&dart_info.executable, &info.env_path, repo_path)
-                    .await?;
+                Some(repo_path)
+            } else {
+                None
             }
+        } else if Self::has_pubspec(hook.work_dir()) {
+            // Local hook with pubspec.yaml in work_dir
+            Some(hook.work_dir())
+        } else {
+            None
+        };
+
+        if let Some(source_path) = pubspec_source {
+            Self::install_from_pubspec(&dart_info.executable, &info.env_path, source_path).await?;
         }
 
         // Install additional dependencies by creating a pubspec.yaml
