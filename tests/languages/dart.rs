@@ -1,3 +1,5 @@
+#![allow(clippy::needless_raw_string_hashes)]
+
 use assert_fs::fixture::{FileWriteStr, PathChild};
 
 use crate::common::{TestContext, cmd_snapshot};
@@ -190,7 +192,7 @@ fn script_with_files() -> anyhow::Result<()> {
 
 /// Test Dart hook with pubspec.yaml and dependencies (from pre-commit test suite).
 #[test]
-#[ignore] // Requires dart to be installed
+#[ignore = "Requires complex setup with dart executables"]
 fn with_pubspec_and_dependencies() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
@@ -410,7 +412,7 @@ fn additional_dependencies_with_version() {
     ");
 }
 
-/// Test Dart environment variables (PATH and PUB_CACHE).
+/// Test Dart environment variables (PATH and `PUB_CACHE`).
 #[test]
 fn dart_environment() {
     let context = TestContext::new();
@@ -463,7 +465,7 @@ fn dart_environment() {
 
 /// Test remote Dart hook from GitHub repository.
 #[test]
-#[ignore] // Requires prek-test-repos/dart-hooks to be created
+#[ignore = "Requires prek-test-repos/dart-hooks to be created"]
 fn remote_hook() {
     let context = TestContext::new();
     context.init_project();

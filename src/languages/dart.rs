@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -24,13 +25,12 @@ pub(crate) struct DartInfo {
 pub(crate) async fn query_dart_info() -> Result<DartInfo> {
     // Get the dart executable path using which crate
     debug!("Searching for dart executable in PATH");
-    if let Ok(path_var) = std::env::var("PATH") {
-        debug!("PATH = {}", path_var);
+    if let Ok(path_var) = EnvVars::var(EnvVars::PATH) {
+        debug!("PATH = {path_var}");
     }
 
-    let executable = which::which("dart").context(
-        "Failed to locate dart executable. Is Dart installed and available in PATH?"
-    )?;
+    let executable = which::which("dart")
+        .context("Failed to locate dart executable. Is Dart installed and available in PATH?")?;
     debug!("Found dart executable at: {}", executable.display());
 
     // Use the executable path we found, not just "dart"
@@ -85,7 +85,9 @@ impl LanguageImpl for Dart {
         debug!(%hook, target = %info.env_path.display(), "Installing Dart environment");
 
         // Check dart is installed.
-        let dart_info = query_dart_info().await.context("Failed to query Dart info")?;
+        let dart_info = query_dart_info()
+            .await
+            .context("Failed to query Dart info")?;
 
         // Install dependencies for the remote repository.
         if let Some(repo_path) = hook.repo_path() {
@@ -216,14 +218,16 @@ impl Dart {
         dependencies: &rustc_hash::FxHashSet<String>,
     ) -> Result<()> {
         // Create a minimal pubspec.yaml with the additional dependencies
-        let mut pubspec_content = String::from("name: prek_dart_env\nenvironment:\n  sdk: '>=2.12.0 <4.0.0'\ndependencies:\n");
+        let mut pubspec_content = String::from(
+            "name: prek_dart_env\nenvironment:\n  sdk: '>=2.12.0 <4.0.0'\ndependencies:\n",
+        );
 
         for dep in dependencies {
             // Parse dependency - format is "package" or "package:version"
             if let Some((package, version)) = dep.split_once(':') {
-                pubspec_content.push_str(&format!("  {}: {}\n", package, version));
+                writeln!(pubspec_content, "  {package}: {version}")?;
             } else {
-                pubspec_content.push_str(&format!("  {}: any\n", dep));
+                writeln!(pubspec_content, "  {dep}: any")?;
             }
         }
 

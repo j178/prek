@@ -1,11 +1,11 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+mod dart;
 #[cfg(all(feature = "docker", target_os = "linux"))]
 mod docker;
 #[cfg(all(feature = "docker", target_os = "linux"))]
 mod docker_image;
-mod dart;
 mod fail;
 mod golang;
 mod lua;
