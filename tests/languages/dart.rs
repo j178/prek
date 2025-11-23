@@ -2,50 +2,6 @@ use assert_fs::fixture::{FileWriteStr, PathChild};
 
 use crate::common::{TestContext, cmd_snapshot};
 
-/// Diagnostic test to check if dart can be found
-#[test]
-fn diagnostic_dart_detection() {
-    eprintln!("\n=== Dart Detection Diagnostic ===");
-
-    // Check PATH environment variable
-    if let Ok(path) = std::env::var("PATH") {
-        eprintln!("PATH = {}", path);
-    } else {
-        eprintln!("PATH environment variable is not set!");
-    }
-
-    // Try to find dart using which crate
-    match which::which("dart") {
-        Ok(dart_path) => {
-            eprintln!("✓ Found dart at: {:?}", dart_path);
-            eprintln!("  Exists: {}", dart_path.exists());
-            eprintln!("  Is file: {}", dart_path.is_file());
-        }
-        Err(e) => {
-            eprintln!("✗ Failed to find dart: {:?}", e);
-        }
-    }
-
-    // Try common Windows locations
-    #[cfg(windows)]
-    {
-        let common_paths = vec![
-            "dart.exe",
-            "dart.bat",
-            r"C:\tools\dart-sdk\bin\dart.exe",
-            r"D:\Applications\Scoop\apps\flutter\current\bin\dart.bat",
-        ];
-
-        eprintln!("\nChecking common Windows dart locations:");
-        for path in common_paths {
-            let p = std::path::Path::new(path);
-            eprintln!("  {} -> exists: {}", path, p.exists());
-        }
-    }
-
-    eprintln!("=== End Diagnostic ===\n");
-}
-
 #[test]
 fn health_check() {
     let context = TestContext::new();
