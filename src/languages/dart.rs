@@ -94,9 +94,10 @@ impl LanguageImpl for Dart {
             }
         }
 
-        // Install additional dependencies.
-        for dep in &hook.additional_dependencies {
-            Self::install_dependency(&info.env_path, dep).await?;
+        // Install additional dependencies by creating a pubspec.yaml
+        if !hook.additional_dependencies.is_empty() {
+            Self::install_additional_dependencies(&info.env_path, &hook.additional_dependencies)
+                .await?;
         }
 
         info.with_toolchain(dart_info.executable)
@@ -198,33 +199,40 @@ impl Dart {
         Ok(())
     }
 
-    async fn install_dependency(env_path: &Path, dependency: &str) -> Result<()> {
+    async fn install_additional_dependencies(
+        env_path: &Path,
+        dependencies: &rustc_hash::FxHashSet<String>,
+    ) -> Result<()> {
+        // Create a minimal pubspec.yaml with the additional dependencies
+        let mut pubspec_content = String::from("name: prek_dart_env\nenvironment:\n  sdk: '>=2.12.0 <4.0.0'\ndependencies:\n");
+
+        for dep in dependencies {
+            // Parse dependency - format is "package" or "package:version"
+            if let Some((package, version)) = dep.split_once(':') {
+                pubspec_content.push_str(&format!("  {}: {}\n", package, version));
+            } else {
+                pubspec_content.push_str(&format!("  {}: any\n", dep));
+            }
+        }
+
+        // Write pubspec.yaml to env_path
+        let pubspec_path = env_path.join("pubspec.yaml");
+        std::fs::write(&pubspec_path, pubspec_content)
+            .context("Failed to write pubspec.yaml for additional dependencies")?;
+
         // Find dart executable
         let dart = which::which("dart").context("Failed to locate dart executable")?;
 
-        // Parse dependency - format is "package" or "package:version"
-        let (package, version) = if let Some((pkg, ver)) = dependency.split_once(':') {
-            (pkg, Some(ver))
-        } else {
-            (dependency, None)
-        };
-
-        // Use `dart pub cache add` to add the dependency
-        let mut cmd = Cmd::new(&dart, "dart pub cache add");
-        cmd.env(EnvVars::PUB_CACHE, env_path.to_string_lossy().as_ref())
+        // Run `dart pub get` to resolve and install dependencies
+        Cmd::new(&dart, "dart pub get")
+            .current_dir(env_path)
+            .env(EnvVars::PUB_CACHE, env_path.to_string_lossy().as_ref())
             .arg("pub")
-            .arg("cache")
-            .arg("add")
-            .arg(package);
-
-        if let Some(ver) = version {
-            cmd.arg("--version").arg(ver);
-        }
-
-        cmd.check(true)
+            .arg("get")
+            .check(true)
             .output()
             .await
-            .context("Failed to install Dart dependency")?;
+            .context("Failed to run dart pub get for additional dependencies")?;
 
         Ok(())
     }
