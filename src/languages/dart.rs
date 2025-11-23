@@ -23,12 +23,6 @@ pub(crate) struct DartInfo {
 }
 
 pub(crate) async fn query_dart_info() -> Result<DartInfo> {
-    // Get the dart executable path using which crate
-    debug!("Searching for dart executable in PATH");
-    if let Ok(path_var) = EnvVars::var(EnvVars::PATH) {
-        debug!("PATH = {path_var}");
-    }
-
     let executable = which::which("dart")
         .context("Failed to locate dart executable. Is Dart installed and available in PATH?")?;
     debug!("Found dart executable at: {}", executable.display());
@@ -41,13 +35,10 @@ pub(crate) async fn query_dart_info() -> Result<DartInfo> {
         .await?
         .stdout;
 
-    // dart --version outputs to stdout
-    let version_output = String::from_utf8_lossy(&stdout).to_string();
-    debug!("Dart version output: {}", version_output);
-
     // Parse output like "Dart SDK version: 3.0.0 (stable)"
     // Handle Flutter SDK which may output extra lines before the version
-    let version = version_output
+    let version = str::from_utf8(&stdout)
+        .context("Failed to parse `dart --version` output as UTF-8")?
         .lines()
         .find(|line| line.contains("Dart SDK version:"))
         .and_then(|line| line.split_whitespace().nth(3))
@@ -55,7 +46,6 @@ pub(crate) async fn query_dart_info() -> Result<DartInfo> {
         .trim();
 
     let version = Version::parse(version).context("Failed to parse Dart version")?;
-    debug!("Parsed Dart version: {}", version);
 
     Ok(DartInfo {
         version,
@@ -150,7 +140,6 @@ impl LanguageImpl for Dart {
         let new_path = prepend_paths(&[&env_dir.join("bin")]).context("Failed to join PATH")?;
         let entry = hook.entry.resolve(Some(&new_path))?;
 
-        let pub_cache = env_dir.to_string_lossy().to_string();
         Self::setup_package_config(env_dir, hook.work_dir())?;
 
         let run = async |batch: &[&Path]| {
@@ -158,7 +147,7 @@ impl LanguageImpl for Dart {
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
-                .env(EnvVars::PUB_CACHE, &pub_cache)
+                .env(EnvVars::PUB_CACHE, env_dir)
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
@@ -202,7 +191,7 @@ impl Dart {
         // Run `dart pub get` to install dependencies from pubspec.yaml
         Cmd::new(dart, "dart pub get")
             .current_dir(repo_path)
-            .env(EnvVars::PUB_CACHE, env_path.to_string_lossy().as_ref())
+            .env(EnvVars::PUB_CACHE, env_path)
             .arg("pub")
             .arg("get")
             .check(true)
@@ -219,9 +208,12 @@ impl Dart {
         dependencies: &rustc_hash::FxHashSet<String>,
     ) -> Result<()> {
         // Create a minimal pubspec.yaml with the additional dependencies
-        let mut pubspec_content = String::from(
-            "name: prek_dart_env\nenvironment:\n  sdk: '>=2.12.0 <4.0.0'\ndependencies:\n",
-        );
+        let mut pubspec_content = indoc::formatdoc! {"
+            name: prek_dart_env
+            environment:
+              sdk: '>=2.12.0 <4.0.0'
+            dependencies:
+        "};
 
         for dep in dependencies {
             // Parse dependency - format is "package" or "package:version"
@@ -234,13 +226,12 @@ impl Dart {
 
         // Write pubspec.yaml to env_path
         let pubspec_path = env_path.join("pubspec.yaml");
-        std::fs::write(&pubspec_path, pubspec_content)
-            .context("Failed to write pubspec.yaml for additional dependencies")?;
+        fs_err::tokio::write(&pubspec_path, pubspec_content).await?;
 
         // Run `dart pub get` to resolve and install dependencies
         Cmd::new(dart, "dart pub get")
             .current_dir(env_path)
-            .env(EnvVars::PUB_CACHE, env_path.to_string_lossy().as_ref())
+            .env(EnvVars::PUB_CACHE, env_path)
             .arg("pub")
             .arg("get")
             .check(true)
