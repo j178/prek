@@ -187,6 +187,73 @@ impl Dart {
         Ok(())
     }
 
+    async fn compile_executables(
+        dart: &Path,
+        pubspec_path: &Path,
+        bin_src_dir: &Path,
+        bin_out_dir: &Path,
+        pub_cache: &Path,
+    ) -> Result<()> {
+        // Read pubspec.yaml to get executables
+        let pubspec_content =
+            fs_err::read_to_string(pubspec_path).context("Failed to read pubspec.yaml")?;
+        let pubspec: serde_yaml::Value =
+            serde_yaml::from_str(&pubspec_content).context("Failed to parse pubspec.yaml")?;
+
+        // Get executables section
+        let Some(executables) = pubspec.get("executables") else {
+            // No executables defined, nothing to compile
+            return Ok(());
+        };
+
+        let Some(executables_map) = executables.as_mapping() else {
+            anyhow::bail!("pubspec.yaml executables must be a mapping");
+        };
+
+        // Ensure bin output directory exists
+        fs_err::create_dir_all(bin_out_dir).context("Failed to create bin output directory")?;
+
+        // Compile each executable
+        for (name, _value) in executables_map {
+            let Some(exe_name) = name.as_str() else {
+                continue;
+            };
+
+            let source_file = bin_src_dir.join(format!("{exe_name}.dart"));
+            if !source_file.exists() {
+                debug!("Skipping executable '{exe_name}': source file not found");
+                continue;
+            }
+
+            // Output path - on Windows this will be .exe, on Unix it's just the name
+            let output_path = if cfg!(windows) {
+                bin_out_dir.join(format!("{exe_name}.exe"))
+            } else {
+                bin_out_dir.join(exe_name)
+            };
+
+            debug!(
+                "Compiling executable '{exe_name}': {} -> {}",
+                source_file.display(),
+                output_path.display()
+            );
+
+            Cmd::new(dart, "dart compile exe")
+                .arg("compile")
+                .arg("exe")
+                .arg(&source_file)
+                .arg("--output")
+                .arg(&output_path)
+                .env(EnvVars::PUB_CACHE, pub_cache)
+                .check(true)
+                .output()
+                .await
+                .context(format!("Failed to compile executable '{exe_name}'"))?;
+        }
+
+        Ok(())
+    }
+
     async fn install_from_pubspec(dart: &Path, env_path: &Path, repo_path: &Path) -> Result<()> {
         // Run `dart pub get` to install dependencies from pubspec.yaml
         Cmd::new(dart, "dart pub get")
@@ -198,6 +265,14 @@ impl Dart {
             .output()
             .await
             .context("Failed to run dart pub get")?;
+
+        // Compile executables to env_path/bin
+        let pubspec_path = repo_path.join("pubspec.yaml");
+        let bin_src_dir = repo_path.join("bin");
+        let bin_out_dir = env_path.join("bin");
+
+        Self::compile_executables(dart, &pubspec_path, &bin_src_dir, &bin_out_dir, env_path)
+            .await?;
 
         Ok(())
     }
