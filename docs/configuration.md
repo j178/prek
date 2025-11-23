@@ -35,16 +35,16 @@ Example:
 
 The original `minimum_pre_commit_version` option has no effect and gets ignored in prek.
 
-### `deduplicate_files`
+### `orphan`
 
 *Only applies in workspace mode with nested projects.*
 
-By default, files in subprojects are processed multiple times - once for each project in the hierarchy that contains them. Setting `deduplicate_files: true` ensures each file is processed only once by the deepest project that contains it.
+By default, files in subprojects are processed multiple times - once for each project in the hierarchy that contains them. Setting `orphan: true` isolates the project from parent configurations, ensuring files in this project are processed only by this project and not by any parent projects.
 
 Example:
 
   ```yaml
-  deduplicate_files: true
+  orphan: true
   repos:
     - repo: https://github.com/astral-sh/ruff-pre-commit
       rev: v0.8.4

@@ -97,11 +97,11 @@ This ensures that more specific configurations (deeper projects) take precedence
 
 **By default**, files in subprojects will be processed multiple times - once for each project in the hierarchy that contains them. For example, a file in `src/backend/` will be checked by hooks in `src/backend/`, then `src/`, then the workspace root.
 
-**To process files only once**, you can set `deduplicate_files: true` in your configuration. When enabled, files will only be processed by the deepest project that contains them:
+**To isolate a project**, you can set `orphan: true` in its configuration. When enabled, files in this project are "consumed" by it and will not be processed by parent projects:
 
 ```yaml
-# .pre-commit-config.yaml
-deduplicate_files: true
+# src/backend/.pre-commit-config.yaml
+orphan: true
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -112,10 +112,10 @@ repos:
 
 With this option:
 - Files in `src/backend/` are processed **only** by hooks in `src/backend/`
-- Files in `src/` (but not in `src/backend/`) are processed **only** by hooks in `src/`
-- Files in the root (but not in subdirectories with configs) are processed **only** by hooks in the root
+- Files in `src/` (but not in `src/backend/`) are processed by hooks in `src/` and the workspace root
+- Files in the root (but not in subdirectories with configs) are processed by hooks in the root
 
-This can be useful to avoid redundant processing in monorepos with nested project structures.
+This can be useful to avoid redundant processing in monorepos with nested project structures or to completely isolate a subproject from parent configurations.
 
 ### Example Output
 

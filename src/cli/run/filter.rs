@@ -90,7 +90,7 @@ impl<'a> FileFilter<'a> {
     pub(crate) fn for_project<I>(
         filenames: I,
         project: &'a Project,
-        processed_files: Option<&FxHashSet<&Path>>,
+        mut consumed_files: Option<&mut FxHashSet<&'a Path>>,
     ) -> Self
     where
         I: Iterator<Item = &'a PathBuf> + Send,
@@ -100,19 +100,26 @@ impl<'a> FileFilter<'a> {
             project.config().exclude.as_deref(),
         );
 
-        // TODO: support orphaned project, which does not share files with its parent project.
+        let orphan = project.config().orphan.unwrap_or(false);
+
+        // The order of below filters matters.
+        // If this is an orphan project, we must mark all files in its directory as consumed
+        // *before* applying the project's include/exclude patterns. This ensures that even
+        // files excluded by this project are still considered "owned" by it and hidden
+        // from parent projects.
         let filenames = filenames
             .map(PathBuf::as_path)
             // Collect files that are inside the hook project directory.
-            .filter(|(_, filename)| filename.starts_with(project.relative_path()))
-            // Skip files that have already been processed (if deduplication is enabled).
-            .filter(|(_, filename)| {
-                if let Some(processed) = processed_files {
-                    !processed.contains(filename)
+            .filter(|filename| filename.starts_with(project.relative_path()))
+            // Skip files that have already been consumed by subprojects.
+            .filter(|filename| {
+                if orphan && let Some(consumed_files) = consumed_files.as_mut() {
+                    consumed_files.insert(filename)
                 } else {
                     true
                 }
             })
+            .filter(|filename| filter.filter(filename))
             .collect::<Vec<_>>();
 
         Self {
