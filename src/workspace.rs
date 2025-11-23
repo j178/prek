@@ -22,7 +22,6 @@ use crate::fs::Simplified;
 use crate::git::GIT_ROOT;
 use crate::hook::{self, Hook, HookBuilder, Repo};
 use crate::store::{CacheBucket, Store};
-use crate::workspace::Error::MissingPreCommitConfig;
 use crate::{git, store, warn_user};
 
 #[derive(Error, Debug)]
@@ -554,7 +553,7 @@ impl Workspace {
             .ancestors()
             .take_while(|p| git_root.parent().map(|root| *p != root).unwrap_or(true))
             .find(|p| p.join(CONFIG_FILE).is_file() || p.join(ALT_CONFIG_FILE).is_file())
-            .ok_or(MissingPreCommitConfig)?
+            .ok_or(Error::MissingPreCommitConfig)?
             .to_path_buf();
 
         debug!("Found workspace root at `{}`", workspace_root.display());
@@ -634,7 +633,7 @@ impl Workspace {
             projects.retain(|p| selectors.matches_path(p.relative_path()));
         }
         if projects.is_empty() {
-            return Err(MissingPreCommitConfig);
+            return Err(Error::MissingPreCommitConfig);
         }
 
         let mut workspace = Self { root, projects };
@@ -651,7 +650,10 @@ impl Workspace {
         let projects = Mutex::new(Ok(Vec::new()));
 
         let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
-        let submodules = git::list_submodules(git_root).unwrap_or_default();
+        let submodules = git::list_submodules(git_root).unwrap_or_else(|e| {
+            error!("Failed to list git submodules: {e}");
+            Vec::new()
+        });
 
         ignore::WalkBuilder::new(root)
             .follow_links(false)
@@ -721,7 +723,7 @@ impl Workspace {
 
         let projects = projects.into_inner().unwrap()?;
         if projects.is_empty() {
-            return Err(MissingPreCommitConfig);
+            return Err(Error::MissingPreCommitConfig);
         }
 
         Ok(projects)
