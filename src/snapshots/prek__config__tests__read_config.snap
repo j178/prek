@@ -285,6 +285,6 @@ Config {
         true,
     ),
     minimum_prek_version: None,
-    deduplicate_files: None,
+    orphan: None,
     _unused_keys: {},
 }

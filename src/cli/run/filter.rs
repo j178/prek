@@ -132,10 +132,6 @@ impl<'a> FileFilter<'a> {
         self.filenames.len()
     }
 
-    pub(crate) fn filenames(&self) -> &[&'a Path] {
-        &self.filenames
-    }
-
     /// Filter filenames by type tags for a specific hook.
     pub(crate) fn by_type(
         &self,
