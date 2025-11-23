@@ -34,15 +34,15 @@ pub(crate) async fn query_dart_info() -> Result<DartInfo> {
     debug!("Found dart executable at: {}", executable.display());
 
     // Use the executable path we found, not just "dart"
-    let output = Cmd::new(&executable, "get dart version")
+    let stdout = Cmd::new(&executable, "get dart version")
         .arg("--version")
         .check(true)
         .output()
-        .await?;
+        .await?
+        .stdout;
 
-    // Combine stdout and stderr as dart --version may output to either
-    let mut version_output = String::from_utf8_lossy(&output.stdout).to_string();
-    version_output.push_str(&String::from_utf8_lossy(&output.stderr));
+    // dart --version outputs to stdout
+    let version_output = String::from_utf8_lossy(&stdout).to_string();
     debug!("Dart version output: {}", version_output);
 
     // Parse output like "Dart SDK version: 3.0.0 (stable)"
