@@ -149,6 +149,18 @@ impl LanguageImpl for Dart {
 
         let pub_cache = env_dir.to_string_lossy().to_string();
 
+        // If we have a package_config.json in env_dir (from additional_dependencies),
+        // copy it to work_dir so Dart can resolve package imports
+        let env_package_config = env_dir.join(".dart_tool").join("package_config.json");
+        if env_package_config.exists() {
+            let work_dart_tool = hook.work_dir().join(".dart_tool");
+            fs_err::create_dir_all(&work_dart_tool)
+                .context("Failed to create .dart_tool directory in work_dir")?;
+            let work_package_config = work_dart_tool.join("package_config.json");
+            fs_err::copy(&env_package_config, &work_package_config)
+                .context("Failed to copy package_config.json to work_dir")?;
+        }
+
         let run = async |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "run dart command")
                 .current_dir(hook.work_dir())
