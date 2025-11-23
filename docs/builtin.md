@@ -12,7 +12,7 @@ Built-in hooks come into play in two ways:
 When you use a standard configuration pointing to a supported repository (like `https://github.com/pre-commit/pre-commit-hooks`), `prek` automatically detects this and runs its internal Rust implementation instead of the Python version defined in the repository.
 
 The fast path is activated when the `repo` URL matches `https://github.com/pre-commit/pre-commit-hooks`. No need to change anything in your configuration.
-Not that the `rev` field is ignored for detection purposes.
+Note that the `rev` field is ignored for detection purposes.
 
 This provides a speed boost while keeping your configuration compatible with the original `pre-commit` tool.
 
