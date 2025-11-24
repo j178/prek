@@ -1198,7 +1198,7 @@ fn orphan_projects() -> Result<()> {
     "#})?;
 
     // In orphan project, files are "consumed" and not processed again in parent projects
-    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--refresh"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1219,6 +1219,21 @@ fn orphan_projects() -> Result<()> {
     - duration: [TIME]
 
       Processing 1 files
+        - test.py
+
+    ----- stderr -----
+    ");
+
+    // If hooks in orphan projects are not selected, files should be "consumed" as well
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files").arg("--skip").arg("src/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Show Files...............................................................Passed
+    - hook id: show-files
+    - duration: [TIME]
+
+      Processing 3 files
         - test.py
 
     ----- stderr -----
