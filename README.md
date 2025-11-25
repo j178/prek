@@ -307,6 +307,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [iceberg-python](https://github.com/apache/iceberg-python/pull/2533)
 - [msgspec](https://github.com/jcrist/msgspec/pull/918)
 - [humanize](https://github.com/python-humanize/humanize/pull/276)
+- [nf-core](https://github.com/nf-core/tools/pull/3899)
 
 <!-- why:end -->
 
