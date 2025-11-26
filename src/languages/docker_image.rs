@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -42,6 +43,7 @@ impl LanguageImpl for DockerImage {
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
+                .stdin(Stdio::null())
                 .output()
                 .await?;
 

@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -171,6 +172,7 @@ impl LanguageImpl for Ruby {
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
+                .stdin(Stdio::null())
                 .pty_output()
                 .await?;
 

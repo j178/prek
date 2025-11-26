@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -169,6 +170,7 @@ impl LanguageImpl for Node {
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
+                .stdin(Stdio::null())
                 .pty_output()
                 .await?;
 
