@@ -80,6 +80,14 @@ The standalone installer automatically downloads and installs the correct binary
   end="<!-- scoop-install:end -->"
 %}
 
+### MacPorts (macOS)
+
+{%
+  include-markdown "../README.md"
+  start="<!-- macports-install:start -->"
+  end="<!-- macports-install:end -->"
+%}
+
 ### Install from Pre-Built Binaries
 
 {%

@@ -218,6 +218,18 @@ scoop install main/prek
 </details>
 
 <details>
+<summary>MacPorts</summary>
+
+<!-- macports-install:start -->
+prek is available via [MacPorts](https://ports.macports.org/port/prek/).
+
+```bash
+sudo port install prek
+```
+<!-- macports-install:end -->
+</details>
+
+<details>
 <summary>GitHub Releases</summary>
 
 <!-- pre-built-binaries:start -->
