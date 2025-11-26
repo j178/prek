@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.19
+
+Released on 2025-11-26.
+
+### Performance
+
+- Simplify `fix_byte_order_marker` hook ([#1136](https://github.com/j178/prek/pull/1136))
+- Simplify `trailing-whitespace` hook to improve performance ([#1135](https://github.com/j178/prek/pull/1135))
+
+### Bug fixes
+
+- Close stdin for hook subcommands ([#1155](https://github.com/j178/prek/pull/1155))
+- Fix parsing Python interpreter info containing non-UTF8 chars ([#1141](https://github.com/j178/prek/pull/1141))
+
+### Contributors
+
+- @chilin0525
+- @nblock
+- @j178
+
 ## 0.2.18
 
 Released on 2025-11-21.
