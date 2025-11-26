@@ -576,10 +576,6 @@ async fn run_hooks(
             .push(hook);
     }
 
-    // Sort projects by their depth in the workspace.
-    let mut project_to_hooks: Vec<_> = project_to_hooks.into_iter().collect();
-    project_to_hooks.sort_by_key(|(_, hooks)| hooks[0].project().idx());
-
     let projects_len = project_to_hooks.len();
     let mut first = true;
     let mut file_modified = false;
@@ -589,10 +585,15 @@ async fn run_hooks(
     let mut consumed_files = FxHashSet::default();
 
     // Hooks might modify the files, so they must be run sequentially.
-    'outer: for (_, mut hooks) in project_to_hooks {
+    'outer: for project in workspace.all_projects() {
+        let filter = FileFilter::for_project(filenames.iter(), project, Some(&mut consumed_files));
+
+        let Some(mut hooks) = project_to_hooks.remove(project) else {
+            continue;
+        };
+
         hooks.sort_by_key(|h| h.idx);
 
-        let project = hooks[0].project();
         if projects_len > 1 || !project.is_root() {
             writeln!(
                 printer.stdout(),
@@ -606,7 +607,6 @@ async fn run_hooks(
 
         let fail_fast = fail_fast || project.config().fail_fast.unwrap_or(false);
 
-        let filter = FileFilter::for_project(filenames.iter(), project, Some(&mut consumed_files));
         trace!(
             "Files for project `{project}` after filtered: {}",
             filter.len()

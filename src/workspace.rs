@@ -402,7 +402,7 @@ impl WorkspaceCache {
     const MAX_CACHE_AGE: u64 = 60 * 60;
 
     /// Create a new cache from workspace discovery results
-    fn new(workspace_root: PathBuf, projects: &[Arc<Project>]) -> Self {
+    fn new(workspace_root: PathBuf, projects: &[Project]) -> Self {
         let mut config_files = Vec::new();
 
         for project in projects {
@@ -535,6 +535,7 @@ impl WorkspaceCache {
 pub(crate) struct Workspace {
     root: PathBuf,
     projects: Vec<Arc<Project>>,
+    all_projects: Vec<Project>,
 }
 
 impl Workspace {
@@ -571,9 +572,11 @@ impl Workspace {
     ) -> Result<Self, Error> {
         if let Some(config) = config {
             let project = Project::from_config_file(config.into(), Some(root.clone()))?;
+            let arc_project = Arc::new(project.clone());
             return Ok(Self {
                 root,
-                projects: vec![Arc::new(project)],
+                projects: vec![arc_project],
+                all_projects: vec![project],
             });
         }
 
@@ -593,7 +596,7 @@ impl Workspace {
                                 .expect("Entry path should be relative to the root")
                                 .to_path_buf();
                             project.with_relative_path(relative_path);
-                            Ok(Arc::new(project))
+                            Ok(project)
                         }
                         Err(e) => {
                             debug!("Failed to load cached project config: {}", e);
@@ -614,7 +617,7 @@ impl Workspace {
             None
         };
 
-        let mut projects = if let Some(projects) = projects {
+        let mut all_projects = if let Some(projects) = projects {
             projects
         } else {
             // Cache miss or invalid, perform fresh discovery
@@ -629,24 +632,40 @@ impl Workspace {
             projects
         };
 
-        if let Some(selectors) = selectors {
-            projects.retain(|p| selectors.matches_path(p.relative_path()));
-        }
+        Self::sort_and_index_projects(&mut all_projects);
+
+        let projects = if let Some(selectors) = selectors {
+            let selected = all_projects
+                .iter()
+                .filter(|p| selectors.matches_path(p.relative_path()))
+                .cloned()
+                .map(Arc::new)
+                .collect::<Vec<_>>();
+            if selected.is_empty() {
+                return Err(Error::MissingPreCommitConfig);
+            }
+            selected
+        } else {
+            all_projects
+                .iter()
+                .cloned()
+                .map(Arc::new)
+                .collect::<Vec<_>>()
+        };
+
         if projects.is_empty() {
             return Err(Error::MissingPreCommitConfig);
         }
 
-        let mut workspace = Self { root, projects };
-        workspace.sort_and_index_projects();
-
-        Ok(workspace)
+        Ok(Self {
+            root,
+            projects,
+            all_projects,
+        })
     }
 
     /// Perform fresh workspace discovery without cache
-    fn discover_fresh(
-        root: &Path,
-        selectors: Option<&Selectors>,
-    ) -> Result<Vec<Arc<Project>>, Error> {
+    fn discover_fresh(root: &Path, selectors: Option<&Selectors>) -> Result<Vec<Project>, Error> {
         let projects = Mutex::new(Ok(Vec::new()));
 
         let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
@@ -692,7 +711,7 @@ impl Workspace {
                             project.with_relative_path(relative_path);
 
                             if let Ok(projects) = projects.lock().unwrap().as_mut() {
-                                projects.push(Arc::new(project));
+                                projects.push(project);
                             }
                         }
                         Err(config::Error::NotFound(_)) => {}
@@ -730,11 +749,11 @@ impl Workspace {
     }
 
     /// Sort projects by depth and assign indices
-    fn sort_and_index_projects(&mut self) {
+    fn sort_and_index_projects(projects: &mut [Project]) {
         // Sort projects by their depth in the directory tree.
         // The deeper the project comes first.
         // This is useful for nested projects where we want to prefer the most specific project.
-        self.projects.sort_by(|a, b| {
+        projects.sort_by(|a, b| {
             b.depth()
                 .cmp(&a.depth())
                 // If depth is the same, sort by relative path to have a deterministic order.
@@ -742,8 +761,8 @@ impl Workspace {
         });
 
         // Assign index to each project.
-        for (idx, project) in self.projects.iter_mut().enumerate() {
-            Arc::get_mut(project).unwrap().with_idx(idx);
+        for (idx, project) in projects.iter_mut().enumerate() {
+            project.with_idx(idx);
         }
     }
 
@@ -753,6 +772,10 @@ impl Workspace {
 
     pub(crate) fn projects(&self) -> &[Arc<Project>] {
         &self.projects
+    }
+
+    pub(crate) fn all_projects(&self) -> &[Project] {
+        &self.all_projects
     }
 
     /// Initialize remote repositories for all projects.

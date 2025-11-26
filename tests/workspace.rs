@@ -1233,7 +1233,7 @@ fn orphan_projects() -> Result<()> {
     - hook id: show-files
     - duration: [TIME]
 
-      Processing 3 files
+      Processing 1 files
         - test.py
 
     ----- stderr -----

@@ -156,6 +156,10 @@ Notice how:
 - The workspace root processes all files in the entire workspace
 - Projects are executed from deepest to shallowest as described in the execution order
 
+#### Orphan Projects and Selectors
+
+When you combine `orphan: true` with selectors such as `--skip`, remember that orphans keep the files they cover. Even if you skip an orphan project (for example via `--skip src/backend/`), that project still claims ownership of the files under its directory. Those files will not fall back to parent projects, so you can disable or precisely target orphaned projects without reintroducing duplicate processing upstream.
+
 ## Command Line Usage
 
 ```bash
