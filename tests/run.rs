@@ -2500,3 +2500,48 @@ fn empty_entry() {
       caused by: Failed to parse entry: entry is empty
     ");
 }
+
+/// Test that hooks are run with stdin closed.
+#[test]
+fn run_with_stdin_closed() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: check-stdin
+                name: check-stdin
+                language: python
+                entry: python -c 'import sys; sys.stdin.read(); print("STDIN closed")'
+                pass_filenames: false
+                verbose: true
+    "#});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check-stdin..............................................................Passed
+    - hook id: check-stdin
+    - duration: [TIME]
+
+      STDIN closed
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--color").arg("always"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check-stdin..............................................................[42mPassed[49m
+    [2m- hook id: check-stdin[0m
+    [2m- duration: [TIME][0m
+
+      STDIN closed
+
+    ----- stderr -----
+    ");
+}

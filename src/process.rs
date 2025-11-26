@@ -195,9 +195,9 @@ impl Cmd {
         }
 
         let (mut pty, pts) = prek_pty::open()?;
-        let (stdin, stdout, stderr) = pts.setup_subprocess()?;
+        let (_, stdout, stderr) = pts.setup_subprocess()?;
 
-        self.inner.stdin(stdin);
+        self.inner.stdin(Stdio::null());
         self.inner.stdout(stdout);
         self.inner.stderr(stderr);
 
