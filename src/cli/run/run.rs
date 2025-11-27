@@ -7,6 +7,7 @@ use std::sync::{Arc, LazyLock};
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
 use owo_colors::{OwoColorize, Style};
+use prek_consts::env_vars::EnvVars;
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -14,8 +15,6 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::{OnceCell, Semaphore};
 use tracing::{debug, trace, warn};
 use unicode_width::UnicodeWidthStr;
-
-use prek_consts::env_vars::EnvVars;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;
