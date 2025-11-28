@@ -2,10 +2,13 @@ use std::fmt::Write as _;
 use std::io::Write;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::{Arc, LazyLock};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
-use futures::stream::{FuturesUnordered, StreamExt};
+use futures::stream::{self, FuturesUnordered, StreamExt};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::{OwoColorize, Style};
 use prek_consts::env_vars::EnvVars;
 use rand::SeedableRng;
@@ -24,7 +27,7 @@ use crate::config::{Language, Stage};
 use crate::fs::CWD;
 use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
-use crate::printer::{Printer, Stdout};
+use crate::printer::Printer;
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
@@ -489,9 +492,15 @@ fn partition_hooks(hooks: &[Arc<Hook>]) -> Vec<Vec<Arc<Hook>>> {
     groups
 }
 
+#[derive(Clone)]
 struct StatusPrinter {
+    inner: Arc<StatusPrinterInner>,
+}
+
+struct StatusPrinterInner {
     printer: Printer,
     columns: usize,
+    lock: Mutex<()>,
 }
 
 impl StatusPrinter {
@@ -504,7 +513,13 @@ impl StatusPrinter {
 
     fn for_hooks(hooks: &[InstalledHook], printer: Printer) -> Self {
         let columns = Self::calculate_columns(hooks);
-        Self { printer, columns }
+        Self {
+            inner: Arc::new(StatusPrinterInner {
+                printer,
+                columns,
+                lock: Mutex::new(()),
+            }),
+        }
     }
 
     fn calculate_columns(hooks: &[InstalledHook]) -> usize {
@@ -519,53 +534,194 @@ impl StatusPrinter {
         )
     }
 
-    fn write_skipped(
-        &self,
-        hook_name: &str,
-        reason: &str,
-        style: Style,
-    ) -> Result<(), std::fmt::Error> {
-        let dots = self.columns - hook_name.width_cjk() - Self::SKIPPED.len() - reason.len() - 1;
-        let line = format!(
-            "{hook_name}{}{}{}",
-            ".".repeat(dots),
-            reason,
-            Self::SKIPPED.style(style)
+    fn printer(&self) -> Printer {
+        self.inner.printer
+    }
+
+    fn write(&self, hook_name: &str, status: StatusLine<'_>) -> Result<(), std::fmt::Error> {
+        let _guard = self.inner.lock.lock().unwrap();
+        match status {
+            StatusLine::Skipped { reason, style } => {
+                let dots = self.inner.columns
+                    - hook_name.width_cjk()
+                    - Self::SKIPPED.len()
+                    - reason.len()
+                    - 1;
+                let line = format!(
+                    "{hook_name}{}{}{}",
+                    ".".repeat(dots.max(0)),
+                    reason,
+                    Self::SKIPPED.style(style)
+                );
+                writeln!(self.inner.printer.stdout(), "{line}")
+            }
+            StatusLine::DryRun => {
+                let dots = self.inner.columns - hook_name.width_cjk() - Self::DRY_RUN.len() - 1;
+                let line = format!(
+                    "{hook_name}{}{}",
+                    ".".repeat(dots.max(0)),
+                    Self::DRY_RUN.on_yellow()
+                );
+                writeln!(self.inner.printer.stdout(), "{line}")
+            }
+            StatusLine::Passed => {
+                let dots = self.inner.columns - hook_name.width_cjk() - Self::PASSED.len() - 1;
+                let line = format!(
+                    "{hook_name}{}{}",
+                    ".".repeat(dots.max(0)),
+                    Self::PASSED.on_green()
+                );
+                writeln!(self.inner.printer.stdout(), "{line}")
+            }
+            StatusLine::Failed => {
+                let dots = self.inner.columns - hook_name.width_cjk() - Self::FAILED.len() - 1;
+                let line = format!(
+                    "{hook_name}{}{}",
+                    ".".repeat(dots.max(0)),
+                    Self::FAILED.on_red()
+                );
+                writeln!(self.inner.printer.stdout_important(), "{line}")
+            }
+        }
+    }
+}
+
+enum StatusLine<'a> {
+    Passed,
+    Failed,
+    DryRun,
+    Skipped { reason: &'a str, style: Style },
+}
+
+#[derive(Clone)]
+struct HookRunReporter {
+    inner: Option<Arc<HookRunReporterInner>>,
+}
+
+struct HookRunReporterInner {
+    multi: MultiProgress,
+    root: ProgressBar,
+    total: usize,
+    completed: AtomicUsize,
+}
+
+impl HookRunReporter {
+    fn new(total_hooks: usize, printer: Printer) -> Self {
+        let enable_progress = total_hooks > 0
+            && matches!(printer, Printer::Default)
+            && std::io::stderr().is_terminal();
+
+        if !enable_progress {
+            return Self { inner: None };
+        }
+
+        let multi = MultiProgress::with_draw_target(printer.target());
+        let root = multi.add(ProgressBar::new(total_hooks as u64));
+        root.enable_steady_tick(Duration::from_millis(120));
+        root.set_style(
+            ProgressStyle::with_template("{spinner:.white} {msg:.dim}")
+                .unwrap()
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
-        writeln!(self.printer.stdout(), "{line}")
+        root.set_message(format!("Running hooks (0/{total_hooks})"));
+
+        Self {
+            inner: Some(Arc::new(HookRunReporterInner {
+                multi,
+                root,
+                total: total_hooks,
+                completed: AtomicUsize::new(0),
+            })),
+        }
     }
 
-    fn write_running(&self, hook_name: &str, important: bool) -> Result<(), std::fmt::Error> {
-        write!(
-            if important {
-                self.printer.stdout_important()
-            } else {
-                self.printer.stdout()
-            },
-            "{}{}",
-            hook_name,
-            ".".repeat(self.columns - hook_name.width_cjk() - Self::PASSED.len() - 1)
-        )
+    fn start(&self, hook: &InstalledHook) -> HookProgress {
+        let Some(inner) = &self.inner else {
+            return HookProgress { inner: None };
+        };
+
+        let bar = inner.multi.add(ProgressBar::new_spinner());
+        bar.enable_steady_tick(Duration::from_millis(150));
+        bar.set_style(
+            ProgressStyle::with_template("{spinner:.white} {msg}")
+                .unwrap()
+                .tick_strings(&["∙", "●", "∙"]),
+        );
+
+        HookProgress {
+            inner: Some(HookProgressInner {
+                bar,
+                reporter: inner.clone(),
+                name: hook.name.clone(),
+            }),
+        }
     }
 
-    fn write_dry_run(&self) -> Result<(), std::fmt::Error> {
-        writeln!(self.printer.stdout(), "{}", Self::DRY_RUN.on_yellow())
+    fn finish(&self) {
+        if let Some(inner) = &self.inner {
+            inner.root.finish_and_clear();
+        }
+    }
+}
+
+struct HookProgress {
+    inner: Option<HookProgressInner>,
+}
+
+struct HookProgressInner {
+    bar: ProgressBar,
+    reporter: Arc<HookRunReporterInner>,
+    name: String,
+}
+
+impl HookProgress {
+    fn running(&self, priority: u32) {
+        if let Some(inner) = &self.inner {
+            inner.bar.set_message(format!(
+                "{} {} (p{})",
+                "⏳".cyan(),
+                inner.name.dimmed(),
+                priority
+            ));
+        }
     }
 
-    fn write_passed(&self) -> Result<(), std::fmt::Error> {
-        writeln!(self.printer.stdout(), "{}", Self::PASSED.on_green())
-    }
+    fn finish(&self, state: HookProgressState<'_>) {
+        if let Some(inner) = &self.inner {
+            inner.bar.finish_with_message(state.message(&inner.name));
 
-    fn write_failed(&self) -> Result<(), std::fmt::Error> {
-        writeln!(self.printer.stdout_important(), "{}", Self::FAILED.on_red())
+            let completed = inner.reporter.completed.fetch_add(1, Ordering::Relaxed) + 1;
+            inner.reporter.root.set_message(format!(
+                "Running hooks ({completed}/{})",
+                inner.reporter.total
+            ));
+            inner.reporter.root.set_position(completed as u64);
+            if completed == inner.reporter.total {
+                inner.reporter.root.finish_and_clear();
+            }
+        }
     }
+}
 
-    fn stdout(&self) -> Stdout {
-        self.printer.stdout()
-    }
+enum HookProgressState<'a> {
+    Passed,
+    Failed,
+    DryRun,
+    Skipped(&'a str),
+    Unimplemented,
+}
 
-    fn stdout_important(&self) -> Stdout {
-        self.printer.stdout_important()
+impl HookProgressState<'_> {
+    fn message(&self, name: &str) -> String {
+        match self {
+            Self::Passed => format!("{} {}", "✔".green(), name.dimmed()),
+            Self::Failed => format!("{} {}", "✖".red(), name.dimmed()),
+            Self::DryRun => format!("{} {}", "⋯".yellow(), name.dimmed()),
+            Self::Skipped(reason) => {
+                format!("{} {} {}", "-".blue(), name.dimmed(), reason.dimmed())
+            }
+            Self::Unimplemented => format!("{} {}", "!".yellow(), name.dimmed()),
+        }
     }
 }
 
@@ -584,18 +740,19 @@ async fn run_hooks(
 ) -> Result<ExitStatus> {
     debug_assert!(!hooks.is_empty(), "No hooks to run");
 
-    let printer = StatusPrinter::for_hooks(hooks, printer);
+    let status_printer = StatusPrinter::for_hooks(hooks, printer);
+    let progress = HookRunReporter::new(hooks.len(), printer);
 
     let mut success = true;
 
     // Group hooks by project to run them in order of their depth in the workspace.
     #[allow(clippy::mutable_key_type)]
-    let mut project_to_hooks: FxHashMap<&Project, Vec<&InstalledHook>> = FxHashMap::default();
+    let mut project_to_hooks: FxHashMap<&Project, Vec<InstalledHook>> = FxHashMap::default();
     for hook in hooks {
         project_to_hooks
             .entry(hook.project())
             .or_default()
-            .push(hook);
+            .push(hook.clone());
     }
 
     let projects_len = project_to_hooks.len();
@@ -614,38 +771,66 @@ async fn run_hooks(
             continue;
         };
 
-        hooks.sort_by_key(|h| h.idx);
+        hooks.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.idx.cmp(&b.idx)));
 
         if projects_len > 1 || !project.is_root() {
             writeln!(
-                printer.stdout(),
+                status_printer.printer().stdout(),
                 "{}{}:",
                 if first { "" } else { "\n" },
                 format!("Running hooks for `{}`", project.to_string().cyan()).bold()
             )?;
             first = false;
         }
-        let mut diff = git::get_diff(project.path()).await?;
 
-        let fail_fast = fail_fast || project.config().fail_fast.unwrap_or(false);
+        let project_fail_fast = fail_fast || project.config().fail_fast.unwrap_or(false);
 
         trace!(
             "Files for project `{project}` after filtered: {}",
             filter.len()
         );
+        let mut idx = 0;
+        while idx < hooks.len() {
+            let priority = hooks[idx].priority;
+            let mut end = idx + 1;
+            while end < hooks.len() && hooks[end].priority == priority {
+                end += 1;
+            }
 
-        for hook in hooks {
-            let result = run_hook(hook, &filter, store, diff, verbose, dry_run, &printer).await?;
-            diff = result.new_diff;
-            file_modified |= result.file_modified;
-            has_unimplemented |= result.status.is_unimplemented();
+            let group_hooks = hooks[idx..end].to_vec();
+            let mut results = stream::iter(group_hooks.into_iter().map(|hook| {
+                run_hook(
+                    hook,
+                    &filter,
+                    store,
+                    verbose,
+                    dry_run,
+                    status_printer.clone(),
+                    progress.clone(),
+                )
+            }))
+            .buffer_unordered((*CONCURRENCY).max(1));
 
-            success &= result.status.as_bool();
-            if !success && (fail_fast || hook.fail_fast) {
+            let mut hook_fail_fast = false;
+            while let Some(result) = results.next().await {
+                let result = result?;
+                file_modified |= result.file_modified;
+                has_unimplemented |= result.status.is_unimplemented();
+                success &= result.status.as_bool();
+                if result.fail_fast_trigger && !result.status.as_bool() {
+                    hook_fail_fast = true;
+                }
+            }
+
+            if !success && (project_fail_fast || hook_fail_fast) {
                 break 'outer;
             }
+
+            idx = end;
         }
     }
+
+    progress.finish();
 
     if has_unimplemented {
         warn_user!(
@@ -730,54 +915,60 @@ impl RunStatus {
 
 struct RunResult {
     status: RunStatus,
-    new_diff: Vec<u8>,
     file_modified: bool,
+    fail_fast_trigger: bool,
 }
 
 async fn run_hook(
-    hook: &InstalledHook,
+    hook: InstalledHook,
     filter: &FileFilter<'_>,
     store: &Store,
-    diff: Vec<u8>,
     verbose: bool,
     dry_run: bool,
-    printer: &StatusPrinter,
+    status_printer: StatusPrinter,
+    reporter: HookRunReporter,
 ) -> Result<RunResult> {
-    let mut filenames = filter.for_hook(hook);
+    let mut filenames = filter.for_hook(&hook);
     trace!(
         "Files for hook `{}` after filtered: {}",
         hook.id,
         filenames.len()
     );
 
+    let progress = reporter.start(&hook);
+    progress.running(hook.priority);
+
     if filenames.is_empty() && !hook.always_run {
-        printer.write_skipped(
+        status_printer.write(
             &hook.name,
-            StatusPrinter::NO_FILES,
-            Style::new().black().on_cyan(),
+            StatusLine::Skipped {
+                reason: StatusPrinter::NO_FILES,
+                style: Style::new().black().on_cyan(),
+            },
         )?;
+        progress.finish(HookProgressState::Skipped(StatusPrinter::NO_FILES));
         return Ok(RunResult {
             status: RunStatus::Skipped,
-            new_diff: diff,
             file_modified: false,
+            fail_fast_trigger: false,
         });
     }
 
     if !Language::supported(hook.language) {
-        printer.write_skipped(
+        status_printer.write(
             &hook.name,
-            StatusPrinter::UNIMPLEMENTED,
-            Style::new().black().on_yellow(),
+            StatusLine::Skipped {
+                reason: StatusPrinter::UNIMPLEMENTED,
+                style: Style::new().black().on_yellow(),
+            },
         )?;
+        progress.finish(HookProgressState::Unimplemented);
         return Ok(RunResult {
             status: RunStatus::Unimplemented,
-            new_diff: diff,
             file_modified: false,
+            fail_fast_trigger: false,
         });
     }
-
-    printer.write_running(&hook.name, false)?;
-    std::io::stdout().flush()?;
 
     let start = std::time::Instant::now();
 
@@ -786,6 +977,17 @@ async fn run_hook(
         filenames
     } else {
         vec![]
+    };
+
+    let tracked_paths = if hook.pass_filenames && !filenames.is_empty() {
+        Some(
+            filenames
+                .iter()
+                .map(|path| hook.work_dir().join(path))
+                .collect::<Vec<_>>(),
+        )
+    } else {
+        None
     };
 
     let (status, output) = if dry_run {
@@ -804,28 +1006,40 @@ async fn run_hook(
         (0, output)
     } else {
         hook.language
-            .run(hook, &filenames, store)
+            .run(&hook, &filenames, store)
             .await
             .with_context(|| format!("Failed to run hook `{hook}`"))?
     };
 
     let duration = start.elapsed();
 
-    let new_diff = git::get_diff(hook.work_dir()).await?;
-    let file_modified = diff != new_diff;
-    let success = status == 0 && !file_modified;
-    if dry_run {
-        printer.write_dry_run()?;
-    } else if success {
-        printer.write_passed()?;
+    let file_modified = if dry_run {
+        false
+    } else if let Some(paths) = tracked_paths.as_ref() {
+        git::has_diff_for_paths(paths).await?
     } else {
-        // If the printer is in quiet mode, the running line was not printed.
-        // Reprint it here before printing the failure.
-        if printer.stdout() == Stdout::Disabled {
-            printer.write_running(&hook.name, true)?;
-        }
-        printer.write_failed()?;
-    }
+        git::has_diff_at_path(hook.work_dir()).await?
+    };
+    let success = status == 0 && !file_modified;
+    let hook_status = if dry_run {
+        StatusLine::DryRun
+    } else if success {
+        StatusLine::Passed
+    } else {
+        StatusLine::Failed
+    };
+    status_printer.write(&hook.name, hook_status)?;
+
+    let progress_state = if dry_run {
+        HookProgressState::DryRun
+    } else if success {
+        HookProgressState::Passed
+    } else {
+        HookProgressState::Failed
+    };
+    progress.finish(progress_state);
+
+    let printer = status_printer.printer();
 
     if verbose || hook.verbose || !success {
         let mut stdout = if success {
@@ -871,7 +1085,7 @@ async fn run_hook(
 
     Ok(RunResult {
         status: RunStatus::from_bool(success),
-        new_diff,
         file_modified,
+        fail_fast_trigger: hook.fail_fast && !success,
     })
 }

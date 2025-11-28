@@ -361,6 +361,94 @@ fn multiple_hook_ids() {
     "#);
 }
 
+#[test]
+fn priorities_respected() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: late
+                name: Late Hook
+                language: system
+                entry: python3 -c "print('late')"
+                always_run: true
+                priority: 10
+              - id: early
+                name: Early Hook
+                language: system
+                entry: python3 -c "print('early')"
+                always_run: true
+                priority: 0
+              - id: middle
+                name: Middle Hook
+                language: system
+                entry: python3 -c "print('middle')"
+                always_run: true
+                priority: 5
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Early Hook...............................................................Passed
+    Middle Hook..............................................................Passed
+    Late Hook................................................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
+fn priority_fail_fast_stops_later_groups() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: fail-fast
+                name: Failing Hook
+                language: system
+                entry: python3 -c "import sys; sys.exit(1)"
+                always_run: true
+                priority: 5
+                fail_fast: true
+              - id: sibling
+                name: Same Priority Sibling
+                language: system
+                entry: python3 -c "import time; time.sleep(0.2)"
+                always_run: true
+                priority: 5
+              - id: later
+                name: Later Hook
+                language: system
+                entry: python3 -c "print('later ran')"
+                always_run: true
+                priority: 10
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Failing Hook.............................................................Failed
+    - hook id: fail-fast
+    - exit code: 1
+    Same Priority Sibling....................................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
 /// `.pre-commit-config.yaml` is not staged.
 #[test]
 fn config_not_staged() -> Result<()> {

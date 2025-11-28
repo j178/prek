@@ -292,6 +292,9 @@ pub(crate) struct HookOptions {
     /// This hook will execute using a single process instead of in parallel.
     /// Default is false.
     pub require_serial: Option<bool>,
+    /// Priority used by the scheduler to determine ordering and concurrency.
+    /// Hooks with the same priority can run in parallel.
+    pub priority: Option<u32>,
     /// Select which git hook(s) to run for.
     /// Default all stages are selected.
     /// See <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.
@@ -335,6 +338,7 @@ impl HookOptions {
             language_version,
             log_file,
             require_serial,
+            priority,
             stages,
             verbose,
             minimum_prek_version,
