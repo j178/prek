@@ -94,11 +94,11 @@ fn language_version() -> Result<()> {
     assert_eq!(
         installed_versions.len(),
         1,
-        "Expected only one node version to be installed, but found: {installed_versions:?}"
+        "Expected only one Rust version to be installed, but found: {installed_versions:?}"
     );
     assert!(
         installed_versions.iter().any(|v| v.starts_with("1.70")),
-        "Expected node v19 to be installed, but found: {installed_versions:?}"
+        "Expected Rust 1.70.X to be installed, but found: {installed_versions:?}"
     );
 
     Ok(())
