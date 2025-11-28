@@ -26,6 +26,30 @@ fn format_cargo_dependency(dep: &str) -> String {
     }
 }
 
+/// Recursively copy a directory, skipping the `target` directory to avoid copying build artifacts.
+async fn copy_dir_all(src: &Path, dst: &Path) -> anyhow::Result<()> {
+    fs_err::tokio::create_dir_all(dst).await?;
+    let mut entries = fs_err::tokio::read_dir(src).await?;
+
+    while let Some(entry) = entries.next_entry().await? {
+        let ty = entry.file_type().await?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+
+        if ty.is_dir() {
+            // Skip target directory to avoid copying build artifacts
+            if entry.file_name() == "target" {
+                continue;
+            }
+            Box::pin(copy_dir_all(&src_path, &dst_path)).await?;
+        } else {
+            fs_err::tokio::copy(&src_path, &dst_path).await?;
+        }
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Rust;
 
@@ -77,30 +101,37 @@ impl LanguageImpl for Rust {
                 }
             });
 
-        // Install library dependencies
-        if !lib_deps.is_empty() {
-            if let Some(repo) = hook.repo_path() {
+        // Install library dependencies and local project
+        if let Some(repo) = hook.repo_path() {
+            let build_dir = if lib_deps.is_empty() {
+                repo.to_path_buf()
+            } else {
+                // Copy repo to env_path/src to avoid modifying the shared repo
+                let build_dir = info.env_path.join("src");
+                copy_dir_all(repo, &build_dir).await?;
+
+                // Run cargo add in the copied directory
                 let mut cmd = Cmd::new("cargo", "add dependencies");
                 cmd.arg("add");
                 for dep in &lib_deps {
                     cmd.arg(format_cargo_dependency(dep.as_str()));
                 }
-                cmd.current_dir(repo)
+                cmd.current_dir(&build_dir)
                     .env(EnvVars::CARGO_HOME, cargo_home)
                     .remove_git_env()
                     .check(true)
                     .output()
                     .await?;
-            }
-        }
 
-        // Install local project
-        if let Some(repo) = hook.repo_path() {
+                build_dir
+            };
+
+            // Install from the build directory (either original repo or copied)
             Cmd::new("cargo", "install local")
                 .args(["install", "--bins", "--root"])
                 .arg(cargo_home)
                 .args(["--path", "."])
-                .current_dir(repo)
+                .current_dir(&build_dir)
                 .env(EnvVars::CARGO_HOME, cargo_home)
                 .remove_git_env()
                 .check(true)

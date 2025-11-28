@@ -172,3 +172,37 @@ fn remote_hooks() {
     ----- stderr -----
     ");
 }
+
+/// Test that library dependencies (non-cli: prefix) work correctly on remote hooks.
+/// This verifies that the shared repo is not modified when adding dependencies.
+#[test]
+fn remote_hooks_with_lib_deps() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: https://github.com/prek-test-repos/rust-hooks
+            rev: v1.0.0
+            hooks:
+              - id: hello-world-lib-deps
+                additional_dependencies: ["itoa:1"]
+                verbose: true
+                pass_filenames: false
+                always_run: true
+    "#});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello World With Lib Deps................................................Passed
+    - hook id: hello-world-lib-deps
+    - duration: [TIME]
+
+      42
+
+    ----- stderr -----
+    ");
+}
