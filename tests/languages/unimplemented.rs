@@ -8,9 +8,9 @@ fn unimplemented_language() {
         repos:
           - repo: local
             hooks:
-            - id: rust-hook
-              name: rust-hook
-              language: rust
+            - id: swift-hook
+              name: swift-hook
+              language: swift
               entry: cargo run
     "});
 
@@ -20,7 +20,7 @@ fn unimplemented_language() {
     success: true
     exit_code: 0
     ----- stdout -----
-    rust-hook............................................(unimplemented yet)Skipped
+    swift-hook...........................................(unimplemented yet)Skipped
 
     ----- stderr -----
     warning: Some hooks were skipped because their languages are unimplemented.
