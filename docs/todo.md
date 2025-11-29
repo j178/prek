@@ -16,6 +16,7 @@ The original pre-commit supports hooks written in 10+ languages. The table below
 | node | ✅ Supported | — | |
 | golang | ✅ Supported | — | |
 | lua | ✅ Supported | — | |
+| dart | ✅ Supported | — | |
 | system | ✅ Supported | — | |
 | script | ✅ Supported | — | |
 | pygrep | ✅ Supported | — | |
@@ -27,7 +28,6 @@ The original pre-commit supports hooks written in 10+ languages. The table below
 | rust | 🚧 Planned | [#44](https://github.com/j178/prek/issues/44) | |
 | conda | 🚧 Planned | [#52](https://github.com/j178/prek/issues/52) | |
 | coursier | 🚧 Planned | [#53](https://github.com/j178/prek/issues/53) | |
-| dart | 🚧 Planned | [#51](https://github.com/j178/prek/issues/51) | |
 | dotnet | 🚧 Planned | [#48](https://github.com/j178/prek/issues/48) | |
 | haskell | 🚧 Planned | — | |
 | julia | 🚧 Planned | — | |

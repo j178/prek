@@ -383,6 +383,8 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
     // Time seconds
     (r"\b(\d+\.)?\d+(ms|s)\b", "[TIME]"),
+    // Dart SDK version output (handles Flutter SDK too)
+    (r"Dart SDK version: .*", "Dart SDK version: [VERSION]"),
     // Windows shebang interpreter
     (r"#!/bin/sh", "#!/usr/bin/env bash"),
 ];
