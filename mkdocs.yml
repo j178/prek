@@ -59,14 +59,15 @@ nav:
   - Introduction: index.md
   - Installation: installation.md
   - Quickstart: quickstart.md
-  - Workspace Mode: workspace.md
   - Configuration: configuration.md
+  - Workspace Mode: workspace.md
   - Commands: cli.md
   - Differences: diff.md
   - Benchmark: benchmark.md
   - Built-in Hooks: builtin.md
   - TODO: todo.md
   - Debugging: debugging.md
+  - FAQ: faq.md
 
 markdown_extensions:
   - pymdownx.highlight:
