@@ -79,6 +79,7 @@ impl LanguageImpl for Golang {
                     .env(EnvVars::GOTOOLCHAIN, "local")
                     .env(EnvVars::GOROOT, go_root)
                     .env(EnvVars::GOBIN, bin_dir(&info.env_path))
+                    .env("GOFLAGS", "-modcacherw")
                     .env(EnvVars::GOPATH, &go_cache);
                 cmd
             }
