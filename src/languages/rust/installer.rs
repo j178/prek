@@ -79,8 +79,9 @@ impl RustResult {
             .check(true)
             .output()
             .await?;
+
         // e.g. "rustc 1.70.0 (90c541806 2023-05-31)"
-        let version_str = String::from_utf8(output.stdout)?;
+        let version_str = str::from_utf8(&output.stdout)?;
         let version_str = version_str.split_ascii_whitespace().nth(1).ok_or_else(|| {
             anyhow::anyhow!("Failed to parse Rust version from output: {version_str}")
         })?;
@@ -102,7 +103,7 @@ impl RustResult {
             .await?;
 
         // e.g. "rustc 1.70.0 (90c541806 2023-05-31)"
-        let version_str = String::from_utf8(output.stdout)?;
+        let version_str = str::from_utf8(&output.stdout)?;
         let version_str = version_str.split_ascii_whitespace().nth(1).ok_or_else(|| {
             anyhow::anyhow!("Failed to parse Rust version from output: {version_str}")
         })?;
@@ -271,8 +272,7 @@ impl RustInstaller {
                     .output()
                     .await?
                     .stdout;
-                let output_str = String::from_utf8(output)?;
-                let versions: Vec<RustVersion> = output_str
+                let versions: Vec<RustVersion> = str::from_utf8(&output)?
                     .lines()
                     .filter_map(|line| {
                         let tag = line.split('\t').nth(1)?;
