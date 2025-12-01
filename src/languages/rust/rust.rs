@@ -11,7 +11,7 @@ use crate::cli::reporter::HookInstallReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::rust::RustRequest;
-use crate::languages::rust::installer::RustInstaller;
+use crate::languages::rust::installer::{RustInstaller, rustup_home_dir};
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
 use crate::run::{prepend_paths, run_by_batch};
@@ -329,9 +329,19 @@ impl LanguageImpl for Rust {
         let rust_tools = store.tools_path(ToolBucket::Rust);
         let rustc_bin = info.toolchain.parent().expect("Rust bin should exist");
 
-        let rust_envs = if rustc_bin.starts_with(rust_tools) {
+        // Determine if this is a managed (non-system) Rust installation
+        let rust_envs = if rustc_bin.starts_with(&rust_tools) {
             let toolchain = info.language_version.to_string();
-            vec![(EnvVars::RUSTUP_TOOLCHAIN, toolchain)]
+            // Get the toolchain directory (parent of bin/)
+            let toolchain_dir = rustc_bin.parent().expect("Toolchain dir should exist");
+            let rustup_home = rustup_home_dir(toolchain_dir);
+            vec![
+                (EnvVars::RUSTUP_TOOLCHAIN, toolchain),
+                (
+                    EnvVars::RUSTUP_HOME,
+                    rustup_home.to_string_lossy().to_string(),
+                ),
+            ]
         } else {
             vec![]
         };

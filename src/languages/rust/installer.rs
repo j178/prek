@@ -95,11 +95,16 @@ impl RustResult {
         Ok(self)
     }
 
-    pub(crate) async fn fill_version_with_toolchain(mut self, toolchain: &str) -> Result<Self> {
+    pub(crate) async fn fill_version_with_toolchain(
+        mut self,
+        toolchain: &str,
+        rustup_home: &Path,
+    ) -> Result<Self> {
         let output = self
             .cmd("rustc version")
             .arg("--version")
             .env(EnvVars::RUSTUP_TOOLCHAIN, toolchain)
+            .env(EnvVars::RUSTUP_HOME, rustup_home)
             .check(true)
             .output()
             .await?;
@@ -146,7 +151,15 @@ impl RustInstaller {
                 .and_then(|n| n.to_str())
                 .map(ToString::to_string)
                 .context("Failed to extract toolchain name")?;
-            return rust.fill_version_with_toolchain(&toolchain).await;
+            let rustup_home = rustup_home_dir(
+                rust.bin()
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .context("Failed to get rust dir")?,
+            );
+            return rust
+                .fill_version_with_toolchain(&toolchain, &rustup_home)
+                .await;
         }
 
         // Check system second
@@ -163,8 +176,9 @@ impl RustInstaller {
         let target_dir = self.root.join(&toolchain);
         install_rust_with_toolchain(&toolchain, &target_dir).await?;
 
+        let rustup_home = rustup_home_dir(&target_dir);
         RustResult::from_dir(&target_dir, false)
-            .fill_version_with_toolchain(&toolchain)
+            .fill_version_with_toolchain(&toolchain, &rustup_home)
             .await
     }
 
@@ -298,6 +312,11 @@ pub(crate) fn bin_dir(env_path: &Path) -> PathBuf {
     env_path.join("bin")
 }
 
+/// Returns the path to the `RUSTUP_HOME` directory within a managed rust installation.
+pub(crate) fn rustup_home_dir(env_path: &Path) -> PathBuf {
+    env_path.join("rustup")
+}
+
 #[cfg(unix)]
 fn make_executable(filename: impl AsRef<Path>) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
@@ -316,9 +335,10 @@ fn make_executable(_filename: impl AsRef<Path>) -> std::io::Result<()> {
     Ok(())
 }
 
-// TODO: reuse rustup from system, and share between toolchains
 async fn install_rust_with_toolchain(toolchain: &str, target_dir: &Path) -> Result<()> {
-    let rustup_dir = tempfile::tempdir()?;
+    // Use a persistent RUSTUP_HOME within the target directory so toolchains are preserved
+    let rustup_home = rustup_home_dir(target_dir);
+    fs_err::tokio::create_dir_all(&rustup_home).await?;
 
     let rustup_bin = bin_dir(target_dir)
         .join("rustup")
@@ -326,7 +346,9 @@ async fn install_rust_with_toolchain(toolchain: &str, target_dir: &Path) -> Resu
 
     // Check if rustup already exists at the expected location
     if !rustup_bin.exists() {
-        // Download rustup-init
+        // Download rustup-init to a temporary location
+        let rustup_init_dir = tempfile::tempdir()?;
+
         let url = if cfg!(windows) {
             "https://win.rustup.rs/x86_64"
         } else {
@@ -343,14 +365,14 @@ async fn install_rust_with_toolchain(toolchain: &str, target_dir: &Path) -> Resu
             anyhow::bail!("Failed to download rustup-init: {}", resp.status());
         }
 
-        let rustup_init = rustup_dir
+        let rustup_init = rustup_init_dir
             .path()
             .join("rustup-init")
             .with_extension(EXE_EXTENSION);
         fs_err::tokio::write(&rustup_init, resp.bytes().await?).await?;
         make_executable(&rustup_init)?;
 
-        // Install rustup into CARGO_HOME/bin
+        // Install rustup into CARGO_HOME/bin, with RUSTUP_HOME in the persistent location
         Cmd::new(&rustup_init, "install rustup")
             .args([
                 "-y",
@@ -360,17 +382,17 @@ async fn install_rust_with_toolchain(toolchain: &str, target_dir: &Path) -> Resu
                 "none",
             ])
             .env(EnvVars::CARGO_HOME, target_dir)
-            .env(EnvVars::RUSTUP_HOME, rustup_dir.path())
+            .env(EnvVars::RUSTUP_HOME, &rustup_home)
             .check(true)
             .output()
             .await?;
     }
 
-    // Install the requested toolchain
+    // Install the requested toolchain into our persistent RUSTUP_HOME
     Cmd::new(&rustup_bin, "install toolchain")
         .args(["toolchain", "install", "--no-self-update", toolchain])
         .env(EnvVars::CARGO_HOME, target_dir)
-        .env(EnvVars::RUSTUP_HOME, rustup_dir.path())
+        .env(EnvVars::RUSTUP_HOME, &rustup_home)
         .check(true)
         .output()
         .await?;
