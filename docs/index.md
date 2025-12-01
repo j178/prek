@@ -28,6 +28,34 @@
   end="<!-- why:end -->"
 %}
 
+## Badges
+
+Show that your project uses prek with a badge in your README:
+
+[![prek](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/assets/badge/v0.json)](https://github.com/j178/prek)
+
+**Markdown**
+
+```markdown
+[![prek](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/assets/badge/v0.json)](https://github.com/j178/prek)
+```
+
+**HTML**
+
+```html
+<a href="https://github.com/j178/prek">
+  <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/assets/badge/v0.json" alt="prek">
+</a>
+```
+
+**reStructuredText (RST)**
+
+```rst
+.. image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/assets/badge/v0.json
+   :target: https://github.com/j178/prek
+   :alt: prek
+```
+
 ## Getting Started
 
 - [Installation](./installation.md) - How to install prek

@@ -5,6 +5,7 @@
   <br/>prek
 </h1>
 
+[![prek](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/assets/badge/v0.json)](https://github.com/j178/prek)
 [![CI](https://github.com/j178/prek/actions/workflows/ci.yml/badge.svg)](https://github.com/j178/prek/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/github/j178/prek/graph/badge.svg?token=MP6TY24F43)](https://codecov.io/github/j178/prek)
 [![GitHub Downloads](https://img.shields.io/github/downloads/j178/prek/total?logo=github)](https://github.com/j178/prek/releases)
