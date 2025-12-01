@@ -174,6 +174,7 @@ impl LanguageImpl for Rust {
                     .args(["--path", "."])
                     .current_dir(&package_dir)
                     .env(EnvVars::CARGO_HOME, cargo_home)
+                    .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
                     .remove_git_env()
                     .check(true)
                     .output()
@@ -223,6 +224,7 @@ impl LanguageImpl for Rust {
                 }
                 cmd.current_dir(&manifest_dir)
                     .env(EnvVars::CARGO_HOME, cargo_home)
+                    .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
                     .remove_git_env()
                     .check(true)
                     .output()
@@ -239,6 +241,7 @@ impl LanguageImpl for Rust {
                     .arg(&target_dir)
                     .current_dir(&package_dir)
                     .env(EnvVars::CARGO_HOME, cargo_home)
+                    .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
                     .remove_git_env()
                     .check(true)
                     .output()
@@ -292,6 +295,7 @@ impl LanguageImpl for Rust {
                 cmd.args(["--version", version]);
             }
             cmd.env(EnvVars::CARGO_HOME, cargo_home)
+                .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
                 .remove_git_env()
                 .check(true)
                 .output()
@@ -334,6 +338,7 @@ impl LanguageImpl for Rust {
                 .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::CARGO_HOME, env_dir)
                 .env(EnvVars::RUSTUP_TOOLCHAIN, info.language_version.to_string())
+                .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
