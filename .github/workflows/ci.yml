@@ -24,6 +24,7 @@ env:
   RUBY_VERSION: "3.4"
   LUA_VERSION: "5.4"
   LUAROCKS_VERSION: "3.12.2"
+  DART_VERSION: "3.10.1"
 
 jobs:
   lint:
@@ -221,6 +222,11 @@ jobs:
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
 
+      - name: "Install Dart"
+        uses: dart-lang/setup-dart@0a8a0fc875eb934c15d08629302413c671d3f672 # v1.6.5
+        with:
+          sdk: ${{ env.DART_VERSION }}
+
       - name: "Cargo test"
         run: |
           cargo llvm-cov nextest \
@@ -300,6 +306,11 @@ jobs:
         uses: ruby/setup-ruby@8aeb6ff8030dd539317f8e1769a044873b56ea71 # v1.268.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
+
+      - name: "Install Dart"
+        uses: dart-lang/setup-dart@0a8a0fc875eb934c15d08629302413c671d3f672 # v1.6.5
+        with:
+          sdk: ${{ env.DART_VERSION }}
 
       - name: "Cargo test"
         run: |
@@ -391,6 +402,11 @@ jobs:
         uses: ruby/setup-ruby@8aeb6ff8030dd539317f8e1769a044873b56ea71 # v1.268.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
+
+      - name: "Install Dart"
+        uses: dart-lang/setup-dart@0a8a0fc875eb934c15d08629302413c671d3f672 # v1.6.5
+        with:
+          sdk: ${{ env.DART_VERSION }}
 
       - name: "Cargo test"
         working-directory: ${{ env.PREK_WORKSPACE }}
