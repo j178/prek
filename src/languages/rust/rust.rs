@@ -320,13 +320,21 @@ impl LanguageImpl for Rust {
         &self,
         hook: &InstalledHook,
         filenames: &[&Path],
-        _store: &Store,
+        store: &Store,
     ) -> anyhow::Result<(i32, Vec<u8>)> {
         let env_dir = hook.env_path().expect("Rust hook must have env path");
         let info = hook.install_info().expect("Rust hook must be installed");
 
         let rust_bin = bin_dir(env_dir);
+        let rust_tools = store.tools_path(ToolBucket::Rust);
         let rustc_bin = info.toolchain.parent().expect("Rust bin should exist");
+
+        let rust_envs = if rustc_bin.starts_with(rust_tools) {
+            let toolchain = info.language_version.to_string();
+            vec![(EnvVars::RUSTUP_TOOLCHAIN, toolchain)]
+        } else {
+            vec![]
+        };
 
         let new_path = prepend_paths(&[&rust_bin, rustc_bin]).context("Failed to join PATH")?;
 
@@ -337,8 +345,8 @@ impl LanguageImpl for Rust {
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::CARGO_HOME, env_dir)
-                .env(EnvVars::RUSTUP_TOOLCHAIN, info.language_version.to_string())
                 .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
+                .envs(rust_envs.iter().map(|(k, v)| (k, v.as_str())))
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
