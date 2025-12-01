@@ -64,7 +64,9 @@ impl RustResult {
     }
 
     pub(crate) fn cmd(&self, summary: &str) -> Cmd {
-        Cmd::new(&self.path, summary)
+        let mut cmd = Cmd::new(&self.path, summary);
+        cmd.env(EnvVars::RUSTUP_AUTO_INSTALL, "0");
+        cmd
     }
 
     pub(crate) fn with_version(mut self, version: RustVersion) -> Self {
