@@ -52,6 +52,7 @@ impl EnvVars {
     pub const GOROOT: &'static str = "GOROOT";
     pub const GOPATH: &'static str = "GOPATH";
     pub const GOBIN: &'static str = "GOBIN";
+    pub const GOFLAGS: &'static str = "GOFLAGS";
 
     // Lua related
     pub const LUA_PATH: &'static str = "LUA_PATH";
