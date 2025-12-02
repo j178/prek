@@ -15,7 +15,7 @@ prek-pty = { path = "crates/prek-pty", version = "0.2.19" }
 rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
 thiserror = { version = "2.0.11" }
 tokio = { version = "1.47.1", features = ["fs", "process", "rt", "sync", "macros", "net"] }
-tracing = { version = "0.1.40" }
+tracing = { version = "0.1.40", default-features = false, features = ["std"] }
 
 [package]
 name = "prek"
