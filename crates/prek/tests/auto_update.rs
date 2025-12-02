@@ -125,7 +125,7 @@ fn auto_update_basic() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -169,7 +169,7 @@ fn auto_update_already_up_to_date() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -222,7 +222,7 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -281,7 +281,7 @@ fn auto_update_specific_repos() -> Result<()> {
     let filters = context.filters();
 
     // Update only repo1
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--repo").arg(&repo1_path), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--repo").arg(&repo1_path).arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -308,7 +308,7 @@ fn auto_update_specific_repos() -> Result<()> {
     );
 
     // Update both repo1 and repo2
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--repo").arg(&repo1_path).arg("--repo").arg(&repo2_path), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--repo").arg(&repo1_path).arg("--repo").arg(&repo2_path).arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -361,7 +361,7 @@ fn auto_update_bleeding_edge() -> Result<()> {
         .chain([("[a-f0-9]{40}", "[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--bleeding-edge"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--bleeding-edge").arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -409,7 +409,7 @@ fn auto_update_freeze() -> Result<()> {
         .chain([(r" [a-f0-9]{40}", r" [COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -465,7 +465,7 @@ fn auto_update_preserve_formatting() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -526,7 +526,7 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
         .chain([(commit_sha, "[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -576,7 +576,7 @@ fn auto_update_local_repo_ignored() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -657,7 +657,7 @@ fn missing_hook_ids() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -718,7 +718,7 @@ fn auto_update_workspace() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -818,7 +818,7 @@ fn prefer_similar_tags() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -867,7 +867,7 @@ fn auto_update_dry_run() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--dry-run"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--dry-run").arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -912,7 +912,7 @@ fn quoting_float_like_version_number() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
