@@ -4,6 +4,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::Context;
+use cargo_metadata::{MetadataCommand, Package};
 use itertools::{Either, Itertools};
 use prek_consts::env_vars::EnvVars;
 
@@ -26,62 +27,55 @@ fn format_cargo_dependency(dep: &str) -> String {
     }
 }
 
-/// Extract package name from Cargo.toml content.
-fn extract_package_name(content: &str) -> Option<String> {
-    for line in content.lines() {
-        let line = line.trim();
-        if line.starts_with("name") {
-            if let Some((_key, value)) = line.split_once('=') {
-                let name = value.trim().trim_matches('"').trim_matches('\'');
-                return Some(name.to_string());
+/// Find the package directory that produces the given binary.
+/// Returns (`package_dir`, `package_name`, `is_workspace`).
+async fn find_package_dir(
+    repo: &Path,
+    binary_name: &str,
+) -> anyhow::Result<(PathBuf, String, bool)> {
+    let repo = repo.to_path_buf();
+    let binary_name = binary_name.to_string();
+
+    tokio::task::spawn_blocking(move || {
+        let metadata = MetadataCommand::new()
+            .manifest_path(repo.join("Cargo.toml"))
+            .no_deps()
+            .exec()
+            .context("Failed to run cargo metadata")?;
+
+        // Search all workspace packages for one that produces this binary
+        for package_id in &metadata.workspace_members {
+            let package = metadata
+                .packages
+                .iter()
+                .find(|p| &p.id == package_id)
+                .ok_or_else(|| anyhow::anyhow!("Package not found in metadata"))?;
+
+            if package_produces_binary(package, &binary_name) {
+                let package_dir = package
+                    .manifest_path
+                    .parent()
+                    .expect("manifest should have parent")
+                    .as_std_path()
+                    .to_path_buf();
+
+                // It's a workspace if either:
+                // - there are multiple members, OR
+                // - the package is not at the workspace root
+                let is_workspace = metadata.workspace_members.len() > 1
+                    || package_dir != metadata.workspace_root.as_std_path();
+
+                return Ok((package_dir, package.name.to_string(), is_workspace));
             }
         }
-    }
-    None
-}
 
-/// Check if a package produces a binary with the given name.
-/// This checks:
-/// 1. `[[bin]]` entries with explicit `name`
-/// 2. Files in `src/bin/*.rs`
-/// 3. Package name (default binary name, only if src/main.rs exists)
-fn package_produces_binary(content: &str, package_dir: &Path, binary_name: &str) -> bool {
-    // Check [[bin]] entries first - these are explicit binary definitions
-    for bin_name in extract_bin_names(content) {
-        if names_match(&bin_name, binary_name) {
-            return true;
-        }
-    }
-
-    // Check src/bin/*.rs files (each produces a binary named after the file)
-    let bin_dir = package_dir.join("src/bin");
-    if bin_dir.exists() {
-        if let Ok(entries) = std::fs::read_dir(&bin_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().is_some_and(|e| e == "rs") {
-                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        if names_match(stem, binary_name) {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Check package name ONLY if src/main.rs exists (default binary)
-    // This must come last to avoid matching library packages
-    let main_rs = package_dir.join("src/main.rs");
-    if main_rs.exists() {
-        if let Some(pkg_name) = extract_package_name(content) {
-            if names_match(&pkg_name, binary_name) {
-                return true;
-            }
-        }
-    }
-
-    false
+        anyhow::bail!(
+            "No package found for binary '{}' in {}",
+            binary_name,
+            repo.display()
+        )
+    })
+    .await?
 }
 
 /// Check if two names match, accounting for hyphen/underscore normalization.
@@ -89,216 +83,13 @@ fn names_match(a: &str, b: &str) -> bool {
     a == b || a.replace('-', "_") == b.replace('-', "_")
 }
 
-/// Extract binary names from `[[bin]]` sections in Cargo.toml.
-fn extract_bin_names(content: &str) -> Vec<String> {
-    let mut names = Vec::new();
-    let mut in_bin_section = false;
-
-    for line in content.lines() {
-        let trimmed = line.trim();
-
-        if trimmed == "[[bin]]" {
-            in_bin_section = true;
-            continue;
-        }
-
-        // Exit bin section if we hit another section
-        if in_bin_section && trimmed.starts_with('[') {
-            in_bin_section = false;
-            continue;
-        }
-
-        if in_bin_section && trimmed.starts_with("name") {
-            if let Some((_key, value)) = trimmed.split_once('=') {
-                let name = value.trim().trim_matches('"').trim_matches('\'');
-                names.push(name.to_string());
-            }
-        }
-    }
-
-    names
-}
-
-/// Find the package directory that produces the given binary.
-/// Returns (`package_dir`, `package_name`, `is_workspace`).
-async fn find_package_dir(
-    repo: &Path,
-    binary_name: &str,
-) -> anyhow::Result<(PathBuf, String, bool)> {
-    let root_cargo = repo.join("Cargo.toml");
-    if !root_cargo.exists() {
-        anyhow::bail!("No Cargo.toml found in {}", repo.display());
-    }
-
-    let content = fs_err::tokio::read_to_string(&root_cargo).await?;
-
-    // If it's a workspace, search workspace members
-    if content.contains("[workspace]") {
-        // First, check if the root itself is also a package
-        if content.contains("[package]") {
-            if let Some(pkg_name) = extract_package_name(&content) {
-                if package_produces_binary(&content, repo, binary_name) {
-                    return Ok((repo.to_path_buf(), pkg_name, true));
-                }
-            }
-        }
-
-        // Parse workspace members and search them
-        let members = parse_workspace_members(&content);
-        for member_pattern in members {
-            let member_paths = resolve_workspace_member(repo, &member_pattern)?;
-
-            for member_path in member_paths {
-                let member_cargo = member_path.join("Cargo.toml");
-                if member_cargo.exists() {
-                    let member_content = fs_err::tokio::read_to_string(&member_cargo).await?;
-                    if let Some(pkg_name) = extract_package_name(&member_content) {
-                        if package_produces_binary(&member_content, &member_path, binary_name) {
-                            return Ok((member_path, pkg_name, true));
-                        }
-                    }
-                }
-            }
-        }
-
-        anyhow::bail!(
-            "No package found for binary '{}' in workspace {}",
-            binary_name,
-            repo.display()
-        );
-    }
-
-    // Single package at root
-    if content.contains("[package]") {
-        let pkg_name = extract_package_name(&content)
-            .ok_or_else(|| anyhow::anyhow!("No package name found in {}", root_cargo.display()))?;
-        return Ok((repo.to_path_buf(), pkg_name, false));
-    }
-
-    anyhow::bail!("Invalid Cargo.toml in {}", repo.display());
-}
-
-/// Parse the `members` array from a workspace Cargo.toml.
-/// This is a simple parser that handles the common cases.
-fn parse_workspace_members(content: &str) -> Vec<String> {
-    let mut members = Vec::new();
-    let mut in_workspace = false;
-    let mut in_members = false;
-    let mut bracket_depth = 0;
-
-    for line in content.lines() {
-        let trimmed = line.trim();
-
-        // Track when we enter [workspace] section
-        if trimmed == "[workspace]" {
-            in_workspace = true;
-            continue;
-        }
-
-        // Exit workspace section if we hit another top-level section
-        if in_workspace && trimmed.starts_with('[') && !trimmed.starts_with("[[") {
-            in_workspace = false;
-            in_members = false;
-            continue;
-        }
-
-        if !in_workspace {
-            continue;
-        }
-
-        // Look for members = [...]
-        if trimmed.starts_with("members") {
-            if let Some(rest) = trimmed.strip_prefix("members").map(str::trim) {
-                if let Some(rest) = rest.strip_prefix('=').map(str::trim) {
-                    // Check if it's a single-line array
-                    if let Some(rest_after_bracket) = rest.strip_prefix('[') {
-                        if rest.ends_with(']') {
-                            // Single line: members = ["a", "b"]
-                            let inner = rest_after_bracket;
-                            members.extend(parse_string_array(inner));
-                        } else {
-                            // Multi-line array starts here
-                            in_members = true;
-                            bracket_depth = 1;
-                            let inner = &rest[1..];
-                            members.extend(parse_string_array(inner));
-                        }
-                    }
-                }
-            }
-            continue;
-        }
-
-        // Continue parsing multi-line members array
-        if in_members {
-            if trimmed.contains(']') {
-                bracket_depth -= 1;
-                if bracket_depth == 0 {
-                    // Parse content before the closing bracket
-                    if let Some(idx) = trimmed.find(']') {
-                        members.extend(parse_string_array(&trimmed[..idx]));
-                    }
-                    in_members = false;
-                }
-            } else {
-                members.extend(parse_string_array(trimmed));
-            }
-        }
-    }
-
-    members
-}
-
-/// Parse comma-separated quoted strings from a line.
-fn parse_string_array(line: &str) -> Vec<String> {
-    let mut results = Vec::new();
-    let mut in_string = false;
-    let mut quote_char = '"';
-    let mut current = String::new();
-
-    for ch in line.chars() {
-        if !in_string {
-            if ch == '"' || ch == '\'' {
-                in_string = true;
-                quote_char = ch;
-                current.clear();
-            }
-        } else if ch == quote_char {
-            in_string = false;
-            if !current.is_empty() {
-                results.push(current.clone());
-            }
-        } else {
-            current.push(ch);
-        }
-    }
-
-    results
-}
-
-/// Resolve a workspace member pattern to actual paths.
-/// Handles both direct paths (e.g., "crates/cli") and globs (e.g., "crates/*").
-fn resolve_workspace_member(repo: &Path, pattern: &str) -> anyhow::Result<Vec<PathBuf>> {
-    let full_pattern = repo.join(pattern);
-
-    // Check if it's a glob pattern
-    if pattern.contains('*') || pattern.contains('?') || pattern.contains('[') {
-        let pattern_str = full_pattern.to_string_lossy();
-        let paths: Vec<PathBuf> = glob::glob(&pattern_str)
-            .map_err(|e| anyhow::anyhow!("Invalid glob pattern '{pattern}': {e}"))?
-            .filter_map(std::result::Result::ok)
-            .filter(|p| p.is_dir())
-            .collect();
-        Ok(paths)
-    } else {
-        // Direct path
-        let path = repo.join(pattern);
-        if path.exists() {
-            Ok(vec![path])
-        } else {
-            Ok(vec![])
-        }
-    }
+/// Check if a package produces a binary with the given name.
+fn package_produces_binary(package: &Package, binary_name: &str) -> bool {
+    package
+        .targets
+        .iter()
+        .filter(|t| t.is_bin())
+        .any(|t| names_match(&t.name, binary_name))
 }
 
 /// Copy executable binaries from a release directory to a destination bin directory.
@@ -644,8 +435,10 @@ mod tests {
 [package]
 name = "my-tool"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+        write_file(&temp.path().join("src/main.rs"), "fn main() {}").await;
 
         let (path, pkg_name, is_workspace) =
             find_package_dir(temp.path(), "my-tool").await.unwrap();
@@ -661,8 +454,10 @@ version = "0.1.0"
 [package]
 name = "my-tool"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+        write_file(&temp.path().join("src/main.rs"), "fn main() {}").await;
 
         // Should match with underscores instead of hyphens
         let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my_tool").await.unwrap();
@@ -672,27 +467,28 @@ version = "0.1.0"
 
     #[tokio::test]
     async fn test_find_package_dir_workspace_with_root_package() {
-        // This is the cargo-deny case: workspace where root is also a package
         let temp = TempDir::new().unwrap();
         let cargo_toml = r#"
 [package]
 name = "cargo-deny"
 version = "0.18.5"
+edition = "2021"
 
 [workspace]
 members = ["subcrate"]
 "#;
         write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
-        // Create src/main.rs so it's detected as a binary package
         write_file(&temp.path().join("src/main.rs"), "fn main() {}").await;
 
-        // Create a subcrate too
+        // Create subcrate with a lib.rs
         let subcrate_toml = r#"
 [package]
 name = "subcrate"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("subcrate/Cargo.toml"), subcrate_toml).await;
+        write_file(&temp.path().join("subcrate/src/lib.rs"), "").await;
 
         let (path, pkg_name, is_workspace) =
             find_package_dir(temp.path(), "cargo-deny").await.unwrap();
@@ -714,17 +510,19 @@ members = ["cli", "lib"]
 [package]
 name = "my-cli"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("cli/Cargo.toml"), cli_toml).await;
-        // Create src/main.rs so it's detected as a binary package
         write_file(&temp.path().join("cli/src/main.rs"), "fn main() {}").await;
 
         let lib_toml = r#"
 [package]
 name = "my-lib"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("lib/Cargo.toml"), lib_toml).await;
+        write_file(&temp.path().join("lib/src/lib.rs"), "").await;
 
         let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "my-cli").await.unwrap();
         assert_eq!(path, temp.path().join("cli"));
@@ -734,12 +532,11 @@ version = "0.1.0"
 
     #[tokio::test]
     async fn test_find_package_dir_by_bin_name() {
-        // Package name differs from binary name
         let temp = TempDir::new().unwrap();
 
         let cargo_toml = r#"
 [workspace]
-members = ["crates/*"]
+members = ["crates/typos-cli"]
 "#;
         write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
 
@@ -748,69 +545,48 @@ members = ["crates/*"]
 [package]
 name = "typos-cli"
 version = "0.1.0"
+edition = "2021"
 
 [[bin]]
 name = "typos"
 path = "src/main.rs"
 "#;
         write_file(&temp.path().join("crates/typos-cli/Cargo.toml"), cli_toml).await;
+        write_file(
+            &temp.path().join("crates/typos-cli/src/main.rs"),
+            "fn main() {}",
+        )
+        .await;
 
         // Should find by binary name, return package name
         let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "typos").await.unwrap();
         assert_eq!(path, temp.path().join("crates/typos-cli"));
-        assert_eq!(pkg_name, "typos-cli"); // Package name, not binary name
+        assert_eq!(pkg_name, "typos-cli");
         assert!(is_workspace);
     }
 
     #[tokio::test]
     async fn test_find_package_dir_by_src_bin_file() {
-        // Binary defined by src/bin/foo.rs
         let temp = TempDir::new().unwrap();
 
         let cargo_toml = r#"
 [package]
 name = "my-pkg"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
         write_file(&temp.path().join("src/bin/my-tool.rs"), "fn main() {}").await;
+        // Need a lib.rs or main.rs for the package itself
+        write_file(&temp.path().join("src/lib.rs"), "").await;
 
         let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my-tool").await.unwrap();
         assert_eq!(path, temp.path());
         assert!(!is_workspace);
     }
 
-    #[test]
-    fn test_extract_bin_names() {
-        let content = r#"
-[package]
-name = "typos-cli"
-
-[[bin]]
-name = "typos"
-path = "src/main.rs"
-
-[[bin]]
-name = "typos-other"
-path = "src/other.rs"
-"#;
-        let names = extract_bin_names(content);
-        assert_eq!(names, vec!["typos", "typos-other"]);
-    }
-
-    #[test]
-    fn test_extract_bin_names_empty() {
-        let content = r#"
-[package]
-name = "simple"
-"#;
-        let names = extract_bin_names(content);
-        assert!(names.is_empty());
-    }
-
     #[tokio::test]
     async fn test_find_package_dir_virtual_workspace_nested_member() {
-        // Virtual workspace: root has [workspace] only, members are nested
         let temp = TempDir::new().unwrap();
 
         let cargo_toml = r#"
@@ -823,9 +599,9 @@ members = ["crates/cli"]
 [package]
 name = "virtual-cli"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("crates/cli/Cargo.toml"), cli_toml).await;
-        // Create src/main.rs so it's detected as a binary package
         write_file(&temp.path().join("crates/cli/src/main.rs"), "fn main() {}").await;
 
         let (path, pkg_name, is_workspace) =
@@ -837,7 +613,6 @@ version = "0.1.0"
 
     #[tokio::test]
     async fn test_find_package_dir_virtual_workspace_glob_members() {
-        // Virtual workspace with glob pattern
         let temp = TempDir::new().unwrap();
 
         let cargo_toml = r#"
@@ -850,74 +625,28 @@ members = ["crates/*"]
 [package]
 name = "my-cli"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("crates/cli/Cargo.toml"), cli_toml).await;
-        // Create src/main.rs so it's detected as a binary package
         write_file(&temp.path().join("crates/cli/src/main.rs"), "fn main() {}").await;
 
         let lib_toml = r#"
 [package]
 name = "my-lib"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("crates/lib/Cargo.toml"), lib_toml).await;
+        write_file(&temp.path().join("crates/lib/src/lib.rs"), "").await;
 
         let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "my-cli").await.unwrap();
         assert_eq!(path, temp.path().join("crates/cli"));
         assert_eq!(pkg_name, "my-cli");
         assert!(is_workspace);
 
-        // my-lib is a library (no main.rs), so searching for it as a binary should fail
+        // my-lib is a library (no binary), so searching for it should fail
         let result = find_package_dir(temp.path(), "my-lib").await;
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_parse_workspace_members_single_line() {
-        let content = r#"
-[workspace]
-members = ["crates/cli", "crates/lib"]
-"#;
-        let members = parse_workspace_members(content);
-        assert_eq!(members, vec!["crates/cli", "crates/lib"]);
-    }
-
-    #[test]
-    fn test_parse_workspace_members_multi_line() {
-        let content = r#"
-[workspace]
-members = [
-    "crates/cli",
-    "crates/lib",
-]
-"#;
-        let members = parse_workspace_members(content);
-        assert_eq!(members, vec!["crates/cli", "crates/lib"]);
-    }
-
-    #[test]
-    fn test_parse_workspace_members_with_glob() {
-        let content = r#"
-[workspace]
-members = ["crates/*", "tools/build"]
-"#;
-        let members = parse_workspace_members(content);
-        assert_eq!(members, vec!["crates/*", "tools/build"]);
-    }
-
-    #[test]
-    fn test_parse_workspace_members_workspace_after_package() {
-        // Some crates have [package] before [workspace]
-        let content = r#"
-[package]
-name = "root-crate"
-version = "0.1.0"
-
-[workspace]
-members = ["subcrate"]
-"#;
-        let members = parse_workspace_members(content);
-        assert_eq!(members, vec!["subcrate"]);
     }
 
     #[tokio::test]
@@ -926,7 +655,8 @@ members = ["subcrate"]
 
         let result = find_package_dir(temp.path(), "anything").await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No Cargo.toml"));
+        // cargo metadata gives a different error message
+        assert!(result.unwrap_err().to_string().contains("cargo metadata"));
     }
 
     #[tokio::test]
@@ -942,41 +672,14 @@ members = ["cli"]
 [package]
 name = "some-other-tool"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("cli/Cargo.toml"), cli_toml).await;
+        write_file(&temp.path().join("cli/src/main.rs"), "fn main() {}").await;
 
         let result = find_package_dir(temp.path(), "nonexistent-binary").await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("No package found"));
-    }
-
-    #[test]
-    fn test_extract_package_name() {
-        let content = r#"
-[package]
-name = "my-tool"
-version = "0.1.0"
-"#;
-        assert_eq!(extract_package_name(content), Some("my-tool".to_string()));
-    }
-
-    #[test]
-    fn test_extract_package_name_with_single_quotes() {
-        let content = r"
-[package]
-name = 'my-tool'
-version = '0.1.0'
-";
-        assert_eq!(extract_package_name(content), Some("my-tool".to_string()));
-    }
-
-    #[test]
-    fn test_extract_package_name_no_package() {
-        let content = r#"
-[workspace]
-members = ["cli"]
-"#;
-        assert_eq!(extract_package_name(content), None);
     }
 
     #[test]
