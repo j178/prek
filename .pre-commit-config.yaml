@@ -17,7 +17,7 @@ repos:
   - repo: https://github.com/crate-ci/typos
     rev: v1.40.0
     hooks:
-      - id: typos-src
+      - id: typos
 
   - repo: local
     hooks:
