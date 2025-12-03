@@ -122,8 +122,8 @@ pub(crate) async fn run(
 
     let mut filtered_hooks: Vec<_> = selected_hooks
         .iter()
-        .cloned()
         .filter(|h| h.stages.contains(hook_stage))
+        .cloned()
         .collect();
 
     if filtered_hooks.is_empty()
