@@ -14,7 +14,8 @@ use prek_consts::env_vars::EnvVars;
 use crate::config::{HookType, Language, Stage};
 
 mod auto_update;
-mod clean;
+mod cache_clean;
+mod cache_size;
 mod completion;
 mod hook_impl;
 mod install;
@@ -28,7 +29,8 @@ mod try_repo;
 mod validate;
 
 pub(crate) use auto_update::auto_update;
-pub(crate) use clean::clean;
+pub(crate) use cache_clean::cache_clean;
+pub(crate) use cache_size::cache_size;
 use completion::selector_completer;
 pub(crate) use hook_impl::hook_impl;
 pub(crate) use install::{init_template_dir, install, install_hooks, uninstall};
@@ -633,6 +635,15 @@ pub(crate) enum CacheCommand {
     GC,
     /// Remove all prek cached data.
     Clean,
+    /// Show the size of the prek cache.
+    Size(SizeArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct SizeArgs {
+    /// Display the cache size in human-readable format (e.g., `1.2 GiB` instead of raw bytes).
+    #[arg(long = "human", short = 'H', alias = "human-readable")]
+    pub(crate) human: bool,
 }
 
 #[derive(Debug, Args)]

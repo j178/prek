@@ -300,7 +300,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Command::Cache(CacheNamespace {
             command: cache_command,
         }) => match cache_command {
-            CacheCommand::Clean => cli::clean(&store, printer),
+            CacheCommand::Clean => cli::cache_clean(&store, printer),
             CacheCommand::Dir => {
                 writeln!(printer.stdout(), "{}", store.path().display().cyan())?;
                 Ok(ExitStatus::Success)
@@ -309,8 +309,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 writeln!(printer.stderr(), "Command not implemented yet")?;
                 Ok(ExitStatus::Failure)
             }
+            CacheCommand::Size(cli::SizeArgs { human }) => cli::cache_size(&store, human, printer),
         },
-        Command::Clean => cli::clean(&store, printer),
+        Command::Clean => cli::cache_clean(&store, printer),
         Command::ValidateConfig(args) => {
             show_settings!(args);
 

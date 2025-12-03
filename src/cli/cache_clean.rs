@@ -10,7 +10,7 @@ use crate::cli::ExitStatus;
 use crate::printer::Printer;
 use crate::store::{CacheBucket, Store};
 
-pub(crate) fn clean(store: &Store, printer: Printer) -> Result<ExitStatus> {
+pub(crate) fn cache_clean(store: &Store, printer: Printer) -> Result<ExitStatus> {
     if !store.path().exists() {
         writeln!(printer.stdout(), "Nothing to clean")?;
         return Ok(ExitStatus::Success);
