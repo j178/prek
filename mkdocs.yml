@@ -11,6 +11,7 @@ copyright: Copyright &copy; 2025 j178
 theme:
   name: material
   logo: assets/logo.webp
+  favicon: assets/favicon.ico
   palette:
     - media: "(prefers-color-scheme)"
       toggle:
