@@ -10,13 +10,14 @@ fn validate_config() -> anyhow::Result<()> {
     let context = TestContext::new();
 
     // No files to validate.
-    cmd_snapshot!(context.filters(), context.validate_config(), @r#"
+    cmd_snapshot!(context.filters(), context.validate_config(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "#);
+    No configs to check
+    ");
 
     context.write_pre_commit_config(indoc::indoc! {r"
             repos:
@@ -28,13 +29,15 @@ fn validate_config() -> anyhow::Result<()> {
                   - id: check-json
         "});
     // Validate one file.
-    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @r#"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "#);
+    success: Config `.pre-commit-config.yaml` is valid
+    All configs are valid
+    ");
 
     context
         .work_dir()
@@ -51,6 +54,7 @@ fn validate_config() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    success: Config `.pre-commit-config.yaml` is valid
     error: Failed to parse `config-1.yaml`
       caused by: Invalid remote repo: missing field `rev`
     ");
@@ -63,13 +67,14 @@ fn validate_manifest() -> anyhow::Result<()> {
     let context = TestContext::new();
 
     // No files to validate.
-    cmd_snapshot!(context.filters(), context.validate_manifest(), @r#"
+    cmd_snapshot!(context.filters(), context.validate_manifest(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "#);
+    No manifests to check
+    ");
 
     context
         .work_dir()
@@ -84,13 +89,15 @@ fn validate_manifest() -> anyhow::Result<()> {
                 minimum_pre_commit_version: 3.2.0
         "})?;
     // Validate one file.
-    cmd_snapshot!(context.filters(), context.validate_manifest().arg(".pre-commit-hooks.yaml"), @r#"
+    cmd_snapshot!(context.filters(), context.validate_manifest().arg(".pre-commit-hooks.yaml"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "#);
+    success: Manifest `.pre-commit-hooks.yaml` is valid
+    All manifests are valid
+    ");
 
     context
         .work_dir()
@@ -111,6 +118,7 @@ fn validate_manifest() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    success: Manifest `.pre-commit-hooks.yaml` is valid
     error: Failed to parse `hooks-1.yaml`
       caused by: .[0]: missing field `entry` at line 1 column 5
     ");
