@@ -58,6 +58,9 @@ pub(crate) async fn run(
         (from_ref, to_ref)
     };
 
+    let mut hook_stage = hook_stage;
+    let mut all_files = all_files;
+
     // Prevent recursive post-checkout hooks.
     if hook_stage == Stage::PostCheckout
         && EnvVars::is_set(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT)
@@ -91,7 +94,7 @@ pub(crate) async fn run(
         .init_hooks(store, Some(&reporter))
         .await
         .context("Failed to init hooks")?;
-    let filtered_hooks: Vec<_> = hooks
+    let selected_hooks: Vec<_> = hooks
         .into_iter()
         .filter(|h| selectors.matches_hook(h))
         .map(Arc::new)
@@ -99,7 +102,7 @@ pub(crate) async fn run(
 
     selectors.report_unused();
 
-    if filtered_hooks.is_empty() {
+    if selected_hooks.is_empty() {
         writeln!(
             printer.stderr(),
             "{}: No hooks found after filtering with the given selectors",
@@ -117,10 +120,39 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Failure);
     }
 
-    let filtered_hooks = filtered_hooks
-        .into_iter()
+    let mut filtered_hooks: Vec<_> = selected_hooks
+        .iter()
+        .cloned()
         .filter(|h| h.stages.contains(hook_stage))
-        .collect::<Vec<_>>();
+        .collect();
+
+    if filtered_hooks.is_empty()
+        && selectors.includes_only_hook_targets()
+        && from_ref.is_none()
+        && to_ref.is_none()
+        && files.is_empty()
+        && directories.is_empty()
+        && !all_files
+        && !last_commit
+        && selected_hooks
+            .iter()
+            .any(|h| h.stages.contains(Stage::Manual))
+    {
+        let prev_stage = hook_stage;
+        hook_stage = Stage::Manual;
+        all_files = true;
+
+        filtered_hooks = selected_hooks
+            .into_iter()
+            .filter(|h| h.stages.contains(hook_stage))
+            .collect();
+
+        warn_user!(
+            "No hooks found for stage `{}` after filtering; running with `{}` as the selected hook(s) support the `manual` stage.",
+            prev_stage.cyan(),
+            "--hook-stage manual --all-files".cyan()
+        );
+    }
 
     if filtered_hooks.is_empty() {
         writeln!(
