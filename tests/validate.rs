@@ -187,5 +187,7 @@ fn unexpected_keys_warning() {
       - `repos[0].hooks[0].unexpected_hook_key_2`
       - `repos[0].hooks[0].unexpected_hook_key_3`
       - `repos[0].hooks[0].unexpected_hook_key_4`
+    success: Config `.pre-commit-config.yaml` is valid
+    All configs are valid
     ");
 }
