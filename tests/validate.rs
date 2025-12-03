@@ -151,6 +151,8 @@ fn unexpected_keys_warning() {
 
     ----- stderr -----
     warning: Ignored unexpected keys in `.pre-commit-config.yaml`: `another_unknown`, `unexpected_top_level_key`, `repos[0].unexpected_repo_key`
+    success: Config `.pre-commit-config.yaml` is valid
+    All configs are valid
     ");
 
     context.write_pre_commit_config(indoc::indoc! {r"
