@@ -16,7 +16,7 @@ fn validate_config() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    No configs to check
+    warning: No configs to check
     ");
 
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -35,8 +35,7 @@ fn validate_config() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    success: Config `.pre-commit-config.yaml` is valid
-    All configs are valid
+    success: All configs are valid
     ");
 
     context
@@ -54,7 +53,6 @@ fn validate_config() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    success: Config `.pre-commit-config.yaml` is valid
     error: Failed to parse `config-1.yaml`
       caused by: Invalid remote repo: missing field `rev`
     ");
@@ -73,7 +71,7 @@ fn validate_manifest() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    No manifests to check
+    warning: No manifests to check
     ");
 
     context
@@ -95,8 +93,7 @@ fn validate_manifest() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    success: Manifest `.pre-commit-hooks.yaml` is valid
-    All manifests are valid
+    success: All manifests are valid
     ");
 
     context
@@ -118,7 +115,6 @@ fn validate_manifest() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    success: Manifest `.pre-commit-hooks.yaml` is valid
     error: Failed to parse `hooks-1.yaml`
       caused by: .[0]: missing field `entry` at line 1 column 5
     ");
@@ -151,8 +147,7 @@ fn unexpected_keys_warning() {
 
     ----- stderr -----
     warning: Ignored unexpected keys in `.pre-commit-config.yaml`: `another_unknown`, `unexpected_top_level_key`, `repos[0].unexpected_repo_key`
-    success: Config `.pre-commit-config.yaml` is valid
-    All configs are valid
+    success: All configs are valid
     ");
 
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -187,7 +182,6 @@ fn unexpected_keys_warning() {
       - `repos[0].hooks[0].unexpected_hook_key_2`
       - `repos[0].hooks[0].unexpected_hook_key_3`
       - `repos[0].hooks[0].unexpected_hook_key_4`
-    success: Config `.pre-commit-config.yaml` is valid
-    All configs are valid
+    success: All configs are valid
     ");
 }
