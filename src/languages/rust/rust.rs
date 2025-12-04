@@ -365,11 +365,8 @@ impl LanguageImpl for Rust {
             let toolchain_dir = rustc_bin.parent().expect("Toolchain dir should exist");
             let rustup_home = rustup_home_dir(toolchain_dir);
             vec![
-                (EnvVars::RUSTUP_TOOLCHAIN, toolchain),
-                (
-                    EnvVars::RUSTUP_HOME,
-                    rustup_home.to_string_lossy().to_string(),
-                ),
+                (EnvVars::RUSTUP_TOOLCHAIN, PathBuf::from(toolchain)),
+                (EnvVars::RUSTUP_HOME, rustup_home),
             ]
         } else {
             vec![]
@@ -385,7 +382,7 @@ impl LanguageImpl for Rust {
                 .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::CARGO_HOME, env_dir)
                 .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
-                .envs(rust_envs.iter().map(|(k, v)| (k, v.as_str())))
+                .envs(rust_envs.iter().cloned())
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
