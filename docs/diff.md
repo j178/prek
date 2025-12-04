@@ -72,6 +72,10 @@ main()
 
 Gems specified in hook gemspec files and `additional_dependencies` will be installed into an isolated gemset for Ruby hooks. This gemset will be shared between hooks that use the same Ruby version and have the same set of dependencies, including across different repositories.
 
+### Rust
+
+`prek` supports installing packages from virtual workspaces. See [#1180](https://github.com/j178/prek/pull/1180)
+
 ### Docker & Docker Image
 
 `prek` auto-detects the available container runtime on the system (Docker or Podman) and uses it to run container-based hooks. You can also explicitly specify the container runtime using the `PREK_CONTAINER_RUNTIME` environment variable.
