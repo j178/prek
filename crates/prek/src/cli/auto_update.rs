@@ -196,12 +196,34 @@ async fn update_repo(
         tmp_dir.path().display()
     );
 
-    git::init_repo(repo.repo.as_str(), tmp_dir.path()).await?;
+    setup_and_fetch_repo(repo.repo.as_str(), tmp_dir.path()).await?;
+
+    let rev = resolve_revision(tmp_dir.path(), &repo.rev, bleeding_edge, cooldown_days).await?;
+
+    let Some(rev) = rev else {
+        // All tags filtered by cooldown - no update available
+        return Ok(Revision {
+            rev: repo.rev.clone(),
+            frozen: None,
+        });
+    };
+
+    let (rev, frozen) = maybe_freeze_revision(tmp_dir.path(), rev, freeze).await?;
+
+    checkout_and_validate_manifest(tmp_dir.path(), &rev, repo).await?;
+
+    let new_revision = Revision { rev, frozen };
+
+    Ok(new_revision)
+}
+
+async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Result<()> {
+    git::init_repo(repo_url, repo_path).await?;
     git::git_cmd("git config")?
         .arg("config")
         .arg("extensions.partialClone")
         .arg("true")
-        .current_dir(tmp_dir.path())
+        .current_dir(repo_path)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -213,18 +235,27 @@ async fn update_repo(
         .arg("--quiet")
         .arg("--filter=blob:none")
         .arg("--tags")
-        .current_dir(tmp_dir.path())
+        .current_dir(repo_path)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .await?;
 
+    Ok(())
+}
+
+async fn resolve_revision(
+    repo_path: &Path,
+    current_rev: &str,
+    bleeding_edge: bool,
+    cooldown_days: u8,
+) -> Result<Option<String>> {
     let mut cmd = git::git_cmd("git describe")?;
     cmd.arg("describe")
         .arg("FETCH_HEAD")
         .arg("--tags") // use any tags found in refs/tags
         .check(false)
-        .current_dir(tmp_dir.path());
+        .current_dir(repo_path);
     if bleeding_edge {
         cmd.arg("--exact-match")
     } else {
@@ -233,20 +264,17 @@ async fn update_repo(
     };
 
     let output = cmd.output().await?;
-    let mut rev = if output.status.success() {
+    let rev = if output.status.success() {
         let rev = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if let Some(best) =
-            get_best_candidate_tag(tmp_dir.path(), &rev, &repo.rev, cooldown_days).await?
+            get_best_candidate_tag(repo_path, &rev, current_rev, cooldown_days).await?
         {
             trace!("Using best candidate tag `{best}`");
             best
         } else {
             // All tags filtered by cooldown - no update available
             trace!("No candidate tags found");
-            return Ok(Revision {
-                rev: repo.rev.clone(),
-                frozen: None,
-            });
+            return Ok(None);
         }
     } else {
         trace!("Failed to describe FETCH_HEAD, using rev-parse instead");
@@ -255,7 +283,7 @@ async fn update_repo(
             .arg("rev-parse")
             .arg("FETCH_HEAD")
             .check(true)
-            .current_dir(tmp_dir.path())
+            .current_dir(repo_path)
             .output()
             .await?
             .stdout;
@@ -263,12 +291,20 @@ async fn update_repo(
     };
     trace!("Resolved latest tag to `{rev}`");
 
+    Ok(Some(rev))
+}
+
+async fn maybe_freeze_revision(
+    repo_path: &Path,
+    mut rev: String,
+    freeze: bool,
+) -> Result<(String, Option<String>)> {
     let mut frozen = None;
     if freeze {
         let exact = git::git_cmd("git rev-parse")?
             .arg("rev-parse")
             .arg(&rev)
-            .current_dir(tmp_dir.path())
+            .current_dir(repo_path)
             .output()
             .await?
             .stdout;
@@ -280,13 +316,21 @@ async fn update_repo(
         }
     }
 
+    Ok((rev, frozen))
+}
+
+async fn checkout_and_validate_manifest(
+    repo_path: &Path,
+    rev: &str,
+    repo: &RemoteRepo,
+) -> Result<()> {
     // Workaround for Windows: https://github.com/pre-commit/pre-commit/issues/2865,
     // https://github.com/j178/prek/issues/614
     if cfg!(windows) {
         git::git_cmd("git show")?
             .arg("show")
             .arg(format!("{rev}:{MANIFEST_FILE}"))
-            .current_dir(tmp_dir.path())
+            .current_dir(repo_path)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
@@ -296,16 +340,16 @@ async fn update_repo(
     git::git_cmd("git checkout")?
         .arg("checkout")
         .arg("--quiet")
-        .arg(&rev)
+        .arg(rev)
         .arg("--")
         .arg(MANIFEST_FILE)
-        .current_dir(tmp_dir.path())
+        .current_dir(repo_path)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .await?;
 
-    let manifest = config::read_manifest(&tmp_dir.path().join(MANIFEST_FILE))?;
+    let manifest = config::read_manifest(&repo_path.join(MANIFEST_FILE))?;
     let new_hook_ids = manifest
         .hooks
         .into_iter()
@@ -327,9 +371,7 @@ async fn update_repo(
         ));
     }
 
-    let new_revision = Revision { rev, frozen };
-
-    Ok(new_revision)
+    Ok(())
 }
 
 /// Returns the Unix timestamp of when a tag was created.
