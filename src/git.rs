@@ -374,6 +374,8 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
 
     git_cmd("git checkout")?
         .current_dir(path)
+        .arg("-c")
+        .arg("core.hooksPath=/dev/null")
         .arg("checkout")
         .arg("FETCH_HEAD")
         .remove_git_env()
