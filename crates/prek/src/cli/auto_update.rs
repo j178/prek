@@ -432,6 +432,7 @@ async fn get_best_candidate_tag(
     current_rev: &str,
     cooldown_days: u8,
 ) -> Result<Option<String>> {
+    // First, try tags pointing at this specific commit
     let stdout = git::git_cmd("git tag")?
         .arg("tag")
         .arg("--points-at")
@@ -455,8 +456,9 @@ async fn get_best_candidate_tag(
     let candidates = if cooldown_days > 0 {
         let filtered = filter_tags_by_cooldown(repo, &tags, cooldown_days).await;
         if filtered.is_empty() {
-            trace!("No tags older than {cooldown_days} day(s), skipping update");
-            return Ok(None);
+            // No tags on this commit satisfy cooldown - search ALL tags
+            trace!("No tags on {rev} satisfy cooldown, searching all tags");
+            return find_best_tag_with_cooldown(repo, current_rev, cooldown_days).await;
         }
         filtered
     } else {
@@ -471,6 +473,63 @@ async fn get_best_candidate_tag(
         })
         .next()
         .map(ToString::to_string))
+}
+
+/// Search all tags in the repo, filter by cooldown, and return the newest one by commit time.
+async fn find_best_tag_with_cooldown(
+    repo: &Path,
+    current_rev: &str,
+    cooldown_days: u8,
+) -> Result<Option<String>> {
+    // Get all version-like tags
+    let stdout = git::git_cmd("git tag")?
+        .arg("tag")
+        .check(true)
+        .current_dir(repo)
+        .output()
+        .await?
+        .stdout;
+
+    let stdout_str = String::from_utf8_lossy(&stdout).into_owned();
+    let all_tags: Vec<&str> = stdout_str
+        .lines()
+        .filter(|line| line.contains('.'))
+        .collect();
+
+    if all_tags.is_empty() {
+        return Ok(None);
+    }
+
+    let candidates = filter_tags_by_cooldown(repo, &all_tags, cooldown_days).await;
+
+    if candidates.is_empty() {
+        trace!("No tags in the repository satisfy cooldown of {cooldown_days} day(s)");
+        return Ok(None);
+    }
+
+    // Find the tag with the newest commit timestamp
+    let mut best: Option<(String, u64)> = None;
+    for tag in candidates {
+        if let Ok(timestamp) = get_tag_timestamp(repo, tag).await {
+            match &best {
+                None => best = Some((tag.to_string(), timestamp)),
+                Some((_best_tag, best_ts)) if timestamp > *best_ts => {
+                    best = Some((tag.to_string(), timestamp));
+                }
+                Some((best_tag, best_ts)) if timestamp == *best_ts => {
+                    // Same timestamp - use Levenshtein as tiebreaker
+                    if levenshtein::levenshtein(tag, current_rev)
+                        < levenshtein::levenshtein(best_tag, current_rev)
+                    {
+                        best = Some((tag.to_string(), timestamp));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    Ok(best.map(|(tag, _)| tag))
 }
 
 async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result<()> {
@@ -710,5 +769,33 @@ mod tests {
 
         // With 0 days cooldown, age >= 0 is always true
         assert_eq!(filtered.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_cooldown_should_fallback_to_older_tag_on_different_commit() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        // Create a commit and tag from 10 days ago
+        create_backdated_commit(repo, "first release", 10).await;
+        create_tag(repo, "v1.8.0").await;
+
+        // Create a commit and tag from 5 days ago
+        create_backdated_commit(repo, "second release", 5).await;
+        create_tag(repo, "v1.9.0").await;
+
+        // Create a commit and tag from 1 day ago (too new for cooldown)
+        create_backdated_commit(repo, "third release", 1).await;
+        create_tag(repo, "v2.0.0").await;
+
+        let result = get_best_candidate_tag(repo, "v2.0.0", "v1.8.0", 3)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result,
+            Some("v1.9.0".to_string()),
+            "Should fallback to v1.9.0 (newest tag satisfying cooldown), not None"
+        );
     }
 }
