@@ -49,6 +49,7 @@ async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
 async_zip = { version = "0.0.17", package = "astral_async_zip", features = ["deflate", "tokio"] }
 axoupdater = { version = "0.9.0", default-features = false, features = ["github_releases"], optional = true }
 bstr = { version = "1.11.0" }
+cargo_metadata = { version = "0.23.1" }
 clap = { version = "4.5.16", features = ["derive", "env", "string", "wrap_help"] }
 clap_complete = { version = "4.5.37", features = ["unstable-dynamic"] }
 ctrlc = { version = "3.4.5" }

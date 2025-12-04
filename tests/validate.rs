@@ -10,13 +10,14 @@ fn validate_config() -> anyhow::Result<()> {
     let context = TestContext::new();
 
     // No files to validate.
-    cmd_snapshot!(context.filters(), context.validate_config(), @r#"
+    cmd_snapshot!(context.filters(), context.validate_config(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "#);
+    warning: No configs to check
+    ");
 
     context.write_pre_commit_config(indoc::indoc! {r"
             repos:
@@ -28,13 +29,14 @@ fn validate_config() -> anyhow::Result<()> {
                   - id: check-json
         "});
     // Validate one file.
-    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @r#"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "#);
+    success: All configs are valid
+    ");
 
     context
         .work_dir()
@@ -63,13 +65,14 @@ fn validate_manifest() -> anyhow::Result<()> {
     let context = TestContext::new();
 
     // No files to validate.
-    cmd_snapshot!(context.filters(), context.validate_manifest(), @r#"
+    cmd_snapshot!(context.filters(), context.validate_manifest(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "#);
+    warning: No manifests to check
+    ");
 
     context
         .work_dir()
@@ -84,13 +87,14 @@ fn validate_manifest() -> anyhow::Result<()> {
                 minimum_pre_commit_version: 3.2.0
         "})?;
     // Validate one file.
-    cmd_snapshot!(context.filters(), context.validate_manifest().arg(".pre-commit-hooks.yaml"), @r#"
+    cmd_snapshot!(context.filters(), context.validate_manifest().arg(".pre-commit-hooks.yaml"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "#);
+    success: All manifests are valid
+    ");
 
     context
         .work_dir()
@@ -143,6 +147,7 @@ fn unexpected_keys_warning() {
 
     ----- stderr -----
     warning: Ignored unexpected keys in `.pre-commit-config.yaml`: `another_unknown`, `unexpected_top_level_key`, `repos[0].unexpected_repo_key`
+    success: All configs are valid
     ");
 
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -177,5 +182,6 @@ fn unexpected_keys_warning() {
       - `repos[0].hooks[0].unexpected_hook_key_2`
       - `repos[0].hooks[0].unexpected_hook_key_3`
       - `repos[0].hooks[0].unexpected_hook_key_4`
+    success: All configs are valid
     ");
 }

@@ -315,12 +315,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Command::ValidateConfig(args) => {
             show_settings!(args);
 
-            Ok(cli::validate_configs(args.configs))
+            cli::validate_configs(args.configs, printer)
         }
         Command::ValidateManifest(args) => {
             show_settings!(args);
 
-            Ok(cli::validate_manifest(args.manifests))
+            cli::validate_manifest(args.manifests, printer)
         }
         Command::SampleConfig(args) => cli::sample_config(args.file, printer),
         Command::AutoUpdate(args) => {

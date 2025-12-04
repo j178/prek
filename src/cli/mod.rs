@@ -42,7 +42,7 @@ pub(crate) use self_update::self_update;
 pub(crate) use try_repo::try_repo;
 pub(crate) use validate::{validate_configs, validate_manifest};
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub(crate) enum ExitStatus {
     /// The command succeeded.
     Success,

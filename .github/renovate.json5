@@ -24,7 +24,6 @@
     'pre-commit',
     'cargo',
     'custom.regex',
-    'mise'
   ],
   customManagers: [
     // Custom manager to update the bundled uv version with the latest uv version from PyPI.
@@ -88,18 +87,9 @@
       ],
       enabled: false
     },
-    // Disable updates for mise managed toolchains
     {
-      matchManagers: [
-        'mise'
-      ],
-      matchDepNames: [
-        'rust',
-        'node',
-        'python',
-        'go'
-      ],
-      enabled: false
+      matchManagers: [ 'cargo', 'pre-commit', 'github-actions', 'custom.regex' ],
+      minimumReleaseAge: '14 days'
     }
   ]
 }

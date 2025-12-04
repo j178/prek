@@ -4,6 +4,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::Context;
+use cargo_metadata::{MetadataCommand, Package};
 use itertools::{Either, Itertools};
 use prek_consts::env_vars::EnvVars;
 
@@ -26,72 +27,105 @@ fn format_cargo_dependency(dep: &str) -> String {
     }
 }
 
-/// Extract package name from Cargo.toml content.
-fn extract_package_name(content: &str) -> Option<String> {
-    for line in content.lines() {
-        let line = line.trim();
-        if line.starts_with("name") {
-            if let Some((_key, value)) = line.split_once('=') {
-                let name = value.trim().trim_matches('"').trim_matches('\'');
-                return Some(name.to_string());
-            }
-        }
-    }
-    None
-}
-
 /// Find the package directory that produces the given binary.
-/// Returns (`package_dir`, `is_workspace`).
-async fn find_package_dir(repo: &Path, binary_name: &str) -> anyhow::Result<(PathBuf, bool)> {
-    let root_cargo = repo.join("Cargo.toml");
-    if !root_cargo.exists() {
-        anyhow::bail!("No Cargo.toml found in {}", repo.display());
-    }
+/// Returns (`package_dir`, `package_name`, `is_workspace`).
+async fn find_package_dir(
+    repo: &Path,
+    binary_name: &str,
+) -> anyhow::Result<(PathBuf, String, bool)> {
+    let repo = repo.to_path_buf();
+    let binary_name = binary_name.to_string();
 
-    let content = fs_err::tokio::read_to_string(&root_cargo).await?;
+    tokio::task::spawn_blocking(move || {
+        let metadata = MetadataCommand::new()
+            .manifest_path(repo.join("Cargo.toml"))
+            .no_deps()
+            .exec()
+            .context("Failed to run cargo metadata")?;
 
-    // If it's a workspace, search member directories AND the root
-    if content.contains("[workspace]") {
-        // First, check if the root itself is also a package
-        if content.contains("[package]") {
-            if let Some(name) = extract_package_name(&content) {
-                if name == binary_name || name.replace('-', "_") == binary_name.replace('-', "_") {
-                    return Ok((repo.to_path_buf(), true));
-                }
+        // Search all workspace packages for one that produces this binary
+        for package_id in &metadata.workspace_members {
+            let package = metadata
+                .packages
+                .iter()
+                .find(|p| &p.id == package_id)
+                .ok_or_else(|| anyhow::anyhow!("Package not found in metadata"))?;
+
+            if package_produces_binary(package, &binary_name) {
+                let package_dir = package
+                    .manifest_path
+                    .parent()
+                    .expect("manifest should have parent")
+                    .as_std_path()
+                    .to_path_buf();
+
+                // It's a workspace if either:
+                // - there are multiple members, OR
+                // - the package is not at the workspace root
+                let is_workspace = metadata.workspace_members.len() > 1
+                    || package_dir != metadata.workspace_root.as_std_path();
+
+                return Ok((package_dir, package.name.to_string(), is_workspace));
             }
         }
 
-        // Then search subdirectories
-        let mut entries = fs_err::tokio::read_dir(repo).await?;
-
-        while let Some(entry) = entries.next_entry().await? {
-            if entry.file_type().await?.is_dir() {
-                let member_cargo = entry.path().join("Cargo.toml");
-                if member_cargo.exists() {
-                    let member_content = fs_err::tokio::read_to_string(&member_cargo).await?;
-                    if let Some(name) = extract_package_name(&member_content) {
-                        if name == binary_name
-                            || name.replace('-', "_") == binary_name.replace('-', "_")
-                        {
-                            return Ok((entry.path(), true));
-                        }
-                    }
-                }
-            }
-        }
         anyhow::bail!(
-            "No package found for binary '{}' in workspace {}",
+            "No package found for binary '{}' in {}",
             binary_name,
             repo.display()
-        );
-    }
+        )
+    })
+    .await?
+}
 
-    // Single package at root
-    if content.contains("[package]") {
-        return Ok((repo.to_path_buf(), false));
-    }
+/// Check if two names match, accounting for hyphen/underscore normalization.
+fn names_match(a: &str, b: &str) -> bool {
+    a == b || a.replace('-', "_") == b.replace('-', "_")
+}
 
-    anyhow::bail!("Invalid Cargo.toml in {}", repo.display());
+/// Check if a package produces a binary with the given name.
+fn package_produces_binary(package: &Package, binary_name: &str) -> bool {
+    package
+        .targets
+        .iter()
+        .filter(|t| t.is_bin())
+        .any(|t| names_match(&t.name, binary_name))
+}
+
+/// Copy executable binaries from a release directory to a destination bin directory.
+async fn copy_binaries(release_dir: &Path, dest_bin_dir: &Path) -> anyhow::Result<()> {
+    let mut entries = fs_err::tokio::read_dir(release_dir).await?;
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        let file_type = entry.file_type().await?;
+        // Copy executable files (not directories, not .d files, etc.)
+        if file_type.is_file() {
+            if let Some(ext) = path.extension() {
+                // Skip non-binary files like .d, .rlib, etc.
+                if ext == "d" || ext == "rlib" || ext == "rmeta" {
+                    continue;
+                }
+            }
+            // On Unix, check if it's executable; on Windows, check for .exe
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let meta = entry.metadata().await?;
+                if meta.permissions().mode() & 0o111 != 0 {
+                    let dest = dest_bin_dir.join(entry.file_name());
+                    fs_err::tokio::copy(&path, &dest).await?;
+                }
+            }
+            #[cfg(windows)]
+            {
+                if path.extension().is_some_and(|e| e == "exe") {
+                    let dest = dest_bin_dir.join(entry.file_name());
+                    fs_err::tokio::copy(&path, &dest).await?;
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -164,10 +198,11 @@ impl LanguageImpl for Rust {
             let binary_name = &entry_parts[0];
 
             // Find the specific package directory for this hook's binary
-            let (package_dir, is_workspace) = find_package_dir(repo, binary_name).await?;
+            let (package_dir, package_name, is_workspace) =
+                find_package_dir(repo, binary_name).await?;
 
-            if lib_deps.is_empty() {
-                // Install directly
+            if lib_deps.is_empty() && !is_workspace {
+                // For single packages without lib deps, use cargo install directly
                 Cmd::new("cargo", "install local")
                     .args(["install", "--bins", "--root"])
                     .arg(cargo_home)
@@ -179,8 +214,28 @@ impl LanguageImpl for Rust {
                     .check(true)
                     .output()
                     .await?;
+            } else if lib_deps.is_empty() {
+                // For workspace members without lib deps, use cargo build + copy
+                // (cargo install doesn't work well with virtual workspaces)
+                let target_dir = info.env_path.join("target");
+                Cmd::new("cargo", "build local")
+                    .args(["build", "--bins", "--release"])
+                    .arg("--manifest-path")
+                    .arg(package_dir.join("Cargo.toml"))
+                    .arg("--target-dir")
+                    .arg(&target_dir)
+                    .current_dir(repo)
+                    .env(EnvVars::CARGO_HOME, cargo_home)
+                    .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
+                    .remove_git_env()
+                    .check(true)
+                    .output()
+                    .await?;
+
+                // Copy compiled binaries to the bin directory
+                copy_binaries(&target_dir.join("release"), &bin_dir(&info.env_path)).await?;
             } else {
-                // Copy manifest files to env directory, modify there, build with --manifest-path
+                // For packages with lib deps, copy manifest, modify, build
                 let manifest_dir = info.env_path.join("manifest");
                 fs_err::tokio::create_dir_all(&manifest_dir).await?;
 
@@ -233,13 +288,19 @@ impl LanguageImpl for Rust {
                 // Build using cargo build with --manifest-path pointing to modified manifest
                 // but source files come from original package_dir
                 let target_dir = info.env_path.join("target");
-                Cmd::new("cargo", "build local with deps")
-                    .args(["build", "--bins", "--release"])
+                let mut cmd = Cmd::new("cargo", "build local with deps");
+                cmd.args(["build", "--bins", "--release"])
                     .arg("--manifest-path")
                     .arg(&dst_manifest)
                     .arg("--target-dir")
-                    .arg(&target_dir)
-                    .current_dir(&package_dir)
+                    .arg(&target_dir);
+
+                // For workspace members, explicitly specify the package
+                if is_workspace {
+                    cmd.args(["--package", &package_name]);
+                }
+
+                cmd.current_dir(&package_dir)
                     .env(EnvVars::CARGO_HOME, cargo_home)
                     .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
                     .remove_git_env()
@@ -248,39 +309,7 @@ impl LanguageImpl for Rust {
                     .await?;
 
                 // Copy compiled binaries to the bin directory
-                let release_bin_dir = target_dir.join("release");
-                let dest_bin_dir = bin_dir(&info.env_path);
-                let mut entries = fs_err::tokio::read_dir(&release_bin_dir).await?;
-                while let Some(entry) = entries.next_entry().await? {
-                    let path = entry.path();
-                    let file_type = entry.file_type().await?;
-                    // Copy executable files (not directories, not .d files, etc.)
-                    if file_type.is_file() {
-                        if let Some(ext) = path.extension() {
-                            // Skip non-binary files like .d, .rlib, etc.
-                            if ext == "d" || ext == "rlib" || ext == "rmeta" {
-                                continue;
-                            }
-                        }
-                        // On Unix, check if it's executable; on Windows, check for .exe
-                        #[cfg(unix)]
-                        {
-                            use std::os::unix::fs::PermissionsExt;
-                            let meta = entry.metadata().await?;
-                            if meta.permissions().mode() & 0o111 != 0 {
-                                let dest = dest_bin_dir.join(entry.file_name());
-                                fs_err::tokio::copy(&path, &dest).await?;
-                            }
-                        }
-                        #[cfg(windows)]
-                        {
-                            if path.extension().is_some_and(|e| e == "exe") {
-                                let dest = dest_bin_dir.join(entry.file_name());
-                                fs_err::tokio::copy(&path, &dest).await?;
-                            }
-                        }
-                    }
-                }
+                copy_binaries(&target_dir.join("release"), &bin_dir(&info.env_path)).await?;
             }
         }
 
@@ -336,11 +365,8 @@ impl LanguageImpl for Rust {
             let toolchain_dir = rustc_bin.parent().expect("Toolchain dir should exist");
             let rustup_home = rustup_home_dir(toolchain_dir);
             vec![
-                (EnvVars::RUSTUP_TOOLCHAIN, toolchain),
-                (
-                    EnvVars::RUSTUP_HOME,
-                    rustup_home.to_string_lossy().to_string(),
-                ),
+                (EnvVars::RUSTUP_TOOLCHAIN, PathBuf::from(toolchain)),
+                (EnvVars::RUSTUP_HOME, rustup_home),
             ]
         } else {
             vec![]
@@ -356,7 +382,7 @@ impl LanguageImpl for Rust {
                 .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::CARGO_HOME, env_dir)
                 .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
-                .envs(rust_envs.iter().map(|(k, v)| (k, v.as_str())))
+                .envs(rust_envs.iter().cloned())
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
@@ -406,11 +432,15 @@ mod tests {
 [package]
 name = "my-tool"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+        write_file(&temp.path().join("src/main.rs"), "fn main() {}").await;
 
-        let (path, is_workspace) = find_package_dir(temp.path(), "my-tool").await.unwrap();
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "my-tool").await.unwrap();
         assert_eq!(path, temp.path());
+        assert_eq!(pkg_name, "my-tool");
         assert!(!is_workspace);
     }
 
@@ -421,39 +451,46 @@ version = "0.1.0"
 [package]
 name = "my-tool"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+        write_file(&temp.path().join("src/main.rs"), "fn main() {}").await;
 
         // Should match with underscores instead of hyphens
-        let (path, is_workspace) = find_package_dir(temp.path(), "my_tool").await.unwrap();
+        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my_tool").await.unwrap();
         assert_eq!(path, temp.path());
         assert!(!is_workspace);
     }
 
     #[tokio::test]
     async fn test_find_package_dir_workspace_with_root_package() {
-        // This is the cargo-deny case: workspace where root is also a package
         let temp = TempDir::new().unwrap();
         let cargo_toml = r#"
 [package]
 name = "cargo-deny"
 version = "0.18.5"
+edition = "2021"
 
 [workspace]
 members = ["subcrate"]
 "#;
         write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+        write_file(&temp.path().join("src/main.rs"), "fn main() {}").await;
 
-        // Create a subcrate too
+        // Create subcrate with a lib.rs
         let subcrate_toml = r#"
 [package]
 name = "subcrate"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("subcrate/Cargo.toml"), subcrate_toml).await;
+        write_file(&temp.path().join("subcrate/src/lib.rs"), "").await;
 
-        let (path, is_workspace) = find_package_dir(temp.path(), "cargo-deny").await.unwrap();
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "cargo-deny").await.unwrap();
         assert_eq!(path, temp.path());
+        assert_eq!(pkg_name, "cargo-deny");
         assert!(is_workspace);
     }
 
@@ -470,19 +507,143 @@ members = ["cli", "lib"]
 [package]
 name = "my-cli"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("cli/Cargo.toml"), cli_toml).await;
+        write_file(&temp.path().join("cli/src/main.rs"), "fn main() {}").await;
 
         let lib_toml = r#"
 [package]
 name = "my-lib"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("lib/Cargo.toml"), lib_toml).await;
+        write_file(&temp.path().join("lib/src/lib.rs"), "").await;
 
-        let (path, is_workspace) = find_package_dir(temp.path(), "my-cli").await.unwrap();
+        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "my-cli").await.unwrap();
         assert_eq!(path, temp.path().join("cli"));
+        assert_eq!(pkg_name, "my-cli");
         assert!(is_workspace);
+    }
+
+    #[tokio::test]
+    async fn test_find_package_dir_by_bin_name() {
+        let temp = TempDir::new().unwrap();
+
+        let cargo_toml = r#"
+[workspace]
+members = ["crates/typos-cli"]
+"#;
+        write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+
+        // Package is typos-cli but binary is typos
+        let cli_toml = r#"
+[package]
+name = "typos-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "typos"
+path = "src/main.rs"
+"#;
+        write_file(&temp.path().join("crates/typos-cli/Cargo.toml"), cli_toml).await;
+        write_file(
+            &temp.path().join("crates/typos-cli/src/main.rs"),
+            "fn main() {}",
+        )
+        .await;
+
+        // Should find by binary name, return package name
+        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "typos").await.unwrap();
+        assert_eq!(path, temp.path().join("crates/typos-cli"));
+        assert_eq!(pkg_name, "typos-cli");
+        assert!(is_workspace);
+    }
+
+    #[tokio::test]
+    async fn test_find_package_dir_by_src_bin_file() {
+        let temp = TempDir::new().unwrap();
+
+        let cargo_toml = r#"
+[package]
+name = "my-pkg"
+version = "0.1.0"
+edition = "2021"
+"#;
+        write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+        write_file(&temp.path().join("src/bin/my-tool.rs"), "fn main() {}").await;
+        // Need a lib.rs or main.rs for the package itself
+        write_file(&temp.path().join("src/lib.rs"), "").await;
+
+        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my-tool").await.unwrap();
+        assert_eq!(path, temp.path());
+        assert!(!is_workspace);
+    }
+
+    #[tokio::test]
+    async fn test_find_package_dir_virtual_workspace_nested_member() {
+        let temp = TempDir::new().unwrap();
+
+        let cargo_toml = r#"
+[workspace]
+members = ["crates/cli"]
+"#;
+        write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+
+        let cli_toml = r#"
+[package]
+name = "virtual-cli"
+version = "0.1.0"
+edition = "2021"
+"#;
+        write_file(&temp.path().join("crates/cli/Cargo.toml"), cli_toml).await;
+        write_file(&temp.path().join("crates/cli/src/main.rs"), "fn main() {}").await;
+
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "virtual-cli").await.unwrap();
+        assert_eq!(path, temp.path().join("crates/cli"));
+        assert_eq!(pkg_name, "virtual-cli");
+        assert!(is_workspace);
+    }
+
+    #[tokio::test]
+    async fn test_find_package_dir_virtual_workspace_glob_members() {
+        let temp = TempDir::new().unwrap();
+
+        let cargo_toml = r#"
+[workspace]
+members = ["crates/*"]
+"#;
+        write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
+
+        let cli_toml = r#"
+[package]
+name = "my-cli"
+version = "0.1.0"
+edition = "2021"
+"#;
+        write_file(&temp.path().join("crates/cli/Cargo.toml"), cli_toml).await;
+        write_file(&temp.path().join("crates/cli/src/main.rs"), "fn main() {}").await;
+
+        let lib_toml = r#"
+[package]
+name = "my-lib"
+version = "0.1.0"
+edition = "2021"
+"#;
+        write_file(&temp.path().join("crates/lib/Cargo.toml"), lib_toml).await;
+        write_file(&temp.path().join("crates/lib/src/lib.rs"), "").await;
+
+        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "my-cli").await.unwrap();
+        assert_eq!(path, temp.path().join("crates/cli"));
+        assert_eq!(pkg_name, "my-cli");
+        assert!(is_workspace);
+
+        // my-lib is a library (no binary), so searching for it should fail
+        let result = find_package_dir(temp.path(), "my-lib").await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
@@ -491,7 +652,8 @@ version = "0.1.0"
 
         let result = find_package_dir(temp.path(), "anything").await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No Cargo.toml"));
+        // cargo metadata gives a different error message
+        assert!(result.unwrap_err().to_string().contains("cargo metadata"));
     }
 
     #[tokio::test]
@@ -507,41 +669,14 @@ members = ["cli"]
 [package]
 name = "some-other-tool"
 version = "0.1.0"
+edition = "2021"
 "#;
         write_file(&temp.path().join("cli/Cargo.toml"), cli_toml).await;
+        write_file(&temp.path().join("cli/src/main.rs"), "fn main() {}").await;
 
         let result = find_package_dir(temp.path(), "nonexistent-binary").await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("No package found"));
-    }
-
-    #[test]
-    fn test_extract_package_name() {
-        let content = r#"
-[package]
-name = "my-tool"
-version = "0.1.0"
-"#;
-        assert_eq!(extract_package_name(content), Some("my-tool".to_string()));
-    }
-
-    #[test]
-    fn test_extract_package_name_with_single_quotes() {
-        let content = r"
-[package]
-name = 'my-tool'
-version = '0.1.0'
-";
-        assert_eq!(extract_package_name(content), Some("my-tool".to_string()));
-    }
-
-    #[test]
-    fn test_extract_package_name_no_package() {
-        let content = r#"
-[workspace]
-members = ["cli"]
-"#;
-        assert_eq!(extract_package_name(content), None);
     }
 
     #[test]
