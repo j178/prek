@@ -374,28 +374,40 @@ async fn checkout_and_validate_manifest(
     Ok(())
 }
 
-/// Returns the Unix timestamp of when a tag was created.
-async fn get_tag_timestamp(repo: &Path, tag: &str) -> Result<u64> {
+/// Returns a map of tag names to their Unix timestamps, fetched in a single git command.
+async fn get_all_tag_timestamps(repo: &Path) -> Result<FxHashMap<String, u64>> {
     let output = git::git_cmd("git log")?
         .arg("log")
-        .arg("-1")
-        .arg("--format=%ct")
-        .arg(tag)
+        .arg("--tags")
+        .arg("--format=%ct %D")
+        .arg("--simplify-by-decoration")
         .current_dir(repo)
         .output()
         .await?;
 
-    String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .parse()
-        .context("Failed to parse tag timestamp")
+    let mut timestamps = FxHashMap::default();
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let Some((timestamp_str, refs)) = line.split_once(' ') else {
+            continue;
+        };
+        let Ok(timestamp) = timestamp_str.parse::<u64>() else {
+            continue;
+        };
+        for tag_ref in refs.split(", ") {
+            if let Some(tag_name) = tag_ref.strip_prefix("tag: ") {
+                timestamps.insert(tag_name.to_string(), timestamp);
+            }
+        }
+    }
+
+    Ok(timestamps)
 }
 
 /// Filters tags to only those older than the cooldown period.
-async fn filter_tags_by_cooldown<'a>(
-    repo: &Path,
+fn filter_tags_by_cooldown<'a>(
     tags: &[&'a str],
     cooldown_days: u8,
+    timestamps: &FxHashMap<String, u64>,
 ) -> Vec<&'a str> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -405,7 +417,7 @@ async fn filter_tags_by_cooldown<'a>(
 
     let mut result = Vec::new();
     for tag in tags {
-        if let Ok(timestamp) = get_tag_timestamp(repo, tag).await {
+        if let Some(&timestamp) = timestamps.get(*tag) {
             let age_secs = now.saturating_sub(timestamp);
             if age_secs >= cutoff_secs {
                 result.push(*tag);
@@ -453,12 +465,16 @@ async fn get_best_candidate_tag(
         return Err(anyhow::anyhow!("No tags found for revision {rev}"));
     }
 
+    // Fetch all timestamps once upfront
+    let timestamps = get_all_tag_timestamps(repo).await?;
+
     let candidates = if cooldown_days > 0 {
-        let filtered = filter_tags_by_cooldown(repo, &tags, cooldown_days).await;
+        let filtered = filter_tags_by_cooldown(&tags, cooldown_days, &timestamps);
         if filtered.is_empty() {
             // No tags on this commit satisfy cooldown - search ALL tags
             trace!("No tags on {rev} satisfy cooldown, searching all tags");
-            return find_best_tag_with_cooldown(repo, current_rev, cooldown_days).await;
+            return find_best_tag_with_cooldown(repo, current_rev, cooldown_days, &timestamps)
+                .await;
         }
         filtered
     } else {
@@ -480,6 +496,7 @@ async fn find_best_tag_with_cooldown(
     repo: &Path,
     current_rev: &str,
     cooldown_days: u8,
+    timestamps: &FxHashMap<String, u64>,
 ) -> Result<Option<String>> {
     // Get all version-like tags
     let stdout = git::git_cmd("git tag")?
@@ -500,7 +517,7 @@ async fn find_best_tag_with_cooldown(
         return Ok(None);
     }
 
-    let candidates = filter_tags_by_cooldown(repo, &all_tags, cooldown_days).await;
+    let candidates = filter_tags_by_cooldown(&all_tags, cooldown_days, timestamps);
 
     if candidates.is_empty() {
         trace!("No tags in the repository satisfy cooldown of {cooldown_days} day(s)");
@@ -508,20 +525,20 @@ async fn find_best_tag_with_cooldown(
     }
 
     // Find the tag with the newest commit timestamp
-    let mut best: Option<(String, u64)> = None;
+    let mut best: Option<(&str, u64)> = None;
     for tag in candidates {
-        if let Ok(timestamp) = get_tag_timestamp(repo, tag).await {
+        if let Some(&timestamp) = timestamps.get(tag) {
             match &best {
-                None => best = Some((tag.to_string(), timestamp)),
+                None => best = Some((tag, timestamp)),
                 Some((_best_tag, best_ts)) if timestamp > *best_ts => {
-                    best = Some((tag.to_string(), timestamp));
+                    best = Some((tag, timestamp));
                 }
                 Some((best_tag, best_ts)) if timestamp == *best_ts => {
                     // Same timestamp - use Levenshtein as tiebreaker
                     if levenshtein::levenshtein(tag, current_rev)
                         < levenshtein::levenshtein(best_tag, current_rev)
                     {
-                        best = Some((tag.to_string(), timestamp));
+                        best = Some((tag, timestamp));
                     }
                 }
                 _ => {}
@@ -529,7 +546,7 @@ async fn find_best_tag_with_cooldown(
         }
     }
 
-    Ok(best.map(|(tag, _)| tag))
+    Ok(best.map(|(tag, _)| tag.to_string()))
 }
 
 async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result<()> {
@@ -644,6 +661,24 @@ mod tests {
             .await
             .unwrap();
 
+        // First commit (required before creating a branch)
+        git::git_cmd("git commit")
+            .unwrap()
+            .args(["commit", "--allow-empty", "-m", "initial"])
+            .current_dir(repo)
+            .output()
+            .await
+            .unwrap();
+
+        // Create a trunk branch (avoid dangling commits)
+        git::git_cmd("git checkout")
+            .unwrap()
+            .args(["branch", "-M", "trunk"])
+            .current_dir(repo)
+            .output()
+            .await
+            .unwrap();
+
         tmp
     }
 
@@ -688,21 +723,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_tag_timestamp() {
+    async fn test_get_all_tag_timestamps() {
         let tmp = setup_test_repo().await;
         let repo = tmp.path();
 
         create_commit(repo, "initial").await;
         create_tag(repo, "v1.0.0").await;
 
-        let timestamp = get_tag_timestamp(repo, "v1.0.0").await.unwrap();
+        let timestamps = get_all_tag_timestamps(repo).await.unwrap();
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
+        assert!(timestamps.contains_key("v1.0.0"));
         // Tag should be created within the last minute
-        assert!(now - timestamp < 60);
+        assert!(now - timestamps["v1.0.0"] < 60);
     }
 
     #[tokio::test]
@@ -716,8 +752,9 @@ mod tests {
         create_backdated_commit(repo, "second", 3).await;
         create_tag(repo, "v1.1.0").await;
 
+        let timestamps = get_all_tag_timestamps(repo).await.unwrap();
         let tags = vec!["v1.0.0", "v1.1.0"];
-        let filtered = filter_tags_by_cooldown(repo, &tags, 2).await;
+        let filtered = filter_tags_by_cooldown(&tags, 2, &timestamps);
 
         assert_eq!(filtered.len(), 2);
         assert!(filtered.contains(&"v1.0.0"));
@@ -735,8 +772,9 @@ mod tests {
         create_commit(repo, "second").await; // Created now, should be filtered
         create_tag(repo, "v1.1.0").await;
 
+        let timestamps = get_all_tag_timestamps(repo).await.unwrap();
         let tags = vec!["v1.0.0", "v1.1.0"];
-        let filtered = filter_tags_by_cooldown(repo, &tags, 2).await;
+        let filtered = filter_tags_by_cooldown(&tags, 2, &timestamps);
 
         assert_eq!(filtered.len(), 1);
         assert!(filtered.contains(&"v1.0.0"));
@@ -750,8 +788,9 @@ mod tests {
         create_commit(repo, "initial").await;
         create_tag(repo, "v1.0.0").await;
 
+        let timestamps = get_all_tag_timestamps(repo).await.unwrap();
         let tags = vec!["v1.0.0"];
-        let filtered = filter_tags_by_cooldown(repo, &tags, 2).await;
+        let filtered = filter_tags_by_cooldown(&tags, 2, &timestamps);
 
         assert!(filtered.is_empty());
     }
@@ -764,8 +803,9 @@ mod tests {
         create_commit(repo, "initial").await;
         create_tag(repo, "v1.0.0").await;
 
+        let timestamps = get_all_tag_timestamps(repo).await.unwrap();
         let tags = vec!["v1.0.0"];
-        let filtered = filter_tags_by_cooldown(repo, &tags, 0).await;
+        let filtered = filter_tags_by_cooldown(&tags, 0, &timestamps);
 
         // With 0 days cooldown, age >= 0 is always true
         assert_eq!(filtered.len(), 1);
