@@ -7,6 +7,7 @@ use std::sync::LazyLock;
 
 use anyhow::Result;
 use path_clean::PathClean;
+use prek_consts::env_vars::EnvVars;
 use rustc_hash::FxHashSet;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, instrument, warn};
@@ -374,11 +375,10 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
 
     git_cmd("git checkout")?
         .current_dir(path)
-        .arg("-c")
-        .arg("core.hooksPath=/dev/null")
         .arg("checkout")
         .arg("FETCH_HEAD")
         .remove_git_env()
+        .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
         .check(true)
         .output()
         .await?;
@@ -415,6 +415,7 @@ async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .current_dir(path)
         .arg("checkout")
         .arg(rev)
+        .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
         .remove_git_env()
         .check(true)
         .output()
