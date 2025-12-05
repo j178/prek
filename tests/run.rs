@@ -576,6 +576,88 @@ fn stage() {
     "#);
 }
 
+#[test]
+fn fallback_to_manual_stage() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: manual-only
+                name: manual-only
+                language: system
+                entry: echo manual-only
+                stages: [ manual ]
+              - id: another-manual
+                name: another-manual
+                language: system
+                entry: echo another-manual
+                stages: [ manual ]
+              - id: default-stage
+                name: default-stage
+                language: system
+                entry: echo default-stage
+              - id: pre-push
+                name: pre-push
+                language: system
+                entry: echo pre-push
+                stages: [ pre-push ]
+    "});
+    context.git_add(".");
+
+    // With pre-commit hooks present, default `prek run` stays on pre-commit.
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    default-stage............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    // Explicit `--hook-stage pre-commit` keeps execution scoped to that stage.
+    cmd_snapshot!(context.filters(), context.run().arg("--hook-stage").arg("pre-commit").arg("default-stage").arg("manual-only"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    default-stage............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    // Selecting manual + pre-commit hooks still runs only the pre-commit ones.
+    cmd_snapshot!(context.filters(), context.run().arg("manual-only").arg("default-stage"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    default-stage............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    // Selecting only manual hooks should still succeed via fallback.
+    cmd_snapshot!(context.filters(), context.run().arg("manual-only").arg("another-manual"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    manual-only..............................................................Passed
+    another-manual...........................................................Passed
+
+    ----- stderr -----
+    ");
+
+    // Mixing `pre-push` and manual selectors still runs the manual hook via fallback.
+    cmd_snapshot!(context.filters(), context.run().arg("pre-push").arg("manual-only"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    manual-only..............................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
 /// Test global `files`, `exclude`, and hook level `files`, `exclude`.
 #[test]
 fn files_and_exclude() -> Result<()> {

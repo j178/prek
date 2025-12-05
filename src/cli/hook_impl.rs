@@ -112,7 +112,7 @@ pub(crate) async fn hook_impl(
         config,
         includes,
         skips,
-        hook_type.into(),
+        Some(hook_type.into()),
         run_args.from_ref,
         run_args.to_ref,
         run_args.all_files,

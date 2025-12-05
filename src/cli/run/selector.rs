@@ -202,6 +202,16 @@ impl Selectors {
         })
     }
 
+    pub(crate) fn includes_only_hook_targets(&self) -> bool {
+        !self.includes.is_empty()
+            && self.includes.iter().all(|s| {
+                matches!(
+                    s.expr,
+                    SelectorExpr::HookId(_) | SelectorExpr::ProjectHook { .. }
+                )
+            })
+    }
+
     /// Check if a hook matches any of the selection criteria.
     pub(crate) fn matches_hook(&self, hook: &Hook) -> bool {
         let mut usage = self.usage.lock().unwrap();
@@ -300,16 +310,6 @@ impl Selectors {
             }
         }
         included
-    }
-
-    pub(crate) fn includes_only_hook_targets(&self) -> bool {
-        !self.includes.is_empty()
-            && self.includes.iter().all(|s| {
-                matches!(
-                    s.expr,
-                    SelectorExpr::HookId(_) | SelectorExpr::ProjectHook { .. }
-                )
-            })
     }
 
     pub(crate) fn report_unused(&self) {
