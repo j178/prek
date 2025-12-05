@@ -448,10 +448,8 @@ pub(crate) struct RunArgs {
     ///
     /// When specified, only hooks configured for that stage (for example `manual`,
     /// `pre-commit`, or `pre-commit`) will run.
-    /// When omitted, prek first attempts to run hooks registered for the
-    /// `pre-commit` stage. If no hooks remain after filtering, it automatically
-    /// falls back to `manual` so manual-only hooks still execute without having
-    /// to pass `--hook-stage manual`.
+    /// Defaults to `pre-commit` if not specified.
+    /// For hooks specified directly in the command line, fallback to `manual` stage if no hooks found for `pre-commit` stage.
     #[arg(long, value_enum)]
     pub(crate) hook_stage: Option<Stage>,
 

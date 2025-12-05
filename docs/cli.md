@@ -205,7 +205,7 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-run--from-ref"><a href="#prek-run--from-ref"><code>--from-ref</code></a>, <code>--source</code>, <code>-s</code> <i>from-ref</i></dt><dd><p>The original ref in a <code>&lt;from_ref&gt;...&lt;to_ref&gt;</code> diff expression. Files changed in this diff will be run through the hooks</p>
 </dd><dt id="prek-run--help"><a href="#prek-run--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-run--hook-stage"><a href="#prek-run--hook-stage"><code>--hook-stage</code></a> <i>hook-stage</i></dt><dd><p>The stage during which the hook is fired.</p>
-<p>When specified, only hooks configured for that stage (for example <code>manual</code>, <code>pre-commit</code>, or <code>pre-commit</code>) will run. When omitted, prek first attempts to run hooks registered for the <code>pre-commit</code> stage. If no hooks remain after filtering, it automatically falls back to <code>manual</code> so manual-only hooks still execute without having to pass <code>--hook-stage manual</code>.</p>
+<p>When specified, only hooks configured for that stage (for example <code>manual</code>, <code>pre-commit</code>, or <code>pre-commit</code>) will run. Defaults to <code>pre-commit</code> if not specified. For hooks specified directly in the command line, fallback to <code>manual</code> stage if no hooks found for <code>pre-commit</code> stage.</p>
 <p>Possible values:</p>
 <ul>
 <li><code>manual</code></li>
@@ -763,7 +763,7 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 </dd><dt id="prek-try-repo--from-ref"><a href="#prek-try-repo--from-ref"><code>--from-ref</code></a>, <code>--source</code>, <code>-s</code> <i>from-ref</i></dt><dd><p>The original ref in a <code>&lt;from_ref&gt;...&lt;to_ref&gt;</code> diff expression. Files changed in this diff will be run through the hooks</p>
 </dd><dt id="prek-try-repo--help"><a href="#prek-try-repo--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-try-repo--hook-stage"><a href="#prek-try-repo--hook-stage"><code>--hook-stage</code></a> <i>hook-stage</i></dt><dd><p>The stage during which the hook is fired.</p>
-<p>When specified, only hooks configured for that stage (for example <code>manual</code>, <code>pre-commit</code>, or <code>pre-commit</code>) will run. When omitted, prek first attempts to run hooks registered for the <code>pre-commit</code> stage. If no hooks remain after filtering, it automatically falls back to <code>manual</code> so manual-only hooks still execute without having to pass <code>--hook-stage manual</code>.</p>
+<p>When specified, only hooks configured for that stage (for example <code>manual</code>, <code>pre-commit</code>, or <code>pre-commit</code>) will run. Defaults to <code>pre-commit</code> if not specified. For hooks specified directly in the command line, fallback to <code>manual</code> stage if no hooks found for <code>pre-commit</code> stage.</p>
 <p>Possible values:</p>
 <ul>
 <li><code>manual</code></li>

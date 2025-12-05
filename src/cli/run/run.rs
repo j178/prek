@@ -133,7 +133,7 @@ pub(crate) async fn run(
             .cloned()
             .collect::<Vec<_>>();
         if hooks.is_empty() && selectors.includes_only_hook_targets() {
-            // If no hooks found for `pre-commit` stage, try filtering by `manual` stage.
+            // If no hooks found for `pre-commit` stage, try fallback to `manual` stage for hooks specified directly.
             hook_stage = Stage::Manual;
             hooks = selected_hooks
                 .iter()
