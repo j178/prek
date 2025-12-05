@@ -9,6 +9,9 @@ impl EnvVars {
     pub const HOME: &'static str = "HOME";
     pub const CI: &'static str = "CI";
 
+    // Git related
+    pub const GIT_TERMINAL_PROMPT: &'static str = "GIT_TERMINAL_PROMPT";
+
     pub const SKIP: &'static str = "SKIP";
 
     // PREK specific environment variables, public for users
