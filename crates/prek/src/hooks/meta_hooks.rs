@@ -257,8 +257,8 @@ pub fn identity(_hook: &Hook, filenames: &[&Path]) -> (i32, Vec<u8>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
     use crate::config::SerdeRegex;
+    use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 
     fn regex_pattern(pattern: &str) -> FilePattern {
         let regex = fancy_regex::Regex::new(pattern).unwrap();
@@ -294,7 +294,12 @@ mod tests {
         assert!(apply_files.is_match(ALT_CONFIG_FILE));
 
         let useless = MetaHook::from_id("check-useless-excludes").expect("known meta hook");
-        let useless_files = useless.0.options.files.as_ref().expect("files should be set");
+        let useless_files = useless
+            .0
+            .options
+            .files
+            .as_ref()
+            .expect("files should be set");
         assert!(useless_files.is_match(CONFIG_FILE));
         assert!(useless_files.is_match(ALT_CONFIG_FILE));
         assert!(!useless_files.sources().is_empty());

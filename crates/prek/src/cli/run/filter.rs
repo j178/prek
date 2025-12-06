@@ -94,7 +94,10 @@ impl<'a> FileFilter<'a> {
     where
         I: Iterator<Item = &'a PathBuf> + Send,
     {
-        let filter = FilenameFilter::new(project.config().files.as_ref(), project.config().exclude.as_ref());
+        let filter = FilenameFilter::new(
+            project.config().files.as_ref(),
+            project.config().exclude.as_ref(),
+        );
 
         let orphan = project.config().orphan.unwrap_or(false);
 

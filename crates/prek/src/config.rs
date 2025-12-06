@@ -173,7 +173,6 @@ impl<'de> Deserialize<'de> for FilePattern {
     }
 }
 
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -1064,7 +1063,8 @@ mod tests {
             files: ^src/
             exclude: ^target/
         "};
-        let parsed: Wrapper = serde_yaml::from_str(regex_yaml).expect("regex patterns should parse");
+        let parsed: Wrapper =
+            serde_yaml::from_str(regex_yaml).expect("regex patterns should parse");
         assert!(
             matches!(parsed.files.kind, FilePatternKind::Regex(_)),
             "expected regex pattern"
@@ -1134,7 +1134,8 @@ mod tests {
 
     #[test]
     fn reject_empty_glob_list() {
-        let err = serde_yaml::from_str::<FilePattern>("glob: []").expect_err("empty list should fail");
+        let err =
+            serde_yaml::from_str::<FilePattern>("glob: []").expect_err("empty list should fail");
         assert!(
             err.to_string().contains("glob list cannot be empty"),
             "unexpected error: {err}"
@@ -1143,7 +1144,8 @@ mod tests {
 
     #[test]
     fn invalid_glob_pattern_errors() {
-        let err = serde_yaml::from_str::<FilePattern>("glob: \"[\"").expect_err("invalid glob should fail");
+        let err = serde_yaml::from_str::<FilePattern>("glob: \"[\"")
+            .expect_err("invalid glob should fail");
         let msg = err.to_string().to_lowercase();
         assert!(
             msg.contains("glob"),
