@@ -193,6 +193,25 @@ Allowed values:
 - `pre-merge-commit`
 - `pre-rebase`
 
+#### `files` / `exclude` patterns
+
+Patterns remain regex by default (matching pre-commit), but you can also opt into globs:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: format-python
+        entry: bash -c 'echo formatting "$@"' _
+        language: system
+        files:
+          glob: src/**/*.py
+        exclude:
+          glob: src/vendor/**
+```
+
+Both forms work at the top-level config and per-hook.
+
 #### `minimum_prek_version`
 
 <a id="prek-only-minimum-prek-version-config"></a>

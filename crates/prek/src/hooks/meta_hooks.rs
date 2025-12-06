@@ -3,11 +3,12 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
-use fancy_regex::Regex;
 use itertools::Itertools;
 
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
-use crate::config::{self, CONFIG_FILE_REGEX, HookOptions, Language, ManifestHook, MetaHook};
+use crate::config::{
+    self, CONFIG_FILE_REGEX, FilePattern, HookOptions, Language, ManifestHook, MetaHook,
+};
 use crate::hook::Hook;
 use crate::store::Store;
 use crate::workspace::Project;
@@ -66,7 +67,7 @@ impl MetaHook {
                 language: Language::System,
                 entry: String::new(),
                 options: HookOptions {
-                    files: Some(config_file_regex),
+                    files: Some(FilePattern::from_regex(config_file_regex)),
                     ..Default::default()
                 },
             },
@@ -76,7 +77,7 @@ impl MetaHook {
                 language: Language::System,
                 entry: String::new(),
                 options: HookOptions {
-                    files: Some(config_file_regex),
+                    files: Some(FilePattern::from_regex(config_file_regex)),
                     ..Default::default()
                 },
             },
@@ -146,8 +147,8 @@ pub(crate) async fn check_hooks_apply(
 // Returns true if the exclude pattern matches any files matching the include pattern.
 fn excludes_any(
     files: &[impl AsRef<Path>],
-    include: Option<&Regex>,
-    exclude: Option<&Regex>,
+    include: Option<&FilePattern>,
+    exclude: Option<&FilePattern>,
 ) -> bool {
     if exclude.is_none() {
         return true;
@@ -158,13 +159,13 @@ fn excludes_any(
             return false; // Skip files that cannot be converted to a string
         };
 
-        if let Some(re) = &include {
-            if !re.is_match(f).unwrap_or(false) {
+        if let Some(pattern) = &include {
+            if !pattern.is_match(f) {
                 return false;
             }
         }
-        if let Some(re) = &exclude {
-            if !re.is_match(f).unwrap_or(false) {
+        if let Some(pattern) = &exclude {
+            if !pattern.is_match(f) {
                 return false;
             }
         }
@@ -190,12 +191,16 @@ pub(crate) async fn check_useless_excludes(
         project.with_relative_path(relative_path.to_path_buf());
 
         let config = project.config();
-        if !excludes_any(&input, None, config.exclude.as_deref()) {
+        if !excludes_any(&input, None, config.exclude.as_ref()) {
             code = 1;
+            let display = config
+                .exclude
+                .as_ref()
+                .map(FilePattern::sources_display)
+                .unwrap_or_default();
             writeln!(
                 &mut output,
-                "The global exclude pattern `{}` does not match any files",
-                config.exclude.as_deref().map_or("", |r| r.as_str())
+                "The global exclude pattern `{display}` does not match any files"
             )?;
         }
 
@@ -218,16 +223,16 @@ pub(crate) async fn check_useless_excludes(
                     opts.exclude_types.as_deref().unwrap_or(&[]),
                 );
 
-                if !excludes_any(
-                    &filtered_files,
-                    opts.files.as_deref(),
-                    opts.exclude.as_deref(),
-                ) {
+                if !excludes_any(&filtered_files, opts.files.as_ref(), opts.exclude.as_ref()) {
                     code = 1;
+                    let display = opts
+                        .exclude
+                        .as_ref()
+                        .map(FilePattern::sources_display)
+                        .unwrap_or_default();
                     writeln!(
                         &mut output,
-                        "The exclude pattern `{}` for `{hook_id}` does not match any files",
-                        opts.exclude.as_deref().map_or("", |r| r.as_str())
+                        "The exclude pattern `{display}` for `{hook_id}` does not match any files"
                     )?;
                 }
             }
@@ -252,6 +257,12 @@ pub fn identity(_hook: &Hook, filenames: &[&Path]) -> (i32, Vec<u8>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::SerdeRegex;
+
+    fn regex_pattern(pattern: &str) -> FilePattern {
+        let regex = fancy_regex::Regex::new(pattern).unwrap();
+        FilePattern::from_regex(SerdeRegex::from_regex(regex))
+    }
 
     #[test]
     fn test_excludes_any() {
@@ -260,23 +271,17 @@ mod tests {
             Path::new("file2.txt"),
             Path::new("file3.txt"),
         ];
-        assert!(excludes_any(
-            &files,
-            Regex::new(r"file.*").ok().as_ref(),
-            Regex::new(r"file2\.txt").ok().as_ref()
-        ));
-        assert!(!excludes_any(
-            &files,
-            Regex::new(r"file.*").ok().as_ref(),
-            Regex::new(r"file4\.txt").ok().as_ref()
-        ));
+        let include = regex_pattern(r"file.*");
+        let exclude = regex_pattern(r"file2\.txt");
+        assert!(excludes_any(&files, Some(&include), Some(&exclude)));
+
+        let include = regex_pattern(r"file.*");
+        let exclude = regex_pattern(r"file4\.txt");
+        assert!(!excludes_any(&files, Some(&include), Some(&exclude)));
         assert!(excludes_any(&files, None, None));
 
         let files = vec![Path::new("html/file1.html"), Path::new("html/file2.html")];
-        assert!(excludes_any(
-            &files,
-            None,
-            Regex::new(r"^html/").ok().as_ref()
-        ));
+        let exclude = regex_pattern(r"^html/");
+        assert!(excludes_any(&files, None, Some(&exclude)));
     }
 }

@@ -75,6 +75,62 @@ fn run_basic() -> Result<()> {
 }
 
 #[test]
+fn run_glob_patterns_with_multiple_hooks() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-py
+                name: echo-py
+                entry: bash -c 'echo PY:$@' _
+                language: system
+                files:
+                  glob: src/**/*.py
+                verbose: true
+              - id: echo-md
+                name: echo-md
+                entry: bash -c 'echo MD:$@' _
+                language: system
+                files:
+                  glob: "**/*.md"
+                verbose: true
+    "#});
+
+    let src_dir = cwd.child("src");
+    src_dir.create_dir_all()?;
+    src_dir.child("main.py").write_str("print('hi')")?;
+    cwd.child("docs").create_dir_all()?;
+    cwd.child("docs/readme.md").write_str("# Docs")?;
+    cwd.child("notes.txt").write_str("note")?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-py..................................................................Passed
+    - hook id: echo-py
+    - duration: [TIME]
+
+      PY:src/main.py
+    echo-md..................................................................Passed
+    - hook id: echo-md
+    - duration: [TIME]
+
+      MD:docs/readme.md
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn run_in_non_git_repo() {
     let context = TestContext::new();
 

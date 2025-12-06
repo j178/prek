@@ -8,6 +8,7 @@ use std::sync::LazyLock;
 
 use anyhow::Result;
 use fancy_regex::Regex;
+use globset::{Glob, GlobMatcher};
 use itertools::Itertools;
 use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use rustc_hash::FxHashMap;
@@ -61,6 +62,12 @@ impl<'de> Deserialize<'de> for SerdeRegex {
     }
 }
 
+impl SerdeRegex {
+    pub(crate) fn from_regex(regex: Regex) -> Self {
+        Self(regex)
+    }
+}
+
 pub(crate) static CONFIG_FILE_REGEX: LazyLock<SerdeRegex> = LazyLock::new(|| {
     let pattern = format!(
         "^{}|{}$",
@@ -69,6 +76,103 @@ pub(crate) static CONFIG_FILE_REGEX: LazyLock<SerdeRegex> = LazyLock::new(|| {
     );
     SerdeRegex(Regex::new(&pattern).expect("config regex must compile"))
 });
+
+#[derive(Clone)]
+pub(crate) struct FilePattern {
+    sources: Vec<String>,
+    kind: FilePatternKind,
+}
+
+#[derive(Clone)]
+enum FilePatternKind {
+    Regex(Regex),
+    Glob(Vec<GlobMatcher>),
+}
+
+impl FilePattern {
+    pub(crate) fn is_match(&self, text: &str) -> bool {
+        match &self.kind {
+            FilePatternKind::Regex(regex) => regex.is_match(text).unwrap_or(false),
+            FilePatternKind::Glob(globs) => globs.iter().any(|g| g.is_match(text)),
+        }
+    }
+
+    pub(crate) fn from_regex(regex: SerdeRegex) -> Self {
+        Self {
+            sources: vec![regex.as_str().to_string()],
+            kind: FilePatternKind::Regex(regex.0),
+        }
+    }
+
+    pub(crate) fn sources(&self) -> &[String] {
+        &self.sources
+    }
+
+    pub(crate) fn sources_display(&self) -> String {
+        self.sources.join(", ")
+    }
+}
+
+impl std::fmt::Debug for FilePattern {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let kind = match self.kind {
+            FilePatternKind::Regex(_) => "Regex",
+            FilePatternKind::Glob(_) => "Glob",
+        };
+        f.debug_struct("FilePattern")
+            .field("kind", &kind)
+            .field("sources", &self.sources)
+            .finish()
+    }
+}
+
+impl<'de> Deserialize<'de> for FilePattern {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum PatternWire {
+            Glob { glob: String },
+            GlobList { glob: Vec<String> },
+            Regex(String),
+        }
+
+        match PatternWire::deserialize(deserializer)? {
+            PatternWire::Glob { glob } => Glob::new(&glob)
+                .map(|g| Self {
+                    sources: vec![glob],
+                    kind: FilePatternKind::Glob(vec![g.compile_matcher()]),
+                })
+                .map_err(serde::de::Error::custom),
+            PatternWire::GlobList { glob } => {
+                if glob.is_empty() {
+                    return Err(serde::de::Error::custom("glob list cannot be empty"));
+                }
+                let mut matchers = Vec::with_capacity(glob.len());
+                for g in &glob {
+                    matchers.push(
+                        Glob::new(g)
+                            .map_err(serde::de::Error::custom)?
+                            .compile_matcher(),
+                    );
+                }
+                Ok(Self {
+                    sources: glob,
+                    kind: FilePatternKind::Glob(matchers),
+                })
+            }
+            PatternWire::Regex(pattern) => Regex::new(&pattern)
+                .map(|r| Self {
+                    sources: vec![pattern],
+                    kind: FilePatternKind::Regex(r),
+                })
+                .map_err(serde::de::Error::custom),
+        }
+    }
+}
+
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
@@ -272,10 +376,10 @@ pub(crate) struct HookOptions {
     /// Not documented in the official docs.
     pub alias: Option<String>,
     /// The pattern of files to run on.
-    pub files: Option<SerdeRegex>,
+    pub files: Option<FilePattern>,
     /// Exclude files that were matched by `files`.
     /// Default is `$^`, which matches nothing.
-    pub exclude: Option<SerdeRegex>,
+    pub exclude: Option<FilePattern>,
     /// List of file types to run on (AND).
     /// Default is `[file]`, which matches all files.
     #[serde(deserialize_with = "deserialize_and_validate_tags", default)]
@@ -682,9 +786,9 @@ pub(crate) struct Config {
     /// Default to all stages.
     pub default_stages: Option<Vec<Stage>>,
     /// Global file include pattern.
-    pub files: Option<SerdeRegex>,
+    pub files: Option<FilePattern>,
     /// Global file exclude pattern.
-    pub exclude: Option<SerdeRegex>,
+    pub exclude: Option<FilePattern>,
     /// Set to true to have prek stop running hooks after the first failure.
     /// Default is false.
     pub fail_fast: Option<bool>,
@@ -947,6 +1051,62 @@ where
 mod tests {
     use super::*;
     use std::io::Write as _;
+
+    #[test]
+    fn parse_file_patterns_regex_and_glob() {
+        #[derive(Debug, Deserialize)]
+        struct Wrapper {
+            files: FilePattern,
+            exclude: FilePattern,
+        }
+
+        let regex_yaml = indoc::indoc! {r"
+            files: ^src/
+            exclude: ^target/
+        "};
+        let parsed: Wrapper = serde_yaml::from_str(regex_yaml).expect("regex patterns should parse");
+        match parsed.files.kind {
+            FilePatternKind::Regex(_) => {}
+            _ => panic!("expected regex pattern"),
+        }
+        assert!(parsed.files.is_match("src/main.rs"));
+        assert!(!parsed.files.is_match("other/main.rs"));
+        assert!(parsed.exclude.is_match("target/debug/app"));
+
+        let glob_yaml = indoc::indoc! {r"
+            files:
+              glob: src/**/*.rs
+            exclude:
+              glob: target/**
+        "};
+        let parsed: Wrapper = serde_yaml::from_str(glob_yaml).expect("glob patterns should parse");
+        match parsed.files.kind {
+            FilePatternKind::Glob(_) => {}
+            _ => panic!("expected glob pattern"),
+        }
+        assert!(parsed.files.is_match("src/lib/main.rs"));
+        assert!(!parsed.files.is_match("src/lib/main.py"));
+        assert!(parsed.exclude.is_match("target/debug/app"));
+        assert!(!parsed.exclude.is_match("src/lib/main.rs"));
+
+        let glob_list_yaml = indoc::indoc! {r"
+            files:
+              glob:
+                - src/**/*.rs
+                - crates/**/src/**/*.rs
+            exclude:
+              glob:
+                - target/**
+                - dist/**
+        "};
+        let parsed: Wrapper =
+            serde_yaml::from_str(glob_list_yaml).expect("glob list patterns should parse");
+        assert!(parsed.files.is_match("src/lib/main.rs"));
+        assert!(parsed.files.is_match("crates/foo/src/lib.rs"));
+        assert!(!parsed.files.is_match("tests/main.rs"));
+        assert!(parsed.exclude.is_match("target/debug/app"));
+        assert!(parsed.exclude.is_match("dist/app"));
+    }
 
     #[test]
     fn parse_repos() {
