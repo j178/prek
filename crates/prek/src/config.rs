@@ -1065,10 +1065,10 @@ mod tests {
             exclude: ^target/
         "};
         let parsed: Wrapper = serde_yaml::from_str(regex_yaml).expect("regex patterns should parse");
-        match parsed.files.kind {
-            FilePatternKind::Regex(_) => {}
-            _ => panic!("expected regex pattern"),
-        }
+        assert!(
+            matches!(parsed.files.kind, FilePatternKind::Regex(_)),
+            "expected regex pattern"
+        );
         assert!(parsed.files.is_match("src/main.rs"));
         assert!(!parsed.files.is_match("other/main.rs"));
         assert!(parsed.exclude.is_match("target/debug/app"));
@@ -1080,10 +1080,10 @@ mod tests {
               glob: target/**
         "};
         let parsed: Wrapper = serde_yaml::from_str(glob_yaml).expect("glob patterns should parse");
-        match parsed.files.kind {
-            FilePatternKind::Glob(_) => {}
-            _ => panic!("expected glob pattern"),
-        }
+        assert!(
+            matches!(parsed.files.kind, FilePatternKind::Glob(_)),
+            "expected glob pattern"
+        );
         assert!(parsed.files.is_match("src/lib/main.rs"));
         assert!(!parsed.files.is_match("src/lib/main.py"));
         assert!(parsed.exclude.is_match("target/debug/app"));
@@ -1431,9 +1431,12 @@ mod tests {
                                         options: HookOptions {
                                             alias: None,
                                             files: Some(
-                                                SerdeRegex(
-                                                    "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
-                                                ),
+                                                FilePattern {
+                                                    kind: "Regex",
+                                                    sources: [
+                                                        "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
+                                                    ],
+                                                },
                                             ),
                                             exclude: None,
                                             types: None,
@@ -1466,9 +1469,12 @@ mod tests {
                                         options: HookOptions {
                                             alias: None,
                                             files: Some(
-                                                SerdeRegex(
-                                                    "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
-                                                ),
+                                                FilePattern {
+                                                    kind: "Regex",
+                                                    sources: [
+                                                        "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
+                                                    ],
+                                                },
                                             ),
                                             exclude: None,
                                             types: None,
