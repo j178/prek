@@ -23,6 +23,7 @@ use crate::cli::{CacheCommand, CacheNamespace, Cli, Command, ExitStatus};
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::printer::Printer;
 use crate::run::USE_COLOR;
+use crate::settings::Settings;
 use crate::store::Store;
 
 mod archive;
@@ -40,6 +41,7 @@ mod process;
 #[cfg(all(unix, feature = "profiler"))]
 mod profiler;
 mod run;
+pub mod settings;
 mod store;
 mod version;
 mod warnings;
@@ -141,7 +143,20 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // Enabled ANSI colors on Windows.
     let _ = anstyle_query::windows::enable_ansi_colors();
 
-    ColorChoice::write_global(cli.globals.color.into());
+    // Determine working directory early (--cd flag or current dir)
+    let working_dir = cli
+        .globals
+        .cd
+        .clone()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+
+    // Initialize settings from all sources (env vars, pyproject.toml, CLI overrides)
+    Settings::init_with_cli(&working_dir, cli.globals.cli_overrides());
+
+    let settings = Settings::get();
+
+    // Set color from resolved settings (CLI > pyproject.toml > env var > default)
+    ColorChoice::write_global(settings.resolved_color().into());
 
     let store = Store::from_settings()?;
     let log_file = LogFile::from_args(cli.globals.log_file.clone(), cli.globals.no_log_file);
