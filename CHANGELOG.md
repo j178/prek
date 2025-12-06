@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- Add glob pattern support for `files`/`exclude` (single glob or list) while retaining regex defaults.
+
 ## 0.2.19
 
 Released on 2025-11-26.
