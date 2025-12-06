@@ -332,6 +332,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.freeze,
                 args.jobs,
                 args.dry_run,
+                args.cooldown_days,
                 printer,
             )
             .await

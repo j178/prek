@@ -578,6 +578,10 @@ pub(crate) struct AutoUpdateArgs {
     /// Number of threads to use.
     #[arg(short, long, default_value_t = 0)]
     pub(crate) jobs: usize,
+    /// Minimum age in days for a release before it can be used.
+    /// Use 0 to disable cooldown.
+    #[arg(long, value_name = "DAYS", default_value_t = 1)]
+    pub(crate) cooldown_days: u8,
 }
 
 #[derive(Debug, Args)]

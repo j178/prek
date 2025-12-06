@@ -286,5 +286,6 @@ Config {
     ),
     minimum_prek_version: None,
     orphan: None,
+    cooldown_days: None,
     _unused_keys: {},
 }

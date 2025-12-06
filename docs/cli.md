@@ -507,7 +507,8 @@ prek auto-update [OPTIONS]
 <li><code>always</code>:  Enables colored output regardless of the detected environment</li>
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-auto-update--config"><a href="#prek-auto-update--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
-</dd><dt id="prek-auto-update--dry-run"><a href="#prek-auto-update--dry-run"><code>--dry-run</code></a></dt><dd><p>Do not write changes to the config file, only display what would be changed</p>
+</dd><dt id="prek-auto-update--cooldown-days"><a href="#prek-auto-update--cooldown-days"><code>--cooldown-days</code></a> <i>days</i></dt><dd><p>Minimum age in days for a release before it can be used. Use 0 to disable cooldown</p>
+<p>[default: 1]</p></dd><dt id="prek-auto-update--dry-run"><a href="#prek-auto-update--dry-run"><code>--dry-run</code></a></dt><dd><p>Do not write changes to the config file, only display what would be changed</p>
 </dd><dt id="prek-auto-update--freeze"><a href="#prek-auto-update--freeze"><code>--freeze</code></a></dt><dd><p>Store &quot;frozen&quot; hashes in <code>rev</code> instead of tag names</p>
 </dd><dt id="prek-auto-update--help"><a href="#prek-auto-update--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-auto-update--jobs"><a href="#prek-auto-update--jobs"><code>--jobs</code></a>, <code>-j</code> <i>jobs</i></dt><dd><p>Number of threads to use</p>
