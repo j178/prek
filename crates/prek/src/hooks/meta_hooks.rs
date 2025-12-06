@@ -257,6 +257,7 @@ pub fn identity(_hook: &Hook, filenames: &[&Path]) -> (i32, Vec<u8>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
     use crate::config::SerdeRegex;
 
     fn regex_pattern(pattern: &str) -> FilePattern {
@@ -283,5 +284,23 @@ mod tests {
         let files = vec![Path::new("html/file1.html"), Path::new("html/file2.html")];
         let exclude = regex_pattern(r"^html/");
         assert!(excludes_any(&files, None, Some(&exclude)));
+    }
+
+    #[test]
+    fn meta_hook_patterns_cover_config_files() {
+        let apply = MetaHook::from_id("check-hooks-apply").expect("known meta hook");
+        let apply_files = apply.0.options.files.as_ref().expect("files should be set");
+        assert!(apply_files.is_match(CONFIG_FILE));
+        assert!(apply_files.is_match(ALT_CONFIG_FILE));
+
+        let useless = MetaHook::from_id("check-useless-excludes").expect("known meta hook");
+        let useless_files = useless.0.options.files.as_ref().expect("files should be set");
+        assert!(useless_files.is_match(CONFIG_FILE));
+        assert!(useless_files.is_match(ALT_CONFIG_FILE));
+        assert!(!useless_files.sources().is_empty());
+
+        let identity = MetaHook::from_id("identity").expect("known meta hook");
+        assert!(identity.0.options.files.is_none());
+        assert_eq!(identity.0.options.verbose, Some(true));
     }
 }

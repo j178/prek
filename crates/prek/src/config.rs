@@ -1109,6 +1109,49 @@ mod tests {
     }
 
     #[test]
+    fn file_patterns_expose_sources_and_display() {
+        let pattern: FilePattern = serde_yaml::from_str(indoc::indoc! {r"
+            glob:
+              - src/**/*.rs
+              - crates/**/src/**/*.rs
+        "})
+        .expect("glob list should parse");
+        assert_eq!(
+            pattern.sources(),
+            &[
+                "src/**/*.rs".to_string(),
+                "crates/**/src/**/*.rs".to_string()
+            ]
+        );
+        assert_eq!(
+            pattern.sources_display(),
+            "src/**/*.rs, crates/**/src/**/*.rs"
+        );
+        assert!(pattern.is_match("src/main.rs"));
+        assert!(pattern.is_match("crates/foo/src/lib.rs"));
+        assert!(!pattern.is_match("tests/main.rs"));
+    }
+
+    #[test]
+    fn reject_empty_glob_list() {
+        let err = serde_yaml::from_str::<FilePattern>("glob: []").expect_err("empty list should fail");
+        assert!(
+            err.to_string().contains("glob list cannot be empty"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn invalid_glob_pattern_errors() {
+        let err = serde_yaml::from_str::<FilePattern>("glob: \"[\"").expect_err("invalid glob should fail");
+        let msg = err.to_string().to_lowercase();
+        assert!(
+            msg.contains("glob"),
+            "error should mention glob issues: {msg}"
+        );
+    }
+
+    #[test]
     fn parse_repos() {
         // Local hook should not have `rev`
         let yaml = indoc::indoc! {r"

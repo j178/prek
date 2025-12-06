@@ -374,3 +374,24 @@ async fn collect_files_from_args(
 
     Ok(files)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn glob_pattern(pattern: &str) -> FilePattern {
+        serde_yaml::from_str::<FilePattern>(&format!("glob: {pattern}"))
+            .expect("glob pattern should deserialize")
+    }
+
+    #[test]
+    fn filename_filter_supports_glob_include_and_exclude() {
+        let include = glob_pattern("src/**/*.rs");
+        let exclude = glob_pattern("src/**/ignored.rs");
+        let filter = FilenameFilter::new(Some(&include), Some(&exclude));
+
+        assert!(filter.filter(Path::new("src/lib/main.rs")));
+        assert!(!filter.filter(Path::new("src/lib/ignored.rs")));
+        assert!(!filter.filter(Path::new("tests/main.rs")));
+    }
+}
