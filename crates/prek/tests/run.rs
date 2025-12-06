@@ -86,14 +86,14 @@ fn run_glob_patterns_with_multiple_hooks() -> Result<()> {
             hooks:
               - id: echo-py
                 name: echo-py
-                entry: bash -c 'echo PY:$@' _
+                entry: python3 -c "import sys; print('PY:' + ' '.join(sys.argv[2:]))" _
                 language: system
                 files:
                   glob: src/**/*.py
                 verbose: true
               - id: echo-md
                 name: echo-md
-                entry: bash -c 'echo MD:$@' _
+                entry: python3 -c "import sys; print('MD:' + ' '.join(sys.argv[2:]))" _
                 language: system
                 files:
                   glob: "**/*.md"
