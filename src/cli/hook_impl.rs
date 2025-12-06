@@ -1,10 +1,12 @@
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::Read;
+use std::ops::RangeInclusive;
 use std::path::PathBuf;
 
 use anstream::eprintln;
 use anyhow::Result;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 
 use prek_consts::env_vars::EnvVars;
@@ -99,8 +101,13 @@ pub(crate) async fn hook_impl(
     }
 
     if !hook_type.num_args().contains(&args.len()) {
-        eprintln!("Invalid number of arguments for hook: {}", hook_type);
-        return Ok(ExitStatus::Failure);
+        anyhow::bail!(
+            "hook `{}` expects {} but received {}{}",
+            hook_type.to_string().cyan(),
+            format_expected_args(hook_type.num_args()),
+            format_received_args(args.len()),
+            format_argument_dump(&args)
+        );
     }
 
     let Some(run_args) = to_run_args(hook_type, &args).await else {
@@ -266,4 +273,32 @@ async fn parse_pre_push_info(remote_name: &str) -> Option<PushInfo> {
 
     // Nothing to push
     None
+}
+
+fn format_expected_args(range: RangeInclusive<usize>) -> String {
+    let (start, end) = (*range.start(), *range.end());
+    match (start, end) {
+        (0, 0) => "no arguments".to_string(),
+        (1, 1) => "exactly 1 argument".to_string(),
+        (s, e) if s == e => format!("exactly {s} arguments"),
+        (0, e) => format!("up to {e} arguments"),
+        (s, usize::MAX) => format!("at least {s} arguments"),
+        (s, e) => format!("between {s} and {e} arguments"),
+    }
+}
+
+fn format_received_args(received: usize) -> String {
+    match received {
+        0 => "no arguments".to_string(),
+        1 => "1 argument".to_string(),
+        n => format!("{n} arguments"),
+    }
+}
+
+fn format_argument_dump(args: &[OsString]) -> String {
+    if args.is_empty() {
+        String::new()
+    } else {
+        format!(": `{}`", args.iter().map(|s| s.to_string_lossy()).join(" "))
+    }
 }
