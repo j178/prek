@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.2.20
+
+Released on 2025-12-08.
+
+### Highlights
+
+In this release:
+
+- Rust hooks are now fully supported with automatic toolchain management, including package discovery in virtual workspaces. Big thanks to @lmmx for driving this.
+- Added a `prek cache size` subcommand so you can quickly see how much cache space prek is using. Thanks @MatthewMckee4!
+- Nested workspaces are easier to reason about: set `orphan: true` on a project to isolate it from parents so its files are processed only once.
+
+Want to show your project runs on prek? Add our README badge to your docs or repo homepage: [![prek](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json)](https://github.com/j178/prek)
+
+### Enhancements
+
+- Support Rust language ([#989](https://github.com/j178/prek/pull/989))
+
+  - Refactor Rust toolchain management ([#1198](https://github.com/j178/prek/pull/1198))
+  - Add support for finding packages in virtual workspaces ([#1180](https://github.com/j178/prek/pull/1180))
+
+- Add `prek cache size` command ([#1183](https://github.com/j178/prek/pull/1183))
+- Support orphan projects ([#1129](https://github.com/j178/prek/pull/1129))
+- Fallback to `manual` stage for hooks specified directly in command line ([#1185](https://github.com/j178/prek/pull/1185))
+- Make go module cache read-writeable (thus deletable) ([#1164](https://github.com/j178/prek/pull/1164))
+- Provide more information when validating configs and manifests ([#1182](https://github.com/j178/prek/pull/1182))
+- Improve error message for invalid number of arguments to hook-impl ([#1196](https://github.com/j178/prek/pull/1196))
+
+### Bug fixes
+
+- Disable git terminal prompts ([#1193](https://github.com/j178/prek/pull/1193))
+- Prevent `post-checkout` deadlock when cloning repos ([#1192](https://github.com/j178/prek/pull/1192))
+- Prevent color output when redirecting stdout to a file ([#1159](https://github.com/j178/prek/pull/1159))
+
+### Documentation
+
+- Add MacPorts to installation methods ([#1157](https://github.com/j178/prek/pull/1157))
+- Add a FAQ page explaining `prek install --install--hooks` ([#1162](https://github.com/j178/prek/pull/1162))
+
+### Other changes
+
+- Add `prek: enabled` repo badge ([#1171](https://github.com/j178/prek/pull/1171))
+- Add favicon for docs website ([#1187](https://github.com/j178/prek/pull/1187))
+
+### Contributors
+
+- @MatthewMckee4
+- @lmmx
+- @j178
+- @joshmarkovic
+- @frazar
+- @jmelahman
+- @drainpixie
+
 ## 0.2.19
 
 Released on 2025-11-26.
