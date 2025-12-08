@@ -1,3 +1,4 @@
+use std::env::consts::EXE_EXTENSION;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -158,6 +159,11 @@ impl LanguageImpl for Rust {
             .install(version, allows_download)
             .await
             .context("Failed to install rust")?;
+        let cargo = rust
+            .toolchain()
+            .join("bin")
+            .join("cargo")
+            .with_extension(EXE_EXTENSION);
 
         let mut info = InstallInfo::new(
             hook.language,
@@ -205,7 +211,7 @@ impl LanguageImpl for Rust {
 
             if lib_deps.is_empty() && !is_workspace {
                 // For single packages without lib deps, use cargo install directly
-                Cmd::new("cargo", "install local")
+                Cmd::new(&cargo, "install local")
                     .args(["install", "--bins", "--root"])
                     .arg(&info.env_path)
                     .args(["--path", "."])
@@ -220,7 +226,7 @@ impl LanguageImpl for Rust {
                 // For workspace members without lib deps, use cargo build + copy
                 // (cargo install doesn't work well with virtual workspaces)
                 let target_dir = info.env_path.join("target");
-                Cmd::new("cargo", "build local")
+                Cmd::new(&cargo, "build local")
                     .args(["build", "--bins", "--release"])
                     .arg("--manifest-path")
                     .arg(package_dir.join("Cargo.toml"))
@@ -274,7 +280,7 @@ impl LanguageImpl for Rust {
                 }
 
                 // Run cargo add on the copied manifest
-                let mut cmd = Cmd::new("cargo", "add dependencies");
+                let mut cmd = Cmd::new(&cargo, "add dependencies");
                 cmd.arg("add");
                 for dep in &lib_deps {
                     cmd.arg(format_cargo_dependency(dep.as_str()));
@@ -290,7 +296,7 @@ impl LanguageImpl for Rust {
                 // Build using cargo build with --manifest-path pointing to modified manifest
                 // but source files come from original package_dir
                 let target_dir = info.env_path.join("target");
-                let mut cmd = Cmd::new("cargo", "build local with deps");
+                let mut cmd = Cmd::new(&cargo, "build local with deps");
                 cmd.args(["build", "--bins", "--release"])
                     .arg("--manifest-path")
                     .arg(&dst_manifest)
@@ -318,7 +324,7 @@ impl LanguageImpl for Rust {
         // Install CLI dependencies
         for cli_dep in cli_deps {
             let (package, version) = cli_dep.split_once(':').unwrap_or((cli_dep, ""));
-            let mut cmd = Cmd::new("cargo", "install cli dep");
+            let mut cmd = Cmd::new(&cargo, "install cli dep");
             cmd.args(["install", "--bins", "--root"])
                 .arg(&info.env_path)
                 .arg(package);

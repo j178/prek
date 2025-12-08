@@ -105,6 +105,7 @@ fn language_version() -> Result<()> {
 }
 
 /// Test `rustup` installer.
+#[test]
 fn rustup_installer() {
     let context = TestContext::new();
     context.init_project();
