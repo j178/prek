@@ -8,6 +8,7 @@ use anyhow::Context;
 use cargo_metadata::{MetadataCommand, Package};
 use itertools::{Either, Itertools};
 use prek_consts::env_vars::EnvVars;
+use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
@@ -36,7 +37,7 @@ async fn find_package_dir(
     repo: &Path,
     binary_name: &str,
     cargo: Option<&Path>,
-) -> anyhow::Result<(PathBuf, String, bool)> {
+) -> anyhow::Result<(PathBuf, Option<String>, bool)> {
     let repo = repo.to_path_buf();
     let binary_name = binary_name.to_string();
     let cargo = cargo.map(Path::to_path_buf);
@@ -74,7 +75,7 @@ async fn find_package_dir(
                 let is_workspace = metadata.workspace_members.len() > 1
                     || package_dir != metadata.workspace_root.as_std_path();
 
-                return Ok((package_dir, package.name.to_string(), is_workspace));
+                return Ok((package_dir, Some(package.name.to_string()), is_workspace));
             }
         }
 
@@ -213,7 +214,19 @@ impl LanguageImpl for Rust {
 
             // Find the specific package directory for this hook's binary
             let (package_dir, package_name, is_workspace) =
-                find_package_dir(repo, binary_name, Some(&cargo)).await?;
+                match find_package_dir(repo, binary_name, Some(&cargo)).await {
+                    Ok(res) => res,
+                    Err(e) => {
+                        debug!(
+                            "Failed to find package for binary '{}' in {}: {}",
+                            binary_name,
+                            repo.display(),
+                            e
+                        );
+                        debug!("Falling back to using repo root as package dir");
+                        (repo.to_path_buf(), None, false)
+                    }
+                };
 
             if lib_deps.is_empty() && !is_workspace {
                 // For single packages without lib deps, use cargo install directly
@@ -310,8 +323,8 @@ impl LanguageImpl for Rust {
                     .arg(&target_dir);
 
                 // For workspace members, explicitly specify the package
-                if is_workspace {
-                    cmd.args(["--package", &package_name]);
+                if is_workspace && let Some(package_name) = &package_name {
+                    cmd.args(["--package", package_name]);
                 }
 
                 cmd.current_dir(&package_dir)
@@ -440,7 +453,7 @@ edition = "2021"
             .await
             .unwrap();
         assert_eq!(path, temp.path());
-        assert_eq!(pkg_name, "my-tool");
+        assert_eq!(pkg_name.unwrap(), "my-tool");
         assert!(!is_workspace);
     }
 
@@ -493,7 +506,7 @@ edition = "2021"
             .await
             .unwrap();
         assert_eq!(path, temp.path());
-        assert_eq!(pkg_name, "cargo-deny");
+        assert_eq!(pkg_name.unwrap(), "cargo-deny");
         assert!(is_workspace);
     }
 
@@ -527,7 +540,7 @@ edition = "2021"
         let (path, pkg_name, is_workspace) =
             find_package_dir(temp.path(), "my-cli", None).await.unwrap();
         assert_eq!(path, temp.path().join("cli"));
-        assert_eq!(pkg_name, "my-cli");
+        assert_eq!(pkg_name.unwrap(), "my-cli");
         assert!(is_workspace);
     }
 
@@ -563,7 +576,7 @@ path = "src/main.rs"
         let (path, pkg_name, is_workspace) =
             find_package_dir(temp.path(), "typos", None).await.unwrap();
         assert_eq!(path, temp.path().join("crates/typos-cli"));
-        assert_eq!(pkg_name, "typos-cli");
+        assert_eq!(pkg_name.unwrap(), "typos-cli");
         assert!(is_workspace);
     }
 
@@ -612,7 +625,7 @@ edition = "2021"
             .await
             .unwrap();
         assert_eq!(path, temp.path().join("crates/cli"));
-        assert_eq!(pkg_name, "virtual-cli");
+        assert_eq!(pkg_name.unwrap(), "virtual-cli");
         assert!(is_workspace);
     }
 
@@ -647,7 +660,7 @@ edition = "2021"
         let (path, pkg_name, is_workspace) =
             find_package_dir(temp.path(), "my-cli", None).await.unwrap();
         assert_eq!(path, temp.path().join("crates/cli"));
-        assert_eq!(pkg_name, "my-cli");
+        assert_eq!(pkg_name.unwrap(), "my-cli");
         assert!(is_workspace);
 
         // my-lib is a library (no binary), so searching for it should fail
