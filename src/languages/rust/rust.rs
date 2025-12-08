@@ -35,12 +35,18 @@ fn format_cargo_dependency(dep: &str) -> String {
 async fn find_package_dir(
     repo: &Path,
     binary_name: &str,
+    cargo: Option<&Path>,
 ) -> anyhow::Result<(PathBuf, String, bool)> {
     let repo = repo.to_path_buf();
     let binary_name = binary_name.to_string();
+    let cargo = cargo.map(Path::to_path_buf);
 
     tokio::task::spawn_blocking(move || {
-        let metadata = MetadataCommand::new()
+        let mut cmd = MetadataCommand::new();
+        if let Some(cargo) = cargo {
+            cmd.cargo_path(cargo);
+        }
+        let metadata = cmd
             .manifest_path(repo.join("Cargo.toml"))
             .no_deps()
             .exec()
@@ -207,7 +213,7 @@ impl LanguageImpl for Rust {
 
             // Find the specific package directory for this hook's binary
             let (package_dir, package_name, is_workspace) =
-                find_package_dir(repo, binary_name).await?;
+                find_package_dir(repo, binary_name, Some(&cargo)).await?;
 
             if lib_deps.is_empty() && !is_workspace {
                 // For single packages without lib deps, use cargo install directly
@@ -430,8 +436,9 @@ edition = "2021"
         write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
         write_file(&temp.path().join("src/main.rs"), "fn main() {}").await;
 
-        let (path, pkg_name, is_workspace) =
-            find_package_dir(temp.path(), "my-tool").await.unwrap();
+        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "my-tool", None)
+            .await
+            .unwrap();
         assert_eq!(path, temp.path());
         assert_eq!(pkg_name, "my-tool");
         assert!(!is_workspace);
@@ -450,7 +457,9 @@ edition = "2021"
         write_file(&temp.path().join("src/main.rs"), "fn main() {}").await;
 
         // Should match with underscores instead of hyphens
-        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my_tool").await.unwrap();
+        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my_tool", None)
+            .await
+            .unwrap();
         assert_eq!(path, temp.path());
         assert!(!is_workspace);
     }
@@ -480,8 +489,9 @@ edition = "2021"
         write_file(&temp.path().join("subcrate/Cargo.toml"), subcrate_toml).await;
         write_file(&temp.path().join("subcrate/src/lib.rs"), "").await;
 
-        let (path, pkg_name, is_workspace) =
-            find_package_dir(temp.path(), "cargo-deny").await.unwrap();
+        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "cargo-deny", None)
+            .await
+            .unwrap();
         assert_eq!(path, temp.path());
         assert_eq!(pkg_name, "cargo-deny");
         assert!(is_workspace);
@@ -514,7 +524,8 @@ edition = "2021"
         write_file(&temp.path().join("lib/Cargo.toml"), lib_toml).await;
         write_file(&temp.path().join("lib/src/lib.rs"), "").await;
 
-        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "my-cli").await.unwrap();
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "my-cli", None).await.unwrap();
         assert_eq!(path, temp.path().join("cli"));
         assert_eq!(pkg_name, "my-cli");
         assert!(is_workspace);
@@ -549,7 +560,8 @@ path = "src/main.rs"
         .await;
 
         // Should find by binary name, return package name
-        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "typos").await.unwrap();
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "typos", None).await.unwrap();
         assert_eq!(path, temp.path().join("crates/typos-cli"));
         assert_eq!(pkg_name, "typos-cli");
         assert!(is_workspace);
@@ -570,7 +582,9 @@ edition = "2021"
         // Need a lib.rs or main.rs for the package itself
         write_file(&temp.path().join("src/lib.rs"), "").await;
 
-        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my-tool").await.unwrap();
+        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my-tool", None)
+            .await
+            .unwrap();
         assert_eq!(path, temp.path());
         assert!(!is_workspace);
     }
@@ -594,8 +608,9 @@ edition = "2021"
         write_file(&temp.path().join("crates/cli/Cargo.toml"), cli_toml).await;
         write_file(&temp.path().join("crates/cli/src/main.rs"), "fn main() {}").await;
 
-        let (path, pkg_name, is_workspace) =
-            find_package_dir(temp.path(), "virtual-cli").await.unwrap();
+        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "virtual-cli", None)
+            .await
+            .unwrap();
         assert_eq!(path, temp.path().join("crates/cli"));
         assert_eq!(pkg_name, "virtual-cli");
         assert!(is_workspace);
@@ -629,13 +644,14 @@ edition = "2021"
         write_file(&temp.path().join("crates/lib/Cargo.toml"), lib_toml).await;
         write_file(&temp.path().join("crates/lib/src/lib.rs"), "").await;
 
-        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "my-cli").await.unwrap();
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "my-cli", None).await.unwrap();
         assert_eq!(path, temp.path().join("crates/cli"));
         assert_eq!(pkg_name, "my-cli");
         assert!(is_workspace);
 
         // my-lib is a library (no binary), so searching for it should fail
-        let result = find_package_dir(temp.path(), "my-lib").await;
+        let result = find_package_dir(temp.path(), "my-lib", None).await;
         assert!(result.is_err());
     }
 
@@ -643,7 +659,7 @@ edition = "2021"
     async fn test_find_package_dir_no_cargo_toml() {
         let temp = TempDir::new().unwrap();
 
-        let result = find_package_dir(temp.path(), "anything").await;
+        let result = find_package_dir(temp.path(), "anything", None).await;
         assert!(result.is_err());
         // cargo metadata gives a different error message
         assert!(result.unwrap_err().to_string().contains("cargo metadata"));
@@ -667,7 +683,7 @@ edition = "2021"
         write_file(&temp.path().join("cli/Cargo.toml"), cli_toml).await;
         write_file(&temp.path().join("cli/src/main.rs"), "fn main() {}").await;
 
-        let result = find_package_dir(temp.path(), "nonexistent-binary").await;
+        let result = find_package_dir(temp.path(), "nonexistent-binary", None).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("No package found"));
     }
