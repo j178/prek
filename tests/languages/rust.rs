@@ -43,7 +43,7 @@ fn language_version() -> Result<()> {
     "});
     context.git_add(".");
 
-    let rust_dir = context.home_dir().child("tools").child("rust");
+    let rust_dir = context.home_dir().child("tools/rustup/toolchains");
     rust_dir.assert(predicates::path::missing());
 
     let filters = [
@@ -102,6 +102,40 @@ fn language_version() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Test `rustup` installer.
+#[test]
+fn rustup_installer() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: rustup-test
+                name: rustup-test
+                language: rust
+                entry: rustc --version
+   "});
+    context.git_add(".");
+    let filters = [(r"rustc 1\.\d{1,3}\.\d{1,2} .+", "rustc 1.X.X")]
+        .into_iter()
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, context.run().arg("-v").env(EnvVars::PREK_INTERNAL__RUSTUP_BINARY_NAME, "non-exist-rustup"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    rustup-test..............................................................Passed
+    - hook id: rustup-test
+    - duration: [TIME]
+
+      rustc 1.X.X
+
+    ----- stderr -----
+    "#);
 }
 
 /// Test that `additional_dependencies` with cli: prefix are installed correctly.

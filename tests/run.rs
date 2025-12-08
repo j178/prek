@@ -2505,12 +2505,6 @@ fn system_language_version() {
                 language_version: system
                 entry: go version
                 pass_filenames: false
-              - id: system-rust
-                name: system-rust
-                language: rust
-                language_version: system
-                entry: rustc --version
-                pass_filenames: false
    "});
     context.git_add(".");
 
@@ -2520,8 +2514,7 @@ fn system_language_version() {
         context.run()
         .arg("system-node")
         .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
-        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist")
-        .env(EnvVars::PREK_INTERNAL__RUST_BINARY_NAME, "rust-never-exist"), @r"
+        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2537,8 +2530,7 @@ fn system_language_version() {
         context.run()
         .arg("system-go")
         .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
-        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist")
-        .env(EnvVars::PREK_INTERNAL__RUST_BINARY_NAME, "rust-never-exist"), @r"
+        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2549,23 +2541,6 @@ fn system_language_version() {
       caused by: No suitable system Go version found and downloads are disabled
     ");
 
-    cmd_snapshot!(
-        context.filters(),
-        context.run()
-        .arg("system-rust")
-        .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
-        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist")
-        .env(EnvVars::PREK_INTERNAL__RUST_BINARY_NAME, "rust-never-exist"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Failed to install hook `system-rust`
-      caused by: Failed to install rust
-      caused by: No suitable system Rust version found and downloads are disabled
-    ");
-
     // When binaries are available, hooks pass.
     cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
@@ -2573,7 +2548,6 @@ fn system_language_version() {
     ----- stdout -----
     system-node..............................................................Passed
     system-go................................................................Passed
-    system-rust..............................................................Passed
 
     ----- stderr -----
     ");

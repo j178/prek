@@ -30,7 +30,7 @@ impl LanguageImpl for Golang {
         let progress = reporter.on_install_start(&hook);
 
         // 1. Install Go
-        let go_dir = store.tools_path(crate::store::ToolBucket::Go);
+        let go_dir = store.tools_path(ToolBucket::Go);
         let installer = GoInstaller::new(go_dir);
 
         let (version, allows_download) = match &hook.language_request {

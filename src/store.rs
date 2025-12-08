@@ -206,7 +206,7 @@ pub(crate) enum ToolBucket {
     Node,
     Go,
     Ruby,
-    Rust,
+    Rustup,
 }
 
 impl ToolBucket {
@@ -216,7 +216,7 @@ impl ToolBucket {
             ToolBucket::Node => "node",
             ToolBucket::Python => "python",
             ToolBucket::Ruby => "ruby",
-            ToolBucket::Rust => "rust",
+            ToolBucket::Rustup => "rustup",
             ToolBucket::Uv => "uv",
         }
     }
@@ -227,7 +227,7 @@ pub(crate) enum CacheBucket {
     Uv,
     Go,
     Python,
-    Rust,
+    Cargo,
     Prek,
 }
 
@@ -237,7 +237,7 @@ impl CacheBucket {
             CacheBucket::Go => "go",
             CacheBucket::Prek => "prek",
             CacheBucket::Python => "python",
-            CacheBucket::Rust => "rust",
+            CacheBucket::Cargo => "cargo",
             CacheBucket::Uv => "uv",
         }
     }
