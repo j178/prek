@@ -207,6 +207,38 @@ fn remote_hooks() {
     ");
 }
 
+/// Test that remote Rust hooks from non-workspace repos are installed and run correctly.
+#[test]
+fn remote_hook_non_workspace() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/prek-test-repos/rust-hooks-non-workspace
+            rev: v1.0.0
+            hooks:
+              - id: hello-world
+                verbose: true
+                pass_filenames: false
+                always_run: true
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello-world..............................................................Passed
+    - hook id: hello-world
+    - duration: [TIME]
+
+      Hello, Prek!
+
+    ----- stderr -----
+    ");
+}
+
 /// Test that library dependencies (non-cli: prefix) work correctly on remote hooks.
 /// This verifies that the shared repo is not modified when adding dependencies.
 #[test]
