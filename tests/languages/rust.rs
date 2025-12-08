@@ -43,7 +43,7 @@ fn language_version() -> Result<()> {
     "});
     context.git_add(".");
 
-    let rust_dir = context.home_dir().child("tools").child("rust");
+    let rust_dir = context.home_dir().child("tools/rustup/toolchains");
     rust_dir.assert(predicates::path::missing());
 
     let filters = [
