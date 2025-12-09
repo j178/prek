@@ -1,11 +1,11 @@
 use std::env::consts::EXE_EXTENSION;
+use std::ffi::OsStr;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::Context;
-use cargo_metadata::{MetadataCommand, Package};
 use itertools::{Either, Itertools};
 use prek_consts::env_vars::EnvVars;
 use tracing::debug;
@@ -37,55 +37,57 @@ async fn find_package_dir(
     repo: &Path,
     binary_name: &str,
     cargo: Option<&Path>,
-) -> anyhow::Result<(PathBuf, Option<String>, bool)> {
-    let repo = repo.to_path_buf();
-    let binary_name = binary_name.to_string();
-    let cargo = cargo.map(Path::to_path_buf);
+    new_path: Option<&OsStr>,
+) -> anyhow::Result<Option<(PathBuf, String, bool)>> {
+    let cargo = cargo.unwrap_or(Path::new("cargo"));
 
-    tokio::task::spawn_blocking(move || {
-        let mut cmd = MetadataCommand::new();
-        if let Some(cargo) = cargo {
-            cmd.cargo_path(cargo);
+    let mut cmd = Cmd::new(cargo, "cargo metadata");
+    if let Some(new_path) = new_path {
+        cmd.env(EnvVars::PATH, new_path);
+    }
+    let output = cmd
+        .arg("metadata")
+        .arg("--format-version")
+        .arg("1")
+        .arg("--no-deps")
+        .arg("--manifest-path")
+        .arg(repo.join("Cargo.toml"))
+        .output()
+        .await?;
+    let stdout = str::from_utf8(&output.stdout)?
+        .lines()
+        .find(|line| line.starts_with('{'))
+        .ok_or(cargo_metadata::Error::NoJson)?;
+    let metadata: cargo_metadata::Metadata =
+        serde_json::from_str(stdout).context("Failed to parse cargo metadata output")?;
+
+    // Search all workspace packages for one that produces this binary
+    for package_id in &metadata.workspace_members {
+        let package = metadata
+            .packages
+            .iter()
+            .find(|p| &p.id == package_id)
+            .ok_or_else(|| anyhow::anyhow!("Package not found in metadata"))?;
+
+        if package_produces_binary(package, binary_name) {
+            let package_dir = package
+                .manifest_path
+                .parent()
+                .expect("manifest should have parent")
+                .as_std_path()
+                .to_path_buf();
+
+            // It's a workspace if either:
+            // - there are multiple members, OR
+            // - the package is not at the workspace root
+            let is_workspace = metadata.workspace_members.len() > 1
+                || package_dir != metadata.workspace_root.as_std_path();
+
+            return Ok(Some((package_dir, package.name.to_string(), is_workspace)));
         }
-        let metadata = cmd
-            .manifest_path(repo.join("Cargo.toml"))
-            .no_deps()
-            .exec()
-            .context("Failed to run cargo metadata")?;
+    }
 
-        // Search all workspace packages for one that produces this binary
-        for package_id in &metadata.workspace_members {
-            let package = metadata
-                .packages
-                .iter()
-                .find(|p| &p.id == package_id)
-                .ok_or_else(|| anyhow::anyhow!("Package not found in metadata"))?;
-
-            if package_produces_binary(package, &binary_name) {
-                let package_dir = package
-                    .manifest_path
-                    .parent()
-                    .expect("manifest should have parent")
-                    .as_std_path()
-                    .to_path_buf();
-
-                // It's a workspace if either:
-                // - there are multiple members, OR
-                // - the package is not at the workspace root
-                let is_workspace = metadata.workspace_members.len() > 1
-                    || package_dir != metadata.workspace_root.as_std_path();
-
-                return Ok((package_dir, Some(package.name.to_string()), is_workspace));
-            }
-        }
-
-        anyhow::bail!(
-            "No package found for binary '{}' in {}",
-            binary_name,
-            repo.display()
-        )
-    })
-    .await?
+    Ok(None)
 }
 
 /// Check if two names match, accounting for hyphen/underscore normalization.
@@ -94,7 +96,7 @@ fn names_match(a: &str, b: &str) -> bool {
 }
 
 /// Check if a package produces a binary with the given name.
-fn package_produces_binary(package: &Package, binary_name: &str) -> bool {
+fn package_produces_binary(package: &cargo_metadata::Package, binary_name: &str) -> bool {
     package
         .targets
         .iter()
@@ -212,20 +214,22 @@ impl LanguageImpl for Rust {
             let binary_name = &entry_parts[0];
 
             // Find the specific package directory for this hook's binary
-            let (package_dir, package_name, is_workspace) =
-                match find_package_dir(repo, binary_name, Some(&cargo)).await {
-                    Ok(res) => res,
-                    Err(e) => {
-                        debug!(
-                            "Failed to find package for binary '{}' in {}: {}",
-                            binary_name,
-                            repo.display(),
-                            e
-                        );
-                        debug!("Falling back to using repo root as package dir");
-                        (repo.to_path_buf(), None, false)
-                    }
-                };
+            let (package_dir, package_name, is_workspace) = find_package_dir(
+                repo,
+                binary_name,
+                Some(&cargo),
+                Some(&new_path),
+            )
+            .await
+            .context("Failed to find package directory using cargo metadata")?
+            .unwrap_or_else(|| {
+                debug!(
+                    "Failed to find package for binary `{}` in `{}`, falling back to repo root",
+                    binary_name,
+                    repo.display(),
+                );
+                (repo.to_path_buf(), String::new(), false)
+            });
 
             if lib_deps.is_empty() && !is_workspace {
                 // For single packages without lib deps, use cargo install directly
@@ -322,8 +326,8 @@ impl LanguageImpl for Rust {
                     .arg(&target_dir);
 
                 // For workspace members, explicitly specify the package
-                if is_workspace && let Some(package_name) = &package_name {
-                    cmd.args(["--package", package_name]);
+                if is_workspace && !package_name.is_empty() {
+                    cmd.args(["--package", &package_name]);
                 }
 
                 cmd.current_dir(&package_dir)
@@ -448,11 +452,12 @@ edition = "2021"
         write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
         write_file(&temp.path().join("src/main.rs"), "fn main() {}").await;
 
-        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "my-tool", None)
+        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "my-tool", None, None)
             .await
+            .unwrap()
             .unwrap();
         assert_eq!(path, temp.path());
-        assert_eq!(pkg_name.unwrap(), "my-tool");
+        assert_eq!(pkg_name, "my-tool");
         assert!(!is_workspace);
     }
 
@@ -469,8 +474,9 @@ edition = "2021"
         write_file(&temp.path().join("src/main.rs"), "fn main() {}").await;
 
         // Should match with underscores instead of hyphens
-        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my_tool", None)
+        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my_tool", None, None)
             .await
+            .unwrap()
             .unwrap();
         assert_eq!(path, temp.path());
         assert!(!is_workspace);
@@ -501,11 +507,13 @@ edition = "2021"
         write_file(&temp.path().join("subcrate/Cargo.toml"), subcrate_toml).await;
         write_file(&temp.path().join("subcrate/src/lib.rs"), "").await;
 
-        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "cargo-deny", None)
-            .await
-            .unwrap();
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "cargo-deny", None, None)
+                .await
+                .unwrap()
+                .unwrap();
         assert_eq!(path, temp.path());
-        assert_eq!(pkg_name.unwrap(), "cargo-deny");
+        assert_eq!(pkg_name, "cargo-deny");
         assert!(is_workspace);
     }
 
@@ -536,10 +544,12 @@ edition = "2021"
         write_file(&temp.path().join("lib/Cargo.toml"), lib_toml).await;
         write_file(&temp.path().join("lib/src/lib.rs"), "").await;
 
-        let (path, pkg_name, is_workspace) =
-            find_package_dir(temp.path(), "my-cli", None).await.unwrap();
+        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "my-cli", None, None)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(path, temp.path().join("cli"));
-        assert_eq!(pkg_name.unwrap(), "my-cli");
+        assert_eq!(pkg_name, "my-cli");
         assert!(is_workspace);
     }
 
@@ -572,10 +582,12 @@ path = "src/main.rs"
         .await;
 
         // Should find by binary name, return package name
-        let (path, pkg_name, is_workspace) =
-            find_package_dir(temp.path(), "typos", None).await.unwrap();
+        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "typos", None, None)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(path, temp.path().join("crates/typos-cli"));
-        assert_eq!(pkg_name.unwrap(), "typos-cli");
+        assert_eq!(pkg_name, "typos-cli");
         assert!(is_workspace);
     }
 
@@ -594,8 +606,9 @@ edition = "2021"
         // Need a lib.rs or main.rs for the package itself
         write_file(&temp.path().join("src/lib.rs"), "").await;
 
-        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my-tool", None)
+        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my-tool", None, None)
             .await
+            .unwrap()
             .unwrap();
         assert_eq!(path, temp.path());
         assert!(!is_workspace);
@@ -620,11 +633,13 @@ edition = "2021"
         write_file(&temp.path().join("crates/cli/Cargo.toml"), cli_toml).await;
         write_file(&temp.path().join("crates/cli/src/main.rs"), "fn main() {}").await;
 
-        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "virtual-cli", None)
-            .await
-            .unwrap();
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "virtual-cli", None, None)
+                .await
+                .unwrap()
+                .unwrap();
         assert_eq!(path, temp.path().join("crates/cli"));
-        assert_eq!(pkg_name.unwrap(), "virtual-cli");
+        assert_eq!(pkg_name, "virtual-cli");
         assert!(is_workspace);
     }
 
@@ -656,22 +671,26 @@ edition = "2021"
         write_file(&temp.path().join("crates/lib/Cargo.toml"), lib_toml).await;
         write_file(&temp.path().join("crates/lib/src/lib.rs"), "").await;
 
-        let (path, pkg_name, is_workspace) =
-            find_package_dir(temp.path(), "my-cli", None).await.unwrap();
+        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "my-cli", None, None)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(path, temp.path().join("crates/cli"));
-        assert_eq!(pkg_name.unwrap(), "my-cli");
+        assert_eq!(pkg_name, "my-cli");
         assert!(is_workspace);
 
         // my-lib is a library (no binary), so searching for it should fail
-        let result = find_package_dir(temp.path(), "my-lib", None).await;
-        assert!(result.is_err());
+        let result = find_package_dir(temp.path(), "my-lib", None, None)
+            .await
+            .unwrap();
+        assert!(result.is_none());
     }
 
     #[tokio::test]
     async fn test_find_package_dir_no_cargo_toml() {
         let temp = TempDir::new().unwrap();
 
-        let result = find_package_dir(temp.path(), "anything", None).await;
+        let result = find_package_dir(temp.path(), "anything", None, None).await;
         assert!(result.is_err());
         // cargo metadata gives a different error message
         assert!(result.unwrap_err().to_string().contains("cargo metadata"));
@@ -695,9 +714,10 @@ edition = "2021"
         write_file(&temp.path().join("cli/Cargo.toml"), cli_toml).await;
         write_file(&temp.path().join("cli/src/main.rs"), "fn main() {}").await;
 
-        let result = find_package_dir(temp.path(), "nonexistent-binary", None).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No package found"));
+        let result = find_package_dir(temp.path(), "nonexistent-binary", None, None)
+            .await
+            .unwrap();
+        assert!(result.is_none());
     }
 
     #[test]
