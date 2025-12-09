@@ -140,6 +140,148 @@ async fn copy_binaries(release_dir: &Path, dest_bin_dir: &Path) -> anyhow::Resul
     Ok(())
 }
 
+async fn install_local_project(
+    hook: &Hook,
+    repo_path: &Path,
+    info: &InstallInfo,
+    lib_deps: &[&String],
+    cargo: &Path,
+    cargo_home: &Path,
+    new_path: &OsStr,
+) -> anyhow::Result<()> {
+    // Get the binary name from the hook entry
+    let entry_parts = hook.entry.split()?;
+    let binary_name = &entry_parts[0];
+
+    // Find the specific package directory for this hook's binary
+    let (package_dir, package_name, is_workspace) = match find_package_dir(
+        repo_path,
+        binary_name,
+        Some(cargo),
+        Some(new_path),
+    )
+    .await
+    {
+        Err(e) => {
+            return Err(e.context("Failed to find package directory using cargo metadata"));
+        }
+        Ok(Some((package_dir, package_name, is_workspace))) => {
+            debug!(
+                "Found package `{}` for binary `{}` in repo `{}` at `{}`",
+                package_name,
+                binary_name,
+                repo_path.display(),
+                package_dir.display(),
+            );
+            (package_dir, package_name, is_workspace)
+        }
+        Ok(None) => {
+            debug!(
+                "Binary `{}` not found in cargo metadata for repo `{}`, falling back to repo root",
+                binary_name,
+                repo_path.display(),
+            );
+            (repo_path.to_path_buf(), String::new(), false)
+        }
+    };
+
+    if lib_deps.is_empty() {
+        // For packages without lib deps, use `cargo install` directly
+        Cmd::new(cargo, "install local")
+            .args(["install", "--bins", "--root"])
+            .arg(&info.env_path)
+            .args(["--path", "."])
+            .current_dir(&package_dir)
+            .env(EnvVars::PATH, new_path)
+            .env(EnvVars::CARGO_HOME, cargo_home)
+            .remove_git_env()
+            .check(true)
+            .output()
+            .await?;
+    } else {
+        // For packages with lib deps, copy manifest, modify, build and copy binaries
+        let manifest_dir = info.env_path.join("manifest");
+        fs_err::tokio::create_dir_all(&manifest_dir).await?;
+
+        // Copy Cargo.toml
+        let src_manifest = package_dir.join("Cargo.toml");
+        let dst_manifest = manifest_dir.join("Cargo.toml");
+        fs_err::tokio::copy(&src_manifest, &dst_manifest).await?;
+
+        // Copy Cargo.lock if it exists (check both package dir and repo root for workspaces)
+        let lock_locations = if is_workspace {
+            vec![repo_path.join("Cargo.lock"), package_dir.join("Cargo.lock")]
+        } else {
+            vec![package_dir.join("Cargo.lock")]
+        };
+        for lock_path in lock_locations {
+            if lock_path.exists() {
+                fs_err::tokio::copy(&lock_path, manifest_dir.join("Cargo.lock")).await?;
+                break;
+            }
+        }
+
+        // Copy src directory (cargo add needs it to exist for path validation)
+        let src_dir = package_dir.join("src");
+        if src_dir.exists() {
+            let dst_src = manifest_dir.join("src");
+            fs_err::tokio::create_dir_all(&dst_src).await?;
+            let mut entries = fs_err::tokio::read_dir(&src_dir).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                if entry.file_type().await?.is_file() {
+                    fs_err::tokio::copy(entry.path(), dst_src.join(entry.file_name())).await?;
+                }
+            }
+        }
+
+        // Run cargo add on the copied manifest
+        let mut cmd = Cmd::new(cargo, "add dependencies");
+        cmd.arg("add");
+        for dep in lib_deps {
+            cmd.arg(format_cargo_dependency(dep.as_str()));
+        }
+        cmd.current_dir(&manifest_dir)
+            .env(EnvVars::PATH, new_path)
+            .env(EnvVars::CARGO_HOME, cargo_home)
+            .remove_git_env()
+            .check(true)
+            .output()
+            .await?;
+
+        // Build using cargo build with --manifest-path pointing to modified manifest
+        // but source files come from original package_dir
+        let target_dir = info.env_path.join("target");
+        let mut cmd = Cmd::new(cargo, "build local with deps");
+        cmd.args(["build", "--bins", "--release"])
+            .arg("--manifest-path")
+            .arg(&dst_manifest)
+            .arg("--target-dir")
+            .arg(&target_dir);
+
+        // For workspace members, explicitly specify the package
+        if is_workspace && !package_name.is_empty() {
+            cmd.args(["--package", &package_name]);
+        }
+
+        cmd.current_dir(&package_dir)
+            .env(EnvVars::PATH, new_path)
+            .env(EnvVars::CARGO_HOME, cargo_home)
+            .remove_git_env()
+            .check(true)
+            .output()
+            .await?;
+
+        // Copy compiled binaries to the bin directory
+        copy_binaries(&target_dir.join("release"), &bin_dir(&info.env_path)).await?;
+
+        // Clean up manifest and target directories
+        fs_err::tokio::remove_dir_all(&manifest_dir).await?;
+        fs_err::tokio::remove_dir_all(&target_dir).await?;
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Rust;
 
@@ -209,138 +351,16 @@ impl LanguageImpl for Rust {
 
         // Install library dependencies and local project
         if let Some(repo) = hook.repo_path() {
-            // Get the binary name from the hook entry
-            let entry_parts = hook.entry.split()?;
-            let binary_name = &entry_parts[0];
-
-            // Find the specific package directory for this hook's binary
-            let (package_dir, package_name, is_workspace) = find_package_dir(
+            install_local_project(
+                &hook,
                 repo,
-                binary_name,
-                Some(&cargo),
-                Some(&new_path),
+                &info,
+                &lib_deps,
+                &cargo,
+                &cargo_home,
+                &new_path,
             )
-            .await
-            .context("Failed to find package directory using cargo metadata")?
-            .unwrap_or_else(|| {
-                debug!(
-                    "Failed to find package for binary `{}` in `{}`, falling back to repo root",
-                    binary_name,
-                    repo.display(),
-                );
-                (repo.to_path_buf(), String::new(), false)
-            });
-
-            if lib_deps.is_empty() && !is_workspace {
-                // For single packages without lib deps, use cargo install directly
-                Cmd::new(&cargo, "install local")
-                    .args(["install", "--bins", "--root"])
-                    .arg(&info.env_path)
-                    .args(["--path", "."])
-                    .current_dir(&package_dir)
-                    .env(EnvVars::PATH, &new_path)
-                    .env(EnvVars::CARGO_HOME, &cargo_home)
-                    .remove_git_env()
-                    .check(true)
-                    .output()
-                    .await?;
-            } else if lib_deps.is_empty() {
-                // For workspace members without lib deps, use cargo build + copy
-                // (cargo install doesn't work well with virtual workspaces)
-                let target_dir = info.env_path.join("target");
-                Cmd::new(&cargo, "build local")
-                    .args(["build", "--bins", "--release"])
-                    .arg("--manifest-path")
-                    .arg(package_dir.join("Cargo.toml"))
-                    .arg("--target-dir")
-                    .arg(&target_dir)
-                    .current_dir(repo)
-                    .env(EnvVars::PATH, &new_path)
-                    .env(EnvVars::CARGO_HOME, &cargo_home)
-                    .remove_git_env()
-                    .check(true)
-                    .output()
-                    .await?;
-
-                // Copy compiled binaries to the bin directory
-                copy_binaries(&target_dir.join("release"), &bin_dir(&info.env_path)).await?;
-            } else {
-                // For packages with lib deps, copy manifest, modify, build
-                let manifest_dir = info.env_path.join("manifest");
-                fs_err::tokio::create_dir_all(&manifest_dir).await?;
-
-                // Copy Cargo.toml
-                let src_manifest = package_dir.join("Cargo.toml");
-                let dst_manifest = manifest_dir.join("Cargo.toml");
-                fs_err::tokio::copy(&src_manifest, &dst_manifest).await?;
-
-                // Copy Cargo.lock if it exists (check both package dir and repo root for workspaces)
-                let lock_locations = if is_workspace {
-                    vec![repo.join("Cargo.lock"), package_dir.join("Cargo.lock")]
-                } else {
-                    vec![package_dir.join("Cargo.lock")]
-                };
-                for lock_path in lock_locations {
-                    if lock_path.exists() {
-                        fs_err::tokio::copy(&lock_path, manifest_dir.join("Cargo.lock")).await?;
-                        break;
-                    }
-                }
-
-                // Copy src directory (cargo add needs it to exist for path validation)
-                let src_dir = package_dir.join("src");
-                if src_dir.exists() {
-                    let dst_src = manifest_dir.join("src");
-                    fs_err::tokio::create_dir_all(&dst_src).await?;
-                    let mut entries = fs_err::tokio::read_dir(&src_dir).await?;
-                    while let Some(entry) = entries.next_entry().await? {
-                        if entry.file_type().await?.is_file() {
-                            fs_err::tokio::copy(entry.path(), dst_src.join(entry.file_name()))
-                                .await?;
-                        }
-                    }
-                }
-
-                // Run cargo add on the copied manifest
-                let mut cmd = Cmd::new(&cargo, "add dependencies");
-                cmd.arg("add");
-                for dep in &lib_deps {
-                    cmd.arg(format_cargo_dependency(dep.as_str()));
-                }
-                cmd.current_dir(&manifest_dir)
-                    .env(EnvVars::PATH, &new_path)
-                    .env(EnvVars::CARGO_HOME, &cargo_home)
-                    .remove_git_env()
-                    .check(true)
-                    .output()
-                    .await?;
-
-                // Build using cargo build with --manifest-path pointing to modified manifest
-                // but source files come from original package_dir
-                let target_dir = info.env_path.join("target");
-                let mut cmd = Cmd::new(&cargo, "build local with deps");
-                cmd.args(["build", "--bins", "--release"])
-                    .arg("--manifest-path")
-                    .arg(&dst_manifest)
-                    .arg("--target-dir")
-                    .arg(&target_dir);
-
-                // For workspace members, explicitly specify the package
-                if is_workspace && !package_name.is_empty() {
-                    cmd.args(["--package", &package_name]);
-                }
-
-                cmd.current_dir(&package_dir)
-                    .env(EnvVars::PATH, &new_path)
-                    .env(EnvVars::CARGO_HOME, &cargo_home)
-                    .remove_git_env()
-                    .check(true)
-                    .output()
-                    .await?;
-
-                // Copy compiled binaries to the bin directory
-                copy_binaries(&target_dir.join("release"), &bin_dir(&info.env_path)).await?;
-            }
+            .await?;
         }
 
         // Install CLI dependencies
