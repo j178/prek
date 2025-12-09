@@ -9,9 +9,9 @@ use clap_complete::engine::ArgValueCompleter;
 use serde::{Deserialize, Serialize};
 
 use prek_consts::CONFIG_FILE;
-use prek_consts::env_vars::EnvVars;
 
 use crate::config::{HookType, Language, Stage};
+use crate::settings::{CliOverrides, ColorChoice};
 
 mod auto_update;
 mod cache_clean;
@@ -72,28 +72,6 @@ impl From<ExitStatus> for ExitCode {
     }
 }
 
-#[derive(Debug, Copy, Clone, clap::ValueEnum)]
-pub enum ColorChoice {
-    /// Enables colored output only when the output is going to a terminal or TTY with support.
-    Auto,
-
-    /// Enables colored output regardless of the detected environment.
-    Always,
-
-    /// Disables colored output.
-    Never,
-}
-
-impl From<ColorChoice> for anstream::ColorChoice {
-    fn from(value: ColorChoice) -> Self {
-        match value {
-            ColorChoice::Auto => Self::Auto,
-            ColorChoice::Always => Self::Always,
-            ColorChoice::Never => Self::Never,
-        }
-    }
-}
-
 const STYLES: Styles = Styles::styled()
     .header(AnsiColor::Green.on_default().effects(Effects::BOLD))
     .usage(AnsiColor::Green.on_default().effects(Effects::BOLD))
@@ -144,14 +122,8 @@ pub(crate) struct GlobalArgs {
     pub(crate) cd: Option<PathBuf>,
 
     /// Whether to use color in output.
-    #[arg(
-        global = true,
-        long,
-        value_enum,
-        env = EnvVars::PREK_COLOR,
-        default_value_t = ColorChoice::Auto,
-    )]
-    pub(crate) color: ColorChoice,
+    #[arg(global = true, long, value_enum)]
+    pub(crate) color: Option<ColorChoice>,
 
     /// Refresh all cached data.
     #[arg(global = true, long)]
@@ -196,6 +168,13 @@ pub(crate) struct GlobalArgs {
     /// This option is used for debugging and development purposes.
     #[arg(global = true, long, hide = true)]
     pub show_settings: bool,
+}
+
+impl GlobalArgs {
+    /// Build CLI overrides from the parsed arguments.
+    pub fn cli_overrides(&self) -> CliOverrides {
+        CliOverrides::new().color(self.color)
+    }
 }
 
 #[derive(Debug, Subcommand)]

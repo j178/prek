@@ -9,13 +9,12 @@ use futures::StreamExt;
 use thiserror::Error;
 use tracing::{debug, warn};
 
-use prek_consts::env_vars::EnvVars;
-
 use crate::config::RemoteRepo;
 use crate::fs::LockedFile;
 use crate::git::clone_repo;
 use crate::hook::InstallInfo;
 use crate::run::CONCURRENCY;
+use crate::settings::Settings;
 use crate::workspace::HookInitReporter;
 
 #[derive(Debug, Error)]
@@ -41,13 +40,15 @@ impl Store {
         Self { path: path.into() }
     }
 
-    /// Create a store from environment variables or default paths.
+    /// Create a store from settings or default paths.
     pub(crate) fn from_settings() -> Result<Self, Error> {
-        let path = if let Some(path) = EnvVars::var_os(EnvVars::PREK_HOME) {
-            Some(path.into())
+        let settings = Settings::get();
+
+        let path = if let Some(home) = settings.home {
+            Some(home)
         } else {
             etcetera::choose_base_strategy()
-                .map(|path| path.cache_dir().join("prek"))
+                .map(|strategy| strategy.cache_dir().join("prek"))
                 .ok()
         };
 
