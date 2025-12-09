@@ -16,7 +16,6 @@ use crate::process::Cmd;
 pub(crate) struct RustResult {
     toolchain: PathBuf,
     version: RustVersion,
-    from_system: bool,
 }
 
 impl Display for RustResult {
@@ -27,11 +26,10 @@ impl Display for RustResult {
 }
 
 impl RustResult {
-    pub(crate) fn from_dir(dir: &Path, from_system: bool) -> Self {
+    pub(crate) fn from_dir(dir: &Path) -> Self {
         Self {
             toolchain: dir.to_path_buf(),
             version: RustVersion::default(),
-            from_system,
         }
     }
 
@@ -41,10 +39,6 @@ impl RustResult {
 
     pub(crate) fn version(&self) -> &RustVersion {
         &self.version
-    }
-
-    pub(crate) fn is_from_system(&self) -> bool {
-        self.from_system
     }
 
     pub(crate) fn with_version(mut self, version: RustVersion) -> Self {
@@ -134,7 +128,7 @@ impl RustInstaller {
 
                 if matches {
                     trace!(name = %info.name, "Found matching installed rust");
-                    Some(RustResult::from_dir(&info.path, false).with_version(info.version))
+                    Some(RustResult::from_dir(&info.path).with_version(info.version))
                 } else {
                     trace!(name = %info.name, "Installed rust does not match request");
                     None
@@ -155,7 +149,7 @@ impl RustInstaller {
 
             if matches {
                 trace!(name = %info.name, "Found matching system rust");
-                let rust = RustResult::from_dir(&info.path, true).with_version(info.version);
+                let rust = RustResult::from_dir(&info.path).with_version(info.version);
                 return Ok(Some(rust));
             }
             trace!(name = %info.name, "System rust does not match request");
@@ -215,13 +209,7 @@ impl RustInstaller {
             .await
             .context("Failed to install Rust toolchain")?;
 
-        let rust = RustResult::from_dir(&toolchain_dir, false)
-            .fill_version()
-            .await?;
+        let rust = RustResult::from_dir(&toolchain_dir).fill_version().await?;
         Ok(rust)
     }
-}
-
-pub(crate) fn bin_dir(env_path: &Path) -> PathBuf {
-    env_path.join("bin")
 }
