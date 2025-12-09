@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/*"]
+resolver = "2"
 
 [workspace.package]
 version = "0.2.21"
@@ -12,42 +13,12 @@ license = "MIT"
 prek-consts = { path = "crates/prek-consts", version = "0.2.21" }
 prek-pty = { path = "crates/prek-pty", version = "0.2.21" }
 
-rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
-thiserror = { version = "2.0.11" }
-tokio = { version = "1.47.1", features = ["fs", "process", "rt", "sync", "macros", "net"] }
-tracing = { version = "0.1.40" }
-
-[package]
-name = "prek"
-authors = ["j178 <hi@j178.dev>"]
-description = "Better `pre-commit`, re-engineered in Rust"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
-
-default-run = "prek"
-
-[features]
-default = ["docker"]
-# Adds self-update functionality. This feature is only enabled for prek built binarys
-# and should be left unselected when building prek for package managers.
-self-update = ["dep:axoupdater"]
-# Enable the profiler for benchmarking
-profiler = ["dep:pprof", "pprof/flamegraph"]
-# Enable docker related tests in integration tests
-docker = []
-
-[dependencies]
-prek-consts = { workspace = true }
-
 anstream = { version = "0.6.15" }
 anstyle-query = { version = "1.1.5" }
 anyhow = { version = "1.0.86" }
 async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
 async_zip = { version = "0.0.17", package = "astral_async_zip", features = ["deflate", "tokio"] }
-axoupdater = { version = "0.9.0", default-features = false, features = ["github_releases"], optional = true }
+axoupdater = { version = "0.9.0", default-features = false, features = ["github_releases"] }
 bstr = { version = "1.11.0" }
 cargo_metadata = { version = "0.23.1" }
 clap = { version = "4.5.16", features = ["derive", "env", "string", "wrap_help"] }
@@ -66,17 +37,20 @@ indoc = { version = "2.0.5" }
 itertools = { version = "0.14.0" }
 lazy-regex = { version = "3.4.2" }
 levenshtein = { version = "1.0.5" }
+libc = { version = "0.2.164" }
 # Enable static linking for liblzma
 # This is required for the `xz` feature in `async-compression`
 liblzma = { version = "0.4.5", features = ["static"] }
 memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
 path-clean = { version = "1.0.1" }
+pprof = { version = "0.15.0" }
 quick-xml = { version = "0.38" }
 rand = { version = "0.9.0" }
 rayon = { version = "1.10.0" }
 reqwest = { version = "0.12.9", default-features = false, features = ["http2", "stream", "json", "rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
 rustc-hash = { version = "2.1.1" }
+rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
 same-file = { version = "1.0.6" }
 semver = { version = "1.0.24", features = ["serde"] }
 serde = { version = "1.0.210", features = ["derive"] }
@@ -88,55 +62,26 @@ smallvec = { version = "1.15.1" }
 target-lexicon = { version = "0.13.0" }
 tempfile = { version = "3.13.0" }
 textwrap = { version = "0.16.1" }
-thiserror = { workspace = true }
-tokio = { workspace = true }
+thiserror = { version = "2.0.11" }
+tokio = { version = "1.47.1", features = ["fs", "process", "rt", "sync", "macros", "net"] }
 tokio-tar = { version = "0.5.1", package = "astral-tokio-tar" }
 tokio-util = { version = "0.7.13" }
 toml = { version = "0.9.5", default-features = false, features = ["fast_hash", "parse", "preserve_order", "serde"] }
-tracing = { workspace = true }
+tracing = { version = "0.1.40" }
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 unicode-width = { version = "0.2.0" }
 walkdir = { version = "2.5.0" }
 which = { version = "8.0.0" }
 
-[target.'cfg(unix)'.dependencies]
-prek-pty = { workspace = true }
-
-libc = { version = "0.2.164" }
-pprof = { version = "0.15.0", optional = true }
-
-[build-dependencies]
-fs-err = { version = "3.1.0" }
-
-[dev-dependencies]
+# dev-dependencies
 assert_cmd = { version = "2.0.16", features = ["color"] }
 assert_fs = { version = "1.1.2" }
-etcetera = { version = "0.11.0" }
 insta = { version = "1.40.0", features = ["filters"] }
 insta-cmd = { version = "0.6.0" }
 markdown = { version = "1.0.0" }
 predicates = { version = "3.1.2" }
 pretty_assertions = { version = "1.4.1" }
 regex = { version = "1.11.0" }
-tempfile = { version = "3.13.0" }
-
-[package.metadata.binstall]
-pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }{ archive-suffix }"
-pkg-fmt = "tgz"
-
-[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
-pkg-fmt = "zip"
-pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.zip"
-
-[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
-pkg-fmt = "zip"
-pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.zip"
-
-[package.metadata.cargo-shear]
-ignored = ["liblzma"]
-
-[lints]
-workspace = true
 
 [workspace.lints.rust]
 dead_code = "allow"
@@ -174,6 +119,9 @@ rest_pat_in_fully_bound_structs = "warn"
 edn = "edn"
 styl = "styl"
 jod = "jod"
+
+[workspace.metadata.cargo-shear]
+ignored = ["liblzma"]
 
 [profile.profiling]
 inherits = "release"
