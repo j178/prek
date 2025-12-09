@@ -982,7 +982,7 @@ mod tests {
 
         let reference_string = generate(Cli::command());
         let filename = "cli.md";
-        let reference_path = PathBuf::from(ROOT_DIR).join("docs").join(filename);
+        let reference_path = PathBuf::from(ROOT_DIR).join("../../docs").join(filename);
 
         match mode {
             Mode::DryRun => {

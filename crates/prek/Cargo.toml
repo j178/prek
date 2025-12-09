@@ -1,0 +1,118 @@
+[package]
+name = "prek"
+authors = ["j178 <hi@j178.dev>"]
+description = "Better `pre-commit`, re-engineered in Rust"
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+
+[features]
+default = ["docker"]
+# Adds self-update functionality. This feature is only enabled for prek built binarys
+# and should be left unselected when building prek for package managers.
+self-update = ["dep:axoupdater"]
+# Enable the profiler for benchmarking
+profiler = ["dep:pprof", "pprof/flamegraph"]
+# Enable docker related tests in integration tests
+docker = []
+
+[dependencies]
+prek-consts = { workspace = true }
+
+anstream = { workspace = true }
+anstyle-query = {  workspace = true }
+anyhow = {  workspace = true }
+async-compression = {  workspace = true, features = ["gzip", "xz", "tokio"] }
+async_zip = {  workspace = true, features = ["deflate", "tokio"] }
+axoupdater = { workspace = true, default-features = false, features = ["github_releases"], optional = true }
+bstr = { workspace = true }
+cargo_metadata = { workspace = true }
+clap = { workspace = true, features = ["derive", "env", "string", "wrap_help"] }
+clap_complete = { workspace = true, features = ["unstable-dynamic"] }
+ctrlc = { workspace = true }
+dunce = { workspace = true }
+etcetera = {  workspace = true }
+fancy-regex = {  workspace = true }
+fs-err = {  workspace = true, features = ["tokio"] }
+futures = {  workspace = true }
+hex = { workspace = true }
+http = { workspace = true }
+ignore = { workspace = true }
+indicatif = { workspace = true }
+indoc = { workspace = true }
+itertools = { workspace = true }
+lazy-regex = { workspace = true }
+levenshtein = { workspace = true }
+# Enable static linking for liblzma
+# This is required for the `xz` feature in `async-compression`
+liblzma = { workspace = true, features = ["static"] }
+memchr = { workspace = true }
+owo-colors = { workspace = true }
+path-clean = { workspace = true }
+quick-xml = { workspace = true }
+rand = { workspace = true }
+rayon = { workspace = true }
+reqwest = { workspace = true, default-features = false, features = ["http2", "stream", "json", "rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
+rustc-hash = { workspace = true }
+same-file = { workspace = true }
+semver = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["unbounded_depth"] }
+serde_stacker = { workspace = true }
+serde_yaml = { workspace = true }
+shlex = { workspace = true }
+smallvec = { workspace = true }
+target-lexicon = { workspace = true }
+tempfile = { workspace = true }
+textwrap = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-tar = { workspace = true }
+tokio-util = { workspace = true }
+toml = { workspace = true, default-features = false, features = ["fast_hash", "parse", "preserve_order", "serde"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+unicode-width = { workspace = true }
+walkdir = { workspace = true }
+which = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+prek-pty = { workspace = true }
+
+libc = { workspace = true }
+pprof = { workspace = true, optional = true }
+
+[build-dependencies]
+fs-err = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = { workspace = true, features = ["color"] }
+assert_fs = { workspace = true }
+etcetera = { workspace = true }
+insta = { workspace = true, features = ["filters"] }
+insta-cmd = { workspace = true }
+markdown = { workspace = true }
+predicates = { workspace = true }
+pretty_assertions = { workspace = true }
+regex = { workspace = true }
+tempfile = { workspace = true }
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }{ archive-suffix }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.zip"
+
+[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
+pkg-fmt = "zip"
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.zip"
+
+[package.metadata.cargo-shear]
+ignored = ["liblzma"]
+
+[lints]
+workspace = true
