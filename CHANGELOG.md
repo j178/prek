@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.21
+
+Released on 2025-12-09.
+
+### Bug fixes
+
+- Fallback to use remote repo package root instead of erroring ([#1203](https://github.com/j178/prek/pull/1203))
+- Prepend toolchain bin directory to PATH when calling cargo ([#1204](https://github.com/j178/prek/pull/1204))
+- Use `cargo` from installed toolchain ([#1202](https://github.com/j178/prek/pull/1202))
+
+### Contributors
+
+- @j178
+
 ## 0.2.20
 
 Released on 2025-12-08.
@@ -17,10 +31,8 @@ Want to show your project runs on prek? Add our README badge to your docs or rep
 ### Enhancements
 
 - Support Rust language ([#989](https://github.com/j178/prek/pull/989))
-
   - Refactor Rust toolchain management ([#1198](https://github.com/j178/prek/pull/1198))
   - Add support for finding packages in virtual workspaces ([#1180](https://github.com/j178/prek/pull/1180))
-
 - Add `prek cache size` command ([#1183](https://github.com/j178/prek/pull/1183))
 - Support orphan projects ([#1129](https://github.com/j178/prek/pull/1129))
 - Fallback to `manual` stage for hooks specified directly in command line ([#1185](https://github.com/j178/prek/pull/1185))
