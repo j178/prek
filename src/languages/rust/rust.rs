@@ -37,6 +37,7 @@ async fn find_package_dir(
     repo: &Path,
     binary_name: &str,
     cargo: Option<&Path>,
+    cargo_home: Option<&Path>,
     new_path: Option<&OsStr>,
 ) -> anyhow::Result<Option<(PathBuf, String, bool)>> {
     let cargo = cargo.unwrap_or(Path::new("cargo"));
@@ -44,6 +45,9 @@ async fn find_package_dir(
     let mut cmd = Cmd::new(cargo, "cargo metadata");
     if let Some(new_path) = new_path {
         cmd.env(EnvVars::PATH, new_path);
+    }
+    if let Some(cargo_home) = cargo_home {
+        cmd.env(EnvVars::CARGO_HOME, cargo_home);
     }
     let output = cmd
         .arg("metadata")
@@ -158,6 +162,7 @@ async fn install_local_project(
         repo_path,
         binary_name,
         Some(cargo),
+        Some(cargo_home),
         Some(new_path),
     )
     .await
@@ -472,10 +477,11 @@ edition = "2021"
         write_file(&temp.path().join("Cargo.toml"), cargo_toml).await;
         write_file(&temp.path().join("src/main.rs"), "fn main() {}").await;
 
-        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "my-tool", None, None)
-            .await
-            .unwrap()
-            .unwrap();
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "my-tool", None, None, None)
+                .await
+                .unwrap()
+                .unwrap();
         assert_eq!(path, temp.path());
         assert_eq!(pkg_name, "my-tool");
         assert!(!is_workspace);
@@ -494,7 +500,7 @@ edition = "2021"
         write_file(&temp.path().join("src/main.rs"), "fn main() {}").await;
 
         // Should match with underscores instead of hyphens
-        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my_tool", None, None)
+        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my_tool", None, None, None)
             .await
             .unwrap()
             .unwrap();
@@ -528,7 +534,7 @@ edition = "2021"
         write_file(&temp.path().join("subcrate/src/lib.rs"), "").await;
 
         let (path, pkg_name, is_workspace) =
-            find_package_dir(temp.path(), "cargo-deny", None, None)
+            find_package_dir(temp.path(), "cargo-deny", None, None, None)
                 .await
                 .unwrap()
                 .unwrap();
@@ -564,10 +570,11 @@ edition = "2021"
         write_file(&temp.path().join("lib/Cargo.toml"), lib_toml).await;
         write_file(&temp.path().join("lib/src/lib.rs"), "").await;
 
-        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "my-cli", None, None)
-            .await
-            .unwrap()
-            .unwrap();
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "my-cli", None, None, None)
+                .await
+                .unwrap()
+                .unwrap();
         assert_eq!(path, temp.path().join("cli"));
         assert_eq!(pkg_name, "my-cli");
         assert!(is_workspace);
@@ -602,10 +609,11 @@ path = "src/main.rs"
         .await;
 
         // Should find by binary name, return package name
-        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "typos", None, None)
-            .await
-            .unwrap()
-            .unwrap();
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "typos", None, None, None)
+                .await
+                .unwrap()
+                .unwrap();
         assert_eq!(path, temp.path().join("crates/typos-cli"));
         assert_eq!(pkg_name, "typos-cli");
         assert!(is_workspace);
@@ -626,7 +634,7 @@ edition = "2021"
         // Need a lib.rs or main.rs for the package itself
         write_file(&temp.path().join("src/lib.rs"), "").await;
 
-        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my-tool", None, None)
+        let (path, _pkg, is_workspace) = find_package_dir(temp.path(), "my-tool", None, None, None)
             .await
             .unwrap()
             .unwrap();
@@ -654,7 +662,7 @@ edition = "2021"
         write_file(&temp.path().join("crates/cli/src/main.rs"), "fn main() {}").await;
 
         let (path, pkg_name, is_workspace) =
-            find_package_dir(temp.path(), "virtual-cli", None, None)
+            find_package_dir(temp.path(), "virtual-cli", None, None, None)
                 .await
                 .unwrap()
                 .unwrap();
@@ -691,16 +699,17 @@ edition = "2021"
         write_file(&temp.path().join("crates/lib/Cargo.toml"), lib_toml).await;
         write_file(&temp.path().join("crates/lib/src/lib.rs"), "").await;
 
-        let (path, pkg_name, is_workspace) = find_package_dir(temp.path(), "my-cli", None, None)
-            .await
-            .unwrap()
-            .unwrap();
+        let (path, pkg_name, is_workspace) =
+            find_package_dir(temp.path(), "my-cli", None, None, None)
+                .await
+                .unwrap()
+                .unwrap();
         assert_eq!(path, temp.path().join("crates/cli"));
         assert_eq!(pkg_name, "my-cli");
         assert!(is_workspace);
 
         // my-lib is a library (no binary), so searching for it should fail
-        let result = find_package_dir(temp.path(), "my-lib", None, None)
+        let result = find_package_dir(temp.path(), "my-lib", None, None, None)
             .await
             .unwrap();
         assert!(result.is_none());
@@ -710,7 +719,7 @@ edition = "2021"
     async fn test_find_package_dir_no_cargo_toml() {
         let temp = TempDir::new().unwrap();
 
-        let result = find_package_dir(temp.path(), "anything", None, None).await;
+        let result = find_package_dir(temp.path(), "anything", None, None, None).await;
         assert!(result.is_err());
         // cargo metadata gives a different error message
         assert!(result.unwrap_err().to_string().contains("cargo metadata"));
@@ -734,7 +743,7 @@ edition = "2021"
         write_file(&temp.path().join("cli/Cargo.toml"), cli_toml).await;
         write_file(&temp.path().join("cli/src/main.rs"), "fn main() {}").await;
 
-        let result = find_package_dir(temp.path(), "nonexistent-binary", None, None)
+        let result = find_package_dir(temp.path(), "nonexistent-binary", None, None, None)
             .await
             .unwrap();
         assert!(result.is_none());
