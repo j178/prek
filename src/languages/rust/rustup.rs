@@ -2,18 +2,18 @@ use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
-use crate::fs::LockedFile;
-use crate::languages::REQWEST_CLIENT;
-use crate::languages::rust::version::RustVersion;
-use crate::process::Cmd;
-use crate::store::Store;
-
 use anyhow::{Context, Result};
 use futures::{StreamExt, TryStreamExt, stream};
 use prek_consts::env_vars::EnvVars;
 use semver::Version;
 use target_lexicon::HOST;
 use tracing::{debug, trace};
+
+use crate::fs::LockedFile;
+use crate::languages::REQWEST_CLIENT;
+use crate::languages::rust::version::RustVersion;
+use crate::process::Cmd;
+use crate::store::Store;
 
 #[derive(Clone)]
 pub(crate) struct Rustup {
