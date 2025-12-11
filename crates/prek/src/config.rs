@@ -628,9 +628,6 @@ pub(crate) struct Config {
     /// When false (default), files in subprojects are processed by both the subproject and
     /// any parent projects that contain them.
     pub orphan: Option<bool>,
-    /// Number of days to wait before updating to a new release.
-    /// Default is 1 day. Set to 0 to disable cooldown.
-    pub cooldown_days: Option<u8>,
 
     #[serde(skip_serializing)]
     #[serde(flatten)]
@@ -941,7 +938,6 @@ mod tests {
                 fail_fast: None,
                 minimum_prek_version: None,
                 orphan: None,
-                cooldown_days: None,
                 _unused_keys: {},
             },
         )
@@ -1018,7 +1014,6 @@ mod tests {
                 fail_fast: None,
                 minimum_prek_version: None,
                 orphan: None,
-                cooldown_days: None,
                 _unused_keys: {},
             },
         )
@@ -1120,7 +1115,6 @@ mod tests {
                 fail_fast: None,
                 minimum_prek_version: None,
                 orphan: None,
-                cooldown_days: None,
                 _unused_keys: {},
             },
         )
@@ -1301,7 +1295,6 @@ mod tests {
                 fail_fast: None,
                 minimum_prek_version: None,
                 orphan: None,
-                cooldown_days: None,
                 _unused_keys: {},
             },
         )
@@ -1439,7 +1432,6 @@ mod tests {
                 fail_fast: None,
                 minimum_prek_version: None,
                 orphan: None,
-                cooldown_days: None,
                 _unused_keys: {},
             },
         )
@@ -1727,7 +1719,6 @@ mod tests {
             fail_fast: None,
             minimum_prek_version: None,
             orphan: None,
-            cooldown_days: None,
             _unused_keys: {},
         }
         "#);
@@ -1815,7 +1806,6 @@ mod tests {
             fail_fast: None,
             minimum_prek_version: None,
             orphan: None,
-            cooldown_days: None,
             _unused_keys: {
                 "local": Object {
                     "language": String("system"),
