@@ -579,11 +579,12 @@ pub(crate) struct AutoUpdateArgs {
     #[arg(short, long, default_value_t = 0)]
     pub(crate) jobs: usize,
     /// Minimum age in days for a release before it can be used.
-    /// Use 0 to disable cooldown.
+    ///
+    /// Age is calculated from the timestamp of the commit pointed to by the tag, **not** the tag's own creation time.
     #[arg(
         long,
         value_name = "DAYS",
-        default_value_t = 1,
+        default_value_t = 0,
         conflicts_with = "bleeding_edge"
     )]
     pub(crate) cooldown_days: u8,

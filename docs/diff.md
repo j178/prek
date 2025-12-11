@@ -98,6 +98,7 @@ Gems specified in hook gemspec files and `additional_dependencies` will be insta
 - `prek auto-update` updates all projects in the workspace to their latest revisions.
 - `prek auto-update` checks updates for the same repository only once, speeding up the process in workspace mode.
 - `prek auto-update` supports `--dry-run` option to preview the updates without applying them.
+- `prek auto-update` supports `--cooldown-days` option to skip releases newer than the specified number of days (based on the tagged commit's timestamp, not when the tag was created).
 
 ### `prek sample-config`
 
