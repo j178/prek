@@ -580,7 +580,12 @@ pub(crate) struct AutoUpdateArgs {
     pub(crate) jobs: usize,
     /// Minimum age in days for a release before it can be used.
     /// Use 0 to disable cooldown.
-    #[arg(long, value_name = "DAYS", default_value_t = 1)]
+    #[arg(
+        long,
+        value_name = "DAYS",
+        default_value_t = 1,
+        conflicts_with = "bleeding_edge"
+    )]
     pub(crate) cooldown_days: u8,
 }
 
