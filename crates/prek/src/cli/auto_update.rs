@@ -345,9 +345,19 @@ async fn resolve_revision(
         "Using tags at cutoff timestamp {target_ts}: {:?}",
         tags_at_cutoff
     );
+
+    // Multiple tags can exist on an SHA. Sometimes a moving tag is attached
+    // to a version tag. Try to pick the tag that looks like a version and most similar
+    // to the current revision, using the Levenshtein string edit distance of the SHAs.
     let best = tags_at_cutoff
         .iter()
-        .min_by_key(|tag| levenshtein::levenshtein(tag, current_rev))
+        .min_by_key(|tag| {
+            let look_likes_version = i32::from(!tag.contains('.'));
+            (
+                look_likes_version,
+                levenshtein::levenshtein(tag, current_rev),
+            )
+        })
         .unwrap()
         .clone();
     trace!("Resolved revision to `{}`", best);
@@ -725,5 +735,38 @@ mod tests {
         let rev = resolve_revision(repo, "v1.2.0", false, 5).await.unwrap();
 
         assert_eq!(rev, Some("v1.0.0".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_revision_prefers_version_like_tags() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        create_backdated_commit(repo, "eligible", 2).await;
+        create_tag(repo, "moving-tag").await;
+        create_tag(repo, "v1.0.0").await;
+
+        // Even though the current rev matches the moving tag exactly, the dotted tag
+        // should be preferred.
+        let rev = resolve_revision(repo, "moving-tag", false, 1)
+            .await
+            .unwrap();
+
+        assert_eq!(rev, Some("v1.0.0".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_revision_picks_closest_version_string() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        create_backdated_commit(repo, "eligible", 3).await;
+        create_tag(repo, "v1.2.0").await;
+        create_tag(repo, "foo-1.2.0").await;
+        create_tag(repo, "v2.0.0").await;
+
+        let rev = resolve_revision(repo, "v1.2.3", false, 1).await.unwrap();
+
+        assert_eq!(rev, Some("v1.2.0".to_string()));
     }
 }
