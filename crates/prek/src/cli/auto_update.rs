@@ -574,7 +574,14 @@ mod tests {
     async fn create_commit(repo: &Path, message: &str) {
         git::git_cmd("git commit")
             .unwrap()
-            .args(["commit", "--allow-empty", "-m", message])
+            .args([
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "--allow-empty",
+                "-m",
+                message,
+            ])
             .current_dir(repo)
             .output()
             .await
@@ -592,7 +599,14 @@ mod tests {
 
         git::git_cmd("git commit")
             .unwrap()
-            .args(["commit", "--allow-empty", "-m", message])
+            .args([
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "--allow-empty",
+                "-m",
+                message,
+            ])
             .env("GIT_AUTHOR_DATE", &date_str)
             .env("GIT_COMMITTER_DATE", &date_str)
             .current_dir(repo)
@@ -604,7 +618,7 @@ mod tests {
     async fn create_tag(repo: &Path, tag: &str) {
         git::git_cmd("git tag")
             .unwrap()
-            .args(["tag", tag, "-m", tag])
+            .args(["-c", "tag.gpgsign=false", "tag", tag, "-m", tag])
             .current_dir(repo)
             .output()
             .await
