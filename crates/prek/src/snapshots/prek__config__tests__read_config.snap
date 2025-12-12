@@ -1,5 +1,5 @@
 ---
-source: src/config.rs
+source: crates/prek/src/config.rs
 expression: config
 ---
 Config {

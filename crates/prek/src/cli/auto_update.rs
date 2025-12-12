@@ -1,6 +1,7 @@
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use bstr::ByteSlice;
@@ -13,7 +14,7 @@ use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use serde::Serializer;
 use serde::ser::SerializeMap;
-use tracing::trace;
+use tracing::{debug, trace};
 
 use crate::cli::ExitStatus;
 use crate::cli::reporter::AutoUpdateReporter;
@@ -39,6 +40,7 @@ pub(crate) async fn auto_update(
     freeze: bool,
     jobs: usize,
     dry_run: bool,
+    cooldown_days: u8,
     printer: Printer,
 ) -> Result<ExitStatus> {
     struct RepoInfo<'a> {
@@ -99,7 +101,7 @@ pub(crate) async fn auto_update(
     .map(async |(remote_repo, _)| {
         let progress = reporter.on_update_start(&remote_repo.to_string());
 
-        let result = update_repo(remote_repo, bleeding_edge, freeze).await;
+        let result = update_repo(remote_repo, bleeding_edge, freeze, cooldown_days).await;
 
         reporter.on_update_complete(progress);
 
@@ -180,7 +182,12 @@ pub(crate) async fn auto_update(
     Ok(ExitStatus::Success)
 }
 
-async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Result<Revision> {
+async fn update_repo(
+    repo: &RemoteRepo,
+    bleeding_edge: bool,
+    freeze: bool,
+    cooldown_days: u8,
+) -> Result<Revision> {
     let tmp_dir = tempfile::tempdir()?;
 
     trace!(
@@ -189,12 +196,36 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
         tmp_dir.path().display()
     );
 
-    git::init_repo(repo.repo.as_str(), tmp_dir.path()).await?;
+    setup_and_fetch_repo(repo.repo.as_str(), tmp_dir.path()).await?;
+
+    let rev = resolve_revision(tmp_dir.path(), &repo.rev, bleeding_edge, cooldown_days).await?;
+
+    let Some(rev) = rev else {
+        debug!("No suitable revision found for repo `{}`", repo.repo);
+        return Ok(Revision {
+            rev: repo.rev.clone(),
+            frozen: None,
+        });
+    };
+
+    let (rev, frozen) = if freeze && let Some(hash) = freeze_revision(tmp_dir.path(), &rev).await? {
+        (hash, Some(rev))
+    } else {
+        (rev, None)
+    };
+
+    checkout_and_validate_manifest(tmp_dir.path(), &rev, repo).await?;
+
+    Ok(Revision { rev, frozen })
+}
+
+async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Result<()> {
+    git::init_repo(repo_url, repo_path).await?;
     git::git_cmd("git config")?
         .arg("config")
         .arg("extensions.partialClone")
         .arg("true")
-        .current_dir(tmp_dir.path())
+        .current_dir(repo_path)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -206,72 +237,163 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
         .arg("--quiet")
         .arg("--filter=blob:none")
         .arg("--tags")
-        .current_dir(tmp_dir.path())
+        .current_dir(repo_path)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .await?;
 
-    let mut cmd = git::git_cmd("git describe")?;
-    cmd.arg("describe")
-        .arg("FETCH_HEAD")
-        .arg("--tags") // use any tags found in refs/tags
-        .check(false)
-        .current_dir(tmp_dir.path());
-    if bleeding_edge {
-        cmd.arg("--exact-match")
-    } else {
-        // `--abbrev=0` suppress long format, find the closest tag name without any suffix
-        cmd.arg("--abbrev=0")
-    };
+    Ok(())
+}
 
-    let output = cmd.output().await?;
-    let mut rev = if output.status.success() {
-        let rev = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let rev = get_best_candidate_tag(tmp_dir.path(), &rev, &repo.rev)
-            .await
-            .unwrap_or(rev);
-        trace!("Using best candidate tag `{rev}`");
-        rev
+async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<String>> {
+    let output = git::git_cmd("git describe")?
+        .arg("describe")
+        .arg("FETCH_HEAD")
+        // Instead of using only the annotated tags, use any tag found in refs/tags namespace.
+        // This option enables matching a lightweight (non-annotated) tag.
+        .arg("--tags")
+        // Only output exact matches (a tag directly references the supplied commit).
+        // This is a synonym for --candidates=0.
+        .arg("--exact-match")
+        .check(false)
+        .current_dir(repo_path)
+        .output()
+        .await?;
+    let rev = if output.status.success() {
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
     } else {
-        trace!("Failed to describe FETCH_HEAD, using rev-parse instead");
+        debug!("No matching tag for `FETCH_HEAD`, using rev-parse instead");
         // "fatal: no tag exactly matches xxx"
-        let stdout = git::git_cmd("git rev-parse")?
+        let output = git::git_cmd("git rev-parse")?
             .arg("rev-parse")
             .arg("FETCH_HEAD")
             .check(true)
-            .current_dir(tmp_dir.path())
+            .current_dir(repo_path)
             .output()
-            .await?
-            .stdout;
-        String::from_utf8_lossy(&stdout).trim().to_string()
+            .await?;
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
     };
-    trace!("Resolved latest tag to `{rev}`");
 
-    let mut frozen = None;
-    if freeze {
-        let exact = git::git_cmd("git rev-parse")?
-            .arg("rev-parse")
-            .arg(&rev)
-            .current_dir(tmp_dir.path())
-            .output()
-            .await?
-            .stdout;
-        let exact = String::from_utf8_lossy(&exact).trim().to_string();
-        if rev != exact {
-            trace!("Freezing revision to `{exact}`");
-            frozen = Some(rev);
-            rev = exact;
+    debug!("Resolved `FETCH_HEAD` to `{rev}`");
+    Ok(Some(rev))
+}
+
+/// Returns all tags and their Unix timestamps (newest first).
+async fn get_all_tag_timestamps(repo: &Path) -> Result<Vec<(u64, Vec<String>)>> {
+    let output = git::git_cmd("git log")?
+        .arg("log")
+        // Only consider tags
+        .arg("--tags")
+        // %ct: committer date, UNIX timestamp
+        // %D: ref names, e.g. "tag: v0.1.4"
+        .arg("--format=%ct %D")
+        // Shows only those commits that are "decorated" by a branch or tag
+        .arg("--simplify-by-decoration")
+        .current_dir(repo)
+        .output()
+        .await?;
+
+    let mut results = Vec::new();
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let Some((timestamp_str, refs)) = line.split_once(' ') else {
+            continue;
+        };
+        let Ok(timestamp) = timestamp_str.parse::<u64>() else {
+            continue;
+        };
+        let tags = refs
+            .split(", ")
+            .filter_map(|tag_ref| tag_ref.strip_prefix("tag: ").map(String::from))
+            .collect::<Vec<_>>();
+        if !tags.is_empty() {
+            results.push((timestamp, tags));
         }
     }
 
+    results.sort_unstable_by(|(ts_a, _), (ts_b, _)| ts_b.cmp(ts_a));
+    Ok(results)
+}
+
+async fn resolve_revision(
+    repo_path: &Path,
+    current_rev: &str,
+    bleeding_edge: bool,
+    cooldown_days: u8,
+) -> Result<Option<String>> {
+    if bleeding_edge {
+        return resolve_bleeding_edge(repo_path).await;
+    }
+
+    let tags_with_ts = get_all_tag_timestamps(repo_path).await?;
+
+    let cutoff_secs = u64::from(cooldown_days) * 86400;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    let cutoff = now.saturating_sub(cutoff_secs);
+
+    // tags_with_ts is sorted newest -> oldest; find the first bucket where ts <= cutoff.
+    let left = match tags_with_ts.binary_search_by(|(ts, _)| ts.cmp(&cutoff).reverse()) {
+        Ok(i) | Err(i) => i,
+    };
+
+    let Some((target_ts, tags_at_cutoff)) = tags_with_ts.get(left) else {
+        trace!("No tags meet cooldown cutoff {cutoff_secs}s");
+        return Ok(None);
+    };
+
+    trace!(
+        "Using tags at cutoff timestamp {target_ts}: {:?}",
+        tags_at_cutoff
+    );
+
+    // Multiple tags can exist on an SHA. Sometimes a moving tag is attached
+    // to a version tag. Try to pick the tag that looks like a version and most similar
+    // to the current revision, using the Levenshtein string edit distance of the SHAs.
+    let best = tags_at_cutoff
+        .iter()
+        .min_by_key(|tag| {
+            let look_likes_version = i32::from(!tag.contains('.'));
+            (
+                look_likes_version,
+                levenshtein::levenshtein(tag, current_rev),
+            )
+        })
+        .unwrap()
+        .clone();
+    trace!("Resolved revision to `{}`", best);
+
+    Ok(Some(best))
+}
+
+async fn freeze_revision(repo_path: &Path, rev: &str) -> Result<Option<String>> {
+    let exact = git::git_cmd("git rev-parse")?
+        .arg("rev-parse")
+        .arg(format!("{rev}^{{}}"))
+        .current_dir(repo_path)
+        .output()
+        .await?
+        .stdout;
+    let exact = String::from_utf8_lossy(&exact).trim().to_string();
+    if rev == exact {
+        Ok(None)
+    } else {
+        trace!("Freezing revision to `{exact}`");
+        Ok(Some(exact))
+    }
+}
+
+async fn checkout_and_validate_manifest(
+    repo_path: &Path,
+    rev: &str,
+    repo: &RemoteRepo,
+) -> Result<()> {
     // Workaround for Windows: https://github.com/pre-commit/pre-commit/issues/2865,
     // https://github.com/j178/prek/issues/614
     if cfg!(windows) {
         git::git_cmd("git show")?
             .arg("show")
             .arg(format!("{rev}:{MANIFEST_FILE}"))
-            .current_dir(tmp_dir.path())
+            .current_dir(repo_path)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
@@ -281,16 +403,16 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
     git::git_cmd("git checkout")?
         .arg("checkout")
         .arg("--quiet")
-        .arg(&rev)
+        .arg(rev)
         .arg("--")
         .arg(MANIFEST_FILE)
-        .current_dir(tmp_dir.path())
+        .current_dir(repo_path)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .await?;
 
-    let manifest = config::read_manifest(&tmp_dir.path().join(MANIFEST_FILE))?;
+    let manifest = config::read_manifest(&repo_path.join(MANIFEST_FILE))?;
     let new_hook_ids = manifest
         .hooks
         .into_iter()
@@ -312,35 +434,7 @@ async fn update_repo(repo: &RemoteRepo, bleeding_edge: bool, freeze: bool) -> Re
         ));
     }
 
-    let new_revision = Revision { rev, frozen };
-
-    Ok(new_revision)
-}
-
-/// Multiple tags can exist on an SHA. Sometimes a moving tag is attached
-/// to a version tag. Try to pick the tag that looks like a version and most similar
-/// to the current revision.
-async fn get_best_candidate_tag(repo: &Path, rev: &str, current_rev: &str) -> Result<String> {
-    let stdout = git::git_cmd("git tag")?
-        .arg("tag")
-        .arg("--points-at")
-        .arg(format!("{rev}^{{}}"))
-        .check(true)
-        .current_dir(repo)
-        .output()
-        .await?
-        .stdout;
-
-    String::from_utf8_lossy(&stdout)
-        .lines()
-        .filter(|line| line.contains('.'))
-        .sorted_by_key(|tag| {
-            // Prefer tags that are more similar to the current revision
-            levenshtein::levenshtein(tag, current_rev)
-        })
-        .next()
-        .map(ToString::to_string)
-        .ok_or_else(|| anyhow::anyhow!("No tags found for revision {rev}"))
+    Ok(())
 }
 
 async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result<()> {
@@ -418,4 +512,261 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
         .with_context(|| format!("Failed to write updated config file `{}`", path.display()))?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    async fn setup_test_repo() -> tempfile::TempDir {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = tmp.path();
+
+        // Initialize git repo
+        git::git_cmd("git init")
+            .unwrap()
+            .arg("init")
+            .current_dir(repo)
+            .output()
+            .await
+            .unwrap();
+
+        // Configure git user
+        git::git_cmd("git config")
+            .unwrap()
+            .args(["config", "user.email", "test@test.com"])
+            .current_dir(repo)
+            .output()
+            .await
+            .unwrap();
+
+        git::git_cmd("git config")
+            .unwrap()
+            .args(["config", "user.name", "Test"])
+            .current_dir(repo)
+            .output()
+            .await
+            .unwrap();
+
+        // First commit (required before creating a branch)
+        git::git_cmd("git commit")
+            .unwrap()
+            .args(["commit", "--allow-empty", "-m", "initial"])
+            .current_dir(repo)
+            .output()
+            .await
+            .unwrap();
+
+        // Create a trunk branch (avoid dangling commits)
+        git::git_cmd("git checkout")
+            .unwrap()
+            .args(["branch", "-M", "trunk"])
+            .current_dir(repo)
+            .output()
+            .await
+            .unwrap();
+
+        tmp
+    }
+
+    async fn create_commit(repo: &Path, message: &str) {
+        git::git_cmd("git commit")
+            .unwrap()
+            .args(["commit", "--allow-empty", "-m", message])
+            .current_dir(repo)
+            .output()
+            .await
+            .unwrap();
+    }
+
+    async fn create_backdated_commit(repo: &Path, message: &str, days_ago: u64) {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            - (days_ago * 86400);
+
+        let date_str = format!("{timestamp} +0000");
+
+        git::git_cmd("git commit")
+            .unwrap()
+            .args(["commit", "--allow-empty", "-m", message])
+            .env("GIT_AUTHOR_DATE", &date_str)
+            .env("GIT_COMMITTER_DATE", &date_str)
+            .current_dir(repo)
+            .output()
+            .await
+            .unwrap();
+    }
+
+    async fn create_tag(repo: &Path, tag: &str) {
+        git::git_cmd("git tag")
+            .unwrap()
+            .args(["tag", tag, "-m", tag])
+            .current_dir(repo)
+            .output()
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_all_tag_timestamps_groups_and_sorts() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        create_backdated_commit(repo, "old", 5).await;
+        create_tag(repo, "v0.1.0").await;
+
+        create_commit(repo, "new").await;
+        create_tag(repo, "v0.2.0").await;
+        create_tag(repo, "alias-v0.2.0").await;
+
+        let timestamps = get_all_tag_timestamps(repo).await.unwrap();
+        assert_eq!(timestamps.len(), 2);
+
+        let (ts_new, tags_new) = &timestamps[0];
+        let (ts_old, tags_old) = &timestamps[1];
+        assert!(ts_new > ts_old);
+
+        let tags_new_set: HashSet<&str> = tags_new.iter().map(String::as_str).collect();
+        assert_eq!(tags_new_set, HashSet::from(["v0.2.0", "alias-v0.2.0"]));
+        assert_eq!(tags_old, &vec!["v0.1.0".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn test_resolve_bleeding_edge_prefers_exact_tag() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        create_commit(repo, "tagged").await;
+        create_tag(repo, "v1.2.3").await;
+
+        git::git_cmd("git fetch")
+            .unwrap()
+            .args(["fetch", ".", "HEAD"])
+            .current_dir(repo)
+            .output()
+            .await
+            .unwrap();
+
+        let rev = resolve_bleeding_edge(repo).await.unwrap();
+        assert_eq!(rev, Some("v1.2.3".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_bleeding_edge_falls_back_to_rev_parse() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        create_commit(repo, "untagged").await;
+
+        git::git_cmd("git fetch")
+            .unwrap()
+            .args(["fetch", ".", "HEAD"])
+            .current_dir(repo)
+            .output()
+            .await
+            .unwrap();
+
+        let rev = resolve_bleeding_edge(repo).await.unwrap();
+
+        let head = git::git_cmd("git rev-parse")
+            .unwrap()
+            .args(["rev-parse", "HEAD"])
+            .current_dir(repo)
+            .output()
+            .await
+            .unwrap()
+            .stdout;
+        let head = String::from_utf8_lossy(&head).trim().to_string();
+
+        assert_eq!(rev, Some(head));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_revision_uses_cooldown_bucket() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        create_backdated_commit(repo, "candidate", 5).await;
+        create_tag(repo, "v2.0.0-rc1").await;
+        create_tag(repo, "totally-different").await;
+
+        create_backdated_commit(repo, "latest", 1).await;
+        create_tag(repo, "v2.0.0").await;
+
+        let rev = resolve_revision(repo, "v2.0.0", false, 3).await.unwrap();
+
+        assert_eq!(rev, Some("v2.0.0-rc1".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_revision_returns_none_when_all_tags_too_new() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        create_backdated_commit(repo, "recent-1", 2).await;
+        create_tag(repo, "v1.0.0").await;
+
+        create_backdated_commit(repo, "recent-2", 1).await;
+        create_tag(repo, "v1.1.0").await;
+
+        let rev = resolve_revision(repo, "v1.1.0", false, 5).await.unwrap();
+
+        assert_eq!(rev, None);
+    }
+
+    #[tokio::test]
+    async fn test_resolve_revision_picks_oldest_eligible_bucket() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        create_backdated_commit(repo, "oldest", 10).await;
+        create_tag(repo, "v1.0.0").await;
+
+        create_backdated_commit(repo, "mid", 4).await;
+        create_tag(repo, "v1.1.0").await;
+
+        create_backdated_commit(repo, "newest", 1).await;
+        create_tag(repo, "v1.2.0").await;
+
+        let rev = resolve_revision(repo, "v1.2.0", false, 5).await.unwrap();
+
+        assert_eq!(rev, Some("v1.0.0".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_revision_prefers_version_like_tags() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        create_backdated_commit(repo, "eligible", 2).await;
+        create_tag(repo, "moving-tag").await;
+        create_tag(repo, "v1.0.0").await;
+
+        // Even though the current rev matches the moving tag exactly, the dotted tag
+        // should be preferred.
+        let rev = resolve_revision(repo, "moving-tag", false, 1)
+            .await
+            .unwrap();
+
+        assert_eq!(rev, Some("v1.0.0".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_revision_picks_closest_version_string() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        create_backdated_commit(repo, "eligible", 3).await;
+        create_tag(repo, "v1.2.0").await;
+        create_tag(repo, "foo-1.2.0").await;
+        create_tag(repo, "v2.0.0").await;
+
+        let rev = resolve_revision(repo, "v1.2.3", false, 1).await.unwrap();
+
+        assert_eq!(rev, Some("v1.2.0".to_string()));
+    }
 }

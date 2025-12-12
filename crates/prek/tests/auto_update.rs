@@ -66,21 +66,28 @@ fn create_local_git_repo(context: &TestContext, repo_name: &str, tags: &[&str]) 
         .assert()
         .success();
 
+    let mut timestamp = 1_000_000_000;
+
     Command::new("git")
         .arg("commit")
         .arg("-m")
         .arg("Initial commit")
+        .env("GIT_AUTHOR_DATE", format!("{timestamp} +0000"))
+        .env("GIT_COMMITTER_DATE", format!("{timestamp} +0000"))
         .current_dir(&repo_dir)
         .assert()
         .success();
 
     // Create tags
     for tag in tags {
+        timestamp += 100;
         Command::new("git")
             .arg("commit")
             .arg("-m")
             .arg(format!("Release {tag}"))
             .arg("--allow-empty")
+            .env("GIT_AUTHOR_DATE", format!("{timestamp} +0000"))
+            .env("GIT_COMMITTER_DATE", format!("{timestamp} +0000"))
             .current_dir(&repo_dir)
             .assert()
             .success();
@@ -94,12 +101,15 @@ fn create_local_git_repo(context: &TestContext, repo_name: &str, tags: &[&str]) 
             .success();
     }
 
+    timestamp += 100;
     // Add an extra commit to the tip
     Command::new("git")
         .arg("commit")
         .arg("-m")
         .arg("tip")
         .arg("--allow-empty")
+        .env("GIT_AUTHOR_DATE", format!("{timestamp} +0000"))
+        .env("GIT_COMMITTER_DATE", format!("{timestamp} +0000"))
         .current_dir(&repo_dir)
         .assert()
         .success();
@@ -125,7 +135,7 @@ fn auto_update_basic() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -169,7 +179,7 @@ fn auto_update_already_up_to_date() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -222,7 +232,7 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -281,7 +291,7 @@ fn auto_update_specific_repos() -> Result<()> {
     let filters = context.filters();
 
     // Update only repo1
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--repo").arg(&repo1_path), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--repo").arg(&repo1_path).arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -308,7 +318,7 @@ fn auto_update_specific_repos() -> Result<()> {
     );
 
     // Update both repo1 and repo2
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--repo").arg(&repo1_path).arg("--repo").arg(&repo2_path), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--repo").arg(&repo1_path).arg("--repo").arg(&repo2_path).arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -409,14 +419,14 @@ fn auto_update_freeze() -> Result<()> {
         .chain([(r" [a-f0-9]{40}", r" [COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("0"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/freeze-repo] updating v1.0.0 -> [COMMIT_SHA]
 
     ----- stderr -----
-    "#);
+    ");
 
     // Should contain frozen comment
     insta::with_settings!(
@@ -465,7 +475,7 @@ fn auto_update_preserve_formatting() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -526,7 +536,7 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
         .chain([(commit_sha, "[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -576,7 +586,7 @@ fn auto_update_local_repo_ignored() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -657,7 +667,7 @@ fn missing_hook_ids() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -718,7 +728,7 @@ fn auto_update_workspace() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -776,15 +786,15 @@ fn prefer_similar_tags() -> Result<()> {
 
     let repo_path = create_local_git_repo(&context, "remote-repo", &["v1.0.0", "v1.1.0"])?;
     // Add tag foo-v1.0.0 pointing to the same commit as v1.1.0
-    // v1.0.0 distance to v1.1.0 is 1
-    // v1.0.0 distance to foo-v1.0.0 is 4
-    // So we choose v1.1.0 as the update target
-    // But if the newest tag is v1.1.1111 (distance is 5), then we would choose foo-v1.0.0 instead
+    // v1.1.0 distance to v1.1.0 is 1
+    // v1.1.0 distance to foo-v1.0.0 is 4
+    // So we should choose v1.1.0 as the update target.
+    // But if the newest tag is v1.1.1111 (distance is 5), then we would choose foo-v1.1.0 instead.
     Command::new("git")
         .arg("tag")
-        .arg("foo-v1.0.0")
+        .arg("foo-v1.1.0")
         .arg("-m")
-        .arg("foo-v1.0.0")
+        .arg("foo-v1.1.0")
         .arg("v1.1.0^{}")
         .current_dir(&repo_path)
         .assert()
@@ -818,7 +828,7 @@ fn prefer_similar_tags() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -867,7 +877,7 @@ fn auto_update_dry_run() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--dry-run"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--dry-run").arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -912,7 +922,7 @@ fn quoting_float_like_version_number() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update(), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
