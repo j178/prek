@@ -29,6 +29,8 @@ build-backend = "maturin"
 
 [tool.maturin]
 bindings = "bin"
+manifest-path = "crates/prek/Cargo.toml"
+strip = true
 include = [
     { path = "licenses/*", format = ["wheel", "sdist"] }
 ]
