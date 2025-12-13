@@ -507,8 +507,8 @@ prek auto-update [OPTIONS]
 <li><code>always</code>:  Enables colored output regardless of the detected environment</li>
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-auto-update--config"><a href="#prek-auto-update--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
-</dd><dt id="prek-auto-update--cooldown-days"><a href="#prek-auto-update--cooldown-days"><code>--cooldown-days</code></a> <i>days</i></dt><dd><p>Minimum age in days for a release before it can be used.</p>
-<p>Age is calculated from the timestamp of the commit pointed to by the tag, <strong>not</strong> the tag's own creation time.</p>
+</dd><dt id="prek-auto-update--cooldown-days"><a href="#prek-auto-update--cooldown-days"><code>--cooldown-days</code></a> <i>days</i></dt><dd><p>Minimum release age (in days) required for a version to be eligible.</p>
+<p>The age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags. A value of <code>0</code> disables this check.</p>
 <p>[default: 0]</p></dd><dt id="prek-auto-update--dry-run"><a href="#prek-auto-update--dry-run"><code>--dry-run</code></a></dt><dd><p>Do not write changes to the config file, only display what would be changed</p>
 </dd><dt id="prek-auto-update--freeze"><a href="#prek-auto-update--freeze"><code>--freeze</code></a></dt><dd><p>Store &quot;frozen&quot; hashes in <code>rev</code> instead of tag names</p>
 </dd><dt id="prek-auto-update--help"><a href="#prek-auto-update--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
