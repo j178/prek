@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.22
+
+Released on 2025-12-13.
+
+### Highlights
+
+In this release, prek adds support for the `--cooldown-days` option in the `prek auto-update` command.
+This option allows users to skip releases that are newer than a specified number of days.
+It is useful to mitigate open source supply chain risks by avoiding very recent releases that may not have been widely adopted or vetted yet.
+Big thanks to @lmmx for driving this feature!
+
+### Enhancements
+
+- Support`--cooldown-days` in `prek auto-update` ([#1172](https://github.com/j178/prek/pull/1172))
+  - Prefer tag creation timestamp in `--cooldown-days` ([#1221](https://github.com/j178/prek/pull/1221))
+- Use `cargo install` for packages in workspace ([#1207](https://github.com/j178/prek/pull/1207))
+
+### Bug fixes
+
+- Set `CARGO_HOME` for `cargo metadata` ([#1209](https://github.com/j178/prek/pull/1209))
+
+### Contributors
+
+- @j178
+- @lmmx
+
 ## 0.2.21
 
 Released on 2025-12-09.
