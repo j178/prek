@@ -280,39 +280,29 @@ async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<String>> {
 }
 
 /// Returns all tags and their Unix timestamps (newest first).
-async fn get_all_tag_timestamps(repo: &Path) -> Result<Vec<(u64, Vec<String>)>> {
-    let output = git::git_cmd("git log")?
-        .arg("log")
-        // Only consider tags
-        .arg("--tags")
-        // %ct: committer date, UNIX timestamp
-        // %D: ref names, e.g. "tag: v0.1.4"
-        .arg("--format=%ct %D")
-        // Shows only those commits that are "decorated" by a branch or tag
-        .arg("--simplify-by-decoration")
+async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
+    let output = git::git_cmd("git for-each-ref")?
+        .arg("for-each-ref")
+        .arg("--sort=-creatordate")
+        // `creatordate` is the date the tag was created (annotated tags) or the commit date (lightweight tags)
+        // `lstrip=2` removes the "refs/tags/" prefix
+        .arg("--format=%(refname:lstrip=2) %(creatordate:unix)")
+        .arg("refs/tags")
+        .check(true)
         .current_dir(repo)
         .output()
         .await?;
 
-    let mut results = Vec::new();
-    for line in String::from_utf8_lossy(&output.stdout).lines() {
-        let Some((timestamp_str, refs)) = line.split_once(' ') else {
-            continue;
-        };
-        let Ok(timestamp) = timestamp_str.parse::<u64>() else {
-            continue;
-        };
-        let tags = refs
-            .split(", ")
-            .filter_map(|tag_ref| tag_ref.strip_prefix("tag: ").map(String::from))
-            .collect::<Vec<_>>();
-        if !tags.is_empty() {
-            results.push((timestamp, tags));
-        }
-    }
-
-    results.sort_unstable_by(|(ts_a, _), (ts_b, _)| ts_b.cmp(ts_a));
-    Ok(results)
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.split_whitespace();
+            let tag = parts.next()?.trim_ascii();
+            let ts_str = parts.next()?.trim_ascii();
+            let ts: u64 = ts_str.parse().ok()?;
+            Some((tag.to_string(), ts))
+        })
+        .collect())
 }
 
 async fn resolve_revision(
@@ -325,41 +315,27 @@ async fn resolve_revision(
         return resolve_bleeding_edge(repo_path).await;
     }
 
-    let tags_with_ts = get_all_tag_timestamps(repo_path).await?;
+    let tags_with_ts = get_tag_timestamps(repo_path).await?;
 
     let cutoff_secs = u64::from(cooldown_days) * 86400;
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let cutoff = now.saturating_sub(cutoff_secs);
 
     // tags_with_ts is sorted newest -> oldest; find the first bucket where ts <= cutoff.
-    let left = match tags_with_ts.binary_search_by(|(ts, _)| ts.cmp(&cutoff).reverse()) {
+    let left = match tags_with_ts.binary_search_by(|(_, ts)| ts.cmp(&cutoff).reverse()) {
         Ok(i) | Err(i) => i,
     };
 
-    let Some((target_ts, tags_at_cutoff)) = tags_with_ts.get(left) else {
+    let Some((target_tag, target_ts)) = tags_with_ts.get(left) else {
         trace!("No tags meet cooldown cutoff {cutoff_secs}s");
         return Ok(None);
     };
 
-    trace!(
-        "Using tags at cutoff timestamp {target_ts}: {:?}",
-        tags_at_cutoff
-    );
+    trace!("Using tag `{target_tag}` cutoff timestamp {target_ts}");
 
-    // Multiple tags can exist on an SHA. Sometimes a moving tag is attached
-    // to a version tag. Try to pick the tag that looks like a version and most similar
-    // to the current revision, using the Levenshtein string edit distance of the SHAs.
-    let best = tags_at_cutoff
-        .iter()
-        .min_by_key(|tag| {
-            let look_likes_version = i32::from(!tag.contains('.'));
-            (
-                look_likes_version,
-                levenshtein::levenshtein(tag, current_rev),
-            )
-        })
-        .unwrap()
-        .clone();
+    let best = get_best_candidate_tag(repo_path, target_tag, current_rev)
+        .await
+        .unwrap_or_else(|_| target_tag.clone());
     trace!("Resolved revision to `{}`", best);
 
     Ok(Some(best))
@@ -435,6 +411,32 @@ async fn checkout_and_validate_manifest(
     }
 
     Ok(())
+}
+
+/// Multiple tags can exist on an SHA. Sometimes a moving tag is attached
+/// to a version tag. Try to pick the tag that looks like a version and most similar
+/// to the current revision.
+async fn get_best_candidate_tag(repo: &Path, rev: &str, current_rev: &str) -> Result<String> {
+    let stdout = git::git_cmd("git tag")?
+        .arg("tag")
+        .arg("--points-at")
+        .arg(format!("{rev}^{{}}"))
+        .check(true)
+        .current_dir(repo)
+        .output()
+        .await?
+        .stdout;
+
+    String::from_utf8_lossy(&stdout)
+        .lines()
+        .filter(|line| line.contains('.'))
+        .sorted_by_key(|tag| {
+            // Prefer tags that are more similar to the current revision
+            levenshtein::levenshtein(tag, current_rev)
+        })
+        .next()
+        .map(ToString::to_string)
+        .ok_or_else(|| anyhow::anyhow!("No tags found for revision {rev}"))
 }
 
 async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result<()> {
@@ -517,7 +519,6 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     async fn setup_test_repo() -> tempfile::TempDir {
@@ -574,7 +575,10 @@ mod tests {
     async fn create_commit(repo: &Path, message: &str) {
         git::git_cmd("git commit")
             .unwrap()
-            .args(["commit", "--allow-empty", "-m", message])
+            .arg("commit")
+            .arg("--allow-empty")
+            .arg("-m")
+            .arg(message)
             .current_dir(repo)
             .output()
             .await
@@ -592,7 +596,10 @@ mod tests {
 
         git::git_cmd("git commit")
             .unwrap()
-            .args(["commit", "--allow-empty", "-m", message])
+            .arg("commit")
+            .arg("--allow-empty")
+            .arg("-m")
+            .arg(message)
             .env("GIT_AUTHOR_DATE", &date_str)
             .env("GIT_COMMITTER_DATE", &date_str)
             .current_dir(repo)
@@ -601,38 +608,66 @@ mod tests {
             .unwrap();
     }
 
-    async fn create_tag(repo: &Path, tag: &str) {
+    async fn create_lightweight_tag(repo: &Path, tag: &str) {
         git::git_cmd("git tag")
             .unwrap()
-            .args(["tag", tag, "-m", tag])
+            .arg("tag")
+            .arg(tag)
+            .arg("--no-sign")
             .current_dir(repo)
             .output()
             .await
             .unwrap();
     }
 
+    async fn create_annotated_tag(repo: &Path, tag: &str, days_ago: u64) {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            - (days_ago * 86400);
+
+        let date_str = format!("{timestamp} +0000");
+
+        git::git_cmd("git tag")
+            .unwrap()
+            .arg("tag")
+            .arg(tag)
+            .arg("-m")
+            .arg(tag)
+            .env("GIT_AUTHOR_DATE", &date_str)
+            .env("GIT_COMMITTER_DATE", &date_str)
+            .current_dir(repo)
+            .output()
+            .await
+            .unwrap();
+    }
+
+    fn get_backdated_timestamp(days_ago: u64) -> u64 {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        now - (days_ago * 86400)
+    }
+
     #[tokio::test]
-    async fn test_get_all_tag_timestamps_groups_and_sorts() {
+    async fn test_get_tag_timestamps() {
         let tmp = setup_test_repo().await;
         let repo = tmp.path();
 
         create_backdated_commit(repo, "old", 5).await;
-        create_tag(repo, "v0.1.0").await;
+        create_lightweight_tag(repo, "v0.1.0").await;
 
-        create_commit(repo, "new").await;
-        create_tag(repo, "v0.2.0").await;
-        create_tag(repo, "alias-v0.2.0").await;
+        create_backdated_commit(repo, "new", 2).await;
+        create_lightweight_tag(repo, "v0.2.0").await;
+        create_annotated_tag(repo, "alias-v0.2.0", 0).await;
 
-        let timestamps = get_all_tag_timestamps(repo).await.unwrap();
-        assert_eq!(timestamps.len(), 2);
-
-        let (ts_new, tags_new) = &timestamps[0];
-        let (ts_old, tags_old) = &timestamps[1];
-        assert!(ts_new > ts_old);
-
-        let tags_new_set: HashSet<&str> = tags_new.iter().map(String::as_str).collect();
-        assert_eq!(tags_new_set, HashSet::from(["v0.2.0", "alias-v0.2.0"]));
-        assert_eq!(tags_old, &vec!["v0.1.0".to_string()]);
+        let timestamps = get_tag_timestamps(repo).await.unwrap();
+        assert_eq!(timestamps.len(), 3);
+        assert_eq!(timestamps[0].0, "alias-v0.2.0");
+        assert_eq!(timestamps[1].0, "v0.2.0");
+        assert_eq!(timestamps[2].0, "v0.1.0");
     }
 
     #[tokio::test]
@@ -641,7 +676,7 @@ mod tests {
         let repo = tmp.path();
 
         create_commit(repo, "tagged").await;
-        create_tag(repo, "v1.2.3").await;
+        create_lightweight_tag(repo, "v1.2.3").await;
 
         git::git_cmd("git fetch")
             .unwrap()
@@ -691,11 +726,11 @@ mod tests {
         let repo = tmp.path();
 
         create_backdated_commit(repo, "candidate", 5).await;
-        create_tag(repo, "v2.0.0-rc1").await;
-        create_tag(repo, "totally-different").await;
+        create_lightweight_tag(repo, "v2.0.0-rc1").await;
+        create_lightweight_tag(repo, "totally-different").await;
 
         create_backdated_commit(repo, "latest", 1).await;
-        create_tag(repo, "v2.0.0").await;
+        create_lightweight_tag(repo, "v2.0.0").await;
 
         let rev = resolve_revision(repo, "v2.0.0", false, 3).await.unwrap();
 
@@ -708,10 +743,10 @@ mod tests {
         let repo = tmp.path();
 
         create_backdated_commit(repo, "recent-1", 2).await;
-        create_tag(repo, "v1.0.0").await;
+        create_lightweight_tag(repo, "v1.0.0").await;
 
         create_backdated_commit(repo, "recent-2", 1).await;
-        create_tag(repo, "v1.1.0").await;
+        create_lightweight_tag(repo, "v1.1.0").await;
 
         let rev = resolve_revision(repo, "v1.1.0", false, 5).await.unwrap();
 
@@ -724,13 +759,13 @@ mod tests {
         let repo = tmp.path();
 
         create_backdated_commit(repo, "oldest", 10).await;
-        create_tag(repo, "v1.0.0").await;
+        create_lightweight_tag(repo, "v1.0.0").await;
 
         create_backdated_commit(repo, "mid", 4).await;
-        create_tag(repo, "v1.1.0").await;
+        create_lightweight_tag(repo, "v1.1.0").await;
 
         create_backdated_commit(repo, "newest", 1).await;
-        create_tag(repo, "v1.2.0").await;
+        create_lightweight_tag(repo, "v1.2.0").await;
 
         let rev = resolve_revision(repo, "v1.2.0", false, 5).await.unwrap();
 
@@ -743,8 +778,8 @@ mod tests {
         let repo = tmp.path();
 
         create_backdated_commit(repo, "eligible", 2).await;
-        create_tag(repo, "moving-tag").await;
-        create_tag(repo, "v1.0.0").await;
+        create_lightweight_tag(repo, "moving-tag").await;
+        create_lightweight_tag(repo, "v1.0.0").await;
 
         // Even though the current rev matches the moving tag exactly, the dotted tag
         // should be preferred.
@@ -761,9 +796,9 @@ mod tests {
         let repo = tmp.path();
 
         create_backdated_commit(repo, "eligible", 3).await;
-        create_tag(repo, "v1.2.0").await;
-        create_tag(repo, "foo-1.2.0").await;
-        create_tag(repo, "v2.0.0").await;
+        create_lightweight_tag(repo, "v1.2.0").await;
+        create_lightweight_tag(repo, "foo-1.2.0").await;
+        create_lightweight_tag(repo, "v2.0.0").await;
 
         let rev = resolve_revision(repo, "v1.2.3", false, 1).await.unwrap();
 

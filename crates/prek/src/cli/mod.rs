@@ -578,9 +578,10 @@ pub(crate) struct AutoUpdateArgs {
     /// Number of threads to use.
     #[arg(short, long, default_value_t = 0)]
     pub(crate) jobs: usize,
-    /// Minimum age in days for a release before it can be used.
+    /// Minimum release age (in days) required for a version to be eligible.
     ///
-    /// Age is calculated from the timestamp of the commit pointed to by the tag, **not** the tag's own creation time.
+    /// The age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags.
+    /// A value of `0` disables this check.
     #[arg(
         long,
         value_name = "DAYS",
