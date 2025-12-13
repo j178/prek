@@ -405,6 +405,16 @@ fn auto_update_freeze() -> Result<()> {
     context.init_project();
 
     let repo_path = create_local_git_repo(&context, "freeze-repo", &["v1.0.0", "v1.1.0"])?;
+    // Make sure the "# frozen: v1.1.0" comment works correctly by adding a tag without dot
+    Command::new("git")
+        .arg("tag")
+        .arg("v1")
+        .arg("-m")
+        .arg("v1")
+        .arg("v1.1.0^{}")
+        .current_dir(&repo_path)
+        .assert()
+        .success();
 
     context.write_pre_commit_config(&indoc::formatdoc! {r"
         repos:
@@ -779,20 +789,21 @@ fn auto_update_workspace() -> Result<()> {
     Ok(())
 }
 
-// When there are multiple tags pointing to the same object,
-// prek prefer picking a tag with a dot and is closest to the current rev according
-// to Levenshtein distance.
+// When multiple tags point to the same object, prek prefers a tag that:
+// - contains a dot (e.g., a SemVer-like tag), and
+// - is most similar to the current revision, as measured by Levenshtein distance.
 #[test]
 fn prefer_similar_tags() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
     let repo_path = create_local_git_repo(&context, "remote-repo", &["v1.0.0", "v1.1.0"])?;
-    // Add tag foo-v1.0.0 pointing to the same commit as v1.1.0
-    // v1.1.0 distance to v1.1.0 is 1
-    // v1.1.0 distance to foo-v1.0.0 is 4
-    // So we should choose v1.1.0 as the update target.
-    // But if the newest tag is v1.1.1111 (distance is 5), then we would choose foo-v1.1.0 instead.
+    // Add a second tag (`foo-v1.1.0`) pointing at the same commit as `v1.1.0`.
+    // From the current `rev` (`v1.0.0`):
+    // - `levenshtein(v1.0.0, v1.1.0) == 1`
+    // - `levenshtein(v1.0.0, foo-v1.1.0) == 5`
+    // Therefore, `v1.1.0` should be selected as the update target.
+    // But if the newest SemVer-like tag (e.g v1.1.111111) were less similar than `foo-v1.1.0`, we would select `foo-v1.1.0` instead.
     Command::new("git")
         .arg("tag")
         .arg("foo-v1.1.0")

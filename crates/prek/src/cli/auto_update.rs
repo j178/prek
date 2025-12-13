@@ -189,16 +189,17 @@ async fn update_repo(
     cooldown_days: u8,
 ) -> Result<Revision> {
     let tmp_dir = tempfile::tempdir()?;
+    let repo_path = tmp_dir.path();
 
     trace!(
         "Cloning repository `{}` to `{}`",
         repo.repo,
-        tmp_dir.path().display()
+        repo_path.display()
     );
 
-    setup_and_fetch_repo(repo.repo.as_str(), tmp_dir.path()).await?;
+    setup_and_fetch_repo(repo.repo.as_str(), repo_path).await?;
 
-    let rev = resolve_revision(tmp_dir.path(), &repo.rev, bleeding_edge, cooldown_days).await?;
+    let rev = resolve_revision(repo_path, &repo.rev, bleeding_edge, cooldown_days).await?;
 
     let Some(rev) = rev else {
         debug!("No suitable revision found for repo `{}`", repo.repo);
@@ -208,13 +209,14 @@ async fn update_repo(
         });
     };
 
-    let (rev, frozen) = if freeze && let Some(hash) = freeze_revision(tmp_dir.path(), &rev).await? {
-        (hash, Some(rev))
+    let (rev, frozen) = if freeze && let Some(exact) = freeze_revision(repo_path, &rev).await? {
+        debug!("Freezing revision `{rev}` to `{exact}`");
+        (exact, Some(rev))
     } else {
         (rev, None)
     };
 
-    checkout_and_validate_manifest(tmp_dir.path(), &rev, repo).await?;
+    checkout_and_validate_manifest(repo_path, &rev, repo).await?;
 
     Ok(Revision { rev, frozen })
 }
@@ -331,12 +333,12 @@ async fn resolve_revision(
         return Ok(None);
     };
 
-    trace!("Using tag `{target_tag}` cutoff timestamp {target_ts}");
+    debug!("Using tag `{target_tag}` cutoff timestamp {target_ts}");
 
     let best = get_best_candidate_tag(repo_path, target_tag, current_rev)
         .await
         .unwrap_or_else(|_| target_tag.clone());
-    trace!("Resolved revision to `{}`", best);
+    debug!("Using best candidate tag `{best}` for revision `{target_tag}`");
 
     Ok(Some(best))
 }
@@ -349,12 +351,11 @@ async fn freeze_revision(repo_path: &Path, rev: &str) -> Result<Option<String>> 
         .output()
         .await?
         .stdout;
-    let exact = String::from_utf8_lossy(&exact).trim().to_string();
+    let exact = str::from_utf8(&exact)?.trim();
     if rev == exact {
         Ok(None)
     } else {
-        trace!("Freezing revision to `{exact}`");
-        Ok(Some(exact))
+        Ok(Some(exact.to_string()))
     }
 }
 
