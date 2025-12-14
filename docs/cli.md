@@ -67,7 +67,22 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-install--config"><a href="#prek-install--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
 </dd><dt id="prek-install--help"><a href="#prek-install--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="prek-install--hook-type"><a href="#prek-install--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dt id="prek-install--install-hooks"><a href="#prek-install--install-hooks"><code>--install-hooks</code></a></dt><dd><p>Create hook environments for all hooks used in the config file</p>
+</dd><dt id="prek-install--hook-type"><a href="#prek-install--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which hook type(s) to install.</p>
+<p>Specifies which git hook stage(s) you want to install the hook script for. Can be specified multiple times to install hooks for multiple stages. Defaults to <code>pre-commit</code> if not specified.</p>
+<p>Note: This is different from a hook's <code>stages</code> parameter in the config file, which declares which stages a hook <em>can</em> run in.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>commit-msg</code></li>
+<li><code>post-checkout</code></li>
+<li><code>post-commit</code></li>
+<li><code>post-merge</code></li>
+<li><code>post-rewrite</code></li>
+<li><code>pre-commit</code></li>
+<li><code>pre-merge-commit</code></li>
+<li><code>pre-push</code></li>
+<li><code>pre-rebase</code></li>
+<li><code>prepare-commit-msg</code></li>
+</ul></dd><dt id="prek-install--install-hooks"><a href="#prek-install--install-hooks"><code>--install-hooks</code></a></dt><dd><p>Create hook environments for all hooks used in the config file</p>
 </dd><dt id="prek-install--log-file"><a href="#prek-install--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
 </dd><dt id="prek-install--no-progress"><a href="#prek-install--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
@@ -372,7 +387,21 @@ prek uninstall [OPTIONS]
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-uninstall--config"><a href="#prek-uninstall--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
 </dd><dt id="prek-uninstall--help"><a href="#prek-uninstall--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="prek-uninstall--hook-type"><a href="#prek-uninstall--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dt id="prek-uninstall--log-file"><a href="#prek-uninstall--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
+</dd><dt id="prek-uninstall--hook-type"><a href="#prek-uninstall--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which hook type(s) to uninstall.</p>
+<p>Specifies which git hook stage(s) you want to uninstall. Can be specified multiple times to uninstall hooks for multiple stages. If not specified, all installed hook types will be uninstalled.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>commit-msg</code></li>
+<li><code>post-checkout</code></li>
+<li><code>post-commit</code></li>
+<li><code>post-merge</code></li>
+<li><code>post-rewrite</code></li>
+<li><code>pre-commit</code></li>
+<li><code>pre-merge-commit</code></li>
+<li><code>pre-push</code></li>
+<li><code>pre-rebase</code></li>
+<li><code>prepare-commit-msg</code></li>
+</ul></dd><dt id="prek-uninstall--log-file"><a href="#prek-uninstall--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
 </dd><dt id="prek-uninstall--no-progress"><a href="#prek-uninstall--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-uninstall--quiet"><a href="#prek-uninstall--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
