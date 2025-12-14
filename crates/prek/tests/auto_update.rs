@@ -459,6 +459,67 @@ fn auto_update_freeze() -> Result<()> {
 }
 
 #[test]
+fn auto_update_freeze_uses_dereferenced_commit_for_annotated_tags() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path =
+        create_local_git_repo(&context, "freeze-annotated-repo", &["v1.0.0", "v1.1.0"])?;
+
+    let tag_object_sha = Command::new("git")
+        .args(["rev-parse", "v1.1.0"])
+        .current_dir(&repo_path)
+        .output()?
+        .stdout;
+    let tag_object_sha = str::from_utf8(&tag_object_sha)?.trim();
+
+    let commit_sha = Command::new("git")
+        .args(["rev-parse", "v1.1.0^{}"])
+        .current_dir(&repo_path)
+        .output()?
+        .stdout;
+    let commit_sha = str::from_utf8(&commit_sha)?.trim();
+
+    assert_ne!(
+        tag_object_sha, commit_sha,
+        "sanity check failed: annotated tag object SHA should differ from commit SHA"
+    );
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+    context.git_add(".");
+
+    context
+        .auto_update()
+        .arg("--freeze")
+        .arg("--cooldown-days")
+        .arg("0")
+        .assert()
+        .success();
+
+    let config = context.read(CONFIG_FILE);
+    assert!(
+        config.contains(&format!("rev: {commit_sha}")),
+        "expected config to contain the dereferenced commit SHA"
+    );
+    assert!(
+        config.contains("# frozen: v1.1.0"),
+        "expected config to preserve the original tag in the frozen comment"
+    );
+    assert!(
+        !config.contains(tag_object_sha),
+        "expected config to not contain the annotated tag object SHA"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn auto_update_preserve_formatting() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
