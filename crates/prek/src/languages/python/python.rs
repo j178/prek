@@ -101,6 +101,8 @@ impl LanguageImpl for Python {
                 .arg(repo_path)
                 .arg("pip")
                 .arg("install")
+                // Explicitly set project to root to avoid uv searching for project-level configs
+                .args(["--project", "/"])
                 .arg(".")
                 .args(&hook.additional_dependencies)
                 .env(EnvVars::VIRTUAL_ENV, &info.env_path)
@@ -116,6 +118,8 @@ impl LanguageImpl for Python {
             uv.cmd("uv pip install", store)
                 .arg("pip")
                 .arg("install")
+                // Explicitly set project to root to avoid uv searching for project-level configs
+                .args(["--project", "/"])
                 .args(&hook.additional_dependencies)
                 .env(EnvVars::VIRTUAL_ENV, &info.env_path)
                 // Make sure uv uses the venv's python
@@ -293,10 +297,12 @@ impl Python {
         let mut cmd = uv.cmd("create venv", store);
         cmd.arg("venv")
             .arg(&info.env_path)
-            .arg("--python-preference")
-            .arg("managed")
+            .args(["--python-preference", "managed"])
+            // Avoid discovering a project or workspace
             .arg("--no-project")
-            .arg("--no-config")
+            // Explicitly set project to root to avoid uv searching for project-level configs
+            .args(["--project", "/"])
+            .env_remove(EnvVars::UV_PYTHON)
             // `--managed_python` conflicts with `--python-preference`, ignore any user setting
             .env_remove(EnvVars::UV_MANAGED_PYTHON)
             .env_remove(EnvVars::UV_NO_MANAGED_PYTHON);
