@@ -68,7 +68,8 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 </ul></dd><dt id="prek-install--config"><a href="#prek-install--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
 </dd><dt id="prek-install--help"><a href="#prek-install--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-install--hook-type"><a href="#prek-install--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which hook type(s) to install.</p>
-<p>Specifies which git hook stage(s) you want to install the hook script for. Can be specified multiple times to install hooks for multiple stages. Defaults to <code>pre-commit</code> if not specified.</p>
+<p>Specifies which git hook stage(s) you want to install the hook script for. Can be specified multiple times to install hooks for multiple stages.</p>
+<p>If not specified, uses <code>default_install_hook_types</code> from the config file, or defaults to <code>pre-commit</code> if that is also not set.</p>
 <p>Note: This is different from a hook's <code>stages</code> parameter in the config file, which declares which stages a hook <em>can</em> run in.</p>
 <p>Possible values:</p>
 <ul>
@@ -388,7 +389,8 @@ prek uninstall [OPTIONS]
 </ul></dd><dt id="prek-uninstall--config"><a href="#prek-uninstall--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
 </dd><dt id="prek-uninstall--help"><a href="#prek-uninstall--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-uninstall--hook-type"><a href="#prek-uninstall--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which hook type(s) to uninstall.</p>
-<p>Specifies which git hook stage(s) you want to uninstall. Can be specified multiple times to uninstall hooks for multiple stages. If not specified, all installed hook types will be uninstalled.</p>
+<p>Specifies which git hook stage(s) you want to uninstall. Can be specified multiple times to uninstall hooks for multiple stages.</p>
+<p>If not specified, uses <code>default_install_hook_types</code> from the config file, or defaults to <code>pre-commit</code> if that is also not set.</p>
 <p>Possible values:</p>
 <ul>
 <li><code>commit-msg</code></li>
@@ -722,7 +724,9 @@ prek init-template-dir [OPTIONS] <DIRECTORY>
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-init-template-dir--config"><a href="#prek-init-template-dir--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
 </dd><dt id="prek-init-template-dir--help"><a href="#prek-init-template-dir--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="prek-init-template-dir--hook-type"><a href="#prek-init-template-dir--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which hook type to install</p>
+</dd><dt id="prek-init-template-dir--hook-type"><a href="#prek-init-template-dir--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which hook type(s) to install.</p>
+<p>Specifies which git hook stage(s) you want to install the hook script for. Can be specified multiple times to install hooks for multiple stages.</p>
+<p>If not specified, uses <code>default_install_hook_types</code> from the config file, or defaults to <code>pre-commit</code> if that is also not set.</p>
 <p>Possible values:</p>
 <ul>
 <li><code>commit-msg</code></li>

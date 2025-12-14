@@ -291,7 +291,9 @@ pub(crate) struct InstallArgs {
     ///
     /// Specifies which git hook stage(s) you want to install the hook script for.
     /// Can be specified multiple times to install hooks for multiple stages.
-    /// Defaults to `pre-commit` if not specified.
+    ///
+    /// If not specified, uses `default_install_hook_types` from the config file,
+    /// or defaults to `pre-commit` if that is also not set.
     ///
     /// Note: This is different from a hook's `stages` parameter in the config file,
     /// which declares which stages a hook *can* run in.
@@ -344,7 +346,9 @@ pub(crate) struct UninstallArgs {
     ///
     /// Specifies which git hook stage(s) you want to uninstall.
     /// Can be specified multiple times to uninstall hooks for multiple stages.
-    /// If not specified, all installed hook types will be uninstalled.
+    ///
+    /// If not specified, uses `default_install_hook_types` from the config file,
+    /// or defaults to `pre-commit` if that is also not set.
     #[arg(short = 't', long = "hook-type", value_name = "HOOK_TYPE", value_enum)]
     pub(crate) hook_types: Vec<HookType>,
 }
@@ -715,7 +719,13 @@ pub(crate) struct InitTemplateDirArgs {
     #[arg(long)]
     pub(crate) no_allow_missing_config: bool,
 
-    /// Which hook type to install.
+    /// Which hook type(s) to install.
+    ///
+    /// Specifies which git hook stage(s) you want to install the hook script for.
+    /// Can be specified multiple times to install hooks for multiple stages.
+    ///
+    /// If not specified, uses `default_install_hook_types` from the config file,
+    /// or defaults to `pre-commit` if that is also not set.
     #[arg(short = 't', long = "hook-type", value_name = "HOOK_TYPE", value_enum)]
     pub(crate) hook_types: Vec<HookType>,
 }
