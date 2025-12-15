@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use prek_consts::env_vars::EnvVars;
 use serde::Deserialize;
-use tracing::{debug, trace};
+use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
 use crate::hook::InstalledHook;
@@ -79,7 +79,7 @@ impl LanguageImpl for Python {
 
         let mut info = InstallInfo::new(
             hook.language,
-            hook.dependencies().clone(),
+            hook.env_key_dependencies().clone(),
             &store.hooks_dir(),
         )?;
 
@@ -91,42 +91,25 @@ impl LanguageImpl for Python {
             .context("Failed to create Python virtual environment")?;
 
         // Install dependencies
-        if let Some(repo_path) = hook.repo_path() {
-            trace!(
-                "Installing dependencies from repo path: {}",
-                repo_path.display()
-            );
-            uv.cmd("uv pip install", store)
-                .arg("--directory")
-                .arg(repo_path)
-                .arg("pip")
-                .arg("install")
-                .arg(".")
-                .args(&hook.additional_dependencies)
-                .env(EnvVars::VIRTUAL_ENV, &info.env_path)
-                // Make sure uv uses the venv's python
-                .env_remove(EnvVars::UV_PYTHON)
-                .env_remove(EnvVars::UV_MANAGED_PYTHON)
-                .env_remove(EnvVars::UV_NO_MANAGED_PYTHON)
-                .check(true)
-                .output()
-                .await?;
-        } else if !hook.additional_dependencies.is_empty() {
-            trace!("Installing additional dependencies for local hook");
-            uv.cmd("uv pip install", store)
-                .arg("pip")
-                .arg("install")
-                .args(&hook.additional_dependencies)
-                .env(EnvVars::VIRTUAL_ENV, &info.env_path)
-                // Make sure uv uses the venv's python
-                .env_remove(EnvVars::UV_PYTHON)
-                .env_remove(EnvVars::UV_MANAGED_PYTHON)
-                .env_remove(EnvVars::UV_NO_MANAGED_PYTHON)
-                .check(true)
-                .output()
-                .await?;
+        let deps = hook.install_dependencies();
+        if deps.is_empty() {
+            debug!("No dependencies to install");
         } else {
-            debug!("No additional dependencies to install");
+            uv.cmd("uv pip install", store)
+                .arg("pip")
+                .arg("install")
+                // Explicitly set project to root to avoid uv searching for project-level configs
+                // `--project` has no other effect on `uv pip` subcommands.
+                .args(["--project", "/"])
+                .args(&*deps)
+                .env(EnvVars::VIRTUAL_ENV, &info.env_path)
+                // Make sure uv uses the venv's python
+                .env_remove(EnvVars::UV_PYTHON)
+                .env_remove(EnvVars::UV_MANAGED_PYTHON)
+                .env_remove(EnvVars::UV_NO_MANAGED_PYTHON)
+                .check(true)
+                .output()
+                .await?;
         }
 
         let python = python_exec(&info.env_path);
@@ -293,10 +276,12 @@ impl Python {
         let mut cmd = uv.cmd("create venv", store);
         cmd.arg("venv")
             .arg(&info.env_path)
-            .arg("--python-preference")
-            .arg("managed")
+            .args(["--python-preference", "managed"])
+            // Avoid discovering a project or workspace
             .arg("--no-project")
-            .arg("--no-config")
+            // Explicitly set project to root to avoid uv searching for project-level configs
+            .args(["--project", "/"])
+            .env_remove(EnvVars::UV_PYTHON)
             // `--managed_python` conflicts with `--python-preference`, ignore any user setting
             .env_remove(EnvVars::UV_MANAGED_PYTHON)
             .env_remove(EnvVars::UV_NO_MANAGED_PYTHON);

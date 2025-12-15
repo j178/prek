@@ -463,7 +463,8 @@ fn partition_hooks(hooks: &[Arc<Hook>]) -> Vec<Vec<Arc<Hook>>> {
         current_group.push(index);
 
         for i in 0..hooks.len() {
-            if !visited[i] && hooks[index].dependencies() == hooks[i].dependencies() {
+            if !visited[i] && hooks[index].env_key_dependencies() == hooks[i].env_key_dependencies()
+            {
                 dfs(i, hooks, visited, current_group);
             }
         }
