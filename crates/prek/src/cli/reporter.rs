@@ -156,6 +156,78 @@ impl HookInstallReporter {
     }
 }
 
+pub(crate) struct HookRunReporter {
+    reporter: ProgressReporter,
+}
+
+impl From<Printer> for HookRunReporter {
+    fn from(printer: Printer) -> Self {
+        let multi = MultiProgress::with_draw_target(printer.target());
+        let root = multi.add(ProgressBar::with_draw_target(None, printer.target()));
+        root.enable_steady_tick(Duration::from_millis(200));
+        root.set_style(
+            ProgressStyle::with_template("{spinner:.white} {msg:.dim}")
+                .unwrap()
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+        );
+        root.set_message("Running hooks");
+
+        let reporter = ProgressReporter::new(root, multi, printer);
+        Self { reporter }
+    }
+}
+
+impl HookRunReporter {
+    pub fn on_run_start(&self, hook: &Hook) -> usize {
+        // Render a per-hook "growing suffix" line while the hook is running.
+        // Example:
+        //   hook-name···
+        //   ⠴ Running hooks
+        let mut state = self.reporter.state.lock().unwrap();
+        let id = state.id();
+
+        let progress = self.reporter.children.insert_before(
+            &self.reporter.root,
+            ProgressBar::with_draw_target(None, self.reporter.printer.target()),
+        );
+
+        // NOTE: indicatif spinners cycle, so the suffix will "grow" then wrap.
+        // That's intended for a lightweight running animation.
+        progress.enable_steady_tick(Duration::from_millis(150));
+        progress.set_style(
+            ProgressStyle::with_template("{msg}{spinner:.dim}")
+                .unwrap()
+                .tick_strings(&["", "·", "··", "···", "····", "·····", "······"]),
+        );
+        progress.set_message(hook.name.clone());
+        state.bars.insert(id, progress);
+        id
+    }
+
+    pub fn on_run_complete(&self, id: usize) {
+        let progress = {
+            let mut state = self.reporter.state.lock().unwrap();
+            state.bars.remove(&id).unwrap()
+        };
+
+        self.reporter.root.inc(1);
+
+        // Clear the running line; final output is printed by the caller.
+        progress.finish_and_clear();
+    }
+
+    /// Temporarily suspend progress rendering while emitting normal output.
+    ///
+    /// This helps prevent the progress UI from being corrupted by concurrent writes.
+    pub fn suspend<R>(&self, f: impl FnOnce() -> R) -> R {
+        self.reporter.children.suspend(f)
+    }
+
+    pub fn on_complete(&self) {
+        self.reporter.on_complete();
+    }
+}
+
 pub(crate) struct AutoUpdateReporter {
     reporter: ProgressReporter,
 }

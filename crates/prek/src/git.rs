@@ -282,68 +282,6 @@ pub(crate) async fn get_diff(path: &Path) -> Result<Vec<u8>, Error> {
     Ok(output.stdout)
 }
 
-const MAX_PATHSPEC_BATCH: usize = 128;
-
-async fn diff_chunk_has_changes(paths: &[PathBuf]) -> Result<bool, Error> {
-    if paths.is_empty() {
-        return Ok(false);
-    }
-
-    let mut cmd = git_cmd("check diff for files")?;
-    cmd.arg("diff")
-        .arg("--no-ext-diff")
-        .arg("--no-textconv")
-        .arg("--ignore-submodules")
-        .arg("--quiet")
-        .arg("--");
-
-    for path in paths {
-        cmd.arg(path);
-    }
-
-    let status = cmd.check(false).status().await?;
-    Ok(!status.success())
-}
-
-pub(crate) async fn has_diff_for_paths(paths: &[PathBuf]) -> Result<bool, Error> {
-    if paths.is_empty() {
-        return Ok(false);
-    }
-
-    let mut current_batch = Vec::new();
-
-    for path in paths {
-        if current_batch.len() == MAX_PATHSPEC_BATCH {
-            if diff_chunk_has_changes(&current_batch).await? {
-                return Ok(true);
-            }
-            current_batch.clear();
-        }
-        current_batch.push(path.clone());
-    }
-
-    if !current_batch.is_empty() && diff_chunk_has_changes(&current_batch).await? {
-        return Ok(true);
-    }
-
-    Ok(false)
-}
-
-pub(crate) async fn has_diff_at_path(path: &Path) -> Result<bool, Error> {
-    let mut cmd = git_cmd("check diff for path")?;
-    cmd.arg("diff")
-        .arg("--no-ext-diff")
-        .arg("--no-textconv")
-        .arg("--ignore-submodules")
-        .arg("--quiet")
-        .arg("--")
-        .arg(path)
-        .check(false);
-
-    let status = cmd.status().await?;
-    Ok(!status.success())
-}
-
 /// Create a tree object from the current index.
 ///
 /// The name of the new tree object is printed to standard output.

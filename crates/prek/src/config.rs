@@ -734,7 +734,7 @@ fn warn_unused_paths(path: &Path, entries: &[String]) {
             .join(", ");
         warn_user!(
             "Ignored unexpected keys in `{}`: {inline}",
-            path.display().cyan()
+            path.user_display().cyan()
         );
     } else {
         let list = entries
@@ -743,7 +743,7 @@ fn warn_unused_paths(path: &Path, entries: &[String]) {
             .join("\n");
         warn_user!(
             "Ignored unexpected keys in `{}`:\n{list}",
-            path.display().cyan()
+            path.user_display().cyan()
         );
     }
 }

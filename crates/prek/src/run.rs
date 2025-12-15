@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::LazyLock;
 
 use anstream::ColorChoice;
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use prek_consts::env_vars::EnvVars;
 use tracing::trace;
 
@@ -165,14 +165,11 @@ where
     );
 
     #[allow(clippy::redundant_closure)]
-    let mut tasks = futures::stream::iter(partitions)
+    let results: Vec<_> = futures::stream::iter(partitions)
         .map(|batch| run(batch))
-        .buffered(concurrency);
-
-    let mut results = Vec::new();
-    while let Some(result) = tasks.next().await {
-        results.push(result?);
-    }
+        .buffered(concurrency)
+        .try_collect()
+        .await?;
 
     Ok(results)
 }
