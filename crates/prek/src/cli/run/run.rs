@@ -1,5 +1,5 @@
 use std::fmt::Write as _;
-use std::io::Write;
+use std::io::Write as _;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, LazyLock};
@@ -523,6 +523,8 @@ impl StatusPrinter {
     }
 
     fn calculate_columns(hooks: &[InstalledHook]) -> usize {
+        // Leave room for optional per-line prefixes like "╭ " / "├ ".
+        const PREFIX_LEN: usize = 2;
         let name_len = hooks
             .iter()
             .map(|hook| hook.name.width_cjk())
@@ -530,7 +532,7 @@ impl StatusPrinter {
             .unwrap_or(0);
         std::cmp::max(
             80,
-            name_len + 3 + Self::NO_FILES.len() + 1 + Self::SKIPPED.len(),
+            (name_len + PREFIX_LEN) + 3 + Self::NO_FILES.len() + 1 + Self::SKIPPED.len(),
         )
     }
 
@@ -668,56 +670,120 @@ async fn run_hooks(
             )
             .buffer_unordered(*CONCURRENCY);
 
-            let mut hook_fail_fast = false;
+            // NOTE: We buffer hook results for the whole group so we can
+            // deterministically print them in config order and override the
+            // group's final status if the group modified files.
+            let mut group_results = Vec::with_capacity(end - idx);
             while let Some(result) = results.next().await {
-                let RunResult {
-                    hook,
-                    status,
-                    status_line,
-                    output,
-                } = result?;
+                group_results.push(result?);
+            }
 
-                reporter.suspend(|| {
-                    // Print the final status line in the familiar dotted style.
-                    status_printer.write(&hook.name, status_line)?;
+            // Print results in a stable order (same order as config within the project).
+            group_results.sort_by(|a, b| a.hook.idx.cmp(&b.hook.idx));
 
-                    // Print any buffered hook output right after the status line.
+            // Check if any files were modified by this group of hooks.
+            let curr_diff = git::get_diff(project.path()).await?;
+            let group_modified_files = curr_diff != prev_diff;
+            prev_diff = curr_diff;
+
+            if group_modified_files {
+                file_modified = true;
+                success = false;
+            }
+
+            let mut hook_fail_fast = false;
+            reporter.suspend(|| {
+                for (
+                    i,
+                    RunResult {
+                        hook,
+                        status_line,
+                        output,
+                        ..
+                    },
+                ) in group_results.iter().enumerate()
+                {
+                    // If the group modified files, treat the whole group as failed.
+                    // This makes the UI and exit status consistent with the "show diff" flow.
+                    let final_status_line = if group_modified_files {
+                        StatusLine::Failed
+                    } else {
+                        *status_line
+                    };
+
+                    let hook_name = if group_modified_files {
+                        // A compact, readable block that scales to many hooks.
+                        //   ╭ hook-1 ... Failed
+                        //   ├ hook-2 ... Failed
+                        //   │ - verbose output...
+                        //   ╰ Files were modified by these hooks
+                        let prefix = if i == 0 { "╭" } else { "├" };
+                        format!("{prefix} {}", hook.name)
+                    } else {
+                        hook.name.clone()
+                    };
+
+                    status_printer.write(&hook_name, final_status_line)?;
+
                     if !output.is_empty() {
-                        let mut stdout = match status_line {
+                        let mut stdout = match final_status_line {
                             StatusLine::Failed => printer.stdout_important(),
                             _ => printer.stdout(),
                         };
-                        stdout.write_str(&String::from_utf8_lossy(&output))?;
-                    }
-                    anyhow::Ok(())
-                })?;
 
+                        if group_modified_files {
+                            // Keep the group's output visually grouped and readable.
+                            // Example:
+                            //   ╭ hook-name ... Failed
+                            //   │ - hook id: ...
+                            //   │ - duration: ...
+                            //   ╰ Files were modified by these hooks
+                            let text = String::from_utf8_lossy(output);
+                            for line in text.lines() {
+                                if line.is_empty() {
+                                    writeln!(stdout, "{}", "│".dimmed())?;
+                                } else {
+                                    writeln!(stdout, "{} {}", "│".dimmed(), line)?;
+                                }
+                            }
+                        } else {
+                            stdout.write_str(&String::from_utf8_lossy(output))?;
+                        }
+                    }
+                }
+
+                if group_modified_files {
+                    writeln!(
+                        printer.stdout_important(),
+                        "╰ {}",
+                        "Files were modified by these hooks".yellow().bold()
+                    )
+                    .map_err(|e| anyhow::anyhow!(e))?;
+                }
+
+                anyhow::Ok(())
+            })?;
+
+            for RunResult { hook, status, .. } in &group_results {
                 has_unimplemented |= status.is_unimplemented();
-                success &= status.as_bool();
-                if !status.as_bool() && hook.fail_fast {
+
+                let final_ok = if group_modified_files {
+                    false
+                } else {
+                    status.as_bool()
+                };
+
+                success &= final_ok;
+                if !final_ok && hook.fail_fast {
                     hook_fail_fast = true;
                 }
             }
 
-            // Check if any files were modified by this group of hooks.
-            let curr_diff = git::get_diff(project.path()).await?;
-            if curr_diff != prev_diff {
-                file_modified = true;
-                success = false;
-
-                // Print a single group-level message so it's clear why the run is failing.
-                reporter.suspend(|| {
-                    writeln!(
-                        printer.stdout_important(),
-                        "{} {}",
-                        "↳".dimmed(),
-                        "Files were modified by hooks".yellow().bold()
-                    )
-                    .map_err(|e| anyhow::anyhow!(e))?;
-                    anyhow::Ok(())
-                })?;
+            if group_modified_files {
+                // If the group failed due to modifications and any hook in the group
+                // requested fail-fast, honor that as well.
+                hook_fail_fast |= group_results.iter().any(|r| r.hook.fail_fast);
             }
-            prev_diff = curr_diff;
 
             if !success && (project_fail_fast || hook_fail_fast) {
                 break 'outer;
