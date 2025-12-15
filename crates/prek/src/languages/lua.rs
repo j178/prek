@@ -64,7 +64,7 @@ impl LanguageImpl for Lua {
 
         let mut info = InstallInfo::new(
             hook.language,
-            hook.dependencies().clone(),
+            hook.env_key_dependencies().clone(),
             &store.hooks_dir(),
         )?;
 

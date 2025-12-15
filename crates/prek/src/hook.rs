@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
@@ -479,7 +480,11 @@ impl Hook {
         matches!(&*self.repo, Repo::Remote { .. })
     }
 
-    pub(crate) fn dependencies(&self) -> &FxHashSet<String> {
+    /// Dependencies used to identify whether an existing hook environment can be reused.
+    ///
+    /// For remote hooks, the repo URL is included to avoid reusing an environment created
+    /// from a different remote repository.
+    pub(crate) fn env_key_dependencies(&self) -> &FxHashSet<String> {
         if !self.is_remote() {
             return &self.additional_dependencies;
         }
@@ -493,6 +498,20 @@ impl Hook {
             deps.insert(self.repo.to_string());
             deps
         })
+    }
+
+    /// Dependencies to pass to language dependency installers.
+    ///
+    /// For remote hooks, this includes the local path to the cloned repository so that
+    /// installers can install the hook's package/project itself.
+    pub(crate) fn install_dependencies(&self) -> Cow<'_, FxHashSet<String>> {
+        if let Some(repo_path) = self.repo_path() {
+            let mut deps = self.additional_dependencies.clone();
+            deps.insert(repo_path.to_string_lossy().to_string());
+            Cow::Owned(deps)
+        } else {
+            Cow::Borrowed(&self.additional_dependencies)
+        }
     }
 }
 
@@ -645,7 +664,7 @@ impl InstallInfo {
 
     pub(crate) fn matches(&self, hook: &Hook) -> bool {
         self.language == hook.language
-            && &self.dependencies == hook.dependencies()
+            && &self.dependencies == hook.env_key_dependencies()
             && hook.language_request.satisfied_by(self)
     }
 }

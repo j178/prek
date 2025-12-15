@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -6,7 +5,6 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use prek_consts::env_vars::EnvVars;
-use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use crate::cli::reporter::HookInstallReporter;
@@ -56,7 +54,7 @@ impl LanguageImpl for Node {
 
         let mut info = InstallInfo::new(
             hook.language,
-            hook.dependencies().clone(),
+            hook.env_key_dependencies().clone(),
             &store.hooks_dir(),
         )?;
 
@@ -81,13 +79,7 @@ impl LanguageImpl for Node {
         .await?;
 
         // 3. Install dependencies
-        let deps = if let Some(repo) = hook.repo_path() {
-            let mut deps = hook.additional_dependencies.clone();
-            deps.insert(repo.to_string_lossy().to_string());
-            Cow::Owned::<FxHashSet<_>>(deps)
-        } else {
-            Cow::Borrowed(&hook.additional_dependencies)
-        };
+        let deps = hook.install_dependencies();
         if deps.is_empty() {
             debug!("No dependencies to install");
         } else {
