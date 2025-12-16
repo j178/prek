@@ -523,8 +523,6 @@ impl StatusPrinter {
     }
 
     fn calculate_columns(hooks: &[InstalledHook]) -> usize {
-        // Leave room for optional per-line prefixes like "╭ " / "├ ".
-        const PREFIX_LEN: usize = 2;
         let name_len = hooks
             .iter()
             .map(|hook| hook.name.width_cjk())
@@ -532,7 +530,7 @@ impl StatusPrinter {
             .unwrap_or(0);
         std::cmp::max(
             80,
-            (name_len + PREFIX_LEN) + 3 + Self::NO_FILES.len() + 1 + Self::SKIPPED.len(),
+            name_len + 3 + Self::NO_FILES.len() + 1 + Self::SKIPPED.len(),
         )
     }
 
@@ -703,6 +701,8 @@ async fn run_hooks(
                     },
                 ) in group_results.iter().enumerate()
                 {
+                    let show_group_ui = group_results.len() > 1 || group_modified_files;
+
                     // If the group modified files, treat the whole group as failed.
                     // This makes the UI and exit status consistent with the "show diff" flow.
                     let final_status_line = if group_modified_files {
@@ -711,13 +711,24 @@ async fn run_hooks(
                         *status_line
                     };
 
-                    let hook_name = if group_modified_files {
-                        // A compact, readable block that scales to many hooks.
-                        //   ╭ hook-1 ... Failed
-                        //   ├ hook-2 ... Failed
-                        //   │ - verbose output...
-                        //   ╰ Files were modified by these hooks
-                        let prefix = if i == 0 { "╭" } else { "├" };
+                    // Keep the default output identical to legacy mode.
+                    // Only show minimal group structure when a priority-group contains
+                    // multiple hooks or when the group modified files.
+                    let hook_name = if show_group_ui {
+                        let prefix = if group_modified_files {
+                            // We'll print a trailing group summary line (╰ ...), so all hooks
+                            // are rendered as "start" or "middle" lines.
+                            if i == 0 { "╭" } else { "├" }
+                        } else {
+                            // No summary line; close the group on the last hook line.
+                            if i == 0 {
+                                "╭"
+                            } else if i + 1 == group_results.len() {
+                                "╰"
+                            } else {
+                                "├"
+                            }
+                        };
                         format!("{prefix} {}", hook.name)
                     } else {
                         hook.name.clone()
@@ -731,13 +742,8 @@ async fn run_hooks(
                             _ => printer.stdout(),
                         };
 
-                        if group_modified_files {
-                            // Keep the group's output visually grouped and readable.
-                            // Example:
-                            //   ╭ hook-name ... Failed
-                            //   │ - hook id: ...
-                            //   │ - duration: ...
-                            //   ╰ Files were modified by these hooks
+                        if show_group_ui {
+                            // Keep verbose output visually grouped and readable.
                             let text = String::from_utf8_lossy(output);
                             for line in text.lines() {
                                 if line.is_empty() {
