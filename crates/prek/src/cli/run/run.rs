@@ -651,30 +651,11 @@ async fn run_hooks(
 
         let project_fail_fast = fail_fast || project.config().fail_fast.unwrap_or(false);
 
-        let mut idx = 0;
-        while idx < hooks.len() {
-            let priority = hooks[idx].priority;
-            let mut end = idx + 1;
-            while end < hooks.len() && hooks[end].priority == priority {
-                end += 1;
-            }
-
-            // Run hooks with the same priority in parallel.
-            let group_hooks = hooks[idx..end].to_vec();
-            let mut results = futures::stream::iter(
-                group_hooks
-                    .into_iter()
-                    .map(|hook| run_hook(hook, &filter, store, verbose, dry_run, &reporter)),
-            )
-            .buffer_unordered(*CONCURRENCY);
-
-            // NOTE: We buffer hook results for the whole group so we can
-            // deterministically print them in config order and override the
-            // group's final status if the group modified files.
-            let mut group_results = Vec::with_capacity(end - idx);
-            while let Some(result) = results.next().await {
-                group_results.push(result?);
-            }
+        for group_range in PriorityGroupRanges::new(&hooks) {
+            let group_hooks = hooks[group_range].to_vec();
+            let mut group_results =
+                run_priority_group(group_hooks, &filter, store, verbose, dry_run, &reporter)
+                    .await?;
 
             // Print results in a stable order (same order as config within the project).
             group_results.sort_by(|a, b| a.hook.idx.cmp(&b.hook.idx));
@@ -689,113 +670,25 @@ async fn run_hooks(
                 success = false;
             }
 
-            let mut hook_fail_fast = false;
             reporter.suspend(|| {
-                for (
-                    i,
-                    RunResult {
-                        hook,
-                        status_line,
-                        output,
-                        ..
-                    },
-                ) in group_results.iter().enumerate()
-                {
-                    let show_group_ui = group_results.len() > 1 || group_modified_files;
-
-                    // If the group modified files, treat the whole group as failed.
-                    // This makes the UI and exit status consistent with the "show diff" flow.
-                    let final_status_line = if group_modified_files {
-                        StatusLine::Failed
-                    } else {
-                        *status_line
-                    };
-
-                    // Keep the default output identical to legacy mode.
-                    // Only show minimal group structure when a priority-group contains
-                    // multiple hooks or when the group modified files.
-                    let hook_name = if show_group_ui {
-                        let prefix = if group_modified_files {
-                            // We'll print a trailing group summary line (╰ ...), so all hooks
-                            // are rendered as "start" or "middle" lines.
-                            if i == 0 { "╭" } else { "├" }
-                        } else {
-                            // No summary line; close the group on the last hook line.
-                            if i == 0 {
-                                "╭"
-                            } else if i + 1 == group_results.len() {
-                                "╰"
-                            } else {
-                                "├"
-                            }
-                        };
-                        format!("{prefix} {}", hook.name)
-                    } else {
-                        hook.name.clone()
-                    };
-
-                    status_printer.write(&hook_name, final_status_line)?;
-
-                    if !output.is_empty() {
-                        let mut stdout = match final_status_line {
-                            StatusLine::Failed => printer.stdout_important(),
-                            _ => printer.stdout(),
-                        };
-
-                        if show_group_ui {
-                            // Keep verbose output visually grouped and readable.
-                            let text = String::from_utf8_lossy(output);
-                            for line in text.lines() {
-                                if line.is_empty() {
-                                    writeln!(stdout, "{}", "│".dimmed())?;
-                                } else {
-                                    writeln!(stdout, "{} {}", "│".dimmed(), line)?;
-                                }
-                            }
-                        } else {
-                            stdout.write_str(&String::from_utf8_lossy(output))?;
-                        }
-                    }
-                }
-
-                if group_modified_files {
-                    writeln!(
-                        printer.stdout_important(),
-                        "╰ {}",
-                        "Files were modified by these hooks".yellow().bold()
-                    )
-                    .map_err(|e| anyhow::anyhow!(e))?;
-                }
-
-                anyhow::Ok(())
+                render_priority_group(
+                    printer,
+                    &status_printer,
+                    &group_results,
+                    group_modified_files,
+                )
             })?;
 
-            for RunResult { hook, status, .. } in &group_results {
-                has_unimplemented |= status.is_unimplemented();
-
-                let final_ok = if group_modified_files {
-                    false
-                } else {
-                    status.as_bool()
-                };
-
-                success &= final_ok;
-                if !final_ok && hook.fail_fast {
-                    hook_fail_fast = true;
-                }
-            }
-
-            if group_modified_files {
-                // If the group failed due to modifications and any hook in the group
-                // requested fail-fast, honor that as well.
-                hook_fail_fast |= group_results.iter().any(|r| r.hook.fail_fast);
-            }
+            let hook_fail_fast = apply_group_outcome(
+                &group_results,
+                group_modified_files,
+                &mut success,
+                &mut has_unimplemented,
+            );
 
             if !success && (project_fail_fast || hook_fail_fast) {
                 break 'outer;
             }
-
-            idx = end;
         }
     }
 
@@ -851,6 +744,161 @@ async fn run_hooks(
     } else {
         Ok(ExitStatus::Failure)
     }
+}
+
+struct PriorityGroupRanges<'a> {
+    hooks: &'a [InstalledHook],
+    idx: usize,
+}
+
+impl<'a> PriorityGroupRanges<'a> {
+    fn new(hooks: &'a [InstalledHook]) -> Self {
+        Self { hooks, idx: 0 }
+    }
+}
+
+impl Iterator for PriorityGroupRanges<'_> {
+    type Item = std::ops::Range<usize>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx >= self.hooks.len() {
+            return None;
+        }
+
+        let start = self.idx;
+        let priority = self.hooks[start].priority;
+        let mut end = start + 1;
+        while end < self.hooks.len() && self.hooks[end].priority == priority {
+            end += 1;
+        }
+        self.idx = end;
+        Some(start..end)
+    }
+}
+
+async fn run_priority_group(
+    group_hooks: Vec<InstalledHook>,
+    filter: &FileFilter<'_>,
+    store: &Store,
+    verbose: bool,
+    dry_run: bool,
+    reporter: &HookRunReporter,
+) -> Result<Vec<RunResult>> {
+    let mut results = futures::stream::iter(
+        group_hooks
+            .into_iter()
+            .map(|hook| run_hook(hook, filter, store, verbose, dry_run, reporter)),
+    )
+    .buffer_unordered(*CONCURRENCY);
+
+    let mut group_results = Vec::new();
+    while let Some(result) = results.next().await {
+        group_results.push(result?);
+    }
+    Ok(group_results)
+}
+
+fn render_priority_group(
+    printer: Printer,
+    status_printer: &StatusPrinter,
+    group_results: &[RunResult],
+    group_modified_files: bool,
+) -> Result<()> {
+    let show_group_ui = group_results.len() > 1 || group_modified_files;
+
+    for (
+        i,
+        RunResult {
+            hook,
+            status_line,
+            output,
+            ..
+        },
+    ) in group_results.iter().enumerate()
+    {
+        let final_status_line = if group_modified_files {
+            StatusLine::Failed
+        } else {
+            *status_line
+        };
+
+        let hook_name = if show_group_ui {
+            let prefix = if group_modified_files {
+                // A trailing summary line (╰ ...) closes the group.
+                if i == 0 { "╭" } else { "├" }
+            } else {
+                // No summary line; close the group on the last hook line.
+                if i == 0 {
+                    "╭"
+                } else if i + 1 == group_results.len() {
+                    "╰"
+                } else {
+                    "├"
+                }
+            };
+            format!("{prefix} {}", hook.name)
+        } else {
+            hook.name.clone()
+        };
+
+        status_printer.write(&hook_name, final_status_line)?;
+
+        if !output.is_empty() {
+            let mut stdout = match final_status_line {
+                StatusLine::Failed => printer.stdout_important(),
+                _ => printer.stdout(),
+            };
+
+            if show_group_ui {
+                let text = String::from_utf8_lossy(output);
+                for line in text.lines() {
+                    if line.is_empty() {
+                        writeln!(stdout, "{}", "│".dimmed())?;
+                    } else {
+                        writeln!(stdout, "{} {}", "│".dimmed(), line)?;
+                    }
+                }
+            } else {
+                stdout.write_str(&String::from_utf8_lossy(output))?;
+            }
+        }
+    }
+
+    if group_modified_files {
+        writeln!(
+            printer.stdout_important(),
+            "╰ {}",
+            "Files were modified by these hooks".yellow().bold()
+        )?;
+    }
+
+    Ok(())
+}
+
+fn apply_group_outcome(
+    group_results: &[RunResult],
+    group_modified_files: bool,
+    success: &mut bool,
+    has_unimplemented: &mut bool,
+) -> bool {
+    let mut hook_fail_fast = false;
+
+    for RunResult { hook, status, .. } in group_results {
+        *has_unimplemented |= status.is_unimplemented();
+
+        let ok = if group_modified_files {
+            false
+        } else {
+            status.as_bool()
+        };
+        *success &= ok;
+
+        if !ok && hook.fail_fast {
+            hook_fail_fast = true;
+        }
+    }
+
+    hook_fail_fast
 }
 
 /// Shuffle the files so that they more evenly fill out the xargs

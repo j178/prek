@@ -191,13 +191,11 @@ impl HookRunReporter {
             ProgressBar::with_draw_target(None, self.reporter.printer.target()),
         );
 
-        // NOTE: indicatif spinners cycle, so the suffix will "grow" then wrap.
-        // That's intended for a lightweight running animation.
-        progress.enable_steady_tick(Duration::from_millis(150));
+        progress.enable_steady_tick(Duration::from_millis(200));
         progress.set_style(
-            ProgressStyle::with_template("{msg}{spinner:.dim}")
+            ProgressStyle::with_template("{msg}{bar:60.green/dim} {pos}/{len}")
                 .unwrap()
-                .tick_strings(&["", "·", "··", "···", "····", "·····", "······"]),
+                .progress_chars(".."),
         );
         progress.set_message(hook.name.clone());
         state.bars.insert(id, progress);
