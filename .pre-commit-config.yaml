@@ -21,18 +21,6 @@ repos:
 
   - repo: local
     hooks:
-      - id: foo
-        name: foo
-        language: system
-        entry: sh -c 'sleep 10 && echo hello'
-        pass_filenames: false
-        priority: 10
-      - id: bar
-        name: bar
-        language: system
-        entry: sh -c 'sleep 10 && echo aa >> README.md'
-        pass_filenames: false
-        priority: 10
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --

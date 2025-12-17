@@ -1,5 +1,5 @@
 ---
-source: src/config.rs
+source: crates/prek/src/config.rs
 expression: manifest
 ---
 Manifest {
@@ -37,6 +37,7 @@ Manifest {
                 language_version: None,
                 log_file: None,
                 require_serial: None,
+                priority: None,
                 stages: None,
                 verbose: None,
                 minimum_prek_version: None,
@@ -78,6 +79,7 @@ Manifest {
                 language_version: None,
                 log_file: None,
                 require_serial: None,
+                priority: None,
                 stages: None,
                 verbose: None,
                 minimum_prek_version: None,
@@ -122,6 +124,7 @@ Manifest {
                 language_version: None,
                 log_file: None,
                 require_serial: None,
+                priority: None,
                 stages: None,
                 verbose: None,
                 minimum_prek_version: None,

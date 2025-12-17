@@ -818,6 +818,8 @@ pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
     Ok(config)
 }
 
+// TODO: disallow `priority` in manifest
+
 /// Read the manifest file from the given path.
 pub(crate) fn read_manifest(path: &Path) -> Result<Manifest, Error> {
     let content = fs_err::read_to_string(path)?;
@@ -923,6 +925,7 @@ mod tests {
                                         language_version: None,
                                         log_file: None,
                                         require_serial: None,
+                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -999,6 +1002,7 @@ mod tests {
                                         language_version: None,
                                         log_file: None,
                                         require_serial: None,
+                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -1100,6 +1104,7 @@ mod tests {
                                         language_version: None,
                                         log_file: None,
                                         require_serial: None,
+                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -1215,6 +1220,7 @@ mod tests {
                                             language_version: None,
                                             log_file: None,
                                             require_serial: None,
+                                            priority: None,
                                             stages: None,
                                             verbose: None,
                                             minimum_prek_version: None,
@@ -1248,6 +1254,7 @@ mod tests {
                                             language_version: None,
                                             log_file: None,
                                             require_serial: None,
+                                            priority: None,
                                             stages: None,
                                             verbose: None,
                                             minimum_prek_version: None,
@@ -1277,6 +1284,7 @@ mod tests {
                                             language_version: None,
                                             log_file: None,
                                             require_serial: None,
+                                            priority: None,
                                             stages: None,
                                             verbose: Some(
                                                 true,
@@ -1359,6 +1367,7 @@ mod tests {
                                         ),
                                         log_file: None,
                                         require_serial: None,
+                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -1388,6 +1397,7 @@ mod tests {
                                         ),
                                         log_file: None,
                                         require_serial: None,
+                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -1417,6 +1427,7 @@ mod tests {
                                         ),
                                         log_file: None,
                                         require_serial: None,
+                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -1672,6 +1683,7 @@ mod tests {
                                     language_version: None,
                                     log_file: None,
                                     require_serial: None,
+                                    priority: None,
                                     stages: None,
                                     verbose: None,
                                     minimum_prek_version: None,
@@ -1704,6 +1716,7 @@ mod tests {
                                     language_version: None,
                                     log_file: None,
                                     require_serial: None,
+                                    priority: None,
                                     stages: None,
                                     verbose: None,
                                     minimum_prek_version: None,
@@ -1787,6 +1800,7 @@ mod tests {
                                     require_serial: Some(
                                         true,
                                     ),
+                                    priority: None,
                                     stages: Some(
                                         [
                                             PreCommit,

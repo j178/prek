@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::PathBuf;
@@ -489,22 +490,9 @@ fn partition_hooks(hooks: &[Arc<Hook>]) -> Vec<Vec<Arc<Hook>>> {
     groups
 }
 
-#[derive(Clone)]
 struct StatusPrinter {
-    inner: Arc<StatusPrinterInner>,
-}
-
-struct StatusPrinterInner {
     printer: Printer,
     columns: usize,
-}
-
-#[derive(Clone, Copy)]
-enum StatusLine<'a> {
-    Skipped { reason: &'a str, style: Style },
-    DryRun,
-    Passed,
-    Failed,
 }
 
 impl StatusPrinter {
@@ -517,9 +505,7 @@ impl StatusPrinter {
 
     fn for_hooks(hooks: &[InstalledHook], printer: Printer) -> Self {
         let columns = Self::calculate_columns(hooks);
-        Self {
-            inner: Arc::new(StatusPrinterInner { printer, columns }),
-        }
+        Self { printer, columns }
     }
 
     fn calculate_columns(hooks: &[InstalledHook]) -> usize {
@@ -535,52 +521,36 @@ impl StatusPrinter {
     }
 
     fn printer(&self) -> Printer {
-        self.inner.printer
+        self.printer
     }
 
-    fn write(&self, hook_name: &str, status: StatusLine<'_>) -> Result<(), std::fmt::Error> {
+    fn write(&self, hook_name: &str, status: RunStatus) -> Result<(), std::fmt::Error> {
+        let (suffix, final_status, style) = match status {
+            RunStatus::NoFiles => (
+                Self::NO_FILES,
+                Self::SKIPPED,
+                Style::new().black().on_cyan(),
+            ),
+            RunStatus::Unimplemented => (
+                Self::UNIMPLEMENTED,
+                Self::SKIPPED,
+                Style::new().black().on_yellow(),
+            ),
+            RunStatus::DryRun => ("", Self::SKIPPED, Style::new().on_yellow()),
+            RunStatus::Success => ("", Self::PASSED, Style::new().on_green()),
+            RunStatus::Failed => ("", Self::FAILED, Style::new().on_red()),
+        };
+        let dots = self.columns - hook_name.width_cjk() - suffix.len() - final_status.len() - 1;
+        let line = format!(
+            "{hook_name}{}{}",
+            ".".repeat(dots.max(0)),
+            style.style(final_status),
+        );
         match status {
-            StatusLine::Skipped { reason, style } => {
-                let dots = self.inner.columns
-                    - hook_name.width_cjk()
-                    - Self::SKIPPED.len()
-                    - reason.len()
-                    - 1;
-                let line = format!(
-                    "{hook_name}{}{}{}",
-                    ".".repeat(dots.max(0)),
-                    reason,
-                    Self::SKIPPED.style(style)
-                );
-                writeln!(self.inner.printer.stdout(), "{line}")
+            RunStatus::Failed => {
+                writeln!(self.printer.stdout_important(), "{line}")
             }
-            StatusLine::DryRun => {
-                let dots = self.inner.columns - hook_name.width_cjk() - Self::DRY_RUN.len() - 1;
-                let line = format!(
-                    "{hook_name}{}{}",
-                    ".".repeat(dots.max(0)),
-                    Self::DRY_RUN.on_yellow()
-                );
-                writeln!(self.inner.printer.stdout(), "{line}")
-            }
-            StatusLine::Passed => {
-                let dots = self.inner.columns - hook_name.width_cjk() - Self::PASSED.len() - 1;
-                let line = format!(
-                    "{hook_name}{}{}",
-                    ".".repeat(dots.max(0)),
-                    Self::PASSED.on_green()
-                );
-                writeln!(self.inner.printer.stdout(), "{line}")
-            }
-            StatusLine::Failed => {
-                let dots = self.inner.columns - hook_name.width_cjk() - Self::FAILED.len() - 1;
-                let line = format!(
-                    "{hook_name}{}{}",
-                    ".".repeat(dots.max(0)),
-                    Self::FAILED.on_red()
-                );
-                writeln!(self.inner.printer.stdout_important(), "{line}")
-            }
+            _ => writeln!(self.printer.stdout(), "{line}"),
         }
     }
 }
@@ -806,22 +776,7 @@ fn render_priority_group(
 ) -> Result<()> {
     let show_group_ui = group_results.len() > 1 || group_modified_files;
 
-    for (
-        i,
-        RunResult {
-            hook,
-            status_line,
-            output,
-            ..
-        },
-    ) in group_results.iter().enumerate()
-    {
-        let final_status_line = if group_modified_files {
-            StatusLine::Failed
-        } else {
-            *status_line
-        };
-
+    for (i, result) in group_results.iter().enumerate() {
         let hook_name = if show_group_ui {
             let prefix = if group_modified_files {
                 // A trailing summary line (╰ ...) closes the group.
@@ -836,30 +791,30 @@ fn render_priority_group(
                     "├"
                 }
             };
-            format!("{prefix} {}", hook.name)
+            Cow::Owned(format!("{prefix} {}", result.hook.name))
         } else {
-            hook.name.clone()
+            Cow::Borrowed(&result.hook.name)
         };
 
-        status_printer.write(&hook_name, final_status_line)?;
+        status_printer.write(&hook_name, result.status)?;
 
-        if !output.is_empty() {
-            let mut stdout = match final_status_line {
-                StatusLine::Failed => printer.stdout_important(),
+        if !result.output.is_empty() {
+            let mut stdout = match result.status {
+                RunStatus::Failed => printer.stdout_important(),
                 _ => printer.stdout(),
             };
 
             if show_group_ui {
-                let text = String::from_utf8_lossy(output);
+                let text = String::from_utf8_lossy(&result.output);
                 for line in text.lines() {
                     if line.is_empty() {
-                        writeln!(stdout, "{}", "│".dimmed())?;
+                        writeln!(stdout, "│")?;
                     } else {
-                        writeln!(stdout, "{} {}", "│".dimmed(), line)?;
+                        writeln!(stdout, "│ {line}")?;
                     }
                 }
             } else {
-                stdout.write_str(&String::from_utf8_lossy(output))?;
+                stdout.write_str(&String::from_utf8_lossy(&result.output))?;
             }
         }
     }
@@ -909,23 +864,24 @@ fn shuffle<T>(filenames: &mut [T]) {
     filenames.shuffle(&mut rng);
 }
 
+#[derive(Copy, Clone)]
 enum RunStatus {
     Success,
     Failed,
-    Skipped,
     DryRun,
+    NoFiles,
     Unimplemented,
 }
 
 impl RunStatus {
-    fn as_bool(&self) -> bool {
+    fn as_bool(self) -> bool {
         matches!(
             self,
-            Self::Success | Self::Skipped | Self::DryRun | Self::Unimplemented
+            Self::Success | Self::NoFiles | Self::DryRun | Self::Unimplemented
         )
     }
 
-    fn is_unimplemented(&self) -> bool {
+    fn is_unimplemented(self) -> bool {
         matches!(self, Self::Unimplemented)
     }
 }
@@ -933,7 +889,6 @@ impl RunStatus {
 struct RunResult {
     hook: InstalledHook,
     status: RunStatus,
-    status_line: StatusLine<'static>,
     output: Vec<u8>,
 }
 
@@ -958,11 +913,7 @@ async fn run_hook(
         reporter.on_run_complete(progress);
         return Ok(RunResult {
             hook,
-            status: RunStatus::Skipped,
-            status_line: StatusLine::Skipped {
-                reason: StatusPrinter::NO_FILES,
-                style: Style::new().dimmed(),
-            },
+            status: RunStatus::NoFiles,
             output: Vec::new(),
         });
     }
@@ -972,10 +923,6 @@ async fn run_hook(
         return Ok(RunResult {
             hook,
             status: RunStatus::Unimplemented,
-            status_line: StatusLine::Skipped {
-                reason: StatusPrinter::UNIMPLEMENTED,
-                style: Style::new().dimmed(),
-            },
             output: Vec::new(),
         });
     }
@@ -1047,14 +994,6 @@ async fn run_hook(
 
     reporter.on_run_complete(progress);
 
-    let status_line = if dry_run {
-        StatusLine::DryRun
-    } else if status == 0 {
-        StatusLine::Passed
-    } else {
-        StatusLine::Failed
-    };
-
     let run_status = if dry_run {
         RunStatus::DryRun
     } else if status == 0 {
@@ -1066,7 +1005,6 @@ async fn run_hook(
     Ok(RunResult {
         hook,
         status: run_status,
-        status_line,
         output,
     })
 }
