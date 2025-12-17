@@ -75,11 +75,7 @@ impl ProgressReporter {
     }
 }
 
-pub(crate) struct HookInitReporter {
-    reporter: ProgressReporter,
-}
-
-impl From<Printer> for HookInitReporter {
+impl From<Printer> for ProgressReporter {
     fn from(printer: Printer) -> Self {
         let multi = MultiProgress::with_draw_target(printer.target());
         let root = multi.add(ProgressBar::with_draw_target(None, printer.target()));
@@ -90,8 +86,19 @@ impl From<Printer> for HookInitReporter {
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
 
-        let reporter = ProgressReporter::new(root, multi, printer);
-        Self { reporter }
+        Self::new(root, multi, printer)
+    }
+}
+
+pub(crate) struct HookInitReporter {
+    reporter: ProgressReporter,
+}
+
+impl From<Printer> for HookInitReporter {
+    fn from(printer: Printer) -> Self {
+        Self {
+            reporter: ProgressReporter::from(printer),
+        }
     }
 }
 
@@ -120,17 +127,9 @@ pub(crate) struct HookInstallReporter {
 
 impl From<Printer> for HookInstallReporter {
     fn from(printer: Printer) -> Self {
-        let multi = MultiProgress::with_draw_target(printer.target());
-        let root = multi.add(ProgressBar::with_draw_target(None, printer.target()));
-        root.enable_steady_tick(Duration::from_millis(200));
-        root.set_style(
-            ProgressStyle::with_template("{spinner:.white} {msg:.dim}")
-                .unwrap()
-                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
-        );
-
-        let reporter = ProgressReporter::new(root, multi, printer);
-        Self { reporter }
+        Self {
+            reporter: ProgressReporter::from(printer),
+        }
     }
 }
 
@@ -162,27 +161,18 @@ pub(crate) struct HookRunReporter {
 
 impl From<Printer> for HookRunReporter {
     fn from(printer: Printer) -> Self {
-        let multi = MultiProgress::with_draw_target(printer.target());
-        let root = multi.add(ProgressBar::with_draw_target(None, printer.target()));
-        root.enable_steady_tick(Duration::from_millis(200));
-        root.set_style(
-            ProgressStyle::with_template("{spinner:.white} {msg:.dim}")
-                .unwrap()
-                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
-        );
-        root.set_message("Running hooks");
-
-        let reporter = ProgressReporter::new(root, multi, printer);
-        Self { reporter }
+        Self {
+            reporter: ProgressReporter::from(printer),
+        }
     }
 }
 
 impl HookRunReporter {
     pub fn on_run_start(&self, hook: &Hook) -> usize {
-        // Render a per-hook "growing suffix" line while the hook is running.
-        // Example:
-        //   hook-name···
-        //   ⠴ Running hooks
+        self.reporter
+            .root
+            .set_message(format!("{}", "Running hooks...".bold().cyan()));
+
         let mut state = self.reporter.state.lock().unwrap();
         let id = state.id();
 
@@ -232,17 +222,9 @@ pub(crate) struct AutoUpdateReporter {
 
 impl From<Printer> for AutoUpdateReporter {
     fn from(printer: Printer) -> Self {
-        let multi = MultiProgress::with_draw_target(printer.target());
-        let root = multi.add(ProgressBar::with_draw_target(None, printer.target()));
-        root.enable_steady_tick(Duration::from_millis(200));
-        root.set_style(
-            ProgressStyle::with_template("{spinner:.white} {msg:.dim}")
-                .unwrap()
-                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
-        );
-
-        let reporter = ProgressReporter::new(root, multi, printer);
-        Self { reporter }
+        Self {
+            reporter: ProgressReporter::from(printer),
+        }
     }
 }
 

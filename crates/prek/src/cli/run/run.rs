@@ -774,7 +774,7 @@ fn render_priority_group(
     group_results: &[RunResult],
     group_modified_files: bool,
 ) -> Result<()> {
-    let show_group_ui = group_results.len() > 1 || group_modified_files;
+    let show_group_ui = group_results.len() > 1;
 
     for (i, result) in group_results.iter().enumerate() {
         let hook_name = if show_group_ui {
