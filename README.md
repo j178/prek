@@ -259,6 +259,8 @@ jobs:
 ```
 
 This action installs prek and runs `prek run --all-files` on your repository.
+
+prek is also available via the [`taiki-e/install-action`](https://github.com/taiki-e/install-action) for installing various tools.
 <!-- github-actions:end -->
 </details>
 
