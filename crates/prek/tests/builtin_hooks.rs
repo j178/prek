@@ -1926,8 +1926,7 @@ fn check_case_conflict_hook() -> Result<()> {
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/pre-commit/pre-commit-hooks
-            rev: v5.0.0
+          - repo: builtin
             hooks:
               - id: check-case-conflict
     "});
@@ -1944,6 +1943,7 @@ fn check_case_conflict_hook() -> Result<()> {
     check for case conflicts.................................................Failed
     - hook id: check-case-conflict
     - exit code: 1
+
       Case-insensitivity conflict found: src/FOO.txt
       Case-insensitivity conflict found: src/foo.txt
 
@@ -1989,8 +1989,7 @@ fn check_case_conflict_directory() -> Result<()> {
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/pre-commit/pre-commit-hooks
-            rev: v5.0.0
+          - repo: builtin
             hooks:
               - id: check-case-conflict
     "});
@@ -2006,6 +2005,7 @@ fn check_case_conflict_directory() -> Result<()> {
     check for case conflicts.................................................Failed
     - hook id: check-case-conflict
     - exit code: 1
+
       Case-insensitivity conflict found: src/UTILS
       Case-insensitivity conflict found: src/utils
 
@@ -2033,8 +2033,7 @@ fn check_case_conflict_among_new_files() -> Result<()> {
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/pre-commit/pre-commit-hooks
-            rev: v5.0.0
+          - repo: builtin
             hooks:
               - id: check-case-conflict
     "});
@@ -2052,6 +2051,7 @@ fn check_case_conflict_among_new_files() -> Result<()> {
     check for case conflicts.................................................Failed
     - hook id: check-case-conflict
     - exit code: 1
+
       Case-insensitivity conflict found: NEWFILE.TXT
       Case-insensitivity conflict found: NewFile.txt
       Case-insensitivity conflict found: newfile.txt
