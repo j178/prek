@@ -35,6 +35,7 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 
 - `trailing-whitespace` (Trim trailing whitespace)
 - `check-added-large-files` (Prevent committing large files)
+- `check-case-conflict` (Check for files that would conflict in case-insensitive filesystems)
 - `end-of-file-fixer` (Ensure newline at EOF)
 - `fix-byte-order-marker` (Remove UTF-8 byte order marker)
 - `check-json` (Validate JSON files)
@@ -89,6 +90,7 @@ For `repo: builtin`, the following hooks are supported:
 
 - `trailing-whitespace` (Trim trailing whitespace)
 - `check-added-large-files` (Prevent committing large files)
+- `check-case-conflict` (Check for files that would conflict in case-insensitive filesystems)
 - `end-of-file-fixer` (Ensure newline at EOF)
 - `fix-byte-order-marker` (Remove UTF-8 byte order marker)
 - `check-json` (Validate JSON files)
