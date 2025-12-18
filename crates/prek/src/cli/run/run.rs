@@ -506,7 +506,7 @@ impl StatusPrinter {
     fn for_hooks(hooks: &[InstalledHook], printer: Printer) -> Self {
         let name_len = hooks
             .iter()
-            .map(|hook| hook.name.width_cjk())
+            .map(|hook| hook.name.width())
             .max()
             .unwrap_or(0);
         let columns = std::cmp::max(
@@ -541,7 +541,7 @@ impl StatusPrinter {
             RunStatus::Success => ("", Self::PASSED, Style::new().on_green()),
             RunStatus::Failed => ("", Self::FAILED, Style::new().on_red()),
         };
-        let dots = self.columns - hook_name.width_cjk() - suffix.len() - final_status.len();
+        let dots = self.columns - hook_name.width() - suffix.len() - final_status.len();
         let line = format!(
             "{hook_name}{}{suffix}{}",
             ".".repeat(dots.max(0)),
@@ -610,12 +610,14 @@ async fn run_hooks(
         hooks.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.idx.cmp(&b.idx)));
 
         if projects_len > 1 || !project.is_root() {
-            writeln!(
-                status_printer.printer().stdout(),
-                "{}{}",
-                if first { "" } else { "\n" },
-                format!("Running hooks for `{}`:", project.to_string().cyan()).bold()
-            )?;
+            reporter.suspend(|| {
+                writeln!(
+                    status_printer.printer().stdout(),
+                    "{}{}",
+                    if first { "" } else { "\n" },
+                    format!("Running hooks for `{}`:", project.to_string().cyan()).bold()
+                )
+            })?;
             first = false;
         }
         let mut prev_diff = git::get_diff(project.path()).await?;
@@ -775,22 +777,23 @@ fn render_priority_group(
     group_results: &[RunResult],
     group_modified_files: bool,
 ) -> Result<()> {
-    let show_group_ui = group_results.len() > 1;
+    // Only show a special group UI when the group failed due to file modifications.
+    // Hooks in a priority group run in parallel, so we can't attribute modifications to a single hook.
+    let show_group_ui = group_modified_files && group_results.len() > 1;
+
+    if show_group_ui {
+        status_printer.write(
+            "Files were modified by this parallel group",
+            RunStatus::Failed,
+        )?;
+    }
 
     for (i, result) in group_results.iter().enumerate() {
         let hook_name = if show_group_ui {
-            let prefix = if group_modified_files {
-                // A trailing summary line (╰ ...) closes the group.
-                if i == 0 { "╭" } else { "├" }
+            let prefix = if i + 1 == group_results.len() {
+                "  └"
             } else {
-                // No summary line; close the group on the last hook line.
-                if i == 0 {
-                    "╭"
-                } else if i + 1 == group_results.len() {
-                    "╰"
-                } else {
-                    "├"
-                }
+                "  │"
             };
             Cow::Owned(format!("{prefix} {}", result.hook.name))
         } else {
@@ -809,23 +812,15 @@ fn render_priority_group(
                 let text = String::from_utf8_lossy(&result.output);
                 for line in text.lines() {
                     if line.is_empty() {
-                        writeln!(stdout, "│")?;
+                        writeln!(stdout, "  │")?;
                     } else {
-                        writeln!(stdout, "│ {line}")?;
+                        writeln!(stdout, "  │ {line}")?;
                     }
                 }
             } else {
                 stdout.write_str(&String::from_utf8_lossy(&result.output))?;
             }
         }
-    }
-
-    if group_modified_files {
-        writeln!(
-            printer.stdout_important(),
-            "╰ {}",
-            "Files were modified by these hooks".yellow().bold()
-        )?;
     }
 
     Ok(())

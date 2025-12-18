@@ -322,6 +322,7 @@ impl HookOptions {
             };
         }
 
+        // Omit `priority` intentionally, it is only settable in local config files.
         update_if_some!(
             alias,
             files,
