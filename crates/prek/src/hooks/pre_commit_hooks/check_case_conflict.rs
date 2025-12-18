@@ -1,9 +1,11 @@
+use std::collections::hash_map::Entry;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 
-use crate::git::get_added_files;
+use crate::git;
 use crate::hook::Hook;
 
 pub(crate) async fn check_case_conflict(
@@ -12,100 +14,103 @@ pub(crate) async fn check_case_conflict(
 ) -> Result<(i32, Vec<u8>)> {
     let work_dir = hook.work_dir();
 
-    // Get all files in the repo
-    let output = tokio::process::Command::new("git")
-        .arg("ls-files")
-        .current_dir(work_dir)
-        .output()
-        .await?;
-
-    let repo_files: FxHashSet<PathBuf> = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(PathBuf::from)
-        .collect();
-
-    // Add directories for repo files
-    let mut repo_files_with_dirs = repo_files.clone();
-    for file in &repo_files {
-        repo_files_with_dirs.extend(get_parent_dirs(file));
+    // Get all files in the repo.
+    let repo_files = git::ls_files(work_dir, Path::new(".")).await?;
+    let mut repo_files_with_dirs: FxHashSet<PathBuf> = FxHashSet::default();
+    for path in &repo_files {
+        insert_path_and_parents(&mut repo_files_with_dirs, path);
     }
 
-    // Get relevant files (filenames + added files)
-    let added = get_added_files(work_dir).await?;
-    let mut relevant_files: FxHashSet<PathBuf> =
-        filenames.iter().map(|p| p.to_path_buf()).collect();
-    relevant_files.extend(added);
-
-    // Add directories for relevant files
-    let mut relevant_files_with_dirs = relevant_files.clone();
-    for file in &relevant_files {
-        relevant_files_with_dirs.extend(get_parent_dirs(file));
+    // Get relevant files (filenames + added files) and include their parent directories.
+    let added = git::get_added_files(work_dir).await?;
+    let mut relevant_files_with_dirs: FxHashSet<PathBuf> = FxHashSet::default();
+    for filename in filenames {
+        insert_path_and_parents(&mut relevant_files_with_dirs, filename);
+    }
+    for path in &added {
+        insert_path_and_parents(&mut relevant_files_with_dirs, path);
     }
 
-    // Remove relevant files from repo files (we only check conflicts with existing files)
+    // Remove relevant files from repo files (avoid self-conflicts).
     for file in &relevant_files_with_dirs {
         repo_files_with_dirs.remove(file);
     }
 
-    let mut retv = 0;
-    let mut conflicts = FxHashSet::default();
+    // Compute conflicts:
+    // 1) relevant vs repo (case-insensitive intersection)
+    // 2) relevant vs relevant (case-insensitive duplicates)
+    let mut repo_lower: FxHashSet<String> = FxHashSet::default();
+    repo_lower.reserve(repo_files_with_dirs.len());
+    for path in &repo_files_with_dirs {
+        repo_lower.insert(lower_key(path));
+    }
 
-    // Check for conflicts between new files and existing files
-    let repo_lower = to_lowercase_set(&repo_files_with_dirs);
-    let relevant_lower = to_lowercase_set(&relevant_files_with_dirs);
-    conflicts.extend(repo_lower.intersection(&relevant_lower).cloned());
+    let mut conflicts: FxHashSet<String> = FxHashSet::default();
+    let mut relevant_lower_counts: FxHashMap<String, u8> = FxHashMap::default();
+    relevant_lower_counts.reserve(relevant_files_with_dirs.len());
 
-    // Check for conflicts among new files themselves
-    let mut lowercase_relevant = to_lowercase_set(&relevant_files_with_dirs);
-    for filename in &relevant_files_with_dirs {
-        let lower = filename.to_string_lossy().to_lowercase();
-        if lowercase_relevant.contains(&lower) {
-            lowercase_relevant.remove(&lower);
-        } else {
-            conflicts.insert(lower);
+    for path in &relevant_files_with_dirs {
+        let lower = lower_key(path);
+
+        if repo_lower.contains(&lower) {
+            conflicts.insert(lower.clone());
+        }
+
+        match relevant_lower_counts.entry(lower) {
+            Entry::Vacant(entry) => {
+                entry.insert(1);
+            }
+            Entry::Occupied(mut entry) => {
+                let count = entry.get_mut();
+                *count = count.saturating_add(1);
+                if *count == 2 {
+                    // Only mark the conflict on the *first* duplicate to avoid repeated
+                    // cloning/inserting for the 3rd+ occurrences of the same lowercase key.
+                    conflicts.insert(entry.key().clone());
+                }
+            }
         }
     }
 
     let mut output = Vec::new();
-    if !conflicts.is_empty() {
-        let mut conflicting_files: Vec<PathBuf> = repo_files_with_dirs
-            .union(&relevant_files_with_dirs)
-            .filter(|f| conflicts.contains(&f.to_string_lossy().to_lowercase()))
-            .cloned()
-            .collect();
-        conflicting_files.sort();
-
-        for filename in conflicting_files {
-            let line = format!(
-                "Case-insensitivity conflict found: {}\n",
-                filename.display()
-            );
-            output.extend(line.into_bytes());
-        }
-        retv = 1;
+    if conflicts.is_empty() {
+        return Ok((0, output));
     }
 
-    Ok((retv, output))
+    // The sets are disjoint at this point (relevant removed from repo), so we can just chain.
+    let mut conflicting_files: Vec<_> = repo_files_with_dirs
+        .iter()
+        .chain(relevant_files_with_dirs.iter())
+        .filter(|path| conflicts.contains(&lower_key(path)))
+        .collect();
+    conflicting_files.sort();
+
+    for filename in conflicting_files {
+        let line = format!(
+            "Case-insensitivity conflict found: {}\n",
+            filename.display()
+        );
+        output.extend(line.into_bytes());
+    }
+
+    Ok((1, output))
 }
 
-fn get_parent_dirs(file: &Path) -> Vec<PathBuf> {
-    let mut dirs = Vec::new();
+fn insert_path_and_parents(set: &mut FxHashSet<PathBuf>, file: &Path) {
+    set.insert(file.to_path_buf());
+
     let mut current = file;
     while let Some(parent) = current.parent() {
-        if parent == Path::new("") {
+        if parent.as_os_str().is_empty() {
             break;
         }
-        dirs.push(parent.to_path_buf());
+        set.insert(parent.to_path_buf());
         current = parent;
     }
-    dirs
 }
 
-fn to_lowercase_set(files: &FxHashSet<PathBuf>) -> FxHashSet<String> {
-    files
-        .iter()
-        .map(|p| p.to_string_lossy().to_lowercase())
-        .collect()
+fn lower_key(path: &Path) -> String {
+    path.to_string_lossy().to_lowercase()
 }
 
 #[cfg(test)]
@@ -113,72 +118,47 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_get_parent_dirs() {
-        let parents = get_parent_dirs(Path::new("foo/bar/baz.txt"));
-        assert_eq!(parents, vec![Path::new("foo/bar"), Path::new("foo")]);
+    fn test_insert_path_and_parents() {
+        let mut set: FxHashSet<PathBuf> = FxHashSet::default();
+        insert_path_and_parents(&mut set, Path::new("foo/bar/baz.txt"));
+        assert!(set.contains(Path::new("foo/bar/baz.txt")));
+        assert!(set.contains(Path::new("foo/bar")));
+        assert!(set.contains(Path::new("foo")));
+        assert_eq!(set.len(), 3);
 
-        let parents = get_parent_dirs(Path::new("single.txt"));
-        assert!(parents.is_empty());
-
-        let parents = get_parent_dirs(Path::new("a/b/c/d.txt"));
-        assert_eq!(
-            parents,
-            vec![Path::new("a/b/c"), Path::new("a/b"), Path::new("a")]
-        );
+        let mut set: FxHashSet<PathBuf> = FxHashSet::default();
+        insert_path_and_parents(&mut set, Path::new("single.txt"));
+        assert!(set.contains(Path::new("single.txt")));
+        assert_eq!(set.len(), 1);
     }
 
     #[test]
-    fn test_to_lowercase_set() {
-        let mut files = FxHashSet::default();
-        files.insert(PathBuf::from("Foo.txt"));
-        files.insert(PathBuf::from("BAR.txt"));
-        files.insert(PathBuf::from("baz.TXT"));
-
-        let lower = to_lowercase_set(&files);
-        assert!(lower.contains("foo.txt"));
-        assert!(lower.contains("bar.txt"));
-        assert!(lower.contains("baz.txt"));
-        assert_eq!(lower.len(), 3);
+    fn test_insert_path_and_parents_nested() {
+        let mut set: FxHashSet<PathBuf> = FxHashSet::default();
+        insert_path_and_parents(&mut set, Path::new("a/b/c/d/e/f.txt"));
+        for expected in [
+            "a/b/c/d/e/f.txt",
+            "a/b/c/d/e",
+            "a/b/c/d",
+            "a/b/c",
+            "a/b",
+            "a",
+        ] {
+            assert!(set.contains(Path::new(expected)));
+        }
     }
 
     #[test]
-    fn test_get_parent_dirs_nested() {
-        let parents = get_parent_dirs(Path::new("a/b/c/d/e/f.txt"));
-        assert_eq!(
-            parents,
-            vec![
-                Path::new("a/b/c/d/e"),
-                Path::new("a/b/c/d"),
-                Path::new("a/b/c"),
-                Path::new("a/b"),
-                Path::new("a")
-            ]
-        );
+    fn test_insert_path_and_parents_no_slash() {
+        let mut set: FxHashSet<PathBuf> = FxHashSet::default();
+        insert_path_and_parents(&mut set, Path::new("file.txt"));
+        assert_eq!(set.len(), 1);
     }
 
     #[test]
-    fn test_get_parent_dirs_no_slash() {
-        let parents = get_parent_dirs(Path::new("file.txt"));
-        assert!(parents.is_empty());
-    }
-
-    #[test]
-    fn test_to_lowercase_set_empty() {
-        let files: FxHashSet<PathBuf> = FxHashSet::default();
-        let lower = to_lowercase_set(&files);
-        assert!(lower.is_empty());
-    }
-
-    #[test]
-    fn test_to_lowercase_set_mixed_case() {
-        let mut files = FxHashSet::default();
-        files.insert(PathBuf::from("FooBar.TXT"));
-        files.insert(PathBuf::from("FOOBAR.txt"));
-        files.insert(PathBuf::from("foobar.Txt"));
-
-        let lower = to_lowercase_set(&files);
-        // All three should map to the same lowercase version
-        assert!(lower.contains("foobar.txt"));
-        assert_eq!(lower.len(), 1);
+    fn test_lower_key() {
+        assert_eq!(lower_key(Path::new("Foo.txt")), "foo.txt");
+        assert_eq!(lower_key(Path::new("BAR.txt")), "bar.txt");
+        assert_eq!(lower_key(Path::new("baz.TXT")), "baz.txt");
     }
 }
