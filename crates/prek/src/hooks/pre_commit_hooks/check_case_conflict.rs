@@ -1,5 +1,5 @@
 use std::collections::hash_map::Entry;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::Result;
 use rustc_hash::FxHashMap;
@@ -16,14 +16,14 @@ pub(crate) async fn check_case_conflict(
 
     // Get all files in the repo.
     let repo_files = git::ls_files(work_dir, Path::new(".")).await?;
-    let mut repo_files_with_dirs: FxHashSet<PathBuf> = FxHashSet::default();
+    let mut repo_files_with_dirs: FxHashSet<&Path> = FxHashSet::default();
     for path in &repo_files {
         insert_path_and_parents(&mut repo_files_with_dirs, path);
     }
 
     // Get relevant files (filenames + added files) and include their parent directories.
     let added = git::get_added_files(work_dir).await?;
-    let mut relevant_files_with_dirs: FxHashSet<PathBuf> = FxHashSet::default();
+    let mut relevant_files_with_dirs: FxHashSet<&Path> = FxHashSet::default();
     for filename in filenames {
         insert_path_and_parents(&mut relevant_files_with_dirs, filename);
     }
@@ -96,15 +96,15 @@ pub(crate) async fn check_case_conflict(
     Ok((1, output))
 }
 
-fn insert_path_and_parents(set: &mut FxHashSet<PathBuf>, file: &Path) {
-    set.insert(file.to_path_buf());
+fn insert_path_and_parents<'p>(set: &mut FxHashSet<&'p Path>, file: &'p Path) {
+    set.insert(file);
 
     let mut current = file;
     while let Some(parent) = current.parent() {
         if parent.as_os_str().is_empty() {
             break;
         }
-        set.insert(parent.to_path_buf());
+        set.insert(parent);
         current = parent;
     }
 }
@@ -119,14 +119,14 @@ mod tests {
 
     #[test]
     fn test_insert_path_and_parents() {
-        let mut set: FxHashSet<PathBuf> = FxHashSet::default();
+        let mut set: FxHashSet<&Path> = FxHashSet::default();
         insert_path_and_parents(&mut set, Path::new("foo/bar/baz.txt"));
         assert!(set.contains(Path::new("foo/bar/baz.txt")));
         assert!(set.contains(Path::new("foo/bar")));
         assert!(set.contains(Path::new("foo")));
         assert_eq!(set.len(), 3);
 
-        let mut set: FxHashSet<PathBuf> = FxHashSet::default();
+        let mut set: FxHashSet<&Path> = FxHashSet::default();
         insert_path_and_parents(&mut set, Path::new("single.txt"));
         assert!(set.contains(Path::new("single.txt")));
         assert_eq!(set.len(), 1);
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn test_insert_path_and_parents_nested() {
-        let mut set: FxHashSet<PathBuf> = FxHashSet::default();
+        let mut set: FxHashSet<&Path> = FxHashSet::default();
         insert_path_and_parents(&mut set, Path::new("a/b/c/d/e/f.txt"));
         for expected in [
             "a/b/c/d/e/f.txt",
@@ -150,7 +150,7 @@ mod tests {
 
     #[test]
     fn test_insert_path_and_parents_no_slash() {
-        let mut set: FxHashSet<PathBuf> = FxHashSet::default();
+        let mut set: FxHashSet<&Path> = FxHashSet::default();
         insert_path_and_parents(&mut set, Path::new("file.txt"));
         assert_eq!(set.len(), 1);
     }
