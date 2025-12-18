@@ -2,6 +2,7 @@ use std::path::Path;
 
 use futures::StreamExt;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
 use tokio::io::AsyncReadExt;
 
 use crate::git;
@@ -86,13 +87,19 @@ async fn git_check_shebangs(
     file_base: &Path,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>), anyhow::Error> {
+    let filenames: FxHashSet<_> = filenames.iter().collect();
+
     let output = git::git_cmd("git ls-files")?
         .arg("ls-files")
         // Show staged contents' mode bits, object name and stage number in the output.
         .arg("--stage")
         .arg("-z")
         .arg("--")
-        .args(filenames)
+        .arg(if file_base.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            file_base
+        })
         .check(true)
         .output()
         .await?;
@@ -102,13 +109,19 @@ async fn git_check_shebangs(
         if entry.is_empty() {
             return None;
         }
+
         let mut parts = entry.split('\t');
         let metadata = parts.next()?;
         let file_name = parts.next()?;
+        let file_name = Path::new(file_name);
+        if !filenames.contains(&file_name) {
+            return None;
+        }
+
         let mode_str = metadata.split_whitespace().next()?;
         let mode_bits = u32::from_str_radix(mode_str, 8).ok()?;
         let is_executable = (mode_bits & 0o111) != 0;
-        Some((Path::new(file_name), is_executable))
+        Some((file_name, is_executable))
     });
 
     let mut tasks = futures::stream::iter(entries)
