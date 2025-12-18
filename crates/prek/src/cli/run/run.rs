@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::PathBuf;
@@ -12,7 +11,6 @@ use prek_consts::env_vars::EnvVars;
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
 use rustc_hash::{FxHashMap, FxHashSet};
-use tokio::io::AsyncWriteExt;
 use tokio::sync::{OnceCell, Semaphore};
 use tracing::{debug, trace, warn};
 use unicode_width::UnicodeWidthStr;
@@ -525,7 +523,12 @@ impl StatusPrinter {
         self.columns - Self::PASSED.len()
     }
 
-    fn write(&self, hook_name: &str, status: RunStatus) -> Result<(), std::fmt::Error> {
+    fn write(
+        &self,
+        hook_name: &str,
+        prefix: &str,
+        status: RunStatus,
+    ) -> Result<(), std::fmt::Error> {
         let (suffix, final_status, style) = match status {
             RunStatus::NoFiles => (
                 Self::NO_FILES,
@@ -537,13 +540,22 @@ impl StatusPrinter {
                 Self::SKIPPED,
                 Style::new().black().on_yellow(),
             ),
-            RunStatus::DryRun => ("", Self::SKIPPED, Style::new().on_yellow()),
+            RunStatus::DryRun => ("", Self::DRY_RUN, Style::new().on_yellow()),
             RunStatus::Success => ("", Self::PASSED, Style::new().on_green()),
             RunStatus::Failed => ("", Self::FAILED, Style::new().on_red()),
         };
-        let dots = self.columns - hook_name.width() - suffix.len() - final_status.len();
+        let prefix = if prefix.is_empty() {
+            String::new()
+        } else {
+            format!("{}", prefix.dimmed())
+        };
+        let dots = self.columns
+            - prefix.width()
+            - hook_name.width()
+            - suffix.width()
+            - final_status.width();
         let line = format!(
-            "{hook_name}{}{suffix}{}",
+            "{prefix}{hook_name}{}{suffix}{}",
             ".".repeat(dots.max(0)),
             style.style(final_status),
         );
@@ -627,8 +639,7 @@ async fn run_hooks(
         for group_range in PriorityGroupRanges::new(&hooks) {
             let group_hooks = hooks[group_range].to_vec();
             let mut group_results =
-                run_priority_group(group_hooks, &filter, store, verbose, dry_run, &reporter)
-                    .await?;
+                run_priority_group(group_hooks, &filter, store, dry_run, &reporter).await?;
 
             // Print results in a stable order (same order as config within the project).
             group_results.sort_by(|a, b| a.hook.idx.cmp(&b.hook.idx));
@@ -648,6 +659,7 @@ async fn run_hooks(
                     printer,
                     &status_printer,
                     &group_results,
+                    verbose,
                     group_modified_files,
                 )
             })?;
@@ -753,14 +765,13 @@ async fn run_priority_group(
     group_hooks: Vec<InstalledHook>,
     filter: &FileFilter<'_>,
     store: &Store,
-    verbose: bool,
     dry_run: bool,
     reporter: &HookRunReporter,
 ) -> Result<Vec<RunResult>> {
     let mut results = futures::stream::iter(
         group_hooks
             .into_iter()
-            .map(|hook| run_hook(hook, filter, store, verbose, dry_run, reporter)),
+            .map(|hook| run_hook(hook, filter, store, dry_run, reporter)),
     )
     .buffer_unordered(*CONCURRENCY);
 
@@ -775,50 +786,110 @@ fn render_priority_group(
     printer: Printer,
     status_printer: &StatusPrinter,
     group_results: &[RunResult],
+    verbose: bool,
     group_modified_files: bool,
 ) -> Result<()> {
     // Only show a special group UI when the group failed due to file modifications.
     // Hooks in a priority group run in parallel, so we can't attribute modifications to a single hook.
     let show_group_ui = group_modified_files && group_results.len() > 1;
+    let single_hook_modified_files = group_results.len() == 1 && group_modified_files;
+    let group_prefix = if show_group_ui {
+        format!("{}", "  │ ".dimmed())
+    } else {
+        String::new()
+    };
 
     if show_group_ui {
         status_printer.write(
-            "Files were modified by this parallel group",
+            "Files were modified by following hooks",
+            "",
             RunStatus::Failed,
         )?;
     }
 
     for (i, result) in group_results.iter().enumerate() {
-        let hook_name = if show_group_ui {
-            let prefix = if i + 1 == group_results.len() {
-                "  └"
+        let prefix = if show_group_ui {
+            if i == 0 {
+                "  ┌ "
+            } else if i + 1 == group_results.len() {
+                "  └ "
             } else {
-                "  │"
-            };
-            Cow::Owned(format!("{prefix} {}", result.hook.name))
+                "  │ "
+            }
         } else {
-            Cow::Borrowed(&result.hook.name)
+            ""
         };
 
-        status_printer.write(&hook_name, result.status)?;
+        // If a single hook modified files, treat it as failed.
+        let status = if single_hook_modified_files && result.status == RunStatus::Success {
+            RunStatus::Failed
+        } else {
+            result.status
+        };
 
-        if !result.output.is_empty() {
-            let mut stdout = match result.status {
-                RunStatus::Failed => printer.stdout_important(),
-                _ => printer.stdout(),
-            };
+        status_printer.write(&result.hook.name, prefix, status)?;
 
-            if show_group_ui {
-                let text = String::from_utf8_lossy(&result.output);
-                for line in text.lines() {
-                    if line.is_empty() {
-                        writeln!(stdout, "  │")?;
-                    } else {
-                        writeln!(stdout, "  │ {line}")?;
+        let mut stdout = match status {
+            RunStatus::Failed => printer.stdout_important(),
+            _ => printer.stdout(),
+        };
+
+        if verbose || result.hook.verbose || status == RunStatus::Failed {
+            writeln!(
+                stdout,
+                "{group_prefix}{}",
+                format!("- hook id: {}", result.hook.id).dimmed()
+            )?;
+            if verbose || result.hook.verbose {
+                writeln!(
+                    stdout,
+                    "{group_prefix}{}",
+                    format!("- duration: {:.2?}s", result.duration.as_secs_f64()).dimmed()
+                )?;
+            }
+            if result.exit_status != 0 {
+                writeln!(
+                    stdout,
+                    "{group_prefix}{}",
+                    format!("- exit code: {}", result.exit_status).dimmed()
+                )?;
+            }
+
+            if single_hook_modified_files {
+                writeln!(
+                    stdout,
+                    "{group_prefix}{}",
+                    "- files were modified by this hook".dimmed()
+                )?;
+            }
+
+            let output = result.output.trim_ascii();
+            if !output.is_empty() {
+                if let Some(file) = result.hook.log_file.as_deref() {
+                    let mut file = fs_err::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(file)?;
+                    file.write_all(output)?;
+                    file.flush()?;
+                } else {
+                    writeln!(stdout, "{group_prefix}")?;
+                    let text = String::from_utf8_lossy(output);
+                    for line in text.lines() {
+                        if line.is_empty() {
+                            if show_group_ui {
+                                writeln!(stdout, "{}", "  │".dimmed())?;
+                            } else {
+                                writeln!(stdout)?;
+                            }
+                        }
+                        if show_group_ui {
+                            writeln!(stdout, "{group_prefix}{line}")?;
+                        } else {
+                            writeln!(stdout, "  {line}")?;
+                        }
                     }
                 }
-            } else {
-                stdout.write_str(&String::from_utf8_lossy(&result.output))?;
             }
         }
     }
@@ -860,7 +931,7 @@ fn shuffle<T>(filenames: &mut [T]) {
     filenames.shuffle(&mut rng);
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 enum RunStatus {
     Success,
     Failed,
@@ -885,14 +956,27 @@ impl RunStatus {
 struct RunResult {
     hook: InstalledHook,
     status: RunStatus,
+    duration: std::time::Duration,
+    exit_status: i32,
     output: Vec<u8>,
+}
+
+impl RunResult {
+    fn from_status(hook: InstalledHook, status: RunStatus) -> Self {
+        Self {
+            hook,
+            status,
+            duration: std::time::Duration::ZERO,
+            exit_status: 0,
+            output: Vec::new(),
+        }
+    }
 }
 
 async fn run_hook(
     hook: InstalledHook,
     filter: &FileFilter<'_>,
     store: &Store,
-    verbose: bool,
     dry_run: bool,
     reporter: &HookRunReporter,
 ) -> Result<RunResult> {
@@ -904,19 +988,11 @@ async fn run_hook(
     );
 
     if filenames.is_empty() && !hook.always_run {
-        return Ok(RunResult {
-            hook,
-            status: RunStatus::NoFiles,
-            output: Vec::new(),
-        });
+        return Ok(RunResult::from_status(hook, RunStatus::NoFiles));
     }
 
     if !Language::supported(hook.language) {
-        return Ok(RunResult {
-            hook,
-            status: RunStatus::Unimplemented,
-            output: Vec::new(),
-        });
+        return Ok(RunResult::from_status(hook, RunStatus::Unimplemented));
     }
     let start = std::time::Instant::now();
 
@@ -927,7 +1003,7 @@ async fn run_hook(
         vec![]
     };
 
-    let (status, hook_output) = if dry_run {
+    let (exit_status, hook_output) = if dry_run {
         let mut output = Vec::new();
         if !filenames.is_empty() {
             writeln!(
@@ -950,43 +1026,9 @@ async fn run_hook(
 
     let duration = start.elapsed();
 
-    let mut output = Vec::new();
-    if verbose || hook.verbose || status != 0 {
-        writeln!(output, "{}", format!("- hook id: {}", hook.id).dimmed())?;
-        if verbose || hook.verbose {
-            writeln!(
-                output,
-                "{}",
-                format!("- duration: {:.2?}s", duration.as_secs_f64()).dimmed()
-            )?;
-        }
-        if status != 0 {
-            writeln!(output, "{}", format!("- exit code: {status}").dimmed())?;
-        }
-
-        let hook_output = hook_output.trim_ascii();
-        if !hook_output.is_empty() {
-            if let Some(file) = hook.log_file.as_deref() {
-                let mut file = fs_err::tokio::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(file)
-                    .await?;
-                file.write_all(hook_output).await?;
-                file.sync_all().await?;
-            } else {
-                writeln!(
-                    output,
-                    "\n{}",
-                    textwrap::indent(&String::from_utf8_lossy(hook_output), "  ")
-                )?;
-            }
-        }
-    }
-
     let run_status = if dry_run {
         RunStatus::DryRun
-    } else if status == 0 {
+    } else if exit_status == 0 {
         RunStatus::Success
     } else {
         RunStatus::Failed
@@ -995,6 +1037,8 @@ async fn run_hook(
     Ok(RunResult {
         hook,
         status: run_status,
-        output,
+        duration,
+        exit_status,
+        output: hook_output,
     })
 }

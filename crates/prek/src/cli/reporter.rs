@@ -177,6 +177,8 @@ impl HookRunReporter {
         let mut state = self.reporter.state.lock().unwrap();
         let id = state.id();
 
+        // len == 0 indicates an unknown length; use 1 to show an indeterminate bar.
+        let len = if len == 0 { 1 } else { len };
         let progress = self.reporter.children.insert_before(
             &self.reporter.root,
             ProgressBar::with_draw_target(Some(len as u64), self.reporter.printer.target()),
