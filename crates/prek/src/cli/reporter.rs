@@ -5,6 +5,7 @@ use std::time::Duration;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
+use unicode_width::UnicodeWidthStr;
 
 use crate::hook::Hook;
 use crate::printer::Printer;
@@ -157,18 +158,18 @@ impl HookInstallReporter {
 
 pub(crate) struct HookRunReporter {
     reporter: ProgressReporter,
-}
-
-impl From<Printer> for HookRunReporter {
-    fn from(printer: Printer) -> Self {
-        Self {
-            reporter: ProgressReporter::from(printer),
-        }
-    }
+    dots: usize,
 }
 
 impl HookRunReporter {
-    pub fn on_run_start(&self, hook: &Hook) -> usize {
+    pub fn new(printer: Printer, dots: usize) -> Self {
+        Self {
+            reporter: ProgressReporter::from(printer),
+            dots,
+        }
+    }
+
+    pub fn on_run_start(&self, hook: &Hook, len: usize) -> usize {
         self.reporter
             .root
             .set_message(format!("{}", "Running hooks...".bold().cyan()));
@@ -178,18 +179,25 @@ impl HookRunReporter {
 
         let progress = self.reporter.children.insert_before(
             &self.reporter.root,
-            ProgressBar::with_draw_target(None, self.reporter.printer.target()),
+            ProgressBar::with_draw_target(Some(len as u64), self.reporter.printer.target()),
         );
 
+        let dots = self.dots - hook.name.width_cjk();
         progress.enable_steady_tick(Duration::from_millis(200));
         progress.set_style(
-            ProgressStyle::with_template("{msg}{bar:60.green/dim} {pos}/{len}")
+            ProgressStyle::with_template(&format!("{{msg}}{{bar:{dots}.green/dim}}"))
                 .unwrap()
                 .progress_chars(".."),
         );
         progress.set_message(hook.name.clone());
         state.bars.insert(id, progress);
         id
+    }
+
+    pub fn on_run_progress(&self, id: usize, completed: u64) {
+        let state = self.reporter.state.lock().unwrap();
+        let progress = &state.bars[&id];
+        progress.inc(completed);
     }
 
     pub fn on_run_complete(&self, id: usize) {

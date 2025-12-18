@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
-use crate::cli::reporter::HookInstallReporter;
+use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::store::Store;
@@ -31,6 +31,7 @@ impl LanguageImpl for Fail {
         hook: &InstalledHook,
         filenames: &[&Path],
         _store: &Store,
+        _reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         let mut out = Vec::new();
         writeln!(out, "{}\n", hook.entry.raw())?;

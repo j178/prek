@@ -10,7 +10,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, error, instrument, trace};
 
 use crate::archive::ArchiveExtension;
-use crate::cli::reporter::HookInstallReporter;
+use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::config::Language;
 use crate::fs::{CWD, Simplified};
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
@@ -61,6 +61,7 @@ trait LanguageImpl {
         hook: &InstalledHook,
         filenames: &[&Path],
         store: &Store,
+        reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)>;
 }
 
@@ -89,6 +90,7 @@ impl LanguageImpl for Unimplemented {
         hook: &InstalledHook,
         _filenames: &[&Path],
         _store: &Store,
+        _reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         anyhow::bail!(UnimplementedError(format!("{}", hook.language)))
     }
@@ -217,6 +219,7 @@ impl Language {
         hook: &InstalledHook,
         filenames: &[&Path],
         store: &Store,
+        reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         match hook.repo() {
             Repo::Meta { .. } => {
@@ -241,19 +244,19 @@ impl Language {
         }
 
         match self {
-            Self::Docker => DOCKER.run(hook, filenames, store).await,
-            Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, store).await,
-            Self::Fail => FAIL.run(hook, filenames, store).await,
-            Self::Golang => GOLANG.run(hook, filenames, store).await,
-            Self::Lua => LUA.run(hook, filenames, store).await,
-            Self::Node => NODE.run(hook, filenames, store).await,
-            Self::Pygrep => PYGREP.run(hook, filenames, store).await,
-            Self::Python => PYTHON.run(hook, filenames, store).await,
-            Self::Ruby => RUBY.run(hook, filenames, store).await,
-            Self::Rust => RUST.run(hook, filenames, store).await,
-            Self::Script => SCRIPT.run(hook, filenames, store).await,
-            Self::System => SYSTEM.run(hook, filenames, store).await,
-            _ => UNIMPLEMENTED.run(hook, filenames, store).await,
+            Self::Docker => DOCKER.run(hook, filenames, store, reporter).await,
+            Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, store, reporter).await,
+            Self::Fail => FAIL.run(hook, filenames, store, reporter).await,
+            Self::Golang => GOLANG.run(hook, filenames, store, reporter).await,
+            Self::Lua => LUA.run(hook, filenames, store, reporter).await,
+            Self::Node => NODE.run(hook, filenames, store, reporter).await,
+            Self::Pygrep => PYGREP.run(hook, filenames, store, reporter).await,
+            Self::Python => PYTHON.run(hook, filenames, store, reporter).await,
+            Self::Ruby => RUBY.run(hook, filenames, store, reporter).await,
+            Self::Rust => RUST.run(hook, filenames, store, reporter).await,
+            Self::Script => SCRIPT.run(hook, filenames, store, reporter).await,
+            Self::System => SYSTEM.run(hook, filenames, store, reporter).await,
+            _ => UNIMPLEMENTED.run(hook, filenames, store, reporter).await,
         }
     }
 }

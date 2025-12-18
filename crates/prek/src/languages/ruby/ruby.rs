@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use prek_consts::env_vars::EnvVars;
 use tracing::debug;
 
-use crate::cli::reporter::HookInstallReporter;
+use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::ruby::RubyRequest;
@@ -142,7 +142,10 @@ impl LanguageImpl for Ruby {
         hook: &InstalledHook,
         filenames: &[&Path],
         _store: &Store,
+        reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
+        let progress = reporter.on_run_start(hook, filenames.len());
+
         let env_dir = hook.env_path().expect("Ruby hook must have env path");
         let info = hook.install_info().expect("Ruby hook must be installed");
 
@@ -176,12 +179,16 @@ impl LanguageImpl for Ruby {
                 .pty_output()
                 .await?;
 
+            reporter.on_run_progress(progress, batch.len() as u64);
+
             output.stdout.extend(output.stderr);
             let code = output.status.code().unwrap_or(1);
             anyhow::Ok((code, output.stdout))
         };
 
         let results = run_by_batch(hook, filenames, &entry, run).await?;
+
+        reporter.on_run_complete(progress);
 
         // Combine results
         let mut combined_status = 0;

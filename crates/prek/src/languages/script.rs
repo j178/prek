@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
-use crate::cli::reporter::HookInstallReporter;
+use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::{LanguageImpl, resolve_command};
@@ -34,10 +34,13 @@ impl LanguageImpl for Script {
         hook: &InstalledHook,
         filenames: &[&Path],
         _store: &Store,
+        reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         // For `language: script`, the `entry[0]` is a script path.
         // For remote hooks, the path is relative to the repo root.
         // For local hooks, the path is relative to the current working directory.
+
+        let progress = reporter.on_run_start(hook, filenames.len());
 
         let repo_path = hook.repo_path().unwrap_or(hook.work_dir());
         let mut split = hook.entry.split()?;
@@ -57,12 +60,16 @@ impl LanguageImpl for Script {
                 .pty_output()
                 .await?;
 
+            reporter.on_run_progress(progress, batch.len() as u64);
+
             output.stdout.extend(output.stderr);
             let code = output.status.code().unwrap_or(1);
             anyhow::Ok((code, output.stdout))
         };
 
         let results = run_by_batch(hook, filenames, &entry, run).await?;
+
+        reporter.on_run_complete(progress);
 
         // Collect results
         let mut combined_status = 0;

@@ -504,24 +504,25 @@ impl StatusPrinter {
     const UNIMPLEMENTED: &'static str = "(unimplemented yet)";
 
     fn for_hooks(hooks: &[InstalledHook], printer: Printer) -> Self {
-        let columns = Self::calculate_columns(hooks);
-        Self { printer, columns }
-    }
-
-    fn calculate_columns(hooks: &[InstalledHook]) -> usize {
         let name_len = hooks
             .iter()
             .map(|hook| hook.name.width_cjk())
             .max()
             .unwrap_or(0);
-        std::cmp::max(
-            80,
-            name_len + 3 + Self::NO_FILES.len() + 1 + Self::SKIPPED.len(),
-        )
+        let columns = std::cmp::max(
+            79,
+            // Hook name...(no files to check)Skipped
+            name_len + 3 + Self::NO_FILES.len() + Self::SKIPPED.len(),
+        );
+        Self { printer, columns }
     }
 
     fn printer(&self) -> Printer {
         self.printer
+    }
+
+    fn bar_len(&self) -> usize {
+        self.columns - Self::PASSED.len()
     }
 
     fn write(&self, hook_name: &str, status: RunStatus) -> Result<(), std::fmt::Error> {
@@ -540,9 +541,9 @@ impl StatusPrinter {
             RunStatus::Success => ("", Self::PASSED, Style::new().on_green()),
             RunStatus::Failed => ("", Self::FAILED, Style::new().on_red()),
         };
-        let dots = self.columns - hook_name.width_cjk() - suffix.len() - final_status.len() - 1;
+        let dots = self.columns - hook_name.width_cjk() - suffix.len() - final_status.len();
         let line = format!(
-            "{hook_name}{}{}",
+            "{hook_name}{}{suffix}{}",
             ".".repeat(dots.max(0)),
             style.style(final_status),
         );
@@ -571,7 +572,7 @@ async fn run_hooks(
     debug_assert!(!hooks.is_empty(), "No hooks to run");
 
     let status_printer = StatusPrinter::for_hooks(hooks, printer);
-    let reporter = HookRunReporter::from(printer);
+    let reporter = HookRunReporter::new(printer, status_printer.bar_len());
 
     let mut success = true;
 
@@ -900,8 +901,6 @@ async fn run_hook(
     dry_run: bool,
     reporter: &HookRunReporter,
 ) -> Result<RunResult> {
-    let progress = reporter.on_run_start(&hook);
-
     let mut filenames = filter.for_hook(&hook);
     trace!(
         "Files for hook `{}` after filtered: {}",
@@ -910,7 +909,6 @@ async fn run_hook(
     );
 
     if filenames.is_empty() && !hook.always_run {
-        reporter.on_run_complete(progress);
         return Ok(RunResult {
             hook,
             status: RunStatus::NoFiles,
@@ -919,7 +917,6 @@ async fn run_hook(
     }
 
     if !Language::supported(hook.language) {
-        reporter.on_run_complete(progress);
         return Ok(RunResult {
             hook,
             status: RunStatus::Unimplemented,
@@ -951,7 +948,7 @@ async fn run_hook(
         (0, output)
     } else {
         hook.language
-            .run(&hook, &filenames, store)
+            .run(&hook, &filenames, store, reporter)
             .await
             .with_context(|| format!("Failed to run hook `{hook}`"))?
     };
@@ -991,8 +988,6 @@ async fn run_hook(
             }
         }
     }
-
-    reporter.on_run_complete(progress);
 
     let run_status = if dry_run {
         RunStatus::DryRun
