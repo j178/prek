@@ -9,8 +9,9 @@ use crate::store::Store;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum BuiltinHooks {
-    TrailingWhitespace,
     CheckAddedLargeFiles,
+    CheckCaseConflict,
+    CheckExecutablesHaveShebangs,
     EndOfFileFixer,
     FixByteOrderMarker,
     CheckJson,
@@ -22,7 +23,7 @@ pub(crate) enum BuiltinHooks {
     MixedLineEnding,
     DetectPrivateKey,
     NoCommitToBranch,
-    CheckExecutablesHaveShebangs,
+    TrailingWhitespace,
 }
 
 impl FromStr for BuiltinHooks {
@@ -30,8 +31,9 @@ impl FromStr for BuiltinHooks {
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
-            "trailing-whitespace" => Ok(Self::TrailingWhitespace),
             "check-added-large-files" => Ok(Self::CheckAddedLargeFiles),
+            "check-case-conflict" => Ok(Self::CheckCaseConflict),
+            "check-executables-have-shebangs" => Ok(Self::CheckExecutablesHaveShebangs),
             "end-of-file-fixer" => Ok(Self::EndOfFileFixer),
             "fix-byte-order-marker" => Ok(Self::FixByteOrderMarker),
             "check-json" => Ok(Self::CheckJson),
@@ -43,7 +45,7 @@ impl FromStr for BuiltinHooks {
             "mixed-line-ending" => Ok(Self::MixedLineEnding),
             "detect-private-key" => Ok(Self::DetectPrivateKey),
             "no-commit-to-branch" => Ok(Self::NoCommitToBranch),
-            "check-executables-have-shebangs" => Ok(Self::CheckExecutablesHaveShebangs),
+            "trailing-whitespace" => Ok(Self::TrailingWhitespace),
             _ => Err(()),
         }
     }
@@ -57,11 +59,12 @@ impl BuiltinHooks {
         filenames: &[&Path],
     ) -> Result<(i32, Vec<u8>)> {
         match self {
-            Self::TrailingWhitespace => {
-                pre_commit_hooks::fix_trailing_whitespace(hook, filenames).await
-            }
             Self::CheckAddedLargeFiles => {
                 pre_commit_hooks::check_added_large_files(hook, filenames).await
+            }
+            Self::CheckCaseConflict => pre_commit_hooks::check_case_conflict(hook, filenames).await,
+            Self::CheckExecutablesHaveShebangs => {
+                pre_commit_hooks::check_executables_have_shebangs(hook, filenames).await
             }
             Self::EndOfFileFixer => pre_commit_hooks::fix_end_of_file(hook, filenames).await,
             Self::FixByteOrderMarker => {
@@ -78,8 +81,8 @@ impl BuiltinHooks {
             Self::MixedLineEnding => pre_commit_hooks::mixed_line_ending(hook, filenames).await,
             Self::DetectPrivateKey => pre_commit_hooks::detect_private_key(hook, filenames).await,
             Self::NoCommitToBranch => pre_commit_hooks::no_commit_to_branch(hook).await,
-            Self::CheckExecutablesHaveShebangs => {
-                pre_commit_hooks::check_executables_have_shebangs(hook, filenames).await
+            Self::TrailingWhitespace => {
+                pre_commit_hooks::fix_trailing_whitespace(hook, filenames).await
             }
         }
     }
@@ -89,18 +92,6 @@ impl BuiltinHook {
     pub(crate) fn from_id(id: &str) -> Result<Self, ()> {
         let hook_id = BuiltinHooks::from_str(id)?;
         let hook = match hook_id {
-            BuiltinHooks::TrailingWhitespace => ManifestHook {
-                id: "trailing-whitespace".to_string(),
-                name: "trim trailing whitespace".to_string(),
-                language: Language::Python,
-                entry: "trailing-whitespace-fixer".to_string(),
-                options: HookOptions {
-                    description: Some("trims trailing whitespace.".to_string()),
-                    types: Some(vec!["text".to_string()]),
-                    stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
-                    ..Default::default()
-                },
-            },
             BuiltinHooks::CheckAddedLargeFiles => ManifestHook {
                 id: "check-added-large-files".to_string(),
                 name: "check for added large files".to_string(),
@@ -108,6 +99,33 @@ impl BuiltinHook {
                 entry: "check-added-large-files".to_string(),
                 options: HookOptions {
                     description: Some("prevents giant files from being committed.".to_string()),
+                    stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::CheckCaseConflict => ManifestHook {
+                id: "check-case-conflict".to_string(),
+                name: "check for case conflicts".to_string(),
+                language: Language::Python,
+                entry: "check-case-conflict".to_string(),
+                options: HookOptions {
+                    description: Some(
+                        "checks for files that would conflict in case-insensitive filesystems"
+                            .to_string(),
+                    ),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::CheckExecutablesHaveShebangs => ManifestHook {
+                id: "check-executables-have-shebangs".to_string(),
+                name: "check that executables have shebangs".to_string(),
+                language: Language::Python,
+                entry: "check-executables-have-shebangs".to_string(),
+                options: HookOptions {
+                    description: Some(
+                        "ensures that (non-binary) executables have a shebang.".to_string(),
+                    ),
+                    types: Some(vec!["text".to_string(), "executable".to_string()]),
                     stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
                     ..Default::default()
                 },
@@ -241,16 +259,14 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
-            BuiltinHooks::CheckExecutablesHaveShebangs => ManifestHook {
-                id: "check-executables-have-shebangs".to_string(),
-                name: "check that executables have shebangs".to_string(),
+            BuiltinHooks::TrailingWhitespace => ManifestHook {
+                id: "trailing-whitespace".to_string(),
+                name: "trim trailing whitespace".to_string(),
                 language: Language::Python,
-                entry: "check-executables-have-shebangs".to_string(),
+                entry: "trailing-whitespace-fixer".to_string(),
                 options: HookOptions {
-                    description: Some(
-                        "ensures that (non-binary) executables have a shebang.".to_string(),
-                    ),
-                    types: Some(vec!["text".to_string(), "executable".to_string()]),
+                    description: Some("trims trailing whitespace.".to_string()),
+                    types: Some(vec!["text".to_string()]),
                     stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
                     ..Default::default()
                 },
