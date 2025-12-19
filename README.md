@@ -283,6 +283,7 @@ prek self update
 - It is [multiple times faster](https://prek.j178.dev/benchmark/) than `pre-commit` and takes up half the disk space.
 - It redesigned how hook environments and toolchains are managed, they are all shared between hooks, which reduces the disk space usage and speeds up the installation process.
 - Repositories are cloned in parallel, and hooks are installed in parallel if their dependencies are disjoint.
+- Hooks can run in parallel by priority (hooks with the same [`priority`](https://prek.j178.dev/configuration/#priority) may run concurrently), reducing end-to-end runtime.
 - It uses [`uv`](https://github.com/astral-sh/uv) for creating Python virtualenvs and installing dependencies, which is known for its speed and efficiency.
 - It implements some common hooks in Rust, [built in prek](https://prek.j178.dev/builtin/), which are faster than their Python counterparts.
 - It supports `repo: builtin` for offline, zero-setup hooks, which is not available in `pre-commit`.

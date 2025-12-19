@@ -85,6 +85,7 @@ Gems specified in hook gemspec files and `additional_dependencies` will be insta
 ### `prek run`
 
 - `prek run [HOOK|PROJECT]...` supports selecting or skipping multiple projects or hooks in workspace mode. See [Running Specific Hooks or Projects](workspace.md#running-specific-hooks-or-projects) for details.
+- `prek run` can execute hooks in parallel by priority (hooks with the same [`priority`](./configuration.md#priority) may run concurrently), instead of strictly serial execution.
 - `prek` provides dynamic completions of hook id.
 - `prek run --last-commit` to run hooks on files changed by the last commit.
 - `prek run --directory <DIR>` to run hooks on a specified directory.
