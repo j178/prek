@@ -1717,14 +1717,14 @@ fn run_directory() -> Result<()> {
     ");
 
     // non-existing directory
-    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("non-existing-dir"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("non-existing-dir"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     directory............................................(no files to check)Skipped
 
     ----- stderr -----
-    "#);
+    ");
 
     // `--directory` with `--files`
     cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--files").arg("dir1/file.txt"), @r"
@@ -2239,7 +2239,7 @@ fn dry_run() {
     success: true
     exit_code: 0
     ----- stdout -----
-    fail.....................................................................Dry Run
+    fail....................................................................Dry Run
     - hook id: fail
     - duration: [TIME]
 

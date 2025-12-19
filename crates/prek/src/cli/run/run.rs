@@ -6,7 +6,7 @@ use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
-use owo_colors::{OwoColorize, Style};
+use owo_colors::OwoColorize;
 use prek_consts::env_vars::EnvVars;
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
@@ -529,35 +529,38 @@ impl StatusPrinter {
         prefix: &str,
         status: RunStatus,
     ) -> Result<(), std::fmt::Error> {
-        let (suffix, final_status, style) = match status {
+        let (suffix, status_line, status_width) = match status {
             RunStatus::NoFiles => (
                 Self::NO_FILES,
-                Self::SKIPPED,
-                Style::new().black().on_cyan(),
+                Self::SKIPPED.black().on_cyan().to_string(),
+                Self::SKIPPED.width(),
             ),
             RunStatus::Unimplemented => (
                 Self::UNIMPLEMENTED,
-                Self::SKIPPED,
-                Style::new().black().on_yellow(),
+                Self::SKIPPED.black().on_yellow().to_string(),
+                Self::SKIPPED.width(),
             ),
-            RunStatus::DryRun => ("", Self::DRY_RUN, Style::new().on_yellow()),
-            RunStatus::Success => ("", Self::PASSED, Style::new().on_green()),
-            RunStatus::Failed => ("", Self::FAILED, Style::new().on_red()),
+            RunStatus::DryRun => (
+                "",
+                Self::DRY_RUN.on_yellow().to_string(),
+                Self::DRY_RUN.width(),
+            ),
+            RunStatus::Success => (
+                "",
+                Self::PASSED.on_green().to_string(),
+                Self::PASSED.width(),
+            ),
+            RunStatus::Failed => ("", Self::FAILED.on_red().to_string(), Self::FAILED.width()),
         };
-        let prefix = if prefix.is_empty() {
-            String::new()
+        let (prefix, prefix_width) = if prefix.is_empty() {
+            (String::new(), 0)
         } else {
-            format!("{}", prefix.dimmed())
+            (prefix.dimmed().to_string(), prefix.width())
         };
-        let dots = self.columns
-            - prefix.width()
-            - hook_name.width()
-            - suffix.width()
-            - final_status.width();
+        let dots = self.columns - prefix_width - hook_name.width() - suffix.width() - status_width;
         let line = format!(
-            "{prefix}{hook_name}{}{suffix}{}",
+            "{prefix}{hook_name}{}{suffix}{status_line}",
             ".".repeat(dots.max(0)),
-            style.style(final_status),
         );
         match status {
             RunStatus::Failed => {
@@ -829,6 +832,10 @@ fn render_priority_group(
 
         status_printer.write(&result.hook.name, prefix, status)?;
 
+        if matches!(status, RunStatus::NoFiles | RunStatus::Unimplemented) {
+            continue;
+        }
+
         let mut stdout = match status {
             RunStatus::Failed => printer.stdout_important(),
             _ => printer.stdout(),
@@ -854,7 +861,6 @@ fn render_priority_group(
                     format!("- exit code: {}", result.exit_status).dimmed()
                 )?;
             }
-
             if single_hook_modified_files {
                 writeln!(
                     stdout,
@@ -873,7 +879,11 @@ fn render_priority_group(
                     file.write_all(output)?;
                     file.flush()?;
                 } else {
-                    writeln!(stdout, "{group_prefix}")?;
+                    if show_group_ui {
+                        writeln!(stdout, "{}", "  │".dimmed())?;
+                    } else {
+                        writeln!(stdout)?;
+                    }
                     let text = String::from_utf8_lossy(output);
                     for line in text.lines() {
                         if line.is_empty() {
@@ -882,11 +892,12 @@ fn render_priority_group(
                             } else {
                                 writeln!(stdout)?;
                             }
-                        }
-                        if show_group_ui {
-                            writeln!(stdout, "{group_prefix}{line}")?;
                         } else {
-                            writeln!(stdout, "  {line}")?;
+                            if show_group_ui {
+                                writeln!(stdout, "{group_prefix}{line}")?;
+                            } else {
+                                writeln!(stdout, "  {line}")?;
+                            }
                         }
                     }
                 }
@@ -990,7 +1001,6 @@ async fn run_hook(
     if filenames.is_empty() && !hook.always_run {
         return Ok(RunResult::from_status(hook, RunStatus::NoFiles));
     }
-
     if !Language::supported(hook.language) {
         return Ok(RunResult::from_status(hook, RunStatus::Unimplemented));
     }
@@ -1013,7 +1023,7 @@ async fn run_hook(
                 filenames.len()
             )?;
         }
-        for filename in &filenames {
+        for filename in filenames {
             writeln!(output, "- {}", filename.display())?;
         }
         (0, output)

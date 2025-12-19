@@ -89,9 +89,9 @@ dead_code = "allow"
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -2 }
 # Allowed pedantic lints
-char_lit_as_u8 = "allow"
 collapsible_else_if = "allow"
 collapsible_if = "allow"
+if_not_else = "allow"
 implicit_hasher = "allow"
 map_unwrap_or = "allow"
 match_same_arms = "allow"
