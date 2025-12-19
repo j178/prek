@@ -12,7 +12,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use thiserror::Error;
-use tracing::{error, trace};
+use tracing::trace;
 
 use crate::config::{
     self, BuiltinHook, Config, HookOptions, Language, LocalHook, ManifestHook, MetaHook,

@@ -3,7 +3,6 @@ use std::fmt::Write;
 use std::iter;
 use std::path::PathBuf;
 
-use anstream::eprintln;
 use anyhow::Result;
 use owo_colors::OwoColorize;
 
