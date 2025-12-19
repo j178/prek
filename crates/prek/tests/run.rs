@@ -449,6 +449,75 @@ fn priority_fail_fast_stops_later_groups() {
     "#);
 }
 
+#[test]
+fn priority_group_modified_files_is_group_failure_and_output_is_indented() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    cwd.child("file.txt").write_str("hello\n")?;
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: modify
+                name: Modifies File
+                language: system
+                entry: python3 -c "from pathlib import Path; p = Path('file.txt'); p.write_text(p.read_text() + 'x')"
+                always_run: true
+                verbose: true
+                priority: 0
+              - id: loud
+                name: Prints Output
+                language: system
+                entry: python3 -c "print('hello from loud')"
+                always_run: true
+                verbose: true
+                priority: 0
+              - id: quiet
+                name: No Output
+                language: system
+                entry: python3 -c "import time; time.sleep(0.1)"
+                always_run: true
+                priority: 0
+              - id: later
+                name: Later Hook
+                language: system
+                entry: python3 -c "print('later ran')"
+                always_run: true
+                verbose: true
+                priority: 10
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Files were modified by following hooks...................................Failed
+      ┌ Modifies File........................................................Passed
+      │ - hook id: modify
+      │ - duration: [TIME]
+      │ Prints Output........................................................Passed
+      │ - hook id: loud
+      │ - duration: [TIME]
+      │
+      │ hello from loud
+      └ No Output............................................................Passed
+    Later Hook...............................................................Passed
+    - hook id: later
+    - duration: [TIME]
+
+      later ran
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 /// `.pre-commit-config.yaml` is not staged.
 #[test]
 fn config_not_staged() -> Result<()> {
