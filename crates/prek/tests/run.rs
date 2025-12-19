@@ -1388,7 +1388,7 @@ fn invalid_entry() {
     success: false
     exit_code: 2
     ----- stdout -----
-    entry....................................................................
+
     ----- stderr -----
     error: Failed to run hook `entry`
       caused by: Invalid hook `entry`
@@ -2663,7 +2663,7 @@ fn empty_entry() {
     success: false
     exit_code: 2
     ----- stdout -----
-    local....................................................................
+
     ----- stderr -----
     error: Failed to run hook `local`
       caused by: Invalid hook `local`

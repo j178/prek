@@ -94,26 +94,26 @@ fn end_of_file_fixer_hook() -> Result<()> {
     ");
 
     // Assert that the files have been corrected
-    assert_snapshot!(context.read("correct_lf.txt"), @"Hello World\n");
-    assert_snapshot!(context.read("correct_crlf.txt"), @"Hello World\n");
-    assert_snapshot!(context.read("no_newline.txt"), @"No trailing newline\n");
-    assert_snapshot!(context.read("multiple_lf.txt"), @"Multiple newlines\n");
-    assert_snapshot!(context.read("multiple_crlf.txt"), @"Multiple newlines\n");
+    assert_snapshot!(context.read("correct_lf.txt"), @"Hello World");
+    assert_snapshot!(context.read("correct_crlf.txt"), @"Hello World");
+    assert_snapshot!(context.read("no_newline.txt"), @"No trailing newline");
+    assert_snapshot!(context.read("multiple_lf.txt"), @"Multiple newlines");
+    assert_snapshot!(context.read("multiple_crlf.txt"), @"Multiple newlines");
     assert_snapshot!(context.read("empty.txt"), @"");
-    assert_snapshot!(context.read("only_newlines.txt"), @"\n");
-    assert_snapshot!(context.read("only_win_newlines.txt"), @"\n");
+    assert_snapshot!(context.read("only_newlines.txt"), @"");
+    assert_snapshot!(context.read("only_win_newlines.txt"), @"");
 
     context.git_add(".");
 
     // Second run: hooks should now pass. The output will be stable.
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     fix end of files.........................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -163,14 +163,14 @@ fn check_yaml_hook() -> Result<()> {
     context.git_add(".");
 
     // Second run: hooks should now pass
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     check yaml...............................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -271,14 +271,14 @@ fn check_json_hook() -> Result<()> {
     context.git_add(".");
 
     // Second run: hooks should now pass
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     check json...............................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -325,21 +325,31 @@ fn mixed_line_ending_hook() -> Result<()> {
     ");
 
     // Assert that the files have been corrected
-    assert_snapshot!(context.read("mixed.txt"), @"line1\r\nline2\r\nline3\r\n");
-    assert_snapshot!(context.read("only_lf.txt"), @"line1\nline2\n");
-    assert_snapshot!(context.read("only_crlf.txt"), @"line1\r\nline2\r\n");
+    assert_snapshot!(context.read("mixed.txt"), @r"
+    line1
+    line2
+    line3
+    ");
+    assert_snapshot!(context.read("only_lf.txt"), @r"
+    line1
+    line2
+    ");
+    assert_snapshot!(context.read("only_crlf.txt"), @r"
+    line1
+    line2
+    ");
 
     context.git_add(".");
 
     // Second run: hooks should now pass.
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     mixed line ending........................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     // Test with --fix=no
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -366,7 +376,10 @@ fn mixed_line_ending_hook() -> Result<()> {
 
     ----- stderr -----
     ");
-    assert_snapshot!(context.read("mixed.txt"), @"line1\nline2\r\n");
+    assert_snapshot!(context.read("mixed.txt"), @r"
+    line1
+    line2
+    ");
 
     // Test with --fix=crlf
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -396,7 +409,10 @@ fn mixed_line_ending_hook() -> Result<()> {
 
     ----- stderr -----
     ");
-    assert_snapshot!(context.read("mixed.txt"), @"line1\r\nline2\r\n");
+    assert_snapshot!(context.read("mixed.txt"), @r"
+    line1
+    line2
+    ");
 
     // Test mixed args with missing value for `--fix`
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -415,7 +431,7 @@ fn mixed_line_ending_hook() -> Result<()> {
     success: false
     exit_code: 2
     ----- stdout -----
-    mixed line ending........................................................
+
     ----- stderr -----
     error: Failed to run hook `mixed-line-ending`
       caused by: error: a value is required for '--fix <FIX>' but none was supplied
@@ -517,14 +533,14 @@ fn check_added_large_files_hook() -> Result<()> {
     context.git_add(".");
 
     // Third run: hook should pass because the large file is tracked by git-lfs
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     check for added large files..............................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -856,14 +872,14 @@ fn check_symlinks_hook_unix() -> Result<()> {
     context.git_add(".");
 
     // Second run: should pass
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     check for broken symlinks................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -1098,14 +1114,14 @@ fn check_merge_conflict_hook() -> Result<()> {
     context.git_add(".");
 
     // Second run: hooks should now pass
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     check for merge conflicts................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -1138,14 +1154,14 @@ fn check_merge_conflict_without_assume_flag() -> Result<()> {
     context.git_add(".");
 
     // Should pass because we're not in a merge state and no --assume-in-merge flag
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     check for merge conflicts................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -1296,14 +1312,14 @@ fn check_xml_with_features() -> Result<()> {
     context.git_add(".");
 
     // All should pass
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     check xml................................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -1350,14 +1366,14 @@ fn no_commit_to_branch_hook() -> Result<()> {
     context.git_add(".");
     context.git_commit("Add feature");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     don't commit to branch...................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     // Test 3: Try to commit to main branch (should fail)
     context.git_branch("main");
@@ -1404,14 +1420,14 @@ fn no_commit_to_branch_hook_with_custom_branches() -> Result<()> {
     context.git_commit("Initial commit");
 
     // Test 1: Try to commit to master branch (should pass - not in custom list)
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     don't commit to branch...................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     // Test 2: Create and switch to develop branch (should fail)
     context.git_branch("develop");
@@ -1540,25 +1556,25 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
     context.git_add(".");
     context.git_commit("Add normal content");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     don't commit to branch...................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     // Test 5: Try to run with detached head pointer status (should pass - ignore this status)
     context.git_checkout("HEAD~1");
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     don't commit to branch...................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     // Test 6: Try to commit to branch with invalid pattern (should fail - invalid pattern)
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -1579,7 +1595,7 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
     success: false
     exit_code: 2
     ----- stdout -----
-    don't commit to branch...................................................
+
     ----- stderr -----
     error: Failed to run hook `no-commit-to-branch`
       caused by: Failed to compile regex patterns
@@ -1662,14 +1678,14 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
     context.git_add(".");
 
     // Second run: should now pass
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     check that executables have shebangs.....................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -1815,14 +1831,14 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
     context.git_add(".");
 
     // Second run: should now pass
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     check that executables have shebangs.....................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
