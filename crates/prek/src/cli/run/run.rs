@@ -1,22 +1,21 @@
 use std::fmt::Write as _;
-use std::io::Write;
+use std::io::Write as _;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
-use owo_colors::{OwoColorize, Style};
+use owo_colors::OwoColorize;
 use prek_consts::env_vars::EnvVars;
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
 use rustc_hash::{FxHashMap, FxHashSet};
-use tokio::io::AsyncWriteExt;
 use tokio::sync::{OnceCell, Semaphore};
 use tracing::{debug, trace, warn};
 use unicode_width::UnicodeWidthStr;
 
-use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
+use crate::cli::reporter::{HookInitReporter, HookInstallReporter, HookRunReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{CollectOptions, FileFilter, Selectors, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
@@ -24,7 +23,7 @@ use crate::config::{Language, Stage};
 use crate::fs::CWD;
 use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
-use crate::printer::{Printer, Stdout};
+use crate::printer::Printer;
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
@@ -503,69 +502,72 @@ impl StatusPrinter {
     const UNIMPLEMENTED: &'static str = "(unimplemented yet)";
 
     fn for_hooks(hooks: &[InstalledHook], printer: Printer) -> Self {
-        let columns = Self::calculate_columns(hooks);
+        let name_len = hooks
+            .iter()
+            .map(|hook| hook.name.width())
+            .max()
+            .unwrap_or(0);
+        let columns = std::cmp::max(
+            79,
+            // Hook name...(no files to check)Skipped
+            name_len + 3 + Self::NO_FILES.len() + Self::SKIPPED.len(),
+        );
         Self { printer, columns }
     }
 
-    fn calculate_columns(hooks: &[InstalledHook]) -> usize {
-        let name_len = hooks
-            .iter()
-            .map(|hook| hook.name.width_cjk())
-            .max()
-            .unwrap_or(0);
-        std::cmp::max(
-            80,
-            name_len + 3 + Self::NO_FILES.len() + 1 + Self::SKIPPED.len(),
-        )
+    fn printer(&self) -> Printer {
+        self.printer
     }
 
-    fn write_skipped(
+    fn bar_len(&self) -> usize {
+        self.columns - Self::PASSED.len()
+    }
+
+    fn write(
         &self,
         hook_name: &str,
-        reason: &str,
-        style: Style,
+        prefix: &str,
+        status: RunStatus,
     ) -> Result<(), std::fmt::Error> {
-        let dots = self.columns - hook_name.width_cjk() - Self::SKIPPED.len() - reason.len() - 1;
+        let (suffix, status_line, status_width) = match status {
+            RunStatus::NoFiles => (
+                Self::NO_FILES,
+                Self::SKIPPED.black().on_cyan().to_string(),
+                Self::SKIPPED.width(),
+            ),
+            RunStatus::Unimplemented => (
+                Self::UNIMPLEMENTED,
+                Self::SKIPPED.black().on_yellow().to_string(),
+                Self::SKIPPED.width(),
+            ),
+            RunStatus::DryRun => (
+                "",
+                Self::DRY_RUN.on_yellow().to_string(),
+                Self::DRY_RUN.width(),
+            ),
+            RunStatus::Success => (
+                "",
+                Self::PASSED.on_green().to_string(),
+                Self::PASSED.width(),
+            ),
+            RunStatus::Failed => ("", Self::FAILED.on_red().to_string(), Self::FAILED.width()),
+        };
+        let (prefix, prefix_width) = if prefix.is_empty() {
+            (String::new(), 0)
+        } else {
+            (prefix.dimmed().to_string(), prefix.width())
+        };
+        let dots = self.columns - prefix_width - hook_name.width() - suffix.width() - status_width;
         let line = format!(
-            "{hook_name}{}{}{}",
-            ".".repeat(dots),
-            reason,
-            Self::SKIPPED.style(style)
+            "{prefix}{hook_name}{}{suffix}{status_line}",
+            ".".repeat(dots.max(0)),
         );
-        writeln!(self.printer.stdout(), "{line}")
-    }
-
-    fn write_running(&self, hook_name: &str, important: bool) -> Result<(), std::fmt::Error> {
-        write!(
-            if important {
-                self.printer.stdout_important()
-            } else {
-                self.printer.stdout()
-            },
-            "{}{}",
-            hook_name,
-            ".".repeat(self.columns - hook_name.width_cjk() - Self::PASSED.len() - 1)
-        )
-    }
-
-    fn write_dry_run(&self) -> Result<(), std::fmt::Error> {
-        writeln!(self.printer.stdout(), "{}", Self::DRY_RUN.on_yellow())
-    }
-
-    fn write_passed(&self) -> Result<(), std::fmt::Error> {
-        writeln!(self.printer.stdout(), "{}", Self::PASSED.on_green())
-    }
-
-    fn write_failed(&self) -> Result<(), std::fmt::Error> {
-        writeln!(self.printer.stdout_important(), "{}", Self::FAILED.on_red())
-    }
-
-    fn stdout(&self) -> Stdout {
-        self.printer.stdout()
-    }
-
-    fn stdout_important(&self) -> Stdout {
-        self.printer.stdout_important()
+        match status {
+            RunStatus::Failed => {
+                writeln!(self.printer.stdout_important(), "{line}")
+            }
+            _ => writeln!(self.printer.stdout(), "{line}"),
+        }
     }
 }
 
@@ -584,18 +586,19 @@ async fn run_hooks(
 ) -> Result<ExitStatus> {
     debug_assert!(!hooks.is_empty(), "No hooks to run");
 
-    let printer = StatusPrinter::for_hooks(hooks, printer);
+    let status_printer = StatusPrinter::for_hooks(hooks, printer);
+    let reporter = HookRunReporter::new(printer, status_printer.bar_len());
 
     let mut success = true;
 
     // Group hooks by project to run them in order of their depth in the workspace.
     #[allow(clippy::mutable_key_type)]
-    let mut project_to_hooks: FxHashMap<&Project, Vec<&InstalledHook>> = FxHashMap::default();
+    let mut project_to_hooks: FxHashMap<&Project, Vec<InstalledHook>> = FxHashMap::default();
     for hook in hooks {
         project_to_hooks
             .entry(hook.project())
             .or_default()
-            .push(hook);
+            .push(hook.clone());
     }
 
     let projects_len = project_to_hooks.len();
@@ -606,46 +609,78 @@ async fn run_hooks(
     // Track files that have been consumed by orphan projects.
     let mut consumed_files = FxHashSet::default();
 
-    // Hooks might modify the files, so they must be run sequentially.
     'outer: for project in workspace.all_projects() {
         let filter = FileFilter::for_project(filenames.iter(), project, Some(&mut consumed_files));
 
         let Some(mut hooks) = project_to_hooks.remove(project) else {
             continue;
         };
-
-        hooks.sort_by_key(|h| h.idx);
-
-        if projects_len > 1 || !project.is_root() {
-            writeln!(
-                printer.stdout(),
-                "{}{}:",
-                if first { "" } else { "\n" },
-                format!("Running hooks for `{}`", project.to_string().cyan()).bold()
-            )?;
-            first = false;
-        }
-        let mut diff = git::get_diff(project.path()).await?;
-
-        let fail_fast = fail_fast || project.config().fail_fast.unwrap_or(false);
-
         trace!(
             "Files for project `{project}` after filtered: {}",
             filter.len()
         );
 
-        for hook in hooks {
-            let result = run_hook(hook, &filter, store, diff, verbose, dry_run, &printer).await?;
-            diff = result.new_diff;
-            file_modified |= result.file_modified;
-            has_unimplemented |= result.status.is_unimplemented();
+        // Sort hooks by priority (lower number means higher priority).
+        // If two hooks have the same priority, preserve their original order from the config.
+        hooks.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.idx.cmp(&b.idx)));
 
-            success &= result.status.as_bool();
-            if !success && (fail_fast || hook.fail_fast) {
+        if projects_len > 1 || !project.is_root() {
+            reporter.suspend(|| {
+                writeln!(
+                    status_printer.printer().stdout(),
+                    "{}{}",
+                    if first { "" } else { "\n" },
+                    format!("Running hooks for `{}`:", project.to_string().cyan()).bold()
+                )
+            })?;
+            first = false;
+        }
+        let mut prev_diff = git::get_diff(project.path()).await?;
+
+        let project_fail_fast = fail_fast || project.config().fail_fast.unwrap_or(false);
+
+        for group_range in PriorityGroupRanges::new(&hooks) {
+            let group_hooks = hooks[group_range].to_vec();
+            let mut group_results =
+                run_priority_group(group_hooks, &filter, store, dry_run, &reporter).await?;
+
+            // Print results in a stable order (same order as config within the project).
+            group_results.sort_by(|a, b| a.hook.idx.cmp(&b.hook.idx));
+
+            // Check if any files were modified by this group of hooks.
+            let curr_diff = git::get_diff(project.path()).await?;
+            let group_modified_files = curr_diff != prev_diff;
+            prev_diff = curr_diff;
+
+            if group_modified_files {
+                file_modified = true;
+                success = false;
+            }
+
+            reporter.suspend(|| {
+                render_priority_group(
+                    printer,
+                    &status_printer,
+                    &group_results,
+                    verbose,
+                    group_modified_files,
+                )
+            })?;
+
+            let hook_fail_fast = apply_group_outcome(
+                &group_results,
+                group_modified_files,
+                &mut success,
+                &mut has_unimplemented,
+            );
+
+            if !success && (project_fail_fast || hook_fail_fast) {
                 break 'outer;
             }
         }
     }
+
+    reporter.on_complete();
 
     if has_unimplemented {
         warn_user!(
@@ -699,6 +734,206 @@ async fn run_hooks(
     }
 }
 
+struct PriorityGroupRanges<'a> {
+    hooks: &'a [InstalledHook],
+    idx: usize,
+}
+
+impl<'a> PriorityGroupRanges<'a> {
+    fn new(hooks: &'a [InstalledHook]) -> Self {
+        Self { hooks, idx: 0 }
+    }
+}
+
+impl Iterator for PriorityGroupRanges<'_> {
+    type Item = std::ops::Range<usize>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx >= self.hooks.len() {
+            return None;
+        }
+
+        let start = self.idx;
+        let priority = self.hooks[start].priority;
+        let mut end = start + 1;
+        while end < self.hooks.len() && self.hooks[end].priority == priority {
+            end += 1;
+        }
+        self.idx = end;
+        Some(start..end)
+    }
+}
+
+async fn run_priority_group(
+    group_hooks: Vec<InstalledHook>,
+    filter: &FileFilter<'_>,
+    store: &Store,
+    dry_run: bool,
+    reporter: &HookRunReporter,
+) -> Result<Vec<RunResult>> {
+    let mut results = futures::stream::iter(
+        group_hooks
+            .into_iter()
+            .map(|hook| run_hook(hook, filter, store, dry_run, reporter)),
+    )
+    .buffer_unordered(*CONCURRENCY);
+
+    let mut group_results = Vec::new();
+    while let Some(result) = results.next().await {
+        group_results.push(result?);
+    }
+    Ok(group_results)
+}
+
+fn render_priority_group(
+    printer: Printer,
+    status_printer: &StatusPrinter,
+    group_results: &[RunResult],
+    verbose: bool,
+    group_modified_files: bool,
+) -> Result<()> {
+    // Only show a special group UI when the group failed due to file modifications.
+    // Hooks in a priority group run in parallel, so we can't attribute modifications to a single hook.
+    let show_group_ui = group_modified_files && group_results.len() > 1;
+    let single_hook_modified_files = group_results.len() == 1 && group_modified_files;
+    let group_prefix = if show_group_ui {
+        format!("{}", "  │ ".dimmed())
+    } else {
+        String::new()
+    };
+
+    if show_group_ui {
+        status_printer.write(
+            "Files were modified by following hooks",
+            "",
+            RunStatus::Failed,
+        )?;
+    }
+
+    for (i, result) in group_results.iter().enumerate() {
+        let prefix = if show_group_ui {
+            if i == 0 {
+                "  ┌ "
+            } else if i + 1 == group_results.len() {
+                "  └ "
+            } else {
+                "  │ "
+            }
+        } else {
+            ""
+        };
+
+        // If a single hook modified files, treat it as failed.
+        let status = if single_hook_modified_files && result.status == RunStatus::Success {
+            RunStatus::Failed
+        } else {
+            result.status
+        };
+
+        status_printer.write(&result.hook.name, prefix, status)?;
+
+        if matches!(status, RunStatus::NoFiles | RunStatus::Unimplemented) {
+            continue;
+        }
+
+        let mut stdout = match status {
+            RunStatus::Failed => printer.stdout_important(),
+            _ => printer.stdout(),
+        };
+
+        if verbose || result.hook.verbose || status == RunStatus::Failed {
+            writeln!(
+                stdout,
+                "{group_prefix}{}",
+                format!("- hook id: {}", result.hook.id).dimmed()
+            )?;
+            if verbose || result.hook.verbose {
+                writeln!(
+                    stdout,
+                    "{group_prefix}{}",
+                    format!("- duration: {:.2?}s", result.duration.as_secs_f64()).dimmed()
+                )?;
+            }
+            if result.exit_status != 0 {
+                writeln!(
+                    stdout,
+                    "{group_prefix}{}",
+                    format!("- exit code: {}", result.exit_status).dimmed()
+                )?;
+            }
+            if single_hook_modified_files {
+                writeln!(
+                    stdout,
+                    "{group_prefix}{}",
+                    "- files were modified by this hook".dimmed()
+                )?;
+            }
+
+            let output = result.output.trim_ascii();
+            if !output.is_empty() {
+                if let Some(file) = result.hook.log_file.as_deref() {
+                    let mut file = fs_err::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(file)?;
+                    file.write_all(output)?;
+                    file.flush()?;
+                } else {
+                    if show_group_ui {
+                        writeln!(stdout, "{}", "  │".dimmed())?;
+                    } else {
+                        writeln!(stdout)?;
+                    }
+                    let text = String::from_utf8_lossy(output);
+                    for line in text.lines() {
+                        if line.is_empty() {
+                            if show_group_ui {
+                                writeln!(stdout, "{}", "  │".dimmed())?;
+                            } else {
+                                writeln!(stdout)?;
+                            }
+                        } else {
+                            if show_group_ui {
+                                writeln!(stdout, "{group_prefix}{line}")?;
+                            } else {
+                                writeln!(stdout, "  {line}")?;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn apply_group_outcome(
+    group_results: &[RunResult],
+    group_modified_files: bool,
+    success: &mut bool,
+    has_unimplemented: &mut bool,
+) -> bool {
+    let mut hook_fail_fast = false;
+
+    for RunResult { hook, status, .. } in group_results {
+        *has_unimplemented |= status.is_unimplemented();
+
+        let ok = if group_modified_files {
+            false
+        } else {
+            status.as_bool()
+        };
+        *success &= ok;
+
+        if !ok && hook.fail_fast {
+            hook_fail_fast = true;
+        }
+    }
+
+    hook_fail_fast
+}
+
 /// Shuffle the files so that they more evenly fill out the xargs
 /// partitions, but do it deterministically in case a hook cares about ordering.
 fn shuffle<T>(filenames: &mut [T]) {
@@ -707,43 +942,56 @@ fn shuffle<T>(filenames: &mut [T]) {
     filenames.shuffle(&mut rng);
 }
 
+#[derive(Copy, Clone, Eq, PartialEq)]
 enum RunStatus {
     Success,
     Failed,
-    Skipped,
+    DryRun,
+    NoFiles,
     Unimplemented,
 }
 
 impl RunStatus {
-    fn from_bool(success: bool) -> Self {
-        if success { Self::Success } else { Self::Failed }
+    fn as_bool(self) -> bool {
+        matches!(
+            self,
+            Self::Success | Self::NoFiles | Self::DryRun | Self::Unimplemented
+        )
     }
 
-    fn as_bool(&self) -> bool {
-        matches!(self, Self::Success | Self::Skipped | Self::Unimplemented)
-    }
-
-    fn is_unimplemented(&self) -> bool {
+    fn is_unimplemented(self) -> bool {
         matches!(self, Self::Unimplemented)
     }
 }
 
 struct RunResult {
+    hook: InstalledHook,
     status: RunStatus,
-    new_diff: Vec<u8>,
-    file_modified: bool,
+    duration: std::time::Duration,
+    exit_status: i32,
+    output: Vec<u8>,
+}
+
+impl RunResult {
+    fn from_status(hook: InstalledHook, status: RunStatus) -> Self {
+        Self {
+            hook,
+            status,
+            duration: std::time::Duration::ZERO,
+            exit_status: 0,
+            output: Vec::new(),
+        }
+    }
 }
 
 async fn run_hook(
-    hook: &InstalledHook,
+    hook: InstalledHook,
     filter: &FileFilter<'_>,
     store: &Store,
-    diff: Vec<u8>,
-    verbose: bool,
     dry_run: bool,
-    printer: &StatusPrinter,
+    reporter: &HookRunReporter,
 ) -> Result<RunResult> {
-    let mut filenames = filter.for_hook(hook);
+    let mut filenames = filter.for_hook(&hook);
     trace!(
         "Files for hook `{}` after filtered: {}",
         hook.id,
@@ -751,34 +999,11 @@ async fn run_hook(
     );
 
     if filenames.is_empty() && !hook.always_run {
-        printer.write_skipped(
-            &hook.name,
-            StatusPrinter::NO_FILES,
-            Style::new().black().on_cyan(),
-        )?;
-        return Ok(RunResult {
-            status: RunStatus::Skipped,
-            new_diff: diff,
-            file_modified: false,
-        });
+        return Ok(RunResult::from_status(hook, RunStatus::NoFiles));
     }
-
     if !Language::supported(hook.language) {
-        printer.write_skipped(
-            &hook.name,
-            StatusPrinter::UNIMPLEMENTED,
-            Style::new().black().on_yellow(),
-        )?;
-        return Ok(RunResult {
-            status: RunStatus::Unimplemented,
-            new_diff: diff,
-            file_modified: false,
-        });
+        return Ok(RunResult::from_status(hook, RunStatus::Unimplemented));
     }
-
-    printer.write_running(&hook.name, false)?;
-    std::io::stdout().flush()?;
-
     let start = std::time::Instant::now();
 
     let filenames = if hook.pass_filenames {
@@ -788,7 +1013,7 @@ async fn run_hook(
         vec![]
     };
 
-    let (status, output) = if dry_run {
+    let (exit_status, hook_output) = if dry_run {
         let mut output = Vec::new();
         if !filenames.is_empty() {
             writeln!(
@@ -798,80 +1023,32 @@ async fn run_hook(
                 filenames.len()
             )?;
         }
-        for filename in &filenames {
-            writeln!(output, "- {}", filename.to_string_lossy())?;
+        for filename in filenames {
+            writeln!(output, "- {}", filename.display())?;
         }
         (0, output)
     } else {
         hook.language
-            .run(hook, &filenames, store)
+            .run(&hook, &filenames, store, reporter)
             .await
             .with_context(|| format!("Failed to run hook `{hook}`"))?
     };
 
     let duration = start.elapsed();
 
-    let new_diff = git::get_diff(hook.work_dir()).await?;
-    let file_modified = diff != new_diff;
-    let success = status == 0 && !file_modified;
-    if dry_run {
-        printer.write_dry_run()?;
-    } else if success {
-        printer.write_passed()?;
+    let run_status = if dry_run {
+        RunStatus::DryRun
+    } else if exit_status == 0 {
+        RunStatus::Success
     } else {
-        // If the printer is in quiet mode, the running line was not printed.
-        // Reprint it here before printing the failure.
-        if printer.stdout() == Stdout::Disabled {
-            printer.write_running(&hook.name, true)?;
-        }
-        printer.write_failed()?;
-    }
-
-    if verbose || hook.verbose || !success {
-        let mut stdout = if success {
-            printer.stdout()
-        } else {
-            printer.stdout_important()
-        };
-
-        writeln!(stdout, "{}", format!("- hook id: {}", hook.id).dimmed())?;
-        if verbose || hook.verbose {
-            writeln!(
-                stdout,
-                "{}",
-                format!("- duration: {:.2?}s", duration.as_secs_f64()).dimmed()
-            )?;
-        }
-        if status != 0 {
-            writeln!(stdout, "{}", format!("- exit code: {status}").dimmed())?;
-        }
-        if file_modified {
-            writeln!(stdout, "{}", "- files were modified by this hook".dimmed())?;
-        }
-
-        let output = output.trim_ascii();
-        if !output.is_empty() {
-            if let Some(file) = hook.log_file.as_deref() {
-                let mut file = fs_err::tokio::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(file)
-                    .await?;
-                file.write_all(output).await?;
-                file.sync_all().await?;
-            } else {
-                writeln!(
-                    stdout,
-                    "\n{}",
-                    textwrap::indent(&String::from_utf8_lossy(output), "  ")
-                )?;
-            }
-        }
-    }
+        RunStatus::Failed
+    };
 
     Ok(RunResult {
-        status: RunStatus::from_bool(success),
-        new_diff,
-        file_modified,
+        hook,
+        status: run_status,
+        duration,
+        exit_status,
+        output: hook_output,
     })
 }

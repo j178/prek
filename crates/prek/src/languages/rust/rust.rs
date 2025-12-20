@@ -10,7 +10,7 @@ use itertools::{Either, Itertools};
 use prek_consts::env_vars::EnvVars;
 use tracing::debug;
 
-use crate::cli::reporter::HookInstallReporter;
+use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::rust::RustRequest;
@@ -405,7 +405,10 @@ impl LanguageImpl for Rust {
         hook: &InstalledHook,
         filenames: &[&Path],
         store: &Store,
+        reporter: &HookRunReporter,
     ) -> anyhow::Result<(i32, Vec<u8>)> {
+        let progress = reporter.on_run_start(hook, filenames.len());
+
         let env_dir = hook.env_path().expect("Rust hook must have env path");
         let info = hook.install_info().expect("Rust hook must be installed");
 
@@ -430,12 +433,16 @@ impl LanguageImpl for Rust {
                 .pty_output()
                 .await?;
 
+            reporter.on_run_progress(progress, batch.len() as u64);
+
             output.stdout.extend(output.stderr);
             let code = output.status.code().unwrap_or(1);
             anyhow::Ok((code, output.stdout))
         };
 
         let results = run_by_batch(hook, filenames, &entry, run).await?;
+
+        reporter.on_run_complete(progress);
 
         let mut combined_status = 0;
         let mut combined_output = Vec::new();

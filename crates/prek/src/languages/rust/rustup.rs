@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
-use futures::{StreamExt, TryStreamExt, stream};
+use futures::{StreamExt, TryStreamExt};
 use prek_consts::env_vars::EnvVars;
 use semver::Version;
 use target_lexicon::HOST;
@@ -179,7 +179,7 @@ impl Rustup {
             .filter_map(parse_toolchain_line)
             .collect();
 
-        let infos: Vec<ToolchainInfo> = stream::iter(entries)
+        let infos: Vec<ToolchainInfo> = futures::stream::iter(entries)
             .map(async move |(name, path)| toolchain_info(name, path).await)
             .buffer_unordered(8)
             .try_collect()
@@ -205,7 +205,7 @@ impl Rustup {
             .filter_map(parse_toolchain_line)
             .collect();
 
-        let infos: Vec<ToolchainInfo> = stream::iter(entries)
+        let infos: Vec<ToolchainInfo> = futures::stream::iter(entries)
             .map(async move |(name, path)| toolchain_info(name, path).await)
             .buffer_unordered(8)
             .try_collect()

@@ -292,6 +292,9 @@ pub(crate) struct HookOptions {
     /// This hook will execute using a single process instead of in parallel.
     /// Default is false.
     pub require_serial: Option<bool>,
+    /// Priority used by the scheduler to determine ordering and concurrency.
+    /// Hooks with the same priority can run in parallel.
+    pub priority: Option<u32>,
     /// Select which git hook(s) to run for.
     /// Default all stages are selected.
     /// See <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.
@@ -319,6 +322,7 @@ impl HookOptions {
             };
         }
 
+        // Omit `priority` intentionally, it is only settable in local config files.
         update_if_some!(
             alias,
             files,
@@ -730,7 +734,7 @@ fn warn_unused_paths(path: &Path, entries: &[String]) {
             .join(", ");
         warn_user!(
             "Ignored unexpected keys in `{}`: {inline}",
-            path.display().cyan()
+            path.user_display().cyan()
         );
     } else {
         let list = entries
@@ -739,7 +743,7 @@ fn warn_unused_paths(path: &Path, entries: &[String]) {
             .join("\n");
         warn_user!(
             "Ignored unexpected keys in `{}`:\n{list}",
-            path.display().cyan()
+            path.user_display().cyan()
         );
     }
 }
@@ -813,6 +817,8 @@ pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
 
     Ok(config)
 }
+
+// TODO: disallow `priority` in manifest
 
 /// Read the manifest file from the given path.
 pub(crate) fn read_manifest(path: &Path) -> Result<Manifest, Error> {
@@ -919,6 +925,7 @@ mod tests {
                                         language_version: None,
                                         log_file: None,
                                         require_serial: None,
+                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -995,6 +1002,7 @@ mod tests {
                                         language_version: None,
                                         log_file: None,
                                         require_serial: None,
+                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -1096,6 +1104,7 @@ mod tests {
                                         language_version: None,
                                         log_file: None,
                                         require_serial: None,
+                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -1211,6 +1220,7 @@ mod tests {
                                             language_version: None,
                                             log_file: None,
                                             require_serial: None,
+                                            priority: None,
                                             stages: None,
                                             verbose: None,
                                             minimum_prek_version: None,
@@ -1244,6 +1254,7 @@ mod tests {
                                             language_version: None,
                                             log_file: None,
                                             require_serial: None,
+                                            priority: None,
                                             stages: None,
                                             verbose: None,
                                             minimum_prek_version: None,
@@ -1273,6 +1284,7 @@ mod tests {
                                             language_version: None,
                                             log_file: None,
                                             require_serial: None,
+                                            priority: None,
                                             stages: None,
                                             verbose: Some(
                                                 true,
@@ -1355,6 +1367,7 @@ mod tests {
                                         ),
                                         log_file: None,
                                         require_serial: None,
+                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -1384,6 +1397,7 @@ mod tests {
                                         ),
                                         log_file: None,
                                         require_serial: None,
+                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -1413,6 +1427,7 @@ mod tests {
                                         ),
                                         log_file: None,
                                         require_serial: None,
+                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -1668,6 +1683,7 @@ mod tests {
                                     language_version: None,
                                     log_file: None,
                                     require_serial: None,
+                                    priority: None,
                                     stages: None,
                                     verbose: None,
                                     minimum_prek_version: None,
@@ -1700,6 +1716,7 @@ mod tests {
                                     language_version: None,
                                     log_file: None,
                                     require_serial: None,
+                                    priority: None,
                                     stages: None,
                                     verbose: None,
                                     minimum_prek_version: None,
@@ -1783,6 +1800,7 @@ mod tests {
                                     require_serial: Some(
                                         true,
                                     ),
+                                    priority: None,
                                     stages: Some(
                                         [
                                             PreCommit,

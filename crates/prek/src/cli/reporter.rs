@@ -5,6 +5,7 @@ use std::time::Duration;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
+use unicode_width::UnicodeWidthStr;
 
 use crate::hook::Hook;
 use crate::printer::Printer;
@@ -75,11 +76,7 @@ impl ProgressReporter {
     }
 }
 
-pub(crate) struct HookInitReporter {
-    reporter: ProgressReporter,
-}
-
-impl From<Printer> for HookInitReporter {
+impl From<Printer> for ProgressReporter {
     fn from(printer: Printer) -> Self {
         let multi = MultiProgress::with_draw_target(printer.target());
         let root = multi.add(ProgressBar::with_draw_target(None, printer.target()));
@@ -90,8 +87,19 @@ impl From<Printer> for HookInitReporter {
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
 
-        let reporter = ProgressReporter::new(root, multi, printer);
-        Self { reporter }
+        Self::new(root, multi, printer)
+    }
+}
+
+pub(crate) struct HookInitReporter {
+    reporter: ProgressReporter,
+}
+
+impl From<Printer> for HookInitReporter {
+    fn from(printer: Printer) -> Self {
+        Self {
+            reporter: ProgressReporter::from(printer),
+        }
     }
 }
 
@@ -120,17 +128,9 @@ pub(crate) struct HookInstallReporter {
 
 impl From<Printer> for HookInstallReporter {
     fn from(printer: Printer) -> Self {
-        let multi = MultiProgress::with_draw_target(printer.target());
-        let root = multi.add(ProgressBar::with_draw_target(None, printer.target()));
-        root.enable_steady_tick(Duration::from_millis(200));
-        root.set_style(
-            ProgressStyle::with_template("{spinner:.white} {msg:.dim}")
-                .unwrap()
-                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
-        );
-
-        let reporter = ProgressReporter::new(root, multi, printer);
-        Self { reporter }
+        Self {
+            reporter: ProgressReporter::from(printer),
+        }
     }
 }
 
@@ -156,23 +156,85 @@ impl HookInstallReporter {
     }
 }
 
+pub(crate) struct HookRunReporter {
+    reporter: ProgressReporter,
+    dots: usize,
+}
+
+impl HookRunReporter {
+    pub fn new(printer: Printer, dots: usize) -> Self {
+        Self {
+            reporter: ProgressReporter::from(printer),
+            dots,
+        }
+    }
+
+    pub fn on_run_start(&self, hook: &Hook, len: usize) -> usize {
+        self.reporter
+            .root
+            .set_message(format!("{}", "Running hooks...".bold().cyan()));
+
+        let mut state = self.reporter.state.lock().unwrap();
+        let id = state.id();
+
+        // len == 0 indicates an unknown length; use 1 to show an indeterminate bar.
+        let len = if len == 0 { 1 } else { len };
+        let progress = self.reporter.children.insert_before(
+            &self.reporter.root,
+            ProgressBar::with_draw_target(Some(len as u64), self.reporter.printer.target()),
+        );
+
+        let dots = self.dots.saturating_sub(hook.name.width());
+        progress.enable_steady_tick(Duration::from_millis(200));
+        progress.set_style(
+            ProgressStyle::with_template(&format!("{{msg}}{{bar:{dots}.green/dim}}"))
+                .unwrap()
+                .progress_chars(".."),
+        );
+        progress.set_message(hook.name.clone());
+        state.bars.insert(id, progress);
+        id
+    }
+
+    pub fn on_run_progress(&self, id: usize, completed: u64) {
+        let state = self.reporter.state.lock().unwrap();
+        let progress = &state.bars[&id];
+        progress.inc(completed);
+    }
+
+    pub fn on_run_complete(&self, id: usize) {
+        let progress = {
+            let mut state = self.reporter.state.lock().unwrap();
+            state.bars.remove(&id).unwrap()
+        };
+
+        self.reporter.root.inc(1);
+
+        // Clear the running line; final output is printed by the caller.
+        progress.finish_and_clear();
+    }
+
+    /// Temporarily suspend progress rendering while emitting normal output.
+    ///
+    /// This helps prevent the progress UI from being corrupted by concurrent writes.
+    pub fn suspend<R>(&self, f: impl FnOnce() -> R) -> R {
+        self.reporter.children.suspend(f)
+    }
+
+    pub fn on_complete(&self) {
+        self.reporter.on_complete();
+    }
+}
+
 pub(crate) struct AutoUpdateReporter {
     reporter: ProgressReporter,
 }
 
 impl From<Printer> for AutoUpdateReporter {
     fn from(printer: Printer) -> Self {
-        let multi = MultiProgress::with_draw_target(printer.target());
-        let root = multi.add(ProgressBar::with_draw_target(None, printer.target()));
-        root.enable_steady_tick(Duration::from_millis(200));
-        root.set_style(
-            ProgressStyle::with_template("{spinner:.white} {msg:.dim}")
-                .unwrap()
-                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
-        );
-
-        let reporter = ProgressReporter::new(root, multi, printer);
-        Self { reporter }
+        Self {
+            reporter: ProgressReporter::from(printer),
+        }
     }
 }
 

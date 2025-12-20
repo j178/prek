@@ -19,7 +19,7 @@ use tracing::{debug, trace};
 use crate::cli::ExitStatus;
 use crate::cli::reporter::AutoUpdateReporter;
 use crate::config::{RemoteRepo, Repo};
-use crate::fs::CWD;
+use crate::fs::{CWD, Simplified};
 use crate::printer::Printer;
 use crate::run::CONCURRENCY;
 use crate::store::Store;
@@ -465,7 +465,7 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
         anyhow::bail!(
             "Found {} `rev:` lines in `{}` but expected {}, file content may have changed",
             rev_lines.len(),
-            path.display(),
+            path.user_display(),
             revisions.len()
         );
     }
@@ -512,7 +512,12 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
 
     fs_err::tokio::write(path, lines.join("").as_bytes())
         .await
-        .with_context(|| format!("Failed to write updated config file `{}`", path.display()))?;
+        .with_context(|| {
+            format!(
+                "Failed to write updated config file `{}`",
+                path.user_display()
+            )
+        })?;
 
     Ok(())
 }

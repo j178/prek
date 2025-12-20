@@ -54,6 +54,48 @@ Example:
 
 For more details and examples, see [Workspace Mode - File Processing Behavior](workspace.md#file-processing-behavior).
 
+### `priority`
+
+Each hook can set an explicit `priority` (a `u32`) that controls when it runs and with which hooks it may execute in parallel. Hooks always run in ascending priority order. Hooks that share the same priority value run concurrently, subject to the global concurrency limit (defaults to the number of CPU cores or `PREK_NO_CONCURRENCY=1`).
+
+When `priority` is omitted, prek automatically assigns the hook a value equal to its index in the configuration file, preserving the original sequential behavior.
+
+Example:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: format
+        name: Format
+        language: system
+        entry: python3 -m ruff format
+        always_run: true
+        priority: 0       # runs first
+      - id: lint-py
+        name: Python Lint
+        language: system
+        entry: python3 -m ruff check
+        always_run: true
+        priority: 10      # runs in parallel with lint-sh
+      - id: lint-sh
+        name: Shell Lint
+        language: system
+        entry: shellcheck
+        always_run: true
+        priority: 10      # shares group with lint-py
+      - id: tests
+        name: Integration Tests
+        language: system
+        entry: just test
+        always_run: true
+        priority: 20      # starts after both lint hooks finish
+```
+
+If a hook must be completely isolated, give it a unique priority value so no other hook can join its group.
+
+> **Note:** `require_serial: true` only affects how `prek` invokes that hook against files—it limits the hook to a single in-flight invocation at a time (so it won’t run multiple batches concurrently). It may still split into multiple invocations if the OS command-line length limit would be exceeded. It does **not** make the hook run exclusively; use a unique `priority` to enforce exclusive execution.
+
 ## Environment variables
 
 Prek supports the following environment variables:

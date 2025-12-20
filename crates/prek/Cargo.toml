@@ -66,7 +66,6 @@ shlex = { workspace = true }
 smallvec = { workspace = true }
 target-lexicon = { workspace = true }
 tempfile = { workspace = true }
-textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-tar = { workspace = true }
@@ -98,6 +97,7 @@ predicates = { workspace = true }
 pretty_assertions = { workspace = true }
 regex = { workspace = true }
 tempfile = { workspace = true }
+textwrap = { workspace = true }
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }{ archive-suffix }"

@@ -361,6 +361,163 @@ fn multiple_hook_ids() {
     "#);
 }
 
+#[test]
+fn priorities_respected() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: late
+                name: Late Hook
+                language: system
+                entry: python3 -c "print('late')"
+                always_run: true
+                priority: 10
+              - id: early
+                name: Early Hook
+                language: system
+                entry: python3 -c "print('early')"
+                always_run: true
+                priority: 0
+              - id: middle
+                name: Middle Hook
+                language: system
+                entry: python3 -c "print('middle')"
+                always_run: true
+                priority: 5
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Early Hook...............................................................Passed
+    Middle Hook..............................................................Passed
+    Late Hook................................................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
+fn priority_fail_fast_stops_later_groups() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: fail-fast
+                name: Failing Hook
+                language: system
+                entry: python3 -c "import sys; sys.exit(1)"
+                always_run: true
+                priority: 5
+                fail_fast: true
+              - id: sibling
+                name: Same Priority Sibling
+                language: system
+                entry: python3 -c "import time; time.sleep(0.2)"
+                always_run: true
+                priority: 5
+              - id: later
+                name: Later Hook
+                language: system
+                entry: python3 -c "print('later ran')"
+                always_run: true
+                priority: 10
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Failing Hook.............................................................Failed
+    - hook id: fail-fast
+    - exit code: 1
+    Same Priority Sibling....................................................Passed
+
+    ----- stderr -----
+    "#);
+}
+
+#[test]
+fn priority_group_modified_files_is_group_failure_and_output_is_indented() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    cwd.child("file.txt").write_str("hello\n")?;
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: modify
+                name: Modifies File
+                language: system
+                entry: python3 -c "from pathlib import Path; p = Path('file.txt'); p.write_text(p.read_text() + 'x')"
+                always_run: true
+                verbose: true
+                priority: 0
+              - id: loud
+                name: Prints Output
+                language: system
+                entry: python3 -c "print('hello from loud')"
+                always_run: true
+                verbose: true
+                priority: 0
+              - id: quiet
+                name: No Output
+                language: system
+                entry: python3 -c "import time; time.sleep(0.1)"
+                always_run: true
+                priority: 0
+              - id: later
+                name: Later Hook
+                language: system
+                entry: python3 -c "print('later ran')"
+                always_run: true
+                verbose: true
+                priority: 10
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Files were modified by following hooks...................................Failed
+      ┌ Modifies File........................................................Passed
+      │ - hook id: modify
+      │ - duration: [TIME]
+      │ Prints Output........................................................Passed
+      │ - hook id: loud
+      │ - duration: [TIME]
+      │
+      │ hello from loud
+      └ No Output............................................................Passed
+    Later Hook...............................................................Passed
+    - hook id: later
+    - duration: [TIME]
+
+      later ran
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 /// `.pre-commit-config.yaml` is not staged.
 #[test]
 fn config_not_staged() -> Result<()> {
@@ -1300,7 +1457,7 @@ fn invalid_entry() {
     success: false
     exit_code: 2
     ----- stdout -----
-    entry....................................................................
+
     ----- stderr -----
     error: Failed to run hook `entry`
       caused by: Invalid hook `entry`
@@ -1629,14 +1786,14 @@ fn run_directory() -> Result<()> {
     ");
 
     // non-existing directory
-    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("non-existing-dir"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("non-existing-dir"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     directory............................................(no files to check)Skipped
 
     ----- stderr -----
-    "#);
+    ");
 
     // `--directory` with `--files`
     cmd_snapshot!(context.filters(), context.run().arg("--directory").arg("dir1").arg("--files").arg("dir1/file.txt"), @r"
@@ -2151,7 +2308,7 @@ fn dry_run() {
     success: true
     exit_code: 0
     ----- stdout -----
-    fail.....................................................................Dry Run
+    fail....................................................................Dry Run
     - hook id: fail
     - duration: [TIME]
 
@@ -2575,7 +2732,7 @@ fn empty_entry() {
     success: false
     exit_code: 2
     ----- stdout -----
-    local....................................................................
+
     ----- stderr -----
     error: Failed to run hook `local`
       caused by: Invalid hook `local`

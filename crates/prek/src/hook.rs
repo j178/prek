@@ -292,6 +292,10 @@ impl HookBuilder {
             None => Stages::All,
         };
 
+        let priority = options
+            .priority
+            .unwrap_or(u32::try_from(self.idx).expect("idx too large"));
+
         let mut hook = Hook {
             entry,
             stages,
@@ -319,6 +323,7 @@ impl HookBuilder {
             require_serial: options.require_serial.expect("require_serial not set"),
             verbose: options.verbose.expect("verbose not set"),
             minimum_prek_version: options.minimum_prek_version,
+            priority,
         };
 
         if let Err(err) = extract_metadata_from_entry(&mut hook).await {
@@ -436,6 +441,7 @@ pub(crate) struct Hook {
     pub stages: Stages,
     pub verbose: bool,
     pub minimum_prek_version: Option<String>,
+    pub priority: u32,
 }
 
 impl Display for Hook {

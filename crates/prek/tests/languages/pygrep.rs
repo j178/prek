@@ -247,15 +247,15 @@ fn invalid_regex() {
         "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
-    invalid-regex............................................................
+
     ----- stderr -----
     error: Failed to run hook `invalid-regex`
       caused by: Failed to parse regex: unterminated character set at position 0
-    "#);
+    ");
 }
 
 #[test]
@@ -433,16 +433,16 @@ fn invalid_args() -> Result<()> {
         "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
-    check-todo...............................................................
+
     ----- stderr -----
     error: Failed to run hook `check-todo`
       caused by: Failed to parse `args`
       caused by: Unknown argument: --hello
-    "#);
+    ");
 
     Ok(())
 }

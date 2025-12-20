@@ -8,7 +8,7 @@ use prek_consts::env_vars::EnvVars;
 use serde::Deserialize;
 use tracing::debug;
 
-use crate::cli::reporter::HookInstallReporter;
+use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::LanguageImpl;
@@ -160,7 +160,10 @@ impl LanguageImpl for Python {
         hook: &InstalledHook,
         filenames: &[&Path],
         _store: &Store,
+        reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
+        let progress = reporter.on_run_start(hook, filenames.len());
+
         let env_dir = hook.env_path().expect("Python must have env path");
         let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
         let entry = hook.entry.resolve(Some(&new_path))?;
@@ -179,12 +182,16 @@ impl LanguageImpl for Python {
                 .pty_output()
                 .await?;
 
+            reporter.on_run_progress(progress, batch.len() as u64);
+
             output.stdout.extend(output.stderr);
             let code = output.status.code().unwrap_or(1);
             anyhow::Ok((code, output.stdout))
         };
 
         let results = run_by_batch(hook, filenames, &entry, run).await?;
+
+        reporter.on_run_complete(progress);
 
         // Collect results
         let mut combined_status = 0;
