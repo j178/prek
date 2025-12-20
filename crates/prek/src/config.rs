@@ -339,7 +339,6 @@ impl HookOptions {
             language_version,
             log_file,
             require_serial,
-            priority,
             stages,
             verbose,
             minimum_prek_version,
