@@ -57,18 +57,22 @@ plugins:
   - include-markdown
 
 nav:
-  - Introduction: index.md
-  - Installation: installation.md
-  - Quickstart: quickstart.md
-  - Configuration: configuration.md
-  - Workspace Mode: workspace.md
-  - Commands: cli.md
-  - Differences: diff.md
-  - Benchmark: benchmark.md
-  - Built-in Hooks: builtin.md
-  - TODO: todo.md
-  - Debugging: debugging.md
-  - FAQ: faq.md
+  - Getting Started:
+    - Introduction: index.md
+    - Installation: installation.md
+    - Quickstart: quickstart.md
+  - Usage:
+    - Configuration: configuration.md
+    - Commands: cli.md
+    - Built-in Hooks: builtin.md
+    - Workspace Mode: workspace.md
+  - Help:
+    - Debugging: debugging.md
+    - FAQ: faq.md
+  - About:
+    - Differences: diff.md
+    - Benchmark: benchmark.md
+    - TODO: todo.md
 
 markdown_extensions:
   - pymdownx.highlight:
