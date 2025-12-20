@@ -94,7 +94,7 @@ repos:
 
 If a hook must be completely isolated, give it a unique priority value so no other hook can join its group.
 
-> **Note:** `require_serial: true` only affects how a hook batches files—it forces prek to pass all matching files to the hook in a single process. It does **not** make the hook run exclusively. Use `priority` to enforce exclusive execution.
+> **Note:** `require_serial: true` only affects how `prek` invokes that hook against files—it limits the hook to a single in-flight invocation at a time (so it won’t run multiple batches concurrently). It may still split into multiple invocations if the OS command-line length limit would be exceeded. It does **not** make the hook run exclusively; use a unique `priority` to enforce exclusive execution.
 
 ## Environment variables
 
