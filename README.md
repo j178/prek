@@ -85,6 +85,9 @@ uv tool install prek
 # Using uvx (install and run in one command)
 uvx prek
 
+# Adding prek to the project dev-dependencies
+uv add --dev prek
+
 # Using pip
 pip install prek
 
@@ -260,7 +263,7 @@ jobs:
 
 This action installs prek and runs `prek run --all-files` on your repository.
 
-prek is also available via the [`taiki-e/install-action`](https://github.com/taiki-e/install-action) for installing various tools.
+prek is also available via [`taiki-e/install-action`](https://github.com/taiki-e/install-action) for installing various tools.
 <!-- github-actions:end -->
 </details>
 
