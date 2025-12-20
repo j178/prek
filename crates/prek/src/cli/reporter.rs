@@ -184,7 +184,7 @@ impl HookRunReporter {
             ProgressBar::with_draw_target(Some(len as u64), self.reporter.printer.target()),
         );
 
-        let dots = self.dots - hook.name.width_cjk();
+        let dots = self.dots.saturating_sub(hook.name.width());
         progress.enable_steady_tick(Duration::from_millis(200));
         progress.set_style(
             ProgressStyle::with_template(&format!("{{msg}}{{bar:{dots}.green/dim}}"))
