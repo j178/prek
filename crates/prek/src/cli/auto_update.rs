@@ -223,7 +223,7 @@ async fn update_repo(
     Ok(Revision { rev, frozen })
 }
 
-async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Result<()> {
+pub(crate) async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Result<()> {
     git::init_repo(repo_url, repo_path).await?;
     git::git_cmd("git config")?
         .arg("config")
@@ -288,7 +288,7 @@ async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<String>> {
 }
 
 /// Returns all tags and their Unix timestamps (newest first).
-async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
+pub(crate) async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
     let output = git::git_cmd("git for-each-ref")?
         .arg("for-each-ref")
         .arg("--sort=-creatordate")
@@ -427,7 +427,11 @@ async fn checkout_and_validate_manifest(
 /// Multiple tags can exist on an SHA. Sometimes a moving tag is attached
 /// to a version tag. Try to pick the tag that looks like a version and most similar
 /// to the current revision.
-async fn get_best_candidate_tag(repo: &Path, rev: &str, current_rev: &str) -> Result<String> {
+pub(crate) async fn get_best_candidate_tag(
+    repo: &Path,
+    rev: &str,
+    current_rev: &str,
+) -> Result<String> {
     let stdout = git::git_cmd("git tag")?
         .arg("tag")
         .arg("--points-at")

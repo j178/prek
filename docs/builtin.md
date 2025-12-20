@@ -105,6 +105,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`detect-private-key`](#detect-private-key) (Detect private keys)
 - [`no-commit-to-branch`](#no-commit-to-branch) (Prevent committing to protected branches)
 - [`check-executables-have-shebangs`](#check-executables-have-shebangs) (Ensures that (non-binary) executables have a shebang)
+- [`check-hook-updates`](#check-hook-updates) (Check if configured hooks have newer versions available)
 
 ### Hook Reference
 
@@ -140,7 +141,7 @@ Trims trailing whitespace from each line.
     - Preserves Markdown hard line breaks (two trailing spaces) for files with the given extension(s).
     - Use `--markdown-linebreak-ext=*` to treat **all** files as Markdown.
 - `--chars=<chars>`
-    - Trim only the specified set of characters instead of “all trailing whitespace”.
+    - Trim only the specified set of characters instead of "all trailing whitespace".
     - Example: `args: [--chars, " \t"]` (space + tab).
 
 **Caveats**
@@ -283,7 +284,7 @@ Attempts to load all XML files to verify syntax.
 **Caveats**
 
 - Empty files are treated as invalid XML.
-- Fails if there is “junk after the document element” (multiple top-level roots).
+- Fails if there is "junk after the document element" (multiple top-level roots).
 
 ---
 
@@ -380,4 +381,4 @@ Checks that non-binary executables have a proper shebang.
 **Caveats**
 
 - The check is intentionally lightweight: it only verifies that the file starts with `#!`.
-- On systems where the executable bit is not tracked by the filesystem, `prek` consults git’s staged mode bits.
+- On systems where the executable bit is not tracked by the filesystem, `prek` consults git's staged mode bits.
