@@ -1,25 +1,46 @@
 # Configuration
 
-Prek is fully compatible with pre-commit configuration file `.pre-commit-config.yaml`, for example:
+Prek is **fully compatible** with the [pre-commit](https://pre-commit.com/) configuration file `.pre-commit-config.yaml`, so your existing configs work unchanged.
+
+For the complete, authoritative schema and semantics, refer to the official pre-commit docs:
+[pre-commit.com](https://pre-commit.com/)
+
+The snippet below is a **concise overview** of commonly used keys (not an exhaustive schema):
 
 ```yaml
+# Common top-level keys
+default_language_version: {python: python3.12, ...}
+default_stages: [commit, ...]
+files: Regex to include
+exclude: Regex to exclude
+fail_fast: true|false
+minimum_pre_commit_version: "X.Y.Z"
+
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+  - repo: https://example.com/some-repo | local | meta
+    rev: v1.2.3
     hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-
-  - repo: https://github.com/crate-ci/typos
-    rev: v1.36.2
-    hooks:
-      - id: typos
+      - id: some-hook
+        # Common hook keys
+        name: Optional display name
+        entry: Override command (varies by language)
+        language: system | python | node | rust | ...
+        args: ["--flag", "value"]
+        files: Regex to include files
+        exclude: Regex to exclude files
+        types: [python, yaml, ...]
+        types_or: ["..."]
+        exclude_types: ["..."]
+        stages: [commit, push, manual, ...]
+        verbose: true|false
+        pass_filenames: true|false
+        always_run: true|false
+        require_serial: true|false
+        fail_fast: true|false
+        additional_dependencies: ["pkg==1.2.3", ...]   # language-specific
+        language_version: "python3.12"                 # language-specific
+        log_file: path/to/log.txt
 ```
-
-Your existing configs work unchanged with prek.
-
-For configuration details, refer to the official pre-commit docs:
-[pre-commit.com](https://pre-commit.com/)
 
 ## Prek specific configurations
 
@@ -27,7 +48,9 @@ The following configuration keys are **prek-specific** and are **not supported b
 
 If you run the same config with `pre-commit`, it may warn about **unexpected/unknown keys**.
 
-### `minimum_prek_version`
+### Project-level
+
+#### `minimum_prek_version`
 
 Specify the minimum required version of prek for the configuration. If the installed version is lower, prek will exit with an error.
 
@@ -39,7 +62,7 @@ Example:
 
 The original `minimum_pre_commit_version` option has no effect and gets ignored in prek.
 
-### `orphan`
+#### `orphan`
 
 !!! note
 
@@ -60,9 +83,11 @@ Example:
 
 For more details and examples, see [Workspace Mode - File Processing Behavior](workspace.md#file-processing-behavior).
 
-### `priority`
+### Hook-level
 
-Each hook can set an explicit `priority` (a `u32`) that controls when it runs and with which hooks it may execute in parallel.
+#### `priority`
+
+Each hook can set an explicit `priority` (a non-negative integer) that controls when it runs and with which hooks it may execute in parallel.
 
 Hooks run in ascending priority order: **lower `priority` values run earlier**. Hooks that share the same `priority` value run concurrently, subject to the global concurrency limit (defaults to the number of CPU cores; set `PREK_NO_CONCURRENCY=1` to force concurrency to `1`).
 
