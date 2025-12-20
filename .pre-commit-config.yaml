@@ -6,11 +6,12 @@ exclude: |
   )$
 
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+  - repo: builtin
     hooks:
-      - id: check-yaml
       - id: trailing-whitespace
+      - id: mixed-line-ending
+      - id: check-yaml
+      - id: check-toml
       - id: end-of-file-fixer
         exclude: docs/cli.md # Exclude generated doc
 
