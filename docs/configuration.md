@@ -23,6 +23,10 @@ For configuration details, refer to the official pre-commit docs:
 
 ## Prek specific configurations
 
+The following configuration keys are **prek-specific** and are **not supported by the original `pre-commit`** (at least at the time of writing).
+
+If you run the same config with `pre-commit`, it may warn about **unexpected/unknown keys**.
+
 ### `minimum_prek_version`
 
 Specify the minimum required version of prek for the configuration. If the installed version is lower, prek will exit with an error.
@@ -37,7 +41,9 @@ The original `minimum_pre_commit_version` option has no effect and gets ignored 
 
 ### `orphan`
 
-*Only applies in workspace mode with nested projects.*
+!!! note
+
+    `orphan` only applies in workspace mode with nested projects.
 
 By default, files in subprojects are processed multiple times - once for each project in the hierarchy that contains them. Setting `orphan: true` isolates the project from parent configurations, ensuring files in this project are processed only by this project and not by any parent projects.
 
@@ -56,7 +62,9 @@ For more details and examples, see [Workspace Mode - File Processing Behavior](w
 
 ### `priority`
 
-Each hook can set an explicit `priority` (a `u32`) that controls when it runs and with which hooks it may execute in parallel. Hooks always run in ascending priority order. Hooks that share the same priority value run concurrently, subject to the global concurrency limit (defaults to the number of CPU cores or `PREK_NO_CONCURRENCY=1`).
+Each hook can set an explicit `priority` (a `u32`) that controls when it runs and with which hooks it may execute in parallel.
+
+Hooks run in ascending priority order: **lower `priority` values run earlier**. Hooks that share the same `priority` value run concurrently, subject to the global concurrency limit (defaults to the number of CPU cores; set `PREK_NO_CONCURRENCY=1` to force concurrency to `1`).
 
 When `priority` is omitted, prek automatically assigns the hook a value equal to its index in the configuration file, preserving the original sequential behavior.
 
@@ -94,7 +102,21 @@ repos:
 
 If a hook must be completely isolated, give it a unique priority value so no other hook can join its group.
 
-> **Note:** `require_serial: true` only affects how `prek` invokes that hook against files—it limits the hook to a single in-flight invocation at a time (so it won’t run multiple batches concurrently). It may still split into multiple invocations if the OS command-line length limit would be exceeded. It does **not** make the hook run exclusively; use a unique `priority` to enforce exclusive execution.
+!!! danger "Parallel hooks modifying files"
+
+    Running hooks in parallel is powerful, but it is **your responsibility** to group hooks safely.
+
+    If two hooks run in the same priority group and they modify the same files (or otherwise depend on shared state), the result is **undefined** — files may be corrupted.
+
+    If hooks must not overlap, assign them different priorities (or give the sensitive hook a unique priority).
+
+!!! note "`require_serial`"
+
+    `require_serial: true` limits that hook to a single in-flight invocation at a time (so it won’t run multiple batches concurrently).
+
+    It may still split into multiple invocations if the OS command-line length limit would be exceeded.
+
+    It does **not** make the hook run exclusively; use a unique `priority` for exclusive execution.
 
 ## Environment variables
 
@@ -104,7 +126,7 @@ Prek supports the following environment variables:
 - `PREK_COLOR` — Control colored output: auto (default), always, or never.
 - `PREK_SKIP` — Comma-separated list of hook IDs to skip (e.g. black,ruff). See [Skipping Projects or Hooks](workspace.md#skipping-projects-or-hooks) for details.
 - `PREK_ALLOW_NO_CONFIG` — Allow running without a .pre-commit-config.yaml (useful for ad‑hoc runs).
-- `PREK_NO_CONCURRENCY` — Disable parallelism for installs and runs.
+- `PREK_NO_CONCURRENCY` — Disable parallelism for installs and runs (set `PREK_NO_CONCURRENCY=1` to force concurrency to `1`).
 - `PREK_NO_FAST_PATH` — Disable Rust-native built-in hooks; always use the original hook implementation. See [Built-in Fast Hooks](builtin.md) for details.
 
 - `PREK_UV_SOURCE` — Control how uv (Python package installer) is installed. Options:
