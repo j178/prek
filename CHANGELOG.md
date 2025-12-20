@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.2.23
+
+Released on 2025-12-20.
+
+### Highlights
+
+🚀 This release introduces priority-based parallel hook execution: prek can run multiple hooks in parallel when they share the same `priority`, which can be a huge speed-up for many configs. See configuration docs for [`priority`](https://prek.j178.dev/configuration/#priority).
+
+### Enhancements
+
+- Allow uv reading user-level or system-level configuration files ([#1227](https://github.com/j178/prek/pull/1227))
+- Implement `check-case-conflict` as builtin hook ([#888](https://github.com/j178/prek/pull/888))
+- Implement `priority` based parallel execution ([#1232](https://github.com/j178/prek/pull/1232))
+
+### Bug fixes
+
+- Fix `check-executable-have-shebangs` "command line too long" error on Windows ([#1236](https://github.com/j178/prek/pull/1236))
+
+### Documentation
+
+- Add FastAPI to the list of projects using prek ([#1241](https://github.com/j178/prek/pull/1241))
+- Document hook_types flag and default_install_hook_types behavior ([#1225](https://github.com/j178/prek/pull/1225))
+- Improve documentation for `priority` ([#1245](https://github.com/j178/prek/pull/1245))
+- Mention prek can be installed via`taiki-e/install-action@prek` ([#1234](https://github.com/j178/prek/pull/1234))
+
+### Contributors
+
+- @j178
+- @copilot-swe-agent
+- @lmmx
+
 ## 0.2.22
 
 Released on 2025-12-13.
