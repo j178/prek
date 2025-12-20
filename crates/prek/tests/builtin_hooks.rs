@@ -2115,3 +2115,54 @@ fn check_case_conflict_among_new_files() -> Result<()> {
 
     Ok(())
 }
+
+/// Tests that `check-hook-updates` hook is recognized as a valid builtin hook.
+#[test]
+fn check_hook_updates_hook_recognized() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-hook-updates
+    "});
+    context.git_add(".");
+
+    // The hook should be recognized and run (it will pass since there are no remote repos to check)
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for hook updates...................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+/// Tests that `check-hook-updates` hook with `--fail-on-updates` argument is recognized.
+#[test]
+fn check_hook_updates_hook_with_args() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-hook-updates
+                args: ['--cooldown-days=7', '--fail-on-updates']
+    "});
+    context.git_add(".");
+
+    // The hook should be recognized and run with the arguments
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for hook updates...................................................Passed
+
+    ----- stderr -----
+    ");
+}
