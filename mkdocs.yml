@@ -74,6 +74,7 @@ nav:
     - Differences: diff.md
     - Benchmark: benchmark.md
     - TODO: todo.md
+    - Changelog: changelog.md
 
 markdown_extensions:
   - pymdownx.highlight:
