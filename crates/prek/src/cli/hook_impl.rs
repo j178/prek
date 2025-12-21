@@ -8,6 +8,7 @@ use anstream::eprintln;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use tracing::debug;
 
 use prek_consts::env_vars::EnvVars;
 
@@ -30,9 +31,28 @@ pub(crate) async fn hook_impl(
     _hook_dir: PathBuf,
     skip_on_missing_config: bool,
     script_version: Option<usize>,
+    git_dir: Option<PathBuf>,
+    work_tree: Option<PathBuf>,
     args: Vec<OsString>,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    // Set GIT_DIR and GIT_WORK_TREE environment variables if provided.
+    // This is needed for bare repository setups where the git directory
+    // is separate from the work tree.
+    // See: https://github.com/j178/prek/issues/1239
+    //
+    // SAFETY: We are setting environment variables before any other threads access them.
+    // This runs at the very start of hook_impl, before any git operations or thread spawning.
+    if let Some(ref dir) = git_dir {
+        debug!("Setting GIT_DIR to {}", dir.display());
+        // SAFETY: No other threads are accessing environment variables at this point
+        unsafe { std::env::set_var("GIT_DIR", dir) };
+    }
+    if let Some(ref tree) = work_tree {
+        debug!("Setting GIT_WORK_TREE to {}", tree.display());
+        // SAFETY: No other threads are accessing environment variables at this point
+        unsafe { std::env::set_var("GIT_WORK_TREE", tree) };
+    }
     // TODO: run in legacy mode
 
     if script_version != Some(cli::install::CUR_SCRIPT_VERSION) {

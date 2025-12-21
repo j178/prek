@@ -650,6 +650,16 @@ pub(crate) struct HookImplArgs {
     /// The prek version that installs the hook.
     #[arg(long)]
     pub(crate) script_version: Option<usize>,
+    /// The path to the git directory (`GIT_DIR`).
+    ///
+    /// Used for bare repository setups where the git directory is separate from the work tree.
+    #[arg(long)]
+    pub(crate) git_dir: Option<PathBuf>,
+    /// The path to the git work tree (`GIT_WORK_TREE`).
+    ///
+    /// Used for bare repository setups where the git directory is separate from the work tree.
+    #[arg(long)]
+    pub(crate) work_tree: Option<PathBuf>,
     #[arg(last = true)]
     pub(crate) args: Vec<OsString>,
 }
