@@ -1,9 +1,11 @@
-# Build uv on all platforms.
+# Build prek on all platforms.
 #
 # Generates both wheels (for PyPI) and archived binaries (for GitHub releases).
-#
 # Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a local
 # artifacts job within `cargo-dist`.
+#
+# Adapted from https://github.com/astral-sh/uv/blob/main/.github/workflows/build-binaries.yml
+
 name: "Build binaries"
 
 on:

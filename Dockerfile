@@ -32,9 +32,9 @@ RUN rustup toolchain install
 RUN rustup target add $(cat rust_target.txt)
 
 # Build
-COPY Cargo.toml Cargo.lock build.rs ./
-COPY src src
-COPY lib lib
+COPY ./Cargo.toml Cargo.toml
+COPY ./Cargo.lock Cargo.lock
+COPY crates crates
 RUN case "${TARGETPLATFORM}" in \
   "linux/arm64") export JEMALLOC_SYS_WITH_LG_PAGE=16;; \
   esac && \
