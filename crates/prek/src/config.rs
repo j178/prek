@@ -812,16 +812,27 @@ pub(crate) fn load_config(path: &Path) -> Result<Config, Error> {
         Err(e) => return Err(e.into()),
     };
 
-    let config: serde_yaml::Value = serde_yaml::from_str(&content)
-        .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
+    match path.extension() {
+        Some(ext) if ext == "toml" => {
+            let config: TomlConfig = toml::from_str(&content).map_err(|e| {
+                Error::Yaml(
+                    path.user_display().to_string(),
+                    serde_yaml::Error::custom(e),
+                )
+            })?;
+            config.into()
+        }
+        _ => {
+            let config: serde_yaml::Value = serde_yaml::from_str(&content)
+                .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
 
-    let config = yaml::merge_keys(config)
-        .map_err(|e| Error::YamlMerge(path.user_display().to_string(), e))?;
+            let config = yaml::merge_keys(config)
+                .map_err(|e| Error::YamlMerge(path.user_display().to_string(), e))?;
 
-    let config: Config = serde_yaml::from_value(config)
-        .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
-
-    Ok(config)
+            serde_yaml::from_value(config)
+                .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?
+        }
+    }
 }
 
 /// Read the configuration file from the given path, and warn about certain issues.
@@ -871,8 +882,6 @@ pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
 
     Ok(config)
 }
-
-// TODO: disallow `priority` in manifest
 
 /// Read the manifest file from the given path.
 pub(crate) fn read_manifest(path: &Path) -> Result<Manifest, Error> {
