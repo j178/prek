@@ -61,6 +61,3 @@ Show that your project uses prek with a badge in your README:
 - [Installation](./installation.md) - How to install prek
 - [Quickstart](./quickstart.md) - Getting started with prek
 - [Configuration](./configuration.md) - Configuring prek
-- [Workspace Mode](./workspace.md) - Monorepo support
-- [Differences](./diff.md) - What's different from pre-commit
-- [Debugging](./debugging.md) - Troubleshooting tips
