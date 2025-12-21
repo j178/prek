@@ -89,6 +89,11 @@ For more details and examples, see [Workspace Mode - File Processing Behavior](w
 
 Each hook can set an explicit `priority` (a non-negative integer) that controls when it runs and with which hooks it may execute in parallel.
 
+Scope:
+
+- `priority` is evaluated **within a single `.pre-commit-config.yaml`** and is compared across **all hooks in that file**, even if they appear under different `repos:` entries.
+- `priority` does **not** coordinate across different `.pre-commit-config.yaml` files. In workspace mode (nested projects), each project’s config file is scheduled independently.
+
 Hooks run in ascending priority order: **lower `priority` values run earlier**. Hooks that share the same `priority` value run concurrently, subject to the global concurrency limit (defaults to the number of CPU cores; set `PREK_NO_CONCURRENCY=1` to force concurrency to `1`).
 
 When `priority` is omitted, prek automatically assigns the hook a value equal to its index in the configuration file, preserving the original sequential behavior.
@@ -105,24 +110,43 @@ repos:
         entry: python3 -m ruff format
         always_run: true
         priority: 0       # runs first
-      - id: lint-py
-        name: Python Lint
-        language: system
-        entry: python3 -m ruff check
-        always_run: true
-        priority: 10      # runs in parallel with lint-sh
+
+      # No explicit priority: automatically assigned based on position.
+      # In this example it is the next hook in the file, so it gets priority=1.
       - id: lint-sh
         name: Shell Lint
         language: system
         entry: shellcheck
         always_run: true
-        priority: 10      # shares group with lint-py
+
+  # These two hooks are defined under different repos, but share the same
+  # priority value, so they can run concurrently.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        name: Python Lint
+        args: [--fix]
+        always_run: true
+        priority: 10
+
+  - repo: local
+    hooks:
+      - id: lint-py
+        name: Python Lint (alt)
+        language: system
+        entry: python3 -m ruff check
+        always_run: true
+        priority: 10
+
+  - repo: local
+    hooks:
       - id: tests
         name: Integration Tests
         language: system
         entry: just test
         always_run: true
-        priority: 20      # starts after both lint hooks finish
+        priority: 20      # starts after the priority=10 group completes
 ```
 
 If a hook must be completely isolated, give it a unique priority value so no other hook can join its group.
