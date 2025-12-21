@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use bstr::ByteSlice;
 use owo_colors::OwoColorize;
-use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
+use prek_consts::CONFIG_FILENAMES;
 use same_file::is_same_file;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
@@ -137,7 +137,7 @@ fn get_hook_types(
             .clone()
             .unwrap_or_default()
     } else {
-        let fallbacks = [CONFIG_FILE, ALT_CONFIG_FILE]
+        let fallbacks = CONFIG_FILENAMES
             .iter()
             .map(Path::new)
             .filter(|p| p.exists());
