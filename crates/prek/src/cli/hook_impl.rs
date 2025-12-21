@@ -36,23 +36,33 @@ pub(crate) async fn hook_impl(
     args: Vec<OsString>,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    // Set GIT_DIR and GIT_WORK_TREE environment variables if provided.
-    // This is needed for bare repository setups where the git directory
-    // is separate from the work tree.
+    // Only set GIT_DIR and GIT_WORK_TREE for bare repository setups.
     // See: https://github.com/j178/prek/issues/1239
+    //
+    // We distinguish bare repos from worktrees by checking if BOTH git_dir and
+    // work_tree are provided. In a bare repo setup (git --git-dir=X --work-tree=Y),
+    // both are set. In a worktree, only GIT_DIR is set by git, not GIT_WORK_TREE.
+    //
+    // We must NOT set GIT_DIR in worktree scenarios because it causes
+    // `git rev-parse --show-toplevel` to return the current directory instead
+    // of the actual git root when run from a subdirectory.
     //
     // SAFETY: We are setting environment variables before any other threads access them.
     // This runs at the very start of hook_impl, before any git operations or thread spawning.
-    if let Some(ref dir) = git_dir {
-        debug!("Setting GIT_DIR to {}", dir.display());
-        // SAFETY: No other threads are accessing environment variables at this point
-        unsafe { std::env::set_var("GIT_DIR", dir) };
+    let is_bare_repo = git_dir.is_some() && work_tree.is_some();
+    if is_bare_repo {
+        if let Some(ref dir) = git_dir {
+            debug!("Setting GIT_DIR to {} (bare repo)", dir.display());
+            // SAFETY: No other threads are accessing environment variables at this point
+            unsafe { std::env::set_var("GIT_DIR", dir) };
+        }
+        if let Some(ref tree) = work_tree {
+            debug!("Setting GIT_WORK_TREE to {} (bare repo)", tree.display());
+            // SAFETY: No other threads are accessing environment variables at this point
+            unsafe { std::env::set_var("GIT_WORK_TREE", tree) };
+        }
     }
-    if let Some(ref tree) = work_tree {
-        debug!("Setting GIT_WORK_TREE to {}", tree.display());
-        // SAFETY: No other threads are accessing environment variables at this point
-        unsafe { std::env::set_var("GIT_WORK_TREE", tree) };
-    }
+
     // TODO: run in legacy mode
 
     if script_version != Some(cli::install::CUR_SCRIPT_VERSION) {
