@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 use assert_fs::fixture::ChildPath;
-use prek_consts::MANIFEST_FILE;
+use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
 fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
     let repo_dir = context.home_dir().child(format!("test-repos/{repo_name}"));
@@ -35,7 +35,9 @@ fn create_hook_repo(context: &TestContext, repo_name: &str) -> Result<PathBuf> {
         .assert()
         .success();
 
-    repo_dir.child(MANIFEST_FILE).write_str(indoc::indoc! {r#"
+    repo_dir
+        .child(PRE_COMMIT_HOOKS_YAML)
+        .write_str(indoc::indoc! {r#"
         - id: test-hook
           name: Test Hook
           entry: echo
@@ -90,7 +92,9 @@ fn create_failing_hook_repo(context: &TestContext, repo_name: &str) -> Result<Pa
         .assert()
         .success();
 
-    repo_dir.child(MANIFEST_FILE).write_str(indoc::indoc! {r#"
+    repo_dir
+        .child(PRE_COMMIT_HOOKS_YAML)
+        .write_str(indoc::indoc! {r#"
         - id: failing-hook
           name: Always Fail
           entry: "false"
@@ -223,7 +227,7 @@ fn try_repo_specific_rev() -> Result<()> {
 
     // Make a new commit
     ChildPath::new(&repo_path)
-        .child(MANIFEST_FILE)
+        .child(PRE_COMMIT_HOOKS_YAML)
         .write_str(indoc::indoc! {r"
         - id: new-hook
           name: New Hook
@@ -275,7 +279,7 @@ fn try_repo_uncommitted_changes() -> Result<()> {
 
     // Make uncommitted changes
     ChildPath::new(&repo_path)
-        .child(MANIFEST_FILE)
+        .child(PRE_COMMIT_HOOKS_YAML)
         .write_str(indoc::indoc! {r"
         - id: uncommitted-hook
           name: Uncommitted Hook

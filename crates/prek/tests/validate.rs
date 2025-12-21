@@ -1,5 +1,5 @@
 use assert_fs::fixture::{FileWriteStr, PathChild};
-use prek_consts::CONFIG_FILE;
+use prek_consts::PRE_COMMIT_CONFIG_YAML;
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -29,7 +29,7 @@ fn validate_config() -> anyhow::Result<()> {
               - id: check-json
     "});
     // Validate one file.
-    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @r"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -47,7 +47,7 @@ fn validate_config() -> anyhow::Result<()> {
         "})?;
 
     // Validate multiple files.
-    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE).arg("config-1.yaml"), @"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML).arg("config-1.yaml"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -78,7 +78,7 @@ fn invalid_config_error() {
             rev: 1.0
     "});
 
-    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -99,7 +99,7 @@ fn invalid_config_error() {
               - name: check-json
     "});
 
-    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -203,7 +203,7 @@ fn unexpected_keys_warning() {
         minimum_pre_commit_version: 1.0.0
     "});
 
-    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @r"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -231,7 +231,7 @@ fn unexpected_keys_warning() {
         minimum_pre_commit_version: 1.0.0
     "});
 
-    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @r"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @r"
     success: true
     exit_code: 0
     ----- stdout -----

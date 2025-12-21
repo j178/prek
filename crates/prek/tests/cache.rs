@@ -1,7 +1,7 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCreateDir};
 use assert_fs::prelude::FileWriteStr;
-use prek_consts::CONFIG_FILE;
+use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use serde_json::json;
 
 use crate::common::{TestContext, cmd_snapshot};
@@ -74,7 +74,7 @@ fn cache_gc_verbose_shows_removed_entries() {
         .expect("create cache dir");
 
     // Have a tracked config that exists but references nothing (so everything above is unreferenced).
-    let config_path = context.work_dir().child(CONFIG_FILE);
+    let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
     write_config_tracking_file(home, &[config_path.path()]).expect("write tracking file");
 
     cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "-v"]),@r"
@@ -282,7 +282,7 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
     let home = context.home_dir();
 
     // Track the config so GC has something to mark from.
-    let config_path = context.work_dir().child(CONFIG_FILE);
+    let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
     write_config_tracking_file(home, &[config_path.path()])?;
 
     // Seed "used" hook env markers so GC can read `.prek-hook.json` and retain the
@@ -416,7 +416,7 @@ fn cache_gc_prunes_tool_versions_without_positive_identification() -> anyhow::Re
     let home = context.home_dir();
 
     // Track the config so GC has something to mark from.
-    let config_path = context.work_dir().child(CONFIG_FILE);
+    let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
     write_config_tracking_file(home, &[config_path.path()])?;
 
     // Seed a matching installed hook env marker, but use a toolchain path that is *not* inside
@@ -576,7 +576,7 @@ fn write_workspace_cache_file(
     use std::hash::{Hash as _, Hasher as _};
     use std::time::SystemTime;
 
-    let config_path = workspace_root.join(CONFIG_FILE);
+    let config_path = workspace_root.join(PRE_COMMIT_CONFIG_YAML);
     let metadata = fs_err::metadata(&config_path)?;
     let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
     let size = metadata.len();
@@ -648,7 +648,7 @@ fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
     context.git_add(".");
 
     let home = context.home_dir();
-    let config_path = cwd.child(CONFIG_FILE);
+    let config_path = cwd.child(PRE_COMMIT_CONFIG_YAML);
     write_config_tracking_file(home, &[config_path.path()])?;
 
     // Simulate config being deleted between runs.
@@ -690,11 +690,11 @@ fn cache_gc_keeps_tracked_config_on_parse_error() -> anyhow::Result<()> {
 
     let cwd = context.work_dir();
     // Intentionally invalid YAML.
-    cwd.child(CONFIG_FILE).write_str("repos: [\n")?;
+    cwd.child(PRE_COMMIT_CONFIG_YAML).write_str("repos: [\n")?;
     context.git_add(".");
 
     let home = context.home_dir();
-    let config_path = cwd.child(CONFIG_FILE);
+    let config_path = cwd.child(PRE_COMMIT_CONFIG_YAML);
     write_config_tracking_file(home, &[config_path.path()])?;
 
     // Add a few obviously-unused entries to ensure GC sweeps even when config is unparsable.
