@@ -26,6 +26,12 @@ When `priority` is omitted, the scheduler assigns the hook a priority equal to i
 
 Execution is driven purely by priority numbers:
 
+### Scope
+
+`priority` is **global within a single configuration file**. That is, priorities are compared across **all hooks in the same `.pre-commit-config.yaml`**, even if the hooks live under different `repos:` entries.
+
+`priority` does **not** apply across *different* `.pre-commit-config.yaml` files (or separate `prek` runs with different configs). Each config file is scheduled independently.
+
 1. **Ordering**: Hooks run from the lowest priority value to the highest.
 2. **Concurrency**: Hooks that share the same priority execute concurrently, subject to the global concurrency limit (default: number of CPUs).
 3. **Defaults**: Without explicit priorities, each hook receives a unique priority derived from its position, so execution remains sequential and backwards-compatible.
@@ -45,6 +51,8 @@ The existing `require_serial` configuration key often causes confusion. In this 
 ### Mixing Explicit and Implicit Priorities
 
 Implicit priorities are always derived from the hook's position in the configuration (0-based), regardless of any explicitly configured priorities on other hooks.
+
+Positions are taken from the **fully flattened hook list for the current `.pre-commit-config.yaml`**, in the order hooks appear as `repos:` and `hooks:` are read. In other words, implicit priorities are assigned across the whole file, not per-repo.
 
 Example:
 
@@ -86,23 +94,31 @@ repos:
         name: Format Rust
         entry: cargo fmt
         language: system
-        priority: 0  # Earliest priority, runs first
+        priority: 0  # Runs first
 
+  # These hooks are in different repos, but share the same priority,
+  # so they can run concurrently.
+  - repo: local
+    hooks:
       - id: ruff
         name: Lint Python
         entry: ruff check
         language: system
-        priority: 10 # Same number means concurrent execution
+        priority: 10
 
+  - repo: local
+    hooks:
       - id: shellcheck
         name: Lint Shell
         entry: shellcheck
         language: system
-        priority: 10 # Runs parallel with ruff
+        priority: 10
 
+  - repo: local
+    hooks:
       - id: integration-tests
         name: Integration Tests
         entry: just test
         language: system
-        priority: 20 # Starts after the lint group completes
+        priority: 20 # Starts after priority=10 group completes
 ```
