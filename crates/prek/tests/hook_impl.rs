@@ -1,7 +1,7 @@
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use indoc::indoc;
-use prek_consts::CONFIG_FILE;
+use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
@@ -213,7 +213,10 @@ fn run_worktree() -> anyhow::Result<()> {
         .success();
 
     // Modify the config in the main worktree
-    context.work_dir().child(CONFIG_FILE).write_str("")?;
+    context
+        .work_dir()
+        .child(PRE_COMMIT_CONFIG_YAML)
+        .write_str("")?;
 
     let mut commit = git_cmd(context.work_dir().child("worktree"));
     commit
@@ -485,7 +488,7 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
     context
         .work_dir()
         .child("project2")
-        .child(CONFIG_FILE)
+        .child(PRE_COMMIT_CONFIG_YAML)
         .write_str("")?;
 
     let mut commit = git_cmd(cwd.child("worktree"));
@@ -551,7 +554,7 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `.pre-commit-config.yaml` found in the current directory or parent directories.
+    error: No `prek.toml` or `.pre-commit-config.yaml` found in the current directory or parent directories.
 
     hint: If you just added one, rerun your command with the `--refresh` flag to rescan the workspace.
     - To temporarily silence this, run `PREK_ALLOW_NO_CONFIG=1 git ...`
@@ -589,7 +592,7 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     // Create the root `.pre-commit-config.yaml`
     context
         .work_dir()
-        .child(CONFIG_FILE)
+        .child(PRE_COMMIT_CONFIG_YAML)
         .write_str(indoc::indoc! {r"
         repos:
         - repo: local
@@ -636,7 +639,7 @@ fn hook_impl_does_not_fail_when_no_hooks_match_stage() -> anyhow::Result<()> {
     // Only a manual-stage hook; a pre-commit hook run should find nothing for the stage.
     context
         .work_dir()
-        .child(CONFIG_FILE)
+        .child(PRE_COMMIT_CONFIG_YAML)
         .write_str(indoc::indoc! {r"
         repos:
           - repo: local

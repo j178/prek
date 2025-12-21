@@ -873,20 +873,21 @@ pub(crate) struct Config {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
-    #[error("Config file not found: {0}")]
-    NotFound(String),
-
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
     #[error("Failed to parse `{0}`")]
     Yaml(String, #[source] Box<serde_saphyr::Error>),
+
+    #[error("Failed to parse `{0}`")]
+    Toml(String, #[source] Box<toml::de::Error>),
 }
 
 impl Error {
     /// Warn the user if the config error is a parse error (not "file not found").
     pub(crate) fn warn_parse_error(&self) {
-        if matches!(self, Self::NotFound(_)) {
+        // Skip file not found errors.
+        if matches!(self, Self::Io(e) if e.kind() == std::io::ErrorKind::NotFound) {
             return;
         }
         if let Some(cause) = self.source() {
@@ -994,16 +995,14 @@ fn warn_unused_paths(path: &Path, entries: &[String]) {
 
 /// Read the configuration file from the given path.
 pub(crate) fn load_config(path: &Path) -> Result<Config, Error> {
-    let content = match fs_err::read_to_string(path) {
-        Ok(content) => content,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(Error::NotFound(path.user_display().to_string()));
-        }
-        Err(e) => return Err(e.into()),
-    };
+    let content = fs_err::read_to_string(path)?;
 
-    let config = serde_saphyr::from_str(&content)
-        .map_err(|e| Error::Yaml(path.user_display().to_string(), Box::new(e)))?;
+    let config = match path.extension() {
+        Some(ext) if ext.eq_ignore_ascii_case("toml") => toml::from_str(&content)
+            .map_err(|e| Error::Toml(path.user_display().to_string(), Box::new(e)))?,
+        _ => serde_saphyr::from_str(&content)
+            .map_err(|e| Error::Yaml(path.user_display().to_string(), Box::new(e)))?,
+    };
 
     Ok(config)
 }
@@ -1562,10 +1561,116 @@ mod tests {
     }
 
     #[test]
-    fn test_read_config() -> Result<()> {
+    fn test_read_yaml_config() -> Result<()> {
         let config = read_config(Path::new("tests/fixtures/uv-pre-commit-config.yaml"))?;
         insta::assert_debug_snapshot!(config);
         Ok(())
+    }
+
+    #[test]
+    fn test_read_toml_config() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let toml_path = dir.path().join("prek.toml");
+        fs_err::write(
+            &toml_path,
+            indoc::indoc! {r#"
+            fail_fast = true
+
+            [[repos]]
+            repo = "local"
+
+            [[repos.hooks]]
+            id = "cargo-fmt"
+            name = "cargo fmt"
+            entry = "cargo fmt --"
+            language = "system"
+
+            [[repos]]
+            repo = "https://github.com/pre-commit/pre-commit-hooks"
+            rev = "v6.0.0"
+            hooks = [
+            { id = "trailing-whitespace" },
+            {
+                id = "end-of-file-fixer",
+                args = ["--fix", "crlf"]
+            }
+            ]
+        "#},
+        )?;
+
+        let config = read_config(&toml_path)?;
+        insta::assert_debug_snapshot!(config);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_invalid_toml_config() {
+        let raw = indoc::indoc! {r#"
+            fail_fast = true
+
+            [[repos]]
+            repo = "local"
+
+            [[repos.hooks]]
+            id = "cargo-fmt"
+            name = "cargo fmt"
+            entry = "cargo fmt --"
+            language = "system"
+
+            [[repos]]
+            repo = "https://github.com/pre-commit/pre-commit-hooks"
+            hooks = [
+            { id = "trailing-whitespace" },
+            {
+                id = "end-of-file-fixer",
+                args = ["--fix", "crlf"]
+            }
+            ]
+        "#};
+
+        let err = toml::from_str::<Config>(raw).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        TOML parse error at line 12, column 1
+           |
+        12 | [[repos]]
+           | ^^^^^^^^^
+        missing field `rev`
+        ");
+
+        let raw = indoc::indoc! {r#"
+            fail_fast = true
+
+            [[repos]]
+            repo = "local"
+            rev = "v1.0.0"
+
+            [[repos.hooks]]
+            id = "cargo-fmt"
+            name = "cargo fmt"
+            entry = "cargo fmt --"
+            language = "system"
+
+            [[repos]]
+            repo = "https://github.com/pre-commit/pre-commit-hooks"
+            rev = "v6.0.0"
+            hooks = [
+            { id = "trailing-whitespace" },
+            {
+                id = "end-of-file-fixer",
+                args = ["--fix", "crlf"]
+            }
+            ]
+        "#};
+
+        let err = toml::from_str::<Config>(raw).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        TOML parse error at line 3, column 1
+          |
+        3 | [[repos]]
+          | ^^^^^^^^^
+        `rev` is not allowed for local repos
+        ");
     }
 
     #[test]
