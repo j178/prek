@@ -1,5 +1,5 @@
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-use prek_consts::MANIFEST_FILE;
+use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
@@ -167,7 +167,7 @@ fn local_package_build() -> anyhow::Result<()> {
     "#})?;
     swift_hook
         .work_dir()
-        .child(MANIFEST_FILE)
+        .child(PRE_COMMIT_HOOKS_YAML)
         .write_str(indoc::indoc! {r"
         - id: swift-package-test
           name: swift-package-test

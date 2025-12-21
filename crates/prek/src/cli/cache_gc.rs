@@ -167,7 +167,7 @@ pub(crate) async fn cache_gc(
                 config
             }
             Err(err) => match err {
-                ConfigError::NotFound(_) => {
+                ConfigError::Io(e) if e.kind() == std::io::ErrorKind::NotFound => {
                     debug!(path = %config_path.display(), "Tracked config does not exist, dropping");
                     continue;
                 }

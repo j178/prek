@@ -77,7 +77,7 @@ pub(crate) async fn hook_impl(
     } else {
         // Try to discover a project from current directory (after `--cd`)
         match Project::discover(config.as_deref(), &CWD) {
-            Err(e) if matches!(e, workspace::Error::MissingPreCommitConfig) => {
+            Err(e @ workspace::Error::MissingConfigFile) => {
                 return if allow_missing_config {
                     Ok(ExitStatus::Success)
                 } else {

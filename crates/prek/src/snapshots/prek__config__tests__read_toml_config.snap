@@ -1,92 +1,18 @@
 ---
 source: crates/prek/src/config.rs
-expression: result
+expression: config
 ---
 Config {
     repos: [
-        Meta(
-            MetaRepo {
-                repo: "meta",
+        Local(
+            LocalRepo {
+                repo: "local",
                 hooks: [
-                    MetaHook {
-                        id: "check-hooks-apply",
-                        name: "Check hooks apply",
-                        priority: None,
-                        options: HookOptions {
-                            alias: None,
-                            files: Some(
-                                Glob(
-                                    GlobPatterns {
-                                        patterns: [
-                                            "prek.toml",
-                                            ".pre-commit-config.yaml",
-                                            ".pre-commit-config.yml",
-                                        ],
-                                        ..
-                                    },
-                                ),
-                            ),
-                            exclude: None,
-                            types: None,
-                            types_or: None,
-                            exclude_types: None,
-                            additional_dependencies: None,
-                            args: None,
-                            env: None,
-                            always_run: None,
-                            fail_fast: None,
-                            pass_filenames: None,
-                            description: None,
-                            language_version: None,
-                            log_file: None,
-                            require_serial: None,
-                            stages: None,
-                            verbose: None,
-                            minimum_prek_version: None,
-                            _unused_keys: {},
-                        },
-                    },
-                    MetaHook {
-                        id: "check-useless-excludes",
-                        name: "Check useless excludes",
-                        priority: None,
-                        options: HookOptions {
-                            alias: None,
-                            files: Some(
-                                Glob(
-                                    GlobPatterns {
-                                        patterns: [
-                                            "prek.toml",
-                                            ".pre-commit-config.yaml",
-                                            ".pre-commit-config.yml",
-                                        ],
-                                        ..
-                                    },
-                                ),
-                            ),
-                            exclude: None,
-                            types: None,
-                            types_or: None,
-                            exclude_types: None,
-                            additional_dependencies: None,
-                            args: None,
-                            env: None,
-                            always_run: None,
-                            fail_fast: None,
-                            pass_filenames: None,
-                            description: None,
-                            language_version: None,
-                            log_file: None,
-                            require_serial: None,
-                            stages: None,
-                            verbose: None,
-                            minimum_prek_version: None,
-                            _unused_keys: {},
-                        },
-                    },
-                    MetaHook {
-                        id: "identity",
-                        name: "identity",
+                    LocalHook {
+                        id: "cargo-fmt",
+                        name: "cargo fmt",
+                        entry: "cargo fmt --",
+                        language: System,
                         priority: None,
                         options: HookOptions {
                             alias: None,
@@ -106,9 +32,79 @@ Config {
                             log_file: None,
                             require_serial: None,
                             stages: None,
-                            verbose: Some(
-                                true,
+                            verbose: None,
+                            minimum_prek_version: None,
+                            _unused_keys: {},
+                        },
+                    },
+                ],
+                _unused_keys: {},
+            },
+        ),
+        Remote(
+            RemoteRepo {
+                repo: "https://github.com/pre-commit/pre-commit-hooks",
+                rev: "v6.0.0",
+                hooks: [
+                    RemoteHook {
+                        id: "trailing-whitespace",
+                        name: None,
+                        entry: None,
+                        language: None,
+                        priority: None,
+                        options: HookOptions {
+                            alias: None,
+                            files: None,
+                            exclude: None,
+                            types: None,
+                            types_or: None,
+                            exclude_types: None,
+                            additional_dependencies: None,
+                            args: None,
+                            env: None,
+                            always_run: None,
+                            fail_fast: None,
+                            pass_filenames: None,
+                            description: None,
+                            language_version: None,
+                            log_file: None,
+                            require_serial: None,
+                            stages: None,
+                            verbose: None,
+                            minimum_prek_version: None,
+                            _unused_keys: {},
+                        },
+                    },
+                    RemoteHook {
+                        id: "end-of-file-fixer",
+                        name: None,
+                        entry: None,
+                        language: None,
+                        priority: None,
+                        options: HookOptions {
+                            alias: None,
+                            files: None,
+                            exclude: None,
+                            types: None,
+                            types_or: None,
+                            exclude_types: None,
+                            additional_dependencies: None,
+                            args: Some(
+                                [
+                                    "--fix",
+                                    "crlf",
+                                ],
                             ),
+                            env: None,
+                            always_run: None,
+                            fail_fast: None,
+                            pass_filenames: None,
+                            description: None,
+                            language_version: None,
+                            log_file: None,
+                            require_serial: None,
+                            stages: None,
+                            verbose: None,
                             minimum_prek_version: None,
                             _unused_keys: {},
                         },
@@ -123,7 +119,9 @@ Config {
     default_stages: None,
     files: None,
     exclude: None,
-    fail_fast: None,
+    fail_fast: Some(
+        true,
+    ),
     minimum_prek_version: None,
     orphan: None,
     _unused_keys: {},
