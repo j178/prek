@@ -149,11 +149,3 @@ COMPLETE=fish prek > ~/.config/fish/completions/prek.fish
 ```powershell
 COMPLETE=powershell prek >> $PROFILE
 ```
-
-## Use in GitHub Actions
-
-{%
-  include-markdown "../README.md"
-  start="<!-- github-actions:start -->"
-  end="<!-- github-actions:end -->"
-%}

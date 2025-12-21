@@ -66,6 +66,7 @@ nav:
     - Commands: cli.md
     - Built-in Hooks: builtin.md
     - Workspace Mode: workspace.md
+    - Integrations: integrations.md
   - Help:
     - Debugging: debugging.md
     - FAQ: faq.md
