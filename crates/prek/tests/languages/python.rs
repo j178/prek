@@ -1,5 +1,6 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
+use prek_consts::MANIFEST_FILE;
 use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot};
@@ -253,6 +254,71 @@ fn additional_dependencies() {
 
     ----- stderr -----
     ");
+}
+
+#[test]
+fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
+    // Create a remote repo with a python hook that has additional dependencies.
+    let repo = TestContext::new();
+    repo.init_project();
+
+    let repo_path = repo.work_dir();
+    repo_path.child(MANIFEST_FILE).write_str(indoc::indoc! {r#"
+        - id: hello
+          name: hello
+          language: python
+          entry: pyecho Greetings from hook
+          additional_dependencies: [".[cli]"]
+    "#})?;
+    repo_path.child("module.py").write_str(indoc::indoc! {r#"
+        def greet():
+            print("Greetings from module")
+    "#})?;
+    repo_path.child("setup.py").write_str(indoc::indoc! {r#"
+        from setuptools import setup, find_packages
+
+        setup(
+            name="remote-hooks",
+            version="0.1.0",
+            py_modules=["module"],
+            extras_require={
+                "cli": ["pyecho-cli"]
+            }
+        )
+    "#})?;
+    repo.git_add(".");
+    repo.configure_git_author();
+    repo.disable_auto_crlf();
+    repo.git_commit("Add manifest");
+    repo.git_tag("v0.1.0");
+
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v0.1.0
+            hooks:
+              - id: hello
+                name: hello
+                verbose: true
+    ", repo_path.display()});
+
+    context.git_add(".");
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello....................................................................Passed
+    - hook id: hello
+    - duration: [TIME]
+
+      Greetings from hook .pre-commit-config.yaml
+
+    ----- stderr -----
+    ");
+
+    Ok(())
 }
 
 /// Ensure that stderr from hooks is captured and shown to the user.
