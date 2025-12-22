@@ -546,6 +546,44 @@ fn check_added_large_files_hook() -> Result<()> {
 }
 
 #[test]
+fn tracked_file_exceeds_large_file_limit() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-added-large-files
+                args: ['--maxkb', '1']
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create and commit a large file
+    let large_file = cwd.child("large_file.txt");
+    large_file.write_binary(&[0; 2048])?; // 2KB file
+    context.git_add(".");
+    context.git_commit("Add large file");
+    // Modify the large file
+    large_file.write_binary(&[0; 4096])?; // 4KB file
+    context.git_add(".");
+
+    // Run the hook: it should pass because the file is already tracked
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for added large files..............................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn builtin_hooks_workspace_mode() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
