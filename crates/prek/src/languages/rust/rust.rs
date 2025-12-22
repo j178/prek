@@ -31,6 +31,29 @@ fn format_cargo_dependency(dep: &str) -> String {
     }
 }
 
+fn format_cargo_cli_dependency(dep: &str) -> Vec<&str> {
+    let is_url = dep.starts_with("http://") || dep.starts_with("https://");
+    let (package, version) = if is_url && dep.matches(':').count() == 1 {
+        (dep, "") // We have a url without version
+    } else {
+        dep.rsplit_once(':').unwrap_or((dep, ""))
+    };
+
+    let mut args = Vec::new();
+    if is_url {
+        args.extend(["--git", package]);
+        if !version.is_empty() {
+            args.extend(["--tag", version]);
+        }
+    } else {
+        args.push(package);
+        if !version.is_empty() {
+            args.extend(["--version", version]);
+        }
+    }
+    args
+}
+
 /// Find the package directory that produces the given binary.
 /// Returns (`package_dir`, `package_name`, `is_workspace`).
 async fn find_package_dir(
@@ -370,14 +393,10 @@ impl LanguageImpl for Rust {
 
         // Install CLI dependencies
         for cli_dep in cli_deps {
-            let (package, version) = cli_dep.split_once(':').unwrap_or((cli_dep, ""));
             let mut cmd = Cmd::new(&cargo, "install cli dep");
             cmd.args(["install", "--bins", "--root"])
                 .arg(&info.env_path)
-                .arg(package);
-            if !version.is_empty() {
-                cmd.args(["--version", version]);
-            }
+                .args(format_cargo_cli_dependency(cli_dep));
             cmd.env(EnvVars::PATH, &new_path)
                 .env(EnvVars::CARGO_HOME, &cargo_home)
                 .remove_git_env()
@@ -761,5 +780,27 @@ edition = "2021"
         assert_eq!(format_cargo_dependency("serde"), "serde@*");
         assert_eq!(format_cargo_dependency("serde:1.0"), "serde@1.0");
         assert_eq!(format_cargo_dependency("tokio:1.0.0"), "tokio@1.0.0");
+    }
+
+    #[test]
+    fn test_format_cargo_cli_dependency() {
+        assert_eq!(format_cargo_cli_dependency("typos-cli"), ["typos-cli"]);
+        assert_eq!(
+            format_cargo_cli_dependency("typos-cli:1.0"),
+            ["typos-cli", "--version", "1.0"]
+        );
+        assert_eq!(
+            format_cargo_cli_dependency("https://github.com/fish-shell/fish-shell"),
+            ["--git", "https://github.com/fish-shell/fish-shell"]
+        );
+        assert_eq!(
+            format_cargo_cli_dependency("https://github.com/fish-shell/fish-shell:4.0"),
+            [
+                "--git",
+                "https://github.com/fish-shell/fish-shell",
+                "--tag",
+                "4.0"
+            ]
+        );
     }
 }
