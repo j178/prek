@@ -10,6 +10,8 @@ impl EnvVars {
     pub const CI: &'static str = "CI";
 
     // Git related
+    pub const GIT_DIR: &'static str = "GIT_DIR";
+    pub const GIT_WORK_TREE: &'static str = "GIT_WORK_TREE";
     pub const GIT_TERMINAL_PROMPT: &'static str = "GIT_TERMINAL_PROMPT";
 
     pub const SKIP: &'static str = "SKIP";

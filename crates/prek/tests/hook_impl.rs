@@ -1,9 +1,10 @@
+use std::process::Command;
+
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use indoc::indoc;
 use prek_consts::CONFIG_FILE;
 use prek_consts::env_vars::EnvVars;
-use std::process::Command;
 
 use crate::common::TestContext;
 use crate::common::cmd_snapshot;
@@ -455,6 +456,7 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
     let mut commit = Command::new("git");
     commit
         .current_dir(cwd.child("worktree"))
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("commit")
         .arg("-m")
         .arg("Test commit from subdirectory")

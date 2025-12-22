@@ -2,13 +2,14 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 use anstream::{ColorChoice, StripStream, eprintln};
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use clap_complete::CompleteEnv;
 use owo_colors::OwoColorize;
+use prek_consts::env_vars::EnvVars;
 use tracing::debug;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::filter::Directive;
@@ -137,7 +138,7 @@ fn setup_logging(level: Level, log_file: LogFile, store: &Store) -> Result<()> {
     Ok(())
 }
 
-async fn run(mut cli: Cli) -> Result<ExitStatus> {
+async fn run(cli: Cli) -> Result<ExitStatus> {
     // Enabled ANSI colors on Windows.
     let _ = anstyle_query::windows::enable_ansi_colors();
 
@@ -175,11 +176,20 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         warnings::enable();
     }
 
-    if cli.command.is_none() {
-        cli.command = Some(Command::Run(Box::new(cli.run_args.clone())));
-    }
-
     debug!("prek: {}", version::version());
+
+    // If `GIT_DIR` is set, prek may be running from a git hook.
+    // In that mode git sets `GIT_DIR` but not `GIT_WORK_TREE`.
+    // When `GIT_WORK_TREE` is missing, `git rev-parse --show-toplevel` treats the *current working
+    // directory* as the work tree, which can change if we later `cd`.
+    // Force initialization of `GIT_ROOT` before any directory changes so subsequent git operations
+    // are anchored to the repository root.
+    // If `GIT_DIR` is not set, we let git discover `.git` after an optional `cd`.
+    // See: https://www.spinics.net/lists/git/msg374197.html
+    //      https://github.com/pre-commit/pre-commit/issues/2295
+    if EnvVars::is_set(EnvVars::GIT_DIR) {
+        LazyLock::force(&git::GIT_ROOT);
+    }
 
     if let Some(dir) = cli.globals.cd.as_ref() {
         debug!("Changing current directory to: `{}`", dir.display());
@@ -203,7 +213,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     }
     show_settings!(cli.globals, false);
 
-    match cli.command.unwrap() {
+    let command = cli
+        .command
+        .unwrap_or_else(|| Command::Run(Box::new(cli.run_args)));
+    match command {
         Command::Install(args) => {
             show_settings!(args);
 
