@@ -4,7 +4,7 @@ use clap::Parser;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 
-use crate::git::{get_lfs_files, get_staged_files};
+use crate::git::{get_added_files, get_lfs_files};
 use crate::hook::Hook;
 use crate::run::CONCURRENCY;
 
@@ -42,7 +42,7 @@ pub(crate) async fn check_added_large_files(
     let filter = if args.enforce_all {
         FileFilter::NoFilter
     } else {
-        let add_files = get_staged_files(hook.work_dir())
+        let add_files = get_added_files(hook.work_dir())
             .await?
             .into_iter()
             .collect::<FxHashSet<_>>();
