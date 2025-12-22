@@ -476,68 +476,8 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
 
     ----- stderr -----
     Running in workspace: `[TEMP_DIR]/worktree/project2`
-    Unstaged changes detected, stashing unstaged changes to `[HOME]/patches/abc1234568636-80689.patch`
     Test Hook............................................(no files to check)Skipped
-    Restored working tree changes from `[HOME]/patches/abc1234568636-80689.patch`
     ");
-
-    let log = fs_err::read_to_string(context.home_dir().join("prek.log"))?;
-    insta::assert_snapshot!(log, @r#"
-    2025-12-22T10:32:48.299260Z DEBUG prek: 0.2.23
-    2025-12-22T10:32:48.314527Z TRACE get_root: close time.busy=15.2ms time.idle=9.46µs
-    2025-12-22T10:32:48.314591Z DEBUG Git root: /Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree
-    2025-12-22T10:32:48.314616Z DEBUG Changing current directory to: `project2`
-    2025-12-22T10:32:48.314638Z DEBUG Args: ["/Users/Jo/code/rust/prek/target/debug/prek", "hook-impl", "--hook-type=pre-commit", "--cd=project2", "--script-version=4", "--hook-dir", "/Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/.git/hooks", "--"]
-    2025-12-22T10:32:48.314988Z DEBUG Found workspace root at `/Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2`
-    2025-12-22T10:32:48.315015Z DEBUG Found project root at ``
-    2025-12-22T10:32:48.315037Z DEBUG Loading project configuration path=.pre-commit-config.yaml
-    2025-12-22T10:32:48.315627Z TRACE read_config{path="/Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2/.pre-commit-config.yaml"}: close time.busy=547µs time.idle=5.33µs
-    2025-12-22T10:32:48.315784Z TRACE Executing `/opt/homebrew/opt/git/libexec/git-core/git ls-files --unmerged`
-    2025-12-22T10:32:48.332067Z DEBUG Found workspace root at `/Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2`
-    2025-12-22T10:32:48.332131Z TRACE Include selectors: ``
-    2025-12-22T10:32:48.332152Z TRACE Skip selectors: ``
-    2025-12-22T10:32:48.332248Z DEBUG discover{root="/Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2" config=None refresh=false}: Performing fresh workspace discovery
-    2025-12-22T10:32:48.332335Z TRACE discover{root="/Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2" config=None refresh=false}:list_submodules{git_root="/Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree"}: close time.busy=8.00µs time.idle=5.42µs
-    2025-12-22T10:32:48.337096Z DEBUG Loading project configuration path=.pre-commit-config.yaml
-    2025-12-22T10:32:48.337556Z TRACE read_config{path="/Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2/.pre-commit-config.yaml"}: close time.busy=405µs time.idle=6.21µs
-    2025-12-22T10:32:48.341044Z TRACE discover{root="/Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2" config=None refresh=false}: close time.busy=8.84ms time.idle=8.21µs
-    2025-12-22T10:32:48.341118Z TRACE Executing `/opt/homebrew/opt/git/libexec/git-core/git diff --exit-code --name-only -z /Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2/.pre-commit-config.yaml [...]`
-    2025-12-22T10:32:48.359838Z TRACE Checking lock resource="store" path=/Users/Jo/.local/share/prek/tests/.tmpy22cNf/home/.lock
-    2025-12-22T10:32:48.359886Z DEBUG Acquired lock resource="store"
-    2025-12-22T10:32:48.360326Z DEBUG Hooks going to run: ["test-hook"]
-    2025-12-22T10:32:48.361058Z DEBUG Found uv in PATH: /Users/Jo/.local/bin/uv
-    2025-12-22T10:32:48.379968Z TRACE Using system uv version 0.9.11 at /Users/Jo/.local/bin/uv
-    2025-12-22T10:32:48.380281Z DEBUG Installing environment hook=test-hook target=/Users/Jo/.local/share/prek/tests/.tmpy22cNf/home/hooks/python-RCFClN394zEIMCQ8ojzA
-    2025-12-22T10:32:48.380318Z TRACE Executing `/Users/Jo/.local/bin/uv venv /Users/Jo/.local/share/prek/tests/.tmpy22cNf/home/hooks/python-RCFClN394zEIMCQ8ojzA --python-preference managed --no-project [...]`
-    2025-12-22T10:32:48.579815Z DEBUG Venv created successfully with no downloads: `/Users/Jo/.local/share/prek/tests/.tmpy22cNf/home/hooks/python-RCFClN394zEIMCQ8ojzA`
-    2025-12-22T10:32:48.579897Z DEBUG No dependencies to install
-    2025-12-22T10:32:48.579923Z TRACE Executing `/Users/Jo/.local/share/prek/tests/.tmpy22cNf/home/hooks/python-RCFClN394zEIMCQ8ojzA/bin/python -I -c import sys, json
-    info = {
-        "version": ".".join(map(str, sys.version_info[:3])),
-        "base_exec_prefix": sys.base_exec_prefix,
-    }
-    print(json.dumps(info))
-     [...]`
-    2025-12-22T10:32:48.603471Z DEBUG Installed hook `test-hook` in `/Users/Jo/.local/share/prek/tests/.tmpy22cNf/home/hooks/python-RCFClN394zEIMCQ8ojzA`
-    2025-12-22T10:32:48.603564Z TRACE Released lock path=/Users/Jo/.local/share/prek/tests/.tmpy22cNf/home/.lock
-    2025-12-22T10:32:48.603630Z TRACE Executing `/opt/homebrew/opt/git/libexec/git-core/git diff --diff-filter=A --name-only -z -- /Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2`
-    2025-12-22T10:32:48.613621Z TRACE Executing `/opt/homebrew/opt/git/libexec/git-core/git write-tree`
-    2025-12-22T10:32:48.624428Z TRACE Executing `/opt/homebrew/opt/git/libexec/git-core/git diff-index --binary --exit-code 44e303738875ee49c589134dfa566c18df7b4b3c -- /Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2 [...]`
-    2025-12-22T10:32:48.636653Z DEBUG Unstaged changes detected
-    2025-12-22T10:32:48.637081Z DEBUG Cleaning working tree
-    2025-12-22T10:32:48.649884Z TRACE collect_files: Executing `/opt/homebrew/opt/git/libexec/git-core/git rev-parse --git-dir`
-    2025-12-22T10:32:48.658905Z TRACE collect_files: Executing `cd /Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2 && /opt/homebrew/opt/git/libexec/git-core/git diff --cached --name-only --diff-filter=ACMRTUXB -z`
-    2025-12-22T10:32:48.669322Z DEBUG collect_files: Staged files: 0
-    2025-12-22T10:32:48.669376Z TRACE collect_files: close time.busy=777µs time.idle=18.7ms
-    2025-12-22T10:32:48.669519Z TRACE for_project{project=.}: close time.busy=2.92µs time.idle=4.17µs
-    2025-12-22T10:32:48.669560Z TRACE Files for project `.` after filtered: 0
-    2025-12-22T10:32:48.669596Z TRACE get_diff{path="/Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2"}: Executing `/opt/homebrew/opt/git/libexec/git-core/git diff -- /Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2`
-    2025-12-22T10:32:48.680014Z TRACE get_diff{path="/Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2"}: close time.busy=273µs time.idle=10.1ms
-    2025-12-22T10:32:48.680354Z TRACE for_hook{hook="test-hook"}: close time.busy=227µs time.idle=3.25µs
-    2025-12-22T10:32:48.680387Z TRACE Files for hook `test-hook` after filtered: 0
-    2025-12-22T10:32:48.680423Z TRACE get_diff{path="/Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2"}: Executing `/opt/homebrew/opt/git/libexec/git-core/git diff -- /Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2`
-    2025-12-22T10:32:48.691763Z TRACE get_diff{path="/Users/Jo/.local/share/prek/tests/.tmpy22cNf/temp/worktree/project2"}: close time.busy=292µs time.idle=11.1ms
-    "#);
 
     Ok(())
 }

@@ -2,7 +2,7 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::str::FromStr;
-use std::sync::{LazyLock, Mutex};
+use std::sync::Mutex;
 
 use anstream::{ColorChoice, StripStream, eprintln};
 use anyhow::{Context, Result};
@@ -179,16 +179,23 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     debug!("prek: {}", version::version());
 
     // If `GIT_DIR` is set, prek may be running from a git hook.
-    // In that mode git sets `GIT_DIR` but not `GIT_WORK_TREE`.
-    // When `GIT_WORK_TREE` is missing, `git rev-parse --show-toplevel` treats the *current working
-    // directory* as the work tree, which can change if we later `cd`.
-    // Force initialization of `GIT_ROOT` before any directory changes so subsequent git operations
-    // are anchored to the repository root.
+    // Git exports `GIT_DIR` but *not* `GIT_WORK_TREE`. Without `GIT_WORK_TREE`, git
+    // treats the current working directory as the working tree. If prek changes the current
+    // working directory (with `--cd`), git commands run by prek may behave unexpectedly.
+    //
+    // To make git behavior stable, we set `GIT_WORK_TREE` ourselves to the repository root we
+    // detected (`GIT_ROOT`). If `GIT_WORK_TREE` is already set, we leave it alone.
     // If `GIT_DIR` is not set, we let git discover `.git` after an optional `cd`.
     // See: https://www.spinics.net/lists/git/msg374197.html
     //      https://github.com/pre-commit/pre-commit/issues/2295
-    if EnvVars::is_set(EnvVars::GIT_DIR) {
-        LazyLock::force(&git::GIT_ROOT);
+    if EnvVars::is_set(EnvVars::GIT_DIR) && !EnvVars::is_set(EnvVars::GIT_WORK_TREE) {
+        let git_root = git::GIT_ROOT.as_ref()?;
+        debug!(
+            "Setting {} to `{}`",
+            EnvVars::GIT_WORK_TREE,
+            git_root.display()
+        );
+        unsafe { std::env::set_var(EnvVars::GIT_WORK_TREE, git_root) }
     }
 
     if let Some(dir) = cli.globals.cd.as_ref() {
