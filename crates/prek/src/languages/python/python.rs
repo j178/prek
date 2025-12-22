@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use prek_consts::env_vars::EnvVars;
 use serde::Deserialize;
-use tracing::debug;
+use tracing::{debug, trace};
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::InstalledHook;
@@ -91,25 +91,45 @@ impl LanguageImpl for Python {
             .context("Failed to create Python virtual environment")?;
 
         // Install dependencies
-        let deps = hook.install_dependencies();
-        if deps.is_empty() {
-            debug!("No dependencies to install");
-        } else {
-            uv.cmd("uv pip install", store)
-                .arg("pip")
+        let pip_install = || {
+            let mut cmd = uv.cmd("uv pip", store);
+            cmd.arg("pip")
                 .arg("install")
                 // Explicitly set project to root to avoid uv searching for project-level configs
                 // `--project` has no other effect on `uv pip` subcommands.
                 .args(["--project", "/"])
-                .args(&*deps)
                 .env(EnvVars::VIRTUAL_ENV, &info.env_path)
                 // Make sure uv uses the venv's python
                 .env_remove(EnvVars::UV_PYTHON)
                 .env_remove(EnvVars::UV_MANAGED_PYTHON)
                 .env_remove(EnvVars::UV_NO_MANAGED_PYTHON)
-                .check(true)
+                .check(true);
+            cmd
+        };
+
+        if let Some(repo_path) = hook.repo_path() {
+            trace!(
+                "Installing dependencies from repo path: {}",
+                repo_path.display()
+            );
+            pip_install()
+                .arg("--directory")
+                .arg(repo_path)
+                .arg(".")
+                .args(&hook.additional_dependencies)
                 .output()
                 .await?;
+        } else if !hook.additional_dependencies.is_empty() {
+            trace!(
+                "Installing additional dependencies: {:?}",
+                hook.additional_dependencies
+            );
+            pip_install()
+                .args(&hook.additional_dependencies)
+                .output()
+                .await?;
+        } else {
+            debug!("No dependencies to install");
         }
 
         let python = python_exec(&info.env_path);

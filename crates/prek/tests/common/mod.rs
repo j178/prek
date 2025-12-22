@@ -289,6 +289,18 @@ impl TestContext {
             .success();
     }
 
+    /// Run `git tag`.
+    pub fn git_tag(&self, tag: &str) {
+        Command::new("git")
+            .arg("tag")
+            .arg(tag)
+            .arg("-m")
+            .arg(format!("Tag {tag}"))
+            .current_dir(&self.temp_dir)
+            .assert()
+            .success();
+    }
+
     /// Run `git reset`.
     pub fn git_reset(&self, target: &str) {
         Command::new("git")
