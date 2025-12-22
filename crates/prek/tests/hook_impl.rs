@@ -188,6 +188,8 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
 fn run_worktree() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
+    context.configure_git_author();
+    context.disable_auto_crlf();
     context.write_pre_commit_config(indoc! { r"
         repos:
         - repo: local
@@ -198,8 +200,6 @@ fn run_worktree() -> anyhow::Result<()> {
              entry: always fail
              always_run: true
     "});
-    context.configure_git_author();
-    context.disable_auto_crlf();
     context.git_add(".");
     context.git_commit("Initial commit");
 
@@ -248,6 +248,61 @@ fn run_worktree() -> anyhow::Result<()> {
     ");
 
     Ok(())
+}
+
+/// Test prek hooks runs with `GIT_DIR` respected.
+#[test]
+fn git_dir_respected() {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+    context.disable_auto_crlf();
+    context.write_pre_commit_config(indoc! { r#"
+        repos:
+        - repo: local
+          hooks:
+           - id: print-git-dir
+             name: Print Git Dir
+             language: python
+             entry: python -c 'import os, sys; print("GIT_DIR:", os.environ.get("GIT_DIR")); print("GIT_WORK_TREE:", os.environ.get("GIT_WORK_TREE")); sys.exit(1)'
+             pass_filenames: false
+    "#});
+    context.git_add(".");
+    let cwd = context.work_dir();
+
+    cmd_snapshot!(context.filters(), context.install(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    "#);
+
+    let mut commit = Command::new("git");
+    commit
+        .arg("--git-dir")
+        .arg(cwd.join(".git"))
+        .arg("--work-tree")
+        .arg(&**cwd)
+        .current_dir(context.home_dir())
+        .arg("commit")
+        .arg("-m")
+        .arg("Test commit with GIT_DIR set");
+
+    cmd_snapshot!(context.filters(), commit, @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Print Git Dir............................................................Failed
+    - hook id: print-git-dir
+    - exit code: 1
+
+      GIT_DIR: [TEMP_DIR]/.git
+      GIT_WORK_TREE: .
+    ");
 }
 
 #[test]

@@ -183,19 +183,15 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     // treats the current working directory as the working tree. If prek changes the current
     // working directory (with `--cd`), git commands run by prek may behave unexpectedly.
     //
-    // To make git behavior stable, we set `GIT_WORK_TREE` ourselves to the repository root we
-    // detected (`GIT_ROOT`). If `GIT_WORK_TREE` is already set, we leave it alone.
+    // To make git behavior stable, we set `GIT_WORK_TREE` ourselves to where prek is run from.
+    // If `GIT_WORK_TREE` is already set, we leave it alone.
     // If `GIT_DIR` is not set, we let git discover `.git` after an optional `cd`.
     // See: https://www.spinics.net/lists/git/msg374197.html
     //      https://github.com/pre-commit/pre-commit/issues/2295
     if EnvVars::is_set(EnvVars::GIT_DIR) && !EnvVars::is_set(EnvVars::GIT_WORK_TREE) {
-        let git_root = git::GIT_ROOT.as_ref()?;
-        debug!(
-            "Setting {} to `{}`",
-            EnvVars::GIT_WORK_TREE,
-            git_root.display()
-        );
-        unsafe { std::env::set_var(EnvVars::GIT_WORK_TREE, git_root) }
+        let cwd = std::env::current_dir().context("Failed to get current directory")?;
+        debug!("Setting {} to `{}`", EnvVars::GIT_WORK_TREE, cwd.display());
+        unsafe { std::env::set_var(EnvVars::GIT_WORK_TREE, cwd) }
     }
 
     if let Some(dir) = cli.globals.cd.as_ref() {
