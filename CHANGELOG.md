@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.2.24
+
+Released on 2025-12-23.
+
+### Enhancements
+
+- Build and publish docker image to `ghcr.io/j178/prek` ([#1253](https://github.com/j178/prek/pull/1253))
+- Support git urls for rust dependencies ([#1256](https://github.com/j178/prek/pull/1256))
+
+### Bug fixes
+
+- Ensure running `uv pip install` inside the remote repo path ([#1262](https://github.com/j178/prek/pull/1262))
+- Fix `check-added-large-files` for traced files ([#1260](https://github.com/j178/prek/pull/1260))
+- Respect `GIT_DIR` set by git ([#1258](https://github.com/j178/prek/pull/1258))
+
+### Documentation
+
+- Add docker integration docs ([#1254](https://github.com/j178/prek/pull/1254))
+- Clarify `priority` scope across repos ([#1251](https://github.com/j178/prek/pull/1251))
+- Improve documentation for configurations ([#1247](https://github.com/j178/prek/pull/1247))
+- Render changelog in document site ([#1248](https://github.com/j178/prek/pull/1248))
+
+### Contributors
+
+- @j178
+- @branchv
+
 ## 0.2.23
 
 Released on 2025-12-20.
