@@ -1,9 +1,10 @@
+use std::process::Command;
+
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use indoc::indoc;
 use prek_consts::CONFIG_FILE;
 use prek_consts::env_vars::EnvVars;
-use std::process::Command;
 
 use crate::common::TestContext;
 use crate::common::cmd_snapshot;
@@ -187,6 +188,8 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
 fn run_worktree() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
+    context.configure_git_author();
+    context.disable_auto_crlf();
     context.write_pre_commit_config(indoc! { r"
         repos:
         - repo: local
@@ -197,8 +200,6 @@ fn run_worktree() -> anyhow::Result<()> {
              entry: always fail
              always_run: true
     "});
-    context.configure_git_author();
-    context.disable_auto_crlf();
     context.git_add(".");
     context.git_commit("Initial commit");
 
@@ -247,6 +248,61 @@ fn run_worktree() -> anyhow::Result<()> {
     ");
 
     Ok(())
+}
+
+/// Test prek hooks runs with `GIT_DIR` respected.
+#[test]
+fn git_dir_respected() {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+    context.disable_auto_crlf();
+    context.write_pre_commit_config(indoc! { r#"
+        repos:
+        - repo: local
+          hooks:
+           - id: print-git-dir
+             name: Print Git Dir
+             language: python
+             entry: python -c 'import os, sys; print("GIT_DIR:", os.environ.get("GIT_DIR")); print("GIT_WORK_TREE:", os.environ.get("GIT_WORK_TREE")); sys.exit(1)'
+             pass_filenames: false
+    "#});
+    context.git_add(".");
+    let cwd = context.work_dir();
+
+    cmd_snapshot!(context.filters(), context.install(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    "#);
+
+    let mut commit = Command::new("git");
+    commit
+        .arg("--git-dir")
+        .arg(cwd.join(".git"))
+        .arg("--work-tree")
+        .arg(&**cwd)
+        .current_dir(context.home_dir())
+        .arg("commit")
+        .arg("-m")
+        .arg("Test commit with GIT_DIR set");
+
+    cmd_snapshot!(context.filters(), commit, @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Print Git Dir............................................................Failed
+    - hook id: print-git-dir
+    - exit code: 1
+
+      GIT_DIR: [TEMP_DIR]/.git
+      GIT_WORK_TREE: .
+    ");
 }
 
 #[test]
@@ -455,6 +511,7 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
     let mut commit = Command::new("git");
     commit
         .current_dir(cwd.child("worktree"))
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("commit")
         .arg("-m")
         .arg("Test commit from subdirectory")
@@ -494,14 +551,14 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     context.git_add(".");
 
     // Install hook that allows missing config
-    cmd_snapshot!(context.filters(), context.install(), @r#"
+    cmd_snapshot!(context.filters(), context.install(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     prek installed at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    "#);
+    ");
 
     // Try to run hook-impl from directory without config
     let mut commit = Command::new("git");

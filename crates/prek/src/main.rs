@@ -9,6 +9,7 @@ use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use clap_complete::CompleteEnv;
 use owo_colors::OwoColorize;
+use prek_consts::env_vars::EnvVars;
 use tracing::debug;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::filter::Directive;
@@ -137,7 +138,7 @@ fn setup_logging(level: Level, log_file: LogFile, store: &Store) -> Result<()> {
     Ok(())
 }
 
-async fn run(mut cli: Cli) -> Result<ExitStatus> {
+async fn run(cli: Cli) -> Result<ExitStatus> {
     // Enabled ANSI colors on Windows.
     let _ = anstyle_query::windows::enable_ansi_colors();
 
@@ -175,11 +176,23 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         warnings::enable();
     }
 
-    if cli.command.is_none() {
-        cli.command = Some(Command::Run(Box::new(cli.run_args.clone())));
-    }
-
     debug!("prek: {}", version::version());
+
+    // If `GIT_DIR` is set, prek may be running from a git hook.
+    // Git exports `GIT_DIR` but *not* `GIT_WORK_TREE`. Without `GIT_WORK_TREE`, git
+    // treats the current working directory as the working tree. If prek changes the current
+    // working directory (with `--cd`), git commands run by prek may behave unexpectedly.
+    //
+    // To make git behavior stable, we set `GIT_WORK_TREE` ourselves to where prek is run from.
+    // If `GIT_WORK_TREE` is already set, we leave it alone.
+    // If `GIT_DIR` is not set, we let git discover `.git` after an optional `cd`.
+    // See: https://www.spinics.net/lists/git/msg374197.html
+    //      https://github.com/pre-commit/pre-commit/issues/2295
+    if EnvVars::is_set(EnvVars::GIT_DIR) && !EnvVars::is_set(EnvVars::GIT_WORK_TREE) {
+        let cwd = std::env::current_dir().context("Failed to get current directory")?;
+        debug!("Setting {} to `{}`", EnvVars::GIT_WORK_TREE, cwd.display());
+        unsafe { std::env::set_var(EnvVars::GIT_WORK_TREE, cwd) }
+    }
 
     if let Some(dir) = cli.globals.cd.as_ref() {
         debug!("Changing current directory to: `{}`", dir.display());
@@ -203,7 +216,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     }
     show_settings!(cli.globals, false);
 
-    match cli.command.unwrap() {
+    let command = cli
+        .command
+        .unwrap_or_else(|| Command::Run(Box::new(cli.run_args)));
+    match command {
         Command::Install(args) => {
             show_settings!(args);
 

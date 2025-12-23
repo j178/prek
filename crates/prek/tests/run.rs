@@ -2040,6 +2040,7 @@ fn git_commit_a() -> Result<()> {
         .arg("-a")
         .arg("-m")
         .arg("Update file")
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .current_dir(cwd);
 
     let filters = context
