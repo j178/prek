@@ -2327,3 +2327,71 @@ fn check_hook_updates_hook_with_args() {
     ----- stderr -----
     ");
 }
+
+/// Tests that `check-hook-updates` hook detects available updates for remote repos.
+/// Without `--fail-on-updates`, the hook passes but outputs available updates.
+#[test]
+fn check_hook_updates_detects_outdated_repo() {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Use an old version of pre-commit-hooks that has newer versions available
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-hook-updates
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v4.0.0
+            hooks:
+              - id: trailing-whitespace
+    "});
+    context.git_add(".");
+
+    // The hook should detect that v4.0.0 is outdated and report available updates (but still pass)
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for hook updates...................................................Passed
+    Trim Trailing Whitespace.................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+/// Tests that `check-hook-updates` hook fails when `--fail-on-updates` is set and updates are available.
+#[test]
+fn check_hook_updates_fails_on_updates() {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Use an old version with --fail-on-updates
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-hook-updates
+                args: ['--fail-on-updates']
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v4.0.0
+            hooks:
+              - id: trailing-whitespace
+    "});
+    context.git_add(".");
+
+    // The hook should fail because updates are available
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for hook updates...................................................Failed
+    - hook id: check-hook-updates
+    - exit code: 1
+
+      https://github.com/pre-commit/pre-commit-hooks: v4.0.0 -> v6.0.0 available
+    Trim Trailing Whitespace.................................................Passed
+
+    ----- stderr -----
+    ");
+}
