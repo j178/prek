@@ -55,9 +55,9 @@ jobs:
         env:
           TAG: ${{ inputs.plan != '' && fromJson(inputs.plan).announcement_tag || 'dry-run' }}
         run: |
-          version=$(grep -m 1 "^version = " dist-workspace.toml | sed -e 's/version = "\(.*\)"/\1/g')
-          if [ "${TAG}" != "${version}" ]; then
-            echo "The input tag does not match the version from dist-workspace.toml:" >&2
+          version=$(grep -m 1 "^version = " pyproject.toml | sed -e 's/version = "\(.*\)"/\1/g')
+          if [ "${TAG}" != "v${version}" ]; then
+            echo "The input tag does not match the version from pyproject.toml:" >&2
             echo "${TAG}" >&2
             echo "${version}" >&2
             exit 1
@@ -68,6 +68,8 @@ jobs:
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
           images: ${{ env.PREK_BASE_IMG }}
           # Defining this makes sure the org.opencontainers.image.version OCI label becomes the actual release version and not the branch name
