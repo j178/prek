@@ -97,7 +97,7 @@
       "description": "Global file exclude pattern.",
       "anyOf": [
         {
-          "$ref": "#/definitions/SerdeRegex"
+          "$ref": "#/definitions/FilePattern"
         },
         {
           "type": "null"
@@ -115,7 +115,7 @@
       "description": "Global file include pattern.",
       "anyOf": [
         {
-          "$ref": "#/definitions/SerdeRegex"
+          "$ref": "#/definitions/FilePattern"
         },
         {
           "type": "null"
@@ -174,6 +174,47 @@
       "required": [
         "repo",
         "hooks"
+      ]
+    },
+    "FilePattern": {
+      "description": "A file pattern, either a regex or glob pattern(s).",
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "regex": {
+              "description": "A regular expression pattern.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "regex"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "glob": {
+              "oneOf": [
+                {
+                  "description": "A glob pattern.",
+                  "type": "string"
+                },
+                {
+                  "description": "A list of glob patterns.",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          },
+          "required": [
+            "glob"
+          ]
+        }
       ]
     },
     "HookType": {
@@ -298,7 +339,7 @@
           "description": "Exclude files that were matched by `files`.\nDefault is `$^`, which matches nothing.",
           "anyOf": [
             {
-              "$ref": "#/definitions/SerdeRegex"
+              "$ref": "#/definitions/FilePattern"
             },
             {
               "type": "null"
@@ -327,7 +368,7 @@
           "description": "The pattern of files to run on.",
           "anyOf": [
             {
-              "$ref": "#/definitions/SerdeRegex"
+              "$ref": "#/definitions/FilePattern"
             },
             {
               "type": "null"
@@ -536,7 +577,7 @@
           "description": "Exclude files that were matched by `files`.\nDefault is `$^`, which matches nothing.",
           "anyOf": [
             {
-              "$ref": "#/definitions/SerdeRegex"
+              "$ref": "#/definitions/FilePattern"
             },
             {
               "type": "null"
@@ -565,7 +606,7 @@
           "description": "The pattern of files to run on.",
           "anyOf": [
             {
-              "$ref": "#/definitions/SerdeRegex"
+              "$ref": "#/definitions/FilePattern"
             },
             {
               "type": "null"
@@ -725,10 +766,6 @@
           "$ref": "#/definitions/BuiltinRepo"
         }
       ]
-    },
-    "SerdeRegex": {
-      "description": "A regular expression string",
-      "type": "string"
     },
     "Stage": {
       "type": "string",

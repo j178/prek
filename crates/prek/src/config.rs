@@ -30,20 +30,6 @@ impl Deref for SerdeRegex {
     }
 }
 
-#[cfg(feature = "schemars")]
-impl schemars::JsonSchema for SerdeRegex {
-    fn schema_name() -> Cow<'static, str> {
-        Cow::Borrowed("SerdeRegex")
-    }
-
-    fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
-        schemars::json_schema!({
-            "type": "string",
-            "description": "A regular expression string",
-        })
-    }
-}
-
 impl std::fmt::Debug for SerdeRegex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("SerdeRegex").field(&self.0.as_str()).finish()
@@ -81,6 +67,53 @@ pub(crate) static CONFIG_FILE_REGEX: LazyLock<SerdeRegex> = LazyLock::new(|| {
 pub(crate) struct FilePattern {
     sources: Vec<String>,
     kind: FilePatternKind,
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for FilePattern {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("FilePattern")
+    }
+
+    fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "object",
+            "description": "A file pattern, either a regex or glob pattern(s).",
+            "oneOf": [
+                {
+                    "type": "object",
+                    "properties": {
+                        "regex": {
+                            "type": "string",
+                            "description": "A regular expression pattern.",
+                        }
+                    },
+                    "required": ["regex"],
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "glob": {
+                            "oneOf": [
+                                {
+                                    "type": "string",
+                                    "description": "A glob pattern.",
+                                },
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string",
+                                    },
+                                    "description": "A list of glob patterns.",
+                                }
+                            ]
+                        }
+                    },
+                    "required": ["glob"],
+                }
+            ],
+        })
+    }
 }
 
 #[derive(Clone)]
