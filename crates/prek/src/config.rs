@@ -586,12 +586,36 @@ pub(crate) struct BuiltinRepo {
 }
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) enum Repo {
     Remote(RemoteRepo),
     Local(LocalRepo),
     Meta(MetaRepo),
     Builtin(BuiltinRepo),
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for Repo {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("Repo")
+    }
+
+    fn json_schema(r#gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        let remote_schema = r#gen.subschema_for::<RemoteRepo>();
+        let local_schema = r#gen.subschema_for::<LocalRepo>();
+        let meta_schema = r#gen.subschema_for::<MetaRepo>();
+        let builtin_schema = r#gen.subschema_for::<BuiltinRepo>();
+
+        schemars::json_schema!({
+            "type": "object",
+            "description": "A repository of hooks, which can be remote, local, meta, or builtin.",
+            "oneOf": [
+                remote_schema,
+                local_schema,
+                meta_schema,
+                builtin_schema,
+            ],
+        })
+    }
 }
 
 impl<'de> Deserialize<'de> for Repo {

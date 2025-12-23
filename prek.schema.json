@@ -629,54 +629,20 @@
       ]
     },
     "Repo": {
+      "description": "A repository of hooks, which can be remote, local, meta, or builtin.",
+      "type": "object",
       "oneOf": [
         {
-          "type": "object",
-          "properties": {
-            "Remote": {
-              "$ref": "#/definitions/RemoteRepo"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "Remote"
-          ]
+          "$ref": "#/definitions/RemoteRepo"
         },
         {
-          "type": "object",
-          "properties": {
-            "Local": {
-              "$ref": "#/definitions/LocalRepo"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "Local"
-          ]
+          "$ref": "#/definitions/LocalRepo"
         },
         {
-          "type": "object",
-          "properties": {
-            "Meta": {
-              "$ref": "#/definitions/MetaRepo"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "Meta"
-          ]
+          "$ref": "#/definitions/MetaRepo"
         },
         {
-          "type": "object",
-          "properties": {
-            "Builtin": {
-              "$ref": "#/definitions/BuiltinRepo"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "Builtin"
-          ]
+          "$ref": "#/definitions/BuiltinRepo"
         }
       ]
     },
