@@ -1,13 +1,13 @@
 use std::io::Write;
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use clap::Parser;
 
-use crate::cli::auto_update::{get_best_candidate_tag, get_tag_timestamps, setup_and_fetch_repo};
+use crate::cli::auto_update::{
+    find_eligible_tag, get_tag_timestamps, resolve_rev_to_commit_hash, setup_and_fetch_repo,
+};
 use crate::config;
-use crate::git::git_cmd;
 use crate::hook::Hook;
 
 #[derive(Parser)]
@@ -111,72 +111,21 @@ async fn resolve_latest_revision(
         return resolve_head_revision(repo_path).await;
     }
 
-    let cutoff_secs = u64::from(cooldown_days) * 86400;
-    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let cutoff = now.saturating_sub(cutoff_secs);
-
-    // tags_with_ts is sorted newest -> oldest; find the first bucket where ts <= cutoff.
-    let left = match tags_with_ts.binary_search_by(|(_, ts)| ts.cmp(&cutoff).reverse()) {
-        Ok(i) | Err(i) => i,
-    };
-
-    let Some((target_tag, _)) = tags_with_ts.get(left) else {
-        // All tags are too new
-        return Ok(None);
-    };
-
-    // Try to find the best candidate tag (prefer version-like tags)
-    let best = get_best_candidate_tag(repo_path, target_tag, current_rev)
-        .await
-        .unwrap_or_else(|_| target_tag.clone());
-
-    Ok(Some(best))
+    find_eligible_tag(repo_path, &tags_with_ts, current_rev, cooldown_days).await
 }
 
 async fn resolve_head_revision(repo_path: &Path) -> Result<Option<String>> {
-    let output = git_cmd("git rev-parse")?
-        .arg("rev-parse")
-        .arg("FETCH_HEAD")
-        .check(false)
-        .current_dir(repo_path)
-        .output()
-        .await?;
-
-    if output.status.success() {
-        Ok(Some(
-            String::from_utf8_lossy(&output.stdout).trim().to_string(),
-        ))
-    } else {
-        Ok(None)
-    }
+    resolve_rev_to_commit_hash(repo_path, "FETCH_HEAD").await
 }
 
 /// Check if two revisions point to the same commit.
 async fn is_same_revision(repo_path: &Path, rev1: &str, rev2: &str) -> Result<bool> {
-    let hash1 = resolve_to_hash(repo_path, rev1).await?;
-    let hash2 = resolve_to_hash(repo_path, rev2).await?;
+    let hash1 = resolve_rev_to_commit_hash(repo_path, rev1).await?;
+    let hash2 = resolve_rev_to_commit_hash(repo_path, rev2).await?;
 
     match (hash1, hash2) {
         (Some(h1), Some(h2)) => Ok(h1 == h2),
         // If we can't resolve one of them, assume they're different
         _ => Ok(false),
-    }
-}
-
-async fn resolve_to_hash(repo_path: &Path, rev: &str) -> Result<Option<String>> {
-    let output = git_cmd("git rev-parse")?
-        .arg("rev-parse")
-        .arg(format!("{rev}^{{}}"))
-        .check(false)
-        .current_dir(repo_path)
-        .output()
-        .await?;
-
-    if output.status.success() {
-        Ok(Some(
-            String::from_utf8_lossy(&output.stdout).trim().to_string(),
-        ))
-    } else {
-        Ok(None)
     }
 }
