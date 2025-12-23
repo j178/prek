@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 use anyhow::Result;
 use fancy_regex::Regex;
 use itertools::Itertools;
-use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
+use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE, PREK_TOML};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize};
 use tracing::instrument;
@@ -63,9 +63,10 @@ impl<'de> Deserialize<'de> for SerdeRegex {
 
 pub(crate) static CONFIG_FILE_REGEX: LazyLock<SerdeRegex> = LazyLock::new(|| {
     let pattern = format!(
-        "^{}|{}$",
+        "^{}|{}|{}$",
         fancy_regex::escape(CONFIG_FILE),
-        fancy_regex::escape(ALT_CONFIG_FILE)
+        fancy_regex::escape(ALT_CONFIG_FILE),
+        fancy_regex::escape(PREK_TOML),
     );
     SerdeRegex(Regex::new(&pattern).expect("config regex must compile"))
 });
@@ -694,9 +695,6 @@ pub(crate) struct Config {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
-    #[error("Config file not found: {0}")]
-    NotFound(String),
-
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -705,6 +703,9 @@ pub(crate) enum Error {
 
     #[error("Failed to merge keys in `{0}`")]
     YamlMerge(String, #[source] yaml::MergeKeyError),
+
+    #[error("Failed to parse `{0}`")]
+    Toml(String, #[source] Box<toml::de::Error>),
 }
 
 /// Keys that prek does not use.
@@ -804,24 +805,11 @@ fn warn_unused_paths(path: &Path, entries: &[String]) {
 
 /// Read the configuration file from the given path.
 pub(crate) fn load_config(path: &Path) -> Result<Config, Error> {
-    let content = match fs_err::read_to_string(path) {
-        Ok(content) => content,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(Error::NotFound(path.user_display().to_string()));
-        }
-        Err(e) => return Err(e.into()),
-    };
+    let content = fs_err::read_to_string(path)?;
 
-    match path.extension() {
-        Some(ext) if ext == "toml" => {
-            let config: TomlConfig = toml::from_str(&content).map_err(|e| {
-                Error::Yaml(
-                    path.user_display().to_string(),
-                    serde_yaml::Error::custom(e),
-                )
-            })?;
-            config.into()
-        }
+    let config = match path.extension() {
+        Some(ext) if ext == "toml" => toml::from_str(&content)
+            .map_err(|e| Error::Toml(path.user_display().to_string(), Box::new(e)))?,
         _ => {
             let config: serde_yaml::Value = serde_yaml::from_str(&content)
                 .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
@@ -832,7 +820,9 @@ pub(crate) fn load_config(path: &Path) -> Result<Config, Error> {
             serde_yaml::from_value(config)
                 .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?
         }
-    }
+    };
+
+    Ok(config)
 }
 
 /// Read the configuration file from the given path, and warn about certain issues.
@@ -1517,9 +1507,46 @@ mod tests {
     }
 
     #[test]
-    fn test_read_config() -> Result<()> {
+    fn test_read_yaml_config() -> Result<()> {
         let config = read_config(Path::new("tests/fixtures/uv-pre-commit-config.yaml"))?;
         insta::assert_debug_snapshot!(config);
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_toml_config() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let toml_path = dir.path().join("prek.toml");
+        fs_err::write(
+            &toml_path,
+            indoc::indoc! {r#"
+            fail_fast = true
+
+            [[repos]]
+            repo = "local"
+
+            [[repos.hooks]]
+            id = "cargo-fmt"
+            name = "cargo fmt"
+            entry = "cargo fmt --"
+            language = "system"
+
+            [[repos]]
+            repo = "https://github.com/pre-commit/pre-commit-hooks"
+            rev = "v6.0.0"
+            hooks = [
+            { id = "trailing-whitespace" },
+            {
+                id = "end-of-file-fixer",
+                args = ["--fix", "crlf"]
+            }
+            ]
+        "#},
+        )?;
+
+        let config = read_config(&toml_path)?;
+        insta::assert_debug_snapshot!(config);
+
         Ok(())
     }
 

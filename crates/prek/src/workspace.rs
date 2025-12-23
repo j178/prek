@@ -10,7 +10,7 @@ use futures::StreamExt;
 use ignore::WalkState;
 use itertools::zip_eq;
 use owo_colors::OwoColorize;
-use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
+use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE, PREK_TOML};
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -36,10 +36,10 @@ pub(crate) enum Error {
     Git(#[from] anyhow::Error),
 
     #[error(
-        "No `.pre-commit-config.yaml` found in the current directory or parent directories.\n\n{} If you just added one, rerun your command with the `--refresh` flag to rescan the workspace.",
+        "No configuration file (`.pre-commit-config.yaml` or `prek.toml`) found in the current directory or parent directories.\n\n{} If you just added one, rerun your command with the `--refresh` flag to rescan the workspace.",
         "hint:".yellow().bold(),
     )]
-    MissingPreCommitConfig,
+    MissingConfigFile,
 
     #[error("Hook `{hook}` not present in repo `{repo}`")]
     HookNotFound { hook: String, repo: String },
@@ -102,7 +102,7 @@ impl Project {
     pub(crate) fn from_config_file(
         config_path: Cow<'_, Path>,
         root: Option<PathBuf>,
-    ) -> Result<Self, config::Error> {
+    ) -> Result<Self, Error> {
         debug!(
             path = %config_path.user_display(),
             "Loading project configuration"
@@ -129,27 +129,40 @@ impl Project {
     }
 
     /// Find the configuration file in the given path.
-    pub(crate) fn from_directory(path: &Path) -> Result<Self, config::Error> {
-        let main = path.join(CONFIG_FILE);
-        let alternate = path.join(ALT_CONFIG_FILE);
-        let main_exists = main.is_file();
-        let alternate_exists = alternate.is_file();
+    pub(crate) fn from_directory(path: &Path) -> Result<Self, Error> {
+        let prek_toml = path.join(PREK_TOML);
+        let prec_yaml = path.join(CONFIG_FILE);
+        let prec_yml = path.join(ALT_CONFIG_FILE);
 
-        if main_exists && alternate_exists {
+        let candidates = [
+            (PREK_TOML, &prek_toml),
+            (CONFIG_FILE, &prec_yaml),
+            (ALT_CONFIG_FILE, &prec_yml),
+        ];
+
+        let present = candidates
+            .into_iter()
+            .filter(|(_, p)| p.is_file())
+            .collect::<Vec<_>>();
+
+        let Some((_, selected)) = present.first() else {
+            return Err(Error::MissingConfigFile);
+        };
+
+        if present.len() > 1 {
+            let found = present
+                .iter()
+                .map(|(name, _)| format!("`{name}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
             warn_user!(
-                "Both `{main}` and `{alternate}` exist, using `{main}` only",
-                main = main.display(),
-                alternate = alternate.display()
+                "Multiple configuration files found ({found}); using `{selected}`",
+                found = found,
+                selected = selected.display(),
             );
         }
-        if main_exists {
-            return Self::from_config_file(main.into(), None);
-        }
-        if alternate_exists {
-            return Self::from_config_file(alternate.into(), None);
-        }
 
-        Err(config::Error::NotFound(main.user_display().to_string()))
+        Self::from_config_file(Cow::Borrowed(selected), None)
     }
 
     /// Discover a project from the give path or search from the given path to the git root.
@@ -157,16 +170,13 @@ impl Project {
         let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
 
         if let Some(config) = config_file {
-            return Ok(Project::from_config_file(
-                config.into(),
-                Some(git_root.clone()),
-            )?);
+            return Project::from_config_file(config.into(), Some(git_root.clone()));
         }
 
         let workspace_root = Workspace::find_root(None, dir)?;
         debug!("Found project root at `{}`", workspace_root.user_display());
 
-        Ok(Project::from_directory(&workspace_root)?)
+        Project::from_directory(&workspace_root)
     }
 
     pub(crate) fn with_relative_path(&mut self, relative_path: PathBuf) {
@@ -554,7 +564,7 @@ impl Workspace {
             .ancestors()
             .take_while(|p| git_root.parent().map(|root| *p != root).unwrap_or(true))
             .find(|p| p.join(CONFIG_FILE).is_file() || p.join(ALT_CONFIG_FILE).is_file())
-            .ok_or(Error::MissingPreCommitConfig)?
+            .ok_or(Error::MissingConfigFile)?
             .to_path_buf();
 
         debug!("Found workspace root at `{}`", workspace_root.display());
@@ -642,7 +652,7 @@ impl Workspace {
                 .map(Arc::new)
                 .collect::<Vec<_>>();
             if selected.is_empty() {
-                return Err(Error::MissingPreCommitConfig);
+                return Err(Error::MissingConfigFile);
             }
             selected
         } else {
@@ -654,7 +664,7 @@ impl Workspace {
         };
 
         if projects.is_empty() {
-            return Err(Error::MissingPreCommitConfig);
+            return Err(Error::MissingConfigFile);
         }
 
         Ok(Self {
@@ -714,7 +724,7 @@ impl Workspace {
                                 projects.push(project);
                             }
                         }
-                        Err(config::Error::NotFound(_)) => {}
+                        Err(Error::MissingConfigFile) => {}
                         Err(e) => {
                             // Exit early if the path is selected
                             if let Some(selectors) = selectors {
@@ -742,7 +752,7 @@ impl Workspace {
 
         let projects = projects.into_inner().unwrap()?;
         if projects.is_empty() {
-            return Err(Error::MissingPreCommitConfig);
+            return Err(Error::MissingConfigFile);
         }
 
         Ok(projects)
