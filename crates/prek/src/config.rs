@@ -808,7 +808,7 @@ pub(crate) fn load_config(path: &Path) -> Result<Config, Error> {
     let content = fs_err::read_to_string(path)?;
 
     let config = match path.extension() {
-        Some(ext) if ext == "toml" => toml::from_str(&content)
+        Some(ext) if ext.eq_ignore_ascii_case("toml") => toml::from_str(&content)
             .map_err(|e| Error::Toml(path.user_display().to_string(), Box::new(e)))?,
         _ => {
             let config: serde_yaml::Value = serde_yaml::from_str(&content)
@@ -1257,7 +1257,7 @@ mod tests {
                                             alias: None,
                                             files: Some(
                                                 SerdeRegex(
-                                                    "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
+                                                    "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml|prek\\.toml$",
                                                 ),
                                             ),
                                             exclude: None,
@@ -1291,7 +1291,7 @@ mod tests {
                                             alias: None,
                                             files: Some(
                                                 SerdeRegex(
-                                                    "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
+                                                    "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml|prek\\.toml$",
                                                 ),
                                             ),
                                             exclude: None,
