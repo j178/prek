@@ -35,10 +35,19 @@ run = "cargo insta test --review --test '*'"
 description = "Run all tests"
 run = "cargo test --all-targets --all-features --workspace"
 
-[tasks.generate]
+[tasks.generate-cli-reference]
 description = "Generate CLI reference"
-run = "cargo test --bin prek cli::tests::generate_cli_reference -- --exact"
+run = "cargo test --bin prek cli::_gen::generate_cli_reference -- --exact"
 env = { PREK_GENERATE = "1" }
+
+[tasks.generate-json-schema]
+description = "Generate JSON schema"
+run = "cargo test --bin prek --features schemars config::_gen::generate_json_schema -- --exact"
+env = { PREK_GENERATE = "1" }
+
+[tasks.generate]
+description = "Generate CLI reference and JSON schema"
+depends = ["generate-cli-reference", "generate-json-schema"]
 
 [tasks.build-docs]
 description = "Build documentation"

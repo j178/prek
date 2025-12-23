@@ -1,3 +1,5 @@
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::ops::{Deref, RangeInclusive};
@@ -24,6 +26,20 @@ impl Deref for SerdeRegex {
     type Target = Regex;
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for SerdeRegex {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("SerdeRegex")
+    }
+
+    fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "A regular expression string",
+        })
     }
 }
 
@@ -56,6 +72,7 @@ pub(crate) static CONFIG_FILE_REGEX: LazyLock<SerdeRegex> = LazyLock::new(|| {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum Language {
     Conda,
     Coursier,
@@ -116,6 +133,7 @@ impl Display for Language {
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) enum HookType {
     CommitMsg,
     PostCheckout,
@@ -173,6 +191,7 @@ impl Display for HookType {
     Debug, Clone, Copy, PartialEq, Eq, Default, Hash, Deserialize, Serialize, clap::ValueEnum,
 )]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) enum Stage {
     Manual,
     CommitMsg,
@@ -248,6 +267,7 @@ impl Stage {
 
 /// Common hook options.
 #[derive(Debug, Clone, Default, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct HookOptions {
     /// Not documented in the official docs.
     pub alias: Option<String>,
@@ -348,6 +368,7 @@ impl HookOptions {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct ManifestHook {
     /// The id of the hook.
     pub id: String,
@@ -373,6 +394,7 @@ pub(crate) struct Manifest {
 /// All keys in manifest hook dict are valid in a config hook dict, but are optional.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct RemoteHook {
     /// The id of the hook.
     pub id: String,
@@ -395,6 +417,7 @@ pub(crate) type LocalHook = ManifestHook;
 ///
 /// It's the same as the manifest hook definition but with only a few predefined id allowed.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct MetaHook(pub(crate) ManifestHook);
 
 impl<'de> Deserialize<'de> for MetaHook {
@@ -436,6 +459,7 @@ impl From<MetaHook> for ManifestHook {
 /// A builtin hook predefined in prek.
 /// Basically the same as meta hooks, but defined under `builtin` repo, and do other non-meta checks.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct BuiltinHook(pub(crate) ManifestHook);
 
 impl<'de> Deserialize<'de> for BuiltinHook {
@@ -475,6 +499,7 @@ impl From<BuiltinHook> for ManifestHook {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct RemoteRepo {
     pub repo: String,
     pub rev: String,
@@ -519,6 +544,7 @@ impl Display for RemoteRepo {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct LocalRepo {
     pub repo: String,
     pub hooks: Vec<LocalHook>,
@@ -534,6 +560,7 @@ impl Display for LocalRepo {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct MetaRepo {
     pub repo: String,
     pub hooks: Vec<MetaHook>,
@@ -549,6 +576,7 @@ impl Display for MetaRepo {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct BuiltinRepo {
     pub repo: String,
     pub hooks: Vec<BuiltinHook>,
@@ -558,6 +586,7 @@ pub(crate) struct BuiltinRepo {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) enum Repo {
     Remote(RemoteRepo),
     Local(LocalRepo),
@@ -606,6 +635,7 @@ impl<'de> Deserialize<'de> for Repo {
 // TODO: warn sensible regex
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct Config {
     pub repos: Vec<Repo>,
     /// A list of `--hook-types` which will be used by default when running `prek install`.
@@ -1868,5 +1898,91 @@ mod tests {
         "#};
         let result = serde_yaml::from_str::<Config>(yaml);
         assert!(result.is_ok());
+    }
+}
+
+#[cfg(all(test, feature = "schemars"))]
+mod _gen {
+    use crate::config::Config;
+    use anyhow::bail;
+    use prek_consts::env_vars::EnvVars;
+    use pretty_assertions::StrComparison;
+    use std::path::PathBuf;
+
+    const ROOT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../");
+
+    enum Mode {
+        /// Update the content.
+        Write,
+
+        /// Don't write to the file, check if the file is up-to-date and error if not.
+        Check,
+
+        /// Write the generated help to stdout.
+        DryRun,
+    }
+
+    fn generate() -> String {
+        let settings = schemars::generate::SchemaSettings::draft07();
+        let generator = schemars::SchemaGenerator::new(settings);
+        let schema = generator.into_root_schema_for::<Config>();
+
+        serde_json::to_string_pretty(&schema).unwrap() + "\n"
+    }
+
+    #[test]
+    fn generate_json_schema() -> anyhow::Result<()> {
+        let mode = if EnvVars::is_set(EnvVars::PREK_GENERATE) {
+            Mode::Write
+        } else {
+            Mode::Check
+        };
+
+        let schema_string = generate();
+        let filename = "prek.schema.json";
+        let schema_path = PathBuf::from(ROOT_DIR).join(filename);
+
+        match mode {
+            Mode::DryRun => {
+                anstream::println!("{schema_string}");
+            }
+            Mode::Check => match fs_err::read_to_string(schema_path) {
+                Ok(current) => {
+                    if current == schema_string {
+                        anstream::println!("Up-to-date: {filename}");
+                    } else {
+                        let comparison = StrComparison::new(&current, &schema_string);
+                        bail!("{filename} changed, please run `mise run generate`:\n{comparison}");
+                    }
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    bail!("{filename} not found, please run `mise run generate`");
+                }
+                Err(err) => {
+                    bail!("{filename} changed, please run `mise run generate`:\n{err}");
+                }
+            },
+            Mode::Write => match fs_err::read_to_string(&schema_path) {
+                Ok(current) => {
+                    if current == schema_string {
+                        anstream::println!("Up-to-date: {filename}");
+                    } else {
+                        anstream::println!("Updating: {filename}");
+                        fs_err::write(schema_path, schema_string.as_bytes())?;
+                    }
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    anstream::println!("Updating: {filename}");
+                    fs_err::write(schema_path, schema_string.as_bytes())?;
+                }
+                Err(err) => {
+                    bail!(
+                        "{filename} changed, please run `cargo dev generate-cli-reference`:\n{err}"
+                    );
+                }
+            },
+        }
+
+        Ok(())
     }
 }
