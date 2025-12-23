@@ -81,6 +81,7 @@ markdown = { version = "1.0.0" }
 predicates = { version = "3.1.2" }
 pretty_assertions = { version = "1.4.1" }
 regex = { version = "1.11.0" }
+schemars = { version = "1.1.0" }
 textwrap = { version = "0.16.0" }
 
 [workspace.lints.rust]

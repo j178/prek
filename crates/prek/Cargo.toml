@@ -18,6 +18,8 @@ self-update = ["dep:axoupdater"]
 profiler = ["dep:pprof", "pprof/flamegraph"]
 # Enable docker related tests in integration tests
 docker = []
+# Enable generation of JSON schema
+schemars = ["dep:schemars"]
 
 [dependencies]
 prek-consts = { workspace = true }
@@ -58,6 +60,7 @@ rayon = { workspace = true }
 reqwest = { workspace = true, default-features = false, features = ["http2", "stream", "json", "rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
+schemars = { workspace = true, optional = true }
 semver = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["unbounded_depth"] }

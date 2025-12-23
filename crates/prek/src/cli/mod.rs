@@ -732,7 +732,7 @@ pub(crate) struct InitTemplateDirArgs {
 
 #[cfg(unix)]
 #[cfg(test)]
-mod tests {
+mod _gen {
     use crate::cli::Cli;
     use anyhow::{Result, bail};
     use clap::{Command, CommandFactory};
@@ -742,7 +742,7 @@ mod tests {
     use std::cmp::max;
     use std::path::PathBuf;
 
-    const ROOT_DIR: &str = env!("CARGO_MANIFEST_DIR");
+    const ROOT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../");
 
     enum Mode {
         /// Update the content.
@@ -1016,7 +1016,7 @@ mod tests {
 
         let reference_string = generate(Cli::command());
         let filename = "cli.md";
-        let reference_path = PathBuf::from(ROOT_DIR).join("../../docs").join(filename);
+        let reference_path = PathBuf::from(ROOT_DIR).join("docs").join(filename);
 
         match mode {
             Mode::DryRun => {

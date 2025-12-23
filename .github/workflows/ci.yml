@@ -226,6 +226,7 @@ jobs:
           cargo llvm-cov nextest \
             --no-report \
             --workspace \
+            --features schemars \
             --status-level skip \
             --failure-output immediate \
             --no-fail-fast \
@@ -306,6 +307,7 @@ jobs:
           cargo nextest show-config test-groups
           cargo nextest run \
             --workspace \
+            --features schemars \
             --status-level skip \
             --failure-output immediate \
             --no-fail-fast \
@@ -401,6 +403,7 @@ jobs:
           cargo llvm-cov nextest `
             --no-report `
             --workspace `
+            --features schemars `
             --status-level skip `
             --failure-output immediate `
             --no-fail-fast `
