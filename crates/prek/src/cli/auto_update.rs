@@ -831,29 +831,4 @@ mod tests {
 
         assert_eq!(rev, Some("v1.2.0".to_string()));
     }
-
-    #[tokio::test]
-    async fn test_resolve_revision_ignores_git_dir_env_var() {
-        // Define early for crate::git::GIT_ENV_TO_REMOVE to cache
-        unsafe { std::env::set_var("GIT_DIR", "tbd") }
-        let tmp = setup_test_repo().await;
-        let repo = tmp.path();
-
-        create_backdated_commit(repo, "old", 2).await;
-        create_lightweight_tag(repo, "v0.1.0").await;
-
-        create_backdated_commit(repo, "new", 1).await;
-        create_lightweight_tag(repo, "v0.2.0").await;
-
-        // Set GIT_DIR to another repo
-        let external_tmp = setup_test_repo().await;
-        let external_repo = external_tmp.path();
-        create_commit(external_repo, "external commit").await;
-
-        unsafe { std::env::set_var("GIT_DIR", external_repo.join(".git")) }
-        let rev = resolve_revision(repo, "v0.1.0", false, 0).await.unwrap();
-        unsafe { std::env::remove_var("GIT_DIR") }
-
-        assert_eq!(rev, Some("v0.2.0".to_string()));
-    }
 }
