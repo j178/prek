@@ -269,6 +269,56 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
     Ok(())
 }
 
+/// Test that `auto-update` ignores the `GIT_DIR` environment variable.
+#[test]
+fn test_resolve_revision_ignores_git_dir_env_var() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(&context, "target-repo", &["v0.1.0", "v0.2.0"])?;
+    let external_repo_path = create_local_git_repo(&context, "external-repo", &["v9.9.9"])?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v0.1.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    let mut cmd = context.auto_update();
+    cmd.arg("--cooldown-days")
+        .arg("0")
+        .env("GIT_DIR", ChildPath::new(&external_repo_path).join(".git"));
+
+    cmd_snapshot!(filters.clone(), cmd, @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/target-repo] updating v0.1.0 -> v0.2.0
+
+    ----- stderr -----
+    "#);
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(CONFIG_FILE), @r#"
+            repos:
+              - repo: [HOME]/test-repos/target-repo
+                rev: v0.2.0
+                hooks:
+                  - id: test-hook
+            "#);
+        }
+    );
+
+    Ok(())
+}
+
 #[test]
 fn auto_update_specific_repos() -> Result<()> {
     let context = TestContext::new();
