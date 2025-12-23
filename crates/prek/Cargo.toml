@@ -2,6 +2,7 @@
 name = "prek"
 authors = ["j178 <hi@j178.dev>"]
 description = "Better `pre-commit`, re-engineered in Rust"
+readme = "../../README.md"
 version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
