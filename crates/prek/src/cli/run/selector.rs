@@ -131,7 +131,7 @@ impl Selector {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct Selectors {
     includes: Vec<Selector>,
     skips: Vec<Selector>,
