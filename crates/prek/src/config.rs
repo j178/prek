@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 use anyhow::Result;
 use fancy_regex::Regex;
 use itertools::Itertools;
-use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE, PREK_TOML};
+use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PREK_TOML};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize};
 use tracing::instrument;
@@ -64,8 +64,8 @@ impl<'de> Deserialize<'de> for SerdeRegex {
 pub(crate) static CONFIG_FILE_REGEX: LazyLock<SerdeRegex> = LazyLock::new(|| {
     let pattern = format!(
         "^{}|{}|{}$",
-        fancy_regex::escape(CONFIG_FILE),
-        fancy_regex::escape(ALT_CONFIG_FILE),
+        fancy_regex::escape(PRE_COMMIT_CONFIG_YAML),
+        fancy_regex::escape(PRE_COMMIT_CONFIG_YML),
         fancy_regex::escape(PREK_TOML),
     );
     SerdeRegex(Regex::new(&pattern).expect("config regex must compile"))

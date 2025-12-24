@@ -1,6 +1,6 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
-use prek_consts::MANIFEST_FILE;
+use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot};
@@ -263,7 +263,9 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
     repo.init_project();
 
     let repo_path = repo.work_dir();
-    repo_path.child(MANIFEST_FILE).write_str(indoc::indoc! {r#"
+    repo_path
+        .child(PRE_COMMIT_HOOKS_YAML)
+        .write_str(indoc::indoc! {r#"
         - id: hello
           name: hello
           language: python

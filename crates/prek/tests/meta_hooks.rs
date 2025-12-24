@@ -3,7 +3,7 @@ mod common;
 use crate::common::{TestContext, cmd_snapshot};
 
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-use prek_consts::CONFIG_FILE;
+use prek_consts::PRE_COMMIT_CONFIG_YAML;
 
 #[test]
 fn meta_hooks() -> anyhow::Result<()> {
@@ -129,7 +129,8 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
 
     let app = context.work_dir().child("app");
     app.create_dir_all()?;
-    app.child(CONFIG_FILE).write_str(indoc::indoc! {r"
+    app.child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:

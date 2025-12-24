@@ -10,7 +10,7 @@ use futures::StreamExt;
 use ignore::WalkState;
 use itertools::zip_eq;
 use owo_colors::OwoColorize;
-use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE, PREK_TOML};
+use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PREK_TOML};
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -131,13 +131,13 @@ impl Project {
     /// Find the configuration file in the given path.
     pub(crate) fn from_directory(path: &Path) -> Result<Self, Error> {
         let prek_toml = path.join(PREK_TOML);
-        let prec_yaml = path.join(CONFIG_FILE);
-        let prec_yml = path.join(ALT_CONFIG_FILE);
+        let prec_yaml = path.join(PRE_COMMIT_CONFIG_YAML);
+        let prec_yml = path.join(PRE_COMMIT_CONFIG_YML);
 
         let candidates = [
             (PREK_TOML, &prek_toml),
-            (CONFIG_FILE, &prec_yaml),
-            (ALT_CONFIG_FILE, &prec_yml),
+            (PRE_COMMIT_CONFIG_YAML, &prec_yaml),
+            (PRE_COMMIT_CONFIG_YML, &prec_yml),
         ];
 
         let present = candidates
