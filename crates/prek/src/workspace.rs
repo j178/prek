@@ -128,22 +128,30 @@ impl Project {
         })
     }
 
+    fn find_config(path: &Path) -> Option<PathBuf> {
+        for name in [PREK_TOML, PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML] {
+            let file = path.join(name);
+            if file.is_file() {
+                return Some(file);
+            }
+        }
+        None
+    }
+
+    fn find_all_configs(path: &Path) -> Vec<(&'static str, PathBuf)> {
+        let mut configs = Vec::new();
+        for name in [PREK_TOML, PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML] {
+            let file = path.join(name);
+            if file.is_file() {
+                configs.push((name, file));
+            }
+        }
+        configs
+    }
+
     /// Find the configuration file in the given path.
     pub(crate) fn from_directory(path: &Path) -> Result<Self, Error> {
-        let prek_toml = path.join(PREK_TOML);
-        let prec_yaml = path.join(PRE_COMMIT_CONFIG_YAML);
-        let prec_yml = path.join(PRE_COMMIT_CONFIG_YML);
-
-        let candidates = [
-            (PREK_TOML, &prek_toml),
-            (PRE_COMMIT_CONFIG_YAML, &prec_yaml),
-            (PRE_COMMIT_CONFIG_YML, &prec_yml),
-        ];
-
-        let present = candidates
-            .into_iter()
-            .filter(|(_, p)| p.is_file())
-            .collect::<Vec<_>>();
+        let present = Self::find_all_configs(path);
 
         let Some((_, selected)) = present.first() else {
             return Err(Error::MissingConfigFile);
@@ -563,11 +571,7 @@ impl Workspace {
         let workspace_root = dir
             .ancestors()
             .take_while(|p| git_root.parent().map(|root| *p != root).unwrap_or(true))
-            .find(|p| {
-                p.join(PREK_TOML).is_file()
-                    || p.join(PRE_COMMIT_CONFIG_YAML).is_file()
-                    || p.join(PRE_COMMIT_CONFIG_YML).is_file()
-            })
+            .find(|p| Project::find_config(p).is_some())
             .ok_or(Error::MissingConfigFile)?
             .to_path_buf();
 
@@ -680,37 +684,7 @@ impl Workspace {
 
     /// Perform fresh workspace discovery without cache
     fn discover_fresh(root: &Path, selectors: Option<&Selectors>) -> Result<Vec<Project>, Error> {
-        #[derive(Default, Debug)]
-        struct FoundConfigs {
-            prek_toml: Option<PathBuf>,
-            pre_commit_yaml: Option<PathBuf>,
-            pre_commit_yml: Option<PathBuf>,
-        }
-
-        impl FoundConfigs {
-            fn selected(&self) -> Option<&Path> {
-                self.prek_toml
-                    .as_deref()
-                    .or(self.pre_commit_yaml.as_deref())
-                    .or(self.pre_commit_yml.as_deref())
-            }
-
-            fn present_names(&self) -> Vec<&'static str> {
-                let mut present = Vec::new();
-                if self.prek_toml.is_some() {
-                    present.push(PREK_TOML);
-                }
-                if self.pre_commit_yaml.is_some() {
-                    present.push(PRE_COMMIT_CONFIG_YAML);
-                }
-                if self.pre_commit_yml.is_some() {
-                    present.push(PRE_COMMIT_CONFIG_YML);
-                }
-                present
-            }
-        }
-
-        let found_configs = Mutex::new(FxHashMap::<PathBuf, FoundConfigs>::default());
+        let projects = Mutex::new(Ok(Vec::new()));
 
         let git_root = GIT_ROOT.as_ref().map_err(|e| Error::Git(e.into()))?;
         let submodules = git::list_submodules(git_root).unwrap_or_else(|e| {
@@ -722,6 +696,7 @@ impl Workspace {
             .follow_links(false)
             .add_custom_ignore_filename(".prekignore")
             .filter_entry(move |entry| {
+                // Do not descend into git submodules.
                 let Some(file_type) = entry.file_type() else {
                     return true;
                 };
@@ -746,91 +721,51 @@ impl Workspace {
                     };
                     if !entry
                         .file_type()
-                        .is_some_and(|file_type| file_type.is_file())
+                        .is_some_and(|file_type| file_type.is_dir())
                     {
                         return WalkState::Continue;
                     }
 
-                    let file_name = entry.file_name();
-                    let is_prek_toml = file_name == PREK_TOML;
-                    let is_pre_commit_yaml = file_name == PRE_COMMIT_CONFIG_YAML;
-                    let is_pre_commit_yml = file_name == PRE_COMMIT_CONFIG_YML;
-                    if !(is_prek_toml || is_pre_commit_yaml || is_pre_commit_yml) {
-                        return WalkState::Continue;
-                    }
+                    match Project::from_directory(entry.path()) {
+                        Ok(mut project) => {
+                            let relative_path = entry
+                                .into_path()
+                                .strip_prefix(root)
+                                .expect("Entry path should be relative to the root")
+                                .to_path_buf();
+                            project.with_relative_path(relative_path);
 
-                    let Some(parent) = entry.path().parent() else {
-                        return WalkState::Continue;
-                    };
-                    let parent = parent.to_path_buf();
-                    let path = entry.into_path();
-
-                    let mut map = found_configs.lock().unwrap();
-                    let found = map.entry(parent).or_default();
-
-                    if is_prek_toml {
-                        found.prek_toml = Some(path);
-                    } else if is_pre_commit_yaml {
-                        found.pre_commit_yaml = Some(path);
-                    } else {
-                        found.pre_commit_yml = Some(path);
+                            if let Ok(projects) = projects.lock().unwrap().as_mut() {
+                                projects.push(project);
+                            }
+                        }
+                        Err(Error::MissingConfigFile) => {}
+                        Err(e) => {
+                            // Exit early if the path is selected
+                            if let Some(selectors) = selectors {
+                                let relative_path = entry
+                                    .path()
+                                    .strip_prefix(root)
+                                    .expect("Entry path should be relative to the root");
+                                if selectors.matches_path(relative_path) {
+                                    *projects.lock().unwrap() = Err(e);
+                                    return WalkState::Quit;
+                                }
+                            }
+                            // Otherwise, just log the error and continue
+                            error!(
+                                path = %entry.path().user_display(),
+                                "Skipping project due to error: {e}"
+                            );
+                            return WalkState::Skip;
+                        }
                     }
 
                     WalkState::Continue
                 })
             });
 
-        let found_configs = found_configs.into_inner().unwrap();
-        if found_configs.is_empty() {
-            return Err(Error::MissingConfigFile);
-        }
-
-        let mut projects = Vec::with_capacity(found_configs.len());
-        for (project_dir, configs) in found_configs {
-            let Some(selected_path) = configs.selected() else {
-                continue;
-            };
-
-            let relative_dir = project_dir
-                .strip_prefix(root)
-                .expect("Entry path should be relative to the root")
-                .to_path_buf();
-
-            let present = configs.present_names();
-            if present.len() > 1 {
-                let found = present
-                    .iter()
-                    .map(|name| format!("`{name}`"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                warn_user!(
-                    "Multiple configuration files found ({found}); using `{selected}`",
-                    found = found,
-                    selected = selected_path.user_display(),
-                );
-            }
-
-            match Project::from_config_file(Cow::Borrowed(selected_path), None) {
-                Ok(mut project) => {
-                    project.with_relative_path(relative_dir);
-                    projects.push(project);
-                }
-                Err(e) => {
-                    // Exit early if the path is selected
-                    if let Some(selectors) = selectors {
-                        if selectors.matches_path(&relative_dir) {
-                            return Err(e);
-                        }
-                    }
-                    // If the path is skipped, just log the error and continue
-                    error!(
-                        path = %selected_path.user_display(),
-                        "Skipping project due to error: {e}"
-                    );
-                }
-            }
-        }
-
+        let projects = projects.into_inner().unwrap()?;
         if projects.is_empty() {
             return Err(Error::MissingConfigFile);
         }
