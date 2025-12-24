@@ -1071,3 +1071,29 @@ fn quoting_float_like_version_number() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn auto_update_with_invalid_config_file() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Write an invalid config file
+    context
+        .work_dir()
+        .child(CONFIG_FILE)
+        .write_str("invalid_yaml: [unclosed_list")?;
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: did not find expected ',' or ']' at line 2 column 1, while parsing a flow sequence at line 1 column 15
+    ");
+
+    Ok(())
+}
