@@ -577,7 +577,7 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No configuration file (`.pre-commit-config.yaml` or `prek.toml`) found in the current directory or parent directories.
+    error: No `prek.toml` or `.pre-commit-config.yaml` found in the current directory or parent directories.
 
     hint: If you just added one, rerun your command with the `--refresh` flag to rescan the workspace.
     - To temporarily silence this, run `PREK_ALLOW_NO_CONFIG=1 git ...`
