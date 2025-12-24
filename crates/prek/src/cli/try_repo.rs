@@ -186,7 +186,7 @@ pub(crate) async fn try_repo(
         hooks_str = hooks_str,
     };
 
-    let config_file = tmp_dir.path().join(prek_consts::PRE_COMMIT_CONFIG_YAML);
+    let config_file = tmp_dir.path().join(prek_consts::PREK_TOML);
     fs_err::tokio::write(&config_file, &config_str).await?;
 
     writeln!(printer.stdout(), "{}", "Using config:".cyan().bold())?;
