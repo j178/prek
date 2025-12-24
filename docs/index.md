@@ -34,30 +34,24 @@ Show that your project uses prek with a badge in your README:
 
 [![prek](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json)](https://github.com/j178/prek)
 
-**Markdown**
+=== "Markdown"
 
-```markdown
-[![prek](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json)](https://github.com/j178/prek)
-```
+    ```markdown
+    [![prek](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json)](https://github.com/j178/prek)
+    ```
 
-**HTML**
+=== "HTML"
 
-```html
-<a href="https://github.com/j178/prek">
-  <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json" alt="prek">
-</a>
-```
+    ```html
+    <a href="https://github.com/j178/prek">
+      <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json" alt="prek">
+    </a>
+    ```
 
-**reStructuredText (RST)**
+=== "reStructuredText (RST)"
 
-```rst
-.. image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json
-   :target: https://github.com/j178/prek
-   :alt: prek
-```
-
-## Getting Started
-
-- [Installation](./installation.md) - How to install prek
-- [Quickstart](./quickstart.md) - Getting started with prek
-- [Configuration](./configuration.md) - Configuring prek
+    ```rst
+    .. image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json
+       :target: https://github.com/j178/prek
+       :alt: prek
+    ```
