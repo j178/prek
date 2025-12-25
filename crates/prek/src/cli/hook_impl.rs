@@ -209,8 +209,6 @@ async fn parse_pre_push_info(remote_name: &str) -> Option<PushInfo> {
         return None;
     }
 
-    let z40 = "0".repeat(40);
-
     for line in buffer.lines() {
         let parts: Vec<&str> = line.rsplitn(4, ' ').collect();
         if parts.len() != 4 {
@@ -223,12 +221,14 @@ async fn parse_pre_push_info(remote_name: &str) -> Option<PushInfo> {
         let remote_sha = parts[0];
 
         // Skip if local_sha is all zeros
-        if local_sha == z40 {
+        if local_sha.bytes().all(|b| b == b'0') {
             continue;
         }
 
-        // If remote_sha exists and is not all zeros, and remote SHA exists
-        if remote_sha != z40 && git::rev_exists(remote_sha).await.unwrap_or(false) {
+        // If remote_sha exists and is not all zeros
+        if !remote_sha.bytes().all(|b| b == b'0')
+            && git::rev_exists(remote_sha).await.unwrap_or(false)
+        {
             return Some(PushInfo {
                 from_ref: Some(remote_sha.to_string()),
                 to_ref: Some(local_sha.to_string()),

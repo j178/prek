@@ -544,9 +544,10 @@ pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<FxHashSet<PathBuf>,
 
 /// Check if a git revision exists
 pub(crate) async fn rev_exists(rev: &str) -> Result<bool, Error> {
-    let output = git_cmd("check if revision exists")?
-        .arg("rev-list")
-        .arg("--quiet")
+    let output = git_cmd("git cat-file")?
+        .arg("cat-file")
+        // Exit with zero status if <object> exists and is a valid object.
+        .arg("-e")
         .arg(rev)
         .check(false)
         .output()
