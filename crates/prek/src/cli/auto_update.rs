@@ -230,7 +230,7 @@ async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Result<()> {
         .arg("extensions.partialClone")
         .arg("true")
         .current_dir(repo_path)
-        .remove_git_env()
+        .remove_git_envs()
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -243,7 +243,7 @@ async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Result<()> {
         .arg("--filter=blob:none")
         .arg("--tags")
         .current_dir(repo_path)
-        .remove_git_env()
+        .remove_git_envs()
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -264,7 +264,7 @@ async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<String>> {
         .arg("--exact-match")
         .check(false)
         .current_dir(repo_path)
-        .remove_git_env()
+        .remove_git_envs()
         .output()
         .await?;
     let rev = if output.status.success() {
@@ -277,7 +277,7 @@ async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<String>> {
             .arg("FETCH_HEAD")
             .check(true)
             .current_dir(repo_path)
-            .remove_git_env()
+            .remove_git_envs()
             .output()
             .await?;
         String::from_utf8_lossy(&output.stdout).trim().to_string()
@@ -298,7 +298,7 @@ async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
         .arg("refs/tags")
         .check(true)
         .current_dir(repo)
-        .remove_git_env()
+        .remove_git_envs()
         .output()
         .await?;
 
@@ -355,7 +355,7 @@ async fn freeze_revision(repo_path: &Path, rev: &str) -> Result<Option<String>> 
         .arg("rev-parse")
         .arg(format!("{rev}^{{}}"))
         .current_dir(repo_path)
-        .remove_git_env()
+        .remove_git_envs()
         .output()
         .await?
         .stdout;
@@ -379,7 +379,7 @@ async fn checkout_and_validate_manifest(
             .arg("show")
             .arg(format!("{rev}:{MANIFEST_FILE}"))
             .current_dir(repo_path)
-            .remove_git_env()
+            .remove_git_envs()
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
@@ -393,7 +393,7 @@ async fn checkout_and_validate_manifest(
         .arg("--")
         .arg(MANIFEST_FILE)
         .current_dir(repo_path)
-        .remove_git_env()
+        .remove_git_envs()
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -434,7 +434,7 @@ async fn get_best_candidate_tag(repo: &Path, rev: &str, current_rev: &str) -> Re
         .arg(format!("{rev}^{{}}"))
         .check(true)
         .current_dir(repo)
-        .remove_git_env()
+        .remove_git_envs()
         .output()
         .await?
         .stdout;
@@ -547,7 +547,7 @@ mod tests {
             .unwrap()
             .arg("init")
             .current_dir(repo)
-            .remove_git_env()
+            .remove_git_envs()
             .output()
             .await
             .unwrap();
@@ -557,7 +557,7 @@ mod tests {
             .unwrap()
             .args(["config", "user.email", "test@test.com"])
             .current_dir(repo)
-            .remove_git_env()
+            .remove_git_envs()
             .output()
             .await
             .unwrap();
@@ -566,7 +566,7 @@ mod tests {
             .unwrap()
             .args(["config", "user.name", "Test"])
             .current_dir(repo)
-            .remove_git_env()
+            .remove_git_envs()
             .output()
             .await
             .unwrap();
@@ -576,7 +576,7 @@ mod tests {
             .unwrap()
             .args(["commit", "--allow-empty", "-m", "initial"])
             .current_dir(repo)
-            .remove_git_env()
+            .remove_git_envs()
             .output()
             .await
             .unwrap();
@@ -586,7 +586,7 @@ mod tests {
             .unwrap()
             .args(["branch", "-M", "trunk"])
             .current_dir(repo)
-            .remove_git_env()
+            .remove_git_envs()
             .output()
             .await
             .unwrap();
@@ -602,7 +602,7 @@ mod tests {
             .arg("-m")
             .arg(message)
             .current_dir(repo)
-            .remove_git_env()
+            .remove_git_envs()
             .output()
             .await
             .unwrap();
@@ -626,7 +626,7 @@ mod tests {
             .env("GIT_AUTHOR_DATE", &date_str)
             .env("GIT_COMMITTER_DATE", &date_str)
             .current_dir(repo)
-            .remove_git_env()
+            .remove_git_envs()
             .output()
             .await
             .unwrap();
@@ -639,7 +639,7 @@ mod tests {
             .arg(tag)
             .arg("--no-sign")
             .current_dir(repo)
-            .remove_git_env()
+            .remove_git_envs()
             .output()
             .await
             .unwrap();
@@ -663,7 +663,7 @@ mod tests {
             .env("GIT_AUTHOR_DATE", &date_str)
             .env("GIT_COMMITTER_DATE", &date_str)
             .current_dir(repo)
-            .remove_git_env()
+            .remove_git_envs()
             .output()
             .await
             .unwrap();
@@ -708,7 +708,7 @@ mod tests {
             .unwrap()
             .args(["fetch", ".", "HEAD"])
             .current_dir(repo)
-            .remove_git_env()
+            .remove_git_envs()
             .output()
             .await
             .unwrap();
@@ -728,7 +728,7 @@ mod tests {
             .unwrap()
             .args(["fetch", ".", "HEAD"])
             .current_dir(repo)
-            .remove_git_env()
+            .remove_git_envs()
             .output()
             .await
             .unwrap();
@@ -739,7 +739,7 @@ mod tests {
             .unwrap()
             .args(["rev-parse", "HEAD"])
             .current_dir(repo)
-            .remove_git_env()
+            .remove_git_envs()
             .output()
             .await
             .unwrap()

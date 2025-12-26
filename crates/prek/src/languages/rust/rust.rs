@@ -222,7 +222,7 @@ async fn install_local_project(
             .current_dir(&package_dir)
             .env(EnvVars::PATH, new_path)
             .env(EnvVars::CARGO_HOME, cargo_home)
-            .remove_git_env()
+            .remove_git_envs()
             .check(true)
             .output()
             .await?;
@@ -271,7 +271,7 @@ async fn install_local_project(
         cmd.current_dir(&manifest_dir)
             .env(EnvVars::PATH, new_path)
             .env(EnvVars::CARGO_HOME, cargo_home)
-            .remove_git_env()
+            .remove_git_envs()
             .check(true)
             .output()
             .await?;
@@ -294,7 +294,7 @@ async fn install_local_project(
         cmd.current_dir(&package_dir)
             .env(EnvVars::PATH, new_path)
             .env(EnvVars::CARGO_HOME, cargo_home)
-            .remove_git_env()
+            .remove_git_envs()
             .check(true)
             .output()
             .await?;
@@ -399,7 +399,7 @@ impl LanguageImpl for Rust {
                 .args(format_cargo_cli_dependency(cli_dep));
             cmd.env(EnvVars::PATH, &new_path)
                 .env(EnvVars::CARGO_HOME, &cargo_home)
-                .remove_git_env()
+                .remove_git_envs()
                 .check(true)
                 .output()
                 .await?;

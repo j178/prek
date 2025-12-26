@@ -370,7 +370,8 @@ impl Cmd {
         self.inner.as_std().get_current_dir()
     }
 
-    pub fn remove_git_env(&mut self) -> &mut Self {
+    /// Remove some git-specific environment variables to make git commands isolated.
+    pub fn remove_git_envs(&mut self) -> &mut Self {
         for (key, _) in crate::git::GIT_ENV_TO_REMOVE.iter() {
             self.inner.env_remove(key);
         }

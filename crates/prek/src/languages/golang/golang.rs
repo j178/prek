@@ -90,7 +90,7 @@ impl LanguageImpl for Golang {
             go_install_cmd()
                 .arg("./...")
                 .current_dir(repo)
-                .remove_git_env()
+                .remove_git_envs()
                 .check(true)
                 .output()
                 .await?;
@@ -100,7 +100,7 @@ impl LanguageImpl for Golang {
             if let Some(repo) = hook.repo_path() {
                 cmd.current_dir(repo);
             }
-            cmd.arg(dep).remove_git_env().check(true).output().await?;
+            cmd.arg(dep).remove_git_envs().check(true).output().await?;
         }
 
         info.persist_env_path();
