@@ -50,6 +50,25 @@ If you run the same config with `pre-commit`, it may warn about **unexpected/unk
 
 ### Project-level
 
+#### `files` / `exclude` patterns
+
+Patterns remain regex by default (matching pre-commit), but you can also opt into globs:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: format-python
+        entry: bash -c 'echo formatting "$@"' _
+        language: system
+        files:
+          glob: src/**/*.py
+        exclude:
+          glob: src/vendor/**
+```
+
+Both forms work at the top-level config and per-hook.
+
 #### `minimum_prek_version`
 
 Specify the minimum required version of prek for the configuration. If the installed version is lower, prek will exit with an error.

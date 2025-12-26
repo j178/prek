@@ -48,6 +48,7 @@ indoc = { workspace = true }
 itertools = { workspace = true }
 lazy-regex = { workspace = true }
 levenshtein = { workspace = true }
+globset = { workspace = true }
 # Enable static linking for liblzma
 # This is required for the `xz` feature in `async-compression`
 liblzma = { workspace = true, features = ["static"] }

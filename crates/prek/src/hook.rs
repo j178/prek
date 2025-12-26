@@ -15,8 +15,8 @@ use thiserror::Error;
 use tracing::trace;
 
 use crate::config::{
-    self, BuiltinHook, Config, HookOptions, Language, LocalHook, ManifestHook, MetaHook,
-    RemoteHook, SerdeRegex, Stage, read_manifest,
+    self, BuiltinHook, Config, FilePattern, HookOptions, Language, LocalHook, ManifestHook,
+    MetaHook, RemoteHook, Stage, read_manifest,
 };
 use crate::languages::version::LanguageRequest;
 use crate::languages::{extract_metadata_from_entry, resolve_command};
@@ -424,8 +424,8 @@ pub(crate) struct Hook {
     pub entry: Entry,
     pub language: Language,
     pub alias: String,
-    pub files: Option<SerdeRegex>,
-    pub exclude: Option<SerdeRegex>,
+    pub files: Option<FilePattern>,
+    pub exclude: Option<FilePattern>,
     pub types: Vec<String>,
     pub types_or: Vec<String>,
     pub exclude_types: Vec<String>,

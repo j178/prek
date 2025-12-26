@@ -12,9 +12,12 @@ Manifest {
             options: HookOptions {
                 alias: None,
                 files: Some(
-                    SerdeRegex(
-                        "^requirements\\.(in|txt)$",
-                    ),
+                    FilePattern {
+                        kind: "Regex",
+                        sources: [
+                            "^requirements\\.(in|txt)$",
+                        ],
+                    },
                 ),
                 exclude: None,
                 types: None,
@@ -54,9 +57,12 @@ Manifest {
             options: HookOptions {
                 alias: None,
                 files: Some(
-                    SerdeRegex(
-                        "^(uv\\.lock|pyproject\\.toml|uv\\.toml)$",
-                    ),
+                    FilePattern {
+                        kind: "Regex",
+                        sources: [
+                            "^(uv\\.lock|pyproject\\.toml|uv\\.toml)$",
+                        ],
+                    },
                 ),
                 exclude: None,
                 types: None,
@@ -96,9 +102,12 @@ Manifest {
             options: HookOptions {
                 alias: None,
                 files: Some(
-                    SerdeRegex(
-                        "^uv\\.lock$",
-                    ),
+                    FilePattern {
+                        kind: "Regex",
+                        sources: [
+                            "^uv\\.lock$",
+                        ],
+                    },
                 ),
                 exclude: None,
                 types: None,

@@ -132,9 +132,12 @@ Config {
                         options: HookOptions {
                             alias: None,
                             files: Some(
-                                SerdeRegex(
-                                    "^crates/(uv-cli|uv-settings)/",
-                                ),
+                                FilePattern {
+                                    kind: "Regex",
+                                    sources: [
+                                        "^crates/(uv-cli|uv-settings)/",
+                                    ],
+                                },
                             ),
                             exclude: None,
                             types: Some(
@@ -284,9 +287,12 @@ Config {
     default_stages: None,
     files: None,
     exclude: Some(
-        SerdeRegex(
-            "(?x)^(\n  .*/(snapshots)/.*|\n)$\n",
-        ),
+        FilePattern {
+            kind: "Regex",
+            sources: [
+                "(?x)^(\n  .*/(snapshots)/.*|\n)$\n",
+            ],
+        },
     ),
     fail_fast: Some(
         true,
