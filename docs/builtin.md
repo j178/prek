@@ -103,3 +103,4 @@ For `repo: builtin`, the following hooks are supported:
 - `detect-private-key` (Detect private keys)
 - `no-commit-to-branch` (Prevent committing to protected branches)
 - `check-executables-have-shebangs` (Ensures that (non-binary) executables have a shebang)
+- `check-hook-updates` (Check if configured hooks have newer versions available)
