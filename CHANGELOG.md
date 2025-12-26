@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.25
+
+Released on 2025-12-27.
+
+### Performance
+
+- Use `git cat-file -e` in check if a rev exists ([#1277](https://github.com/j178/prek/pull/1277))
+
+### Bug fixes
+
+- Fix `priority` not applied for remote hooks ([#1281](https://github.com/j178/prek/pull/1281))
+- Report config file parsing error in `auto-update` ([#1274](https://github.com/j178/prek/pull/1274))
+- Unset `GIT_DIR` for auto-update ([#1269](https://github.com/j178/prek/pull/1269))
+
+### Contributors
+
+- @j178
+- @branchv
+
 ## 0.2.24
 
 Released on 2025-12-23.

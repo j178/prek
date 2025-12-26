@@ -19,9 +19,69 @@
         "object",
         "null"
       ],
-      "additionalProperties": {
-        "type": "string"
-      }
+      "properties": {
+        "conda": {
+          "type": "string"
+        },
+        "coursier": {
+          "type": "string"
+        },
+        "dart": {
+          "type": "string"
+        },
+        "docker": {
+          "type": "string"
+        },
+        "docker_image": {
+          "type": "string"
+        },
+        "dotnet": {
+          "type": "string"
+        },
+        "fail": {
+          "type": "string"
+        },
+        "golang": {
+          "type": "string"
+        },
+        "haskell": {
+          "type": "string"
+        },
+        "lua": {
+          "type": "string"
+        },
+        "node": {
+          "type": "string"
+        },
+        "perl": {
+          "type": "string"
+        },
+        "pygrep": {
+          "type": "string"
+        },
+        "python": {
+          "type": "string"
+        },
+        "r": {
+          "type": "string"
+        },
+        "ruby": {
+          "type": "string"
+        },
+        "rust": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string"
+        },
+        "swift": {
+          "type": "string"
+        },
+        "system": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
     },
     "default_stages": {
       "description": "A configuration-wide default for the stages property of hooks.\nDefault to all stages.",
