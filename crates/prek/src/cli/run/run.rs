@@ -771,6 +771,13 @@ async fn run_priority_group(
     dry_run: bool,
     reporter: &HookRunReporter,
 ) -> Result<Vec<RunResult>> {
+    debug!(
+        "Running priority group with priority {} with concurrency {}: {:?}",
+        group_hooks[0].priority,
+        *CONCURRENCY,
+        group_hooks.iter().map(|h| &h.id).collect::<Vec<_>>()
+    );
+
     let mut results = futures::stream::iter(
         group_hooks
             .into_iter()
