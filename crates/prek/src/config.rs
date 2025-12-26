@@ -342,7 +342,6 @@ impl HookOptions {
             };
         }
 
-        // Omit `priority` intentionally, it is only settable in local config files.
         update_if_some!(
             alias,
             files,
@@ -359,6 +358,7 @@ impl HookOptions {
             language_version,
             log_file,
             require_serial,
+            priority,
             stages,
             verbose,
             minimum_prek_version,
