@@ -8,7 +8,7 @@ mod unix {
     use super::*;
 
     use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-    use prek_consts::CONFIG_FILE;
+    use prek_consts::PRE_COMMIT_CONFIG_YAML;
     use std::os::unix::fs::PermissionsExt;
 
     #[test]
@@ -70,7 +70,7 @@ mod unix {
 
         let child = context.work_dir().child("child");
         child.create_dir_all()?;
-        child.child(CONFIG_FILE).write_str(config)?;
+        child.child(PRE_COMMIT_CONFIG_YAML).write_str(config)?;
         child.child("script.sh").write_str(indoc::indoc! {r#"
             #!/usr/bin/env bash
             echo "Hello, World from child!"

@@ -165,7 +165,8 @@ pub(crate) async fn try_repo(
 
     let selectors = Selectors::load(&run_args.includes, &run_args.skips, GIT_ROOT.as_ref()?)?;
 
-    let manifest = config::read_manifest(&repo_clone_path.join(prek_consts::MANIFEST_FILE))?;
+    let manifest =
+        config::read_manifest(&repo_clone_path.join(prek_consts::PRE_COMMIT_HOOKS_YAML))?;
     let hooks_str = manifest
         .hooks
         .into_iter()
@@ -185,7 +186,7 @@ pub(crate) async fn try_repo(
         hooks_str = hooks_str,
     };
 
-    let config_file = tmp_dir.path().join(prek_consts::CONFIG_FILE);
+    let config_file = tmp_dir.path().join(prek_consts::PRE_COMMIT_HOOKS_YAML);
     fs_err::tokio::write(&config_file, &config_str).await?;
 
     writeln!(printer.stdout(), "{}", "Using config:".cyan().bold())?;

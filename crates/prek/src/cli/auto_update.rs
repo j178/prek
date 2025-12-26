@@ -9,7 +9,7 @@ use futures::StreamExt;
 use itertools::Itertools;
 use lazy_regex::regex;
 use owo_colors::OwoColorize;
-use prek_consts::MANIFEST_FILE;
+use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use serde::Serializer;
@@ -377,7 +377,7 @@ async fn checkout_and_validate_manifest(
     if cfg!(windows) {
         git::git_cmd("git show")?
             .arg("show")
-            .arg(format!("{rev}:{MANIFEST_FILE}"))
+            .arg(format!("{rev}:{PRE_COMMIT_HOOKS_YAML}"))
             .current_dir(repo_path)
             .remove_git_envs()
             .stdout(Stdio::null())
@@ -391,7 +391,7 @@ async fn checkout_and_validate_manifest(
         .arg("--quiet")
         .arg(rev)
         .arg("--")
-        .arg(MANIFEST_FILE)
+        .arg(PRE_COMMIT_HOOKS_YAML)
         .current_dir(repo_path)
         .remove_git_envs()
         .stdout(Stdio::null())
@@ -399,7 +399,7 @@ async fn checkout_and_validate_manifest(
         .status()
         .await?;
 
-    let manifest = config::read_manifest(&repo_path.join(MANIFEST_FILE))?;
+    let manifest = config::read_manifest(&repo_path.join(PRE_COMMIT_HOOKS_YAML))?;
     let new_hook_ids = manifest
         .hooks
         .into_iter()
