@@ -195,6 +195,7 @@ impl LanguageImpl for Python {
                 .env(EnvVars::VIRTUAL_ENV, env_dir)
                 .env(EnvVars::PATH, &new_path)
                 .env_remove(EnvVars::PYTHONHOME)
+                .envs(&hook.env)
                 .args(&hook.args)
                 .args(batch)
                 .check(false)

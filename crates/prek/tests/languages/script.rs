@@ -21,6 +21,8 @@ mod unix {
             rev: main
             hooks:
               - id: echo
+                env:
+                  WORD2: override
                 verbose: true
         "});
         context.git_add(".");
@@ -34,6 +36,9 @@ mod unix {
         - duration: [TIME]
 
           .pre-commit-config.yaml
+          A
+          override
+          C
 
         ----- stderr -----
         warning: The following repos have mutable `rev` fields (moving tag / branch):
@@ -49,7 +54,7 @@ mod unix {
         let context = TestContext::new();
         context.init_project();
 
-        let config = indoc::indoc! {r"
+        let config = indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -57,15 +62,17 @@ mod unix {
                 name: script
                 language: script
                 entry: ./script.sh
+                env:
+                  MESSAGE: "Hello, World"
                 verbose: true
-        "};
+        "#};
         context.write_pre_commit_config(config);
         context
             .work_dir()
             .child("script.sh")
             .write_str(indoc::indoc! {r#"
             #!/usr/bin/env bash
-            echo "Hello, World!"
+            echo "$MESSAGE!"
         "#})?;
 
         let child = context.work_dir().child("child");
@@ -73,7 +80,7 @@ mod unix {
         child.child(CONFIG_FILE).write_str(config)?;
         child.child("script.sh").write_str(indoc::indoc! {r#"
             #!/usr/bin/env bash
-            echo "Hello, World from child!"
+            echo "$MESSAGE from child!"
         "#})?;
 
         fs_err::set_permissions(

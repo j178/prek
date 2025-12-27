@@ -284,6 +284,16 @@
           "description": "The command to run. It can contain arguments that will not be overridden.",
           "type": "string"
         },
+        "env": {
+          "description": "Environment variables to set for the hook.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "exclude": {
           "description": "Exclude files that were matched by `files`.\nDefault is `$^`, which matches nothing.",
           "anyOf": [
@@ -511,6 +521,16 @@
             "string",
             "null"
           ]
+        },
+        "env": {
+          "description": "Environment variables to set for the hook.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "exclude": {
           "description": "Exclude files that were matched by `files`.\nDefault is `$^`, which matches nothing.",

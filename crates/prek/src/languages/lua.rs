@@ -151,6 +151,7 @@ impl LanguageImpl for Lua {
                 .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::LUA_PATH, &lua_path)
                 .env(EnvVars::LUA_CPATH, &lua_cpath)
+                .envs(&hook.env)
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
