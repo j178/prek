@@ -17,8 +17,8 @@ mod unix {
         context.init_project();
         context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/prek-test-repos/script-hooks
-            rev: main
+          - repo: https://github.com/danielparks/script-hooks
+            rev: add-env
             hooks:
               - id: echo
                 env:
@@ -42,7 +42,7 @@ mod unix {
 
         ----- stderr -----
         warning: The following repos have mutable `rev` fields (moving tag / branch):
-        https://github.com/prek-test-repos/script-hooks: main
+        https://github.com/danielparks/script-hooks: add-env
         Mutable references are never updated after first install and are not supported.
         See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details.
         Hint: `prek autoupdate` often fixes this",
