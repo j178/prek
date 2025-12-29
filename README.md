@@ -329,6 +329,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [apache/iceberg-python](https://github.com/apache/iceberg-python/pull/2533)
 - [jcrist/msgspec](https://github.com/jcrist/msgspec/pull/918)
 - [python-humanize/humanize](https://github.com/python-humanize/humanize/pull/276)
+- [MoonshotAI/kimi-cli](https://github.com/MoonshotAI/kimi-cli/pull/535)
 
 <!-- why:end -->
 
