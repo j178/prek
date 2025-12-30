@@ -156,20 +156,17 @@ impl<'a> Iterator for Partitions<'a> {
 
         if self.current_index == start_index {
             // If we couldn't add even a single file to this batch, it means the file
-            // is too long to fit in the command line by itself. This is a critical error
-            // because silently skipping files could lead to incomplete checking.
-            
-            // Safety check: ensure we're within bounds
-            if self.current_index >= self.filenames.len() {
-                return None;
-            }
-            
+            // is too long to fit in the command line by itself.
             let filename = self.filenames[self.current_index];
             let filename_length = filename.as_os_str().len() + 1;
+            let filename_display = filename.to_string_lossy();
+            let filename_display = format!(
+                "{}...{}",
+                &filename_display[..10],
+                &filename_display[filename_display.len().saturating_sub(10)..]
+            );
             panic!(
-                "Filename `{}` ({} bytes) is too long to fit in command line",
-                filename.display(),
-                filename_length
+                "Filename `{filename_display}` ({filename_length} bytes) is too long to fit in command line",
             );
         } else {
             Some(&self.filenames[start_index..self.current_index])
@@ -277,20 +274,6 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "is too long")]
-    fn test_partitions_overly_long_filename_panics() {
-        // Create a filename that's too long for the available space
-        let long_name = "a".repeat(5000);
-        let long_file = PathBuf::from(&long_name);
-        let filenames: Vec<&Path> = vec![&long_file];
-
-        let mut partitions = create_test_partitions(&filenames, 100, 1000, 10);
-
-        // This should panic when trying to process the overly long filename
-        partitions.next();
-    }
-
-    #[test]
-    #[should_panic(expected = "is too long")]
     fn test_partitions_long_filename_in_middle_panics() {
         let file1 = PathBuf::from("file1.txt");
         let long_name = "a".repeat(5000);
@@ -312,7 +295,9 @@ mod tests {
     #[test]
     fn test_partitions_respects_max_per_batch() {
         // Create many small files
-        let files: Vec<PathBuf> = (0..100).map(|i| PathBuf::from(format!("f{}.txt", i))).collect();
+        let files: Vec<PathBuf> = (0..100)
+            .map(|i| PathBuf::from(format!("f{}.txt", i)))
+            .collect();
         let file_refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
 
         let mut partitions = create_test_partitions(&file_refs, 100, 100000, 25);
@@ -334,7 +319,9 @@ mod tests {
     #[test]
     fn test_partitions_respects_cli_length_limit() {
         // Create files that will exceed CLI length limit
-        let files: Vec<PathBuf> = (0..10).map(|i| PathBuf::from(format!("file{}.txt", i))).collect();
+        let files: Vec<PathBuf> = (0..10)
+            .map(|i| PathBuf::from(format!("file{}.txt", i)))
+            .collect();
         let file_refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
 
         // Set a small max_cli_length to force multiple batches
