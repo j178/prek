@@ -155,7 +155,21 @@ impl<'a> Iterator for Partitions<'a> {
         }
 
         if self.current_index == start_index {
-            None
+            // If we couldn't add even a single file to this batch, it means the file
+            // is too long to fit in the command line by itself. This is a critical error
+            // because silently skipping files could lead to incomplete checking.
+            let filename = self.filenames[self.current_index];
+            let filename_length = filename.as_os_str().len() + 1;
+            panic!(
+                "Filename '{}' is too long ({} bytes) to fit in command line. \
+                 Available space: {} bytes (max_cli_length: {}, command_length: {}). \
+                 This file and all subsequent files would be skipped.",
+                filename.display(),
+                filename_length,
+                self.max_cli_length.saturating_sub(self.command_length + 1),
+                self.max_cli_length,
+                self.command_length
+            );
         } else {
             Some(&self.filenames[start_index..self.current_index])
         }
@@ -202,4 +216,140 @@ pub(crate) fn prepend_paths(paths: &[&Path]) -> Result<OsString, std::env::JoinP
                 .flat_map(std::env::split_paths),
         ),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    /// Helper to create a Partitions iterator for testing.
+    /// This bypasses the Hook requirement by directly constructing the struct.
+    fn create_test_partitions<'a>(
+        filenames: &'a [&'a Path],
+        command_length: usize,
+        max_cli_length: usize,
+        max_per_batch: usize,
+    ) -> Partitions<'a> {
+        Partitions {
+            filenames,
+            current_index: 0,
+            command_length,
+            max_per_batch,
+            max_cli_length,
+        }
+    }
+
+    #[test]
+    fn test_partitions_normal_filenames() {
+        let file1 = PathBuf::from("file1.txt");
+        let file2 = PathBuf::from("file2.txt");
+        let file3 = PathBuf::from("file3.txt");
+        let filenames: Vec<&Path> = vec![&file1, &file2, &file3];
+
+        let mut partitions = create_test_partitions(&filenames, 100, 4096, 10);
+
+        // Should be able to iterate through all files
+        let mut total_files = 0;
+        while let Some(batch) = partitions.next() {
+            total_files += batch.len();
+        }
+
+        // All files should have been processed (no panic)
+        assert_eq!(total_files, 3);
+    }
+
+    #[test]
+    fn test_partitions_empty_filenames() {
+        let filenames: Vec<&Path> = vec![];
+
+        let mut partitions = create_test_partitions(&filenames, 100, 4096, 10);
+
+        // Should return empty slice once, then None
+        let batch = partitions.next();
+        assert!(batch.is_some());
+        assert_eq!(batch.unwrap().len(), 0);
+
+        let batch = partitions.next();
+        assert!(batch.is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "is too long")]
+    fn test_partitions_overly_long_filename_panics() {
+        // Create a filename that's too long for the available space
+        let long_name = "a".repeat(5000);
+        let long_file = PathBuf::from(&long_name);
+        let filenames: Vec<&Path> = vec![&long_file];
+
+        let mut partitions = create_test_partitions(&filenames, 100, 1000, 10);
+
+        // This should panic when trying to process the overly long filename
+        partitions.next();
+    }
+
+    #[test]
+    #[should_panic(expected = "is too long")]
+    fn test_partitions_long_filename_in_middle_panics() {
+        let file1 = PathBuf::from("file1.txt");
+        let long_name = "a".repeat(5000);
+        let long_file = PathBuf::from(&long_name);
+        let file3 = PathBuf::from("file3.txt");
+        let filenames: Vec<&Path> = vec![&file1, &long_file, &file3];
+
+        let mut partitions = create_test_partitions(&filenames, 100, 1000, 10);
+
+        // First batch should succeed with file1
+        let batch1 = partitions.next();
+        assert!(batch1.is_some());
+
+        // Second batch should panic on the long filename
+        // This ensures we don't silently skip file3
+        partitions.next();
+    }
+
+    #[test]
+    fn test_partitions_respects_max_per_batch() {
+        // Create many small files
+        let files: Vec<PathBuf> = (0..100).map(|i| PathBuf::from(format!("f{}.txt", i))).collect();
+        let file_refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
+
+        let mut partitions = create_test_partitions(&file_refs, 100, 100000, 25);
+
+        // Collect all batches
+        let mut all_batches = vec![];
+        while let Some(batch) = partitions.next() {
+            all_batches.push(batch.len());
+        }
+
+        // Should have multiple batches due to max_per_batch
+        assert!(all_batches.len() >= 4);
+
+        // All files should have been processed
+        let total_files: usize = all_batches.iter().sum();
+        assert_eq!(total_files, 100);
+    }
+
+    #[test]
+    fn test_partitions_respects_cli_length_limit() {
+        // Create files that will exceed CLI length limit
+        let files: Vec<PathBuf> = (0..10).map(|i| PathBuf::from(format!("file{}.txt", i))).collect();
+        let file_refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
+
+        // Set a small max_cli_length to force multiple batches
+        let mut partitions = create_test_partitions(&file_refs, 50, 150, 100);
+
+        // Collect all batches
+        let mut all_batches = vec![];
+        while let Some(batch) = partitions.next() {
+            all_batches.push(batch.len());
+        }
+
+        // Should have multiple batches due to CLI length limit
+        assert!(all_batches.len() > 1);
+
+        // All files should have been processed
+        let total_files: usize = all_batches.iter().sum();
+        assert_eq!(total_files, 10);
+    }
 }
