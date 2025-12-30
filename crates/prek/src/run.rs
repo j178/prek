@@ -219,7 +219,7 @@ pub(crate) fn prepend_paths(paths: &[&Path]) -> Result<OsString, std::env::JoinP
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     /// Helper to create a Partitions iterator for testing.
     /// This bypasses the Hook requirement by directly constructing the struct.
@@ -245,13 +245,9 @@ mod tests {
         let file3 = PathBuf::from("file3.txt");
         let filenames: Vec<&Path> = vec![&file1, &file2, &file3];
 
-        let mut partitions = create_test_partitions(&filenames, 100, 4096, 10);
+        let partitions = create_test_partitions(&filenames, 100, 4096, 10);
 
-        // Should be able to iterate through all files
-        let mut total_files = 0;
-        while let Some(batch) = partitions.next() {
-            total_files += batch.len();
-        }
+        let total_files: usize = partitions.map(<[&Path]>::len).sum();
 
         // All files should have been processed (no panic)
         assert_eq!(total_files, 3);
@@ -296,17 +292,13 @@ mod tests {
     fn test_partitions_respects_max_per_batch() {
         // Create many small files
         let files: Vec<PathBuf> = (0..100)
-            .map(|i| PathBuf::from(format!("f{}.txt", i)))
+            .map(|i| PathBuf::from(format!("f{i}.txt")))
             .collect();
         let file_refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
 
-        let mut partitions = create_test_partitions(&file_refs, 100, 100000, 25);
+        let partitions = create_test_partitions(&file_refs, 100, 100_000, 25);
 
-        // Collect all batches
-        let mut all_batches = vec![];
-        while let Some(batch) = partitions.next() {
-            all_batches.push(batch.len());
-        }
+        let all_batches: Vec<_> = partitions.map(<[&Path]>::len).collect();
 
         // Should have multiple batches due to max_per_batch
         assert!(all_batches.len() >= 4);
@@ -320,18 +312,14 @@ mod tests {
     fn test_partitions_respects_cli_length_limit() {
         // Create files that will exceed CLI length limit
         let files: Vec<PathBuf> = (0..10)
-            .map(|i| PathBuf::from(format!("file{}.txt", i)))
+            .map(|i| PathBuf::from(format!("file{i}.txt")))
             .collect();
         let file_refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
 
         // Set a small max_cli_length to force multiple batches
-        let mut partitions = create_test_partitions(&file_refs, 50, 150, 100);
+        let partitions = create_test_partitions(&file_refs, 50, 150, 100);
 
-        // Collect all batches
-        let mut all_batches = vec![];
-        while let Some(batch) = partitions.next() {
-            all_batches.push(batch.len());
-        }
+        let all_batches: Vec<_> = partitions.map(<[&Path]>::len).collect();
 
         // Should have multiple batches due to CLI length limit
         assert!(all_batches.len() > 1);
