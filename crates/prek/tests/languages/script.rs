@@ -18,30 +18,37 @@ mod unix {
         context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/prek-test-repos/script-hooks
-            rev: main
+            rev: v1.0.0
             hooks:
-              - id: echo
+              - id: echo-env
+                env:
+                  VAR2: universe
+                verbose: true
+              - id: echo-env
+                env:
+                  VAR1: everyone
+                  VAR2: galaxy
                 verbose: true
         "});
         context.git_add(".");
 
-        cmd_snapshot!(context.filters(), context.run(), @r#"
+        cmd_snapshot!(context.filters(), context.run(), @r"
         success: true
         exit_code: 0
         ----- stdout -----
-        echo.....................................................................Passed
-        - hook id: echo
+        echo-env.................................................................Passed
+        - hook id: echo-env
         - duration: [TIME]
 
-          .pre-commit-config.yaml
+          Hello world and universe!
+        echo-env.................................................................Passed
+        - hook id: echo-env
+        - duration: [TIME]
+
+          Hello everyone and galaxy!
 
         ----- stderr -----
-        warning: The following repos have mutable `rev` fields (moving tag / branch):
-        https://github.com/prek-test-repos/script-hooks: main
-        Mutable references are never updated after first install and are not supported.
-        See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details.
-        Hint: `prek autoupdate` often fixes this",
-        "#);
+        ");
     }
 
     #[test]
@@ -49,7 +56,7 @@ mod unix {
         let context = TestContext::new();
         context.init_project();
 
-        let config = indoc::indoc! {r"
+        let config = indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
@@ -57,15 +64,17 @@ mod unix {
                 name: script
                 language: script
                 entry: ./script.sh
+                env:
+                  MESSAGE: "Hello, World"
                 verbose: true
-        "};
+        "#};
         context.write_pre_commit_config(config);
         context
             .work_dir()
             .child("script.sh")
             .write_str(indoc::indoc! {r#"
             #!/usr/bin/env bash
-            echo "Hello, World!"
+            echo "$MESSAGE!"
         "#})?;
 
         let child = context.work_dir().child("child");
@@ -73,7 +82,7 @@ mod unix {
         child.child(CONFIG_FILE).write_str(config)?;
         child.child("script.sh").write_str(indoc::indoc! {r#"
             #!/usr/bin/env bash
-            echo "Hello, World from child!"
+            echo "$MESSAGE from child!"
         "#})?;
 
         fs_err::set_permissions(

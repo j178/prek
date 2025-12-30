@@ -445,6 +445,7 @@ impl LanguageImpl for Rust {
                 .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::CARGO_HOME, &cargo_home)
                 .env(EnvVars::RUSTUP_AUTO_INSTALL, "0")
+                .envs(&hook.env)
                 .args(&hook.args)
                 .args(batch)
                 .check(false)

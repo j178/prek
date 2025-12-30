@@ -171,6 +171,7 @@ impl LanguageImpl for Ruby {
                 .env(EnvVars::BUNDLE_IGNORE_CONFIG, "1")
                 .env_remove(EnvVars::GEM_PATH)
                 .env_remove(EnvVars::BUNDLE_GEMFILE)
+                .envs(&hook.env)
                 .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)

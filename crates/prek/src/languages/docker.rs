@@ -444,6 +444,13 @@ impl LanguageImpl for Docker {
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());
 
+        // Pass environment variables on the command line (they will appear in ps output).
+        let env_args: Vec<String> = hook
+            .env
+            .iter()
+            .flat_map(|(key, value)| ["-e".to_owned(), format!("{key}={value}")])
+            .collect();
+
         let docker_tag = Docker::build_docker_image(
             hook,
             hook.install_info().expect("Docker env must be installed"),
@@ -458,6 +465,7 @@ impl LanguageImpl for Docker {
             let mut cmd = Docker::docker_run_cmd(hook.work_dir());
             let mut output = cmd
                 .current_dir(hook.work_dir())
+                .args(&env_args)
                 .arg("--entrypoint")
                 .arg(&entry[0])
                 .arg(&docker_tag)

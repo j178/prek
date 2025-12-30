@@ -292,6 +292,8 @@ pub(crate) struct HookOptions {
     pub additional_dependencies: Option<Vec<String>>,
     /// Additional arguments to pass to the hook.
     pub args: Option<Vec<String>>,
+    /// Environment variables to set for the hook.
+    pub env: Option<FxHashMap<String, String>>,
     /// This hook will run even if there are no matching files.
     /// Default is false.
     pub always_run: Option<bool>,
@@ -363,6 +365,15 @@ impl HookOptions {
             verbose,
             minimum_prek_version,
         );
+
+        // Merge environment variables.
+        if let Some(other_env) = &other.env {
+            if let Some(self_env) = &mut self.env {
+                self_env.extend(other_env.clone());
+            } else {
+                self.env.clone_from(&other.env);
+            }
+        }
     }
 }
 
@@ -972,6 +983,7 @@ mod tests {
                                         exclude_types: None,
                                         additional_dependencies: None,
                                         args: None,
+                                        env: None,
                                         always_run: None,
                                         fail_fast: None,
                                         pass_filenames: None,
@@ -1049,6 +1061,7 @@ mod tests {
                                         exclude_types: None,
                                         additional_dependencies: None,
                                         args: None,
+                                        env: None,
                                         always_run: None,
                                         fail_fast: None,
                                         pass_filenames: None,
@@ -1151,6 +1164,7 @@ mod tests {
                                         exclude_types: None,
                                         additional_dependencies: None,
                                         args: None,
+                                        env: None,
                                         always_run: None,
                                         fail_fast: None,
                                         pass_filenames: None,
@@ -1267,6 +1281,7 @@ mod tests {
                                             exclude_types: None,
                                             additional_dependencies: None,
                                             args: None,
+                                            env: None,
                                             always_run: None,
                                             fail_fast: None,
                                             pass_filenames: None,
@@ -1301,6 +1316,7 @@ mod tests {
                                             exclude_types: None,
                                             additional_dependencies: None,
                                             args: None,
+                                            env: None,
                                             always_run: None,
                                             fail_fast: None,
                                             pass_filenames: None,
@@ -1331,6 +1347,7 @@ mod tests {
                                             exclude_types: None,
                                             additional_dependencies: None,
                                             args: None,
+                                            env: None,
                                             always_run: None,
                                             fail_fast: None,
                                             pass_filenames: None,
@@ -1412,6 +1429,7 @@ mod tests {
                                         exclude_types: None,
                                         additional_dependencies: None,
                                         args: None,
+                                        env: None,
                                         always_run: None,
                                         fail_fast: None,
                                         pass_filenames: None,
@@ -1442,6 +1460,7 @@ mod tests {
                                         exclude_types: None,
                                         additional_dependencies: None,
                                         args: None,
+                                        env: None,
                                         always_run: None,
                                         fail_fast: None,
                                         pass_filenames: None,
@@ -1472,6 +1491,7 @@ mod tests {
                                         exclude_types: None,
                                         additional_dependencies: None,
                                         args: None,
+                                        env: None,
                                         always_run: None,
                                         fail_fast: None,
                                         pass_filenames: None,
@@ -1730,6 +1750,7 @@ mod tests {
                                     exclude_types: None,
                                     additional_dependencies: None,
                                     args: None,
+                                    env: None,
                                     always_run: None,
                                     fail_fast: None,
                                     pass_filenames: None,
@@ -1763,6 +1784,7 @@ mod tests {
                                     exclude_types: None,
                                     additional_dependencies: None,
                                     args: None,
+                                    env: None,
                                     always_run: None,
                                     fail_fast: None,
                                     pass_filenames: None,
@@ -1843,6 +1865,7 @@ mod tests {
                                     exclude_types: None,
                                     additional_dependencies: None,
                                     args: None,
+                                    env: None,
                                     always_run: None,
                                     fail_fast: None,
                                     pass_filenames: Some(
