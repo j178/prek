@@ -17,36 +17,38 @@ mod unix {
         context.init_project();
         context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/danielparks/script-hooks
-            rev: add-env
+          - repo: https://github.com/prek-test-repos/script-hooks
+            rev: v1.0.0
             hooks:
-              - id: echo
+              - id: echo-env
                 env:
-                  WORD2: override
+                  VAR2: universe
+                verbose: true
+              - id: echo-env
+                env:
+                  VAR1: everyone
+                  VAR2: galaxy
                 verbose: true
         "});
         context.git_add(".");
 
-        cmd_snapshot!(context.filters(), context.run(), @r#"
+        cmd_snapshot!(context.filters(), context.run(), @r"
         success: true
         exit_code: 0
         ----- stdout -----
-        echo.....................................................................Passed
-        - hook id: echo
+        echo-env.................................................................Passed
+        - hook id: echo-env
         - duration: [TIME]
 
-          .pre-commit-config.yaml
-          A
-          override
-          C
+          Hello world and universe!
+        echo-env.................................................................Passed
+        - hook id: echo-env
+        - duration: [TIME]
+
+          Hello everyone and galaxy!
 
         ----- stderr -----
-        warning: The following repos have mutable `rev` fields (moving tag / branch):
-        https://github.com/danielparks/script-hooks: add-env
-        Mutable references are never updated after first install and are not supported.
-        See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details.
-        Hint: `prek autoupdate` often fixes this",
-        "#);
+        ");
     }
 
     #[test]
