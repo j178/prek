@@ -158,6 +158,12 @@ impl<'a> Iterator for Partitions<'a> {
             // If we couldn't add even a single file to this batch, it means the file
             // is too long to fit in the command line by itself. This is a critical error
             // because silently skipping files could lead to incomplete checking.
+            
+            // Safety check: ensure we're within bounds
+            if self.current_index >= self.filenames.len() {
+                return None;
+            }
+            
             let filename = self.filenames[self.current_index];
             let filename_length = filename.as_os_str().len() + 1;
             panic!(
