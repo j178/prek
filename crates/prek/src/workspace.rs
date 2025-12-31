@@ -21,6 +21,7 @@ use crate::config::{self, Config, ManifestHook, read_config};
 use crate::fs::Simplified;
 use crate::git::GIT_ROOT;
 use crate::hook::{self, Hook, HookBuilder, Repo};
+use crate::run::CONCURRENCY;
 use crate::store::{CacheBucket, Store};
 use crate::{git, store, warn_user};
 
@@ -824,7 +825,7 @@ impl Workspace {
 
                     Ok::<(), Error>(())
                 })
-                .buffer_unordered(5);
+                .buffer_unordered(*CONCURRENCY);
 
             while let Some(result) = tasks.next().await {
                 result?;
