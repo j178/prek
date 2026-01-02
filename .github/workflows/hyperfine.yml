@@ -15,8 +15,7 @@ env:
   CARGO_TERM_COLOR: always
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-permissions:
-  pull-requests: write
+permissions: {}
 
 jobs:
   benchmark:
@@ -398,13 +397,20 @@ jobs:
           if [ "$failed" = true ]; then
             exit 1
           fi
-      - name: Post comment
+      - name: Post to job summary
         run: cat comment.md >> "$GITHUB_STEP_SUMMARY"
+        if: always()
+
+      - name: Save benchmark results
         if: always() && github.event_name == 'pull_request'
-      - name: Comment on PR
-        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+        run: |
+          mkdir -p /tmp/hyperfine-results
+          echo ${{ github.event.pull_request.number }} > /tmp/hyperfine-results/pr-number.txt
+          cp comment.md /tmp/hyperfine-results/benchmark-results.md
+
+      - name: Upload benchmark results
         if: always() && github.event_name == 'pull_request'
-        continue-on-error: true
+        uses: actions/upload-artifact@0b2256b8c012f0828dc542b3febcab082c67f72b # v4.3.4
         with:
-          file-path: comment.md
-          comment-tag: hyperfine
+          name: hyperfine-results
+          path: /tmp/hyperfine-results
