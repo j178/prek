@@ -37,12 +37,14 @@ jobs:
           path: ~/bin/prek-${{ steps.versions.outputs.main }}
           key: prek-hyperfine-main-${{ steps.versions.outputs.main }}-${{ hashFiles('Cargo.lock') }}-${{ runner.os }}-${{ runner.arch }}
       - name: Build master
+        env:
+          MAIN_VERSION: ${{ steps.versions.outputs.main }}
         run: |
           mkdir -p "$HOME/bin"
-          if [ ! -f "$HOME/bin/prek-${{ steps.versions.outputs.main }}" ]; then
+          if [ ! -f "$HOME/bin/prek-$MAIN_VERSION" ]; then
             CURRENT_COMMIT=$(git rev-parse HEAD)
             git checkout origin/master
-            cargo build --release && mv target/release/prek "$HOME/bin/prek-${{ steps.versions.outputs.main }}"
+            cargo build --release && mv target/release/prek "$HOME/bin/prek-$MAIN_VERSION"
             git checkout "$CURRENT_COMMIT"
           fi
       - name: Build current version
@@ -140,6 +142,9 @@ jobs:
           git add -A
           git commit -m "Initial commit" || { echo "Failed to commit"; exit 1; }
       - name: Run benchmarks
+        env:
+          MAIN_VERSION: ${{ steps.versions.outputs.main }}
+          PATH: $HOME/bin:/home/runner/bin:${{ env.PATH }}
         run: |
           set -euo pipefail
           set -x
@@ -165,17 +170,17 @@ jobs:
             fi
 
             if [ -n "${PREK_ALT:-}" ]; then
-              if ! timeout 5m hyperfine "${hyperfine_args[@]}" --reference "$PREK_ALT $cmd" "prek $cmd"; then
+              if ! hyperfine "${hyperfine_args[@]}" --reference "$PREK_ALT $cmd" "prek $cmd"; then
                 echo "⚠️ Benchmark failed for: $cmd" >> "$GITHUB_WORKSPACE/comment.md"
                 return 1
               fi
-            elif [ -f "$HOME/bin/prek-${{ steps.versions.outputs.main }}" ]; then
-              if ! timeout 5m hyperfine "${hyperfine_args[@]}" --reference "prek-${{ steps.versions.outputs.main }} $cmd" "prek $cmd"; then
+            elif [ -f "$HOME/bin/prek-$MAIN_VERSION" ]; then
+              if ! hyperfine "${hyperfine_args[@]}" --reference "prek-$MAIN_VERSION $cmd" "prek $cmd"; then
                 echo "⚠️ Benchmark failed for: $cmd" >> "$GITHUB_WORKSPACE/comment.md"
                 return 1
               fi
             else
-              if ! timeout 5m hyperfine "${hyperfine_args[@]}" "prek $cmd"; then
+              if ! hyperfine "${hyperfine_args[@]}" "prek $cmd"; then
                 echo "⚠️ Benchmark failed for: $cmd" >> "$GITHUB_WORKSPACE/comment.md"
                 return 1
               fi
@@ -200,7 +205,7 @@ jobs:
                 diff=$(echo "scale=2; ($variance - 1) * 100" | bc)
 
                 if (( $(echo "${diff#-} > 10" | bc -l) )); then
-                  if grep -q "prek-${{ steps.versions.outputs.main }}.*±.*±" out.md; then
+                  if grep -q "prek-$MAIN_VERSION.*±.*±" out.md; then
                     echo "✅  Performance improvement for \`$cmd\` is ${diff#-}%" >> "$GITHUB_WORKSPACE/comment.md"
                   else
                     echo "⚠️  Warning: Performance regression for \`$cmd\` is ${diff#-}%" >> "$GITHUB_WORKSPACE/comment.md"
@@ -391,13 +396,11 @@ jobs:
           if [ "$failed" = true ]; then
             exit 1
           fi
-        env:
-          PATH: $HOME/bin:/home/runner/bin:${{ env.PATH }}
       - name: Post comment
         run: cat comment.md >> "$GITHUB_STEP_SUMMARY"
         if: always() && github.event_name == 'pull_request'
       - name: Comment on PR
-        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3
+        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
         if: always() && github.event_name == 'pull_request'
         continue-on-error: true
         with:
