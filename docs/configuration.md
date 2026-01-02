@@ -221,6 +221,7 @@ Prek supports the following environment variables:
     - `auto` (default, auto-detect available runtime)
     - `docker`
     - `podman`
+    - `container`
 
 Compatibility fallbacks:
 
