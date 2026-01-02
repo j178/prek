@@ -133,7 +133,7 @@ impl BuiltinHook {
             BuiltinHooks::EndOfFileFixer => ManifestHook {
                 id: "end-of-file-fixer".to_string(),
                 name: "fix end of files".to_string(),
-                language: Language::Python,
+                language: Language::Rust,
                 entry: "end-of-file-fixer".to_string(),
                 options: HookOptions {
                     description: Some(

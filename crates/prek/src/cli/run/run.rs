@@ -23,6 +23,7 @@ use crate::config::{Language, Stage};
 use crate::fs::CWD;
 use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
+use crate::hooks::check_fast_path;
 use crate::printer::Printer;
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::Store;
@@ -355,6 +356,16 @@ pub async fn install_hooks(
                     if matches!(hook.repo(), Repo::Meta { .. } | Repo::Builtin { .. }) {
                         debug!(
                             "Hook `{}` is a meta or builtin hook, no installation needed",
+                            &hook
+                        );
+                        hook_envs.push(InstalledHook::NoNeedInstall(hook));
+                        continue;
+                    }
+
+                    // Skip installation for hooks with fast path Rust implementations
+                    if check_fast_path(&hook) {
+                        debug!(
+                            "Hook `{}` has a fast path Rust implementation, skipping Python installation",
                             &hook
                         );
                         hook_envs.push(InstalledHook::NoNeedInstall(hook));
