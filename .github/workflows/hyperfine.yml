@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # zizmor: ignore[artipacked] - Need full history to checkout and build master branch for comparison
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           save-if: false
@@ -144,11 +144,13 @@ jobs:
       - name: Run benchmarks
         env:
           MAIN_VERSION: ${{ steps.versions.outputs.main }}
-          PATH: $HOME/bin:/home/runner/bin:${{ env.PATH }}
         run: |
           set -euo pipefail
           set -x
           failed=false
+
+          # Add prek binaries to PATH
+          export PATH="$HOME/bin:/home/runner/bin:$PATH"
 
           # Helper function to run hyperfine with consistent options
           run_hyperfine() {
