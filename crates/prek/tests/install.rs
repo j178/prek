@@ -227,9 +227,10 @@ fn install_with_hooks() -> anyhow::Result<()> {
     ----- stderr -----
     "#);
 
-    // Check that repos and hooks are created.
+    // Check that repos are created.
     assert_eq!(context.home_dir().child("repos").read_dir()?.count(), 1);
-    assert_eq!(context.home_dir().child("hooks").read_dir()?.count(), 1);
+    // No hook environments should be installed since trailing-whitespace uses fast path
+    assert_eq!(context.home_dir().child("hooks").read_dir()?.count(), 0);
 
     insta::with_settings!(
         { filters => filters },
@@ -292,9 +293,10 @@ fn install_hooks_only() -> anyhow::Result<()> {
     ----- stderr -----
     "#);
 
-    // Check that repos and hooks are created.
+    // Check that repos are created.
     assert_eq!(context.home_dir().child("repos").read_dir()?.count(), 1);
-    assert_eq!(context.home_dir().child("hooks").read_dir()?.count(), 1);
+    // No hook environments should be installed since trailing-whitespace uses fast path
+    assert_eq!(context.home_dir().child("hooks").read_dir()?.count(), 0);
 
     // Ensure the git hook is not installed.
     context
