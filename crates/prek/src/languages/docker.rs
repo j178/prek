@@ -162,7 +162,7 @@ impl RuntimeKind {
                 let output = Command::new(self.cmd())
                     .arg("info")
                     .arg("--format")
-                    .arg("'{{ .Host.Security.Rootless }}'")
+                    .arg("{{ .Host.Security.Rootless -}}")
                     .output()?;
 
                 let stdout = str::from_utf8(&output.stdout)?;
