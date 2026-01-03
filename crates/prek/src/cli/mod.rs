@@ -6,10 +6,9 @@ use clap::builder::styling::{AnsiColor, Effects};
 use clap::builder::{ArgPredicate, Styles};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
 use clap_complete::engine::ArgValueCompleter;
-use serde::{Deserialize, Serialize};
-
-use prek_consts::CONFIG_FILE;
+use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use prek_consts::env_vars::EnvVars;
+use serde::{Deserialize, Serialize};
 
 use crate::config::{HookType, Language, Stage};
 
@@ -573,7 +572,7 @@ pub(crate) struct SampleConfigArgs {
         short,
         long,
         num_args = 0..=1,
-        default_missing_value = CONFIG_FILE,
+        default_missing_value = PRE_COMMIT_CONFIG_YAML,
     )]
     pub(crate) file: Option<PathBuf>,
 }

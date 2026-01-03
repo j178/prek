@@ -352,7 +352,7 @@ fn list_no_config_file() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `.pre-commit-config.yaml` found in the current directory or parent directories.
+    error: No `prek.toml` or `.pre-commit-config.yaml` found in the current directory or parent directories.
 
     hint: If you just added one, rerun your command with the `--refresh` flag to rescan the workspace.
     ");

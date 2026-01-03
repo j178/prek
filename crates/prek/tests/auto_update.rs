@@ -5,7 +5,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
-use prek_consts::CONFIG_FILE;
+use prek_consts::PRE_COMMIT_CONFIG_YAML;
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -150,7 +150,7 @@ fn auto_update_basic() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
             repos:
               - repo: [HOME]/test-repos/test-repo
                 rev: v2.0.0
@@ -194,7 +194,7 @@ fn auto_update_already_up_to_date() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
             repos:
               - repo: [HOME]/test-repos/up-to-date-repo
                 rev: v1.0.0
@@ -248,7 +248,7 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r"
             repos:
               - repo: [HOME]/test-repos/repo1
                 rev: v1.1.0
@@ -306,7 +306,7 @@ fn test_resolve_revision_ignores_git_dir_env_var() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
             repos:
               - repo: [HOME]/test-repos/target-repo
                 rev: v0.2.0
@@ -356,7 +356,7 @@ fn auto_update_specific_repos() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
             repos:
               - repo: [HOME]/test-repos/repo1
                 rev: v1.1.0
@@ -384,7 +384,7 @@ fn auto_update_specific_repos() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
             repos:
               - repo: [HOME]/test-repos/repo1
                 rev: v1.1.0
@@ -436,7 +436,7 @@ fn auto_update_bleeding_edge() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
             repos:
               - repo: [HOME]/test-repos/bleeding-repo
                 rev: [COMMIT_SHA]
@@ -495,7 +495,7 @@ fn auto_update_freeze() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r##"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r##"
             repos:
               - repo: [HOME]/test-repos/freeze-repo
                 rev: [COMMIT_SHA]  # frozen: v1.1.0
@@ -552,7 +552,7 @@ fn auto_update_freeze_uses_dereferenced_commit_for_annotated_tags() -> Result<()
         .assert()
         .success();
 
-    let config = context.read(CONFIG_FILE);
+    let config = context.read(PRE_COMMIT_CONFIG_YAML);
     assert!(
         config.contains(&format!("rev: {commit_sha}")),
         "expected config to contain the dereferenced commit SHA"
@@ -612,7 +612,7 @@ fn auto_update_preserve_formatting() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r"
             # Pre-commit configuration
             repos:
               - repo: [HOME]/test-repos/repo1  # Test repository
@@ -672,7 +672,7 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
             repos:
               - repo: [HOME]/test-repos/frozen-repo
                 rev: v1.2.0
@@ -722,7 +722,7 @@ fn auto_update_local_repo_ignored() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
             repos:
               - repo: local
                 hooks:
@@ -965,7 +965,7 @@ fn prefer_similar_tags() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r"
             repos:
               - repo: local
                 hooks:
@@ -1014,7 +1014,7 @@ fn auto_update_dry_run() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r"
             repos:
               - repo: [HOME]/test-repos/test-repo
                 rev: v1.0.0
@@ -1059,7 +1059,7 @@ fn quoting_float_like_version_number() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r"
             repos:
               - repo: [HOME]/test-repos/test-repo
                 rev: '0.50'
@@ -1080,7 +1080,7 @@ fn auto_update_with_invalid_config_file() -> Result<()> {
     // Write an invalid config file
     context
         .work_dir()
-        .child(CONFIG_FILE)
+        .child(PRE_COMMIT_CONFIG_YAML)
         .write_str("invalid_yaml: [unclosed_list")?;
 
     let filters = context.filters();

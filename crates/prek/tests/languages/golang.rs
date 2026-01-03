@@ -3,7 +3,7 @@ use std::process::Command;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::env_vars::EnvVars;
-use prek_consts::{CONFIG_FILE, MANIFEST_FILE};
+use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_HOOKS_YAML};
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -277,7 +277,7 @@ fn local_additional_deps() -> anyhow::Result<()> {
     "#})?;
     go_hook
         .work_dir()
-        .child(MANIFEST_FILE)
+        .child(PRE_COMMIT_HOOKS_YAML)
         .write_str(indoc::indoc! {r"
         - id: go-hook
           name: go-hook
@@ -298,7 +298,7 @@ fn local_additional_deps() -> anyhow::Result<()> {
 
     let hook_url = go_hook.work_dir().to_str().unwrap();
     work_dir
-        .child(CONFIG_FILE)
+        .child(PRE_COMMIT_CONFIG_YAML)
         .write_str(&indoc::formatdoc! {r"
         repos:
           - repo: {hook_url}

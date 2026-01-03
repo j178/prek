@@ -9,7 +9,7 @@ use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir};
 use etcetera::BaseStrategy;
 use rustc_hash::FxHashSet;
 
-use prek_consts::CONFIG_FILE;
+use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use prek_consts::env_vars::EnvVars;
 
 pub struct TestContext {
@@ -359,7 +359,7 @@ impl TestContext {
     /// Write a `.pre-commit-config.yaml` file in the temporary directory.
     pub fn write_pre_commit_config(&self, content: &str) {
         self.temp_dir
-            .child(CONFIG_FILE)
+            .child(PRE_COMMIT_CONFIG_YAML)
             .write_str(content)
             .expect("Failed to write pre-commit config");
     }
@@ -368,13 +368,17 @@ impl TestContext {
     /// This creates a tree-like directory structure for testing workspace functionality.
     pub fn setup_workspace(&self, project_paths: &[&str], config: &str) -> anyhow::Result<()> {
         // Always create root config
-        self.temp_dir.child(CONFIG_FILE).write_str(config)?;
+        self.temp_dir
+            .child(PRE_COMMIT_CONFIG_YAML)
+            .write_str(config)?;
 
         // Create each project directory and config
         for path in project_paths {
             let project_dir = self.temp_dir.child(path);
             project_dir.create_dir_all()?;
-            project_dir.child(CONFIG_FILE).write_str(config)?;
+            project_dir
+                .child(PRE_COMMIT_CONFIG_YAML)
+                .write_str(config)?;
         }
 
         Ok(())

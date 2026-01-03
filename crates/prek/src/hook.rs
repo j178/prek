@@ -7,7 +7,7 @@ use std::sync::{Arc, OnceLock};
 
 use anyhow::{Context, Result};
 use clap::ValueEnum;
-use prek_consts::MANIFEST_FILE;
+use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
@@ -69,10 +69,11 @@ pub(crate) enum Repo {
 impl Repo {
     /// Load the remote repo manifest from the path.
     pub(crate) fn remote(url: String, rev: String, path: PathBuf) -> Result<Self, Error> {
-        let manifest = read_manifest(&path.join(MANIFEST_FILE)).map_err(|e| Error::Manifest {
-            repo: url.clone(),
-            error: e,
-        })?;
+        let manifest =
+            read_manifest(&path.join(PRE_COMMIT_HOOKS_YAML)).map_err(|e| Error::Manifest {
+                repo: url.clone(),
+                error: e,
+            })?;
         let hooks = manifest.hooks;
 
         Ok(Self::Remote {
