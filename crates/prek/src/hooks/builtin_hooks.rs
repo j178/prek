@@ -1,6 +1,7 @@
-use anyhow::Result;
 use std::path::Path;
 use std::str::FromStr;
+
+use anyhow::Result;
 
 use crate::config::{BuiltinHook, HookOptions, Language, ManifestHook, Stage};
 use crate::hook::Hook;
@@ -24,6 +25,7 @@ pub(crate) enum BuiltinHooks {
     DetectPrivateKey,
     NoCommitToBranch,
     TrailingWhitespace,
+    CheckHookUpdates,
 }
 
 impl FromStr for BuiltinHooks {
@@ -46,6 +48,7 @@ impl FromStr for BuiltinHooks {
             "detect-private-key" => Ok(Self::DetectPrivateKey),
             "no-commit-to-branch" => Ok(Self::NoCommitToBranch),
             "trailing-whitespace" => Ok(Self::TrailingWhitespace),
+            "check-hook-updates" => Ok(Self::CheckHookUpdates),
             _ => Err(()),
         }
     }
@@ -84,6 +87,7 @@ impl BuiltinHooks {
             Self::TrailingWhitespace => {
                 pre_commit_hooks::fix_trailing_whitespace(hook, filenames).await
             }
+            Self::CheckHookUpdates => pre_commit_hooks::check_hook_updates(hook, filenames).await,
         }
     }
 }
@@ -267,6 +271,21 @@ impl BuiltinHook {
                 options: HookOptions {
                     description: Some("trims trailing whitespace.".to_string()),
                     types: Some(vec!["text".to_string()]),
+                    stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::CheckHookUpdates => ManifestHook {
+                id: "check-hook-updates".to_string(),
+                name: "check for hook updates".to_string(),
+                language: Language::System,
+                entry: "check-hook-updates".to_string(),
+                options: HookOptions {
+                    description: Some(
+                        "checks if configured hooks have newer versions available.".to_string(),
+                    ),
+                    pass_filenames: Some(false),
+                    always_run: Some(true),
                     stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
                     ..Default::default()
                 },
