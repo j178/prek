@@ -313,6 +313,7 @@ For more detailed improvements prek offers, take a look at [Difference from pre-
 prek is pretty new, but it is already being used or recommend by some projects and organizations:
 
 - [apache/airflow](https://github.com/apache/airflow/issues/44995)
+- [python/cpython](https://github.com/python/cpython/issues/143148)
 - [pdm-project/pdm](https://github.com/pdm-project/pdm/pull/3593)
 - [fastapi/fastapi](https://github.com/fastapi/fastapi/pull/14572)
 - [fastapi/typer](https://github.com/fastapi/typer/pull/1453)

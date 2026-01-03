@@ -20,7 +20,7 @@ use crate::store::{CacheBucket, Store};
 use crate::version;
 
 // The version range of `uv` we will install. Should update periodically.
-const CUR_UV_VERSION: &str = "0.9.15";
+const CUR_UV_VERSION: &str = "0.9.18";
 static UV_VERSION_RANGE: LazyLock<VersionReq> =
     LazyLock::new(|| VersionReq::parse(">=0.7.0, <0.10.0").unwrap());
 
