@@ -195,6 +195,7 @@ impl HookBuilder {
         options.language_version.get_or_insert_default();
         options.alias.get_or_insert_default();
         options.args.get_or_insert_default();
+        options.env.get_or_insert_default();
         options.types.get_or_insert(vec!["file".to_string()]);
         options.types_or.get_or_insert_default();
         options.exclude_types.get_or_insert_default();
@@ -315,6 +316,7 @@ impl HookBuilder {
             types_or: options.types_or.expect("types_or not set"),
             exclude_types: options.exclude_types.expect("exclude_types not set"),
             args: options.args.expect("args not set"),
+            env: options.env.expect("env not set"),
             always_run: options.always_run.expect("always_run not set"),
             fail_fast: options.fail_fast.expect("fail_fast not set"),
             pass_filenames: options.pass_filenames.expect("pass_filenames not set"),
@@ -431,6 +433,7 @@ pub(crate) struct Hook {
     pub exclude_types: Vec<String>,
     pub additional_dependencies: FxHashSet<String>,
     pub args: Vec<String>,
+    pub env: FxHashMap<String, String>,
     pub always_run: bool,
     pub fail_fast: bool,
     pub pass_filenames: bool,

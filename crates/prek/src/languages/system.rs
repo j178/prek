@@ -42,6 +42,7 @@ impl LanguageImpl for System {
         let run = async |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "run system command")
                 .current_dir(hook.work_dir())
+                .envs(&hook.env)
                 .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)

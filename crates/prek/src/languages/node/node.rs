@@ -162,6 +162,7 @@ impl LanguageImpl for Node {
                 .env(EnvVars::NPM_CONFIG_PREFIX, env_dir)
                 .env_remove(EnvVars::NPM_CONFIG_USERCONFIG)
                 .env(EnvVars::NODE_PATH, lib_dir(env_dir))
+                .envs(&hook.env)
                 .args(&hook.args)
                 .args(batch)
                 .check(false)

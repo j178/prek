@@ -63,7 +63,7 @@ target-lexicon = { version = "0.13.0" }
 tempfile = { version = "3.13.0" }
 thiserror = { version = "2.0.11" }
 tokio = { version = "1.47.1", features = ["fs", "process", "rt", "sync", "macros", "net"] }
-tokio-tar = { version = "0.5.1", package = "astral-tokio-tar" }
+tokio-tar = { version = "0.5.6", package = "astral-tokio-tar" }
 tokio-util = { version = "0.7.13" }
 toml = { version = "0.9.5", default-features = false, features = ["fast_hash", "parse", "preserve_order", "serde"] }
 tracing = { version = "0.1.40" }

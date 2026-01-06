@@ -26,6 +26,7 @@ Manifest {
                 args: Some(
                     [],
                 ),
+                env: None,
                 always_run: None,
                 fail_fast: None,
                 pass_filenames: Some(
@@ -68,6 +69,7 @@ Manifest {
                 args: Some(
                     [],
                 ),
+                env: None,
                 always_run: None,
                 fail_fast: None,
                 pass_filenames: Some(
@@ -113,6 +115,7 @@ Manifest {
                         "--output-file=requirements.txt",
                     ],
                 ),
+                env: None,
                 always_run: None,
                 fail_fast: None,
                 pass_filenames: Some(

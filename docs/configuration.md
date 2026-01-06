@@ -26,6 +26,8 @@ repos:
         entry: Override command (varies by language)
         language: system | python | node | rust | ...
         args: ["--flag", "value"]
+        env:
+          EXTRA_ENV: "some value"
         files: Regex to include files
         exclude: Regex to exclude files
         types: [python, yaml, ...]
@@ -84,6 +86,28 @@ Example:
 For more details and examples, see [Workspace Mode - File Processing Behavior](workspace.md#file-processing-behavior).
 
 ### Hook-level
+
+#### `env`
+
+Sets extra environment variables for the hook. These will override existing environment variables, such as `$PATH`.
+
+For `docker` and `docker-image` hooks, the environment variables are not set for the `docker` command, but instead passed to the container via command line arguments.
+
+Example:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: cargo doc
+        name: cargo doc
+        language: system
+        entry: cargo doc --all-features --workspace --no-deps --document-private-items
+        env:
+          RUSTDOCFLAGS: -Dwarnings
+        files: \.rs$
+        pass_filenames: false
+```
 
 #### `priority`
 

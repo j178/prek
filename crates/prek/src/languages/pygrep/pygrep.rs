@@ -201,6 +201,7 @@ impl LanguageImpl for Pygrep {
         let args = Args::parse(&hook.args).context("Failed to parse `args`")?;
         let mut cmd = Cmd::new(&info.toolchain, "python script")
             .current_dir(hook.work_dir())
+            .envs(&hook.env)
             .arg("-I") // Isolate mode.
             .arg("-B") // Don't write bytecode.
             .arg(py_script.path())

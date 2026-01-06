@@ -14,7 +14,9 @@ fn docker() {
             rev: v1.0
             hooks:
               - id: hello-world
-                entry: "echo Hello, world!"
+                entry: "sh -c 'echo $MESSAGE! $*' --"
+                env:
+                    MESSAGE: "Hello, world"
                 verbose: true
                 always_run: true
     "#});

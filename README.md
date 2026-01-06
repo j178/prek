@@ -313,6 +313,7 @@ For more detailed improvements prek offers, take a look at [Difference from pre-
 prek is pretty new, but it is already being used or recommend by some projects and organizations:
 
 - [apache/airflow](https://github.com/apache/airflow/issues/44995)
+- [python/cpython](https://github.com/python/cpython/issues/143148)
 - [pdm-project/pdm](https://github.com/pdm-project/pdm/pull/3593)
 - [fastapi/fastapi](https://github.com/fastapi/fastapi/pull/14572)
 - [fastapi/typer](https://github.com/fastapi/typer/pull/1453)
@@ -329,6 +330,8 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [apache/iceberg-python](https://github.com/apache/iceberg-python/pull/2533)
 - [jcrist/msgspec](https://github.com/jcrist/msgspec/pull/918)
 - [python-humanize/humanize](https://github.com/python-humanize/humanize/pull/276)
+- [MoonshotAI/kimi-cli](https://github.com/MoonshotAI/kimi-cli/pull/535)
+- [ZhuoZhuoCrayon/throttled-py](https://github.com/ZhuoZhuoCrayon/throttled-py/pull/119)
 
 <!-- why:end -->
 

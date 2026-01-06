@@ -153,6 +153,7 @@ impl LanguageImpl for Golang {
                 .env(EnvVars::GOBIN, &go_bin)
                 .env(EnvVars::GOFLAGS, "-modcacherw")
                 .envs(go_envs.iter().copied())
+                .envs(&hook.env)
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
