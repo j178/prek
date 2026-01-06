@@ -4,7 +4,7 @@ use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use indoc::indoc;
 use insta::assert_snapshot;
-use prek_consts::CONFIG_FILE;
+use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use prek_consts::env_vars::EnvVars;
 
 mod common;
@@ -526,7 +526,7 @@ fn init_template_dir_non_git_repo() {
           - pre-push
         repos:
     "});
-    cmd_snapshot!(context.filters(), context.command().arg("init-template-dir").arg("-c").arg(context.work_dir().join(CONFIG_FILE)).arg(".git"), @r"
+    cmd_snapshot!(context.filters(), context.command().arg("init-template-dir").arg("-c").arg(context.work_dir().join(PRE_COMMIT_CONFIG_YAML)).arg(".git"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -801,13 +801,13 @@ fn workspace_install_only_root_hook_types() -> anyhow::Result<()> {
 
     context
         .work_dir()
-        .child(CONFIG_FILE)
+        .child(PRE_COMMIT_CONFIG_YAML)
         .write_str(root_config)?;
     context.work_dir().child("project2").create_dir_all()?;
     context
         .work_dir()
         .child("project2")
-        .child(CONFIG_FILE)
+        .child(PRE_COMMIT_CONFIG_YAML)
         .write_str(nested_config)?;
     context.git_add(".");
 

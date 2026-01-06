@@ -4,7 +4,7 @@ use std::os::unix::fs::PermissionsExt;
 use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
-use prek_consts::CONFIG_FILE;
+use prek_consts::PRE_COMMIT_CONFIG_YAML;
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -600,7 +600,8 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     // Subproject with built-in hooks.
     let app = context.work_dir().child("app");
     app.create_dir_all()?;
-    app.child(CONFIG_FILE).write_str(indoc::indoc! {r"
+    app.child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:

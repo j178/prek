@@ -7,7 +7,7 @@ use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use prek_consts::env_vars::EnvVars;
-use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
+use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PREK_TOML};
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -524,7 +524,7 @@ fn config_not_staged() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
-    context.work_dir().child(CONFIG_FILE).touch()?;
+    context.work_dir().child(PRE_COMMIT_CONFIG_YAML).touch()?;
     context.git_add(".");
 
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -2088,7 +2088,7 @@ fn write_pre_commit_config(path: &Path, hooks: &[(&str, &str)]) -> Result<()> {
     }
 
     std::fs::create_dir_all(path)?;
-    std::fs::write(path.join(CONFIG_FILE), yaml)?;
+    std::fs::write(path.join(PRE_COMMIT_CONFIG_YAML), yaml)?;
 
     Ok(())
 }
@@ -2328,7 +2328,7 @@ fn alternate_config_file() -> Result<()> {
 
     context
         .work_dir()
-        .child(ALT_CONFIG_FILE)
+        .child(PRE_COMMIT_CONFIG_YML)
         .write_str(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -2355,7 +2355,7 @@ fn alternate_config_file() -> Result<()> {
 
     context
         .work_dir()
-        .child(CONFIG_FILE)
+        .child(PRE_COMMIT_CONFIG_YAML)
         .write_str(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -2378,7 +2378,77 @@ fn alternate_config_file() -> Result<()> {
       Hello, world!
 
     ----- stderr -----
-    warning: Both `[TEMP_DIR]/.pre-commit-config.yaml` and `[TEMP_DIR]/.pre-commit-config.yml` exist, using `[TEMP_DIR]/.pre-commit-config.yaml` only
+    warning: Multiple configuration files found (`.pre-commit-config.yaml`, `.pre-commit-config.yml`); using `[TEMP_DIR]/.pre-commit-config.yaml`
+    ");
+
+    context
+        .work_dir()
+        .child(PREK_TOML)
+        .write_str(indoc::indoc! {r#"
+        [[repos]]
+        repo = "local"
+        hooks = [
+          {
+            id = "local-python-hook",
+            name = "local-python-hook",
+            language = "python",
+            entry = "python3 -c 'import sys; print(\"Hello, world!\")'"
+          }
+        ]
+    "#})?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--refresh").arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local-python-hook........................................................Passed
+    - hook id: local-python-hook
+    - duration: [TIME]
+
+      Hello, world!
+
+    ----- stderr -----
+    warning: Multiple configuration files found (`prek.toml`, `.pre-commit-config.yaml`, `.pre-commit-config.yml`); using `[TEMP_DIR]/prek.toml`
+    ");
+
+    Ok(())
+}
+
+/// Supports `prek.toml` as configuration file.
+#[test]
+fn prek_toml() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context
+        .work_dir()
+        .child(PREK_TOML)
+        .write_str(indoc::indoc! {r#"
+        [[repos]]
+        repo = "local"
+        hooks = [
+          {
+            id = "local-python-hook",
+            name = "local-python-hook",
+            language = "python",
+            entry = "python3 -c 'import sys; print(\"Hello, world!\")'"
+          }
+        ]
+    "#})?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local-python-hook........................................................Passed
+    - hook id: local-python-hook
+    - duration: [TIME]
+
+      Hello, world!
+
+    ----- stderr -----
     ");
 
     Ok(())
@@ -2466,7 +2536,7 @@ fn show_diff_on_failure() -> Result<()> {
     let app = context.work_dir().child("app");
     app.create_dir_all()?;
     app.child("file.txt").write_str("Original line\n")?;
-    app.child(CONFIG_FILE).write_str(config)?;
+    app.child(PRE_COMMIT_CONFIG_YAML).write_str(config)?;
 
     Command::new("git")
         .arg("add")
