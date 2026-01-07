@@ -1,7 +1,7 @@
 <div align="center">
 
 <h1>
-  <img width="180" alt="prek" src="./docs/assets/logo.webp" />
+  <img width="180" alt="prek" src="./docs/assets/logo.webp?v=1" />
   <br/>prek
 </h1>
 
