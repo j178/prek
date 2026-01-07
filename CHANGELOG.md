@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.26
+## 0.2.27
 
 Released on 2026-01-07.
 
@@ -26,6 +26,7 @@ Released on 2026-01-07.
 
 - Add `python/cpython` to users ([#1308](https://github.com/j178/prek/pull/1308))
 - Add `MoonshotAI/kimi-cli` to users ([#1286](https://github.com/j178/prek/pull/1286))
+- Drop powerpc64 wheels ([#1319](https://github.com/j178/prek/pull/1319))
 
 ### Contributors
 
