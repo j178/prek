@@ -305,64 +305,6 @@ jobs:
             *.tar.gz
             *.sha256
 
-  linux-powerpc:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      matrix:
-        platform:
-          - target: powerpc64le-unknown-linux-gnu
-            arch: ppc64le
-            # see https://github.com/astral-sh/uv/issues/6528
-            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
-          - target: powerpc64-unknown-linux-gnu
-            arch: ppc64
-            # see https://github.com/astral-sh/uv/issues/6528
-            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-        with:
-          persist-credentials: false
-      - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
-        with:
-          target: ${{ matrix.platform.target }}
-          manylinux: auto
-          docker-options: ${{ matrix.platform.maturin_docker_options }}
-          args: --release --locked --out dist --features self-update
-          before-script-linux: |
-            if command -v yum &> /dev/null; then
-                yum update -y
-                yum -y install epel-release
-                yum repolist
-                yum install -y gcc-powerpc64-linux-gnu
-            fi
-      - name: "Upload wheels"
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        with:
-          name: wheels-linux-${{ matrix.platform.target }}
-          path: dist
-      - name: "Archive binary"
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          TARGET=${{ matrix.platform.target }}
-          ARCHIVE_NAME=prek-$TARGET
-          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
-
-          mkdir -p $ARCHIVE_NAME
-          cp target/$TARGET/release/prek $ARCHIVE_NAME/prek
-          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
-          shasum -a 256 $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
-      - name: "Upload binary"
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        with:
-          name: artifacts-${{ matrix.platform.target }}
-          path: |
-            *.tar.gz
-            *.sha256
-
   linux-riscv64:
     runs-on: ubuntu-latest
     timeout-minutes: 30
