@@ -14,13 +14,13 @@ A common pattern is to copy the binary into your own image:
 
 ```dockerfile
 FROM debian:bookworm-slim
-COPY --from=ghcr.io/j178/prek:v0.2.26 /prek /usr/local/bin/prek
+COPY --from=ghcr.io/j178/prek:v0.2.27 /prek /usr/local/bin/prek
 ```
 
 If you prefer, you can also run the distroless image directly:
 
 ```bash
-docker run --rm ghcr.io/j178/prek:v0.2.26 --version
+docker run --rm ghcr.io/j178/prek:v0.2.27 --version
 ```
 
 ## GitHub Actions
