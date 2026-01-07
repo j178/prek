@@ -652,6 +652,70 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
 }
 
 #[test]
+fn hook_impl_does_not_fail_when_no_hooks_match_stage() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+    context.disable_auto_crlf();
+
+    // Only a manual-stage hook; a pre-commit hook run should find nothing for the stage.
+    context
+        .work_dir()
+        .child(CONFIG_FILE)
+        .write_str(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: manual-only
+                name: manual-only
+                language: system
+                entry: echo manual-only
+                stages: [ manual ]
+    "})?;
+
+    context.work_dir().child("file.txt").write_str("x")?;
+    context.git_add(".");
+
+    // Install the git hook (which invokes `prek hook-impl`).
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+
+    // Commit should succeed; the hook should not error just because no hooks match pre-commit.
+    let mut commit = Command::new("git");
+    commit
+        .current_dir(context.work_dir())
+        .arg("commit")
+        .arg("-m")
+        .arg("Test commit");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([("[a-f0-9]{7}", "abc1234")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, commit, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [master (root-commit) abc1234] Test commit
+     2 files changed, 9 insertions(+)
+     create mode 100644 .pre-commit-config.yaml
+     create mode 100644 file.txt
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn workspace_hook_impl_with_selectors() -> anyhow::Result<()> {
     let context = TestContext::new();
     let cwd = context.work_dir();

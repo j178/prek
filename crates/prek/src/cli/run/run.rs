@@ -144,13 +144,11 @@ pub(crate) async fn run(
     };
 
     if filtered_hooks.is_empty() {
-        writeln!(
-            printer.stderr(),
-            "{}: No hooks found for stage `{}` after filtering",
-            "error".red().bold(),
-            hook_stage.cyan()
-        )?;
-        return Ok(ExitStatus::Failure);
+        debug!(
+            stage = %hook_stage,
+            "No hooks found for stage after filtering, exit early"
+        );
+        return Ok(ExitStatus::Success);
     }
 
     debug!(
