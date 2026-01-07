@@ -11,7 +11,7 @@ use std::sync::{Arc, LazyLock};
 use anyhow::{Context, Result};
 use lazy_regex::regex;
 use prek_consts::env_vars::EnvVars;
-use tracing::{debug, trace, warn};
+use tracing::{trace, warn};
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::{Hook, InstallInfo, InstalledHook};
@@ -225,7 +225,7 @@ impl ContainerRuntimeInfo {
             match RuntimeKind::from_str(&val) {
                 Ok(runtime) => {
                     if runtime != RuntimeKind::Auto {
-                        debug!(
+                        trace!(
                             "Container runtime overridden by {}={}",
                             EnvVars::PREK_CONTAINER_RUNTIME,
                             val
@@ -253,7 +253,7 @@ impl ContainerRuntimeInfo {
             return RuntimeKind::AppleContainer;
         }
 
-        debug!("No container runtime found on PATH, defaulting to docker");
+        trace!("No container runtime found on PATH, defaulting to docker");
         RuntimeKind::Docker
     }
 
@@ -400,22 +400,24 @@ impl Docker {
             // the same as current `uid:gid` on the host - see subuid / subgid.
         }
 
+        // https://docs.docker.com/reference/cli/docker/container/run/#volumes-from
+        // The `Z` option tells Docker to label the content with a private
+        // unshared label. Only the current container can use a private volume.
         let work_dir = CONTAINER_RUNTIME.map_to_host_path(work_dir);
         let z = if CONTAINER_RUNTIME.is_apple_container() {
             "" // Not currently supported
         } else {
             ",Z"
         };
+        let volume = format!("{}:/src:rw{z}", work_dir.display());
+
         if !CONTAINER_RUNTIME.is_apple_container() {
             // Run an init inside the container that forwards signals and reaps processes
             command.arg("--init");
         }
         command
-            // https://docs.docker.com/reference/cli/docker/container/run/#volumes-from
-            // The `Z` option tells Docker to label the content with a private
-            // unshared label. Only the current container can use a private volume.
             .arg("--volume")
-            .arg(format!("{}:/src:rw{}", work_dir.display(), z))
+            .arg(volume)
             .arg("--workdir")
             .arg("/src");
 

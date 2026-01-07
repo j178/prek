@@ -78,7 +78,7 @@ Gems specified in hook gemspec files and `additional_dependencies` will be insta
 
 ### Docker & Docker Image
 
-`prek` auto-detects the available container runtime on the system (Docker, Podman, or Container) and uses it to run container-based hooks. You can also explicitly specify the container runtime using the `PREK_CONTAINER_RUNTIME` environment variable.
+`prek` auto-detects the available container runtime on the system (Docker, Podman, or [Container](https://github.com/apple/container)) and uses it to run container-based hooks. You can also explicitly specify the container runtime using the [`PREK_CONTAINER_RUNTIME`](configuration.md#environment-variables) environment variable.
 
 ## Command line interface
 
