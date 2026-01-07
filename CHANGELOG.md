@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.2.26
+
+Released on 2026-01-07.
+
+### Highlights
+
+`python/cpython` is now [using](https://github.com/j178/prek/pull/1308) prek. That’s the highlight of this release!
+
+### Enhancements
+
+- Add hook-level `env` option to set environment variables for hooks (#1279) ([#1285](https://github.com/j178/prek/pull/1285))
+- Support apple's `container` for docker language ([#1306](https://github.com/j178/prek/pull/1306))
+- Skip cookiecutter template directories like `{{cookiecutter.project_slug}}` during project discovery ([#1316](https://github.com/j178/prek/pull/1316))
+- Use global `CONCURRENCY` for repo clone ([#1292](https://github.com/j178/prek/pull/1292))
+- untar: disallow external symlinks ([#1314](https://github.com/j178/prek/pull/1314))
+
+### Bug fixes
+
+- Exit with success if no hooks match the hook stage ([#1317](https://github.com/j178/prek/pull/1317))
+- Fix Go template string to detect rootless podman ([#1302](https://github.com/j178/prek/pull/1302))
+- Panic on overly long filenames instead of silently dropping files ([#1287](https://github.com/j178/prek/pull/1287))
+
+### Other changes
+
+- Add `python/cpython` to users ([#1308](https://github.com/j178/prek/pull/1308))
+- Add `MoonshotAI/kimi-cli` to users ([#1286](https://github.com/j178/prek/pull/1286))
+
+### Contributors
+
+- @ulgens
+- @loganaden
+- @danielparks
+- @branchv
+- @j178
+- @yihong0618
+- @mocknen
+- @copilot-swe-agent
+- @ZhuoZhuoCrayon
+
 ## 0.2.25
 
 Released on 2025-12-27.
