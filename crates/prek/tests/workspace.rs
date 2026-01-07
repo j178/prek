@@ -1067,6 +1067,55 @@ fn submodule_discovery() -> Result<()> {
 }
 
 #[test]
+fn cookiecutter_template_directories_are_skipped() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let config = indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+        - id: show-cwd
+          name: Show CWD
+          language: python
+          entry: python -c 'import sys, os; print(os.getcwd()); print(sys.argv[1:])'
+          verbose: true
+    "};
+
+    context.setup_workspace(&["project2", "{{cookiecutter.project_slug}}"], config)?;
+
+    // Stage only the configs that should participate in discovery.
+    context.git_add(".pre-commit-config.yaml");
+    context.git_add("project2/.pre-commit-config.yaml");
+
+    // The cookiecutter directory would otherwise be discovered as a project.
+    cmd_snapshot!(context.filters(), context.run().arg("--refresh").arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `project2`:
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+
+      [TEMP_DIR]/project2
+      ['.pre-commit-config.yaml']
+
+    Running hooks for `.`:
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+
+      [TEMP_DIR]/
+      ['project2/.pre-commit-config.yaml', '.pre-commit-config.yaml']
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn orphan_projects() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
