@@ -690,6 +690,20 @@ impl Workspace {
                     if !file_type.is_dir() {
                         return WalkState::Continue;
                     }
+
+                    // Skip cookiecutter template directories
+                    if entry.file_name().to_str().is_some_and(|filename| {
+                        filename.starts_with("{{")
+                            && filename.ends_with("}}")
+                            && filename.contains("cookiecutter")
+                    }) {
+                        trace!(
+                            path = %entry.path().user_display(),
+                            "Skipping cookiecutter template directory"
+                        );
+                        return WalkState::Skip;
+                    }
+
                     // Skip git submodules
                     if submodules
                         .iter()

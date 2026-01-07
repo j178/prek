@@ -29,6 +29,8 @@ When you run `prek run` without the `--config` option, `prek` automatically disc
 
 - Directories beginning with a dot (e.g. `.hidden`) are ignored during project discovery.
 
+- Cookiecutter template directories (names like `{{cookiecutter.project_slug}}`) are ignored during project discovery.
+
 - By default, `prek` respects `.gitignore` files during workspace discovery. This means any directories or files excluded by `.gitignore`, `.git/info/exclude`, or your global gitignore configuration will automatically be excluded from project discovery. This prevents `prek` from discovering workspaces in ignored directories like `node_modules`, `target`, or `.venv`.
 
 - For additional control, `prek` also supports reading `.prekignore` files (following the same syntax rules as `.gitignore`) to exclude specific directories from workspace discovery beyond what's in `.gitignore`. Like `.gitignore`, `.prekignore` files can be placed anywhere in the workspace and apply to their directory and all subdirectories. This works similarly to the `--skip` option but is configured via files.
