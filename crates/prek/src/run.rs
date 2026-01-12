@@ -80,6 +80,8 @@ impl<'a> Partitions<'a> {
             max_cli_length = 8192 - 1024;
         }
 
+        trace!("Platform max CLI length: {}", max_cli_length);
+
         if cfg!(unix) {
             // Reserve space for environment variables.
             max_cli_length = max_cli_length.saturating_sub(
@@ -106,12 +108,15 @@ impl<'a> Partitions<'a> {
                         })
                         .sum::<usize>(),
             );
+            trace!("Adjusted max CLI length after env vars: {}", max_cli_length);
         }
 
         let command_length = entry.iter().map(String::len).sum::<usize>()
             + entry.len()
             + hook.args.iter().map(String::len).sum::<usize>()
             + hook.args.len();
+
+        trace!("Command length without filenames: {}", command_length);
 
         Self {
             filenames,
