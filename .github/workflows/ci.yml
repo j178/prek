@@ -26,6 +26,65 @@ env:
   LUAROCKS_VERSION: "3.12.2"
 
 jobs:
+  determine_changes:
+    name: "Determine changes"
+    runs-on: ubuntu-latest
+    outputs:
+      # Flag that is raised when any code is changed
+      code: ${{ steps.changed.outputs.code_any_changed }}
+      # Flag that is raised when uv.schema.json is changed (e.g., in a release PR)
+      schema: ${{ steps.changed.outputs.schema_changed }}
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Determine changed files"
+        id: changed
+        shell: bash
+        run: |
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha || 'origin/master' }}...HEAD)
+
+          CODE_CHANGED=false
+          SCHEMA_CHANGED=false
+
+          while IFS= read -r file; do
+            # Check if the schema file changed (e.g., in a release PR)
+            if [[ "${file}" == "prek.schema.json" ]]; then
+              echo "Detected schema change: ${file}"
+              SCHEMA_CHANGED=true
+            fi
+
+            if [[ "${file}" =~ ^docs/ ]]; then
+              echo "Skipping ${file} (matches docs/ pattern)"
+              continue
+            fi
+            if [[ "${file}" =~ ^mkdocs.*\.yml$ ]]; then
+              echo "Skipping ${file} (matches mkdocs*.yml pattern)"
+              continue
+            fi
+            if [[ "${file}" =~ \.md$ ]]; then
+              echo "Skipping ${file} (matches *.md pattern)"
+              continue
+            fi
+            if [[ "${file}" =~ ^bin/ ]]; then
+              echo "Skipping ${file} (matches bin/ pattern)"
+              continue
+            fi
+            if [[ "${file}" =~ ^assets/ ]]; then
+              echo "Skipping ${file} (matches assets/ pattern)"
+              continue
+            fi
+
+            echo "Detected code change in: ${file}"
+            CODE_CHANGED=true
+            break
+
+          done <<< "${CHANGED_FILES}"
+          echo "code_any_changed=${CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
+          echo "schema_changed=${SCHEMA_CHANGED}" >> "${GITHUB_OUTPUT}"
+
   lint:
     name: "lint"
     timeout-minutes: 10
@@ -444,3 +503,90 @@ jobs:
       - name: Run prek on cpython
         working-directory: cpython
         run: cargo run -p prek -- --all-files
+
+  build-binary-linux-libc:
+    timeout-minutes: 10
+    needs: determine_changes
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/master') }}
+    runs-on: ubuntu-latest
+    name: "build binary | linux libc"
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+
+      - name: "Build"
+        run: cargo build --profile no-debug --bin prek
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: prek-linux-libc-${{ github.sha }}
+          path: |
+            ./target/no-debug/prek
+          retention-days: 1
+
+  build-binary-macos-aarch64:
+    timeout-minutes: 10
+    needs: determine_changes
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/master') }}
+    runs-on: macos-latest
+    name: "build binary | macos aarch64"
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - name: "Build"
+        run: cargo build --profile no-debug --bin prek
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: prek-macos-aarch64-${{ github.sha }}
+          path: |
+            ./target/no-debug/prek
+          retention-days: 1
+
+  build-binary-windows-x86_64:
+    needs: determine_changes
+    timeout-minutes: 10
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/master') }}
+    runs-on: windows-latest
+    name: "build binary | windows x86_64"
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          workspaces: ${{ env.PREK_WORKSPACE }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      - name: "Build"
+        working-directory: ${{ env.PREK_WORKSPACE }}
+        run: cargo build --profile no-debug --bin prek
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: prek-windows-x86_64-${{ github.sha }}
+          path: |
+            ${{ env.PREK_WORKSPACE }}/target/no-debug/prek.exe
+          retention-days: 1
