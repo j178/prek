@@ -420,3 +420,27 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
+
+  ecosystem-cpython:
+    name: "ecosystem | cpython"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout python/cpython
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          repository: python/cpython
+          ref: f3759d21dd5e6510361d7409a1df53f35ebd9a58
+          path: cpython
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+
+      - name: Run prek on cpython
+        working-directory: cpython
+        run: cargo run -p prek -- --all-files
