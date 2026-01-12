@@ -27,11 +27,11 @@ See [Workspace Mode](./workspace.md) for more information.
 - If not found, automatically installs `uv` from the best available source (GitHub releases, PyPI, or mirrors)
 - Automatically installs the required Python version if it's not already available
 
-**Environment Variables:**
+!!! warning "Environment Variables"
 
-Since `prek` calls `uv` under the hood to create Python virtual environments and install dependencies, most `uv` environment variables will affect `prek`'s behavior. For example, setting `UV_RESOLUTION=lowest-direct` in your environment will cause hook dependencies to be resolved to their lowest compatible versions, which may lead to installation failures with old packages on modern Python versions.
+    Since `prek` calls `uv` under the hood to create Python virtual environments and install dependencies, most `uv` environment variables will affect `prek`'s behavior. For example, setting `UV_RESOLUTION=lowest-direct` in your environment will cause hook dependencies to be resolved to their lowest compatible versions, which may lead to installation failures with old packages on modern Python versions.
 
-If you encounter unexpected behavior when installing Python hooks, check whether you have any `UV_*` environment variables set that might be affecting dependency resolution or installation.
+    If you encounter unexpected behavior when installing Python hooks, check whether you have any `UV_*` environment variables set that might be affecting dependency resolution or installation.
 
 #### PEP 723 Inline Script Metadata Support
 
