@@ -335,15 +335,14 @@ pub async fn install_hooks(
     }
 
     let mut futures = FuturesUnordered::new();
-    let semaphore = Arc::new(Semaphore::new(*CONCURRENCY));
+    let semaphore = Rc::new(Semaphore::new(*CONCURRENCY));
 
     for (_, hooks) in hooks_by_language {
-        let semaphore = semaphore.clone();
         let partitions = partition_hooks(&hooks);
 
         for hooks in partitions {
-            let semaphore = semaphore.clone();
-            let store_hooks = store_hooks.clone();
+            let semaphore = Rc::clone(&semaphore);
+            let store_hooks = Rc::clone(&store_hooks);
 
             futures.push(async move {
                 let mut hook_envs = Vec::with_capacity(hooks.len());
@@ -643,16 +642,21 @@ async fn run_hooks(
                 run_priority_group(group_hooks, &filter, store, dry_run, &reporter).await?;
 
             // Print results in a stable order (same order as config within the project).
-            group_results.sort_by(|a, b| a.hook.idx.cmp(&b.hook.idx));
+            group_results.sort_unstable_by(|a, b| a.hook.idx.cmp(&b.hook.idx));
 
             // Check if any files were modified by this group of hooks.
-            let curr_diff = git::get_diff(project.path()).await?;
-            let group_modified_files = curr_diff != prev_diff;
-            prev_diff = curr_diff;
+            let all_skipped = group_results.iter().all(|r| r.status.is_skipped());
+            let group_modified_files = if !all_skipped {
+                let curr_diff = git::get_diff(project.path()).await?;
+                let group_modified_files = curr_diff != prev_diff;
+                prev_diff = curr_diff;
+                group_modified_files
+            } else {
+                false
+            };
 
             if group_modified_files {
                 file_modified = true;
-                success = false;
             }
 
             reporter.suspend(|| {
@@ -966,6 +970,10 @@ impl RunStatus {
 
     fn is_unimplemented(self) -> bool {
         matches!(self, Self::Unimplemented)
+    }
+
+    fn is_skipped(self) -> bool {
+        matches!(self, Self::DryRun | Self::NoFiles | Self::Unimplemented)
     }
 }
 
