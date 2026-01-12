@@ -335,15 +335,14 @@ pub async fn install_hooks(
     }
 
     let mut futures = FuturesUnordered::new();
-    let semaphore = Arc::new(Semaphore::new(*CONCURRENCY));
+    let semaphore = Rc::new(Semaphore::new(*CONCURRENCY));
 
     for (_, hooks) in hooks_by_language {
-        let semaphore = semaphore.clone();
         let partitions = partition_hooks(&hooks);
 
         for hooks in partitions {
-            let semaphore = semaphore.clone();
-            let store_hooks = store_hooks.clone();
+            let semaphore = Rc::clone(&semaphore);
+            let store_hooks = Rc::clone(&store_hooks);
 
             futures.push(async move {
                 let mut hook_envs = Vec::with_capacity(hooks.len());
