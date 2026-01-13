@@ -117,11 +117,10 @@ impl<'a> Partitions<'a> {
             + entry.len()
             + hook.args.iter().map(String::len).sum::<usize>()
             + hook.args.len();
-        if max_cli_length <= command_length + 1 {
-            panic!(
-                "Command line ({command_length} bytes) exceeds available argument length ({max_cli_length} bytes)"
-            );
-        }
+        assert!(
+            max_cli_length > command_length + 1,
+            "Command line ({command_length} bytes) exceeds available argument length ({max_cli_length} bytes)"
+        );
 
         Self {
             filenames,
