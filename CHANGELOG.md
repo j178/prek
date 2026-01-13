@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.2.28
+
+Released on 2026-01-13.
+
+### Enhancements
+
+- Avoid running `git diff` for skipped hooks ([#1335](https://github.com/j178/prek/pull/1335))
+- More accurate command line length limit calculation ([#1348](https://github.com/j178/prek/pull/1348))
+- Raise platform command line length upper limit ([#1347](https://github.com/j178/prek/pull/1347))
+- Use `/bin/sh` in generated git hook scripts ([#1333](https://github.com/j178/prek/pull/1333))
+
+### Bug fixes
+
+- Avoid rewriting if config is up-to-date ([#1346](https://github.com/j178/prek/pull/1346))
+
+### Documentation
+
+- Add `ty` to the users of prek ([#1342](https://github.com/j178/prek/pull/1342))
+- Add `ruff` to the users of prek ([#1334](https://github.com/j178/prek/pull/1334))
+- Complete configuration document ([#1338](https://github.com/j178/prek/pull/1338))
+- Document UV environment variable inheritance in prek ([#1339](https://github.com/j178/prek/pull/1339))
+
+### Contributors
+
+- @copilot-swe-agent
+- @MatthewMckee4
+- @yihong0618
+- @j178
+
 ## 0.2.27
 
 Released on 2026-01-07.
