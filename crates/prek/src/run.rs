@@ -45,8 +45,13 @@ fn platform_max_cli_length() -> usize {
     #[cfg(unix)]
     {
         let maximum = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
-        let maximum = usize::try_from(maximum).expect("SC_ARG_MAX too large") - 2048;
-        maximum.clamp(1 << 12, 1 << 17)
+        let maximum = if maximum <= 0 {
+            1 << 12
+        } else {
+            usize::try_from(maximum).expect("SC_ARG_MAX too large")
+        };
+        let maximum = maximum.saturating_sub(2048);
+        maximum.max(1 << 12)
     }
     #[cfg(windows)]
     {
@@ -112,6 +117,11 @@ impl<'a> Partitions<'a> {
             + entry.len()
             + hook.args.iter().map(String::len).sum::<usize>()
             + hook.args.len();
+        if max_cli_length <= command_length + 1 {
+            panic!(
+                "Command line ({command_length} bytes) exceeds available argument length ({max_cli_length} bytes)"
+            );
+        }
 
         Self {
             filenames,
@@ -327,5 +337,19 @@ mod tests {
         // All files should have been processed
         let total_files: usize = all_batches.iter().sum();
         assert_eq!(total_files, 10);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_platform_max_cli_length_matches_sysconf() {
+        let raw = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
+        let expected = if raw <= 0 {
+            1 << 12
+        } else {
+            let maximum = usize::try_from(raw).expect("SC_ARG_MAX too large");
+            maximum.saturating_sub(2048).max(1 << 12)
+        };
+
+        assert_eq!(platform_max_cli_length(), expected);
     }
 }
