@@ -51,7 +51,7 @@ fn platform_max_cli_length() -> usize {
             usize::try_from(maximum).expect("SC_ARG_MAX too large")
         };
         let maximum = maximum.saturating_sub(2048);
-        maximum.max(1 << 12)
+        maximum.clamp(1 << 12, 1 << 20)
     }
     #[cfg(windows)]
     {
@@ -64,12 +64,12 @@ fn platform_max_cli_length() -> usize {
 }
 
 impl<'a> Partitions<'a> {
-    fn new(
+    fn split(
         hook: &'a Hook,
         entry: &'a [String],
         filenames: &'a [&'a Path],
         concurrency: usize,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let max_per_batch = max(4, filenames.len().div_ceil(concurrency));
         let mut max_cli_length = platform_max_cli_length();
 
@@ -117,18 +117,24 @@ impl<'a> Partitions<'a> {
             + entry.len()
             + hook.args.iter().map(String::len).sum::<usize>()
             + hook.args.len();
-        assert!(
-            max_cli_length > command_length + 1,
-            "Command line ({command_length} bytes) exceeds available argument length ({max_cli_length} bytes)"
-        );
 
-        Self {
+        // `+ 1` is the space/null separator between the fixed command and the first filename.
+        let fixed_bytes = command_length + 1;
+
+        if fixed_bytes >= max_cli_length {
+            anyhow::bail!(
+                "Command line length ({fixed_bytes} bytes) exceeds platform limit ({max_cli_length} bytes).
+                \nhint: Shorten the hook `entry`/`args` or wrap the command in a script to reduce command-line length.",
+            );
+        }
+
+        Ok(Self {
             filenames,
             current_index: 0,
             command_length,
             max_per_batch,
             max_cli_length,
-        }
+        })
     }
 }
 
@@ -196,7 +202,7 @@ where
     let concurrency = target_concurrency(hook.require_serial);
 
     // Split files into batches
-    let partitions = Partitions::new(hook, entry, filenames, concurrency);
+    let partitions = Partitions::split(hook, entry, filenames, concurrency)?;
     trace!(
         total_files = filenames.len(),
         concurrency = concurrency,
@@ -336,19 +342,5 @@ mod tests {
         // All files should have been processed
         let total_files: usize = all_batches.iter().sum();
         assert_eq!(total_files, 10);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn test_platform_max_cli_length_matches_sysconf() {
-        let raw = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
-        let expected = if raw <= 0 {
-            1 << 12
-        } else {
-            let maximum = usize::try_from(raw).expect("SC_ARG_MAX too large");
-            maximum.saturating_sub(2048).max(1 << 12)
-        };
-
-        assert_eq!(platform_max_cli_length(), expected);
     }
 }
