@@ -208,6 +208,50 @@ fn auto_update_already_up_to_date() -> Result<()> {
 }
 
 #[test]
+#[cfg(unix)]
+fn auto_update_does_not_rewrite_config_when_up_to_date() -> Result<()> {
+    use std::time::UNIX_EPOCH;
+
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(&context, "up-to-date-repo-mtime", &["v1.0.0"])?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+    context.git_add(".");
+
+    let config_path = context.work_dir().child(CONFIG_FILE);
+
+    let before_secs = std::fs::metadata(config_path.path())?
+        .modified()?
+        .duration_since(UNIX_EPOCH)?
+        .as_secs();
+
+    let assert = context
+        .auto_update()
+        .arg("--cooldown-days")
+        .arg("0")
+        .assert()
+        .success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(stdout.contains("already up to date"));
+
+    let after_secs = std::fs::metadata(config_path.path())?
+        .modified()?
+        .duration_since(UNIX_EPOCH)?
+        .as_secs();
+    assert_eq!(after_secs, before_secs);
+
+    Ok(())
+}
+
+#[test]
 fn auto_update_multiple_repos_mixed() -> Result<()> {
     let context = TestContext::new();
     context.init_project();

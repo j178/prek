@@ -126,13 +126,9 @@ pub(crate) async fn auto_update(
     for (remote_repo, result) in tasks {
         match result {
             Ok(new_rev) => {
-                if remote_repo.rev == new_rev.rev {
-                    writeln!(
-                        printer.stdout(),
-                        "[{}] already up to date",
-                        remote_repo.repo.as_str().yellow()
-                    )?;
-                } else {
+                let is_changed = remote_repo.rev != new_rev.rev;
+
+                if is_changed {
                     writeln!(
                         printer.stdout(),
                         "[{}] updating {} -> {}",
@@ -140,10 +136,16 @@ pub(crate) async fn auto_update(
                         remote_repo.rev,
                         new_rev.rev
                     )?;
+                } else {
+                    writeln!(
+                        printer.stdout(),
+                        "[{}] already up to date",
+                        remote_repo.repo.as_str().yellow()
+                    )?;
                 }
 
                 // Apply this update to all projects that reference this repo
-                if let Some(projects) = repo_updates.get(&remote_repo) {
+                if is_changed && let Some(projects) = repo_updates.get(&remote_repo) {
                     for RepoInfo {
                         project,
                         remote_size,
