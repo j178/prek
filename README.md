@@ -320,6 +320,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [fastapi/asyncer](https://github.com/fastapi/asyncer/pull/437)
 - [astral-sh/ruff](https://github.com/astral-sh/ruff/pull/22505)
 - [astral-sh/ty](https://github.com/astral-sh/ty/pull/2469)
+- [home-assistant/core](https://github.com/home-assistant/core/pull/160427)
 - [DetachHead/basedpyright](https://github.com/DetachHead/basedpyright/pull/1413)
 - [OpenLineage/OpenLineage](https://github.com/OpenLineage/OpenLineage/pull/3965)
 - [authlib/authlib](https://github.com/authlib/authlib/pull/804)
