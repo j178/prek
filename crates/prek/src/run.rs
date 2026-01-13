@@ -1,5 +1,5 @@
 use std::cmp::max;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::sync::LazyLock;
 
@@ -41,7 +41,15 @@ struct Partitions<'a> {
     max_cli_length: usize,
 }
 
+// https://www.in-ulm.de/~mascheck/various/argmax/
+// https://cgit.git.savannah.gnu.org/cgit/findutils.git/tree/xargs/xargs.c
+// https://github.com/rust-lang/rust/issues/40384
+// https://github.com/uutils/findutils/blob/af48c151fe9b29cb7d25471b5388013ca15748ba/src/xargs/mod.rs#L177
+// https://github.com/sharkdp/argmax
 fn platform_max_cli_length() -> usize {
+    // POSIX requires that we leave 2048 bytes of space so that the child processes
+    // can have room to set their own environment variables.
+    const ARG_HEADROOM: usize = 2048;
     #[cfg(unix)]
     {
         let maximum = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
@@ -50,17 +58,32 @@ fn platform_max_cli_length() -> usize {
         } else {
             usize::try_from(maximum).expect("SC_ARG_MAX too large")
         };
-        let maximum = maximum.saturating_sub(2048);
+        let maximum = maximum.saturating_sub(ARG_HEADROOM);
         maximum.clamp(1 << 12, 1 << 20)
     }
     #[cfg(windows)]
     {
-        (1 << 15) - 2048 // UNICODE_STRING max - headroom
+        (1 << 15) - ARG_HEADROOM // UNICODE_STRING max - headroom
     }
     #[cfg(not(any(unix, windows)))]
     {
         1 << 12
     }
+}
+
+// Adapted from https://github.com/uutils/findutils/blob/main/src/xargs/mod.rs
+#[cfg(windows)]
+fn count_osstr_chars_for_exec(s: &OsStr) -> usize {
+    use std::os::windows::ffi::OsStrExt;
+    // Include +1 for either the null terminator or trailing space.
+    s.encode_wide().count() + 1
+}
+
+#[cfg(unix)]
+fn count_osstr_chars_for_exec(s: &OsStr) -> usize {
+    use std::os::unix::ffi::OsStrExt;
+    // Include +1 for the null terminator.
+    s.as_bytes().len() + 1
 }
 
 impl<'a> Partitions<'a> {
@@ -87,30 +110,29 @@ impl<'a> Partitions<'a> {
 
         if cfg!(unix) {
             // Reserve space for environment variables.
-            max_cli_length = max_cli_length.saturating_sub(
-                std::env::vars_os()
+            let env_size = std::env::vars_os()
+                .map(|(key, value)| {
+                    if key
+                        .to_str()
+                        .map(|key| hook.env.contains_key(key))
+                        .unwrap_or(false)
+                    {
+                        // key is in hook.env; add it later.
+                        0
+                    } else {
+                        count_osstr_chars_for_exec(&key) + count_osstr_chars_for_exec(&value)
+                    }
+                })
+                .sum::<usize>()
+                + hook
+                    .env
+                    .iter()
                     .map(|(key, value)| {
-                        if key
-                            .to_str()
-                            .map(|key| hook.env.contains_key(key))
-                            .unwrap_or(false)
-                        {
-                            // key is in hook.env; add it later.
-                            0
-                        } else {
-                            key.len() + value.len() + 2 // key=value\0
-                        }
+                        // On UNIX, the OS string equivalent is the same length
+                        key.len() + value.len() + 2 // key=value\0
                     })
-                    .sum::<usize>()
-                    + hook
-                        .env
-                        .iter()
-                        .map(|(key, value)| {
-                            // On UNIX, the OS string equivalent is the same length
-                            key.len() + value.len() + 2 // key=value\0
-                        })
-                        .sum::<usize>(),
-            );
+                    .sum::<usize>();
+            max_cli_length = max_cli_length.saturating_sub(env_size);
         }
 
         let command_length = entry.iter().map(String::len).sum::<usize>()
