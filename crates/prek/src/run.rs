@@ -174,14 +174,11 @@ impl<'a> Iterator for Partitions<'a> {
             // is too long to fit in the command line by itself.
             let filename = self.filenames[self.current_index];
             let filename_length = filename.as_os_str().len() + 1;
-            let filename_display = filename.to_string_lossy();
-            let filename_display = format!(
-                "{}...{}",
-                &filename_display[..10],
-                &filename_display[filename_display.len().saturating_sub(10)..]
-            );
             panic!(
-                "Filename `{filename_display}` ({filename_length} bytes) is too long to fit in command line",
+                "Filename `{}` is too long ({filename_length} bytes) to fit in command line (max_cli_length = {}, command_length = {})",
+                filename.display(),
+                self.max_cli_length,
+                self.command_length,
             );
         } else {
             Some(&self.filenames[start_index..self.current_index])
