@@ -420,3 +420,53 @@ fn pep723_script() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// Test that GIT environment variables do not leak into uv pip install subprocess.
+/// When prek runs in a git worktree, git sets `GIT_DIR` which should not propagate to
+/// pip install where it breaks packages using `setuptools_scm` for file discovery.
+///
+/// Regression test for <https://github.com/j178/prek/issues/1354>
+#[test]
+fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // setup.py that fails if GIT_DIR leaks into pip install
+    context
+        .work_dir()
+        .child("setup.py")
+        .write_str(indoc::indoc! {r#"
+        import os, sys
+        from setuptools import setup
+        if os.environ.get("GIT_DIR"):
+            sys.exit("ERROR: GIT_DIR should not leak into pip install")
+        setup(name="test", version="0.1.0", extras_require={"test": []})
+    "#})?;
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: check-no-git-dir
+                name: check-no-git-dir
+                language: python
+                entry: python -c "print('ok')"
+                additional_dependencies: [".[test]"]
+                always_run: true
+    "#});
+
+    context.git_add(".");
+
+    // Simulate worktree environment by setting GIT_DIR (like git does in worktrees)
+    cmd_snapshot!(context.filters(), context.run()
+        .env("GIT_DIR", context.work_dir().join(".git")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check-no-git-dir.........................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
