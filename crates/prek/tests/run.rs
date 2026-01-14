@@ -2785,3 +2785,25 @@ fn run_with_stdin_closed() {
     ----- stderr -----
     ");
 }
+
+/// Test `prek --version` outputs version info.
+#[test]
+fn version_info() {
+    let context = TestContext::new();
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(
+            r"prek \d+\.\d+\.\d+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?(\+\d+)? \(\w{9} [\d\-T:\.]+\)",
+            "prek [CURRENT_VERSION] ([COMMIT] [DATE])",
+        )])
+        .collect::<Vec<_>>();
+    cmd_snapshot!(filters, context.command().arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek [CURRENT_VERSION] ([COMMIT] [DATE])
+
+    ----- stderr -----
+    ");
+}
