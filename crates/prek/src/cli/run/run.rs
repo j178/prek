@@ -20,7 +20,7 @@ use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{CollectOptions, FileFilter, Selectors, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, Stage};
-use crate::fs::CWD;
+use crate::fs::{CWD, set_global_reporter};
 use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::printer::Printer;
@@ -83,11 +83,12 @@ pub(crate) async fn run(
         workspace.check_configs_staged().await?;
     }
 
-    let reporter = HookInitReporter::from(printer);
+    let reporter = Arc::new(HookInitReporter::from(printer));
+    set_global_reporter(Some(reporter.clone()));
     let lock = store.lock_async().await?;
 
     let hooks = workspace
-        .init_hooks(store, Some(&reporter))
+        .init_hooks(store, Some(reporter.as_ref()))
         .await
         .context("Failed to init hooks")?;
     let selected_hooks: Vec<_> = hooks
@@ -155,8 +156,9 @@ pub(crate) async fn run(
         "Hooks going to run: {:?}",
         filtered_hooks.iter().map(|h| &h.id).collect::<Vec<_>>()
     );
-    let reporter = HookInstallReporter::from(printer);
-    let installed_hooks = install_hooks(filtered_hooks, store, &reporter).await?;
+    let reporter = Arc::new(HookInstallReporter::from(printer));
+    set_global_reporter(Some(reporter.clone()));
+    let installed_hooks = install_hooks(filtered_hooks, store, reporter.as_ref()).await?;
 
     // Release the store lock.
     drop(lock);
@@ -584,7 +586,8 @@ async fn run_hooks(
     debug_assert!(!hooks.is_empty(), "No hooks to run");
 
     let status_printer = StatusPrinter::for_hooks(hooks, printer);
-    let reporter = HookRunReporter::new(printer, status_printer.bar_len());
+    let reporter = Arc::new(HookRunReporter::new(printer, status_printer.bar_len()));
+    set_global_reporter(Some(reporter.clone()));
 
     let mut success = true;
 
