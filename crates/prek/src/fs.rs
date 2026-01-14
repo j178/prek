@@ -22,13 +22,33 @@
 
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock, Mutex};
+use std::time::Duration;
 use tracing::{debug, error, info, trace};
 
 use anyhow::Context;
 
 pub static CWD: LazyLock<PathBuf> =
     LazyLock::new(|| std::env::current_dir().expect("The current directory must be exist"));
+
+/// A trait for reporters that can suspend their output.
+pub trait SuspendableReporter: Send + Sync {
+    /// Temporarily suspend progress rendering while emitting normal output.
+    fn suspend_dyn(&self, f: Box<dyn FnOnce() + Send>);
+}
+
+/// Global reporter for lock acquisition warnings.
+static GLOBAL_REPORTER: Mutex<Option<Arc<dyn SuspendableReporter>>> = Mutex::new(None);
+
+/// Set the global reporter for lock acquisition warnings.
+pub fn set_global_reporter(reporter: Option<Arc<dyn SuspendableReporter>>) {
+    *GLOBAL_REPORTER.lock().unwrap() = reporter;
+}
+
+/// Get a copy of the global reporter, if one is set.
+fn get_global_reporter() -> Option<Arc<dyn SuspendableReporter>> {
+    GLOBAL_REPORTER.lock().unwrap().clone()
+}
 
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
@@ -65,7 +85,6 @@ impl LockedFile {
                         err
                     ))
                 })?;
-
                 trace!(resource, "Acquired lock");
                 Ok(Self(file))
             }
@@ -77,9 +96,35 @@ impl LockedFile {
         path: impl AsRef<Path>,
         resource: impl Display,
     ) -> Result<Self, std::io::Error> {
-        let file = fs_err::File::create(path.as_ref())?;
+        let path = path.as_ref().to_path_buf();
+        let file = fs_err::File::create(&path)?;
         let resource = resource.to_string();
-        tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource)).await?
+
+        let reporter = get_global_reporter();
+        let path_for_warning = path.display().to_string();
+
+        let mut task =
+            tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource));
+
+        tokio::select! {
+            result = &mut task => result?,
+            () = tokio::time::sleep(Duration::from_secs(1)) => {
+                let emit = move || {
+                    crate::warn_user!(
+                        "Waiting to acquire lock at `{}`. Another prek process may still be running",
+                        &path_for_warning
+                    );
+                };
+
+                if let Some(reporter) = reporter {
+                    reporter.suspend_dyn(Box::new(emit));
+                } else {
+                    emit();
+                }
+
+                task.await?
+            }
+        }
     }
 }
 
