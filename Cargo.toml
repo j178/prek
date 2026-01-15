@@ -130,6 +130,14 @@ ignored = ["liblzma"]
 insta.opt-level = 3
 similar.opt-level = 3
 
+# Profile for fast test execution: Skip debug info generation, and
+# apply basic optimization, which speed up build and running tests.
+[profile.fast-build]
+inherits = "dev"
+opt-level = 1
+debug = 0
+strip = "debuginfo"
+
 # Profile for faster builds: Skip debug info generation, for faster
 # builds of smaller binaries.
 [profile.no-debug]
@@ -144,13 +152,15 @@ debug = "full"
 lto = false
 codegen-units = 16
 
-[profile.release]
+[profile.minimal-size]
+inherits = "release"
 # Enable Full LTO for the best optimizations
 lto = "fat"
 # Reduce codegen units to 1 for better optimizations
 codegen-units = 1
 strip = true
+panic = "abort"
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
-inherits = "release"
+inherits = "minimal-size"

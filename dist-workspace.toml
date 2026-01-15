@@ -14,7 +14,7 @@ build-local-artifacts = false
 # Whether CI should trigger releases with dispatches instead of tag pushes
 dispatch-releases = true
 # Which actions to run on pull requests
-pr-run-mode = "plan"
+pr-run-mode = "skip"
 # Which phase dist should use to create the GitHub release
 github-release = "announce"
 # Whether to publish prereleases to package managers
