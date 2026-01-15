@@ -7,6 +7,7 @@ pub struct EnvVars;
 impl EnvVars {
     pub const PATH: &'static str = "PATH";
     pub const HOME: &'static str = "HOME";
+    pub const TERM: &'static str = "TERM";
     pub const CI: &'static str = "CI";
 
     // Git related
