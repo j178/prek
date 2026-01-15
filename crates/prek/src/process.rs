@@ -32,7 +32,6 @@ use std::process::Output;
 use std::process::{CommandArgs, CommandEnvs, ExitStatus, Stdio};
 
 use owo_colors::OwoColorize;
-use prek_consts::env_vars::EnvVars;
 use thiserror::Error;
 use tracing::trace;
 
@@ -188,6 +187,7 @@ impl Cmd {
 
     #[cfg(not(windows))]
     pub async fn pty_output(&mut self) -> Result<Output, Error> {
+        use prek_consts::env_vars::EnvVars;
         use tokio::io::AsyncReadExt;
 
         // If color is not used, fallback to piped output.
