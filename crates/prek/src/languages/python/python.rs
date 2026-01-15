@@ -103,6 +103,9 @@ impl LanguageImpl for Python {
                 .env_remove(EnvVars::UV_PYTHON)
                 .env_remove(EnvVars::UV_MANAGED_PYTHON)
                 .env_remove(EnvVars::UV_NO_MANAGED_PYTHON)
+                // Remove GIT environment variables that may leak from git hooks (e.g., in worktrees).
+                // These can break packages using setuptools_scm for file discovery.
+                .remove_git_envs()
                 .check(true);
             cmd
         };
