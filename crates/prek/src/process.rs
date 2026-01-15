@@ -201,6 +201,9 @@ impl Cmd {
         self.inner.stdout(stdout);
         self.inner.stderr(stderr);
 
+        // more to check: https://github.com/j178/prek/issues/1362
+        self.inner.env("TERM", "screen-256color");
+
         let session_leader = pts.session_leader();
         unsafe { self.inner.pre_exec(session_leader) };
 
