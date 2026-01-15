@@ -187,6 +187,7 @@ impl Cmd {
 
     #[cfg(not(windows))]
     pub async fn pty_output(&mut self) -> Result<Output, Error> {
+        use prek_consts::env_vars::EnvVars;
         use tokio::io::AsyncReadExt;
 
         // If color is not used, fallback to piped output.
@@ -200,6 +201,18 @@ impl Cmd {
         self.inner.stdin(Stdio::null());
         self.inner.stdout(stdout);
         self.inner.stderr(stderr);
+
+        // We run some commands under a PTY so they behave like they do in an interactive terminal
+        // (colors, progress bars, etc.). However, this is still a *pseudo*-terminal and it doesn't
+        // necessarily provide a full/accurate terminal environment.
+        //
+        // Some CLI programs probe terminal capabilities via terminfo/termcap based on `$TERM`, and
+        // a few are known to misbehave (including hanging) when those probes don't match the PTY
+        // implementation or when they expect a real TTY.
+        //
+        // Forcing `TERM=dumb` tells well-behaved programs to disable advanced terminal features and
+        // avoids capability negotiation that can deadlock under a fake PTY.
+        self.inner.env(EnvVars::TERM, "dumb");
 
         let session_leader = pts.session_leader();
         unsafe { self.inner.pre_exec(session_leader) };
