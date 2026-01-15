@@ -37,7 +37,20 @@
       matchStrings: [
         'const\\s+CUR_UV_VERSION\\s*:\\s*&str\\s*=\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"'
       ]
-    }
+    },
+    // Update major GitHub actions references in documentation.
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/README\\.md$/',
+        '/^docs/.*\\.md$/'
+      ],
+      matchStrings: [
+        '\\suses: (?<depName>[\\w-]+/[\\w-]+)(?<path>/.*)?@(?<currentValue>.+?)\\s',
+      ],
+      datasourceTemplate: 'github-tags',
+      versioningTemplate: 'regex:^v(?<major>\\d+)$',
+    },
   ],
   packageRules: [
     // Group all GitHub Actions updates together
