@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.2.29
+
+Released on 2026-01-16.
+
+### Highlights
+
+`files` / `exclude` now support globs (including glob lists), making config filters much easier to read and maintain than heavily-escaped regex.
+
+Before (regex):
+
+```yaml
+files: "^(src/.*\\.rs$|crates/[^/]+/src/.*\\.rs$)"
+```
+
+After (glob list):
+
+```yaml
+files:
+  glob:
+    - src/**/*.rs
+    - crates/**/src/**/*.rs
+```
+
+### Enhancements
+
+- Add `check-json5` as builtin hooks ([#1367](https://github.com/j178/prek/pull/1367))
+- Add glob list support for file patterns (`files` and `exclude`) ([#1197](https://github.com/j178/prek/pull/1197))
+
+### Bug fixes
+
+- Fix missing commit hash from version info ([#1352](https://github.com/j178/prek/pull/1352))
+- Remove git env vars from `uv pip install` subprocess ([#1355](https://github.com/j178/prek/pull/1355))
+- Set `TERM=dumb` under PTY to prevent capability-probe hangs ([#1363](https://github.com/j178/prek/pull/1363))
+
+### Documentation
+
+- Add `home-assistant/core` to the users of prek ([#1350](https://github.com/j178/prek/pull/1350))
+- Document builtin hooks ([#1370](https://github.com/j178/prek/pull/1370))
+- Explain project configuration scope ([#1373](https://github.com/j178/prek/pull/1373))
+
+### Contributors
+
+- @Goldziher
+- @yihong0618
+- @j178
+- @shaanmajid
+- @ulgens
+
 ## 0.2.28
 
 Released on 2026-01-13.
