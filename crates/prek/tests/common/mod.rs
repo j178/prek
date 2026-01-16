@@ -284,6 +284,7 @@ impl TestContext {
             .arg("commit")
             .arg("-m")
             .arg(message)
+            .env(EnvVars::PREK_HOME, &**self.home_dir())
             .current_dir(&self.temp_dir)
             .assert()
             .success();

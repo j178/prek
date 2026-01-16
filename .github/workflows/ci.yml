@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       test-code: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.any_code_changed == 'true' || github.ref == 'refs/heads/master') }}
-      save-rust-cache: ${{ github.ref == 'refs/heads/main' || steps.changed.outputs.cache_changed == 'true' }}
+      save-rust-cache: ${{ github.ref == 'refs/heads/master' || steps.changed.outputs.cache_changed == 'true' }}
       # Run benchmarks only if Rust code changed
       run-bench: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.rust_code_changed == 'true' || github.ref == 'refs/heads/master') }}
     steps:

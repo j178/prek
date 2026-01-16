@@ -32,6 +32,7 @@ fn hook_impl() {
     let mut commit = Command::new("git");
     commit
         .arg("commit")
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .current_dir(context.work_dir())
         .arg("-m")
         .arg("Initial commit");
@@ -82,6 +83,7 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
     let mut commit = Command::new("git");
     commit
         .arg("commit")
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .current_dir(context.work_dir())
         .arg("-m")
         .arg("Initial commit");
@@ -150,6 +152,7 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
         .arg("push")
         .arg("origin")
         .arg("master")
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .current_dir(context.work_dir());
 
     cmd_snapshot!(context.filters(), push_cmd, @r"
@@ -169,6 +172,7 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
         .arg("push")
         .arg("origin")
         .arg("master")
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .current_dir(context.work_dir());
 
     cmd_snapshot!(context.filters(), push_cmd2, @r"
@@ -230,6 +234,7 @@ fn run_worktree() -> anyhow::Result<()> {
     commit
         .arg("commit")
         .current_dir(context.work_dir().child("worktree"))
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("-m")
         .arg("Initial commit")
         .arg("--allow-empty");
@@ -286,6 +291,7 @@ fn git_dir_respected() {
         .arg("--work-tree")
         .arg(&**cwd)
         .current_dir(context.home_dir())
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("commit")
         .arg("-m")
         .arg("Test commit with GIT_DIR set");
@@ -339,6 +345,7 @@ fn workspace_hook_impl_root() -> anyhow::Result<()> {
     let mut commit = Command::new("git");
     commit
         .current_dir(context.work_dir())
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("commit")
         .arg("-m")
         .arg("Test commit from subdirectory");
@@ -422,6 +429,7 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
     let mut commit = Command::new("git");
     commit
         .current_dir(cwd)
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("commit")
         .arg("-m")
         .arg("Test commit from subdirectory");
@@ -564,6 +572,7 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     let mut commit = Command::new("git");
     commit
         .current_dir(&empty_dir)
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("commit")
         .arg("-m")
         .arg("Test commit");
@@ -586,6 +595,7 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     let mut commit = Command::new("git");
     commit
         .current_dir(&empty_dir)
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .env(EnvVars::PREK_ALLOW_NO_CONFIG, "1")
         .arg("commit")
         .arg("-m")
@@ -628,6 +638,7 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     let mut commit = Command::new("git");
     commit
         .current_dir(&empty_dir)
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .env(EnvVars::PREK_ALLOW_NO_CONFIG, "1")
         .arg("commit")
         .arg("-m")
@@ -690,6 +701,7 @@ fn hook_impl_does_not_fail_when_no_hooks_match_stage() -> anyhow::Result<()> {
     let mut commit = Command::new("git");
     commit
         .current_dir(context.work_dir())
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("commit")
         .arg("-m")
         .arg("Test commit");
@@ -749,6 +761,7 @@ fn workspace_hook_impl_with_selectors() -> anyhow::Result<()> {
     let mut commit = Command::new("git");
     commit
         .current_dir(cwd)
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("commit")
         .arg("-m")
         .arg("Test commit from subdirectory");
