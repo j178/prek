@@ -2,7 +2,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Display;
-use std::ops::{Deref, RangeInclusive};
+use std::ops::RangeInclusive;
 use std::path::Path;
 use std::sync::LazyLock;
 
@@ -20,53 +20,19 @@ use crate::version;
 use crate::warn_user;
 use crate::{identify, yaml};
 
-#[derive(Clone)]
-pub(crate) struct SerdeRegex(Regex);
-
-impl Deref for SerdeRegex {
-    type Target = Regex;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::fmt::Debug for SerdeRegex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("SerdeRegex").field(&self.0.as_str()).finish()
-    }
-}
-
-impl<'de> Deserialize<'de> for SerdeRegex {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        Regex::new(&s)
-            .map(SerdeRegex)
-            .map_err(serde::de::Error::custom)
-    }
-}
-
-impl SerdeRegex {
-    pub(crate) fn from_regex(regex: Regex) -> Self {
-        Self(regex)
-    }
-}
-
-pub(crate) static CONFIG_FILE_REGEX: LazyLock<SerdeRegex> = LazyLock::new(|| {
+pub(crate) static CONFIG_FILE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     let pattern = format!(
         "^{}|{}$",
         fancy_regex::escape(CONFIG_FILE),
         fancy_regex::escape(ALT_CONFIG_FILE)
     );
-    SerdeRegex(Regex::new(&pattern).expect("config regex must compile"))
+    Regex::new(&pattern).expect("config regex must compile")
 });
 
-#[derive(Clone)]
-pub(crate) struct FilePattern {
-    sources: Vec<String>,
-    kind: FilePatternKind,
+#[derive(Debug, Clone)]
+pub(crate) enum FilePattern {
+    Regex(Regex),
+    Glob(Vec<GlobMatcher>),
 }
 
 #[cfg(feature = "schemars")]
@@ -116,46 +82,30 @@ impl schemars::JsonSchema for FilePattern {
     }
 }
 
-#[derive(Clone)]
-enum FilePatternKind {
-    Regex(Regex),
-    Glob(Vec<GlobMatcher>),
-}
-
 impl FilePattern {
-    pub(crate) fn is_match(&self, text: &str) -> bool {
-        match &self.kind {
-            FilePatternKind::Regex(regex) => regex.is_match(text).unwrap_or(false),
-            FilePatternKind::Glob(globs) => globs.iter().any(|g| g.is_match(text)),
+    pub(crate) fn is_match(&self, str: &str) -> bool {
+        match self {
+            FilePattern::Regex(regex) => regex.is_match(str).unwrap_or(false),
+            FilePattern::Glob(globs) => globs.iter().any(|g| g.is_match(str)),
         }
-    }
-
-    pub(crate) fn from_regex(regex: SerdeRegex) -> Self {
-        Self {
-            sources: vec![regex.as_str().to_string()],
-            kind: FilePatternKind::Regex(regex.0),
-        }
-    }
-
-    pub(crate) fn sources(&self) -> &[String] {
-        &self.sources
-    }
-
-    pub(crate) fn sources_display(&self) -> String {
-        self.sources.join(", ")
     }
 }
 
-impl std::fmt::Debug for FilePattern {
+impl Display for FilePattern {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let kind = match self.kind {
-            FilePatternKind::Regex(_) => "Regex",
-            FilePatternKind::Glob(_) => "Glob",
-        };
-        f.debug_struct("FilePattern")
-            .field("kind", &kind)
-            .field("sources", &self.sources)
-            .finish()
+        match self {
+            FilePattern::Regex(regex) => write!(f, "regex: {}", regex.as_str()),
+            FilePattern::Glob(globs) => {
+                let patterns = globs.iter().map(|g| g.glob().to_string()).join(", ");
+                write!(f, "glob: [{patterns}]")
+            }
+        }
+    }
+}
+
+impl From<Regex> for FilePattern {
+    fn from(regex: Regex) -> Self {
+        FilePattern::Regex(regex)
     }
 }
 
@@ -173,35 +123,28 @@ impl<'de> Deserialize<'de> for FilePattern {
         }
 
         match PatternWire::deserialize(deserializer)? {
-            PatternWire::Glob { glob } => Glob::new(&glob)
-                .map(|g| Self {
-                    sources: vec![glob],
-                    kind: FilePatternKind::Glob(vec![g.compile_matcher()]),
-                })
-                .map_err(serde::de::Error::custom),
+            PatternWire::Glob { glob } => {
+                Glob::new(&glob)
+                    .map_err(serde::de::Error::custom)
+                    .map(|glob| {
+                        let matcher = glob.compile_matcher();
+                        Self::Glob(vec![matcher])
+                    })
+            }
             PatternWire::GlobList { glob } => {
-                if glob.is_empty() {
-                    return Err(serde::de::Error::custom("glob list cannot be empty"));
-                }
-                let mut matchers = Vec::with_capacity(glob.len());
-                for g in &glob {
-                    matchers.push(
-                        Glob::new(g)
-                            .map_err(serde::de::Error::custom)?
-                            .compile_matcher(),
-                    );
-                }
-                Ok(Self {
-                    sources: glob,
-                    kind: FilePatternKind::Glob(matchers),
-                })
+                let matchers = glob
+                    .into_iter()
+                    .map(|g| {
+                        Glob::new(&g)
+                            .map_err(serde::de::Error::custom)
+                            .map(|glob| glob.compile_matcher())
+                    })
+                    .collect::<Result<Vec<GlobMatcher>, D::Error>>()?;
+                Ok(Self::Glob(matchers))
             }
             PatternWire::Regex(pattern) => Regex::new(&pattern)
-                .map(|r| Self {
-                    sources: vec![pattern],
-                    kind: FilePatternKind::Regex(r),
-                })
-                .map_err(serde::de::Error::custom),
+                .map_err(serde::de::Error::custom)
+                .map(Self::Regex),
         }
     }
 }
@@ -1099,7 +1042,7 @@ mod tests {
         let parsed: Wrapper =
             serde_yaml::from_str(regex_yaml).expect("regex patterns should parse");
         assert!(
-            matches!(parsed.files.kind, FilePatternKind::Regex(_)),
+            matches!(parsed.files, FilePattern::Regex(_)),
             "expected regex pattern"
         );
         assert!(parsed.files.is_match("src/main.rs"));
@@ -1114,7 +1057,7 @@ mod tests {
         "};
         let parsed: Wrapper = serde_yaml::from_str(glob_yaml).expect("glob patterns should parse");
         assert!(
-            matches!(parsed.files.kind, FilePatternKind::Glob(_)),
+            matches!(parsed.files, FilePattern::Glob(_)),
             "expected glob pattern"
         );
         assert!(parsed.files.is_match("src/lib/main.rs"));
@@ -1150,15 +1093,8 @@ mod tests {
         "})
         .expect("glob list should parse");
         assert_eq!(
-            pattern.sources(),
-            &[
-                "src/**/*.rs".to_string(),
-                "crates/**/src/**/*.rs".to_string()
-            ]
-        );
-        assert_eq!(
-            pattern.sources_display(),
-            "src/**/*.rs, crates/**/src/**/*.rs"
+            pattern.to_string(),
+            "glob: [src/**/*.rs, crates/**/src/**/*.rs]"
         );
         assert!(pattern.is_match("src/main.rs"));
         assert!(pattern.is_match("crates/foo/src/lib.rs"));
@@ -1166,13 +1102,10 @@ mod tests {
     }
 
     #[test]
-    fn reject_empty_glob_list() {
-        let err =
-            serde_yaml::from_str::<FilePattern>("glob: []").expect_err("empty list should fail");
-        assert!(
-            err.to_string().contains("glob list cannot be empty"),
-            "unexpected error: {err}"
-        );
+    fn empty_glob_list_matches_nothing() {
+        let pattern = serde_yaml::from_str::<FilePattern>("glob: []").unwrap();
+        assert!(!pattern.is_match("any/file.rs"));
+        assert!(!pattern.is_match(""));
     }
 
     #[test]
@@ -1509,12 +1442,9 @@ mod tests {
                                         options: HookOptions {
                                             alias: None,
                                             files: Some(
-                                                FilePattern {
-                                                    kind: "Regex",
-                                                    sources: [
-                                                        "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
-                                                    ],
-                                                },
+                                                Regex(
+                                                    ^\.pre-commit-config\.yaml|\.pre-commit-config\.yml$,
+                                                ),
                                             ),
                                             exclude: None,
                                             types: None,
@@ -1547,12 +1477,9 @@ mod tests {
                                         options: HookOptions {
                                             alias: None,
                                             files: Some(
-                                                FilePattern {
-                                                    kind: "Regex",
-                                                    sources: [
-                                                        "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
-                                                    ],
-                                                },
+                                                Regex(
+                                                    ^\.pre-commit-config\.yaml|\.pre-commit-config\.yml$,
+                                                ),
                                             ),
                                             exclude: None,
                                             types: None,

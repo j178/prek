@@ -135,12 +135,9 @@ Config {
                         options: HookOptions {
                             alias: None,
                             files: Some(
-                                FilePattern {
-                                    kind: "Regex",
-                                    sources: [
-                                        "^crates/(uv-cli|uv-settings)/",
-                                    ],
-                                },
+                                Regex(
+                                    ^crates/(uv-cli|uv-settings)/,
+                                ),
                             ),
                             exclude: None,
                             types: Some(
@@ -294,12 +291,12 @@ Config {
     default_stages: None,
     files: None,
     exclude: Some(
-        FilePattern {
-            kind: "Regex",
-            sources: [
-                "(?x)^(\n  .*/(snapshots)/.*|\n)$\n",
-            ],
-        },
+        Regex(
+            (?x)^(
+              .*/(snapshots)/.*|
+            )$
+            ,
+        ),
     ),
     fail_fast: Some(
         true,

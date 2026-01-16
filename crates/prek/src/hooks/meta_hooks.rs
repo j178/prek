@@ -57,8 +57,8 @@ impl MetaHooks {
 
 impl MetaHook {
     pub(crate) fn from_id(id: &str) -> Result<Self, ()> {
-        let config_file_regex = CONFIG_FILE_REGEX.clone();
         let hook_id = MetaHooks::from_str(id)?;
+        let config_file_regex = CONFIG_FILE_REGEX.clone();
 
         let hook = match hook_id {
             MetaHooks::CheckHooksApply => ManifestHook {
@@ -67,7 +67,7 @@ impl MetaHook {
                 language: Language::System,
                 entry: String::new(),
                 options: HookOptions {
-                    files: Some(FilePattern::from_regex(config_file_regex)),
+                    files: Some(FilePattern::from(config_file_regex)),
                     ..Default::default()
                 },
             },
@@ -77,7 +77,7 @@ impl MetaHook {
                 language: Language::System,
                 entry: String::new(),
                 options: HookOptions {
-                    files: Some(FilePattern::from_regex(config_file_regex)),
+                    files: Some(FilePattern::from(config_file_regex)),
                     ..Default::default()
                 },
             },
@@ -196,7 +196,7 @@ pub(crate) async fn check_useless_excludes(
             let display = config
                 .exclude
                 .as_ref()
-                .map(FilePattern::sources_display)
+                .map(ToString::to_string)
                 .unwrap_or_default();
             writeln!(
                 &mut output,
@@ -228,7 +228,7 @@ pub(crate) async fn check_useless_excludes(
                     let display = opts
                         .exclude
                         .as_ref()
-                        .map(FilePattern::sources_display)
+                        .map(ToString::to_string)
                         .unwrap_or_default();
                     writeln!(
                         &mut output,
@@ -257,12 +257,11 @@ pub fn identity(_hook: &Hook, filenames: &[&Path]) -> (i32, Vec<u8>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::SerdeRegex;
     use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 
     fn regex_pattern(pattern: &str) -> FilePattern {
         let regex = fancy_regex::Regex::new(pattern).unwrap();
-        FilePattern::from_regex(SerdeRegex::from_regex(regex))
+        FilePattern::from(regex)
     }
 
     #[test]
@@ -302,7 +301,6 @@ mod tests {
             .expect("files should be set");
         assert!(useless_files.is_match(CONFIG_FILE));
         assert!(useless_files.is_match(ALT_CONFIG_FILE));
-        assert!(!useless_files.sources().is_empty());
 
         let identity = MetaHook::from_id("identity").expect("known meta hook");
         assert!(identity.0.options.files.is_none());

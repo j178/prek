@@ -12,12 +12,9 @@ Manifest {
             options: HookOptions {
                 alias: None,
                 files: Some(
-                    FilePattern {
-                        kind: "Regex",
-                        sources: [
-                            "^requirements\\.(in|txt)$",
-                        ],
-                    },
+                    Regex(
+                        ^requirements\.(in|txt)$,
+                    ),
                 ),
                 exclude: None,
                 types: None,
@@ -58,12 +55,9 @@ Manifest {
             options: HookOptions {
                 alias: None,
                 files: Some(
-                    FilePattern {
-                        kind: "Regex",
-                        sources: [
-                            "^(uv\\.lock|pyproject\\.toml|uv\\.toml)$",
-                        ],
-                    },
+                    Regex(
+                        ^(uv\.lock|pyproject\.toml|uv\.toml)$,
+                    ),
                 ),
                 exclude: None,
                 types: None,
@@ -104,12 +98,9 @@ Manifest {
             options: HookOptions {
                 alias: None,
                 files: Some(
-                    FilePattern {
-                        kind: "Regex",
-                        sources: [
-                            "^uv\\.lock$",
-                        ],
-                    },
+                    Regex(
+                        ^uv\.lock$,
+                    ),
                 ),
                 exclude: None,
                 types: None,
