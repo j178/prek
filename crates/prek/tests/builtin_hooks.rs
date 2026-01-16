@@ -2115,3 +2115,73 @@ fn check_case_conflict_among_new_files() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn check_json5() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-json5
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files
+    cwd.child("valid.json5").write_str(indoc::indoc! {r"
+        // This is a comment
+        {
+            unquotedKey: 'value', // Trailing comma
+            anotherKey: 12345,
+        }
+    "})?;
+    cwd.child("invalid_missing_comma.json5")
+        .write_str(indoc::indoc! {r"
+        {
+            key1: 'value1'
+            key2: 'value2', // Missing comma between key-value pairs
+        }
+    "})?;
+
+    context.git_add(".");
+
+    // First run: hooks should fail
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check json5..............................................................Failed
+    - hook id: check-json5
+    - exit code: 1
+
+      invalid_missing_comma.json5: Failed to json5 decode (expected comma at line 3 column 5)
+
+    ----- stderr -----
+    ");
+
+    // Fix the files
+    cwd.child("invalid_missing_comma.json5")
+        .write_str(indoc::indoc! {r"
+        {
+            key1: 'value1',
+            key2: 'value2',
+        }
+    "})?;
+    context.git_add(".");
+
+    // Second run: hooks should now pass
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check json5..............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
