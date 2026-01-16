@@ -286,7 +286,7 @@ Allowed values:
 
 !!! note "prek-only"
 
-  This key is a `prek` extension. Upstream `pre-commit` uses `minimum_pre_commit_version`, which `prek` intentionally ignores.
+     This key is a `prek` extension. Upstream `pre-commit` uses `minimum_pre_commit_version`, which `prek` intentionally ignores.
 
 Require a minimum `prek` version for this config.
 
@@ -307,7 +307,7 @@ minimum_prek_version: '0.2.0'
 
 !!! note "prek-only"
 
-  `orphan` is a `prek` workspace-mode feature and is not recognized by upstream `pre-commit`.
+    `orphan` is a `prek` workspace-mode feature and is not recognized by upstream `pre-commit`.
 
 Workspace-mode setting to isolate a nested project from parent configs.
 
@@ -435,7 +435,7 @@ repos:
 
 !!! note "prek-only"
 
-  `repo: builtin` is specific to `prek` and is not compatible with upstream `pre-commit`.
+    `repo: builtin` is specific to `prek` and is not compatible with upstream `pre-commit`.
 
 Use `prek`’s built-in fast hooks (offline, zero setup).
 
@@ -530,10 +530,10 @@ Common values include `system`, `python`, `node`, `rust`, `golang`, `ruby`, and 
 
 !!! note "Legacy aliases"
 
-  Some older `pre-commit` language names map to modern ones:
+    Some older `pre-commit` language names map to modern ones:
 
-  - `unsupported` is treated as `system`
-  - `unsupported_script` is treated as `script`
+    - `unsupported` is treated as `system`
+    - `unsupported_script` is treated as `script`
 
 #### `alias`
 
@@ -561,7 +561,7 @@ hooks:
 
 !!! note "prek-only"
 
-  `env` is a `prek` extension and may not be recognized by upstream `pre-commit`.
+    `env` is a `prek` extension and may not be recognized by upstream `pre-commit`.
 
 Extra environment variables for the hook process.
 
@@ -672,7 +672,7 @@ This is useful for tools that use global caches/locks or otherwise can’t handl
 
 !!! note "prek-only"
 
-  `priority` controls `prek`'s scheduler and does not exist in upstream `pre-commit`.
+    `priority` controls `prek`'s scheduler and does not exist in upstream `pre-commit`.
 
 Each hook can set an explicit `priority` (a non-negative integer) that controls when it runs and with which hooks it may execute in parallel.
 
@@ -774,7 +774,7 @@ If you set this for a language that doesn’t support dependency installation, `
 
 !!! note "prek-only"
 
-  This is a `prek`-specific requirement gate. Upstream `pre-commit` does not have a hook-level minimum version key.
+    This is a `prek`-specific requirement gate. Upstream `pre-commit` does not have a hook-level minimum version key.
 
 Require a minimum `prek` version for this specific hook.
 
