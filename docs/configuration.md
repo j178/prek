@@ -125,6 +125,8 @@ This is usually used to narrow down the universe of files in large repositories.
 
     This is a `prek` extension. Upstream `pre-commit` expects regex strings here.
 
+    For more information on the glob syntax, refer to the [globset documentation](https://docs.rs/globset/latest/globset/#syntax).
+
 Examples:
 
 ```yaml
@@ -156,6 +158,8 @@ Global *exclude* regex applied before hook-level filtering.
 !!! note "prek-only globs"
 
     Like `files`, `exclude` supports `glob` (single glob or glob list) as a `prek` extension.
+
+    For more information on the glob syntax, refer to the [globset documentation](https://docs.rs/globset/latest/globset/#syntax).
 
 Examples:
 
