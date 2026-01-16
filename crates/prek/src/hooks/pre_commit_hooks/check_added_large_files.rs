@@ -51,14 +51,13 @@ pub(crate) async fn check_added_large_files(
 
     let lfs_files = get_lfs_files(filenames).await?;
 
-    let filenames: Vec<&Path> = filenames
+    let filenames = filenames
         .iter()
         .copied()
         .filter(|f| filter.contains(f))
-        .filter(|f| !lfs_files.contains(*f))
-        .collect();
+        .filter(|f| !lfs_files.contains(*f));
 
-    run_concurrent_file_checks(&filenames, *CONCURRENCY, |filename| async move {
+    run_concurrent_file_checks(filenames, *CONCURRENCY, |filename| async move {
         let file_path = hook.project().relative_path().join(filename);
         let size = fs_err::tokio::metadata(file_path).await?.len() / 1024;
         if size > args.max_kb {

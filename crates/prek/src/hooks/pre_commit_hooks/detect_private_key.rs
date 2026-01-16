@@ -20,7 +20,7 @@ const BLACKLIST: &[&[u8]] = &[
 ];
 
 pub(crate) async fn detect_private_key(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
-    run_concurrent_file_checks(filenames, *CONCURRENCY, |filename| {
+    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
         check_file(hook.project().relative_path(), filename)
     })
     .await

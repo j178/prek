@@ -41,7 +41,7 @@ async fn os_check_shebangs(
     file_base: &Path,
     paths: &[&Path],
 ) -> Result<(i32, Vec<u8>), anyhow::Error> {
-    run_concurrent_file_checks(paths, *CONCURRENCY, |file| async move {
+    run_concurrent_file_checks(paths.iter().copied(), *CONCURRENCY, |file| async move {
         let file_path = file_base.join(file);
         let has_shebang = file_has_shebang(&file_path).await?;
         if has_shebang {

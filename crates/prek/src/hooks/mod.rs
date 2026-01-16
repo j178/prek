@@ -50,19 +50,20 @@ pub async fn run_fast_path(
     }
 }
 
-pub(crate) async fn run_concurrent_file_checks<'a, F, Fut>(
-    filenames: &'a [&'a Path],
+pub(crate) async fn run_concurrent_file_checks<'a, I, F, Fut>(
+    filenames: I,
     concurrency: usize,
     check: F,
 ) -> anyhow::Result<(i32, Vec<u8>)>
 where
+    I: IntoIterator<Item = &'a Path>,
     F: Fn(&'a Path) -> Fut,
     Fut: Future<Output = anyhow::Result<(i32, Vec<u8>)>>,
 {
     use futures::StreamExt;
 
     let mut tasks = futures::stream::iter(filenames)
-        .map(|f| check(f))
+        .map(check)
         .buffered(concurrency);
 
     let mut code = 0;

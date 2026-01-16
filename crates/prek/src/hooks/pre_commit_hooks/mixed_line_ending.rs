@@ -44,7 +44,7 @@ enum FixMode {
 pub(crate) async fn mixed_line_ending(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
 
-    run_concurrent_file_checks(filenames, *CONCURRENCY, |filename| {
+    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
         fix_file(hook.project().relative_path(), filename, args.fix)
     })
     .await

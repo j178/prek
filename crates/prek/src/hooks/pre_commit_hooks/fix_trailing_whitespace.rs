@@ -84,7 +84,7 @@ pub(crate) async fn fix_trailing_whitespace(
         Vec::new()
     };
 
-    run_concurrent_file_checks(filenames, *CONCURRENCY, |filename| {
+    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
         fix_file(
             hook.project().relative_path(),
             filename,
