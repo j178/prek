@@ -94,6 +94,7 @@ For `repo: builtin`, the following hooks are supported:
 - `end-of-file-fixer` (Ensure newline at EOF)
 - `fix-byte-order-marker` (Remove UTF-8 byte order marker)
 - `check-json` (Validate JSON files)
+- `check-json5` (Validate JSON5 files)
 - `check-toml` (Validate TOML files)
 - `check-yaml` (Validate YAML files)
 - `check-xml` (Validate XML files)

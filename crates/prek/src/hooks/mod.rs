@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::LazyLock;
@@ -47,4 +48,32 @@ pub async fn run_fast_path(
         }
         _ => unreachable!(),
     }
+}
+
+pub(crate) async fn run_concurrent_file_checks<'a, I, F, Fut>(
+    filenames: I,
+    concurrency: usize,
+    check: F,
+) -> anyhow::Result<(i32, Vec<u8>)>
+where
+    I: IntoIterator<Item = &'a Path>,
+    F: Fn(&'a Path) -> Fut,
+    Fut: Future<Output = anyhow::Result<(i32, Vec<u8>)>>,
+{
+    use futures::StreamExt;
+
+    let mut tasks = futures::stream::iter(filenames)
+        .map(check)
+        .buffered(concurrency);
+
+    let mut code = 0;
+    let mut output = Vec::new();
+
+    while let Some(result) = tasks.next().await {
+        let (c, o) = result?;
+        code |= c;
+        output.extend(o);
+    }
+
+    Ok((code, output))
 }

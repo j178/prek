@@ -35,6 +35,7 @@ ignore = { version = "0.4.23" }
 indicatif = { version = "0.18.0" }
 indoc = { version = "2.0.5" }
 itertools = { version = "0.14.0" }
+json5 = { version = "1.3.0" }
 lazy-regex = { version = "3.4.2" }
 levenshtein = { version = "1.0.5" }
 libc = { version = "0.2.164" }

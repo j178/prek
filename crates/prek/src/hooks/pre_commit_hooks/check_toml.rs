@@ -1,26 +1,16 @@
 use std::path::Path;
 
 use anyhow::Result;
-use futures::StreamExt;
 
 use crate::hook::Hook;
+use crate::hooks::run_concurrent_file_checks;
 use crate::run::CONCURRENCY;
 
 pub(crate) async fn check_toml(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
-    let mut tasks = futures::stream::iter(filenames)
-        .map(async |filename| check_file(hook.project().relative_path(), filename).await)
-        .buffered(*CONCURRENCY);
-
-    let mut code = 0;
-    let mut output = Vec::new();
-
-    while let Some(result) = tasks.next().await {
-        let (c, o) = result?;
-        code |= c;
-        output.extend(o);
-    }
-
-    Ok((code, output))
+    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
+        check_file(hook.project().relative_path(), filename)
+    })
+    .await
 }
 
 async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {

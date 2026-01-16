@@ -1,10 +1,10 @@
 use std::path::Path;
 
 use anyhow::Result;
-use futures::StreamExt;
 use tokio::io::AsyncReadExt;
 
 use crate::hook::Hook;
+use crate::hooks::run_concurrent_file_checks;
 use crate::run::CONCURRENCY;
 
 const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
@@ -14,20 +14,10 @@ pub(crate) async fn fix_byte_order_marker(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
-    let mut tasks = futures::stream::iter(filenames)
-        .map(async |filename| fix_file(hook.project().relative_path(), filename).await)
-        .buffered(*CONCURRENCY);
-
-    let mut code = 0;
-    let mut output = Vec::new();
-
-    while let Some(result) = tasks.next().await {
-        let (c, o) = result?;
-        code |= c;
-        output.extend(o);
-    }
-
-    Ok((code, output))
+    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
+        fix_file(hook.project().relative_path(), filename)
+    })
+    .await
 }
 
 async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
