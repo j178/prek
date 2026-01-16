@@ -1885,6 +1885,7 @@ dependencies = [
  "fancy-regex",
  "fs-err",
  "futures",
+ "globset",
  "hex",
  "http",
  "ignore",

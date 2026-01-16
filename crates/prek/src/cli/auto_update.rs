@@ -576,7 +576,14 @@ mod tests {
         // First commit (required before creating a branch)
         git::git_cmd("git commit")
             .unwrap()
-            .args(["commit", "--allow-empty", "-m", "initial"])
+            .args([
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "initial",
+            ])
             .current_dir(repo)
             .remove_git_envs()
             .output()
@@ -599,10 +606,14 @@ mod tests {
     async fn create_commit(repo: &Path, message: &str) {
         git::git_cmd("git commit")
             .unwrap()
-            .arg("commit")
-            .arg("--allow-empty")
-            .arg("-m")
-            .arg(message)
+            .args([
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "--allow-empty",
+                "-m",
+                message,
+            ])
             .current_dir(repo)
             .remove_git_envs()
             .output()
@@ -621,10 +632,14 @@ mod tests {
 
         git::git_cmd("git commit")
             .unwrap()
-            .arg("commit")
-            .arg("--allow-empty")
-            .arg("-m")
-            .arg(message)
+            .args([
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "--allow-empty",
+                "-m",
+                message,
+            ])
             .env("GIT_AUTHOR_DATE", &date_str)
             .env("GIT_COMMITTER_DATE", &date_str)
             .current_dir(repo)
@@ -660,6 +675,7 @@ mod tests {
             .unwrap()
             .arg("tag")
             .arg(tag)
+            .arg("--no-sign")
             .arg("-m")
             .arg(tag)
             .env("GIT_AUTHOR_DATE", &date_str)

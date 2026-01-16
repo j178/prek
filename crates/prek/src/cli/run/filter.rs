@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use fancy_regex::Regex;
 use itertools::{Either, Itertools};
 use path_clean::PathClean;
 use prek_consts::env_vars::EnvVars;
@@ -9,7 +8,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::FxHashSet;
 use tracing::{debug, error, instrument};
 
-use crate::config::Stage;
+use crate::config::{FilePattern, Stage};
 use crate::git::GIT_ROOT;
 use crate::hook::Hook;
 use crate::identify::{TagSet, tags_from_path};
@@ -18,12 +17,12 @@ use crate::{fs, git, warn_user};
 
 /// Filter filenames by include/exclude patterns.
 pub(crate) struct FilenameFilter<'a> {
-    include: Option<&'a Regex>,
-    exclude: Option<&'a Regex>,
+    include: Option<&'a FilePattern>,
+    exclude: Option<&'a FilePattern>,
 }
 
 impl<'a> FilenameFilter<'a> {
-    pub(crate) fn new(include: Option<&'a Regex>, exclude: Option<&'a Regex>) -> Self {
+    pub(crate) fn new(include: Option<&'a FilePattern>, exclude: Option<&'a FilePattern>) -> Self {
         Self { include, exclude }
     }
 
@@ -31,13 +30,13 @@ impl<'a> FilenameFilter<'a> {
         let Some(filename) = filename.to_str() else {
             return false;
         };
-        if let Some(re) = &self.include {
-            if !re.is_match(filename).unwrap_or(false) {
+        if let Some(pattern) = &self.include {
+            if !pattern.is_match(filename) {
                 return false;
             }
         }
-        if let Some(re) = &self.exclude {
-            if re.is_match(filename).unwrap_or(false) {
+        if let Some(pattern) = &self.exclude {
+            if pattern.is_match(filename) {
                 return false;
             }
         }
@@ -96,8 +95,8 @@ impl<'a> FileFilter<'a> {
         I: Iterator<Item = &'a PathBuf> + Send,
     {
         let filter = FilenameFilter::new(
-            project.config().files.as_deref(),
-            project.config().exclude.as_deref(),
+            project.config().files.as_ref(),
+            project.config().exclude.as_ref(),
         );
 
         let orphan = project.config().orphan.unwrap_or(false);
@@ -163,7 +162,7 @@ impl<'a> FileFilter<'a> {
     #[instrument(level = "trace", skip_all, fields(hook = ?hook.id))]
     pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&Path> {
         // Filter by hook `files` and `exclude` patterns.
-        let filter = FilenameFilter::new(hook.files.as_deref(), hook.exclude.as_deref());
+        let filter = FilenameFilter::new(hook.files.as_ref(), hook.exclude.as_ref());
 
         let filenames = self.filenames.par_iter().filter(|filename| {
             if let Ok(stripped) = filename.strip_prefix(self.filename_prefix) {
@@ -377,4 +376,25 @@ async fn collect_files_from_args(
     debug!("Staged files: {}", files.len());
 
     Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn glob_pattern(pattern: &str) -> FilePattern {
+        serde_yaml::from_str::<FilePattern>(&format!("glob: {pattern}"))
+            .expect("glob pattern should deserialize")
+    }
+
+    #[test]
+    fn filename_filter_supports_glob_include_and_exclude() {
+        let include = glob_pattern("src/**/*.rs");
+        let exclude = glob_pattern("src/**/ignored.rs");
+        let filter = FilenameFilter::new(Some(&include), Some(&exclude));
+
+        assert!(filter.filter(Path::new("src/lib/main.rs")));
+        assert!(!filter.filter(Path::new("src/lib/ignored.rs")));
+        assert!(!filter.filter(Path::new("tests/main.rs")));
+    }
 }
