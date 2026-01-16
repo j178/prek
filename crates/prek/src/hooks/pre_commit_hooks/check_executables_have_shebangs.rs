@@ -7,6 +7,7 @@ use tokio::io::AsyncReadExt;
 
 use crate::git;
 use crate::hook::Hook;
+use crate::hooks::run_concurrent_file_checks;
 use crate::run::CONCURRENCY;
 
 pub(crate) async fn check_executables_have_shebangs(
@@ -40,28 +41,17 @@ async fn os_check_shebangs(
     file_base: &Path,
     paths: &[&Path],
 ) -> Result<(i32, Vec<u8>), anyhow::Error> {
-    let mut tasks = futures::stream::iter(paths)
-        .map(|file| async move {
-            let file_path = file_base.join(file);
-            let has_shebang = file_has_shebang(&file_path).await?;
-            if has_shebang {
-                anyhow::Ok((0, Vec::new()))
-            } else {
-                let msg = print_shebang_warning(file);
-                Ok((1, msg.into_bytes()))
-            }
-        })
-        .buffered(*CONCURRENCY);
-
-    let mut code = 0;
-    let mut output = Vec::new();
-    while let Some(result) = tasks.next().await {
-        let (c, o) = result?;
-        code |= c;
-        output.extend(o);
-    }
-
-    Ok((code, output))
+    run_concurrent_file_checks(paths, *CONCURRENCY, |file| async move {
+        let file_path = file_base.join(file);
+        let has_shebang = file_has_shebang(&file_path).await?;
+        if has_shebang {
+            anyhow::Ok((0, Vec::new()))
+        } else {
+            let msg = print_shebang_warning(file);
+            Ok((1, msg.into_bytes()))
+        }
+    })
+    .await
 }
 
 fn print_shebang_warning(path: &Path) -> String {
