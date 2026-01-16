@@ -7,12 +7,15 @@ use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks;
 use crate::store::Store;
 
+mod check_json5;
+
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum BuiltinHooks {
     CheckAddedLargeFiles,
     CheckCaseConflict,
     CheckExecutablesHaveShebangs,
     CheckJson,
+    CheckJson5,
     CheckMergeConflict,
     CheckSymlinks,
     CheckToml,
@@ -35,6 +38,7 @@ impl FromStr for BuiltinHooks {
             "check-case-conflict" => Ok(Self::CheckCaseConflict),
             "check-executables-have-shebangs" => Ok(Self::CheckExecutablesHaveShebangs),
             "check-json" => Ok(Self::CheckJson),
+            "check-json5" => Ok(Self::CheckJson5),
             "check-merge-conflict" => Ok(Self::CheckMergeConflict),
             "check-symlinks" => Ok(Self::CheckSymlinks),
             "check-toml" => Ok(Self::CheckToml),
@@ -67,6 +71,7 @@ impl BuiltinHooks {
                 pre_commit_hooks::check_executables_have_shebangs(hook, filenames).await
             }
             Self::CheckJson => pre_commit_hooks::check_json(hook, filenames).await,
+            Self::CheckJson5 => check_json5::check_json5(hook, filenames).await,
             Self::CheckMergeConflict => {
                 pre_commit_hooks::check_merge_conflict(hook, filenames).await
             }
@@ -138,6 +143,17 @@ impl BuiltinHook {
                 options: HookOptions {
                     description: Some("checks json files for parseable syntax.".to_string()),
                     types: Some(vec!["json".to_string()]),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::CheckJson5 => ManifestHook {
+                id: "check-json5".to_string(),
+                name: "check json5".to_string(),
+                language: Language::Python,
+                entry: "check-json5".to_string(),
+                options: HookOptions {
+                    description: Some("checks json5 files for parseable syntax.".to_string()),
+                    types: Some(vec!["json5".to_string()]),
                     ..Default::default()
                 },
             },

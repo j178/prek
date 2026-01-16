@@ -46,6 +46,7 @@ ignore = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
+json5 = { workspace = true }
 lazy-regex = { workspace = true }
 levenshtein = { workspace = true }
 # Enable static linking for liblzma

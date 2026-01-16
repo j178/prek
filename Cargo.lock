@@ -1410,6 +1410,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "json5"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56c86c72f9e1d3fe29baa32cab8896548eef9aae271fce4e796d16b583fdf6d5"
+dependencies = [
+ "serde",
+ "ucd-trie",
+]
+
+[[package]]
 name = "lazy-regex"
 version = "3.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1883,6 +1893,7 @@ dependencies = [
  "insta",
  "insta-cmd",
  "itertools",
+ "json5",
  "lazy-regex",
  "levenshtein",
  "libc",
@@ -3013,6 +3024,12 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "ucd-trie"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2896d95c02a80c6d6a5d6e953d479f5ddf2dfdb6a244441010e373ac0fb88971"
 
 [[package]]
 name = "unicode-id"
