@@ -977,7 +977,6 @@ pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
         let msg = repos_has_mutable_rev
             .iter()
             .map(|repo| format!("{}: {}", repo.repo.cyan(), repo.rev.yellow()))
-            .collect::<Vec<_>>()
             .join("\n");
 
         warn_user!(
@@ -987,7 +986,7 @@ pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
             {}
             Mutable references are never updated after first install and are not supported.
             See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details.
-            Hint: `prek autoupdate` often fixes this",
+            Hint: `prek auto-update` often fixes this",
             "#,
             msg
             }
