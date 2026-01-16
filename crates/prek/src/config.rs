@@ -50,7 +50,25 @@ impl GlobPatterns {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum FilePatternWire {
+    Glob { glob: String },
+    GlobList { glob: Vec<String> },
+    Regex(String),
+}
+
+#[derive(Debug, thiserror::Error)]
+enum FilePatternWireError {
+    #[error(transparent)]
+    Glob(#[from] globset::Error),
+
+    #[error(transparent)]
+    Regex(#[from] fancy_regex::Error),
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(try_from = "FilePatternWire")]
 pub(crate) enum FilePattern {
     Regex(Regex),
     Glob(GlobPatterns),
@@ -130,29 +148,14 @@ impl From<Regex> for FilePattern {
     }
 }
 
-impl<'de> Deserialize<'de> for FilePattern {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum PatternWire {
-            Glob { glob: String },
-            GlobList { glob: Vec<String> },
-            Regex(String),
-        }
+impl TryFrom<FilePatternWire> for FilePattern {
+    type Error = FilePatternWireError;
 
-        match PatternWire::deserialize(deserializer)? {
-            PatternWire::Glob { glob } => GlobPatterns::new(vec![glob])
-                .map_err(serde::de::Error::custom)
-                .map(Self::Glob),
-            PatternWire::GlobList { glob } => GlobPatterns::new(glob)
-                .map_err(serde::de::Error::custom)
-                .map(Self::Glob),
-            PatternWire::Regex(pattern) => Regex::new(&pattern)
-                .map_err(serde::de::Error::custom)
-                .map(Self::Regex),
+    fn try_from(value: FilePatternWire) -> Result<Self, Self::Error> {
+        match value {
+            FilePatternWire::Glob { glob } => Ok(Self::Glob(GlobPatterns::new(vec![glob])?)),
+            FilePatternWire::GlobList { glob } => Ok(Self::Glob(GlobPatterns::new(glob)?)),
+            FilePatternWire::Regex(pattern) => Ok(Self::Regex(Regex::new(&pattern)?)),
         }
     }
 }
@@ -514,29 +517,35 @@ pub(crate) type LocalHook = ManifestHook;
 /// A meta hook predefined in pre-commit.
 ///
 /// It's the same as the manifest hook definition but with only a few predefined id allowed.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(try_from = "RemoteHook")]
 pub(crate) struct MetaHook(pub(crate) ManifestHook);
 
-impl<'de> Deserialize<'de> for MetaHook {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let hook_options = RemoteHook::deserialize(deserializer)?;
-        let mut meta_hook = MetaHook::from_id(&hook_options.id).map_err(|()| {
-            serde::de::Error::custom(format!("unknown meta hook id `{}`", &hook_options.id))
-        })?;
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum MetaHookWireError {
+    #[error("unknown meta hook id `{0}`")]
+    UnknownId(String),
+
+    #[error("language must be `system` for meta hooks")]
+    InvalidLanguage,
+
+    #[error("entry is not allowed for meta hooks")]
+    EntryNotAllowed,
+}
+
+impl TryFrom<RemoteHook> for MetaHook {
+    type Error = MetaHookWireError;
+
+    fn try_from(hook_options: RemoteHook) -> std::result::Result<Self, Self::Error> {
+        let mut meta_hook = MetaHook::from_id(&hook_options.id)
+            .map_err(|()| MetaHookWireError::UnknownId(hook_options.id.clone()))?;
 
         if hook_options.language.is_some_and(|l| l != Language::System) {
-            return Err(serde::de::Error::custom(
-                "language must be `system` for meta hooks",
-            ));
+            return Err(MetaHookWireError::InvalidLanguage);
         }
         if hook_options.entry.is_some() {
-            return Err(serde::de::Error::custom(
-                "entry is not allowed for meta hooks",
-            ));
+            return Err(MetaHookWireError::EntryNotAllowed);
         }
 
         if let Some(name) = &hook_options.name {
@@ -556,29 +565,35 @@ impl From<MetaHook> for ManifestHook {
 
 /// A builtin hook predefined in prek.
 /// Basically the same as meta hooks, but defined under `builtin` repo, and do other non-meta checks.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(try_from = "RemoteHook")]
 pub(crate) struct BuiltinHook(pub(crate) ManifestHook);
 
-impl<'de> Deserialize<'de> for BuiltinHook {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let hook_options = RemoteHook::deserialize(deserializer)?;
-        let mut builtin_hook = BuiltinHook::from_id(&hook_options.id).map_err(|()| {
-            serde::de::Error::custom(format!("unknown builtin hook id `{}`", &hook_options.id))
-        })?;
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum BuiltinHookWireError {
+    #[error("unknown builtin hook id `{0}`")]
+    UnknownId(String),
+
+    #[error("language must be `system` for builtin hooks")]
+    InvalidLanguage,
+
+    #[error("entry is not allowed for builtin hooks")]
+    EntryNotAllowed,
+}
+
+impl TryFrom<RemoteHook> for BuiltinHook {
+    type Error = BuiltinHookWireError;
+
+    fn try_from(hook_options: RemoteHook) -> std::result::Result<Self, Self::Error> {
+        let mut builtin_hook = BuiltinHook::from_id(&hook_options.id)
+            .map_err(|()| BuiltinHookWireError::UnknownId(hook_options.id.clone()))?;
 
         if hook_options.language.is_some_and(|l| l != Language::System) {
-            return Err(serde::de::Error::custom(
-                "language must be `system` for builtin hooks",
-            ));
+            return Err(BuiltinHookWireError::InvalidLanguage);
         }
         if hook_options.entry.is_some() {
-            return Err(serde::de::Error::custom(
-                "entry is not allowed for builtin hooks",
-            ));
+            return Err(BuiltinHookWireError::EntryNotAllowed);
         }
 
         if let Some(name) = &hook_options.name {
@@ -683,12 +698,34 @@ pub(crate) struct BuiltinRepo {
     _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(try_from = "serde_json::Value")]
 pub(crate) enum Repo {
     Remote(RemoteRepo),
     Local(LocalRepo),
     Meta(MetaRepo),
     Builtin(BuiltinRepo),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum RepoWireError {
+    #[error("missing field `repo`")]
+    MissingRepo,
+
+    #[error("repo must be a string")]
+    RepoNotString,
+
+    #[error("Invalid local repo: {0}")]
+    InvalidLocal(String),
+
+    #[error("Invalid meta repo: {0}")]
+    InvalidMeta(String),
+
+    #[error("Invalid builtin repo: {0}")]
+    InvalidBuiltin(String),
+
+    #[error("Invalid remote repo: {0}")]
+    InvalidRemote(String),
 }
 
 #[cfg(feature = "schemars")]
@@ -716,40 +753,30 @@ impl schemars::JsonSchema for Repo {
     }
 }
 
-impl<'de> Deserialize<'de> for Repo {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let repo_wire = serde_json::Value::deserialize(deserializer)?;
+impl TryFrom<serde_json::Value> for Repo {
+    type Error = RepoWireError;
+
+    fn try_from(repo_wire: serde_json::Value) -> std::result::Result<Self, Self::Error> {
         let repo_location = repo_wire
             .get("repo")
-            .ok_or_else(|| serde::de::Error::missing_field("repo"))?
+            .ok_or(RepoWireError::MissingRepo)?
             .as_str()
-            .ok_or_else(|| serde::de::Error::custom("repo must be a string"))?;
+            .ok_or(RepoWireError::RepoNotString)?
+            .to_string();
 
-        match repo_location {
-            "local" => {
-                let repo = LocalRepo::deserialize(repo_wire)
-                    .map_err(|e| serde::de::Error::custom(format!("Invalid local repo: {e}")))?;
-                Ok(Repo::Local(repo))
-            }
-            "meta" => {
-                let repo = MetaRepo::deserialize(repo_wire)
-                    .map_err(|e| serde::de::Error::custom(format!("Invalid meta repo: {e}")))?;
-                Ok(Repo::Meta(repo))
-            }
-            "builtin" => {
-                let repo = BuiltinRepo::deserialize(repo_wire)
-                    .map_err(|e| serde::de::Error::custom(format!("Invalid builtin repo: {e}")))?;
-                Ok(Repo::Builtin(repo))
-            }
-            _ => {
-                let repo = RemoteRepo::deserialize(repo_wire)
-                    .map_err(|e| serde::de::Error::custom(format!("Invalid remote repo: {e}")))?;
-
-                Ok(Repo::Remote(repo))
-            }
+        match repo_location.as_str() {
+            "local" => LocalRepo::deserialize(repo_wire)
+                .map(Repo::Local)
+                .map_err(|e| RepoWireError::InvalidLocal(e.to_string())),
+            "meta" => MetaRepo::deserialize(repo_wire)
+                .map(Repo::Meta)
+                .map_err(|e| RepoWireError::InvalidMeta(e.to_string())),
+            "builtin" => BuiltinRepo::deserialize(repo_wire)
+                .map(Repo::Builtin)
+                .map_err(|e| RepoWireError::InvalidBuiltin(e.to_string())),
+            _ => RemoteRepo::deserialize(repo_wire)
+                .map(Repo::Remote)
+                .map_err(|e| RepoWireError::InvalidRemote(e.to_string())),
         }
     }
 }
