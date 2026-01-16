@@ -75,6 +75,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_duplicate_keys() -> anyhow::Result<()> {
+        // JSON5 allows duplicate keys following JavaScript object semantics (last value wins).
+        // This differs from check-json which explicitly rejects duplicate keys.
+        // The json5 crate parses duplicate keys without error, treating them as valid JSON5.
         let dir = tempdir()?;
         let content = indoc::indoc! {r#"
         {
