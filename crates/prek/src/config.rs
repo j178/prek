@@ -8,7 +8,7 @@ use std::sync::LazyLock;
 
 use anyhow::Result;
 use fancy_regex::Regex;
-use globset::{Glob, GlobMatcher};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use itertools::Itertools;
 use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use rustc_hash::FxHashMap;
@@ -30,9 +30,30 @@ pub(crate) static CONFIG_FILE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 #[derive(Debug, Clone)]
+pub(crate) struct GlobPatterns {
+    patterns: Vec<String>,
+    set: GlobSet,
+}
+
+impl GlobPatterns {
+    fn new(patterns: Vec<String>) -> Result<Self, globset::Error> {
+        let mut builder = GlobSetBuilder::new();
+        for pattern in &patterns {
+            builder.add(Glob::new(pattern)?);
+        }
+        let set = builder.build()?;
+        Ok(Self { patterns, set })
+    }
+
+    fn is_match(&self, value: &str) -> bool {
+        self.set.is_match(Path::new(value))
+    }
+}
+
+#[derive(Debug, Clone)]
 pub(crate) enum FilePattern {
     Regex(Regex),
-    Glob(Vec<GlobMatcher>),
+    Glob(GlobPatterns),
 }
 
 #[cfg(feature = "schemars")]
@@ -86,7 +107,7 @@ impl FilePattern {
     pub(crate) fn is_match(&self, str: &str) -> bool {
         match self {
             FilePattern::Regex(regex) => regex.is_match(str).unwrap_or(false),
-            FilePattern::Glob(globs) => globs.iter().any(|g| g.is_match(str)),
+            FilePattern::Glob(globs) => globs.is_match(str),
         }
     }
 }
@@ -96,7 +117,7 @@ impl Display for FilePattern {
         match self {
             FilePattern::Regex(regex) => write!(f, "regex: {}", regex.as_str()),
             FilePattern::Glob(globs) => {
-                let patterns = globs.iter().map(|g| g.glob().to_string()).join(", ");
+                let patterns = globs.patterns.iter().join(", ");
                 write!(f, "glob: [{patterns}]")
             }
         }
@@ -123,25 +144,12 @@ impl<'de> Deserialize<'de> for FilePattern {
         }
 
         match PatternWire::deserialize(deserializer)? {
-            PatternWire::Glob { glob } => {
-                Glob::new(&glob)
-                    .map_err(serde::de::Error::custom)
-                    .map(|glob| {
-                        let matcher = glob.compile_matcher();
-                        Self::Glob(vec![matcher])
-                    })
-            }
-            PatternWire::GlobList { glob } => {
-                let matchers = glob
-                    .into_iter()
-                    .map(|g| {
-                        Glob::new(&g)
-                            .map_err(serde::de::Error::custom)
-                            .map(|glob| glob.compile_matcher())
-                    })
-                    .collect::<Result<Vec<GlobMatcher>, D::Error>>()?;
-                Ok(Self::Glob(matchers))
-            }
+            PatternWire::Glob { glob } => GlobPatterns::new(vec![glob])
+                .map_err(serde::de::Error::custom)
+                .map(Self::Glob),
+            PatternWire::GlobList { glob } => GlobPatterns::new(glob)
+                .map_err(serde::de::Error::custom)
+                .map(Self::Glob),
             PatternWire::Regex(pattern) => Regex::new(&pattern)
                 .map_err(serde::de::Error::custom)
                 .map(Self::Regex),
