@@ -132,7 +132,7 @@ jobs:
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
-          save-if: ${{ github.ref == 'refs/heads/master' }}
+          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
         run: rustup component add clippy
@@ -218,6 +218,7 @@ jobs:
         run: |
           echo "::group::Test install uv with auto select"
           cargo llvm-cov nextest \
+            --color always \
             --cargo-profile fast-build \
             --no-report \
             -E 'binary_id(prek::run) and test(run_basic)'
@@ -227,6 +228,7 @@ jobs:
             echo "::group::Test install uv from $source"
             export PREK_UV_SOURCE=$source
             cargo llvm-cov nextest \
+              --color always \
               --cargo-profile fast-build \
               --no-report \
               -E 'binary_id(prek::run) and test(run_basic)'
