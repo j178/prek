@@ -3,15 +3,15 @@ members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
-version = "0.2.28"
+version = "0.2.29"
 edition = "2024"
 repository = "https://github.com/j178/prek"
 homepage = "https://prek.j178.dev/"
 license = "MIT"
 
 [workspace.dependencies]
-prek-consts = { path = "crates/prek-consts", version = "0.2.28" }
-prek-pty = { path = "crates/prek-pty", version = "0.2.28" }
+prek-consts = { path = "crates/prek-consts", version = "0.2.29" }
+prek-pty = { path = "crates/prek-pty", version = "0.2.29" }
 
 anstream = { version = "0.6.15" }
 anstyle-query = { version = "1.1.5" }
