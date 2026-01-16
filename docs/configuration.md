@@ -13,7 +13,7 @@ In addition to compatibility, `prek` adds a few extra keys (documented here) for
 By default, `prek` looks for a configuration file starting from your current working directory and moving upward.
 It stops when it finds a config file, or when it hits the git repository boundary.
 
-If you run without `--config`, `prek` then enables **workspace mode**:
+If you run **without** `--config`, `prek` then enables **workspace mode**:
 
 - The first config found while traversing upward becomes the workspace root.
 - From that root, `prek` searches for additional config files in subdirectories (nested projects).
@@ -58,6 +58,38 @@ repos:
         entry: python3 -m ruff check
         files: '\\.py$'
 ```
+
+### Scope (per-project)
+
+Each `.pre-commit-config.yaml` / `.pre-commit-config.yml` file is scoped to the **project directory it lives in**.
+
+In workspace mode, `prek` treats every discovered configuration file as a **distinct project**:
+
+- A project’s config only controls hook selection and filtering (for example `files` / `exclude`) for that project.
+- A project may contain nested subprojects (subdirectories with their own config). Those subprojects run using *their own* configs.
+
+Practical implication: filters in the parent project do not “turn off” a subproject.
+
+Example layout (monorepo with a nested project):
+
+- `foo/.pre-commit-config.yaml` (project `foo`)
+- `foo/bar/.pre-commit-config.yaml` (project `foo/bar`, nested subproject)
+
+If project `foo` config contains an `exclude` that matches `bar/**`, then hooks for project `foo` will not run on files under `foo/bar`:
+
+```yaml
+# foo/.pre-commit-config.yaml
+exclude:
+  glob: bar/**
+```
+
+But if `foo/bar` is itself a project (has its own config), files under `foo/bar` are still eligible for hooks when running **in the context of project `foo/bar`**.
+
+!!! note "Excluding a nested project"
+
+    If `foo/bar/.pre-commit-config.yaml` exists but you *don’t* want it to be recognized as a project in workspace mode, exclude it from discovery using [`.prekignore`](workspace.md#discovery).
+
+    Like `.gitignore`, `.prekignore` files can be placed anywhere in the workspace and apply to their directory and all subdirectories.
 
 ### Validation
 
