@@ -51,7 +51,7 @@ fn meta_hooks() -> anyhow::Result<()> {
     - hook id: check-useless-excludes
     - exit code: 1
 
-      The exclude pattern `$nonexistent^` for `useless-exclude` does not match any files
+      The exclude pattern `regex: $nonexistent^` for `useless-exclude` does not match any files
     identity.................................................................Passed
     - hook id: identity
     - duration: [TIME]
@@ -114,7 +114,7 @@ fn check_useless_excludes_remote() -> anyhow::Result<()> {
     - hook id: check-useless-excludes
     - exit code: 1
 
-      The exclude pattern `^useless/$` for `echo` does not match any files
+      The exclude pattern `regex: ^useless/$` for `echo` does not match any files
 
     ----- stderr -----
     ");
@@ -172,7 +172,7 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
     - hook id: check-useless-excludes
     - exit code: 1
 
-      The exclude pattern `$nonexistent^` for `useless-exclude` does not match any files
+      The exclude pattern `regex: $nonexistent^` for `useless-exclude` does not match any files
     identity.................................................................Passed
     - hook id: identity
     - duration: [TIME]

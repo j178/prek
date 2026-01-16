@@ -105,23 +105,74 @@ Each entry is one of:
 
 See [Repo entries](#repo-entries).
 
+<a id="top-level-files"></a>
+
 #### `files`
 
 Global *include* regex applied before hook-level filtering.
 
-- Type: regex string
+- Type: regex string (default, pre-commit compatible) **or** a prek-only glob pattern mapping
 - Default: no global include filter
 
 This is usually used to narrow down the universe of files in large repositories.
+
+!!! note "prek-only globs"
+
+    In addition to regex strings, `prek` supports glob patterns via:
+
+    - `files: { glob: "..." }` (single glob)
+    - `files: { glob: ["...", "..."] }` (glob list)
+
+    This is a `prek` extension. Upstream `pre-commit` expects regex strings here.
+
+Examples:
+
+```yaml
+# Regex (portable to pre-commit)
+files: '\\.rs$'
+
+# Glob (prek-only)
+files:
+  glob: src/**/*.rs
+
+# Glob list (prek-only; matches if any glob matches)
+files:
+  glob:
+    - src/**/*.rs
+    - crates/**/src/**/*.rs
+```
+
+<a id="top-level-exclude"></a>
 
 #### `exclude`
 
 Global *exclude* regex applied before hook-level filtering.
 
-- Type: regex string
+- Type: regex string (default, pre-commit compatible) **or** a prek-only glob pattern mapping
 - Default: no global exclude filter
 
 `exclude` is useful for generated folders, vendored code, or build outputs.
+
+!!! note "prek-only globs"
+
+    Like `files`, `exclude` supports `glob` (single glob or glob list) as a `prek` extension.
+
+Examples:
+
+```yaml
+# Regex (portable to pre-commit)
+exclude: '^target/'
+
+# Glob (prek-only)
+exclude:
+  glob: target/**
+
+# Glob list (prek-only)
+exclude:
+  glob:
+    - target/**
+    - dist/**
+```
 
 #### `fail_fast`
 
@@ -192,25 +243,6 @@ Allowed values:
 - `post-rewrite`
 - `pre-merge-commit`
 - `pre-rebase`
-
-#### `files` / `exclude` patterns
-
-Patterns remain regex by default (matching pre-commit), but you can also opt into globs:
-
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: format-python
-        entry: bash -c 'echo formatting "$@"' _
-        language: system
-        files:
-          glob: src/**/*.py
-        exclude:
-          glob: src/vendor/**
-```
-
-Both forms work at the top-level config and per-hook.
 
 #### `minimum_prek_version`
 
@@ -520,12 +552,17 @@ repos:
 
 #### `files` / `exclude`
 
-Regex filters applied to candidate filenames.
+Filters applied to candidate filenames.
 
 - `files` selects which files are eligible for the hook.
 - `exclude` removes files matched by `files`.
 
 If you use both global and hook-level filters, the effective behavior is “global filter first, then hook filter”.
+
+By default (and for compatibility with upstream `pre-commit`), these are regex strings.
+As a `prek` extension, you can also specify globs using `glob` or a glob list.
+
+See [Top-level `files`](#top-level-files) and [Top-level `exclude`](#top-level-exclude) for the full syntax and examples.
 
 #### `types` / `types_or` / `exclude_types`
 
