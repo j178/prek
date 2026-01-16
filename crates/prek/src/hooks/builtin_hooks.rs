@@ -12,16 +12,16 @@ pub(crate) enum BuiltinHooks {
     CheckAddedLargeFiles,
     CheckCaseConflict,
     CheckExecutablesHaveShebangs,
-    EndOfFileFixer,
-    FixByteOrderMarker,
     CheckJson,
-    CheckSymlinks,
     CheckMergeConflict,
+    CheckSymlinks,
     CheckToml,
     CheckXml,
     CheckYaml,
-    MixedLineEnding,
     DetectPrivateKey,
+    EndOfFileFixer,
+    FixByteOrderMarker,
+    MixedLineEnding,
     NoCommitToBranch,
     TrailingWhitespace,
 }
@@ -34,16 +34,16 @@ impl FromStr for BuiltinHooks {
             "check-added-large-files" => Ok(Self::CheckAddedLargeFiles),
             "check-case-conflict" => Ok(Self::CheckCaseConflict),
             "check-executables-have-shebangs" => Ok(Self::CheckExecutablesHaveShebangs),
-            "end-of-file-fixer" => Ok(Self::EndOfFileFixer),
-            "fix-byte-order-marker" => Ok(Self::FixByteOrderMarker),
             "check-json" => Ok(Self::CheckJson),
             "check-merge-conflict" => Ok(Self::CheckMergeConflict),
-            "check-toml" => Ok(Self::CheckToml),
             "check-symlinks" => Ok(Self::CheckSymlinks),
+            "check-toml" => Ok(Self::CheckToml),
             "check-xml" => Ok(Self::CheckXml),
             "check-yaml" => Ok(Self::CheckYaml),
-            "mixed-line-ending" => Ok(Self::MixedLineEnding),
             "detect-private-key" => Ok(Self::DetectPrivateKey),
+            "end-of-file-fixer" => Ok(Self::EndOfFileFixer),
+            "fix-byte-order-marker" => Ok(Self::FixByteOrderMarker),
+            "mixed-line-ending" => Ok(Self::MixedLineEnding),
             "no-commit-to-branch" => Ok(Self::NoCommitToBranch),
             "trailing-whitespace" => Ok(Self::TrailingWhitespace),
             _ => Err(()),
@@ -66,20 +66,20 @@ impl BuiltinHooks {
             Self::CheckExecutablesHaveShebangs => {
                 pre_commit_hooks::check_executables_have_shebangs(hook, filenames).await
             }
+            Self::CheckJson => pre_commit_hooks::check_json(hook, filenames).await,
+            Self::CheckMergeConflict => {
+                pre_commit_hooks::check_merge_conflict(hook, filenames).await
+            }
+            Self::CheckSymlinks => pre_commit_hooks::check_symlinks(hook, filenames).await,
+            Self::CheckToml => pre_commit_hooks::check_toml(hook, filenames).await,
+            Self::CheckXml => pre_commit_hooks::check_xml(hook, filenames).await,
+            Self::CheckYaml => pre_commit_hooks::check_yaml(hook, filenames).await,
+            Self::DetectPrivateKey => pre_commit_hooks::detect_private_key(hook, filenames).await,
             Self::EndOfFileFixer => pre_commit_hooks::fix_end_of_file(hook, filenames).await,
             Self::FixByteOrderMarker => {
                 pre_commit_hooks::fix_byte_order_marker(hook, filenames).await
             }
-            Self::CheckJson => pre_commit_hooks::check_json(hook, filenames).await,
-            Self::CheckSymlinks => pre_commit_hooks::check_symlinks(hook, filenames).await,
-            Self::CheckMergeConflict => {
-                pre_commit_hooks::check_merge_conflict(hook, filenames).await
-            }
-            Self::CheckToml => pre_commit_hooks::check_toml(hook, filenames).await,
-            Self::CheckYaml => pre_commit_hooks::check_yaml(hook, filenames).await,
-            Self::CheckXml => pre_commit_hooks::check_xml(hook, filenames).await,
             Self::MixedLineEnding => pre_commit_hooks::mixed_line_ending(hook, filenames).await,
-            Self::DetectPrivateKey => pre_commit_hooks::detect_private_key(hook, filenames).await,
             Self::NoCommitToBranch => pre_commit_hooks::no_commit_to_branch(hook).await,
             Self::TrailingWhitespace => {
                 pre_commit_hooks::fix_trailing_whitespace(hook, filenames).await
@@ -130,32 +130,6 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
-            BuiltinHooks::EndOfFileFixer => ManifestHook {
-                id: "end-of-file-fixer".to_string(),
-                name: "fix end of files".to_string(),
-                language: Language::Python,
-                entry: "end-of-file-fixer".to_string(),
-                options: HookOptions {
-                    description: Some(
-                        "ensures that a file is either empty, or ends with one newline."
-                            .to_string(),
-                    ),
-                    types: Some(vec!["text".to_string()]),
-                    stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
-                    ..Default::default()
-                },
-            },
-            BuiltinHooks::FixByteOrderMarker => ManifestHook {
-                id: "fix-byte-order-marker".to_string(),
-                name: "fix utf-8 byte order marker".to_string(),
-                language: Language::Python,
-                entry: "fix-byte-order-marker".to_string(),
-                options: HookOptions {
-                    description: Some("removes utf-8 byte order marker.".to_string()),
-                    types: Some(vec!["text".to_string()]),
-                    ..Default::default()
-                },
-            },
             BuiltinHooks::CheckJson => ManifestHook {
                 id: "check-json".to_string(),
                 name: "check json".to_string(),
@@ -164,19 +138,6 @@ impl BuiltinHook {
                 options: HookOptions {
                     description: Some("checks json files for parseable syntax.".to_string()),
                     types: Some(vec!["json".to_string()]),
-                    ..Default::default()
-                },
-            },
-            BuiltinHooks::CheckSymlinks => ManifestHook {
-                id: "check-symlinks".to_string(),
-                name: "check for broken symlinks".to_string(),
-                language: Language::Python,
-                entry: "check-symlinks".to_string(),
-                options: HookOptions {
-                    description: Some(
-                        "checks for symlinks which do not point to anything.".to_string(),
-                    ),
-                    types: Some(vec!["symlink".to_string()]),
                     ..Default::default()
                 },
             },
@@ -190,6 +151,19 @@ impl BuiltinHook {
                         "checks for files that contain merge conflict strings.".to_string(),
                     ),
                     types: Some(vec!["text".to_string()]),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::CheckSymlinks => ManifestHook {
+                id: "check-symlinks".to_string(),
+                name: "check for broken symlinks".to_string(),
+                language: Language::Python,
+                entry: "check-symlinks".to_string(),
+                options: HookOptions {
+                    description: Some(
+                        "checks for symlinks which do not point to anything.".to_string(),
+                    ),
+                    types: Some(vec!["symlink".to_string()]),
                     ..Default::default()
                 },
             },
@@ -226,17 +200,6 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
-            BuiltinHooks::MixedLineEnding => ManifestHook {
-                id: "mixed-line-ending".to_string(),
-                name: "mixed line ending".to_string(),
-                language: Language::Python,
-                entry: "mixed-line-ending".to_string(),
-                options: HookOptions {
-                    description: Some("replaces or checks mixed line ending.".to_string()),
-                    types: Some(vec!["text".to_string()]),
-                    ..Default::default()
-                },
-            },
             BuiltinHooks::DetectPrivateKey => ManifestHook {
                 id: "detect-private-key".to_string(),
                 name: "detect private key".to_string(),
@@ -244,6 +207,43 @@ impl BuiltinHook {
                 entry: "detect-private-key".to_string(),
                 options: HookOptions {
                     description: Some("detects the presence of private keys.".to_string()),
+                    types: Some(vec!["text".to_string()]),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::EndOfFileFixer => ManifestHook {
+                id: "end-of-file-fixer".to_string(),
+                name: "fix end of files".to_string(),
+                language: Language::Python,
+                entry: "end-of-file-fixer".to_string(),
+                options: HookOptions {
+                    description: Some(
+                        "ensures that a file is either empty, or ends with one newline."
+                            .to_string(),
+                    ),
+                    types: Some(vec!["text".to_string()]),
+                    stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::FixByteOrderMarker => ManifestHook {
+                id: "fix-byte-order-marker".to_string(),
+                name: "fix utf-8 byte order marker".to_string(),
+                language: Language::Python,
+                entry: "fix-byte-order-marker".to_string(),
+                options: HookOptions {
+                    description: Some("removes utf-8 byte order marker.".to_string()),
+                    types: Some(vec!["text".to_string()]),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::MixedLineEnding => ManifestHook {
+                id: "mixed-line-ending".to_string(),
+                name: "mixed line ending".to_string(),
+                language: Language::Python,
+                entry: "mixed-line-ending".to_string(),
+                options: HookOptions {
+                    description: Some("replaces or checks mixed line ending.".to_string()),
                     types: Some(vec!["text".to_string()]),
                     ..Default::default()
                 },
