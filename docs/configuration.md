@@ -528,9 +528,11 @@ How `prek` should run the hook (and whether it should create a managed environme
 
 Common values include `system`, `python`, `node`, `rust`, `golang`, `ruby`, and `docker`.
 
-!!! note "Legacy aliases"
+See [Language Support](languages.md) for per-language behavior, supported values, and `language_version` details.
 
-    Some older `pre-commit` language names map to modern ones:
+!!! note "Language name aliases"
+
+    For compatibility with upstream `pre-commit`, the following legacy language names are also accepted:
 
     - `unsupported` is treated as `system`
     - `unsupported_script` is treated as `script`
@@ -759,6 +761,44 @@ Choose the language/toolchain version request for this hook.
 - Default: `default`
 
 If not set, `prek` may use `default_language_version` for the hook’s language.
+
+!!! note "prek-only"
+
+    `language_version` is treated as a **version request**, not a single pinned value. For languages that use semver requests, you can specify ranges (for example `^1.2`, `>=1.5, <2.0`).
+
+    Special values:
+
+    - `default`: use the language’s default resolution logic.
+    - `system`: require a system-installed toolchain (no downloads).
+
+    Language-specific behavior:
+
+    - Python: passed to the Python resolver (for example `python3`, `python3.12`, or a specific interpreter name). May trigger toolchain download.
+    - Node: passed to the Node resolver (for example `20`, `18.19.0`). May trigger toolchain download.
+    - Go: uses Go version strings such as `1.22.1` (downloaded if missing).
+    - Rust: supports rustup toolchains such as `stable`, `beta`, `nightly`, or versioned toolchains.
+    - Other languages: parsed as a semver request and matched against the installed toolchain version.
+
+    Examples:
+
+    ```yaml
+    hooks:
+      - id: ruff
+        language: python
+        language_version: python3.12
+
+      - id: eslint
+        language: node
+        language_version: '20'
+
+      - id: cargo-fmt
+        language: rust
+        language_version: stable
+
+      - id: my-tool
+        language: system
+        language_version: system
+    ```
 
 #### `additional_dependencies`
 
