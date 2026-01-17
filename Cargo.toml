@@ -42,6 +42,7 @@ libc = { version = "0.2.164" }
 # Enable static linking for liblzma
 # This is required for the `xz` feature in `async-compression`
 liblzma = { version = "0.4.5", features = ["static"] }
+libyaml = { version = "0.2.0" }
 memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
 path-clean = { version = "1.0.1" }

@@ -614,7 +614,7 @@ fn auto_update_freeze_uses_dereferenced_commit_for_annotated_tags() -> Result<()
 }
 
 #[test]
-fn auto_update_preserve_formatting() -> Result<()> {
+fn auto_update_preserve_quote_style() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -626,18 +626,24 @@ fn auto_update_preserve_formatting() -> Result<()> {
         # Pre-commit configuration
         repos:
           - repo: {}  # Test repository
-            rev: 'v1.0.0'  # Current version
+            rev: v1.0.0  # No quotes
+            hooks:
+              - id: test-hook
+                # Hook configuration
+                name: Test Hook
+          - repo: {}  # Test repository
+            rev: 'v1.0.0'  # Single quotes
             hooks:
               - id: test-hook
                 # Hook configuration
                 name: Test Hook
           - repo: {}
-            rev: "v1.0.0"  # Current version
+            rev: "v1.0.0"  # Double quotes
             hooks:
               - id: test-hook
                 # Hook configuration
                 name: Test Hook
-    "#, repo1_path, repo2_path });
+    "#, repo1_path, repo1_path, repo2_path });
 
     context.git_add(".");
 
@@ -656,22 +662,28 @@ fn auto_update_preserve_formatting() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r"
+            assert_snapshot!(context.read(CONFIG_FILE), @r#"
             # Pre-commit configuration
             repos:
               - repo: [HOME]/test-repos/repo1  # Test repository
-                rev: v1.1.0  # Current version
+                rev: v1.1.0  # No quotes
+                hooks:
+                  - id: test-hook
+                    # Hook configuration
+                    name: Test Hook
+              - repo: [HOME]/test-repos/repo1  # Test repository
+                rev: 'v1.1.0'  # Single quotes
                 hooks:
                   - id: test-hook
                     # Hook configuration
                     name: Test Hook
               - repo: [HOME]/test-repos/repo2
-                rev: v1.1.0  # Current version
+                rev: "v1.1.0"  # Double quotes
                 hooks:
                   - id: test-hook
                     # Hook configuration
                     name: Test Hook
-            ");
+            "#);
         }
     );
 
@@ -1103,13 +1115,13 @@ fn quoting_float_like_version_number() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(CONFIG_FILE), @r"
+            assert_snapshot!(context.read(CONFIG_FILE), @r#"
             repos:
               - repo: [HOME]/test-repos/test-repo
-                rev: '0.50'
+                rev: "0.50"
                 hooks:
                   - id: test-hook
-            ");
+            "#);
         }
     );
 

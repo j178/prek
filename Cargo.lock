@@ -1492,6 +1492,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "libyaml"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32988842c4499c8f20857137eae4d949fa84963d745406e2f6a66cef72eee1fc"
+dependencies = [
+ "unsafe-libyaml",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1899,6 +1908,7 @@ dependencies = [
  "levenshtein",
  "libc",
  "liblzma",
+ "libyaml",
  "markdown",
  "memchr",
  "owo-colors",
