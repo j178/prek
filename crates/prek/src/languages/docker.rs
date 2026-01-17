@@ -481,7 +481,7 @@ impl LanguageImpl for Docker {
         )
         .await
         .context("Failed to build docker image")?;
-        let entry = hook.entry.resolve(None)?;
+        let entry = hook.entry.split()?;
 
         let run = async |batch: &[&Path]| {
             // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
