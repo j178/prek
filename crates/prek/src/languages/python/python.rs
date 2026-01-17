@@ -1,12 +1,15 @@
 use std::env::consts::EXE_EXTENSION;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
 use prek_consts::env_vars::EnvVars;
+use rustc_hash::FxBuildHasher;
 use serde::Deserialize;
 use tracing::{debug, trace};
+use uv_once_map::OnceMap;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::InstalledHook;
@@ -28,7 +31,21 @@ pub(crate) struct PythonInfo {
     pub(crate) python_exec: PathBuf,
 }
 
-pub(crate) async fn query_python_info(python: &Path) -> Result<PythonInfo> {
+#[derive(Debug, Clone, thiserror::Error)]
+pub(crate) enum PythonInfoError {
+    #[error("Failed to parse Python info JSON: {0}")]
+    Parse(String),
+    #[error("Failed to query Python info: {0}")]
+    Query(String),
+    #[error("{0}")]
+    Message(String),
+}
+
+static PYTHON_INFO_CACHE: LazyLock<
+    OnceMap<PathBuf, Result<Arc<PythonInfo>, PythonInfoError>, FxBuildHasher>,
+> = LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
+
+async fn query_python_info(python: &Path) -> Result<PythonInfo, PythonInfoError> {
     #[derive(Deserialize)]
     struct QueryPythonInfo {
         version: semver::Version,
@@ -50,16 +67,39 @@ pub(crate) async fn query_python_info(python: &Path) -> Result<PythonInfo> {
         .arg(QUERY_PYTHON_INFO)
         .check(true)
         .output()
-        .await?
+        .await
+        .map_err(|err| PythonInfoError::Query(err.to_string()))?
         .stdout;
 
     let info: QueryPythonInfo =
-        serde_json::from_slice(&stdout).context("Failed to parse Python info JSON")?;
+        serde_json::from_slice(&stdout).map_err(|err| PythonInfoError::Parse(err.to_string()))?;
     let python_exec = python_exec(&info.base_exec_prefix);
 
     Ok(PythonInfo {
         version: info.version,
         python_exec,
+    })
+}
+
+pub(crate) async fn query_python_info_cached(
+    python: &Path,
+) -> Result<Arc<PythonInfo>, PythonInfoError> {
+    let python = fs::canonicalize(python).unwrap_or_else(|_| python.to_path_buf());
+
+    if let Some(result) = PYTHON_INFO_CACHE.get(&python) {
+        return result;
+    }
+
+    if PYTHON_INFO_CACHE.register(python.clone()) {
+        let result = query_python_info(&python).await.map(Arc::new);
+        PYTHON_INFO_CACHE.done(python, result.clone());
+        return result;
+    }
+
+    PYTHON_INFO_CACHE.wait(&python).await.unwrap_or_else(|| {
+        Err(PythonInfoError::Message(
+            "Python info cache entry missing after wait".to_string(),
+        ))
     })
 }
 
@@ -155,7 +195,7 @@ impl LanguageImpl for Python {
 
     async fn check_health(&self, info: &InstallInfo) -> Result<()> {
         let python = python_exec(&info.env_path);
-        let python_info = query_python_info(&python)
+        let python_info = query_python_info_cached(&python)
             .await
             .context("Failed to query Python info")?;
 

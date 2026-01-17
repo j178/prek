@@ -81,6 +81,7 @@ toml = { workspace = true, default-features = false, features = ["fast_hash", "p
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 unicode-width = { workspace = true }
+uv-once-map = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
 
