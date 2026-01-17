@@ -241,3 +241,42 @@ fn doctoc() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// Test that `npm.cmd` can be found on Windows.
+#[test]
+fn npm_version() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: npm-version
+                name: npm-version
+                language: system
+                entry: npm --version
+                always_run: true
+                pass_filenames: false
+                verbose: true
+    "});
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\d+\.\d+\.\d+", "[NPM_VERSION]")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    npm-version..............................................................Passed
+    - hook id: npm-version
+    - duration: [TIME]
+
+      [NPM_VERSION]
+
+    ----- stderr -----
+    ");
+}

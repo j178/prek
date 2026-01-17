@@ -272,6 +272,13 @@ pub(crate) async fn extract_metadata_from_entry(hook: &mut Hook) -> Result<()> {
 
 /// Resolve the actual process invocation, honoring shebangs and PATH lookups.
 pub(crate) fn resolve_command(mut cmds: Vec<String>, paths: Option<&OsStr>) -> Vec<String> {
+    let env_path = if paths.is_none() {
+        EnvVars::var_os(EnvVars::PATH)
+    } else {
+        None
+    };
+    let paths = paths.or(env_path.as_deref());
+
     let candidate = &cmds[0];
     let resolved_binary = match which::which_in(candidate, paths, &*CWD) {
         Ok(p) => p,
