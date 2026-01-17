@@ -63,6 +63,7 @@ nav:
     - Quickstart: quickstart.md
   - Usage:
     - Configuration: configuration.md
+    - Language Support: languages.md
     - Commands: cli.md
     - Built-in Hooks: builtin.md
     - Workspace Mode: workspace.md
