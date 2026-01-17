@@ -4,7 +4,6 @@ use std::process::Stdio;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
-use bstr::ByteSlice;
 use futures::StreamExt;
 use itertools::Itertools;
 use lazy_regex::regex;
@@ -12,8 +11,6 @@ use owo_colors::OwoColorize;
 use prek_consts::MANIFEST_FILE;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
-use serde::Serializer;
-use serde::ser::SerializeMap;
 use tracing::{debug, trace};
 
 use crate::cli::ExitStatus;
@@ -25,6 +22,7 @@ use crate::printer::Printer;
 use crate::run::CONCURRENCY;
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
+use crate::yaml::serialize_yaml_scalar;
 use crate::{config, git};
 
 #[derive(Default, Clone)]
@@ -489,21 +487,11 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
             continue;
         };
 
-        let mut new_rev = Vec::new();
-        let mut serializer = serde_yaml::Serializer::new(&mut new_rev);
-        serializer
-            .serialize_map(Some(1))?
-            .serialize_entry("rev", &revision.rev)?;
-        serializer.end()?;
-
-        let (_, new_rev) = new_rev
-            .to_str()?
-            .split_once(':')
-            .expect("Failed to split serialized revision");
-
         let caps = rev_regex
             .captures(&lines[*line_no])
             .context("Failed to capture rev line")?;
+
+        let new_rev = serialize_yaml_scalar(&revision.rev, &caps[3])?;
 
         let comment = if let Some(frozen) = &revision.frozen {
             format!("  # frozen: {frozen}")
@@ -515,11 +503,7 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
 
         lines[*line_no] = format!(
             "{}rev:{}{}{}{}",
-            &caps[1],
-            &caps[2],
-            new_rev.trim(),
-            comment,
-            &caps[6]
+            &caps[1], &caps[2], new_rev, comment, &caps[6]
         );
     }
 

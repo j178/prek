@@ -53,6 +53,7 @@ globset = { workspace = true }
 # Enable static linking for liblzma
 # This is required for the `xz` feature in `async-compression`
 liblzma = { workspace = true, features = ["static"] }
+libyaml = { workspace = true }
 memchr = { workspace = true }
 owo-colors = { workspace = true }
 path-clean = { workspace = true }
