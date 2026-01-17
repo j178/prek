@@ -14,7 +14,7 @@ use crate::cli::run;
 use crate::cli::run::{SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
 use crate::config::load_config;
-use crate::fs::{CWD, Simplified};
+use crate::fs::{CWD, Simplified, set_global_reporter};
 use crate::git::{GIT_ROOT, git_cmd};
 use crate::printer::Printer;
 use crate::store::Store;
@@ -94,11 +94,12 @@ pub(crate) async fn install_hooks(
     let mut workspace =
         Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
-    let reporter = HookInitReporter::from(printer);
+    let reporter = Arc::new(HookInitReporter::from(printer));
+    set_global_reporter(Some(reporter.clone()));
     let _lock = store.lock_async().await?;
 
     let hooks = workspace
-        .init_hooks(store, Some(&reporter))
+        .init_hooks(store, Some(reporter.as_ref()))
         .await
         .context("Failed to init hooks")?;
     let filtered_hooks: Vec<_> = hooks
@@ -107,8 +108,9 @@ pub(crate) async fn install_hooks(
         .map(Arc::new)
         .collect();
 
-    let reporter = HookInstallReporter::from(printer);
-    run::install_hooks(filtered_hooks, store, &reporter).await?;
+    let reporter = Arc::new(HookInstallReporter::from(printer));
+    set_global_reporter(Some(reporter.clone()));
+    run::install_hooks(filtered_hooks, store, reporter.as_ref()).await?;
 
     Ok(ExitStatus::Success)
 }

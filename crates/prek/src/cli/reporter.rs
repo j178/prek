@@ -7,6 +7,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use unicode_width::UnicodeWidthStr;
 
+use crate::fs::SuspendableReporter;
 use crate::hook::Hook;
 use crate::printer::Printer;
 use crate::workspace;
@@ -122,6 +123,12 @@ impl workspace::HookInitReporter for HookInitReporter {
     }
 }
 
+impl SuspendableReporter for HookInitReporter {
+    fn suspend_dyn(&self, f: Box<dyn FnOnce() + Send>) {
+        self.reporter.children.suspend(f);
+    }
+}
+
 pub(crate) struct HookInstallReporter {
     reporter: ProgressReporter,
 }
@@ -153,6 +160,12 @@ impl HookInstallReporter {
 
     pub fn on_complete(&self) {
         self.reporter.on_complete();
+    }
+}
+
+impl SuspendableReporter for HookInstallReporter {
+    fn suspend_dyn(&self, f: Box<dyn FnOnce() + Send>) {
+        self.reporter.children.suspend(f);
     }
 }
 
@@ -223,6 +236,12 @@ impl HookRunReporter {
 
     pub fn on_complete(&self) {
         self.reporter.on_complete();
+    }
+}
+
+impl SuspendableReporter for HookRunReporter {
+    fn suspend_dyn(&self, f: Box<dyn FnOnce() + Send>) {
+        self.reporter.children.suspend(f);
     }
 }
 
