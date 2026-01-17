@@ -371,6 +371,8 @@ Use `system` for tools with special environment requirements that cannot run in 
 
 `script` runs repository-local scripts without a managed environment. For remote hooks, `entry` is resolved relative to the hook repository root; for local hooks, it is resolved relative to the current working directory.
 
+If `entry` contains a newline, it is treated as an inline script. Inline scripts are written to a temporary file and executed based on the script content. If the first line starts with a shebang (`#!`), that interpreter is used (for example, a `pwsh` shebang yields a `.ps1` file). If no shebang is present, `bash` is preferred when available, otherwise `sh` is used.
+
 Use `script` for simple repository scripts that only need file paths and no managed environment.
 
 !!! note
