@@ -31,10 +31,21 @@ pub(crate) struct PythonInfo {
     pub(crate) python_exec: PathBuf,
 }
 
-static PYTHON_INFO_CACHE: LazyLock<OnceMap<PathBuf, Option<Arc<PythonInfo>>, FxBuildHasher>> =
-    LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
+#[derive(Debug, Clone, thiserror::Error)]
+pub(crate) enum PythonInfoError {
+    #[error("Failed to parse Python info JSON: {0}")]
+    Parse(String),
+    #[error("Failed to query Python info: {0}")]
+    Query(String),
+    #[error("{0}")]
+    Message(String),
+}
 
-async fn query_python_info(python: &Path) -> Result<PythonInfo> {
+static PYTHON_INFO_CACHE: LazyLock<
+    OnceMap<PathBuf, Result<Arc<PythonInfo>, PythonInfoError>, FxBuildHasher>,
+> = LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
+
+async fn query_python_info(python: &Path) -> Result<PythonInfo, PythonInfoError> {
     #[derive(Deserialize)]
     struct QueryPythonInfo {
         version: semver::Version,
@@ -56,11 +67,12 @@ async fn query_python_info(python: &Path) -> Result<PythonInfo> {
         .arg(QUERY_PYTHON_INFO)
         .check(true)
         .output()
-        .await?
+        .await
+        .map_err(|err| PythonInfoError::Query(err.to_string()))?
         .stdout;
 
     let info: QueryPythonInfo =
-        serde_json::from_slice(&stdout).context("Failed to parse Python info JSON")?;
+        serde_json::from_slice(&stdout).map_err(|err| PythonInfoError::Parse(err.to_string()))?;
     let python_exec = python_exec(&info.base_exec_prefix);
 
     Ok(PythonInfo {
@@ -69,38 +81,26 @@ async fn query_python_info(python: &Path) -> Result<PythonInfo> {
     })
 }
 
-pub(crate) async fn query_python_info_cached(python: &Path) -> Result<Arc<PythonInfo>> {
+pub(crate) async fn query_python_info_cached(
+    python: &Path,
+) -> Result<Arc<PythonInfo>, PythonInfoError> {
     let python = fs::canonicalize(python).unwrap_or_else(|_| python.to_path_buf());
 
-    loop {
-        if let Some(info) = PYTHON_INFO_CACHE.get(&python) {
-            if let Some(info) = info {
-                return Ok(info);
-            }
-            PYTHON_INFO_CACHE.remove(&python);
-        }
-
-        if PYTHON_INFO_CACHE.register(python.clone()) {
-            return match query_python_info(&python).await {
-                Ok(python_info) => {
-                    let python_info = Arc::new(python_info);
-                    PYTHON_INFO_CACHE.done(python.clone(), Some(Arc::clone(&python_info)));
-                    Ok(python_info)
-                }
-                Err(err) => {
-                    PYTHON_INFO_CACHE.done(python.clone(), None);
-                    Err(err)
-                }
-            };
-        }
-
-        if let Some(info) = PYTHON_INFO_CACHE.wait(&python).await {
-            if let Some(info) = info {
-                return Ok(info);
-            }
-            PYTHON_INFO_CACHE.remove(&python);
-        }
+    if let Some(result) = PYTHON_INFO_CACHE.get(&python) {
+        return result;
     }
+
+    if PYTHON_INFO_CACHE.register(python.clone()) {
+        let result = query_python_info(&python).await.map(Arc::new);
+        PYTHON_INFO_CACHE.done(python, result.clone());
+        return result;
+    }
+
+    PYTHON_INFO_CACHE.wait(&python).await.unwrap_or_else(|| {
+        Err(PythonInfoError::Message(
+            "Python info cache entry missing after wait".to_string(),
+        ))
+    })
 }
 
 impl LanguageImpl for Python {
