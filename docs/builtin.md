@@ -236,8 +236,7 @@ Attempts to load all JSON5 files to verify syntax.
 
 **Caveats / differences**
 
-- JSON5 follows JavaScript object semantics: duplicate keys are allowed and the “last value wins”.
-  This differs from `check-json`, which rejects duplicate keys.
+- This implementation rejects **duplicate object keys** (errors with `duplicate key ...`).
 
 ---
 
