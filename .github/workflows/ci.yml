@@ -485,11 +485,6 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
-        with:
-          workspaces: ${{ env.PREK_WORKSPACE }}
-          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
-
       - name: "Install Rust toolchain"
         run: rustup component add llvm-tools-preview
 
