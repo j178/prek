@@ -171,6 +171,131 @@ mod unix {
 
         Ok(())
     }
+
+    #[test]
+    fn inline_script_no_shebang() -> Result<()> {
+        let context = TestContext::new();
+        context.init_project();
+        context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: inline
+                name: inline
+                language: script
+                entry: |
+                  echo "inline hello"
+                  echo "$MESSAGE"
+                env:
+                  MESSAGE: world
+                pass_filenames: false
+                verbose: true
+        "#});
+        context.git_add(".");
+
+        cmd_snapshot!(context.filters(), context.run(), @r"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        inline...................................................................Passed
+        - hook id: inline
+        - duration: [TIME]
+
+          inline hello
+          world
+
+        ----- stderr -----
+        ");
+
+        Ok(())
+    }
+
+    #[test]
+    fn inline_script_with_env_s_shebang_and_filenames() -> Result<()> {
+        let context = TestContext::new();
+        context.init_project();
+
+        // pass_filenames defaults to true, keep it that way to exercise "$@".
+        context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: inline
+                name: inline
+                language: script
+                files: ^a\.txt$
+                entry: |
+                  #!/usr/bin/env -S bash -e
+                  printf 'args:'
+                  printf ' %s' "$@"
+                  printf '\n'
+                verbose: true
+        "#});
+
+        // Ensure there's at least one filename.
+        context.work_dir().child("a.txt").write_str("a")?;
+        context.git_add(".");
+
+        cmd_snapshot!(context.filters(), context.run(), @r"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        inline...................................................................Passed
+        - hook id: inline
+        - duration: [TIME]
+
+          args: a.txt
+
+        ----- stderr -----
+        ");
+
+        Ok(())
+    }
+
+    #[test]
+    fn multiline_entry_still_script_path() -> Result<()> {
+        let context = TestContext::new();
+        context.init_project();
+
+        // Entry is written as a YAML block scalar (contains newlines) but the first token is a
+        // real script path, so it should be treated as a normal `script` hook.
+        context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: script
+                name: script
+                language: script
+                entry: |
+                  ./script.sh --from-entry
+                pass_filenames: false
+                verbose: true
+        "#});
+
+        let script = context.work_dir().child("script.sh");
+        script.write_str(indoc::indoc! {r#"
+            #!/usr/bin/env bash
+            echo "ran script.sh $1"
+        "#})?;
+        fs_err::set_permissions(&script, std::fs::Permissions::from_mode(0o755))?;
+
+        context.git_add(".");
+
+        cmd_snapshot!(context.filters(), context.run(), @r"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        script...................................................................Passed
+        - hook id: script
+        - duration: [TIME]
+
+          ran script.sh --from-entry
+
+        ----- stderr -----
+        ");
+
+        Ok(())
+    }
 }
 
 /// Test that a script with a shebang line works correctly on Windows.
