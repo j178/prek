@@ -135,7 +135,10 @@ jobs:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
-        run: rustup component add clippy
+        uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # v1.15.2
+        with:
+          components: clippy
+
       - name: "Clippy"
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
@@ -164,7 +167,9 @@ jobs:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
-        run: rustup component add clippy
+        uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # v1.15.2
+        with:
+          components: clippy
 
       - name: "Clippy"
         working-directory: ${{ env.PREK_WORKSPACE }}
@@ -202,7 +207,9 @@ jobs:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
-        run: rustup component add llvm-tools-preview
+        uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # v1.15.2
+        with:
+          components: llvm-tools-preview
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@a983ca795126a4be4e8a44879ac5c4c3ef66cae1 # v2.65.11
@@ -259,7 +266,9 @@ jobs:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
-        run: rustup component add llvm-tools-preview
+        uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # v1.15.2
+        with:
+          components: llvm-tools-preview
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@a983ca795126a4be4e8a44879ac5c4c3ef66cae1 # v2.65.11
@@ -349,7 +358,7 @@ jobs:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
-        run: rustup show
+        uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # v1.15.2
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@a983ca795126a4be4e8a44879ac5c4c3ef66cae1 # v2.65.11
@@ -434,7 +443,9 @@ jobs:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
-        run: rustup component add llvm-tools-preview
+        uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # v1.15.2
+        with:
+          components: llvm-tools-preview
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@a983ca795126a4be4e8a44879ac5c4c3ef66cae1 # v2.65.11
@@ -487,7 +498,9 @@ jobs:
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
 
       - name: "Install Rust toolchain"
-        run: rustup component add llvm-tools-preview
+        uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # v1.15.2
+        with:
+          components: llvm-tools-preview
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@a983ca795126a4be4e8a44879ac5c4c3ef66cae1 # v2.65.11
@@ -601,6 +614,9 @@ jobs:
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
+      - name: "Install Rust toolchain"
+        uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # v1.15.2
+
       - name: Run prek on cpython
         working-directory: cpython
         run: cargo run -p prek -- --all-files
@@ -621,6 +637,9 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
+
+      - name: "Install Rust toolchain"
+        uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # v1.15.2
 
       - name: "Build"
         run: cargo build --profile no-debug --bin prek
@@ -649,6 +668,9 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
+
+      - name: "Install Rust toolchain"
+        uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # v1.15.2
 
       - name: "Build"
         run: cargo build --profile no-debug --bin prek
@@ -684,6 +706,9 @@ jobs:
         with:
           workspaces: ${{ env.PREK_WORKSPACE }}
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
+
+      - name: "Install Rust toolchain"
+        uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # v1.15.2
 
       - name: "Build"
         working-directory: ${{ env.PREK_WORKSPACE }}
