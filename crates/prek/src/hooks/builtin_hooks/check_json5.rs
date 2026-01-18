@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use crate::hook::Hook;
+use crate::hooks::pre_commit_hooks::check_json::JsonValue;
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::CONCURRENCY;
 
@@ -21,7 +22,7 @@ async fn check_file(file_base: &Path, filename: &Path) -> anyhow::Result<(i32, V
         return Ok((0, Vec::new()));
     }
 
-    match json5::from_str::<serde_json::Value>(&content) {
+    match json5::from_str::<JsonValue>(&content) {
         Ok(_) => Ok((0, Vec::new())),
         Err(e) => {
             let error_message = format!("{}: Failed to json5 decode ({})\n", filename.display(), e);
@@ -75,9 +76,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_duplicate_keys() -> anyhow::Result<()> {
-        // JSON5 allows duplicate keys following JavaScript object semantics (last value wins).
-        // This differs from check-json which explicitly rejects duplicate keys.
-        // The json5 crate parses duplicate keys without error, treating them as valid JSON5.
+        // JSON5 warns duplicate names are unpredictable; implementations may error or accept.
+        // Our JsonValue custom deserializer rejects duplicates.
         let dir = tempdir()?;
         let content = indoc::indoc! {r#"
         {
@@ -88,8 +88,8 @@ mod tests {
         "#};
         let file_path = create_test_file(&dir, "duplicate.json5", content.as_bytes()).await?;
         let (code, output) = check_file(dir.path(), &file_path).await?;
-        assert_eq!(code, 0);
-        assert!(output.is_empty());
+        assert_eq!(code, 1);
+        assert!(String::from_utf8_lossy(&output).contains("duplicate key"));
 
         Ok(())
     }
