@@ -66,9 +66,14 @@ impl TestContext {
                 .map(|pattern| (pattern, "[HOME]/".to_string())),
         );
 
-        let current_exe = EnvVars::var_os("NEXTEST_BIN_EXE_prek")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(assert_cmd::cargo::cargo_bin!("prek")));
+        if let Some(current_exe) = EnvVars::var_os("NEXTEST_BIN_EXE_prek") {
+            filters.extend(
+                Self::path_patterns(current_exe)
+                    .into_iter()
+                    .map(|pattern| (pattern, "[CURRENT_EXE]".to_string())),
+            );
+        }
+        let current_exe = assert_cmd::cargo::cargo_bin!("prek");
         filters.extend(
             Self::path_patterns(current_exe)
                 .into_iter()
