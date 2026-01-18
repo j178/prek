@@ -567,6 +567,7 @@ jobs:
             --no-report `
             --partition hash:${{ matrix.partition }}/2 `
             --archive-file nextest-archive.tar.zst `
+            --extract-to ./target `
             --status-level skip `
             --failure-output immediate `
             --no-fail-fast `
