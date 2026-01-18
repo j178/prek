@@ -1,5 +1,5 @@
 use std::cmp::max;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::LazyLock;
 
@@ -237,17 +237,6 @@ where
         .await?;
 
     Ok(results)
-}
-
-pub(crate) fn prepend_paths(paths: &[&Path]) -> Result<OsString, std::env::JoinPathsError> {
-    std::env::join_paths(
-        paths.iter().map(|p| p.to_path_buf()).chain(
-            EnvVars::var_os(EnvVars::PATH)
-                .as_ref()
-                .iter()
-                .flat_map(std::env::split_paths),
-        ),
-    )
 }
 
 #[cfg(test)]

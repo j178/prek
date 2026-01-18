@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use prek_consts::env_vars::EnvVars;
+use prek_consts::prepend_paths;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
@@ -16,7 +17,7 @@ use crate::languages::node::installer::{NodeInstaller, NodeResult, bin_dir, lib_
 use crate::languages::node::version::EXTRA_KEY_LTS;
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
-use crate::run::{prepend_paths, run_by_batch};
+use crate::run::run_by_batch;
 use crate::store::{Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone)]
