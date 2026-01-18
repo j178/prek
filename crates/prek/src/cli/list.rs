@@ -44,7 +44,7 @@ pub(crate) async fn list(
     let mut workspace =
         Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
-    let reporter = HookInitReporter::from(printer);
+    let reporter = HookInitReporter::new(printer);
     let lock = store.lock_async().await?;
     let hooks = workspace
         .init_hooks(store, Some(&reporter))

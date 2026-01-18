@@ -94,7 +94,7 @@ pub(crate) async fn install_hooks(
     let mut workspace =
         Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
-    let reporter = HookInitReporter::from(printer);
+    let reporter = HookInitReporter::new(printer);
     let _lock = store.lock_async().await?;
 
     let hooks = workspace
@@ -107,7 +107,7 @@ pub(crate) async fn install_hooks(
         .map(Arc::new)
         .collect();
 
-    let reporter = HookInstallReporter::from(printer);
+    let reporter = HookInstallReporter::new(printer);
     run::install_hooks(filtered_hooks, store, &reporter).await?;
 
     Ok(ExitStatus::Success)

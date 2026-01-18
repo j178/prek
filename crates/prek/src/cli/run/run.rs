@@ -83,7 +83,7 @@ pub(crate) async fn run(
         workspace.check_configs_staged().await?;
     }
 
-    let reporter = HookInitReporter::from(printer);
+    let reporter = HookInitReporter::new(printer);
     let lock = store.lock_async().await?;
 
     let hooks = workspace
@@ -155,7 +155,7 @@ pub(crate) async fn run(
         "Hooks going to run: {:?}",
         filtered_hooks.iter().map(|h| &h.id).collect::<Vec<_>>()
     );
-    let reporter = HookInstallReporter::from(printer);
+    let reporter = HookInstallReporter::new(printer);
     let installed_hooks = install_hooks(filtered_hooks, store, &reporter).await?;
 
     // Release the store lock.

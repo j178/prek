@@ -88,7 +88,7 @@ pub(crate) async fn auto_update(
         })
         .max(1);
 
-    let reporter = AutoUpdateReporter::from(printer);
+    let reporter = AutoUpdateReporter::new(printer);
 
     let mut tasks = futures::stream::iter(repo_updates.iter().filter(|(remote_repo, _)| {
         // Filter by user specified repositories
