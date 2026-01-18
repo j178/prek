@@ -17,6 +17,7 @@ env:
   # Otherwise, tests jobs will install their own uv, and it will encounter concurrency issue.
   UV_VERSION: "0.8.22"
   NODE_VERSION: "20"
+  BUN_VERSION: "1.3"
   GO_VERSION: "1.24"
   PYTHON_VERSION: "3.12"
   RUBY_VERSION: "3.4"
@@ -314,6 +315,11 @@ jobs:
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
 
+      - name: "Install Bun"
+        uses: oven-sh/setup-bun@db6bcf6eb8d88a8aa03265b887ec7bd84d64cd68 # v2.1.1
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
       - name: "Cargo test"
         run: |
           cargo llvm-cov nextest \
@@ -397,6 +403,11 @@ jobs:
         uses: ruby/setup-ruby@4c24fa5ec04b2e79eb40571b1cee2a0d2b705771 # v1.278.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
+
+      - name: "Install Bun"
+        uses: oven-sh/setup-bun@db6bcf6eb8d88a8aa03265b887ec7bd84d64cd68 # v2.1.1
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
 
       - name: "Cargo test"
         run: |
@@ -551,6 +562,11 @@ jobs:
         uses: ruby/setup-ruby@4c24fa5ec04b2e79eb40571b1cee2a0d2b705771 # v1.278.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
+
+      - name: "Install Bun"
+        uses: oven-sh/setup-bun@db6bcf6eb8d88a8aa03265b887ec7bd84d64cd68 # v2.1.1
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
 
       - name: "Cargo test"
         working-directory: ${{ env.PREK_WORKSPACE }}

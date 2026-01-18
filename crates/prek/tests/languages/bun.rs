@@ -48,7 +48,7 @@ fn additional_dependencies() {
               - id: bun-cowsay
                 name: bun cowsay
                 language: bun
-                entry: bunx cowsay Hello World!
+                entry: cowsay Hello World!
                 additional_dependencies: ["cowsay"]
                 always_run: true
                 verbose: true
