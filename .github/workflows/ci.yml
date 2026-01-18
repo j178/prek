@@ -409,12 +409,62 @@ jobs:
             -j 8 \
             --final-status-level slow
 
-  cargo-test-windows:
-    name: "cargo test | windows"
+  build-windows-artifact:
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
+    name: "build tests archive | windows"
+    timeout-minutes: 10
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          # By default actions/checkout checks out a merge commit. Check out the PR head instead.
+          # https://github.com/actions/checkout#checkout-pull-request-head-commit-instead-of-merge-commit
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Create Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          workspaces: ${{ env.PREK_WORKSPACE }}
+          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
+
+      - name: "Install Rust toolchain"
+        run: rustup component add llvm-tools-preview
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@a983ca795126a4be4e8a44879ac5c4c3ef66cae1 # v2.65.11
+        with:
+          tool: cargo-nextest
+
+      - name: "Install cargo-llvm-cov"
+        uses: taiki-e/install-action@a983ca795126a4be4e8a44879ac5c4c3ef66cae1 # v2.65.11
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Build and archive tests
+        run: cargo llvm-cov nextest archive --archive-file nextest-archive.tar.zst
+      - name: Upload archive to workflow
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: nextest-archive
+          path: nextest-archive.tar.zst
+
+  cargo-test-windows:
+    name: "cargo test | windows ${{ matrix.partition }}/2"
+    needs: build-windows-artifact
     runs-on: windows-latest
     timeout-minutes: 15
+    strategy:
+      matrix:
+        partition: [1, 2]
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -502,6 +552,7 @@ jobs:
             --no-report `
             --workspace `
             --cargo-profile fast-build `
+            --partition hash:${{ matrix.partition }}/2 `
             --features schemars `
             --status-level skip `
             --failure-output immediate `
