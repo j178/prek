@@ -2212,7 +2212,6 @@ fn check_json5() -> Result<()> {
     Ok(())
 }
 
-<<<<<<< HEAD
 /// Test that builtin hooks work correctly even when a system-wide binary with the
 /// same name exists on PATH (regression test for <https://github.com/j178/prek/issues/1412>).
 ///
@@ -2328,6 +2327,42 @@ fn check_hook_updates_hook_with_args() {
     ");
 }
 
+/// Tests that `check-hook-updates` hook with `--check-interval-hours=0` runs every time.
+#[test]
+fn check_hook_updates_check_interval_zero_runs_every_time() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-hook-updates
+                args: ['--check-interval-hours=0']
+    "});
+    context.git_add(".");
+
+    // First run
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for hook updates...................................................Passed
+
+    ----- stderr -----
+    ");
+
+    // Second run should also execute (not skip)
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for hook updates...................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
 /// Tests that `check-hook-updates` hook detects available updates for remote repos.
 /// Without `--fail-on-updates`, the hook passes but outputs available updates.
 #[test]
@@ -2336,11 +2371,13 @@ fn check_hook_updates_detects_outdated_repo() {
     context.init_project();
 
     // Use an old version of pre-commit-hooks that has newer versions available
+    // Use --check-interval-hours=0 to ensure the check runs
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
               - id: check-hook-updates
+                args: ['--check-interval-hours=0']
           - repo: https://github.com/pre-commit/pre-commit-hooks
             rev: v4.0.0
             hooks:
@@ -2367,12 +2404,13 @@ fn check_hook_updates_fails_on_updates() {
     context.init_project();
 
     // Use an old version with --fail-on-updates
+    // Use --check-interval-hours=0 to ensure the check runs
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
               - id: check-hook-updates
-                args: ['--fail-on-updates']
+                args: ['--fail-on-updates', '--check-interval-hours=0']
           - repo: https://github.com/pre-commit/pre-commit-hooks
             rev: v4.0.0
             hooks:

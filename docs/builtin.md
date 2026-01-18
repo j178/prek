@@ -382,3 +382,24 @@ Checks that non-binary executables have a proper shebang.
 
 - The check is intentionally lightweight: it only verifies that the file starts with `#!`.
 - On systems where the executable bit is not tracked by the filesystem, `prek` consults git's staged mode bits.
+
+---
+
+#### `check-hook-updates`
+
+Checks if configured hooks have newer versions available.
+
+**Supported arguments**:
+
+- `--cooldown-days=<N>` (default: `7`)
+    - Minimum release age (in days) required for a version to be eligible. Helps prevent supply chain attacks by not immediately suggesting brand-new releases. A value of `0` disables this check.
+- `--fail-on-updates`
+    - Fail the hook if updates are available (default: warn only).
+- `--check-interval-hours=<N>` (default: `24`)
+    - Minimum hours between checks. Set to `0` to check every time.
+
+**Behavior / caveats**
+
+- By default, the hook only runs once every 24 hours to avoid slowing down commits. The last check time is stored in the prek cache directory.
+- Network errors are reported as warnings but do not fail the hook.
+- This hook is configured as `always_run: true` by default, and does not take filenames.
