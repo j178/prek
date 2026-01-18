@@ -196,7 +196,7 @@ pub(crate) async fn try_repo(
         Some(config_file),
         vec![],
         vec![],
-        run_args.hook_stage,
+        run_args.stage,
         run_args.from_ref,
         run_args.to_ref,
         run_args.all_files,

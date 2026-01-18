@@ -2199,7 +2199,7 @@ fn selectors_completion() -> Result<()> {
     --from-ref	The original ref in a `<from_ref>...<to_ref>` diff expression. Files changed in this diff will be run through the hooks
     --to-ref	The destination ref in a `from_ref...to_ref` diff expression. Defaults to `HEAD` if `from_ref` is specified
     --last-commit	Run hooks against the last commit. Equivalent to `--from-ref HEAD~1 --to-ref HEAD`
-    --hook-stage	The stage during which the hook is fired
+    --stage	The stage during which the hook is fired
     --show-diff-on-failure	When hooks fail, run `git diff` directly afterward
     --fail-fast	Stop running hooks after the first failure
     --dry-run	Do not run the hooks, but print the hooks that would have been run
