@@ -470,6 +470,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
         partition: [1, 2, 3]
     steps:

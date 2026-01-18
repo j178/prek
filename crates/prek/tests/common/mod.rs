@@ -67,6 +67,7 @@ impl TestContext {
         );
 
         if let Some(current_exe) = EnvVars::var_os("NEXTEST_BIN_EXE_prek") {
+            panic!("NEXTEST_BIN_EXE_prek set to {}", current_exe.display());
             filters.extend(
                 Self::path_patterns(current_exe)
                     .into_iter()
