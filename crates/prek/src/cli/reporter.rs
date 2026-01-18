@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -12,20 +12,23 @@ use crate::printer::Printer;
 use crate::workspace;
 
 /// Current progress reporter used to suspend rendering while printing normal output.
-static CURRENT_REPORTER: Mutex<Option<Arc<ProgressReporter>>> = Mutex::new(None);
+static CURRENT_REPORTER: Mutex<Option<Weak<ProgressReporter>>> = Mutex::new(None);
 
 /// Set the current reporter for lock acquisition warnings.
-fn set_current_reporter(reporter: Option<Arc<ProgressReporter>>) {
-    *CURRENT_REPORTER.lock().unwrap() = reporter;
+fn set_current_reporter(reporter: Option<&Arc<ProgressReporter>>) {
+    *CURRENT_REPORTER.lock().unwrap() = reporter.map(Arc::downgrade);
 }
 
 /// Suspend progress rendering while emitting normal output.
+///
+/// If a progress reporter is currently active, this runs `f` inside
+/// `indicatif::MultiProgress::suspend` to avoid corrupting the progress display.
+/// If no reporter is active (or it has already been dropped), this just runs `f`.
 pub(crate) fn suspend(f: impl FnOnce() + Send + 'static) {
     let reporter = CURRENT_REPORTER.lock().unwrap().clone();
-    if let Some(reporter) = reporter {
-        reporter.children.suspend(f);
-    } else {
-        f();
+    match reporter.and_then(|r| r.upgrade()) {
+        Some(reporter) => reporter.children.suspend(f),
+        None => f(),
     }
 }
 
@@ -116,7 +119,7 @@ pub(crate) struct HookInitReporter {
 impl HookInitReporter {
     pub(crate) fn new(printer: Printer) -> Self {
         let reporter = Arc::new(ProgressReporter::from(printer));
-        set_current_reporter(Some(reporter.clone()));
+        set_current_reporter(Some(&reporter));
         Self { reporter }
     }
 }
@@ -147,7 +150,7 @@ pub(crate) struct HookInstallReporter {
 impl HookInstallReporter {
     pub(crate) fn new(printer: Printer) -> Self {
         let reporter = Arc::new(ProgressReporter::from(printer));
-        set_current_reporter(Some(reporter.clone()));
+        set_current_reporter(Some(&reporter));
         Self { reporter }
     }
 }
@@ -182,7 +185,7 @@ pub(crate) struct HookRunReporter {
 impl HookRunReporter {
     pub fn new(printer: Printer, dots: usize) -> Self {
         let reporter = Arc::new(ProgressReporter::from(printer));
-        set_current_reporter(Some(reporter.clone()));
+        set_current_reporter(Some(&reporter));
 
         Self { reporter, dots }
     }
@@ -252,7 +255,7 @@ pub(crate) struct AutoUpdateReporter {
 impl AutoUpdateReporter {
     pub(crate) fn new(printer: Printer) -> Self {
         let reporter = Arc::new(ProgressReporter::from(printer));
-        set_current_reporter(Some(reporter.clone()));
+        set_current_reporter(Some(&reporter));
         Self { reporter }
     }
 }
