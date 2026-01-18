@@ -9,7 +9,7 @@ use crate::hook::Hook;
 mod check_added_large_files;
 mod check_case_conflict;
 mod check_executables_have_shebangs;
-mod check_json;
+pub(crate) mod check_json;
 mod check_merge_conflict;
 mod check_symlinks;
 mod check_toml;

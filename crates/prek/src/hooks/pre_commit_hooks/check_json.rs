@@ -9,7 +9,7 @@ use crate::hooks::run_concurrent_file_checks;
 use crate::run::CONCURRENCY;
 
 #[derive(Debug)]
-enum JsonValue {
+pub(crate) enum JsonValue {
     Object(FxHashMap<String, JsonValue>),
     Array(Vec<JsonValue>),
     String(String),
