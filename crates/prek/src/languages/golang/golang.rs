@@ -4,8 +4,8 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::Context;
-
 use prek_consts::env_vars::EnvVars;
+use prek_consts::prepend_paths;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::{Hook, InstallInfo, InstalledHook};
@@ -14,7 +14,7 @@ use crate::languages::golang::GoRequest;
 use crate::languages::golang::installer::GoInstaller;
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
-use crate::run::{prepend_paths, run_by_batch};
+use crate::run::run_by_batch;
 use crate::store::{CacheBucket, Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone)]
