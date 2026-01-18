@@ -2292,49 +2292,71 @@ fn reuse_env() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let pkg_dir = context.work_dir().child("local_pkg");
+    pkg_dir.create_dir_all()?;
+    pkg_dir.child("setup.py").write_str(indoc::indoc! {r#"
+        from setuptools import setup
+
+        setup(
+            name="local-pkg",
+            version="0.1.0",
+            py_modules=["local_pkg"],
+        )
+    "#})?;
+    pkg_dir
+        .child("local_pkg.py")
+        .write_str("def hello():\n     print('hello')\n")?;
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
     repos:
-      - repo: https://github.com/PyCQA/flake8
-        rev: 7.1.1
+      - repo: local
         hooks:
-          - id: flake8
-            additional_dependencies: [flake8-errmsg]
-    "});
-
-    context
-        .work_dir()
-        .child("err.py")
-        .write_str("raise ValueError('error')\n")?;
-    context.git_add(".");
-
-    cmd_snapshot!(context.filters(), context.run(), @r"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-    flake8...................................................................Failed
-    - hook id: flake8
-    - exit code: 1
-
-      err.py:1:1: EM101 Exceptions must not use a string literal; assign to a variable first
-
-    ----- stderr -----
-    ");
-
-    // Remove dependencies, so the environment should not be reused.
-    context.write_pre_commit_config(indoc::indoc! {r"
-    repos:
-      - repo: https://github.com/PyCQA/flake8
-        rev: 7.1.1
-        hooks:
-          - id: flake8
-    "});
+          - id: reuse-env
+            name: reuse-env
+            language: python
+            entry: python -c "import local_pkg; local_pkg.hello()"
+            pass_filenames: false
+            additional_dependencies: ["./local_pkg"]
+            verbose: true
+    "#});
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    flake8...................................................................Passed
+    reuse-env................................................................Passed
+    - hook id: reuse-env
+    - duration: [TIME]
+
+      hello
+
+    ----- stderr -----
+    ");
+
+    // Remove dependencies, so the environment should not be reused.
+    context.write_pre_commit_config(indoc::indoc! {r#"
+    repos:
+      - repo: local
+        hooks:
+          - id: reuse-env
+            name: reuse-env
+            language: python
+            entry: python -c "print('ok')"
+            pass_filenames: false
+            verbose: true
+    "#});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    reuse-env................................................................Passed
+    - hook id: reuse-env
+    - duration: [TIME]
+
+      ok
 
     ----- stderr -----
     ");
