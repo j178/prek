@@ -359,11 +359,11 @@ pub(crate) struct RunExtraArgs {
     pub(crate) remote_branch: Option<String>,
     #[arg(long, hide = true)]
     pub(crate) local_branch: Option<String>,
-    #[arg(long, hide = true, required_if_eq("hook_stage", "pre-rebase"))]
+    #[arg(long, hide = true, required_if_eq("stage", "pre-rebase"))]
     pub(crate) pre_rebase_upstream: Option<String>,
     #[arg(long, hide = true)]
     pub(crate) pre_rebase_branch: Option<String>,
-    #[arg(long, hide = true, required_if_eq_any = [("hook_stage", "prepare-commit-msg"), ("hook_stage", "commit-msg")])]
+    #[arg(long, hide = true, required_if_eq_any = [("stage", "prepare-commit-msg"), ("stage", "commit-msg")])]
     pub(crate) commit_msg_filename: Option<String>,
     #[arg(long, hide = true)]
     pub(crate) prepare_commit_message_source: Option<String>,
@@ -467,8 +467,8 @@ pub(crate) struct RunArgs {
     /// `pre-commit`, or `pre-commit`) will run.
     /// Defaults to `pre-commit` if not specified.
     /// For hooks specified directly in the command line, fallback to `manual` stage if no hooks found for `pre-commit` stage.
-    #[arg(long, value_enum)]
-    pub(crate) hook_stage: Option<Stage>,
+    #[arg(long, value_enum, alias = "hook-stage")]
+    pub(crate) stage: Option<Stage>,
 
     /// When hooks fail, run `git diff` directly afterward.
     #[arg(long)]

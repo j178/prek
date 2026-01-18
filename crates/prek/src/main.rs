@@ -262,7 +262,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 cli.globals.config,
                 args.includes,
                 args.skips,
-                args.hook_stage,
+                args.stage,
                 args.from_ref,
                 args.to_ref,
                 args.all_files,
