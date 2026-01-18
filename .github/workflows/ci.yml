@@ -465,13 +465,13 @@ jobs:
           path: ${{ env.PREK_WORKSPACE }}/nextest-archive.tar.zst
 
   cargo-test-windows:
-    name: "cargo test | windows ${{ matrix.partition }}/2"
+    name: "cargo test | windows ${{ matrix.partition }}/3"
     needs: build-windows-artifact
     runs-on: windows-latest
     timeout-minutes: 15
     strategy:
       matrix:
-        partition: [1, 2]
+        partition: [1, 2, 3]
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -565,9 +565,8 @@ jobs:
           cargo llvm-cov nextest `
             --color always `
             --no-report `
-            --partition hash:${{ matrix.partition }}/2 `
+            --partition hash:${{ matrix.partition }}/3 `
             --archive-file nextest-archive.tar.zst `
-            --extract-to ./target `
             --status-level skip `
             --failure-output immediate `
             --no-fail-fast `
