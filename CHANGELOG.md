@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.30
+
+Released on 2026-01-18.
+
+### Enhancements
+
+- Build binaries using minimal-size profile ([#1376](https://github.com/j178/prek/pull/1376))
+- Check for duplicate keys in `check-json5` builtin hook ([#1387](https://github.com/j178/prek/pull/1387))
+- Preserve quoting style in `auto-update` ([#1379](https://github.com/j178/prek/pull/1379))
+- Show warning if file lock acquiring blocks for long time ([#1353](https://github.com/j178/prek/pull/1353))
+- Singleflight Python health checks with cached interpreter info ([#1381](https://github.com/j178/prek/pull/1381))
+
+### Bug fixes
+
+- Do not resolve entry for docker_image ([#1386](https://github.com/j178/prek/pull/1386))
+- Fix command lookup on Windows ([#1383](https://github.com/j178/prek/pull/1383))
+
+### Documentation
+
+- Document language support details ([#1380](https://github.com/j178/prek/pull/1380))
+- Document that `check-json5` now rejects duplicate keys ([#1391](https://github.com/j178/prek/pull/1391))
+
+### Contributors
+
+- @j178
+
 ## 0.2.29
 
 Released on 2026-01-16.
