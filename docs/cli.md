@@ -318,6 +318,7 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 </ul></dd><dt id="prek-list--language"><a href="#prek-list--language"><code>--language</code></a> <i>language</i></dt><dd><p>Show only hooks that are implemented in the specified language</p>
 <p>Possible values:</p>
 <ul>
+<li><code>bun</code></li>
 <li><code>conda</code></li>
 <li><code>coursier</code></li>
 <li><code>dart</code></li>
