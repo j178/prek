@@ -6,6 +6,7 @@ use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
 use prek_consts::env_vars::EnvVars;
+use prek_consts::prepend_paths;
 use rustc_hash::FxBuildHasher;
 use serde::Deserialize;
 use tracing::{debug, trace};
@@ -20,7 +21,7 @@ use crate::languages::python::uv::Uv;
 use crate::languages::version::LanguageRequest;
 use crate::process;
 use crate::process::Cmd;
-use crate::run::{prepend_paths, run_by_batch};
+use crate::run::run_by_batch;
 use crate::store::{Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone)]

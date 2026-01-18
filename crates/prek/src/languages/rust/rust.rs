@@ -8,6 +8,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use itertools::{Either, Itertools};
 use prek_consts::env_vars::EnvVars;
+use prek_consts::prepend_paths;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
@@ -19,7 +20,7 @@ use crate::languages::rust::rustup::Rustup;
 use crate::languages::rust::version::EXTRA_KEY_CHANNEL;
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
-use crate::run::{prepend_paths, run_by_batch};
+use crate::run::run_by_batch;
 use crate::store::{CacheBucket, Store, ToolBucket};
 
 fn format_cargo_dependency(dep: &str) -> String {
