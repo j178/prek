@@ -33,6 +33,14 @@ use crate::cli::reporter;
 pub static CWD: LazyLock<PathBuf> =
     LazyLock::new(|| std::env::current_dir().expect("The current directory must be exist"));
 
+#[cfg(test)]
+static LAST_LOCK_WARNING: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+#[cfg(test)]
+fn record_lock_warning(message: String) {
+    *LAST_LOCK_WARNING.lock().unwrap() = Some(message);
+}
+
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
 pub struct LockedFile(fs_err::File);
@@ -90,10 +98,21 @@ impl LockedFile {
             result = &mut task => result?,
             () = tokio::time::sleep(Duration::from_secs(1)) => {
                 reporter::suspend(move || {
-                    crate::warn_user!(
-                        "Waiting to acquire lock at `{}`. Another prek process may still be running",
-                        path.display()
-                    );
+                    #[cfg(test)]
+                    {
+                        record_lock_warning(format!(
+                            "Waiting to acquire lock at `{}`. Another prek process may still be running",
+                            path.display()
+                        ));
+                    }
+
+                    #[cfg(not(test))]
+                    {
+                        crate::warn_user!(
+                            "Waiting to acquire lock at `{}`. Another prek process may still be running",
+                            path.display()
+                        );
+                    }
                 });
 
                 task.await?
@@ -326,5 +345,67 @@ pub(crate) async fn rename_or_copy(source: &Path, target: &Path) -> std::io::Res
             );
             Err(e)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use crate::warnings;
+
+    struct WarningGuard;
+
+    impl WarningGuard {
+        fn new() -> Self {
+            warnings::enable();
+            Self
+        }
+    }
+
+    impl Drop for WarningGuard {
+        fn drop(&mut self) {
+            warnings::disable();
+        }
+    }
+
+    #[tokio::test]
+    async fn lock_warning_emitted_after_timeout() {
+        let _warnings = WarningGuard::new();
+
+        // Clear any previous warning.
+        *super::LAST_LOCK_WARNING.lock().unwrap() = None;
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let lock_path = tmp.path().join(".lock");
+
+        // First acquire should succeed immediately.
+        let lock1 = super::LockedFile::acquire(&lock_path, "test-lock")
+            .await
+            .expect("acquire lock1");
+
+        // Second acquire should block, trigger the 1s warning, then complete once we drop lock1.
+        let lock_path2 = lock_path.clone();
+        let task =
+            tokio::spawn(async move { super::LockedFile::acquire(lock_path2, "test-lock").await });
+
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+
+        let warning = super::LAST_LOCK_WARNING.lock().unwrap().clone();
+        assert!(
+            warning
+                .as_ref()
+                .is_some_and(|w| w.contains("Waiting to acquire lock")),
+            "expected recorded lock warning, got: {warning:?}"
+        );
+        assert!(
+            warning
+                .as_ref()
+                .is_some_and(|w| w.contains("Another prek process may still be running")),
+            "expected recorded lock warning hint, got: {warning:?}"
+        );
+
+        drop(lock1);
+        task.await.expect("join task").expect("acquire lock2");
     }
 }
