@@ -1,6 +1,5 @@
 use std::fmt::Write;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use anyhow::Context;
 use clap::ValueEnum;
@@ -11,7 +10,7 @@ use crate::cli::reporter::HookInitReporter;
 use crate::cli::run::Selectors;
 use crate::cli::{ExitStatus, ListOutputFormat};
 use crate::config::{Language, Stage};
-use crate::fs::{CWD, set_global_reporter};
+use crate::fs::CWD;
 use crate::hook;
 use crate::printer::Printer;
 use crate::store::Store;
@@ -45,11 +44,10 @@ pub(crate) async fn list(
     let mut workspace =
         Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
-    let reporter = Arc::new(HookInitReporter::from(printer));
-    set_global_reporter(Some(reporter.clone()));
+    let reporter = HookInitReporter::new(printer);
     let lock = store.lock_async().await?;
     let hooks = workspace
-        .init_hooks(store, Some(reporter.as_ref()))
+        .init_hooks(store, Some(&reporter))
         .await
         .context("Failed to init hooks")?;
 

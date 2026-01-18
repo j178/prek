@@ -7,10 +7,27 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use unicode_width::UnicodeWidthStr;
 
-use crate::fs::SuspendableReporter;
 use crate::hook::Hook;
 use crate::printer::Printer;
 use crate::workspace;
+
+/// Current progress reporter used to suspend rendering while printing normal output.
+static CURRENT_REPORTER: Mutex<Option<Arc<ProgressReporter>>> = Mutex::new(None);
+
+/// Set the current reporter for lock acquisition warnings.
+fn set_current_reporter(reporter: Option<Arc<ProgressReporter>>) {
+    *CURRENT_REPORTER.lock().unwrap() = reporter;
+}
+
+/// Suspend progress rendering while emitting normal output.
+pub(crate) fn suspend(f: impl FnOnce() + Send + 'static) {
+    let reporter = CURRENT_REPORTER.lock().unwrap().clone();
+    if let Some(reporter) = reporter {
+        reporter.children.suspend(f);
+    } else {
+        f();
+    }
+}
 
 #[derive(Default, Debug)]
 struct BarState {
@@ -93,14 +110,14 @@ impl From<Printer> for ProgressReporter {
 }
 
 pub(crate) struct HookInitReporter {
-    reporter: ProgressReporter,
+    reporter: Arc<ProgressReporter>,
 }
 
-impl From<Printer> for HookInitReporter {
-    fn from(printer: Printer) -> Self {
-        Self {
-            reporter: ProgressReporter::from(printer),
-        }
+impl HookInitReporter {
+    pub(crate) fn new(printer: Printer) -> Self {
+        let reporter = Arc::new(ProgressReporter::from(printer));
+        set_current_reporter(Some(reporter.clone()));
+        Self { reporter }
     }
 }
 
@@ -123,21 +140,15 @@ impl workspace::HookInitReporter for HookInitReporter {
     }
 }
 
-impl SuspendableReporter for HookInitReporter {
-    fn suspend_dyn(&self, f: Box<dyn FnOnce() + Send>) {
-        self.reporter.children.suspend(f);
-    }
-}
-
 pub(crate) struct HookInstallReporter {
-    reporter: ProgressReporter,
+    reporter: Arc<ProgressReporter>,
 }
 
-impl From<Printer> for HookInstallReporter {
-    fn from(printer: Printer) -> Self {
-        Self {
-            reporter: ProgressReporter::from(printer),
-        }
+impl HookInstallReporter {
+    pub(crate) fn new(printer: Printer) -> Self {
+        let reporter = Arc::new(ProgressReporter::from(printer));
+        set_current_reporter(Some(reporter.clone()));
+        Self { reporter }
     }
 }
 
@@ -163,23 +174,17 @@ impl HookInstallReporter {
     }
 }
 
-impl SuspendableReporter for HookInstallReporter {
-    fn suspend_dyn(&self, f: Box<dyn FnOnce() + Send>) {
-        self.reporter.children.suspend(f);
-    }
-}
-
 pub(crate) struct HookRunReporter {
-    reporter: ProgressReporter,
+    reporter: Arc<ProgressReporter>,
     dots: usize,
 }
 
 impl HookRunReporter {
     pub fn new(printer: Printer, dots: usize) -> Self {
-        Self {
-            reporter: ProgressReporter::from(printer),
-            dots,
-        }
+        let reporter = Arc::new(ProgressReporter::from(printer));
+        set_current_reporter(Some(reporter.clone()));
+
+        Self { reporter, dots }
     }
 
     pub fn on_run_start(&self, hook: &Hook, len: usize) -> usize {
@@ -239,21 +244,16 @@ impl HookRunReporter {
     }
 }
 
-impl SuspendableReporter for HookRunReporter {
-    fn suspend_dyn(&self, f: Box<dyn FnOnce() + Send>) {
-        self.reporter.children.suspend(f);
-    }
-}
-
+#[derive(Clone)]
 pub(crate) struct AutoUpdateReporter {
-    reporter: ProgressReporter,
+    reporter: Arc<ProgressReporter>,
 }
 
-impl From<Printer> for AutoUpdateReporter {
-    fn from(printer: Printer) -> Self {
-        Self {
-            reporter: ProgressReporter::from(printer),
-        }
+impl AutoUpdateReporter {
+    pub(crate) fn new(printer: Printer) -> Self {
+        let reporter = Arc::new(ProgressReporter::from(printer));
+        set_current_reporter(Some(reporter.clone()));
+        Self { reporter }
     }
 }
 
