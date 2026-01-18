@@ -560,7 +560,8 @@ jobs:
 
           cargo llvm-cov nextest `
             --color always `
-            --no-report `
+            --lcov `
+            --output-path lcov.info `
             --partition hash:${{ matrix.partition }}/3 `
             --archive-file nextest-archive.tar.zst `
             --status-level skip `
@@ -570,8 +571,6 @@ jobs:
             --final-status-level slow
 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          cargo llvm-cov report --profile fast-build --lcov --output-path lcov.info
         shell: pwsh
 
       - name: "Upload coverage reports to Codecov"

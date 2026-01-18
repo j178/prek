@@ -106,9 +106,9 @@ impl TestContext {
             // Trim the trailing separator for cross-platform directories filters
             r"{}\\?/?",
             regex::escape(&path.as_ref().display().to_string())
-                // Make separators platform agnostic because on Windows we will display
+                // Make separators platform-agnostic because on Windows we will display
                 // paths with Unix-style separators sometimes
-                .replace(r"/", r"(\\|\/)")
+                .replace('/', r"(\\|\/)")
                 .replace(r"\\", r"(\\|\/)")
         )
     }
