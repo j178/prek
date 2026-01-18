@@ -35,7 +35,7 @@ while also providing some additional long-requested features.
 - 🔄 Fully compatible with the original pre-commit configurations and hooks.
 - 🏗️ Built-in support for monorepos (i.e. [workspace mode](https://prek.j178.dev/workspace/)).
 - 🐍 Integration with [`uv`](https://github.com/astral-sh/uv) for managing Python virtual environments and dependencies.
-- 🛠️ Improved toolchain installations for Python, Node.js, Go, Rust and Ruby, shared between hooks.
+- 🛠️ Improved toolchain installations for Python, Node.js, Bun, Go, Rust and Ruby, shared between hooks.
 - 📦 [Built-in](https://prek.j178.dev/builtin/) Rust-native implementation of some common hooks.
 <!-- features:end -->
 
