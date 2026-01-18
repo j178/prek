@@ -67,7 +67,6 @@ impl TestContext {
         );
 
         if let Some(current_exe) = EnvVars::var_os("NEXTEST_BIN_EXE_prek") {
-            panic!("NEXTEST_BIN_EXE_prek set to {}", current_exe.display());
             filters.extend(
                 Self::path_patterns(current_exe)
                     .into_iter()
@@ -414,7 +413,6 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d]|\.\.|\.)", "/$1"),
-    (r"prek.exe", "prek"),
     // The exact message is host language dependent
     (
         r"Caused by: .* \(os error 2\)",
