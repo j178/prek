@@ -507,7 +507,9 @@ jobs:
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: nextest-archive
-          path: ${{ env.PREK_WORKSPACE }}/nextest-archive.tar.zst
+          # `path` must be a directory. If you set it to a file path, download-artifact
+          # creates a directory with that name, and nextest later fails to read it.
+          path: ${{ env.PREK_WORKSPACE }}
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@681c641aba71e4a1c380be3ab5e12ad51f415867 # v7.1.6
