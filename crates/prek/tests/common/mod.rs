@@ -66,6 +66,13 @@ impl TestContext {
                 .map(|pattern| (pattern, "[HOME]/".to_string())),
         );
 
+        if let Some(current_exe) = EnvVars::var_os("NEXTEST_BIN_EXE_prek") {
+            filters.extend(
+                Self::path_patterns(current_exe)
+                    .into_iter()
+                    .map(|pattern| (pattern, "[CURRENT_EXE]".to_string())),
+            );
+        }
         let current_exe = assert_cmd::cargo::cargo_bin!("prek");
         filters.extend(
             Self::path_patterns(current_exe)
@@ -99,8 +106,9 @@ impl TestContext {
             // Trim the trailing separator for cross-platform directories filters
             r"{}\\?/?",
             regex::escape(&path.as_ref().display().to_string())
-                // Make separators platform agnostic because on Windows we will display
+                // Make separators platform-agnostic because on Windows we will display
                 // paths with Unix-style separators sometimes
+                .replace('/', r"(\\|\/)")
                 .replace(r"\\", r"(\\|\/)")
         )
     }
@@ -138,7 +146,11 @@ impl TestContext {
             cmd.env(EnvVars::PRE_COMMIT_HOME, &**self.home_dir());
             cmd
         } else {
-            let bin = assert_cmd::cargo::cargo_bin!("prek");
+            // The absolute path to a binary target's executable. This is only set when running an integration test or benchmark.
+            // When reusing builds from an archive, this is set to the remapped path within the target directory.
+            let bin = EnvVars::var_os("NEXTEST_BIN_EXE_prek")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(assert_cmd::cargo::cargo_bin!("prek")));
             let mut cmd = Command::new(bin);
             cmd.current_dir(self.work_dir());
             cmd.env(EnvVars::PREK_HOME, &**self.home_dir());
@@ -402,7 +414,6 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d]|\.\.|\.)", "/$1"),
-    (r"prek.exe", "prek"),
     // The exact message is host language dependent
     (
         r"Caused by: .* \(os error 2\)",

@@ -138,7 +138,6 @@ similar.opt-level = 3
 # apply basic optimization, which speed up build and running tests.
 [profile.fast-build]
 inherits = "dev"
-opt-level = 1
 debug = 0
 strip = "debuginfo"
 
