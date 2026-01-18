@@ -418,9 +418,6 @@ jobs:
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
-          # By default actions/checkout checks out a merge commit. Check out the PR head instead.
-          # https://github.com/actions/checkout#checkout-pull-request-head-commit-instead-of-merge-commit
-          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
       - name: Create Dev Drive
@@ -451,7 +448,12 @@ jobs:
 
       - name: Build and archive tests
         working-directory: ${{ env.PREK_WORKSPACE }}
-        run: cargo llvm-cov nextest-archive --archive-file nextest-archive.tar.zst
+        run: |
+          cargo llvm-cov nextest-archive \
+            --workspace \
+            --all-features \
+            --cargo-profile fast-build \
+            --archive-file nextest-archive.tar.zst
 
       - name: Upload archive to workflow
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
@@ -470,7 +472,6 @@ jobs:
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
       - name: Create Dev Drive
@@ -559,8 +560,6 @@ jobs:
           cargo llvm-cov nextest `
             --color always `
             --no-report `
-            --workspace `
-            --cargo-profile fast-build `
             --partition hash:${{ matrix.partition }}/2 `
             --archive-file nextest-archive.tar.zst `
             --features schemars `
