@@ -450,12 +450,14 @@ jobs:
           tool: cargo-llvm-cov
 
       - name: Build and archive tests
-        run: cargo llvm-cov nextest archive --archive-file nextest-archive.tar.zst
+        working-directory: ${{ env.PREK_WORKSPACE }}
+        run: cargo llvm-cov nextest-archive --archive-file nextest-archive.tar.zst
+
       - name: Upload archive to workflow
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: nextest-archive
-          path: nextest-archive.tar.zst
+          path: ${{ env.PREK_WORKSPACE }}/nextest-archive.tar.zst
 
   cargo-test-windows:
     name: "cargo test | windows ${{ matrix.partition }}/2"
@@ -468,6 +470,7 @@ jobs:
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
       - name: Create Dev Drive
@@ -495,6 +498,12 @@ jobs:
         uses: taiki-e/install-action@a983ca795126a4be4e8a44879ac5c4c3ef66cae1 # v2.65.11
         with:
           tool: cargo-llvm-cov
+
+      - name: Download tests archive
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: nextest-archive
+          path: ${{ env.PREK_WORKSPACE }}/nextest-archive.tar.zst
 
       - name: "Install uv"
         uses: astral-sh/setup-uv@681c641aba71e4a1c380be3ab5e12ad51f415867 # v7.1.6
@@ -553,6 +562,7 @@ jobs:
             --workspace `
             --cargo-profile fast-build `
             --partition hash:${{ matrix.partition }}/2 `
+            --archive-file nextest-archive.tar.zst `
             --features schemars `
             --status-level skip `
             --failure-output immediate `
