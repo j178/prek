@@ -185,13 +185,21 @@ impl Store {
         self.path.join("patches")
     }
 
+    pub(crate) fn tools_dir(&self) -> PathBuf {
+        self.path.join("tools")
+    }
+
+    pub(crate) fn cache_dir(&self) -> PathBuf {
+        self.path.join("cache")
+    }
+
     /// The path to the tool directory in the store.
     pub(crate) fn tools_path(&self, tool: ToolBucket) -> PathBuf {
-        self.path.join("tools").join(tool.as_str())
+        self.tools_dir().join(tool.as_str())
     }
 
     pub(crate) fn cache_path(&self, tool: CacheBucket) -> PathBuf {
-        self.path.join("cache").join(tool.as_str())
+        self.cache_dir().join(tool.as_str())
     }
 
     /// Scratch path for temporary files.

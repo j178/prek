@@ -218,7 +218,7 @@ fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
 
     // Scratch and patches are always cleared when GC runs.
     home.child("scratch").assert(predicates::path::missing());
-    home.child("patches").assert(predicates::path::missing());
+    home.child("patches").assert(predicates::path::is_dir());
 
     Ok(())
 }

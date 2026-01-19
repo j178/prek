@@ -32,15 +32,17 @@ pub(crate) async fn cache_gc(store: &Store, printer: Printer) -> Result<ExitStat
     for config_path in &tracked_configs {
         let config = match load_config(config_path) {
             Ok(config) => config,
-            Err(err) => {
-                if let ConfigError::NotFound(_) = err {
+            Err(err) => match err {
+                ConfigError::NotFound(_) => {
                     debug!(path = %config_path.display(), "Tracked config does not exist, dropping");
-                } else {
+                    continue;
+                }
+                err => {
                     warn!(path = %config_path.display(), %err, "Failed to parse config, skipping for GC");
                     kept_configs.insert(config_path.clone());
+                    continue;
                 }
-                continue;
-            }
+            },
         };
         kept_configs.insert(config_path.clone());
 
@@ -89,31 +91,71 @@ pub(crate) async fn cache_gc(store: &Store, printer: Printer) -> Result<ExitStat
     removed_hooks += sweep_dir_by_name(&store.hooks_dir(), &used_hook_env_dirs).await?;
 
     // Sweep tools/<bucket>
-    let tools_root = store.path().join("tools");
+    let tools_root = store.tools_dir();
     let used_tool_names: FxHashSet<String> =
         used_tools.iter().map(|t| t.as_str().to_string()).collect();
     removed_tools += sweep_dir_by_name(&tools_root, &used_tool_names).await?;
 
     // Sweep cache/<bucket>
-    let cache_root = store.path().join("cache");
+    let cache_root = store.cache_dir();
     let used_cache_names: FxHashSet<String> =
         used_cache.iter().map(|c| c.as_str().to_string()).collect();
     removed_cache += sweep_dir_by_name(&cache_root, &used_cache_names).await?;
 
     // Always clear scratch and patches; they are temporary workspaces.
     let _ = remove_dir_if_exists(&store.scratch_path()).await?;
-    let _ = remove_dir_if_exists(&store.patches_dir()).await?;
+    // NOTE: Do not clear `patches/` here. It can contain user-important temporary patches.
+    // A future enhancement could implement a safer cleanup strategy (e.g. GC patches older
+    // than a configurable age, or only remove patches known to be orphaned).
+    // let _ = remove_dir_if_exists(&store.patches_dir()).await?;
 
-    writeln!(
-        printer.stdout(),
-        "Removed {removed_repos} repos, {removed_hooks} hook envs, {removed_tools} tools, {removed_cache} caches"
-    )?;
+    let mut removed = Vec::new();
+    if removed_repos > 0 {
+        removed.push(format!("{removed_repos} repos"));
+    }
+    if removed_hooks > 0 {
+        removed.push(format!("{removed_hooks} hook envs"));
+    }
+    if removed_tools > 0 {
+        removed.push(format!("{removed_tools} tools"));
+    }
+    if removed_cache > 0 {
+        removed.push(format!("{removed_cache} caches"));
+    }
+
+    if removed.is_empty() {
+        writeln!(printer.stdout(), "Nothing to clean")?;
+    } else {
+        writeln!(printer.stdout(), "Removed {}", removed.join(", "))?;
+    }
 
     Ok(ExitStatus::Success)
 }
 
 fn hook_env_keys_from_config(store: &Store, config: &config::Config) -> Vec<HookEnvKey> {
     let mut keys = Vec::new();
+
+    fn extend_keys_from_hooks<'a, T>(
+        keys: &mut Vec<HookEnvKey>,
+        config: &config::Config,
+        hooks: impl IntoIterator<Item = &'a T>,
+        remote_dep: Option<&str>,
+        mut to_spec: impl FnMut(&T) -> HookSpec,
+        id_of: impl Fn(&T) -> &str,
+    ) where
+        T: 'a,
+    {
+        for hook in hooks {
+            let hook_spec = to_spec(hook);
+            match HookEnvKey::from_hook_spec(config, hook_spec, remote_dep) {
+                Ok(Some(key)) => keys.push(key),
+                Ok(None) => {}
+                Err(err) => {
+                    warn!(hook = %id_of(hook), %err, "Failed to compute hook env key, skipping");
+                }
+            }
+        }
+    }
 
     for repo_config in &config.repos {
         match repo_config {
@@ -156,40 +198,34 @@ fn hook_env_keys_from_config(store: &Store, config: &config::Config) -> Vec<Hook
                 }
             }
             ConfigRepo::Local(repo_config) => {
-                for hook_config in &repo_config.hooks {
-                    let hook_spec = HookSpec::from(hook_config.clone());
-                    match HookEnvKey::from_hook_spec(config, hook_spec, None) {
-                        Ok(Some(key)) => keys.push(key),
-                        Ok(None) => {}
-                        Err(err) => {
-                            warn!(hook = %hook_config.id, %err, "Failed to compute hook env key, skipping");
-                        }
-                    }
-                }
+                extend_keys_from_hooks(
+                    &mut keys,
+                    config,
+                    &repo_config.hooks,
+                    None,
+                    |h| HookSpec::from(h.clone()),
+                    |h| h.id.as_str(),
+                );
             }
             ConfigRepo::Meta(repo_config) => {
-                for hook_config in &repo_config.hooks {
-                    let hook_spec = HookSpec::from(hook_config.clone());
-                    match HookEnvKey::from_hook_spec(config, hook_spec, None) {
-                        Ok(Some(key)) => keys.push(key),
-                        Ok(None) => {}
-                        Err(err) => {
-                            warn!(hook = %hook_config.id, %err, "Failed to compute hook env key, skipping");
-                        }
-                    }
-                }
+                extend_keys_from_hooks(
+                    &mut keys,
+                    config,
+                    &repo_config.hooks,
+                    None,
+                    |h| HookSpec::from(h.clone()),
+                    |h| h.id.as_str(),
+                );
             }
             ConfigRepo::Builtin(repo_config) => {
-                for hook_config in &repo_config.hooks {
-                    let hook_spec = HookSpec::from(hook_config.clone());
-                    match HookEnvKey::from_hook_spec(config, hook_spec, None) {
-                        Ok(Some(key)) => keys.push(key),
-                        Ok(None) => {}
-                        Err(err) => {
-                            warn!(hook = %hook_config.id, %err, "Failed to compute hook env key, skipping");
-                        }
-                    }
-                }
+                extend_keys_from_hooks(
+                    &mut keys,
+                    config,
+                    &repo_config.hooks,
+                    None,
+                    |h| HookSpec::from(h.clone()),
+                    |h| h.id.as_str(),
+                );
             }
         }
     }
