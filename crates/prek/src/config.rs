@@ -2205,14 +2205,16 @@ mod _gen {
                         anstream::println!("Up-to-date: {filename}");
                     } else {
                         let comparison = StrComparison::new(&current, &schema_string);
-                        bail!("{filename} changed, please run `mise run generate`:\n{comparison}");
+                        bail!(
+                            "{filename} changed, please run `mise run generate` to update:\n{comparison}"
+                        );
                     }
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    bail!("{filename} not found, please run `mise run generate`");
+                    bail!("{filename} not found, please run `mise run generate` to generate");
                 }
                 Err(err) => {
-                    bail!("{filename} changed, please run `mise run generate`:\n{err}");
+                    bail!("{filename} changed, please run `mise run generate` to update:\n{err}");
                 }
             },
             Mode::Write => match fs_err::read_to_string(&schema_path) {
@@ -2229,9 +2231,7 @@ mod _gen {
                     fs_err::write(schema_path, schema_string.as_bytes())?;
                 }
                 Err(err) => {
-                    bail!(
-                        "{filename} changed, please run `cargo dev generate-cli-reference`:\n{err}"
-                    );
+                    bail!("{filename} changed, please run `mise run generate` to update:\n{err}");
                 }
             },
         }

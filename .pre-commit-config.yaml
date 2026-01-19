@@ -13,7 +13,6 @@ repos:
       - id: check-yaml
       - id: check-toml
       - id: end-of-file-fixer
-        exclude: docs/cli.md # Exclude generated doc
 
   - repo: https://github.com/crate-ci/typos
     rev: v1.42.0

@@ -891,4 +891,3 @@ prek self update [OPTIONS] [TARGET_VERSION]
 <p>May also be set with the <code>GITHUB_TOKEN</code> environment variable.</p></dd><dt id="prek-self-update--verbose"><a href="#prek-self-update--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-self-update--version"><a href="#prek-self-update--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
-
