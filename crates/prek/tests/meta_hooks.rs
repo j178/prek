@@ -71,6 +71,30 @@ fn meta_hooks() -> anyhow::Result<()> {
 }
 
 #[test]
+fn meta_hooks_unknown_hook() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: meta
+            hooks:
+              - id: this-hook-does-not-exist
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: Invalid meta repo: unknown meta hook id `this-hook-does-not-exist`
+    ");
+}
+
+#[test]
 fn check_useless_excludes_remote() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
