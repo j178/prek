@@ -774,6 +774,20 @@ mod _gen {
         output
     }
 
+    fn markdown_to_html(s: &str) -> String {
+        markdown::to_html_with_options(
+            s,
+            &markdown::Options {
+                compile: markdown::CompileOptions {
+                    default_line_ending: markdown::LineEnding::LineFeed,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    }
+
     #[allow(clippy::format_push_string)]
     fn generate_command<'a>(
         output: &mut String,
@@ -841,7 +855,7 @@ mod _gen {
                 if let Some(about) = subcommand.get_about() {
                     output.push_str(&format!(
                         "<dd>{}</dd>\n",
-                        markdown::to_html(&about.to_string())
+                        markdown_to_html(&about.to_string())
                     ));
                 }
             }
@@ -879,7 +893,7 @@ mod _gen {
                     output.push_str("</dt>");
                     if let Some(help) = arg.get_long_help().or_else(|| arg.get_help()) {
                         output.push_str("<dd>");
-                        output.push_str(&format!("{}\n", markdown::to_html(&help.to_string())));
+                        output.push_str(&format!("{}\n", markdown_to_html(&help.to_string())));
                         output.push_str("</dd>");
                     }
                 }
@@ -932,7 +946,7 @@ mod _gen {
                     output.push_str("</dt>");
                     if let Some(help) = opt.get_long_help().or_else(|| opt.get_help()) {
                         output.push_str("<dd>");
-                        output.push_str(&format!("{}\n", markdown::to_html(&help.to_string())));
+                        output.push_str(&format!("{}\n", markdown_to_html(&help.to_string())));
                         emit_env_option(opt, output);
                         emit_default_option(opt, output);
                         emit_possible_options(opt, output);
@@ -961,7 +975,7 @@ mod _gen {
             return;
         }
         if let Some(env) = opt.get_env() {
-            output.push_str(&markdown::to_html(&format!(
+            output.push_str(&markdown_to_html(&format!(
                 "May also be set with the `{}` environment variable.",
                 env.to_string_lossy()
             )));
@@ -982,7 +996,7 @@ mod _gen {
                     .map(|s| s.to_string_lossy())
                     .join(",")
             );
-            output.push_str(&markdown::to_html(&value));
+            output.push_str(&markdown_to_html(&value));
         }
     }
 
@@ -1008,7 +1022,7 @@ mod _gen {
                     .collect_vec()
                     .join("\n"),
             );
-            output.push_str(&markdown::to_html(&value));
+            output.push_str(&markdown_to_html(&value));
         }
     }
 
