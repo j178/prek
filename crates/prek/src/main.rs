@@ -321,11 +321,15 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 writeln!(printer.stdout(), "{}", store.path().display().cyan())?;
                 Ok(ExitStatus::Success)
             }
-            CacheCommand::GC(args) => cli::cache_gc(&store, args.dry_run, printer).await,
+            CacheCommand::GC(args) => {
+                cli::cache_gc(&store, args.dry_run, cli.globals.verbose > 0, printer).await
+            }
             CacheCommand::Size(cli::SizeArgs { human }) => cli::cache_size(&store, human, printer),
         },
         Command::Clean => cli::cache_clean(&store, printer),
-        Command::GC(args) => cli::cache_gc(&store, args.dry_run, printer).await,
+        Command::GC(args) => {
+            cli::cache_gc(&store, args.dry_run, cli.globals.verbose > 0, printer).await
+        }
         Command::ValidateConfig(args) => {
             show_settings!(args);
 

@@ -12,7 +12,12 @@ use crate::hook::{HookEnvKey, HookSpec, Repo as HookRepo};
 use crate::printer::Printer;
 use crate::store::{CacheBucket, Store, ToolBucket};
 
-pub(crate) async fn cache_gc(store: &Store, dry_run: bool, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn cache_gc(
+    store: &Store,
+    dry_run: bool,
+    verbose: bool,
+    printer: Printer,
+) -> Result<ExitStatus> {
     let _lock = store.lock_async().await?;
 
     let tracked_configs = store.tracked_configs()?;
@@ -83,25 +88,24 @@ pub(crate) async fn cache_gc(store: &Store, dry_run: bool, printer: Printer) -> 
         store.update_tracked_configs(&kept_configs)?;
     }
 
-    let mut removed_repos = 0usize;
-    let mut removed_hooks = 0usize;
-    let mut removed_tools = 0usize;
-    let mut removed_cache = 0usize;
-
-    removed_repos += sweep_dir_by_name(&store.repos_dir(), &used_repo_keys, dry_run).await?;
-    removed_hooks += sweep_dir_by_name(&store.hooks_dir(), &used_hook_env_dirs, dry_run).await?;
+    let (removed_repos, removed_repo_names) =
+        sweep_dir_by_name(&store.repos_dir(), &used_repo_keys, dry_run, verbose).await?;
+    let (removed_hooks, removed_hook_names) =
+        sweep_dir_by_name(&store.hooks_dir(), &used_hook_env_dirs, dry_run, verbose).await?;
 
     // Sweep tools/<bucket>
     let tools_root = store.tools_dir();
     let used_tool_names: FxHashSet<String> =
         used_tools.iter().map(|t| t.as_str().to_string()).collect();
-    removed_tools += sweep_dir_by_name(&tools_root, &used_tool_names, dry_run).await?;
+    let (removed_tools, removed_tool_names) =
+        sweep_dir_by_name(&tools_root, &used_tool_names, dry_run, verbose).await?;
 
     // Sweep cache/<bucket>
     let cache_root = store.cache_dir();
     let used_cache_names: FxHashSet<String> =
         used_cache.iter().map(|c| c.as_str().to_string()).collect();
-    removed_cache += sweep_dir_by_name(&cache_root, &used_cache_names, dry_run).await?;
+    let (removed_cache, removed_cache_names) =
+        sweep_dir_by_name(&cache_root, &used_cache_names, dry_run, verbose).await?;
 
     // Always clear scratch and patches; they are temporary workspaces.
     if !dry_run {
@@ -131,9 +135,40 @@ pub(crate) async fn cache_gc(store: &Store, dry_run: bool, printer: Printer) -> 
     } else {
         let verb = if dry_run { "Would remove" } else { "Removed" };
         writeln!(printer.stdout(), "{verb} {}", removed.join(", "))?;
+
+        if verbose {
+            print_removed_details(printer, dry_run, "repos", removed_repo_names)?;
+            print_removed_details(printer, dry_run, "hooks", removed_hook_names)?;
+            print_removed_details(printer, dry_run, "tools", removed_tool_names)?;
+            print_removed_details(printer, dry_run, "cache", removed_cache_names)?;
+        }
     }
 
     Ok(ExitStatus::Success)
+}
+
+fn print_removed_details(
+    printer: Printer,
+    dry_run: bool,
+    title: &'static str,
+    mut names: Vec<String>,
+) -> Result<()> {
+    if names.is_empty() {
+        return Ok(());
+    }
+
+    names.sort();
+
+    writeln!(
+        printer.stdout(),
+        "\n{} {title}:",
+        if dry_run { "Would remove" } else { "Removed" }
+    )?;
+    for name in names {
+        writeln!(printer.stdout(), "- {name}")?;
+    }
+
+    Ok(())
 }
 
 fn hook_env_keys_from_config(store: &Store, config: &config::Config) -> Vec<HookEnvKey> {
@@ -284,15 +319,17 @@ async fn sweep_dir_by_name(
     root: &Path,
     keep_names: &FxHashSet<String>,
     dry_run: bool,
-) -> Result<usize> {
+    collect_names: bool,
+) -> Result<(usize, Vec<String>)> {
     if !root.exists() {
-        return Ok(0);
+        return Ok((0, Vec::new()));
     }
 
     let mut removed = 0usize;
+    let mut removed_names = Vec::new();
     let entries = match fs_err::read_dir(root) {
         Ok(entries) => entries,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok((0, Vec::new())),
         Err(err) => return Err(err.into()),
     };
 
@@ -318,6 +355,9 @@ async fn sweep_dir_by_name(
 
         if dry_run {
             removed += 1;
+            if collect_names {
+                removed_names.push(name.to_string());
+            }
             continue;
         }
 
@@ -326,8 +366,11 @@ async fn sweep_dir_by_name(
             warn!(%err, path = %path.display(), "Failed to remove unused cache entry");
         } else {
             removed += 1;
+            if collect_names {
+                removed_names.push(name.to_string());
+            }
         }
     }
 
-    Ok(removed)
+    Ok((removed, removed_names))
 }

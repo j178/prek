@@ -23,6 +23,44 @@ fn cache_dir() {
 }
 
 #[test]
+fn cache_gc_verbose_shows_removed_entries() {
+    let context = TestContext::new();
+
+    context.write_pre_commit_config("repos: []\n");
+    let home = context.home_dir();
+
+    // Seed store entries that will be removed.
+    home.child("repos/deadbeef")
+        .create_dir_all()
+        .expect("create repo dir");
+    home.child("hooks/hook-env-dead")
+        .create_dir_all()
+        .expect("create hook env dir");
+
+    // Have a tracked config that exists but references nothing (so everything above is unreferenced).
+    let config_path = context.work_dir().child(CONFIG_FILE);
+    write_config_tracking_file(home, &[config_path.path()]).expect("write tracking file");
+
+    cmd_snapshot!(context.filters(), context
+        .command()
+        .args(["cache", "gc", "-v"]),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed 1 repos, 1 hook envs
+
+    Removed repos:
+    - deadbeef
+
+    Removed hooks:
+    - hook-env-dead
+
+    ----- stderr -----
+    "###);
+}
+
+#[test]
 fn cache_clean() -> anyhow::Result<()> {
     let context = TestContext::new();
 
