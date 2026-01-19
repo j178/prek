@@ -48,12 +48,10 @@ fn cache_gc_verbose_shows_removed_entries() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Removed 1 repos, 1 hook envs
-
-    Removed repos:
+    Removed 1 repos:
     - deadbeef
 
-    Removed hooks:
+    Removed 1 hook envs:
     - hook-env-dead
 
     ----- stderr -----
@@ -188,7 +186,7 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Removed 1 repos, 2 hook envs, 1 tools, 2 caches
+    Removed 1 repos, 2 hook envs, 1 tools, 1 caches
 
     ----- stderr -----
     ");

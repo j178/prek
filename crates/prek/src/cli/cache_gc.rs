@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::Result;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 use crate::cli::ExitStatus;
 use crate::config::{self, Error as ConfigError, Language, Repo as ConfigRepo, load_config};
@@ -33,11 +33,17 @@ pub(crate) async fn cache_gc(
     let mut used_cache: FxHashSet<CacheBucket> = FxHashSet::default();
     let mut used_env_keys: Vec<HookEnvKey> = Vec::new();
 
+    // Always keep Prek's own cache.
+    used_cache.insert(CacheBucket::Prek);
+
     let installed = store.installed_hooks().await;
 
     for config_path in &tracked_configs {
         let config = match load_config(config_path) {
-            Ok(config) => config,
+            Ok(config) => {
+                trace!(path = %config_path.display(), "Found tracked config");
+                config
+            }
             Err(err) => match err {
                 ConfigError::NotFound(_) => {
                     debug!(path = %config_path.display(), "Tracked config does not exist, dropping");
@@ -118,29 +124,43 @@ pub(crate) async fn cache_gc(
 
     let mut removed = Vec::new();
     if removed_repos > 0 {
-        removed.push(format!("{} repos", removed_repos.cyan()));
+        removed.push(format!("{} repos", removed_repos.cyan().bold()));
     }
     if removed_hooks > 0 {
-        removed.push(format!("{} hook envs", removed_hooks.cyan()));
+        removed.push(format!("{} hook envs", removed_hooks.cyan().bold()));
     }
     if removed_tools > 0 {
-        removed.push(format!("{} tools", removed_tools.cyan()));
+        removed.push(format!("{} tools", removed_tools.cyan().bold()));
     }
     if removed_cache > 0 {
-        removed.push(format!("{} caches", removed_cache.cyan()));
+        removed.push(format!("{} caches", removed_cache.cyan().bold()));
     }
 
+    let verb = if dry_run { "Would remove" } else { "Removed" };
     if removed.is_empty() {
-        writeln!(printer.stdout(), "Nothing to clean")?;
+        writeln!(printer.stdout(), "{}", "Nothing to clean".bold())?;
     } else {
-        let verb = if dry_run { "Would remove" } else { "Removed" };
         writeln!(printer.stdout(), "{verb} {}", removed.join(", "))?;
 
         if verbose {
-            print_removed_details(printer, dry_run, "repos", removed_repo_names)?;
-            print_removed_details(printer, dry_run, "hooks", removed_hook_names)?;
-            print_removed_details(printer, dry_run, "tools", removed_tool_names)?;
-            print_removed_details(printer, dry_run, "cache", removed_cache_names)?;
+            if removed_repos > 0 {
+                print_removed_details(printer, verb, removed_repos, "repos", removed_repo_names)?;
+            }
+            if removed_hooks > 0 {
+                print_removed_details(
+                    printer,
+                    verb,
+                    removed_hooks,
+                    "hook envs",
+                    removed_hook_names,
+                )?;
+            }
+            if removed_tools > 0 {
+                print_removed_details(printer, verb, removed_tools, "tools", removed_tool_names)?;
+            }
+            if removed_cache > 0 {
+                print_removed_details(printer, verb, removed_cache, "caches", removed_cache_names)?;
+            }
         }
     }
 
@@ -149,20 +169,16 @@ pub(crate) async fn cache_gc(
 
 fn print_removed_details(
     printer: Printer,
-    dry_run: bool,
+    verb: &'static str,
+    count: usize,
     title: &'static str,
     mut names: Vec<String>,
 ) -> Result<()> {
-    if names.is_empty() {
-        return Ok(());
-    }
-
     names.sort();
-
     writeln!(
         printer.stdout(),
-        "\n{} {title}:",
-        if dry_run { "Would remove" } else { "Removed" }
+        "\n{}:",
+        format!("{verb} {} {title}", count.cyan()).bold()
     )?;
     for name in names {
         writeln!(printer.stdout(), "- {name}")?;
@@ -173,28 +189,6 @@ fn print_removed_details(
 
 fn hook_env_keys_from_config(store: &Store, config: &config::Config) -> Vec<HookEnvKey> {
     let mut keys = Vec::new();
-
-    fn extend_keys_from_hooks<'a, T>(
-        keys: &mut Vec<HookEnvKey>,
-        config: &config::Config,
-        hooks: impl IntoIterator<Item = &'a T>,
-        remote_dep: Option<&str>,
-        mut to_spec: impl FnMut(&T) -> HookSpec,
-        id_of: impl Fn(&T) -> &str,
-    ) where
-        T: 'a,
-    {
-        for hook in hooks {
-            let hook_spec = to_spec(hook);
-            match HookEnvKey::from_hook_spec(config, hook_spec, remote_dep) {
-                Ok(Some(key)) => keys.push(key),
-                Ok(None) => {}
-                Err(err) => {
-                    warn!(hook = %id_of(hook), %err, "Failed to compute hook env key, skipping");
-                }
-            }
-        }
-    }
 
     for repo_config in &config.repos {
         match repo_config {
@@ -237,35 +231,18 @@ fn hook_env_keys_from_config(store: &Store, config: &config::Config) -> Vec<Hook
                 }
             }
             ConfigRepo::Local(repo_config) => {
-                extend_keys_from_hooks(
-                    &mut keys,
-                    config,
-                    &repo_config.hooks,
-                    None,
-                    |h| HookSpec::from(h.clone()),
-                    |h| h.id.as_str(),
-                );
+                for hook in &repo_config.hooks {
+                    let hook_spec = HookSpec::from(hook.clone());
+                    match HookEnvKey::from_hook_spec(config, hook_spec, None) {
+                        Ok(Some(key)) => keys.push(key),
+                        Ok(None) => {}
+                        Err(err) => {
+                            warn!(hook = %hook.id, %err, "Failed to compute hook env key, skipping");
+                        }
+                    }
+                }
             }
-            ConfigRepo::Meta(repo_config) => {
-                extend_keys_from_hooks(
-                    &mut keys,
-                    config,
-                    &repo_config.hooks,
-                    None,
-                    |h| HookSpec::from(h.clone()),
-                    |h| h.id.as_str(),
-                );
-            }
-            ConfigRepo::Builtin(repo_config) => {
-                extend_keys_from_hooks(
-                    &mut keys,
-                    config,
-                    &repo_config.hooks,
-                    None,
-                    |h| HookSpec::from(h.clone()),
-                    |h| h.id.as_str(),
-                );
-            }
+            _ => {} // Meta repos and builtin repos do not have hook envs.
         }
     }
 
