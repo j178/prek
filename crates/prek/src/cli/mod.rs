@@ -764,6 +764,12 @@ mod _gen {
         output.push_str("# CLI Reference\n\n");
         generate_command(&mut output, &cmd, &mut parents);
 
+        // Trim trailing whitespace
+        while output.ends_with('\n') {
+            output.pop();
+        }
+        output.push('\n');
+
         output
     }
 
@@ -1027,14 +1033,16 @@ mod _gen {
                         anstream::println!("Up-to-date: {filename}");
                     } else {
                         let comparison = StrComparison::new(&current, &reference_string);
-                        bail!("{filename} changed, please run `mise run generate`:\n{comparison}");
+                        bail!(
+                            "{filename} changed, please run `mise run generate` to update:\n{comparison}"
+                        );
                     }
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    bail!("{filename} not found, please run `mise run generate`");
+                    bail!("{filename} not found, please run `mise run generate` to update");
                 }
                 Err(err) => {
-                    bail!("{filename} changed, please run `mise run generate`:\n{err}");
+                    bail!("{filename} changed, please run `mise run generate` to update:\n{err}");
                 }
             },
             Mode::Write => match fs_err::read_to_string(&reference_path) {
