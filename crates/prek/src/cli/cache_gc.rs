@@ -1,18 +1,15 @@
-use std::borrow::Cow;
 use std::fmt::Write;
 use std::path::Path;
-use std::sync::Arc;
 
 use anyhow::Result;
 use rustc_hash::FxHashSet;
 use tracing::{debug, warn};
 
 use crate::cli::ExitStatus;
-use crate::config::{Language, Repo as ConfigRepo, load_config};
-use crate::hook::{Hook, HookBuilder, HookSpec, Repo as HookRepo};
+use crate::config::{self, Error as ConfigError, Language, Repo as ConfigRepo, load_config};
+use crate::hook::{HookEnvKey, HookSpec, Repo as HookRepo};
 use crate::printer::Printer;
 use crate::store::{CacheBucket, Store, ToolBucket};
-use crate::workspace::Project;
 
 pub(crate) async fn cache_gc(store: &Store, printer: Printer) -> Result<ExitStatus> {
     let _lock = store.lock_async().await?;
@@ -28,58 +25,52 @@ pub(crate) async fn cache_gc(store: &Store, printer: Printer) -> Result<ExitStat
     let mut used_hook_env_dirs: FxHashSet<String> = FxHashSet::default();
     let mut used_tools: FxHashSet<ToolBucket> = FxHashSet::default();
     let mut used_cache: FxHashSet<CacheBucket> = FxHashSet::default();
+    let mut used_env_keys: Vec<HookEnvKey> = Vec::new();
 
     let installed = store.installed_hooks().await;
 
     for config_path in &tracked_configs {
-        if !config_path.is_file() {
-            debug!(path = %config_path.display(), "Tracked config does not exist, dropping");
-            continue;
-        }
-
-        // Ensure the file is parseable; if not, keep tracking but skip marking.
-        if let Err(err) = load_config(config_path) {
-            warn!(path = %config_path.display(), %err, "Failed to parse config, skipping for GC");
-            kept_configs.insert(config_path.clone());
-            continue;
-        }
-        kept_configs.insert(config_path.clone());
-
-        let mut hooks = match build_hooks_from_config(store, config_path).await {
-            Ok(hooks) => hooks,
+        let config = match load_config(config_path) {
+            Ok(config) => config,
             Err(err) => {
-                warn!(path = %config_path.display(), %err, "Failed to build hooks from config, skipping hook/env marking");
-                Vec::new()
+                if let ConfigError::NotFound(_) = err {
+                    debug!(path = %config_path.display(), "Tracked config does not exist, dropping");
+                } else {
+                    warn!(path = %config_path.display(), %err, "Failed to parse config, skipping for GC");
+                    kept_configs.insert(config_path.clone());
+                }
+                continue;
             }
         };
+        kept_configs.insert(config_path.clone());
+
+        used_env_keys.extend(hook_env_keys_from_config(store, &config));
 
         // Mark repos referenced by this config (if present in store).
         // We do this via config parsing (no clone), so GC won't keep repos for missing configs.
-        if let Ok(config) = load_config(config_path) {
-            for repo in &config.repos {
-                if let ConfigRepo::Remote(remote) = repo {
-                    let key = Store::repo_key(remote);
-                    used_repo_keys.insert(key);
-                }
+        for repo in &config.repos {
+            if let ConfigRepo::Remote(remote) = repo {
+                let key = Store::repo_key(remote);
+                used_repo_keys.insert(key);
             }
         }
+    }
 
-        // Mark tools/caches and hook environments by matching already-installed envs.
-        for hook in &mut hooks {
-            mark_tools_and_cache_for_hook(hook, &mut used_tools, &mut used_cache);
+    // Mark tools/caches from hook languages.
+    for key in &used_env_keys {
+        mark_tools_and_cache_for_language(key.language, &mut used_tools, &mut used_cache);
+    }
 
-            for info in &installed {
-                if info.matches(hook) {
-                    if let Some(dir) = info
-                        .env_path
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .map(str::to_string)
-                    {
-                        used_hook_env_dirs.insert(dir);
-                    }
-                    break;
-                }
+    // Mark hook environments by matching already-installed env metadata.
+    for info in &installed {
+        if used_env_keys.iter().any(|k| k.matches_install_info(info)) {
+            if let Some(dir) = info
+                .env_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .map(str::to_string)
+            {
+                used_hook_env_dirs.insert(dir);
             }
         }
     }
@@ -121,11 +112,9 @@ pub(crate) async fn cache_gc(store: &Store, printer: Printer) -> Result<ExitStat
     Ok(ExitStatus::Success)
 }
 
-async fn build_hooks_from_config(store: &Store, config_path: &Path) -> Result<Vec<Hook>> {
-    let project = Arc::new(Project::from_config_file(Cow::Borrowed(config_path), None)?);
-    let config = project.config();
+fn hook_env_keys_from_config(store: &Store, config: &config::Config) -> Vec<HookEnvKey> {
+    let mut keys = Vec::new();
 
-    let mut hooks = Vec::new();
     for repo_config in &config.repos {
         match repo_config {
             ConfigRepo::Remote(repo_config) => {
@@ -140,91 +129,81 @@ async fn build_hooks_from_config(store: &Store, config_path: &Path) -> Result<Ve
                     repo_config.rev.clone(),
                     repo_path,
                 ) {
-                    Ok(repo) => Arc::new(repo),
+                    Ok(repo) => repo,
                     Err(err) => {
                         warn!(repo = %repo_config.repo, %err, "Failed to load repo manifest, skipping");
                         continue;
                     }
                 };
 
+                let remote_dep = repo_config.to_string();
+
                 for hook_config in &repo_config.hooks {
-                    let Some(hook_spec) = repo.get_hook(&hook_config.id) else {
+                    let Some(manifest_hook) = repo.get_hook(&hook_config.id) else {
                         continue;
                     };
 
-                    let mut builder = HookBuilder::new(
-                        Arc::clone(&project),
-                        Arc::clone(&repo),
-                        hook_spec.clone(),
-                        hooks.len(),
-                    );
-                    builder.update(hook_config);
-                    builder.combine(config);
-                    if let Ok(hook) = builder.build().await {
-                        hooks.push(hook);
+                    let mut hook_spec = manifest_hook.clone();
+                    hook_spec.apply_remote_hook_overrides(hook_config);
+
+                    match HookEnvKey::from_hook_spec(config, hook_spec, Some(&remote_dep)) {
+                        Ok(Some(key)) => keys.push(key),
+                        Ok(None) => {}
+                        Err(err) => {
+                            warn!(hook = %hook_config.id, repo = %remote_dep, %err, "Failed to compute hook env key, skipping");
+                        }
                     }
                 }
             }
             ConfigRepo::Local(repo_config) => {
-                let repo = Arc::new(HookRepo::local(repo_config.hooks.clone()));
                 for hook_config in &repo_config.hooks {
                     let hook_spec = HookSpec::from(hook_config.clone());
-                    let mut builder = HookBuilder::new(
-                        Arc::clone(&project),
-                        Arc::clone(&repo),
-                        hook_spec,
-                        hooks.len(),
-                    );
-                    builder.combine(config);
-                    if let Ok(hook) = builder.build().await {
-                        hooks.push(hook);
+                    match HookEnvKey::from_hook_spec(config, hook_spec, None) {
+                        Ok(Some(key)) => keys.push(key),
+                        Ok(None) => {}
+                        Err(err) => {
+                            warn!(hook = %hook_config.id, %err, "Failed to compute hook env key, skipping");
+                        }
                     }
                 }
             }
             ConfigRepo::Meta(repo_config) => {
-                let repo = Arc::new(HookRepo::meta(repo_config.hooks.clone()));
                 for hook_config in &repo_config.hooks {
                     let hook_spec = HookSpec::from(hook_config.clone());
-                    let mut builder = HookBuilder::new(
-                        Arc::clone(&project),
-                        Arc::clone(&repo),
-                        hook_spec,
-                        hooks.len(),
-                    );
-                    builder.combine(config);
-                    if let Ok(hook) = builder.build().await {
-                        hooks.push(hook);
+                    match HookEnvKey::from_hook_spec(config, hook_spec, None) {
+                        Ok(Some(key)) => keys.push(key),
+                        Ok(None) => {}
+                        Err(err) => {
+                            warn!(hook = %hook_config.id, %err, "Failed to compute hook env key, skipping");
+                        }
                     }
                 }
             }
             ConfigRepo::Builtin(repo_config) => {
-                let repo = Arc::new(HookRepo::builtin(repo_config.hooks.clone()));
                 for hook_config in &repo_config.hooks {
                     let hook_spec = HookSpec::from(hook_config.clone());
-                    let mut builder = HookBuilder::new(
-                        Arc::clone(&project),
-                        Arc::clone(&repo),
-                        hook_spec,
-                        hooks.len(),
-                    );
-                    builder.combine(config);
-                    if let Ok(hook) = builder.build().await {
-                        hooks.push(hook);
+                    match HookEnvKey::from_hook_spec(config, hook_spec, None) {
+                        Ok(Some(key)) => keys.push(key),
+                        Ok(None) => {}
+                        Err(err) => {
+                            warn!(hook = %hook_config.id, %err, "Failed to compute hook env key, skipping");
+                        }
                     }
                 }
             }
         }
     }
 
-    Ok(hooks)
+    keys
 }
 
-fn mark_tools_and_cache_for_hook(
-    hook: &Hook,
+// TODO: read `toolchain` from `.prek-hook.json`, and use that to determine tools/cache to keep.
+fn mark_tools_and_cache_for_language(
+    language: Language,
     used_tools: &mut FxHashSet<ToolBucket>,
     used_cache: &mut FxHashSet<CacheBucket>,
 ) {
-    match hook.language {
+    match language {
         Language::Python | Language::Pygrep => {
             used_tools.insert(ToolBucket::Uv);
             used_tools.insert(ToolBucket::Python);
