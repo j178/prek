@@ -4,7 +4,7 @@ This page tracks gaps that prevent `prek` from being a drop-in replacement for `
 
 ## Subcommands not implemented
 
-All major subcommands of `pre-commit` have been implemented in `prek`. 
+All major subcommands of `pre-commit` have been implemented in `prek`.
 
 !!! Note "pre-commit hazmat"
 

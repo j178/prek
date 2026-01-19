@@ -44,10 +44,12 @@ fn cache_gc_verbose_shows_removed_entries() {
     cmd_snapshot!(context.filters(), context
         .command()
         .args(["cache", "gc", "-v"]),
-        @r###"
+        @r"
     success: true
     exit_code: 0
     ----- stdout -----
+    Removed 1 repos, 1 hook envs
+
     Removed 1 repos:
     - deadbeef
 
@@ -55,7 +57,7 @@ fn cache_gc_verbose_shows_removed_entries() {
     - hook-env-dead
 
     ----- stderr -----
-    "###);
+    ");
 }
 
 #[test]
