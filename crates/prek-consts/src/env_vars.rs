@@ -58,6 +58,9 @@ impl EnvVars {
     // Bun related
     pub const BUN_INSTALL: &'static str = "BUN_INSTALL";
 
+    // GitHub API authentication (to avoid rate limits)
+    pub const GITHUB_TOKEN: &'static str = "GITHUB_TOKEN";
+
     // Go related
     pub const GOTOOLCHAIN: &'static str = "GOTOOLCHAIN";
     pub const GOROOT: &'static str = "GOROOT";

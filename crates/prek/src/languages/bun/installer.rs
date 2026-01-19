@@ -174,7 +174,14 @@ impl BunInstaller {
     /// List all versions of Bun available on GitHub releases.
     async fn list_remote_versions(&self) -> Result<Vec<BunVersion>> {
         let url = "https://api.github.com/repos/oven-sh/bun/releases?per_page=100";
-        let releases: Vec<GitHubRelease> = REQWEST_CLIENT.get(url).send().await?.json().await?;
+
+        // Use GitHub token if available to avoid rate limits (60/hr unauthenticated vs 5000/hr authenticated)
+        let mut request = REQWEST_CLIENT.get(url);
+        if let Ok(token) = EnvVars::var(EnvVars::GITHUB_TOKEN) {
+            request = request.header("Authorization", format!("Bearer {token}"));
+        }
+
+        let releases: Vec<GitHubRelease> = request.send().await?.json().await?;
 
         let versions: Vec<BunVersion> = releases
             .into_iter()
