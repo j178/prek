@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 use std::fmt::Display;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -33,6 +34,9 @@ use crate::cli::reporter;
 pub static CWD: LazyLock<PathBuf> =
     LazyLock::new(|| std::env::current_dir().expect("The current directory must be exist"));
 
+static IN_PROCESS_LOCKS: LazyLock<std::sync::Mutex<HashMap<PathBuf, std::sync::Arc<tokio::sync::Semaphore>>>> =
+    LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
+
 #[cfg(test)]
 static LAST_LOCK_WARNING: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
@@ -43,11 +47,14 @@ fn record_lock_warning(message: String) {
 
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
-pub struct LockedFile(fs_err::File);
+pub struct LockedFile {
+    file: fs_err::File,
+    _permit: tokio::sync::OwnedSemaphorePermit,
+}
 
 impl LockedFile {
     /// Inner implementation for [`LockedFile::acquire_blocking`] and [`LockedFile::acquire`].
-    fn lock_file_blocking(file: fs_err::File, resource: &str) -> Result<Self, std::io::Error> {
+    fn lock_file_blocking(mut file: fs_err::File, resource: &str) -> Result<fs_err::File, std::io::Error> {
         trace!(
             resource,
             path = %file.path().display(),
@@ -56,7 +63,7 @@ impl LockedFile {
         match file.try_lock() {
             Ok(()) => {
                 debug!(resource, "Acquired lock");
-                Ok(Self(file))
+                Ok(file)
             }
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures
@@ -77,7 +84,7 @@ impl LockedFile {
                     ))
                 })?;
                 trace!(resource, "Acquired lock");
-                Ok(Self(file))
+                Ok(file)
             }
         }
     }
@@ -88,13 +95,29 @@ impl LockedFile {
         resource: impl Display,
     ) -> Result<Self, std::io::Error> {
         let path = path.as_ref().to_path_buf();
+
+        // Prevent same-process re-entrant lock attempts from ever reaching the OS-level file lock.
+        // This avoids spurious "another prek process" warnings when the contention is purely
+        // within the current process.
+        let semaphore = {
+            let mut locks = IN_PROCESS_LOCKS.lock().unwrap();
+            locks
+                .entry(path.clone())
+                .or_insert_with(|| std::sync::Arc::new(tokio::sync::Semaphore::new(1)))
+                .clone()
+        };
+        let permit = semaphore
+            .acquire_owned()
+            .await
+            .map_err(|_| std::io::Error::other("In-process lock semaphore closed"))?;
+
         let file = fs_err::File::create(&path)?;
 
         let resource = resource.to_string();
         let mut task =
             tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource));
 
-        tokio::select! {
+        let file = tokio::select! {
             result = &mut task => result?,
             () = tokio::time::sleep(Duration::from_secs(1)) => {
                 reporter::suspend(move || {
@@ -117,20 +140,22 @@ impl LockedFile {
 
                 task.await?
             }
-        }
+        };
+
+        Ok(Self { file, _permit: permit })
     }
 }
 
 impl Drop for LockedFile {
     fn drop(&mut self) {
-        if let Err(err) = self.0.file().unlock() {
+        if let Err(err) = self.file.file().unlock() {
             error!(
                 "Failed to unlock {}; program may be stuck: {}",
-                self.0.path().display(),
+                self.file.path().display(),
                 err
             );
         } else {
-            trace!(path = %self.0.path().display(), "Released lock");
+            trace!(path = %self.file.path().display(), "Released lock");
         }
     }
 }
