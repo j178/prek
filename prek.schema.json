@@ -303,7 +303,7 @@
           ]
         },
         "priority": {
-          "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.",
+          "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
           "type": [
             "integer",
             "null"
@@ -463,27 +463,8 @@
         "system"
       ]
     },
-    "LocalRepo": {
-      "type": "object",
-      "properties": {
-        "hooks": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/ManifestHook"
-          }
-        },
-        "repo": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": true,
-      "required": [
-        "repo",
-        "hooks"
-      ]
-    },
-    "ManifestHook": {
-      "description": "Common hook options.",
+    "LocalHook": {
+      "description": "A local hook in the configuration file.\n\nThis is similar to `ManifestHook`, but includes config-only fields (like `priority`).",
       "type": "object",
       "properties": {
         "additional_dependencies": {
@@ -690,6 +671,25 @@
         "language"
       ]
     },
+    "LocalRepo": {
+      "type": "object",
+      "properties": {
+        "hooks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LocalHook"
+          }
+        },
+        "repo": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true,
+      "required": [
+        "repo",
+        "hooks"
+      ]
+    },
     "MetaHook": {
       "description": "A meta hook predefined in pre-commit.\n\nIt's the same as the manifest hook definition but with only a few predefined id allowed.",
       "type": "object",
@@ -844,7 +844,7 @@
           ]
         },
         "priority": {
-          "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.",
+          "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
           "type": [
             "integer",
             "null"
@@ -1077,7 +1077,7 @@
           ]
         },
         "priority": {
-          "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.",
+          "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
           "type": [
             "integer",
             "null"

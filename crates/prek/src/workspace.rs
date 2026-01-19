@@ -17,9 +17,10 @@ use thiserror::Error;
 use tracing::{debug, error, instrument, trace};
 
 use crate::cli::run::Selectors;
-use crate::config::{self, Config, ManifestHook, read_config};
+use crate::config::{self, Config, read_config};
 use crate::fs::Simplified;
 use crate::git::GIT_ROOT;
+use crate::hook::HookSpec;
 use crate::hook::{self, Hook, HookBuilder, Repo};
 use crate::run::CONCURRENCY;
 use crate::store::{CacheBucket, Store};
@@ -59,7 +60,7 @@ pub(crate) trait HookInitReporter {
     fn on_complete(&self);
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct Project {
     /// The absolute path of the project directory.
     root: PathBuf,
@@ -71,6 +72,17 @@ pub(crate) struct Project {
     idx: usize,
     config: Config,
     repos: Vec<Arc<Repo>>,
+}
+
+impl std::fmt::Debug for Project {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Project")
+            .field("relative_path", &self.relative_path)
+            .field("idx", &self.idx)
+            .field("config", &self.config)
+            .field("repos", &self.repos)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Display for Project {
@@ -268,7 +280,7 @@ impl Project {
 
                     Ok::<(), Error>(())
                 })
-                .buffer_unordered(5);
+                .buffer_unordered(*CONCURRENCY);
 
         while let Some(result) = tasks.next().await {
             result?;
@@ -314,7 +326,7 @@ impl Project {
                 config::Repo::Remote(repo_config) => {
                     for hook_config in &repo_config.hooks {
                         // Check hook id is valid.
-                        let Some(hook) = repo.get_hook(&hook_config.id) else {
+                        let Some(hook_spec) = repo.get_hook(&hook_config.id) else {
                             return Err(Error::HookNotFound {
                                 hook: hook_config.id.clone(),
                                 repo: repo.to_string(),
@@ -323,7 +335,7 @@ impl Project {
 
                         let repo = Arc::clone(repo);
                         let mut builder =
-                            HookBuilder::new(self.clone(), repo, hook.clone(), hooks.len());
+                            HookBuilder::new(self.clone(), repo, hook_spec.clone(), hooks.len());
                         builder.update(hook_config);
                         builder.combine(&self.config);
 
@@ -334,8 +346,10 @@ impl Project {
                 config::Repo::Local(repo_config) => {
                     for hook_config in &repo_config.hooks {
                         let repo = Arc::clone(repo);
+                        let hook_spec = HookSpec::from(hook_config.clone());
                         let mut builder =
-                            HookBuilder::new(self.clone(), repo, hook_config.clone(), hooks.len());
+                            HookBuilder::new(self.clone(), repo, hook_spec, hooks.len());
+
                         builder.combine(&self.config);
 
                         let hook = builder.build().await?;
@@ -345,9 +359,9 @@ impl Project {
                 config::Repo::Meta(repo_config) => {
                     for hook_config in &repo_config.hooks {
                         let repo = Arc::clone(repo);
-                        let hook_config = ManifestHook::from(hook_config.clone());
+                        let hook_spec = HookSpec::from(hook_config.clone());
                         let mut builder =
-                            HookBuilder::new(self.clone(), repo, hook_config, hooks.len());
+                            HookBuilder::new(self.clone(), repo, hook_spec, hooks.len());
                         builder.combine(&self.config);
 
                         let hook = builder.build().await?;
@@ -357,9 +371,9 @@ impl Project {
                 config::Repo::Builtin(repo_config) => {
                     for hook_config in &repo_config.hooks {
                         let repo = Arc::clone(repo);
-                        let hook_config = ManifestHook::from(hook_config.clone());
+                        let hook_spec = HookSpec::from(hook_config.clone());
                         let mut builder =
-                            HookBuilder::new(self.clone(), repo, hook_config, hooks.len());
+                            HookBuilder::new(self.clone(), repo, hook_spec, hooks.len());
                         builder.combine(&self.config);
 
                         let hook = builder.build().await?;

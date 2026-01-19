@@ -13,7 +13,6 @@ use itertools::Itertools;
 use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize};
-use tracing::instrument;
 
 use crate::fs::Simplified;
 use crate::version;
@@ -404,9 +403,6 @@ pub(crate) struct HookOptions {
     /// This hook will execute using a single process instead of in parallel.
     /// Default is false.
     pub require_serial: Option<bool>,
-    /// Priority used by the scheduler to determine ordering and concurrency.
-    /// Hooks with the same priority can run in parallel.
-    pub priority: Option<u32>,
     /// Select which git hook(s) to run for.
     /// Default all stages are selected.
     /// See <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.
@@ -450,7 +446,6 @@ impl HookOptions {
             language_version,
             log_file,
             require_serial,
-            priority,
             stages,
             verbose,
             minimum_prek_version,
@@ -505,61 +500,118 @@ pub(crate) struct RemoteHook {
     pub entry: Option<String>,
     /// Override the language. Not documented in the official docs but works.
     pub language: Option<Language>,
+    /// Priority used by the scheduler to determine ordering and concurrency.
+    /// Hooks with the same priority can run in parallel.
+    ///
+    /// This is only allowed in project config files (e.g. `.pre-commit-config.yaml`).
+    /// It is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).
+    pub priority: Option<u32>,
     #[serde(flatten)]
     pub options: HookOptions,
 }
 
 /// A local hook in the configuration file.
 ///
-/// It's the same as the manifest hook definition.
-pub(crate) type LocalHook = ManifestHook;
+/// This is similar to `ManifestHook`, but includes config-only fields (like `priority`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub(crate) struct LocalHook {
+    /// The id of the hook.
+    pub id: String,
+    /// The name of the hook.
+    pub name: String,
+    /// The command to run. It can contain arguments that will not be overridden.
+    pub entry: String,
+    /// The language of the hook. Tells prek how to install and run the hook.
+    pub language: Language,
+    /// Priority used by the scheduler to determine ordering and concurrency.
+    /// Hooks with the same priority can run in parallel.
+    pub priority: Option<u32>,
+    #[serde(flatten)]
+    pub options: HookOptions,
+}
 
 /// A meta hook predefined in pre-commit.
 ///
 /// It's the same as the manifest hook definition but with only a few predefined id allowed.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(try_from = "RemoteHook")]
-pub(crate) struct MetaHook(pub(crate) ManifestHook);
-
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum MetaHookWireError {
-    #[error("unknown meta hook id `{0}`")]
-    UnknownId(String),
-
-    #[error("language must be `system` for meta hooks")]
-    InvalidLanguage,
-
-    #[error("entry is not allowed for meta hooks")]
-    EntryNotAllowed,
+pub(crate) struct MetaHook {
+    /// The id of the hook.
+    pub id: String,
+    /// The name of the hook.
+    pub name: String,
+    /// Priority used by the scheduler to determine ordering and concurrency.
+    /// Hooks with the same priority can run in parallel.
+    pub priority: Option<u32>,
+    #[serde(flatten)]
+    pub options: HookOptions,
 }
 
-impl TryFrom<RemoteHook> for MetaHook {
-    type Error = MetaHookWireError;
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum PredefinedHookWireError {
+    #[error("unknown {kind} hook id `{id}`")]
+    UnknownId {
+        kind: PredefinedHookKind,
+        id: String,
+    },
 
-    fn try_from(hook_options: RemoteHook) -> std::result::Result<Self, Self::Error> {
-        let mut meta_hook = MetaHook::from_id(&hook_options.id)
-            .map_err(|()| MetaHookWireError::UnknownId(hook_options.id.clone()))?;
+    #[error("language must be `system` for {kind} hooks")]
+    InvalidLanguage { kind: PredefinedHookKind },
 
-        if hook_options.language.is_some_and(|l| l != Language::System) {
-            return Err(MetaHookWireError::InvalidLanguage);
+    #[error("entry is not allowed for {kind} hooks")]
+    EntryNotAllowed { kind: PredefinedHookKind },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PredefinedHookKind {
+    Meta,
+    Builtin,
+}
+
+impl Display for PredefinedHookKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Meta => f.write_str("meta"),
+            Self::Builtin => f.write_str("builtin"),
         }
-        if hook_options.entry.is_some() {
-            return Err(MetaHookWireError::EntryNotAllowed);
-        }
-
-        if let Some(name) = &hook_options.name {
-            meta_hook.0.name.clone_from(name);
-        }
-        meta_hook.0.options.update(&hook_options.options);
-
-        Ok(meta_hook)
     }
 }
 
-impl From<MetaHook> for ManifestHook {
-    fn from(hook: MetaHook) -> Self {
-        hook.0
+impl TryFrom<RemoteHook> for MetaHook {
+    type Error = PredefinedHookWireError;
+
+    fn try_from(hook_options: RemoteHook) -> std::result::Result<Self, Self::Error> {
+        let mut meta_hook = MetaHook::from_id(&hook_options.id).map_err(|()| {
+            PredefinedHookWireError::UnknownId {
+                kind: PredefinedHookKind::Meta,
+                id: hook_options.id.clone(),
+            }
+        })?;
+
+        if hook_options.language.is_some_and(|l| l != Language::System) {
+            return Err(PredefinedHookWireError::InvalidLanguage {
+                kind: PredefinedHookKind::Meta,
+            });
+        }
+        if hook_options.entry.is_some() {
+            return Err(PredefinedHookWireError::EntryNotAllowed {
+                kind: PredefinedHookKind::Meta,
+            });
+        }
+
+        if let Some(name) = &hook_options.name {
+            meta_hook.name.clone_from(name);
+        }
+        if hook_options.priority.is_some() {
+            meta_hook.priority = hook_options.priority;
+        }
+        meta_hook.options.update(&hook_options.options);
+
+        Ok(meta_hook)
     }
 }
 
@@ -568,46 +620,56 @@ impl From<MetaHook> for ManifestHook {
 #[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(try_from = "RemoteHook")]
-pub(crate) struct BuiltinHook(pub(crate) ManifestHook);
-
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum BuiltinHookWireError {
-    #[error("unknown builtin hook id `{0}`")]
-    UnknownId(String),
-
-    #[error("language must be `system` for builtin hooks")]
-    InvalidLanguage,
-
-    #[error("entry is not allowed for builtin hooks")]
-    EntryNotAllowed,
+pub(crate) struct BuiltinHook {
+    /// The id of the hook.
+    pub id: String,
+    /// The name of the hook.
+    ///
+    /// This is populated from the predefined builtin hook definition.
+    pub name: String,
+    /// The command to run. It can contain arguments that will not be overridden.
+    pub entry: String,
+    /// Priority used by the scheduler to determine ordering and concurrency.
+    /// Hooks with the same priority can run in parallel.
+    pub priority: Option<u32>,
+    /// Common hook options.
+    ///
+    /// Builtin hooks allow the same set of options overrides as other hooks.
+    #[serde(flatten)]
+    pub options: HookOptions,
 }
 
 impl TryFrom<RemoteHook> for BuiltinHook {
-    type Error = BuiltinHookWireError;
+    type Error = PredefinedHookWireError;
 
     fn try_from(hook_options: RemoteHook) -> std::result::Result<Self, Self::Error> {
-        let mut builtin_hook = BuiltinHook::from_id(&hook_options.id)
-            .map_err(|()| BuiltinHookWireError::UnknownId(hook_options.id.clone()))?;
+        let mut builtin_hook = BuiltinHook::from_id(&hook_options.id).map_err(|()| {
+            PredefinedHookWireError::UnknownId {
+                kind: PredefinedHookKind::Builtin,
+                id: hook_options.id.clone(),
+            }
+        })?;
 
         if hook_options.language.is_some_and(|l| l != Language::System) {
-            return Err(BuiltinHookWireError::InvalidLanguage);
+            return Err(PredefinedHookWireError::InvalidLanguage {
+                kind: PredefinedHookKind::Builtin,
+            });
         }
         if hook_options.entry.is_some() {
-            return Err(BuiltinHookWireError::EntryNotAllowed);
+            return Err(PredefinedHookWireError::EntryNotAllowed {
+                kind: PredefinedHookKind::Builtin,
+            });
         }
 
         if let Some(name) = &hook_options.name {
-            builtin_hook.0.name.clone_from(name);
+            builtin_hook.name.clone_from(name);
         }
-        builtin_hook.0.options.update(&hook_options.options);
+        if hook_options.priority.is_some() {
+            builtin_hook.priority = hook_options.priority;
+        }
+        builtin_hook.options.update(&hook_options.options);
 
         Ok(builtin_hook)
-    }
-}
-
-impl From<BuiltinHook> for ManifestHook {
-    fn from(hook: BuiltinHook) -> Self {
-        hook.0
     }
 }
 
@@ -875,11 +937,11 @@ fn collect_unused_paths(config: &Config) -> Vec<String> {
                 ),
                 Repo::Meta(meta) => (
                     &meta._unused_keys,
-                    Box::new(meta.hooks.iter().map(|h| &h.0.options)),
+                    Box::new(meta.hooks.iter().map(|h| &h.options)),
                 ),
                 Repo::Builtin(builtin) => (
                     &builtin._unused_keys,
-                    Box::new(builtin.hooks.iter().map(|h| &h.0.options)),
+                    Box::new(builtin.hooks.iter().map(|h| &h.options)),
                 ),
             };
 
@@ -950,7 +1012,6 @@ pub(crate) fn load_config(path: &Path) -> Result<Config, Error> {
 }
 
 /// Read the configuration file from the given path, and warn about certain issues.
-#[instrument(level = "trace")]
 pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
     let config = load_config(path)?;
 
@@ -1001,8 +1062,9 @@ pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
 /// Read the manifest file from the given path.
 pub(crate) fn read_manifest(path: &Path) -> Result<Manifest, Error> {
     let content = fs_err::read_to_string(path)?;
-    let manifest = serde_yaml::from_str(&content)
+    let manifest: Manifest = serde_yaml::from_str(&content)
         .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
+
     Ok(manifest)
 }
 
@@ -1174,11 +1236,12 @@ mod tests {
                         LocalRepo {
                             repo: "local",
                             hooks: [
-                                ManifestHook {
+                                LocalHook {
                                     id: "cargo-fmt",
                                     name: "cargo fmt",
                                     entry: "cargo fmt --",
                                     language: System,
+                                    priority: None,
                                     options: HookOptions {
                                         alias: None,
                                         files: None,
@@ -1196,7 +1259,6 @@ mod tests {
                                         language_version: None,
                                         log_file: None,
                                         require_serial: None,
-                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -1257,6 +1319,7 @@ mod tests {
                                     name: None,
                                     entry: None,
                                     language: None,
+                                    priority: None,
                                     options: HookOptions {
                                         alias: None,
                                         files: None,
@@ -1274,7 +1337,6 @@ mod tests {
                                         language_version: None,
                                         log_file: None,
                                         require_serial: None,
-                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -1355,11 +1417,12 @@ mod tests {
                         LocalRepo {
                             repo: "local",
                             hooks: [
-                                ManifestHook {
+                                LocalHook {
                                     id: "cargo-fmt",
                                     name: "cargo fmt",
                                     entry: "cargo fmt",
                                     language: Rust,
+                                    priority: None,
                                     options: HookOptions {
                                         alias: None,
                                         files: None,
@@ -1377,7 +1440,6 @@ mod tests {
                                         language_version: None,
                                         log_file: None,
                                         require_serial: None,
-                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -1467,109 +1529,97 @@ mod tests {
                         MetaRepo {
                             repo: "meta",
                             hooks: [
-                                MetaHook(
-                                    ManifestHook {
-                                        id: "check-hooks-apply",
-                                        name: "Check hooks apply",
-                                        entry: "",
-                                        language: System,
-                                        options: HookOptions {
-                                            alias: None,
-                                            files: Some(
-                                                Regex(
-                                                    ^\.pre-commit-config\.yaml|\.pre-commit-config\.yml$,
-                                                ),
+                                MetaHook {
+                                    id: "check-hooks-apply",
+                                    name: "Check hooks apply",
+                                    priority: None,
+                                    options: HookOptions {
+                                        alias: None,
+                                        files: Some(
+                                            Regex(
+                                                ^\.pre-commit-config\.yaml|\.pre-commit-config\.yml$,
                                             ),
-                                            exclude: None,
-                                            types: None,
-                                            types_or: None,
-                                            exclude_types: None,
-                                            additional_dependencies: None,
-                                            args: None,
-                                            env: None,
-                                            always_run: None,
-                                            fail_fast: None,
-                                            pass_filenames: None,
-                                            description: None,
-                                            language_version: None,
-                                            log_file: None,
-                                            require_serial: None,
-                                            priority: None,
-                                            stages: None,
-                                            verbose: None,
-                                            minimum_prek_version: None,
-                                            _unused_keys: {},
-                                        },
+                                        ),
+                                        exclude: None,
+                                        types: None,
+                                        types_or: None,
+                                        exclude_types: None,
+                                        additional_dependencies: None,
+                                        args: None,
+                                        env: None,
+                                        always_run: None,
+                                        fail_fast: None,
+                                        pass_filenames: None,
+                                        description: None,
+                                        language_version: None,
+                                        log_file: None,
+                                        require_serial: None,
+                                        stages: None,
+                                        verbose: None,
+                                        minimum_prek_version: None,
+                                        _unused_keys: {},
                                     },
-                                ),
-                                MetaHook(
-                                    ManifestHook {
-                                        id: "check-useless-excludes",
-                                        name: "Check useless excludes",
-                                        entry: "",
-                                        language: System,
-                                        options: HookOptions {
-                                            alias: None,
-                                            files: Some(
-                                                Regex(
-                                                    ^\.pre-commit-config\.yaml|\.pre-commit-config\.yml$,
-                                                ),
+                                },
+                                MetaHook {
+                                    id: "check-useless-excludes",
+                                    name: "Check useless excludes",
+                                    priority: None,
+                                    options: HookOptions {
+                                        alias: None,
+                                        files: Some(
+                                            Regex(
+                                                ^\.pre-commit-config\.yaml|\.pre-commit-config\.yml$,
                                             ),
-                                            exclude: None,
-                                            types: None,
-                                            types_or: None,
-                                            exclude_types: None,
-                                            additional_dependencies: None,
-                                            args: None,
-                                            env: None,
-                                            always_run: None,
-                                            fail_fast: None,
-                                            pass_filenames: None,
-                                            description: None,
-                                            language_version: None,
-                                            log_file: None,
-                                            require_serial: None,
-                                            priority: None,
-                                            stages: None,
-                                            verbose: None,
-                                            minimum_prek_version: None,
-                                            _unused_keys: {},
-                                        },
+                                        ),
+                                        exclude: None,
+                                        types: None,
+                                        types_or: None,
+                                        exclude_types: None,
+                                        additional_dependencies: None,
+                                        args: None,
+                                        env: None,
+                                        always_run: None,
+                                        fail_fast: None,
+                                        pass_filenames: None,
+                                        description: None,
+                                        language_version: None,
+                                        log_file: None,
+                                        require_serial: None,
+                                        stages: None,
+                                        verbose: None,
+                                        minimum_prek_version: None,
+                                        _unused_keys: {},
                                     },
-                                ),
-                                MetaHook(
-                                    ManifestHook {
-                                        id: "identity",
-                                        name: "identity",
-                                        entry: "",
-                                        language: System,
-                                        options: HookOptions {
-                                            alias: None,
-                                            files: None,
-                                            exclude: None,
-                                            types: None,
-                                            types_or: None,
-                                            exclude_types: None,
-                                            additional_dependencies: None,
-                                            args: None,
-                                            env: None,
-                                            always_run: None,
-                                            fail_fast: None,
-                                            pass_filenames: None,
-                                            description: None,
-                                            language_version: None,
-                                            log_file: None,
-                                            require_serial: None,
-                                            priority: None,
-                                            stages: None,
-                                            verbose: Some(
-                                                true,
-                                            ),
-                                            minimum_prek_version: None,
-                                            _unused_keys: {},
-                                        },
+                                },
+                                MetaHook {
+                                    id: "identity",
+                                    name: "identity",
+                                    priority: None,
+                                    options: HookOptions {
+                                        alias: None,
+                                        files: None,
+                                        exclude: None,
+                                        types: None,
+                                        types_or: None,
+                                        exclude_types: None,
+                                        additional_dependencies: None,
+                                        args: None,
+                                        env: None,
+                                        always_run: None,
+                                        fail_fast: None,
+                                        pass_filenames: None,
+                                        description: None,
+                                        language_version: None,
+                                        log_file: None,
+                                        require_serial: None,
+                                        stages: None,
+                                        verbose: Some(
+                                            true,
+                                        ),
+                                        minimum_prek_version: None,
+                                        _unused_keys: {},
                                     },
-                                ),
+                                },
                             ],
                             _unused_keys: {},
                         },
@@ -1620,11 +1670,12 @@ mod tests {
                         LocalRepo {
                             repo: "local",
                             hooks: [
-                                ManifestHook {
+                                LocalHook {
                                     id: "hook-1",
                                     name: "hook 1",
                                     entry: "echo hello world",
                                     language: System,
+                                    priority: None,
                                     options: HookOptions {
                                         alias: None,
                                         files: None,
@@ -1644,18 +1695,18 @@ mod tests {
                                         ),
                                         log_file: None,
                                         require_serial: None,
-                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
                                         _unused_keys: {},
                                     },
                                 },
-                                ManifestHook {
+                                LocalHook {
                                     id: "hook-2",
                                     name: "hook 2",
                                     entry: "echo hello world",
                                     language: System,
+                                    priority: None,
                                     options: HookOptions {
                                         alias: None,
                                         files: None,
@@ -1675,18 +1726,18 @@ mod tests {
                                         ),
                                         log_file: None,
                                         require_serial: None,
-                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
                                         _unused_keys: {},
                                     },
                                 },
-                                ManifestHook {
+                                LocalHook {
                                     id: "hook-3",
                                     name: "hook 3",
                                     entry: "echo hello world",
                                     language: System,
+                                    priority: None,
                                     options: HookOptions {
                                         alias: None,
                                         files: None,
@@ -1706,7 +1757,6 @@ mod tests {
                                         ),
                                         log_file: None,
                                         require_serial: None,
-                                        priority: None,
                                         stages: None,
                                         verbose: None,
                                         minimum_prek_version: None,
@@ -1936,11 +1986,12 @@ mod tests {
                     LocalRepo {
                         repo: "local",
                         hooks: [
-                            ManifestHook {
+                            LocalHook {
                                 id: "mypy-local",
                                 name: "Local mypy",
                                 entry: "python tools/pre_commit/mypy.py 0 \"local\"",
                                 language: Python,
+                                priority: None,
                                 options: HookOptions {
                                     alias: None,
                                     files: None,
@@ -1963,18 +2014,18 @@ mod tests {
                                     language_version: None,
                                     log_file: None,
                                     require_serial: None,
-                                    priority: None,
                                     stages: None,
                                     verbose: None,
                                     minimum_prek_version: None,
                                     _unused_keys: {},
                                 },
                             },
-                            ManifestHook {
+                            LocalHook {
                                 id: "mypy-3.10",
                                 name: "Mypy 3.10",
                                 entry: "python tools/pre_commit/mypy.py 1 \"3.10\"",
                                 language: Python,
+                                priority: None,
                                 options: HookOptions {
                                     alias: None,
                                     files: None,
@@ -1997,7 +2048,6 @@ mod tests {
                                     language_version: None,
                                     log_file: None,
                                     require_serial: None,
-                                    priority: None,
                                     stages: None,
                                     verbose: None,
                                     minimum_prek_version: None,
@@ -2056,11 +2106,12 @@ mod tests {
                     LocalRepo {
                         repo: "local",
                         hooks: [
-                            ManifestHook {
+                            LocalHook {
                                 id: "test-yaml",
                                 name: "Test YAML compatibility",
                                 entry: "prek --help",
                                 language: System,
+                                priority: None,
                                 options: HookOptions {
                                     alias: None,
                                     files: None,
@@ -2082,7 +2133,6 @@ mod tests {
                                     require_serial: Some(
                                         true,
                                     ),
-                                    priority: None,
                                     stages: Some(
                                         [
                                             PreCommit,

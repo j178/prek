@@ -6,9 +6,7 @@ use anyhow::{Context, Result};
 use itertools::Itertools;
 
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
-use crate::config::{
-    self, CONFIG_FILE_REGEX, FilePattern, HookOptions, Language, ManifestHook, MetaHook,
-};
+use crate::config::{self, CONFIG_FILE_REGEX, FilePattern, HookOptions, Language, MetaHook};
 use crate::hook::Hook;
 use crate::store::Store;
 use crate::workspace::Project;
@@ -60,40 +58,35 @@ impl MetaHook {
         let hook_id = MetaHooks::from_str(id)?;
         let config_file_regex = CONFIG_FILE_REGEX.clone();
 
-        let hook = match hook_id {
-            MetaHooks::CheckHooksApply => ManifestHook {
+        Ok(match hook_id {
+            MetaHooks::CheckHooksApply => MetaHook {
                 id: "check-hooks-apply".to_string(),
                 name: "Check hooks apply".to_string(),
-                language: Language::System,
-                entry: String::new(),
+                priority: None,
                 options: HookOptions {
                     files: Some(FilePattern::from(config_file_regex)),
                     ..Default::default()
                 },
             },
-            MetaHooks::CheckUselessExcludes => ManifestHook {
+            MetaHooks::CheckUselessExcludes => MetaHook {
                 id: "check-useless-excludes".to_string(),
                 name: "Check useless excludes".to_string(),
-                language: Language::System,
-                entry: String::new(),
+                priority: None,
                 options: HookOptions {
                     files: Some(FilePattern::from(config_file_regex)),
                     ..Default::default()
                 },
             },
-            MetaHooks::Identity => ManifestHook {
+            MetaHooks::Identity => MetaHook {
                 id: "identity".to_string(),
                 name: "identity".to_string(),
-                language: Language::System,
-                entry: String::new(),
+                priority: None,
                 options: HookOptions {
                     verbose: Some(true),
                     ..Default::default()
                 },
             },
-        };
-
-        Ok(MetaHook(hook))
+        })
     }
 }
 
@@ -210,10 +203,8 @@ pub(crate) async fn check_useless_excludes(
             let hooks_iter: Box<dyn Iterator<Item = (&String, &HookOptions)>> = match repo {
                 config::Repo::Remote(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
                 config::Repo::Local(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
-                config::Repo::Meta(r) => Box::new(r.hooks.iter().map(|h| (&h.0.id, &h.0.options))),
-                config::Repo::Builtin(r) => {
-                    Box::new(r.hooks.iter().map(|h| (&h.0.id, &h.0.options)))
-                }
+                config::Repo::Meta(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
+                config::Repo::Builtin(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
             };
 
             for (hook_id, opts) in hooks_iter {
@@ -288,22 +279,17 @@ mod tests {
     #[test]
     fn meta_hook_patterns_cover_config_files() {
         let apply = MetaHook::from_id("check-hooks-apply").expect("known meta hook");
-        let apply_files = apply.0.options.files.as_ref().expect("files should be set");
+        let apply_files = apply.options.files.as_ref().expect("files should be set");
         assert!(apply_files.is_match(CONFIG_FILE));
         assert!(apply_files.is_match(ALT_CONFIG_FILE));
 
         let useless = MetaHook::from_id("check-useless-excludes").expect("known meta hook");
-        let useless_files = useless
-            .0
-            .options
-            .files
-            .as_ref()
-            .expect("files should be set");
+        let useless_files = useless.options.files.as_ref().expect("files should be set");
         assert!(useless_files.is_match(CONFIG_FILE));
         assert!(useless_files.is_match(ALT_CONFIG_FILE));
 
         let identity = MetaHook::from_id("identity").expect("known meta hook");
-        assert!(identity.0.options.files.is_none());
-        assert_eq!(identity.0.options.verbose, Some(true));
+        assert!(identity.options.files.is_none());
+        assert_eq!(identity.options.verbose, Some(true));
     }
 }

@@ -170,12 +170,12 @@ fn all_hooks(proj: &Project) -> Vec<(String, Option<String>)> {
             }
             config::Repo::Meta(cfg) => {
                 for h in &cfg.hooks {
-                    out.push((h.0.id.clone(), Some(h.0.name.clone())));
+                    out.push((h.id.clone(), Some(h.name.clone())));
                 }
             }
             config::Repo::Builtin(cfg) => {
                 for h in &cfg.hooks {
-                    out.push((h.0.id.clone(), Some(h.0.name.clone())));
+                    out.push((h.id.clone(), Some(h.name.clone())));
                 }
             }
         }
