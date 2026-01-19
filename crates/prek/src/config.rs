@@ -462,17 +462,6 @@ impl HookOptions {
     }
 }
 
-/// A hook specification that all hook types can be converted into.
-#[derive(Debug, Clone)]
-pub(crate) struct HookSpec {
-    pub id: String,
-    pub name: String,
-    pub entry: String,
-    pub language: Language,
-    pub priority: Option<u32>,
-    pub options: HookOptions,
-}
-
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -487,19 +476,6 @@ pub(crate) struct ManifestHook {
     pub language: Language,
     #[serde(flatten)]
     pub options: HookOptions,
-}
-
-impl From<ManifestHook> for HookSpec {
-    fn from(hook: ManifestHook) -> Self {
-        Self {
-            id: hook.id,
-            name: hook.name,
-            entry: hook.entry,
-            language: hook.language,
-            priority: None,
-            options: hook.options,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -556,19 +532,6 @@ pub(crate) struct LocalHook {
     pub options: HookOptions,
 }
 
-impl From<LocalHook> for HookSpec {
-    fn from(hook: LocalHook) -> Self {
-        Self {
-            id: hook.id,
-            name: hook.name,
-            entry: hook.entry,
-            language: hook.language,
-            priority: hook.priority,
-            options: hook.options,
-        }
-    }
-}
-
 /// A meta hook predefined in pre-commit.
 ///
 /// It's the same as the manifest hook definition but with only a few predefined id allowed.
@@ -586,19 +549,6 @@ pub(crate) struct MetaHook {
     pub priority: Option<u32>,
     #[serde(flatten)]
     pub options: HookOptions,
-}
-
-impl From<MetaHook> for HookSpec {
-    fn from(hook: MetaHook) -> Self {
-        Self {
-            id: hook.id,
-            name: hook.name,
-            entry: String::new(),
-            language: Language::System,
-            priority: hook.priority,
-            options: hook.options,
-        }
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -687,19 +637,6 @@ pub(crate) struct BuiltinHook {
     /// Builtin hooks allow the same set of options overrides as other hooks.
     #[serde(flatten)]
     pub options: HookOptions,
-}
-
-impl From<BuiltinHook> for HookSpec {
-    fn from(hook: BuiltinHook) -> Self {
-        Self {
-            id: hook.id,
-            name: hook.name,
-            entry: hook.entry,
-            language: Language::System,
-            priority: hook.priority,
-            options: hook.options,
-        }
-    }
 }
 
 impl TryFrom<RemoteHook> for BuiltinHook {

@@ -15,8 +15,8 @@ use thiserror::Error;
 use tracing::trace;
 
 use crate::config::{
-    self, BuiltinHook, Config, FilePattern, HookOptions, HookSpec, Language, LocalHook, MetaHook,
-    RemoteHook, Stage, read_manifest,
+    self, BuiltinHook, Config, FilePattern, HookOptions, Language, LocalHook, ManifestHook,
+    MetaHook, RemoteHook, Stage, read_manifest,
 };
 use crate::languages::version::LanguageRequest;
 use crate::languages::{extract_metadata_from_entry, resolve_command};
@@ -44,6 +44,69 @@ pub(crate) enum Error {
 
     #[error("Failed to create directory for hook environment")]
     TmpDir(#[from] std::io::Error),
+}
+
+/// A hook specification that all hook types can be converted into.
+#[derive(Debug, Clone)]
+pub(crate) struct HookSpec {
+    pub id: String,
+    pub name: String,
+    pub entry: String,
+    pub language: Language,
+    pub priority: Option<u32>,
+    pub options: HookOptions,
+}
+
+impl From<ManifestHook> for HookSpec {
+    fn from(hook: ManifestHook) -> Self {
+        Self {
+            id: hook.id,
+            name: hook.name,
+            entry: hook.entry,
+            language: hook.language,
+            priority: None,
+            options: hook.options,
+        }
+    }
+}
+
+impl From<LocalHook> for HookSpec {
+    fn from(hook: LocalHook) -> Self {
+        Self {
+            id: hook.id,
+            name: hook.name,
+            entry: hook.entry,
+            language: hook.language,
+            priority: hook.priority,
+            options: hook.options,
+        }
+    }
+}
+
+impl From<MetaHook> for HookSpec {
+    fn from(hook: MetaHook) -> Self {
+        Self {
+            id: hook.id,
+            name: hook.name,
+            entry: String::new(),
+            language: Language::System,
+            priority: hook.priority,
+            options: hook.options,
+        }
+    }
+}
+
+impl From<BuiltinHook> for HookSpec {
+    fn from(hook: BuiltinHook) -> Self {
+        Self {
+            id: hook.id,
+            name: hook.name,
+            entry: hook.entry,
+            language: Language::System,
+            priority: hook.priority,
+            options: hook.options,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -693,7 +756,8 @@ mod tests {
     use prek_consts::CONFIG_FILE;
     use rustc_hash::FxHashMap;
 
-    use crate::config::{HookOptions, HookSpec, Language, RemoteHook};
+    use crate::config::{HookOptions, Language, RemoteHook};
+    use crate::hook::HookSpec;
     use crate::workspace::Project;
 
     use super::{HookBuilder, Repo};
@@ -792,6 +856,7 @@ mod tests {
                     _unused_keys: {},
                 },
                 repos: [],
+                ..
             },
             repo: Local {
                 hooks: [],

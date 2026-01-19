@@ -17,9 +17,10 @@ use thiserror::Error;
 use tracing::{debug, error, instrument, trace};
 
 use crate::cli::run::Selectors;
-use crate::config::{self, Config, HookSpec, read_config};
+use crate::config::{self, Config, read_config};
 use crate::fs::Simplified;
 use crate::git::GIT_ROOT;
+use crate::hook::HookSpec;
 use crate::hook::{self, Hook, HookBuilder, Repo};
 use crate::run::CONCURRENCY;
 use crate::store::{CacheBucket, Store};
