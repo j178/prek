@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::path::Path;
 use std::str::FromStr;
 
-use crate::config::{BuiltinHook, HookOptions, Language, ManifestHook, Stage};
+use crate::config::{BuiltinHook, HookOptions, Stage};
 use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks;
 use crate::store::Store;
@@ -96,23 +96,23 @@ impl BuiltinHooks {
 impl BuiltinHook {
     pub(crate) fn from_id(id: &str) -> Result<Self, ()> {
         let hook_id = BuiltinHooks::from_str(id)?;
-        let hook = match hook_id {
-            BuiltinHooks::CheckAddedLargeFiles => ManifestHook {
+        Ok(match hook_id {
+            BuiltinHooks::CheckAddedLargeFiles => BuiltinHook {
                 id: "check-added-large-files".to_string(),
                 name: "check for added large files".to_string(),
-                language: Language::Python,
                 entry: "check-added-large-files".to_string(),
+                priority: None,
                 options: HookOptions {
                     description: Some("prevents giant files from being committed.".to_string()),
                     stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
                     ..Default::default()
                 },
             },
-            BuiltinHooks::CheckCaseConflict => ManifestHook {
+            BuiltinHooks::CheckCaseConflict => BuiltinHook {
                 id: "check-case-conflict".to_string(),
                 name: "check for case conflicts".to_string(),
-                language: Language::Python,
                 entry: "check-case-conflict".to_string(),
+                priority: None,
                 options: HookOptions {
                     description: Some(
                         "checks for files that would conflict in case-insensitive filesystems"
@@ -121,11 +121,11 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
-            BuiltinHooks::CheckExecutablesHaveShebangs => ManifestHook {
+            BuiltinHooks::CheckExecutablesHaveShebangs => BuiltinHook {
                 id: "check-executables-have-shebangs".to_string(),
                 name: "check that executables have shebangs".to_string(),
-                language: Language::Python,
                 entry: "check-executables-have-shebangs".to_string(),
+                priority: None,
                 options: HookOptions {
                     description: Some(
                         "ensures that (non-binary) executables have a shebang.".to_string(),
@@ -135,33 +135,33 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
-            BuiltinHooks::CheckJson => ManifestHook {
+            BuiltinHooks::CheckJson => BuiltinHook {
                 id: "check-json".to_string(),
                 name: "check json".to_string(),
-                language: Language::Python,
                 entry: "check-json".to_string(),
+                priority: None,
                 options: HookOptions {
                     description: Some("checks json files for parseable syntax.".to_string()),
                     types: Some(vec!["json".to_string()]),
                     ..Default::default()
                 },
             },
-            BuiltinHooks::CheckJson5 => ManifestHook {
+            BuiltinHooks::CheckJson5 => BuiltinHook {
                 id: "check-json5".to_string(),
                 name: "check json5".to_string(),
-                language: Language::Python,
                 entry: "check-json5".to_string(),
+                priority: None,
                 options: HookOptions {
                     description: Some("checks json5 files for parseable syntax.".to_string()),
                     types: Some(vec!["json5".to_string()]),
                     ..Default::default()
                 },
             },
-            BuiltinHooks::CheckMergeConflict => ManifestHook {
+            BuiltinHooks::CheckMergeConflict => BuiltinHook {
                 id: "check-merge-conflict".to_string(),
                 name: "check for merge conflicts".to_string(),
-                language: Language::Python,
                 entry: "check-merge-conflict".to_string(),
+                priority: None,
                 options: HookOptions {
                     description: Some(
                         "checks for files that contain merge conflict strings.".to_string(),
@@ -170,11 +170,11 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
-            BuiltinHooks::CheckSymlinks => ManifestHook {
+            BuiltinHooks::CheckSymlinks => BuiltinHook {
                 id: "check-symlinks".to_string(),
                 name: "check for broken symlinks".to_string(),
-                language: Language::Python,
                 entry: "check-symlinks".to_string(),
+                priority: None,
                 options: HookOptions {
                     description: Some(
                         "checks for symlinks which do not point to anything.".to_string(),
@@ -183,55 +183,55 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
-            BuiltinHooks::CheckToml => ManifestHook {
+            BuiltinHooks::CheckToml => BuiltinHook {
                 id: "check-toml".to_string(),
                 name: "check toml".to_string(),
-                language: Language::Python,
                 entry: "check-toml".to_string(),
+                priority: None,
                 options: HookOptions {
                     description: Some("checks toml files for parseable syntax.".to_string()),
                     types: Some(vec!["toml".to_string()]),
                     ..Default::default()
                 },
             },
-            BuiltinHooks::CheckXml => ManifestHook {
+            BuiltinHooks::CheckXml => BuiltinHook {
                 id: "check-xml".to_string(),
                 name: "check xml".to_string(),
-                language: Language::Python,
                 entry: "check-xml".to_string(),
+                priority: None,
                 options: HookOptions {
                     description: Some("checks xml files for parseable syntax.".to_string()),
                     types: Some(vec!["xml".to_string()]),
                     ..Default::default()
                 },
             },
-            BuiltinHooks::CheckYaml => ManifestHook {
+            BuiltinHooks::CheckYaml => BuiltinHook {
                 id: "check-yaml".to_string(),
                 name: "check yaml".to_string(),
-                language: Language::Python,
                 entry: "check-yaml".to_string(),
+                priority: None,
                 options: HookOptions {
                     description: Some("checks yaml files for parseable syntax.".to_string()),
                     types: Some(vec!["yaml".to_string()]),
                     ..Default::default()
                 },
             },
-            BuiltinHooks::DetectPrivateKey => ManifestHook {
+            BuiltinHooks::DetectPrivateKey => BuiltinHook {
                 id: "detect-private-key".to_string(),
                 name: "detect private key".to_string(),
-                language: Language::Python,
                 entry: "detect-private-key".to_string(),
+                priority: None,
                 options: HookOptions {
                     description: Some("detects the presence of private keys.".to_string()),
                     types: Some(vec!["text".to_string()]),
                     ..Default::default()
                 },
             },
-            BuiltinHooks::EndOfFileFixer => ManifestHook {
+            BuiltinHooks::EndOfFileFixer => BuiltinHook {
                 id: "end-of-file-fixer".to_string(),
                 name: "fix end of files".to_string(),
-                language: Language::Python,
                 entry: "end-of-file-fixer".to_string(),
+                priority: None,
                 options: HookOptions {
                     description: Some(
                         "ensures that a file is either empty, or ends with one newline."
@@ -242,44 +242,44 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
-            BuiltinHooks::FixByteOrderMarker => ManifestHook {
+            BuiltinHooks::FixByteOrderMarker => BuiltinHook {
                 id: "fix-byte-order-marker".to_string(),
                 name: "fix utf-8 byte order marker".to_string(),
-                language: Language::Python,
                 entry: "fix-byte-order-marker".to_string(),
+                priority: None,
                 options: HookOptions {
                     description: Some("removes utf-8 byte order marker.".to_string()),
                     types: Some(vec!["text".to_string()]),
                     ..Default::default()
                 },
             },
-            BuiltinHooks::MixedLineEnding => ManifestHook {
+            BuiltinHooks::MixedLineEnding => BuiltinHook {
                 id: "mixed-line-ending".to_string(),
                 name: "mixed line ending".to_string(),
-                language: Language::Python,
                 entry: "mixed-line-ending".to_string(),
+                priority: None,
                 options: HookOptions {
                     description: Some("replaces or checks mixed line ending.".to_string()),
                     types: Some(vec!["text".to_string()]),
                     ..Default::default()
                 },
             },
-            BuiltinHooks::NoCommitToBranch => ManifestHook {
+            BuiltinHooks::NoCommitToBranch => BuiltinHook {
                 id: "no-commit-to-branch".to_string(),
                 name: "don't commit to branch".to_string(),
-                language: Language::Python,
                 entry: "no-commit-to-branch".to_string(),
+                priority: None,
                 options: HookOptions {
                     pass_filenames: Some(false),
                     always_run: Some(true),
                     ..Default::default()
                 },
             },
-            BuiltinHooks::TrailingWhitespace => ManifestHook {
+            BuiltinHooks::TrailingWhitespace => BuiltinHook {
                 id: "trailing-whitespace".to_string(),
                 name: "trim trailing whitespace".to_string(),
-                language: Language::Python,
                 entry: "trailing-whitespace-fixer".to_string(),
+                priority: None,
                 options: HookOptions {
                     description: Some("trims trailing whitespace.".to_string()),
                     types: Some(vec!["text".to_string()]),
@@ -287,8 +287,6 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
-        };
-
-        Ok(BuiltinHook(hook))
+        })
     }
 }
