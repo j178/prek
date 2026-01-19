@@ -730,7 +730,6 @@ pub(crate) struct InitTemplateDirArgs {
     pub(crate) hook_types: Vec<HookType>,
 }
 
-#[cfg(unix)]
 #[cfg(test)]
 mod _gen {
     use crate::cli::Cli;
