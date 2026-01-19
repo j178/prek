@@ -764,6 +764,7 @@ mod _gen {
         output.push_str("# CLI Reference\n\n");
         generate_command(&mut output, &cmd, &mut parents);
 
+        let mut output = output.replace("\r\n", "\n");
         // Trim trailing whitespace
         while output.ends_with('\n') {
             output.pop();
