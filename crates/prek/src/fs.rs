@@ -21,12 +21,15 @@
 // SOFTWARE.
 
 use std::fmt::Display;
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use anyhow::Context;
+use rustc_hash::FxHashMap;
+#[cfg(test)]
+use rustc_hash::FxHashSet;
 use tracing::{debug, error, info, trace};
 
 use crate::cli::reporter;
@@ -34,27 +37,32 @@ use crate::cli::reporter;
 pub static CWD: LazyLock<PathBuf> =
     LazyLock::new(|| std::env::current_dir().expect("The current directory must be exist"));
 
-static IN_PROCESS_LOCKS: LazyLock<std::sync::Mutex<HashMap<PathBuf, std::sync::Arc<tokio::sync::Semaphore>>>> =
-    LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
+static IN_PROCESS_LOCK_HELD_COUNTS: LazyLock<Mutex<FxHashMap<PathBuf, usize>>> =
+    LazyLock::new(Default::default);
 
 #[cfg(test)]
-static LAST_LOCK_WARNING: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+static LOCK_WARNING_PATHS: LazyLock<Mutex<FxHashSet<PathBuf>>> = LazyLock::new(Default::default);
 
+// Test-only override: treat contention for specific lock paths as cross-process so we emit the
+// warning even if the lock is held by the current process. This lets unit tests exercise the
+// warning logic without spawning another process, and avoids affecting unrelated locks/tests.
 #[cfg(test)]
-fn record_lock_warning(message: String) {
-    *LAST_LOCK_WARNING.lock().unwrap() = Some(message);
-}
+static FORCE_CROSS_PROCESS_LOCK_WARNING_FOR: LazyLock<Mutex<FxHashSet<PathBuf>>> =
+    LazyLock::new(Default::default);
 
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
 pub struct LockedFile {
     file: fs_err::File,
-    _permit: tokio::sync::OwnedSemaphorePermit,
+    path: PathBuf,
 }
 
 impl LockedFile {
     /// Inner implementation for [`LockedFile::acquire_blocking`] and [`LockedFile::acquire`].
-    fn lock_file_blocking(mut file: fs_err::File, resource: &str) -> Result<fs_err::File, std::io::Error> {
+    fn lock_file_blocking(
+        file: fs_err::File,
+        resource: &str,
+    ) -> Result<fs_err::File, std::io::Error> {
         trace!(
             resource,
             path = %file.path().display(),
@@ -96,53 +104,71 @@ impl LockedFile {
     ) -> Result<Self, std::io::Error> {
         let path = path.as_ref().to_path_buf();
 
-        // Prevent same-process re-entrant lock attempts from ever reaching the OS-level file lock.
-        // This avoids spurious "another prek process" warnings when the contention is purely
-        // within the current process.
-        let semaphore = {
-            let mut locks = IN_PROCESS_LOCKS.lock().unwrap();
-            locks
-                .entry(path.clone())
-                .or_insert_with(|| std::sync::Arc::new(tokio::sync::Semaphore::new(1)))
-                .clone()
-        };
-        let permit = semaphore
-            .acquire_owned()
-            .await
-            .map_err(|_| std::io::Error::other("In-process lock semaphore closed"))?;
-
         let file = fs_err::File::create(&path)?;
 
         let resource = resource.to_string();
         let mut task =
             tokio::task::spawn_blocking(move || Self::lock_file_blocking(file, &resource));
 
+        let warning_path = path.clone();
+
         let file = tokio::select! {
-            result = &mut task => result?,
+            result = &mut task => result??,
             () = tokio::time::sleep(Duration::from_secs(1)) => {
-                reporter::suspend(move || {
+                let held_by_this_process = {
+                    let held_by_this_process = IN_PROCESS_LOCK_HELD_COUNTS
+                                .lock()
+                                .unwrap()
+                                .get(&warning_path)
+                                .is_some_and(|count| *count > 0);
+
                     #[cfg(test)]
                     {
-                        record_lock_warning(format!(
-                            "Waiting to acquire lock at `{}`. Another prek process may still be running",
-                            path.display()
-                        ));
+                        let forced_cross_process = FORCE_CROSS_PROCESS_LOCK_WARNING_FOR
+                            .lock()
+                            .unwrap()
+                            .contains(&warning_path);
+
+                        if forced_cross_process {
+                            false
+                        } else {
+                            held_by_this_process
+                        }
                     }
 
                     #[cfg(not(test))]
                     {
-                        crate::warn_user!(
-                            "Waiting to acquire lock at `{}`. Another prek process may still be running",
-                            path.display()
-                        );
+                        held_by_this_process
                     }
-                });
+                };
 
-                task.await?
+                if !held_by_this_process {
+                    reporter::suspend(move || {
+                        #[cfg(test)]
+                        {
+                            LOCK_WARNING_PATHS.lock().unwrap().insert(warning_path);
+                        }
+
+                        #[cfg(not(test))]
+                        {
+                            crate::warn_user!(
+                                "Waiting to acquire lock at `{}`. Another prek process may still be running",
+                                warning_path.display()
+                            );
+                        }
+                    });
+                }
+
+                task.await??
             }
         };
 
-        Ok(Self { file, _permit: permit })
+        {
+            let mut held = IN_PROCESS_LOCK_HELD_COUNTS.lock().unwrap();
+            *held.entry(path.clone()).or_insert(0) += 1;
+        }
+
+        Ok(Self { file, path })
     }
 }
 
@@ -155,6 +181,13 @@ impl Drop for LockedFile {
                 err
             );
         } else {
+            let mut held = IN_PROCESS_LOCK_HELD_COUNTS.lock().unwrap();
+            if let Some(count) = held.get_mut(&self.path) {
+                *count = count.saturating_sub(1);
+                if *count == 0 {
+                    held.remove(&self.path);
+                }
+            }
             trace!(path = %self.file.path().display(), "Released lock");
         }
     }
@@ -377,30 +410,8 @@ pub(crate) async fn rename_or_copy(source: &Path, target: &Path) -> std::io::Res
 mod tests {
     use std::time::Duration;
 
-    use crate::warnings;
-
-    struct WarningGuard;
-
-    impl WarningGuard {
-        fn new() -> Self {
-            warnings::enable();
-            Self
-        }
-    }
-
-    impl Drop for WarningGuard {
-        fn drop(&mut self) {
-            warnings::disable();
-        }
-    }
-
     #[tokio::test]
-    async fn lock_warning_emitted_after_timeout() {
-        let _warnings = WarningGuard::new();
-
-        // Clear any previous warning.
-        *super::LAST_LOCK_WARNING.lock().unwrap() = None;
-
+    async fn lock_warning_suppressed_for_in_process_contention() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let lock_path = tmp.path().join(".lock");
 
@@ -409,27 +420,74 @@ mod tests {
             .await
             .expect("acquire lock1");
 
-        // Second acquire should block, trigger the 1s warning, then complete once we drop lock1.
+        let held_count = super::IN_PROCESS_LOCK_HELD_COUNTS
+            .lock()
+            .unwrap()
+            .get(&lock_path)
+            .copied();
+        assert_eq!(
+            held_count,
+            Some(1),
+            "expected held-count to be set after first acquire"
+        );
+
+        // Second acquire should block, but since the lock is held by this process, it should NOT
+        // trigger the "Another prek process" warning.
         let lock_path2 = lock_path.clone();
         let task =
             tokio::spawn(async move { super::LockedFile::acquire(lock_path2, "test-lock").await });
 
         tokio::time::sleep(Duration::from_millis(1100)).await;
 
-        let warning = super::LAST_LOCK_WARNING.lock().unwrap().clone();
+        let warning = super::LOCK_WARNING_PATHS
+            .lock()
+            .unwrap()
+            .contains(&lock_path);
         assert!(
-            warning
-                .as_ref()
-                .is_some_and(|w| w.contains("Waiting to acquire lock")),
-            "expected recorded lock warning, got: {warning:?}"
-        );
-        assert!(
-            warning
-                .as_ref()
-                .is_some_and(|w| w.contains("Another prek process may still be running")),
-            "expected recorded lock warning hint, got: {warning:?}"
+            !warning,
+            "expected no warning for in-process contention, got: {warning:?}"
         );
 
+        drop(lock1);
+        task.await.expect("join task").expect("acquire lock2");
+    }
+
+    #[tokio::test]
+    async fn lock_warning_emitted_when_forced_cross_process() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let lock_path = tmp.path().join(".lock");
+
+        super::FORCE_CROSS_PROCESS_LOCK_WARNING_FOR
+            .lock()
+            .unwrap()
+            .insert(lock_path.clone());
+
+        // First acquire should succeed immediately.
+        let lock1 = super::LockedFile::acquire(&lock_path, "test-lock")
+            .await
+            .expect("acquire lock1");
+
+        // Second acquire should block and emit the warning due to the forced override.
+        let lock_path2 = lock_path.clone();
+        let task =
+            tokio::spawn(async move { super::LockedFile::acquire(lock_path2, "test-lock").await });
+
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+
+        let warning = super::LOCK_WARNING_PATHS
+            .lock()
+            .unwrap()
+            .contains(&lock_path);
+        assert!(
+            warning,
+            "expected warning when forced cross-process mode is enabled"
+        );
+
+        // Cleanup.
+        super::FORCE_CROSS_PROCESS_LOCK_WARNING_FOR
+            .lock()
+            .unwrap()
+            .remove(&lock_path);
         drop(lock1);
         task.await.expect("join task").expect("acquire lock2");
     }

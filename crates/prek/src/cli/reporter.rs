@@ -128,7 +128,7 @@ impl workspace::HookInitReporter for HookInitReporter {
     fn on_clone_start(&self, repo: &str) -> usize {
         self.reporter
             .root
-            .set_message(format!("{}", "Initializing hooks...".bold().cyan()));
+            .set_message(format!("{}", "Cloning repos...".bold().cyan()));
 
         self.reporter
             .on_start(format!("{} {}", "Cloning".bold().cyan(), repo.dimmed()))
