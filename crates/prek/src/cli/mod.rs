@@ -1042,6 +1042,19 @@ mod _gen {
                             .arg(&new_path)
                             .status()
                             .ok();
+                        let mut count = 100;
+                        for (i, (a, b)) in current.chars().zip(reference_string.chars()).enumerate()
+                        {
+                            if a != b && count > 0 {
+                                anstream::println!(
+                                    "Found difference at byte {}: expected {:?}, found {:?}",
+                                    i,
+                                    a,
+                                    b
+                                );
+                                count -= 1;
+                            }
+                        }
 
                         let comparison = StrComparison::new(&current, &reference_string);
                         bail!(
