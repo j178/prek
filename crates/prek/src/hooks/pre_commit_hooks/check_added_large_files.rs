@@ -37,7 +37,7 @@ pub(crate) async fn check_added_large_files(
     hook: &Hook,
     filenames: &[&Path],
 ) -> anyhow::Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
+    let args = Args::try_parse_from(hook.entry.split()?.iter().chain(&hook.args))?;
 
     let filter = if args.enforce_all {
         FileFilter::NoFilter
