@@ -1,4 +1,6 @@
 #[cfg(unix)]
+use prek_consts::env_vars::EnvVars;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
 use anyhow::Result;
@@ -2206,6 +2208,70 @@ fn check_json5() -> Result<()> {
 
     ----- stderr -----
     ");
+
+    Ok(())
+}
+
+/// Test that builtin hooks work correctly even when a system-wide binary with the
+/// same name exists on PATH (regression test for <https://github.com/j178/prek/issues/1412>).
+///
+/// When pre-commit-hooks is installed system-wide via pip, binaries like
+/// `trailing-whitespace-fixer` are placed in PATH. These binaries have shebangs
+/// (e.g., `#!/usr/bin/python3`). Before the fix, `resolve(None)` would find these
+/// binaries, parse their shebangs, and corrupt argument parsing.
+#[test]
+#[cfg(unix)]
+fn builtin_hooks_ignore_system_path_binaries() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    // Create a fake "trailing-whitespace-fixer" binary with a shebang in a temp dir.
+    // This simulates `pip install pre-commit-hooks` which places such binaries in PATH.
+    let fake_bin_dir = context.home_dir().child("fake_bin");
+    fake_bin_dir.create_dir_all()?;
+
+    let fake_binary = fake_bin_dir.child("trailing-whitespace-fixer");
+    fake_binary.write_str("#!/usr/bin/python3\n# fake binary\n")?;
+    std::fs::set_permissions(fake_binary.path(), std::fs::Permissions::from_mode(0o755))?;
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: trailing-whitespace
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("test.txt").write_str("hello world   \n")?;
+    context.git_add(".");
+
+    // Prepend the fake bin directory to PATH so the fake binary is found first.
+    let original_path = EnvVars::var_os(EnvVars::PATH).unwrap_or_default();
+    let mut new_path = std::ffi::OsString::from(fake_bin_dir.path());
+    new_path.push(":");
+    new_path.push(&original_path);
+
+    // Run prek with the modified PATH.
+    // Before the fix: this would fail with a clap argument parsing error like:
+    //   "unexpected argument '/path/to/trailing-whitespace-fixer' found"
+    // After the fix: this should pass because builtin hooks use split() not resolve(None).
+    cmd_snapshot!(context.filters(), context.run().env("PATH", new_path), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    trim trailing whitespace.................................................Failed
+    - hook id: trailing-whitespace
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing test.txt
+
+    ----- stderr -----
+    ");
+
+    // Verify the file was fixed (trailing whitespace removed).
+    assert_eq!(context.read("test.txt"), "hello world\n");
 
     Ok(())
 }
