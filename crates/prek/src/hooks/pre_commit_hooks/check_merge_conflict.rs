@@ -30,7 +30,7 @@ pub(crate) async fn check_merge_conflict(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
+    let args = Args::try_parse_from(hook.entry.split()?.iter().chain(&hook.args))?;
 
     // Check if we're in a merge state or assuming merge
     if !args.assume_in_merge && !is_in_merge().await? {
