@@ -268,7 +268,7 @@ impl Project {
 
                     Ok::<(), Error>(())
                 })
-                .buffer_unordered(5);
+                .buffer_unordered(*CONCURRENCY);
 
         while let Some(result) = tasks.next().await {
             result?;

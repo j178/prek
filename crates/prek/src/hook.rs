@@ -169,6 +169,9 @@ impl HookBuilder {
         if let Some(language) = &config.language {
             self.hook_spec.language.clone_from(language);
         }
+        if let Some(priority) = config.priority {
+            self.hook_spec.priority = Some(priority);
+        }
 
         self.hook_spec.options.update(&config.options);
 

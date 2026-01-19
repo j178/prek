@@ -52,7 +52,9 @@ Config {
                         name: None,
                         entry: None,
                         language: None,
-                        priority: None,
+                        priority: Some(
+                            10,
+                        ),
                         options: HookOptions {
                             alias: None,
                             files: None,
