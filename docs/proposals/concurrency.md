@@ -42,7 +42,7 @@ Execution is driven purely by priority numbers:
 The existing `require_serial` configuration key often causes confusion. In this design, its meaning is strictly scoped:
 
 * **`require_serial: true`**: Controls **invocation concurrency for that hook**. When running a hook against files, `prek` limits that hook to a single in-flight invocation at a time. This effectively disables running multiple batches of the *same hook* concurrently.
-  * `prek` will still try to pass all files in one invocation, but may split into multiple invocations if the OS command-line length limit would be exceeded.
+    * `prek` will still try to pass all files in one invocation, but may split into multiple invocations if the OS command-line length limit would be exceeded.
 * **It does NOT imply exclusive execution**. A hook with `require_serial: true` can still run in parallel with other hooks that share its `priority`.
 * If a hook *must* run alone (e.g., it modifies global state), it should be assigned a unique priority value that no other hook uses.
 

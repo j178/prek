@@ -299,9 +299,9 @@ prek self update
 - No hassle with your Python version or virtual environments, prek automatically installs the required Python version and creates a virtual environment for you.
 - Built-in support for [workspaces](https://prek.j178.dev/workspace/) (or monorepos), each subproject can have its own `.pre-commit-config.yaml` file.
 - [`prek run`](https://prek.j178.dev/cli/#prek-run) has some nifty improvements over `pre-commit run`, such as:
-  - `prek run --directory <dir>` runs hooks for files in the specified directory, no need to use `git ls-files -- <dir> | xargs pre-commit run --files` anymore.
-  - `prek run --last-commit` runs hooks for files changed in the last commit.
-  - `prek run [HOOK] [HOOK]` selects and runs multiple hooks.
+    - `prek run --directory <dir>` runs hooks for files in the specified directory, no need to use `git ls-files -- <dir> | xargs pre-commit run --files` anymore.
+    - `prek run --last-commit` runs hooks for files changed in the last commit.
+    - `prek run [HOOK] [HOOK]` selects and runs multiple hooks.
 - [`prek list`](https://prek.j178.dev/cli/#prek-list) command lists all available hooks, their ids, and descriptions, providing a better overview of the configured hooks.
 - [`prek auto-update`](https://prek.j178.dev/cli/#prek-auto-update) supports `--cooldown-days` to mitigate open source supply chain attacks.
 - prek provides shell completions for `prek run <hook_id>` command, making it easier to run specific hooks without remembering their ids.

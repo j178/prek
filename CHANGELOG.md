@@ -234,7 +234,7 @@ Big thanks to @lmmx for driving this feature!
 ### Enhancements
 
 - Support`--cooldown-days` in `prek auto-update` ([#1172](https://github.com/j178/prek/pull/1172))
-  - Prefer tag creation timestamp in `--cooldown-days` ([#1221](https://github.com/j178/prek/pull/1221))
+    - Prefer tag creation timestamp in `--cooldown-days` ([#1221](https://github.com/j178/prek/pull/1221))
 - Use `cargo install` for packages in workspace ([#1207](https://github.com/j178/prek/pull/1207))
 
 ### Bug fixes
@@ -277,8 +277,8 @@ Want to show your project runs on prek? Add our README badge to your docs or rep
 ### Enhancements
 
 - Support Rust language ([#989](https://github.com/j178/prek/pull/989))
-  - Refactor Rust toolchain management ([#1198](https://github.com/j178/prek/pull/1198))
-  - Add support for finding packages in virtual workspaces ([#1180](https://github.com/j178/prek/pull/1180))
+    - Refactor Rust toolchain management ([#1198](https://github.com/j178/prek/pull/1198))
+    - Add support for finding packages in virtual workspaces ([#1180](https://github.com/j178/prek/pull/1180))
 - Add `prek cache size` command ([#1183](https://github.com/j178/prek/pull/1183))
 - Support orphan projects ([#1129](https://github.com/j178/prek/pull/1129))
 - Fallback to `manual` stage for hooks specified directly in command line ([#1185](https://github.com/j178/prek/pull/1185))
