@@ -1155,6 +1155,7 @@ Then uninstall the old `prefligit` and install the new `prek` from scratch.
 - Set `GOROOT` when installing golang hook ([#381](https://github.com/j178/prefligit/pull/381))
 
 ### Other changes
+
 - Add devcontainer config ([#379](https://github.com/j178/prefligit/pull/379))
 - Bump rust toolchain to 1.89 ([#386](https://github.com/j178/prefligit/pull/386))
 

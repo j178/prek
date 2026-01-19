@@ -17,8 +17,8 @@ A new optional field `priority` is added to the hook configuration.
   priority: 10
 ```
 
-* **Type**: `u32`
-* **Default**: `None` (auto-populated by hook index)
+- **Type**: `u32`
+- **Default**: `None` (auto-populated by hook index)
 
 When `priority` is omitted, the scheduler assigns the hook a priority equal to its index in the configuration file, starting at `0`. This preserves the current sequential behavior by giving each hook a unique, increasing priority by default.
 
@@ -41,10 +41,10 @@ Execution is driven purely by priority numbers:
 
 The existing `require_serial` configuration key often causes confusion. In this design, its meaning is strictly scoped:
 
-* **`require_serial: true`**: Controls **invocation concurrency for that hook**. When running a hook against files, `prek` limits that hook to a single in-flight invocation at a time. This effectively disables running multiple batches of the *same hook* concurrently.
-    * `prek` will still try to pass all files in one invocation, but may split into multiple invocations if the OS command-line length limit would be exceeded.
-* **It does NOT imply exclusive execution**. A hook with `require_serial: true` can still run in parallel with other hooks that share its `priority`.
-* If a hook *must* run alone (e.g., it modifies global state), it should be assigned a unique priority value that no other hook uses.
+- **`require_serial: true`**: Controls **invocation concurrency for that hook**. When running a hook against files, `prek` limits that hook to a single in-flight invocation at a time. This effectively disables running multiple batches of the *same hook* concurrently.
+    - `prek` will still try to pass all files in one invocation, but may split into multiple invocations if the OS command-line length limit would be exceeded.
+- **It does NOT imply exclusive execution**. A hook with `require_serial: true` can still run in parallel with other hooks that share its `priority`.
+- If a hook *must* run alone (e.g., it modifies global state), it should be assigned a unique priority value that no other hook uses.
 
 ## Design Considerations
 
@@ -56,9 +56,9 @@ Positions are taken from the **fully flattened hook list for the current `.pre-c
 
 Example:
 
-* Hook at index `0` with no `priority` gets implicit priority `0`.
-* Hook at index `1` with `priority: 10` keeps priority `10`.
-* Hook at index `2` with no `priority` gets implicit priority `2`.
+- Hook at index `0` with no `priority` gets implicit priority `0`.
+- Hook at index `1` with `priority: 10` keeps priority `10`.
+- Hook at index `2` with no `priority` gets implicit priority `2`.
 
 This means a later hook with an implicit priority can run before an earlier hook that was assigned a larger explicit priority.
 
@@ -82,7 +82,7 @@ Example:
 
 If `fail_fast` is enabled:
 
-* If a hook fails, `prek` should wait for currently running hooks with the *current priority* to finish, but **abort** the execution of higher-priority groups.
+- If a hook fails, `prek` should wait for currently running hooks with the *current priority* to finish, but **abort** the execution of higher-priority groups.
 
 ### Example Configuration
 

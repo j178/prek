@@ -113,6 +113,7 @@ repos:
 ```
 
 With this option:
+
 - Files in `src/backend/` are processed **only** by hooks in `src/backend/`
 - Files in `src/` (but not in `src/backend/`) are processed by hooks in `src/` and the workspace root
 - Files in the root (but not in subdirectories with configs) are processed by hooks in the root
@@ -315,7 +316,7 @@ prek run -c docs/.pre-commit-config.yaml
 ### Key Differences: Workspace vs Single Config
 
 | Feature | Workspace Mode | Single Config Mode |
-|---------|----------------|-------------------|
+| -- | -- | -- |
 | **Discovery** | Auto-discovers all `.pre-commit-config.yaml` files | Uses single specified config file |
 | **Working Directory** | Uses workspace root | Uses git repository root |
 | **File Scope** | All files in workspace | All files in git repo |

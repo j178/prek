@@ -5,9 +5,9 @@
 </div>
 
 {%
-  include-markdown "../README.md"
-  start="<!-- description:start -->"
-  end="<!-- description:end -->"
+include-markdown "../README.md"
+start="<!-- description:start -->"
+end="<!-- description:end -->"
 %}
 
 !!! note
@@ -17,15 +17,15 @@
     Please note that some subcommands and languages are still missing for full drop‑in parity with `pre-commit`. Track the remaining gaps here: [TODO](https://prek.j178.dev/todo/).
 
 {%
-  include-markdown "../README.md"
-  start="<!-- features:start -->"
-  end="<!-- features:end -->"
+include-markdown "../README.md"
+start="<!-- features:start -->"
+end="<!-- features:end -->"
 %}
 
 {%
-  include-markdown "../README.md"
-  start="<!-- why:start -->"
-  end="<!-- why:end -->"
+include-markdown "../README.md"
+start="<!-- why:start -->"
+end="<!-- why:end -->"
 %}
 
 ## Badges
