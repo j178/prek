@@ -283,11 +283,8 @@ struct GitHubRelease {
 }
 
 pub(crate) fn bin_dir(prefix: &Path) -> PathBuf {
-    if cfg!(windows) {
-        prefix.to_path_buf()
-    } else {
-        prefix.join("bin")
-    }
+    // Bun installs global packages to $BUN_INSTALL/bin/ on all platforms
+    prefix.join("bin")
 }
 
 pub(crate) fn lib_dir(prefix: &Path) -> PathBuf {
