@@ -2,6 +2,7 @@ use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::Result;
+use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use tracing::{debug, warn};
 
@@ -113,16 +114,16 @@ pub(crate) async fn cache_gc(store: &Store, dry_run: bool, printer: Printer) -> 
 
     let mut removed = Vec::new();
     if removed_repos > 0 {
-        removed.push(format!("{removed_repos} repos"));
+        removed.push(format!("{} repos", removed_repos.cyan()));
     }
     if removed_hooks > 0 {
-        removed.push(format!("{removed_hooks} hook envs"));
+        removed.push(format!("{} hook envs", removed_hooks.cyan()));
     }
     if removed_tools > 0 {
-        removed.push(format!("{removed_tools} tools"));
+        removed.push(format!("{} tools", removed_tools.cyan()));
     }
     if removed_cache > 0 {
-        removed.push(format!("{removed_cache} caches"));
+        removed.push(format!("{} caches", removed_cache.cyan()));
     }
 
     if removed.is_empty() {
@@ -279,7 +280,11 @@ async fn remove_dir_if_exists(path: &Path) -> Result<bool> {
     Ok(true)
 }
 
-async fn sweep_dir_by_name(root: &Path, keep_names: &FxHashSet<String>, dry_run: bool) -> Result<usize> {
+async fn sweep_dir_by_name(
+    root: &Path,
+    keep_names: &FxHashSet<String>,
+    dry_run: bool,
+) -> Result<usize> {
     if !root.exists() {
         return Ok(0);
     }

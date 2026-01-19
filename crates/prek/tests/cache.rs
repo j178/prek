@@ -290,11 +290,14 @@ fn cache_gc_dry_run_does_not_remove_entries() -> anyhow::Result<()> {
     ");
 
     // Nothing should be removed in dry-run mode.
-    home.child("repos/unused-repo").assert(predicates::path::is_dir());
-    home.child("hooks/unused-hook-env").assert(predicates::path::is_dir());
+    home.child("repos/unused-repo")
+        .assert(predicates::path::is_dir());
+    home.child("hooks/unused-hook-env")
+        .assert(predicates::path::is_dir());
     home.child("tools/node").assert(predicates::path::is_dir());
     home.child("cache/go").assert(predicates::path::is_dir());
-    home.child("scratch/some-temp").assert(predicates::path::is_dir());
+    home.child("scratch/some-temp")
+        .assert(predicates::path::is_dir());
 
     Ok(())
 }
