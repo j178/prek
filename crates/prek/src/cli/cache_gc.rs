@@ -11,7 +11,7 @@ use crate::hook::{HookEnvKey, HookSpec, Repo as HookRepo};
 use crate::printer::Printer;
 use crate::store::{CacheBucket, Store, ToolBucket};
 
-pub(crate) async fn cache_gc(store: &Store, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn cache_gc(store: &Store, dry_run: bool, printer: Printer) -> Result<ExitStatus> {
     let _lock = store.lock_async().await?;
 
     let tracked_configs = store.tracked_configs()?;
@@ -87,23 +87,25 @@ pub(crate) async fn cache_gc(store: &Store, printer: Printer) -> Result<ExitStat
     let mut removed_tools = 0usize;
     let mut removed_cache = 0usize;
 
-    removed_repos += sweep_dir_by_name(&store.repos_dir(), &used_repo_keys).await?;
-    removed_hooks += sweep_dir_by_name(&store.hooks_dir(), &used_hook_env_dirs).await?;
+    removed_repos += sweep_dir_by_name(&store.repos_dir(), &used_repo_keys, dry_run).await?;
+    removed_hooks += sweep_dir_by_name(&store.hooks_dir(), &used_hook_env_dirs, dry_run).await?;
 
     // Sweep tools/<bucket>
     let tools_root = store.tools_dir();
     let used_tool_names: FxHashSet<String> =
         used_tools.iter().map(|t| t.as_str().to_string()).collect();
-    removed_tools += sweep_dir_by_name(&tools_root, &used_tool_names).await?;
+    removed_tools += sweep_dir_by_name(&tools_root, &used_tool_names, dry_run).await?;
 
     // Sweep cache/<bucket>
     let cache_root = store.cache_dir();
     let used_cache_names: FxHashSet<String> =
         used_cache.iter().map(|c| c.as_str().to_string()).collect();
-    removed_cache += sweep_dir_by_name(&cache_root, &used_cache_names).await?;
+    removed_cache += sweep_dir_by_name(&cache_root, &used_cache_names, dry_run).await?;
 
     // Always clear scratch and patches; they are temporary workspaces.
-    let _ = remove_dir_if_exists(&store.scratch_path()).await?;
+    if !dry_run {
+        let _ = remove_dir_if_exists(&store.scratch_path()).await?;
+    }
     // NOTE: Do not clear `patches/` here. It can contain user-important temporary patches.
     // A future enhancement could implement a safer cleanup strategy (e.g. GC patches older
     // than a configurable age, or only remove patches known to be orphaned).
@@ -126,7 +128,8 @@ pub(crate) async fn cache_gc(store: &Store, printer: Printer) -> Result<ExitStat
     if removed.is_empty() {
         writeln!(printer.stdout(), "Nothing to clean")?;
     } else {
-        writeln!(printer.stdout(), "Removed {}", removed.join(", "))?;
+        let verb = if dry_run { "Would remove" } else { "Removed" };
+        writeln!(printer.stdout(), "{verb} {}", removed.join(", "))?;
     }
 
     Ok(ExitStatus::Success)
@@ -276,7 +279,7 @@ async fn remove_dir_if_exists(path: &Path) -> Result<bool> {
     Ok(true)
 }
 
-async fn sweep_dir_by_name(root: &Path, keep_names: &FxHashSet<String>) -> Result<usize> {
+async fn sweep_dir_by_name(root: &Path, keep_names: &FxHashSet<String>, dry_run: bool) -> Result<usize> {
     if !root.exists() {
         return Ok(0);
     }
@@ -305,6 +308,11 @@ async fn sweep_dir_by_name(root: &Path, keep_names: &FxHashSet<String>) -> Resul
             continue;
         };
         if keep_names.contains(name) {
+            continue;
+        }
+
+        if dry_run {
+            removed += 1;
             continue;
         }
 

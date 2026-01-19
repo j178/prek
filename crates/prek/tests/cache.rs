@@ -259,3 +259,42 @@ fn cache_gc_keeps_tracked_config_on_parse_error() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn cache_gc_dry_run_does_not_remove_entries() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config("repos: []\n");
+    context.git_add(".");
+
+    let home = context.home_dir();
+    // Seed tracking with a missing config to force sweeping everything.
+    let missing_config_path = cwd.child("missing-config.yaml");
+    write_config_tracking_file(home, &[missing_config_path.path()])?;
+
+    home.child("repos/unused-repo").create_dir_all()?;
+    home.child("hooks/unused-hook-env").create_dir_all()?;
+    home.child("tools/node").create_dir_all()?;
+    home.child("cache/go").create_dir_all()?;
+    home.child("scratch/some-temp").create_dir_all()?;
+
+    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc").arg("--dry-run"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Would remove 1 repos, 1 hook envs, 1 tools, 1 caches
+
+    ----- stderr -----
+    ");
+
+    // Nothing should be removed in dry-run mode.
+    home.child("repos/unused-repo").assert(predicates::path::is_dir());
+    home.child("hooks/unused-hook-env").assert(predicates::path::is_dir());
+    home.child("tools/node").assert(predicates::path::is_dir());
+    home.child("cache/go").assert(predicates::path::is_dir());
+    home.child("scratch/some-temp").assert(predicates::path::is_dir());
+
+    Ok(())
+}
