@@ -774,20 +774,6 @@ mod _gen {
         output
     }
 
-    fn markdown_to_html(s: &str) -> String {
-        markdown::to_html_with_options(
-            s,
-            &markdown::Options {
-                compile: markdown::CompileOptions {
-                    default_line_ending: markdown::LineEnding::LineFeed,
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-        )
-        .unwrap()
-    }
-
     #[allow(clippy::format_push_string)]
     fn generate_command<'a>(
         output: &mut String,
@@ -855,7 +841,7 @@ mod _gen {
                 if let Some(about) = subcommand.get_about() {
                     output.push_str(&format!(
                         "<dd>{}</dd>\n",
-                        markdown_to_html(&about.to_string())
+                        markdown::to_html(&about.to_string())
                     ));
                 }
             }
@@ -893,7 +879,7 @@ mod _gen {
                     output.push_str("</dt>");
                     if let Some(help) = arg.get_long_help().or_else(|| arg.get_help()) {
                         output.push_str("<dd>");
-                        output.push_str(&format!("{}\n", markdown_to_html(&help.to_string())));
+                        output.push_str(&format!("{}\n", markdown::to_html(&help.to_string())));
                         output.push_str("</dd>");
                     }
                 }
@@ -946,7 +932,7 @@ mod _gen {
                     output.push_str("</dt>");
                     if let Some(help) = opt.get_long_help().or_else(|| opt.get_help()) {
                         output.push_str("<dd>");
-                        output.push_str(&format!("{}\n", markdown_to_html(&help.to_string())));
+                        output.push_str(&format!("{}\n", markdown::to_html(&help.to_string())));
                         emit_env_option(opt, output);
                         emit_default_option(opt, output);
                         emit_possible_options(opt, output);
@@ -975,7 +961,7 @@ mod _gen {
             return;
         }
         if let Some(env) = opt.get_env() {
-            output.push_str(&markdown_to_html(&format!(
+            output.push_str(&markdown::to_html(&format!(
                 "May also be set with the `{}` environment variable.",
                 env.to_string_lossy()
             )));
@@ -996,7 +982,7 @@ mod _gen {
                     .map(|s| s.to_string_lossy())
                     .join(",")
             );
-            output.push_str(&markdown_to_html(&value));
+            output.push_str(&markdown::to_html(&value));
         }
     }
 
@@ -1022,7 +1008,7 @@ mod _gen {
                     .collect_vec()
                     .join("\n"),
             );
-            output.push_str(&markdown_to_html(&value));
+            output.push_str(&markdown::to_html(&value));
         }
     }
 
@@ -1047,30 +1033,6 @@ mod _gen {
                     if current == reference_string {
                         anstream::println!("Up-to-date: {filename}");
                     } else {
-                        let new_path = PathBuf::from(ROOT_DIR)
-                            .join("target")
-                            .join("cli-reference-new.md");
-                        fs_err::write(&new_path, reference_string.as_bytes())?;
-                        std::process::Command::new("git")
-                            .args(["diff", "--no-index", "--color", "--"])
-                            .arg(&reference_path)
-                            .arg(&new_path)
-                            .status()
-                            .ok();
-                        let mut count = 100;
-                        for (i, (a, b)) in current.chars().zip(reference_string.chars()).enumerate()
-                        {
-                            if a != b && count > 0 {
-                                anstream::println!(
-                                    "Found difference at byte {}: expected {:?}, found {:?}",
-                                    i,
-                                    a,
-                                    b
-                                );
-                                count -= 1;
-                            }
-                        }
-
                         let comparison = StrComparison::new(&current, &reference_string);
                         bail!(
                             "{filename} changed, please run `mise run generate` to update:\n{comparison}"
@@ -1078,7 +1040,7 @@ mod _gen {
                     }
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    bail!("{filename} not found, please run `mise run generate` to update");
+                    bail!("{filename} not found, please run `mise run generate` to generate");
                 }
                 Err(err) => {
                     bail!("{filename} changed, please run `mise run generate` to update:\n{err}");

@@ -2211,7 +2211,7 @@ mod _gen {
                     }
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    bail!("{filename} not found, please run `mise run generate` to update");
+                    bail!("{filename} not found, please run `mise run generate` to generate");
                 }
                 Err(err) => {
                     bail!("{filename} changed, please run `mise run generate` to update:\n{err}");

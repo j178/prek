@@ -36,7 +36,7 @@
 
 - Integration tests use `TestContext` helpers in `crates/prek/tests/common/mod.rs` and snapshot macros like `cmd_snapshot!`.
 - Tests often normalize paths with regex filters; prefer using `context.filters()` for stable snapshots.
-- DO NOT run whole-workspace tests in CI; they are slow. Use `cargo test -p prek --test <unit-test> -- --exact` for unit tests and `cargo test -p prek --test <test> -- <filter>` for integration tests.
+- DO NOT run whole-workspace tests in CI; they are slow. Use `cargo test -p prek --lib <unit-test> -- --exact` (or `cargo test -p prek --bin prek <unit-test> -- --exact`) for unit tests and `cargo test -p prek --test <test> -- <filter>` for integration tests.
 - Use `cargo insta review --accept` to accept snapshot changes after running tests locally.
 
 ## Docs + generated artifacts
