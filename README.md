@@ -336,6 +336,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [MoonshotAI/kimi-cli](https://github.com/MoonshotAI/kimi-cli/pull/535)
 - [simple-icons/simple-icons](https://github.com/simple-icons/simple-icons/pull/14245)
 - [ast-grep/ast-grep](https://github.com/ast-grep/ast-grep.github.io/commit/e30818144b2967a7f9172c8cf2f4596bba219bf5)
+- [commitizen-tools/commitizen](https://github.com/commitizen-tools/commitizen)
 
 <!-- why:end -->
 
