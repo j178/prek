@@ -683,3 +683,171 @@ impl InstallInfo {
             && hook.language_request.satisfied_by(self)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+    use std::sync::Arc;
+
+    use anyhow::Result;
+    use prek_consts::CONFIG_FILE;
+    use rustc_hash::FxHashMap;
+
+    use crate::config::{HookOptions, HookSpec, Language, RemoteHook};
+    use crate::workspace::Project;
+
+    use super::{HookBuilder, Repo};
+
+    #[tokio::test]
+    async fn hook_builder_build_fills_and_merges_attributes() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join(CONFIG_FILE);
+
+        // Ensure `combine()` can supply defaults for stages and language_version.
+        fs_err::write(
+            &config_path,
+            indoc::indoc! {r"
+                repos: []
+                default_language_version:
+                  python: python3.12
+                default_stages: [manual]
+            "},
+        )?;
+
+        let project = Arc::new(Project::from_config_file(
+            Cow::Borrowed(&config_path),
+            None,
+        )?);
+        let repo = Arc::new(Repo::Local { hooks: vec![] });
+
+        // Base hook spec (e.g. from a manifest): minimal options, one env var.
+        let mut base_env = FxHashMap::default();
+        base_env.insert("BASE".to_string(), "1".to_string());
+
+        let hook_spec = HookSpec {
+            id: "test-hook".to_string(),
+            name: "original-name".to_string(),
+            entry: "python3 -c 'print(1)'".to_string(),
+            language: Language::Python,
+            priority: None,
+            options: HookOptions {
+                env: Some(base_env),
+                ..Default::default()
+            },
+        };
+
+        let mut builder = HookBuilder::new(project.clone(), repo, hook_spec, 7);
+
+        // Project config overrides (e.g. from `.pre-commit-config.yaml`).
+        let mut override_env = FxHashMap::default();
+        override_env.insert("OVERRIDE".to_string(), "2".to_string());
+
+        let hook_override = RemoteHook {
+            id: "test-hook".to_string(),
+            name: Some("override-name".to_string()),
+            entry: Some("python3 -c 'print(2)'".to_string()),
+            language: None,
+            priority: Some(42),
+            options: HookOptions {
+                alias: Some("alias-1".to_string()),
+                types: Some(vec!["text".to_string()]),
+                args: Some(vec!["--flag".to_string()]),
+                env: Some(override_env),
+                always_run: Some(true),
+                pass_filenames: Some(false),
+                verbose: Some(true),
+                description: Some("desc".to_string()),
+                ..Default::default()
+            },
+        };
+
+        builder.update(&hook_override);
+        builder.combine(project.config());
+
+        let hook = builder.build().await?;
+
+        insta::assert_debug_snapshot!(hook, @r#"
+        Hook {
+            project: Project {
+                relative_path: "",
+                idx: 0,
+                config: Config {
+                    repos: [],
+                    default_install_hook_types: None,
+                    default_language_version: Some(
+                        {
+                            Python: "python3.12",
+                        },
+                    ),
+                    default_stages: Some(
+                        [
+                            Manual,
+                        ],
+                    ),
+                    files: None,
+                    exclude: None,
+                    fail_fast: None,
+                    minimum_prek_version: None,
+                    orphan: None,
+                    _unused_keys: {},
+                },
+                repos: [],
+            },
+            repo: Local {
+                hooks: [],
+            },
+            dependencies: OnceLock(
+                <uninit>,
+            ),
+            idx: 7,
+            id: "test-hook",
+            name: "override-name",
+            entry: Entry {
+                hook: "test-hook",
+                entry: "python3 -c 'print(2)'",
+            },
+            language: Python,
+            alias: "alias-1",
+            files: None,
+            exclude: None,
+            types: [
+                "text",
+            ],
+            types_or: [],
+            exclude_types: [],
+            additional_dependencies: {},
+            args: [
+                "--flag",
+            ],
+            env: {
+                "BASE": "1",
+                "OVERRIDE": "2",
+            },
+            always_run: true,
+            fail_fast: false,
+            pass_filenames: false,
+            description: Some(
+                "desc",
+            ),
+            language_request: Python(
+                MajorMinor(
+                    3,
+                    12,
+                ),
+            ),
+            log_file: None,
+            require_serial: false,
+            stages: Some(
+                {
+                    Manual,
+                },
+            ),
+            verbose: true,
+            minimum_prek_version: None,
+            priority: 42,
+        }
+        "#);
+
+        Ok(())
+    }
+}

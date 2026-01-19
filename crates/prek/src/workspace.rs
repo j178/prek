@@ -59,7 +59,7 @@ pub(crate) trait HookInitReporter {
     fn on_complete(&self);
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct Project {
     /// The absolute path of the project directory.
     root: PathBuf,
@@ -71,6 +71,17 @@ pub(crate) struct Project {
     idx: usize,
     config: Config,
     repos: Vec<Arc<Repo>>,
+}
+
+impl std::fmt::Debug for Project {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Project")
+            .field("relative_path", &self.relative_path)
+            .field("idx", &self.idx)
+            .field("config", &self.config)
+            .field("repos", &self.repos)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Display for Project {
