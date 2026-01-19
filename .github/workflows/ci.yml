@@ -22,6 +22,11 @@ env:
   RUBY_VERSION: "3.4"
   LUA_VERSION: "5.4"
   LUAROCKS_VERSION: "3.12.2"
+  # Cargo env vars
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
 
 jobs:
   plan:
@@ -218,7 +223,6 @@ jobs:
         run: |
           echo "::group::Test install uv with auto select"
           cargo llvm-cov nextest \
-            --color always \
             --cargo-profile fast-build \
             --no-report \
             -E 'binary_id(prek::run) and test(run_basic)'
@@ -228,7 +232,6 @@ jobs:
             echo "::group::Test install uv from $source"
             export PREK_UV_SOURCE=$source
             cargo llvm-cov nextest \
-              --color always \
               --cargo-profile fast-build \
               --no-report \
               -E 'binary_id(prek::run) and test(run_basic)'
@@ -314,7 +317,6 @@ jobs:
       - name: "Cargo test"
         run: |
           cargo llvm-cov nextest \
-            --color always \
             --no-report \
             --workspace \
             --cargo-profile fast-build \
@@ -399,7 +401,6 @@ jobs:
       - name: "Cargo test"
         run: |
           cargo nextest run \
-            --color always \
             --workspace \
             --cargo-profile fast-build \
             --features schemars \
@@ -452,7 +453,6 @@ jobs:
         run: |
           cargo llvm-cov nextest-archive `
             --no-report `
-            --color always `
             --workspace `
             --features schemars `
             --cargo-profile fast-build `
