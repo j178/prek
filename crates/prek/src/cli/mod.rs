@@ -1027,11 +1027,22 @@ mod _gen {
             Mode::DryRun => {
                 anstream::println!("{reference_string}");
             }
-            Mode::Check => match fs_err::read_to_string(reference_path) {
+            Mode::Check => match fs_err::read_to_string(&reference_path) {
                 Ok(current) => {
                     if current == reference_string {
                         anstream::println!("Up-to-date: {filename}");
                     } else {
+                        let new_path = PathBuf::from(ROOT_DIR)
+                            .join("target")
+                            .join("cli-reference-new.md");
+                        fs_err::write(&new_path, reference_string.as_bytes())?;
+                        std::process::Command::new("git")
+                            .args(["diff", "--no-index", "--color", "--"])
+                            .arg(&reference_path)
+                            .arg(&new_path)
+                            .status()
+                            .ok();
+
                         let comparison = StrComparison::new(&current, &reference_string);
                         bail!(
                             "{filename} changed, please run `mise run generate` to update:\n{comparison}"
