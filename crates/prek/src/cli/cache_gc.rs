@@ -26,7 +26,7 @@ pub(crate) async fn cache_gc(
         return Ok(ExitStatus::Success);
     }
 
-    let mut kept_configs = FxHashSet::default();
+    let mut kept_configs: FxHashSet<&Path> = FxHashSet::default();
     let mut used_repo_keys: FxHashSet<String> = FxHashSet::default();
     let mut used_hook_env_dirs: FxHashSet<String> = FxHashSet::default();
     let mut used_tools: FxHashSet<ToolBucket> = FxHashSet::default();
@@ -51,12 +51,12 @@ pub(crate) async fn cache_gc(
                 }
                 err => {
                     warn!(path = %config_path.display(), %err, "Failed to parse config, skipping for GC");
-                    kept_configs.insert(config_path.clone());
+                    kept_configs.insert(config_path);
                     continue;
                 }
             },
         };
-        kept_configs.insert(config_path.clone());
+        kept_configs.insert(config_path);
 
         used_env_keys.extend(hook_env_keys_from_config(store, &config));
 
@@ -91,6 +91,7 @@ pub(crate) async fn cache_gc(
 
     // Update tracking file to drop configs that no longer exist.
     if kept_configs.len() != tracked_configs.len() {
+        let kept_configs = kept_configs.into_iter().map(Path::to_path_buf).collect();
         store.update_tracked_configs(&kept_configs)?;
     }
 
