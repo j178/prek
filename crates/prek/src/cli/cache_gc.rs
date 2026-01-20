@@ -22,7 +22,7 @@ pub(crate) async fn cache_gc(
 
     let tracked_configs = store.tracked_configs()?;
     if tracked_configs.is_empty() {
-        writeln!(printer.stdout(), "Nothing to clean")?;
+        writeln!(printer.stdout(), "{}", "Nothing to clean".bold())?;
         return Ok(ExitStatus::Success);
     }
 
@@ -113,7 +113,7 @@ pub(crate) async fn cache_gc(
     let (removed_cache, removed_cache_names) =
         sweep_dir_by_name(&cache_root, &used_cache_names, dry_run, verbose).await?;
 
-    // Always clear scratch and patches; they are temporary workspaces.
+    // Always clear scratch, as it is only temporary data.
     if !dry_run {
         let _ = remove_dir_if_exists(&store.scratch_path()).await?;
     }
@@ -133,7 +133,7 @@ pub(crate) async fn cache_gc(
         removed.push(format!("{} tools", removed_tools.cyan().bold()));
     }
     if removed_cache > 0 {
-        removed.push(format!("{} caches", removed_cache.cyan().bold()));
+        removed.push(format!("{} cache entries", removed_cache.cyan().bold()));
     }
 
     let verb = if dry_run { "Would remove" } else { "Removed" };
@@ -159,7 +159,13 @@ pub(crate) async fn cache_gc(
                 print_removed_details(printer, verb, removed_tools, "tools", removed_tool_names)?;
             }
             if removed_cache > 0 {
-                print_removed_details(printer, verb, removed_cache, "caches", removed_cache_names)?;
+                print_removed_details(
+                    printer,
+                    verb,
+                    removed_cache,
+                    "cache entries",
+                    removed_cache_names,
+                )?;
             }
         }
     }
@@ -174,7 +180,7 @@ fn print_removed_details(
     title: &'static str,
     mut names: Vec<String>,
 ) -> Result<()> {
-    names.sort();
+    names.sort_unstable();
     writeln!(
         printer.stdout(),
         "\n{}:",

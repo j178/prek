@@ -90,64 +90,6 @@ impl HookSpec {
     }
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct HookEnvKey {
-    pub(crate) language: Language,
-    pub(crate) dependencies: FxHashSet<String>,
-    pub(crate) language_request: LanguageRequest,
-}
-
-impl HookEnvKey {
-    /// Compute the key used to match an installed hook environment.
-    ///
-    /// Returns `Ok(None)` if this hook does not install an environment.
-    pub(crate) fn from_hook_spec(
-        config: &Config,
-        mut hook_spec: HookSpec,
-        remote_repo_dependency: Option<&str>,
-    ) -> Result<Option<Self>> {
-        let language = hook_spec.language;
-        if !language.supports_install_env() {
-            return Ok(None);
-        }
-
-        hook_spec.apply_project_defaults(config);
-        hook_spec.options.language_version.get_or_insert_default();
-        hook_spec
-            .options
-            .additional_dependencies
-            .get_or_insert_default();
-
-        let request = hook_spec.options.language_version.as_deref().unwrap_or("");
-        let language_request = LanguageRequest::parse(language, request).with_context(|| {
-            format!(
-                "Invalid language_version `{request}` for hook `{}`",
-                hook_spec.id
-            )
-        })?;
-
-        let mut dependencies: FxHashSet<String> = FxHashSet::default();
-        if let Some(deps) = &hook_spec.options.additional_dependencies {
-            dependencies.extend(deps.iter().cloned());
-        }
-        if let Some(dep) = remote_repo_dependency {
-            dependencies.insert(dep.to_string());
-        }
-
-        Ok(Some(Self {
-            language,
-            dependencies,
-            language_request,
-        }))
-    }
-
-    pub(crate) fn matches_install_info(&self, info: &InstallInfo) -> bool {
-        info.language == self.language
-            && info.dependencies == self.dependencies
-            && self.language_request.satisfied_by(info)
-    }
-}
-
 impl From<ManifestHook> for HookSpec {
     fn from(hook: ManifestHook) -> Self {
         Self {
@@ -310,18 +252,6 @@ impl HookBuilder {
             hook_spec,
             idx,
         }
-    }
-
-    /// Update the hook from the project level hook configuration.
-    pub(crate) fn update(&mut self, config: &RemoteHook) -> &mut Self {
-        self.hook_spec.apply_remote_hook_overrides(config);
-
-        self
-    }
-
-    /// Combine the hook configuration with the project level configuration.
-    pub(crate) fn combine(&mut self, config: &Config) {
-        self.hook_spec.apply_project_defaults(config);
     }
 
     /// Fill in the default values for the hook configuration.
@@ -661,6 +591,64 @@ impl Hook {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct HookEnvKey {
+    pub(crate) language: Language,
+    pub(crate) dependencies: FxHashSet<String>,
+    pub(crate) language_request: LanguageRequest,
+}
+
+impl HookEnvKey {
+    /// Compute the key used to match an installed hook environment.
+    ///
+    /// Returns `Ok(None)` if this hook does not install an environment.
+    pub(crate) fn from_hook_spec(
+        config: &Config,
+        mut hook_spec: HookSpec,
+        remote_repo_dependency: Option<&str>,
+    ) -> Result<Option<Self>> {
+        let language = hook_spec.language;
+        if !language.supports_install_env() {
+            return Ok(None);
+        }
+
+        hook_spec.apply_project_defaults(config);
+        hook_spec.options.language_version.get_or_insert_default();
+        hook_spec
+            .options
+            .additional_dependencies
+            .get_or_insert_default();
+
+        let request = hook_spec.options.language_version.as_deref().unwrap_or("");
+        let language_request = LanguageRequest::parse(language, request).with_context(|| {
+            format!(
+                "Invalid language_version `{request}` for hook `{}`",
+                hook_spec.id
+            )
+        })?;
+
+        let mut dependencies: FxHashSet<String> = FxHashSet::default();
+        if let Some(deps) = &hook_spec.options.additional_dependencies {
+            dependencies.extend(deps.iter().cloned());
+        }
+        if let Some(dep) = remote_repo_dependency {
+            dependencies.insert(dep.to_string());
+        }
+
+        Ok(Some(Self {
+            language,
+            dependencies,
+            language_request,
+        }))
+    }
+
+    pub(crate) fn matches_install_info(&self, info: &InstallInfo) -> bool {
+        info.language == self.language
+            && info.dependencies == self.dependencies
+            && self.language_request.satisfied_by(info)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub(crate) enum InstalledHook {
     Installed {
         hook: Arc<Hook>,
@@ -687,7 +675,7 @@ impl Display for InstalledHook {
     }
 }
 
-const HOOK_MARKER: &str = ".prek-hook.json";
+pub(crate) const HOOK_MARKER: &str = ".prek-hook.json";
 
 impl InstalledHook {
     /// Get the path to the environment where the hook is installed.
@@ -855,7 +843,7 @@ mod tests {
         let mut base_env = FxHashMap::default();
         base_env.insert("BASE".to_string(), "1".to_string());
 
-        let hook_spec = HookSpec {
+        let mut hook_spec = HookSpec {
             id: "test-hook".to_string(),
             name: "original-name".to_string(),
             entry: "python3 -c 'print(1)'".to_string(),
@@ -866,8 +854,6 @@ mod tests {
                 ..Default::default()
             },
         };
-
-        let mut builder = HookBuilder::new(project.clone(), repo, hook_spec, 7);
 
         // Project config overrides (e.g. from `.pre-commit-config.yaml`).
         let mut override_env = FxHashMap::default();
@@ -892,9 +878,10 @@ mod tests {
             },
         };
 
-        builder.update(&hook_override);
-        builder.combine(project.config());
+        hook_spec.apply_remote_hook_overrides(&hook_override);
+        hook_spec.apply_project_defaults(project.config());
 
+        let builder = HookBuilder::new(project.clone(), repo, hook_spec, 7);
         let hook = builder.build().await?;
 
         insta::assert_debug_snapshot!(hook, @r#"

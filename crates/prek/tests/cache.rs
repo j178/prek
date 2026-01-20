@@ -188,7 +188,7 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Removed 1 repos, 2 hook envs, 1 tools, 1 caches
+    Removed 1 repos, 2 hook envs, 1 tools, 1 cache entries
 
     ----- stderr -----
     ");
@@ -244,7 +244,7 @@ fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Removed 1 repos, 1 hook envs, 1 tools, 1 caches
+    Removed 1 repos, 1 hook envs, 1 tools, 1 cache entries
 
     ----- stderr -----
     ");
@@ -285,7 +285,7 @@ fn cache_gc_keeps_tracked_config_on_parse_error() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Removed 1 repos, 1 hook envs, 1 tools, 1 caches
+    Removed 1 repos, 1 hook envs, 1 tools, 1 cache entries
 
     ----- stderr -----
     ");
@@ -322,7 +322,7 @@ fn cache_gc_dry_run_does_not_remove_entries() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Would remove 1 repos, 1 hook envs, 1 tools, 1 caches
+    Would remove 1 repos, 1 hook envs, 1 tools, 1 cache entries
 
     ----- stderr -----
     ");

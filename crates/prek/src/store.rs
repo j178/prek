@@ -31,6 +31,8 @@ pub enum Error {
     Serde(#[from] serde_json::Error),
 }
 
+pub(crate) const REPO_MARKER: &str = ".prek-repo.json";
+
 /// A store for managing repos.
 #[derive(Debug)]
 pub struct Store {
@@ -90,7 +92,7 @@ impl Store {
     ) -> Result<PathBuf, Error> {
         // Check if the repo is already cloned.
         let target = self.repo_path(repo);
-        if target.join(".prek-repo.json").try_exists()? {
+        if target.join(REPO_MARKER).try_exists()? {
             return Ok(target);
         }
 
@@ -112,7 +114,7 @@ impl Store {
         fs_err::tokio::rename(temp, &target).await?;
 
         let content = serde_json::to_string_pretty(&repo)?;
-        fs_err::tokio::write(target.join(".prek-repo.json"), content).await?;
+        fs_err::tokio::write(target.join(REPO_MARKER), content).await?;
 
         if let Some((reporter, progress)) = progress {
             reporter.on_clone_complete(progress);
