@@ -28,6 +28,7 @@ Languages with managed toolchain downloads in prek today:
 
 - [Python](#python)
 - [Node](#node)
+- [Bun](#bun)
 - [Golang](#golang)
 - [Rust](#rust)
 
@@ -36,6 +37,30 @@ Other supported languages rely on system installations and will fail if a matchi
 ## Language details
 
 Below is how prek handles each language (with notes when it differs from pre-commit).
+
+### bun
+
+**Status in prek:** ✅ Supported.
+
+prek installs Bun hooks via `bun install` and runs the configured entry. The repository should contain a `package.json`. `entry` should match a provided bin name or be a Bun command. `additional_dependencies` are supported.
+
+Bun hooks run without needing a pre-installed Bun runtime when toolchain download is available.
+
+#### `language_version`
+
+Supported formats:
+
+- `default` or `system`
+- `bun`, `bun@latest`
+- `bun@1`, `1`
+- `bun@1.1`, `1.1`
+- `bun@1.1.0`, `1.1.0`
+- Semver ranges like `>=1.0, <2.0`
+- Absolute path to a Bun executable
+
+!!! note "prek-only"
+
+    Bun language support is a prek extension. pre-commit does not have native `bun` support.
 
 ### conda
 

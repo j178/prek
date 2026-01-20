@@ -299,11 +299,13 @@ pub(crate) enum ToolBucket {
     Go,
     Ruby,
     Rustup,
+    Bun,
 }
 
 impl ToolBucket {
     pub(crate) fn as_str(&self) -> &str {
         match self {
+            ToolBucket::Bun => "bun",
             ToolBucket::Go => "go",
             ToolBucket::Node => "node",
             ToolBucket::Python => "python",

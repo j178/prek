@@ -20,6 +20,9 @@
         "null"
       ],
       "properties": {
+        "bun": {
+          "type": "string"
+        },
         "conda": {
           "type": "string"
         },
@@ -441,6 +444,7 @@
     "Language": {
       "type": "string",
       "enum": [
+        "bun",
         "conda",
         "coursier",
         "dart",

@@ -2741,6 +2741,12 @@ fn system_language_version() {
                 language_version: system
                 entry: go version
                 pass_filenames: false
+              - id: system-bun
+                name: system-bun
+                language: bun
+                language_version: system
+                entry: bun -e 'console.log(`Bun ${Bun.version}`)'
+                pass_filenames: false
    "});
     context.git_add(".");
 
@@ -2750,7 +2756,8 @@ fn system_language_version() {
         context.run()
         .arg("system-node")
         .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
-        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist"), @r"
+        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist")
+        .env(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME, "bun-never-exist"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2766,7 +2773,8 @@ fn system_language_version() {
         context.run()
         .arg("system-go")
         .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
-        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist"), @r"
+        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist")
+        .env(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME, "bun-never-exist"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2777,6 +2785,23 @@ fn system_language_version() {
       caused by: No suitable system Go version found and downloads are disabled
     ");
 
+    cmd_snapshot!(
+        context.filters(),
+        context.run()
+        .arg("system-bun")
+        .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
+        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist")
+        .env(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME, "bun-never-exist"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install hook `system-bun`
+      caused by: Failed to install bun
+      caused by: No suitable system Bun version found and downloads are disabled
+    ");
+
     // When binaries are available, hooks pass.
     cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
@@ -2784,6 +2809,7 @@ fn system_language_version() {
     ----- stdout -----
     system-node..............................................................Passed
     system-go................................................................Passed
+    system-bun...............................................................Passed
 
     ----- stderr -----
     ");

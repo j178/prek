@@ -18,6 +18,7 @@ use crate::identify::parse_shebang;
 use crate::store::Store;
 use crate::{archive, hooks, warn_user_once};
 
+mod bun;
 mod docker;
 mod docker_image;
 mod fail;
@@ -32,6 +33,7 @@ mod script;
 mod system;
 pub mod version;
 
+static BUN: bun::Bun = bun::Bun;
 static DOCKER: docker::Docker = docker::Docker;
 static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
 static FAIL: fail::Fail = fail::Fail;
@@ -97,6 +99,7 @@ impl LanguageImpl for Unimplemented {
 }
 
 // `pre-commit` language support:
+// bun: install requested version, support env, support additional deps
 // conda: only system version, support env, support additional deps
 // coursier: only system version, support env, support additional deps
 // dart: only system version, support env, support additional deps
@@ -122,10 +125,11 @@ impl Language {
     pub fn supported(lang: Language) -> bool {
         matches!(
             lang,
-            Self::Golang
+            Self::Bun
                 | Self::Docker
                 | Self::DockerImage
                 | Self::Fail
+                | Self::Golang
                 | Self::Lua
                 | Self::Node
                 | Self::Pygrep
@@ -150,7 +154,7 @@ impl Language {
     pub fn supports_language_version(self) -> bool {
         matches!(
             self,
-            Self::Python | Self::Node | Self::Golang | Self::Ruby | Self::Rust
+            Self::Bun | Self::Golang | Self::Node | Self::Python | Self::Ruby | Self::Rust
         )
     }
 
@@ -179,6 +183,7 @@ impl Language {
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         match self {
+            Self::Bun => BUN.install(hook, store, reporter).await,
             Self::Docker => DOCKER.install(hook, store, reporter).await,
             Self::DockerImage => DOCKER_IMAGE.install(hook, store, reporter).await,
             Self::Fail => FAIL.install(hook, store, reporter).await,
@@ -197,6 +202,7 @@ impl Language {
 
     pub async fn check_health(&self, info: &InstallInfo) -> Result<()> {
         match self {
+            Self::Bun => BUN.check_health(info).await,
             Self::Docker => DOCKER.check_health(info).await,
             Self::DockerImage => DOCKER_IMAGE.check_health(info).await,
             Self::Fail => FAIL.check_health(info).await,
@@ -244,6 +250,7 @@ impl Language {
         }
 
         match self {
+            Self::Bun => BUN.run(hook, filenames, store, reporter).await,
             Self::Docker => DOCKER.run(hook, filenames, store, reporter).await,
             Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, store, reporter).await,
             Self::Fail => FAIL.run(hook, filenames, store, reporter).await,
