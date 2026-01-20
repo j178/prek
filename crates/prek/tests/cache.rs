@@ -55,13 +55,13 @@ fn cache_gc_verbose_shows_removed_entries() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Removed 1 repos, 1 hook envs ([SIZE])
+    Removed 1 repo, 1 hook env ([SIZE])
 
-    Removed 1 repos:
+    Removed 1 repo:
     - https://github.com/pre-commit/pre-commit-hooks@v1.0.0
       path: [HOME]/repos/deadbeef
 
-    Removed 1 hook envs:
+    Removed 1 hook env:
     - hook-env-dead
       path: [HOME]/hooks/hook-env-dead
 
@@ -197,7 +197,7 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Removed 1 repos, 2 hook envs, 1 tools, 1 cache entries ([SIZE])
+    Removed 1 repo, 2 hook envs, 1 tool, 1 cache entry ([SIZE])
 
     ----- stderr -----
     ");
@@ -208,6 +208,65 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
         .assert(predicates::path::missing());
     home.child("tools/node").assert(predicates::path::missing());
     home.child("cache/go").assert(predicates::path::missing());
+
+    Ok(())
+}
+
+#[test]
+fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
+    let context = TestContext::new();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+            - id: local-python
+              name: Local Python Hook
+              entry: "python -c \"print(1)\""
+              language: python
+    "#});
+
+    let home = context.home_dir();
+
+    // Track the config so GC has something to mark from.
+    let config_path = context.work_dir().child(CONFIG_FILE);
+    write_config_tracking_file(home, &[config_path.path()])?;
+
+    // Seed a "used" python hook env marker so GC can read `.prek-hook.json` and retain the
+    // corresponding Python tool version.
+    let env_dir = home.child("hooks/python-keep");
+    env_dir.create_dir_all()?;
+
+    let py_312 = home.child("tools/python/3.12.0");
+    let py_311 = home.child("tools/python/3.11.0");
+    py_312.create_dir_all()?;
+    py_311.create_dir_all()?;
+
+    // Match logic for local hooks: empty deps + language request is `Any` by default.
+    let marker = json!({
+        "language": "python",
+        "language_version": "3.12.0",
+        "dependencies": [],
+        "env_path": env_dir.path(),
+        "toolchain": py_312.child("bin/python").path(),
+        "extra": {},
+    });
+    env_dir
+        .child(".prek-hook.json")
+        .write_str(&serde_json::to_string_pretty(&marker)?)?;
+
+    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "--dry-run", "-v"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Would remove 1 tool ([SIZE])
+
+    Would remove 1 tool:
+    - python/3.11.0
+      path: [HOME]/tools/python/3.11.0
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }
@@ -269,7 +328,7 @@ fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Removed 1 hook envs ([SIZE])
+    Removed 1 hook env ([SIZE])
 
     ----- stderr -----
     ");
@@ -355,7 +414,7 @@ fn cache_gc_bootstraps_tracking_from_workspace_cache() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Removed 1 repos, 1 hook envs ([SIZE])
+    Removed 1 repo, 1 hook env ([SIZE])
 
     ----- stderr -----
     ");
@@ -396,7 +455,7 @@ fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Removed 1 repos, 1 hook envs, 1 tools, 1 cache entries ([SIZE])
+    Removed 1 repo, 1 hook env, 1 tool, 1 cache entry ([SIZE])
 
     ----- stderr -----
     ");
@@ -437,7 +496,7 @@ fn cache_gc_keeps_tracked_config_on_parse_error() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Removed 1 repos, 1 hook envs, 1 tools, 1 cache entries ([SIZE])
+    Removed 1 repo, 1 hook env, 1 tool, 1 cache entry ([SIZE])
 
     ----- stderr -----
     ");
@@ -474,7 +533,7 @@ fn cache_gc_dry_run_does_not_remove_entries() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Would remove 1 repos, 1 hook envs, 1 tools, 1 cache entries ([SIZE])
+    Would remove 1 repo, 1 hook env, 1 tool, 1 cache entry ([SIZE])
 
     ----- stderr -----
     ");
