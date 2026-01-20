@@ -6,10 +6,10 @@ use std::sync::LazyLock;
 use prek_consts::env_vars::EnvVars;
 
 use crate::hook::{Hook, Repo};
+pub(crate) use crate::hooks::builtin_hooks::BuiltinHooks;
+pub(crate) use crate::hooks::meta_hooks::MetaHooks;
 use crate::hooks::pre_commit_hooks::{PreCommitHooks, is_pre_commit_hooks};
 use crate::store::Store;
-pub(crate) use builtin_hooks::BuiltinHooks;
-pub(crate) use meta_hooks::MetaHooks;
 
 mod builtin_hooks;
 mod meta_hooks;

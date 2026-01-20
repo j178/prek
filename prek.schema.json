@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Config",
+  "title": "prek configuration file format",
   "type": "object",
   "properties": {
     "default_install_hook_types": {
@@ -150,7 +150,7 @@
   ],
   "definitions": {
     "BuiltinHook": {
-      "description": "A builtin hook predefined in prek.\n\nOnly predefined ids are allowed.\n`entry` is not allowed, and `language` may only be `system`.",
+      "description": "A builtin hook predefined in prek.",
       "type": "object",
       "properties": {
         "additional_dependencies": {
@@ -194,7 +194,10 @@
             "null"
           ]
         },
-        "entry": false,
+        "entry": {
+          "description": "Entry is not allowed for predefined hooks.",
+          "const": false
+        },
         "env": {
           "description": "Environment variables to set for the hook.",
           "type": [
@@ -246,26 +249,7 @@
           ]
         },
         "id": {
-          "description": "The id of the hook.",
-          "type": "string",
-          "enum": [
-            "check-added-large-files",
-            "check-case-conflict",
-            "check-executables-have-shebangs",
-            "check-json",
-            "check-json5",
-            "check-merge-conflict",
-            "check-symlinks",
-            "check-toml",
-            "check-xml",
-            "check-yaml",
-            "detect-private-key",
-            "end-of-file-fixer",
-            "fix-byte-order-marker",
-            "mixed-line-ending",
-            "no-commit-to-branch",
-            "trailing-whitespace"
-          ]
+          "$ref": "#/definitions/BuiltinHooks"
         },
         "language": {
           "anyOf": [
@@ -376,6 +360,27 @@
       "additionalProperties": true,
       "required": [
         "id"
+      ]
+    },
+    "BuiltinHooks": {
+      "type": "string",
+      "enum": [
+        "check-added-large-files",
+        "check-case-conflict",
+        "check-executables-have-shebangs",
+        "check-json",
+        "check-json5",
+        "check-merge-conflict",
+        "check-symlinks",
+        "check-toml",
+        "check-xml",
+        "check-yaml",
+        "detect-private-key",
+        "end-of-file-fixer",
+        "fix-byte-order-marker",
+        "mixed-line-ending",
+        "no-commit-to-branch",
+        "trailing-whitespace"
       ]
     },
     "BuiltinRepo": {
@@ -706,7 +711,7 @@
       ]
     },
     "MetaHook": {
-      "description": "A meta hook predefined in pre-commit.\n\nOnly a few predefined ids are allowed.\n`entry` is not allowed, and `language` may only be `system`.",
+      "description": "A meta hook predefined in prek.",
       "type": "object",
       "properties": {
         "additional_dependencies": {
@@ -750,7 +755,10 @@
             "null"
           ]
         },
-        "entry": false,
+        "entry": {
+          "description": "Entry is not allowed for predefined hooks.",
+          "const": false
+        },
         "env": {
           "description": "Environment variables to set for the hook.",
           "type": [
@@ -802,13 +810,7 @@
           ]
         },
         "id": {
-          "description": "The id of the hook.",
-          "type": "string",
-          "enum": [
-            "check-hooks-apply",
-            "check-useless-excludes",
-            "identity"
-          ]
+          "$ref": "#/definitions/MetaHooks"
         },
         "language": {
           "anyOf": [
@@ -919,6 +921,14 @@
       "additionalProperties": true,
       "required": [
         "id"
+      ]
+    },
+    "MetaHooks": {
+      "type": "string",
+      "enum": [
+        "check-hooks-apply",
+        "check-useless-excludes",
+        "identity"
       ]
     },
     "MetaRepo": {

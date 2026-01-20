@@ -672,69 +672,44 @@ impl TryFrom<RemoteHook> for BuiltinHook {
 }
 
 #[cfg(feature = "schemars")]
-fn predefined_hook_id_enum_schema(description: &str, allowed_ids: &[String]) -> serde_json::Value {
-    serde_json::json!({
-        "description": description,
-        "type": "string",
-        "enum": allowed_ids,
-    })
-}
-
-#[cfg(feature = "schemars")]
-fn predefined_hook_language_system_schema(description: &str) -> serde_json::Value {
-    serde_json::json!({
-        "anyOf": [
-            {
-                "description": description,
-                "type": "string",
-                "enum": ["system"],
-            },
-            { "type": "null" }
-        ]
-    })
-}
-
-#[cfg(feature = "schemars")]
-fn value_enum_names<T: clap::ValueEnum>() -> Vec<String> {
-    <T as clap::ValueEnum>::value_variants()
-        .iter()
-        .filter_map(|variant| {
-            clap::ValueEnum::to_possible_value(variant).map(|pv| pv.get_name().to_string())
-        })
-        .collect()
-}
-
-#[cfg(feature = "schemars")]
 fn predefined_hook_schema(
     schema_gen: &mut schemars::SchemaGenerator,
     description: &str,
-    allowed_ids: &[String],
+    id_schema: schemars::Schema,
 ) -> schemars::Schema {
     let mut schema = <RemoteHook as schemars::JsonSchema>::json_schema(schema_gen);
 
     let root = schema.ensure_object();
-    root.insert(
-        "description".to_string(),
-        serde_json::Value::String(description.to_string()),
-    );
+    root.insert("description".to_string(), serde_json::json!(description));
+    root.insert("required".to_string(), serde_json::json!(["id"]));
 
     let properties = root
         .get_mut("properties")
         .and_then(serde_json::Value::as_object_mut);
 
     if let Some(properties) = properties {
-        properties.insert(
-            "id".to_string(),
-            predefined_hook_id_enum_schema("The id of the hook.", allowed_ids),
-        );
+        properties.insert("id".to_string(), id_schema.into());
         properties.insert(
             "language".to_string(),
-            predefined_hook_language_system_schema(
-                "Language must be `system` for predefined hooks (or omitted).",
-            ),
+            serde_json::json!({
+                "anyOf": [
+                    {
+                        "type": "string",
+                        "enum": ["system"],
+                        "description": "Language must be `system` for predefined hooks (or omitted).",
+                    },
+                    { "type": "null" }
+                ]
+            })
         );
         // `entry` is not allowed for predefined hooks.
-        properties.insert("entry".to_string(), serde_json::json!(false));
+        properties.insert(
+            "entry".to_string(),
+            serde_json::json!({
+                "const": false,
+                "description": "Entry is not allowed for predefined hooks.",
+            }),
+        );
     }
 
     schema
@@ -746,17 +721,11 @@ impl schemars::JsonSchema for MetaHook {
         Cow::Borrowed("MetaHook")
     }
 
-    fn schema_id() -> Cow<'static, str> {
-        concat!(module_path!(), "::MetaHook").into()
-    }
-
     fn json_schema(schema_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        let allowed_ids = value_enum_names::<crate::hooks::MetaHooks>();
-        predefined_hook_schema(
-            schema_gen,
-            "A meta hook predefined in pre-commit.\n\nOnly a few predefined ids are allowed.\n`entry` is not allowed, and `language` may only be `system`.",
-            &allowed_ids,
-        )
+        use crate::hooks::MetaHooks;
+
+        let id_schema = schema_gen.subschema_for::<MetaHooks>();
+        predefined_hook_schema(schema_gen, "A meta hook predefined in prek.", id_schema)
     }
 }
 
@@ -766,17 +735,11 @@ impl schemars::JsonSchema for BuiltinHook {
         Cow::Borrowed("BuiltinHook")
     }
 
-    fn schema_id() -> Cow<'static, str> {
-        concat!(module_path!(), "::BuiltinHook").into()
-    }
+    fn json_schema(r#gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        use crate::hooks::BuiltinHooks;
 
-    fn json_schema(schema_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        let allowed_ids = value_enum_names::<crate::hooks::BuiltinHooks>();
-        predefined_hook_schema(
-            schema_gen,
-            "A builtin hook predefined in prek.\n\nOnly predefined ids are allowed.\n`entry` is not allowed, and `language` may only be `system`.",
-            &allowed_ids,
-        )
+        let id_schema = r#gen.subschema_for::<BuiltinHooks>();
+        predefined_hook_schema(r#gen, "A builtin hook predefined in prek.", id_schema)
     }
 }
 
@@ -954,6 +917,10 @@ impl TryFrom<serde_json::Value> for Repo {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(title = "prek configuration file format")
+)]
 pub(crate) struct Config {
     pub repos: Vec<Repo>,
     /// A list of `--hook-types` which will be used by default when running `prek install`.

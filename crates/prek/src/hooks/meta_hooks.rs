@@ -18,8 +18,9 @@ use crate::workspace::Project;
 // When matching files (files or exclude), we need to match against the filenames
 // relative to the project root.
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, clap::ValueEnum)]
-#[clap(rename_all = "kebab-case")]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(rename_all = "kebab-case"))]
 pub(crate) enum MetaHooks {
     CheckHooksApply,
     CheckUselessExcludes,
