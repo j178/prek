@@ -163,6 +163,7 @@ impl TryFrom<FilePatternWire> for FilePattern {
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum Language {
+    Bun,
     Conda,
     Coursier,
     Dart,
@@ -190,6 +191,7 @@ pub enum Language {
 impl Language {
     pub fn as_str(&self) -> &str {
         match self {
+            Self::Bun => "bun",
             Self::Conda => "conda",
             Self::Coursier => "coursier",
             Self::Dart => "dart",
