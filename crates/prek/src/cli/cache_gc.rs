@@ -1,4 +1,6 @@
 use std::fmt::Write;
+use std::fmt::{Display, Formatter};
+use std::ops::AddAssign;
 use std::path::Path;
 
 use anyhow::Result;
@@ -7,10 +9,90 @@ use rustc_hash::FxHashSet;
 use tracing::{debug, trace, warn};
 
 use crate::cli::ExitStatus;
+use crate::cli::cache_size::{dir_size_bytes, human_readable_bytes};
 use crate::config::{self, Error as ConfigError, Language, Repo as ConfigRepo, load_config};
 use crate::hook::{HookEnvKey, HookSpec, Repo as HookRepo};
 use crate::printer::Printer;
 use crate::store::{CacheBucket, Store, ToolBucket};
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+enum RemovalKind {
+    Repos,
+    HookEnvs,
+    Tools,
+    CacheEntries,
+}
+
+impl RemovalKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            RemovalKind::Repos => "repos",
+            RemovalKind::HookEnvs => "hook envs",
+            RemovalKind::Tools => "tools",
+            RemovalKind::CacheEntries => "cache entries",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Removal {
+    kind: RemovalKind,
+    count: usize,
+    bytes: u64,
+    names: Vec<String>,
+}
+
+impl Removal {
+    fn new(kind: RemovalKind) -> Self {
+        Self {
+            kind,
+            count: 0,
+            bytes: 0,
+            names: Vec::new(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+}
+
+impl Display for Removal {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {}", self.count.cyan().bold(), self.kind.as_str())
+    }
+}
+
+#[derive(Debug, Default)]
+struct RemovalSummary {
+    parts: Vec<String>,
+    count: usize,
+    bytes: u64,
+}
+
+impl RemovalSummary {
+    fn is_empty(&self) -> bool {
+        self.parts.is_empty()
+    }
+
+    fn joined(&self) -> String {
+        self.parts.join(", ")
+    }
+
+    fn total_bytes(&self) -> u64 {
+        self.bytes
+    }
+}
+
+impl AddAssign<&Removal> for RemovalSummary {
+    fn add_assign(&mut self, rhs: &Removal) {
+        if rhs.count > 0 {
+            self.parts.push(rhs.to_string());
+        }
+        self.count += rhs.count;
+        self.bytes = self.bytes.saturating_add(rhs.bytes);
+    }
+}
 
 pub(crate) async fn cache_gc(
     store: &Store,
@@ -95,99 +177,100 @@ pub(crate) async fn cache_gc(
         store.update_tracked_configs(&kept_configs)?;
     }
 
-    let (removed_repos, removed_repo_names) =
-        sweep_dir_by_name(&store.repos_dir(), &used_repo_keys, dry_run, verbose).await?;
-    let (removed_hooks, removed_hook_names) =
-        sweep_dir_by_name(&store.hooks_dir(), &used_hook_env_dirs, dry_run, verbose).await?;
+    // Sweep repos/<hash>
+    let removed_repos = sweep_dir_by_name(
+        RemovalKind::Repos,
+        &store.repos_dir(),
+        &used_repo_keys,
+        dry_run,
+        verbose,
+    )?;
+
+    // Sweep hooks/<hash>
+    let removed_hooks = sweep_dir_by_name(
+        RemovalKind::HookEnvs,
+        &store.hooks_dir(),
+        &used_hook_env_dirs,
+        dry_run,
+        verbose,
+    )?;
 
     // Sweep tools/<bucket>
     let tools_root = store.tools_dir();
     let used_tool_names: FxHashSet<String> =
         used_tools.iter().map(|t| t.as_str().to_string()).collect();
-    let (removed_tools, removed_tool_names) =
-        sweep_dir_by_name(&tools_root, &used_tool_names, dry_run, verbose).await?;
+    let removed_tools = sweep_dir_by_name(
+        RemovalKind::Tools,
+        &tools_root,
+        &used_tool_names,
+        dry_run,
+        verbose,
+    )?;
 
     // Sweep cache/<bucket>
     let cache_root = store.cache_dir();
     let used_cache_names: FxHashSet<String> =
         used_cache.iter().map(|c| c.as_str().to_string()).collect();
-    let (removed_cache, removed_cache_names) =
-        sweep_dir_by_name(&cache_root, &used_cache_names, dry_run, verbose).await?;
+    let removed_cache = sweep_dir_by_name(
+        RemovalKind::CacheEntries,
+        &cache_root,
+        &used_cache_names,
+        dry_run,
+        verbose,
+    )?;
 
     // Always clear scratch, as it is only temporary data.
     if !dry_run {
-        let _ = remove_dir_if_exists(&store.scratch_path()).await?;
+        let _ = fs_err::remove_dir_all(store.scratch_path());
     }
     // NOTE: Do not clear `patches/` here. It can contain user-important temporary patches.
     // A future enhancement could implement a safer cleanup strategy (e.g. GC patches older
     // than a configurable age, or only remove patches known to be orphaned).
-    // let _ = remove_dir_if_exists(&store.patches_dir()).await?;
+    // let _ = fs_err::remove_dir_all(store.patches_dir())?;
 
-    let mut removed = Vec::new();
-    if removed_repos > 0 {
-        removed.push(format!("{} repos", removed_repos.cyan().bold()));
-    }
-    if removed_hooks > 0 {
-        removed.push(format!("{} hook envs", removed_hooks.cyan().bold()));
-    }
-    if removed_tools > 0 {
-        removed.push(format!("{} tools", removed_tools.cyan().bold()));
-    }
-    if removed_cache > 0 {
-        removed.push(format!("{} cache entries", removed_cache.cyan().bold()));
-    }
+    let mut removed = RemovalSummary::default();
+    removed += &removed_repos;
+    removed += &removed_hooks;
+    removed += &removed_tools;
+    removed += &removed_cache;
+
+    let removed_total_bytes = removed.total_bytes();
+    let (removed_bytes, removed_unit) = human_readable_bytes(removed_total_bytes);
 
     let verb = if dry_run { "Would remove" } else { "Removed" };
     if removed.is_empty() {
         writeln!(printer.stdout(), "{}", "Nothing to clean".bold())?;
     } else {
-        writeln!(printer.stdout(), "{verb} {}", removed.join(", "))?;
+        writeln!(
+            printer.stdout(),
+            "{verb} {} ({}{removed_unit})",
+            removed.joined(),
+            format!("{removed_bytes:.1}").cyan().bold(),
+        )?;
 
         if verbose {
-            if removed_repos > 0 {
-                print_removed_details(printer, verb, removed_repos, "repos", removed_repo_names)?;
-            }
-            if removed_hooks > 0 {
-                print_removed_details(
-                    printer,
-                    verb,
-                    removed_hooks,
-                    "hook envs",
-                    removed_hook_names,
-                )?;
-            }
-            if removed_tools > 0 {
-                print_removed_details(printer, verb, removed_tools, "tools", removed_tool_names)?;
-            }
-            if removed_cache > 0 {
-                print_removed_details(
-                    printer,
-                    verb,
-                    removed_cache,
-                    "cache entries",
-                    removed_cache_names,
-                )?;
-            }
+            print_removed_details(printer, verb, removed_repos)?;
+            print_removed_details(printer, verb, removed_hooks)?;
+            print_removed_details(printer, verb, removed_tools)?;
+            print_removed_details(printer, verb, removed_cache)?;
         }
     }
 
     Ok(ExitStatus::Success)
 }
 
-fn print_removed_details(
-    printer: Printer,
-    verb: &'static str,
-    count: usize,
-    title: &'static str,
-    mut names: Vec<String>,
-) -> Result<()> {
-    names.sort_unstable();
+fn print_removed_details(printer: Printer, verb: &str, mut removal: Removal) -> Result<()> {
+    if removal.count == 0 {
+        return Ok(());
+    }
+
+    removal.names.sort_unstable();
     writeln!(
         printer.stdout(),
         "\n{}:",
-        format!("{verb} {} {title}", count.cyan()).bold()
+        format!("{verb} {} {}", removal.count.cyan(), removal.kind.as_str()).bold()
     )?;
-    for name in names {
+    for name in removal.names {
         writeln!(printer.stdout(), "- {name}")?;
     }
 
@@ -286,33 +369,17 @@ fn mark_tools_and_cache_for_language(
     }
 }
 
-async fn remove_dir_if_exists(path: &Path) -> Result<bool> {
-    if !path.exists() {
-        return Ok(false);
-    }
-    if path.is_dir() {
-        fs_err::tokio::remove_dir_all(path).await?;
-    } else {
-        fs_err::tokio::remove_file(path).await?;
-    }
-    Ok(true)
-}
-
-async fn sweep_dir_by_name(
+fn sweep_dir_by_name(
+    kind: RemovalKind,
     root: &Path,
     keep_names: &FxHashSet<String>,
     dry_run: bool,
     collect_names: bool,
-) -> Result<(usize, Vec<String>)> {
-    if !root.exists() {
-        return Ok((0, Vec::new()));
-    }
-
-    let mut removed = 0usize;
-    let mut removed_names = Vec::new();
+) -> Result<Removal> {
+    let mut removal = Removal::new(kind);
     let entries = match fs_err::read_dir(root) {
         Ok(entries) => entries,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok((0, Vec::new())),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Removal::new(kind)),
         Err(err) => return Err(err.into()),
     };
 
@@ -336,24 +403,28 @@ async fn sweep_dir_by_name(
             continue;
         }
 
+        let entry_bytes = dir_size_bytes(&path);
+
         if dry_run {
-            removed += 1;
+            removal.count += 1;
+            removal.bytes = removal.bytes.saturating_add(entry_bytes);
             if collect_names {
-                removed_names.push(name.to_string());
+                removal.names.push(name.to_string());
             }
             continue;
         }
 
         // Best-effort cleanup.
-        if let Err(err) = fs_err::tokio::remove_dir_all(&path).await {
+        if let Err(err) = fs_err::remove_dir_all(&path) {
             warn!(%err, path = %path.display(), "Failed to remove unused cache entry");
         } else {
-            removed += 1;
+            removal.count += 1;
+            removal.bytes = removal.bytes.saturating_add(entry_bytes);
             if collect_names {
-                removed_names.push(name.to_string());
+                removal.names.push(name.to_string());
             }
         }
     }
 
-    Ok((removed, removed_names))
+    Ok(removal)
 }
