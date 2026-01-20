@@ -32,8 +32,7 @@ Thanks for your interest in improving **prek**! This guide walks through the dev
 
 ## 2. Writing tests with `insta` snapshot assertions
 
-prek uses [insta](https://insta.rs/) for snapshot testing. It's recommended (but not necessary) to use
-`cargo-insta` for a better snapshot review experience.
+prek uses [insta](https://insta.rs/) for snapshot testing. It's recommended (but not necessary) to use `cargo-insta` for a better snapshot review experience.
 
 If you are contributing new functionality, please include coverage via unit tests (in `src/…` using `#[cfg(test)]`) or integration tests (under `tests/`).
 

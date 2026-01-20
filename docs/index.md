@@ -4,11 +4,7 @@
   <img width="220" alt="prek" src="/assets/logo.webp" />
 </div>
 
-{%
-include-markdown "../README.md"
-start="<!-- description:start -->"
-end="<!-- description:end -->"
-%}
+--8<-- "README.md:description"
 
 !!! note
 
@@ -16,17 +12,11 @@ end="<!-- description:end -->"
 
     Please note that some subcommands and languages are still missing for full drop‑in parity with `pre-commit`. Track the remaining gaps here: [TODO](https://prek.j178.dev/todo/).
 
-{%
-include-markdown "../README.md"
-start="<!-- features:start -->"
-end="<!-- features:end -->"
-%}
+<!-- "--8<--" is used for includes, see https://facelessuser.github.io/pymdown-extensions/extensions/snippets/#snippets-notation -->
 
-{%
-include-markdown "../README.md"
-start="<!-- why:start -->"
-end="<!-- why:end -->"
-%}
+--8<-- "README.md:features"
+
+--8<-- "README.md:why"
 
 ## Badges
 
