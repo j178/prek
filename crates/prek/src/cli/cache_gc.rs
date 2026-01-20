@@ -11,7 +11,7 @@ use tracing::{debug, trace, warn};
 
 use crate::cli::ExitStatus;
 use crate::cli::cache_size::{dir_size_bytes, human_readable_bytes};
-use crate::config::{self, Error as ConfigError, Language, Repo as ConfigRepo, load_config};
+use crate::config::{self, Error as ConfigError, Repo as ConfigRepo, load_config};
 use crate::hook::{HOOK_MARKER, HookEnvKey, HookSpec, InstallInfo, Repo as HookRepo};
 use crate::printer::Printer;
 use crate::store::{CacheBucket, REPO_MARKER, Store, ToolBucket};
@@ -193,7 +193,8 @@ pub(crate) async fn cache_gc(
 
     // Mark tools/caches from hook languages.
     for key in &used_env_keys {
-        mark_tools_and_cache_for_language(key.language, &mut used_tools, &mut used_cache);
+        used_tools.extend(key.language.tool_buckets());
+        used_cache.extend(key.language.cache_buckets());
     }
 
     // Mark hook environments by matching already-installed env metadata.
@@ -400,36 +401,6 @@ fn hook_env_keys_from_config(store: &Store, config: &config::Config) -> Vec<Hook
     keys
 }
 
-fn mark_tools_and_cache_for_language(
-    language: Language,
-    used_tools: &mut FxHashSet<ToolBucket>,
-    used_cache: &mut FxHashSet<CacheBucket>,
-) {
-    match language {
-        Language::Python | Language::Pygrep => {
-            used_tools.insert(ToolBucket::Uv);
-            used_tools.insert(ToolBucket::Python);
-            used_cache.insert(CacheBucket::Uv);
-            used_cache.insert(CacheBucket::Python);
-        }
-        Language::Node => {
-            used_tools.insert(ToolBucket::Node);
-        }
-        Language::Golang => {
-            used_tools.insert(ToolBucket::Go);
-            used_cache.insert(CacheBucket::Go);
-        }
-        Language::Ruby => {
-            used_tools.insert(ToolBucket::Ruby);
-        }
-        Language::Rust => {
-            used_tools.insert(ToolBucket::Rustup);
-            used_cache.insert(CacheBucket::Cargo);
-        }
-        _ => {}
-    }
-}
-
 fn mark_tool_versions_from_install_info(
     store: &Store,
     info: &InstallInfo,
@@ -438,16 +409,7 @@ fn mark_tool_versions_from_install_info(
     // NOTE: `InstallInfo.toolchain` is typically the executable path (e.g.
     // tools/go/1.24.0/bin/go). We keep the first path component under the tool bucket.
     // If we can't recognize it, we do nothing (and GC will keep all versions).
-    let buckets: &[ToolBucket] = match info.language {
-        Language::Python | Language::Pygrep => &[ToolBucket::Python, ToolBucket::Uv],
-        Language::Node => &[ToolBucket::Node],
-        Language::Golang => &[ToolBucket::Go],
-        Language::Ruby => &[ToolBucket::Ruby],
-        Language::Rust => &[ToolBucket::Rustup],
-        _ => &[],
-    };
-
-    for bucket in buckets {
+    for bucket in info.language.tool_buckets() {
         let bucket_root = store.tools_path(*bucket);
         if let Some(version) = tool_version_dir_name(&bucket_root, &info.toolchain) {
             used_tool_versions
@@ -516,6 +478,7 @@ fn sweep_tool_bucket_versions(
             }
         };
         let path = entry.path();
+        // Don't remove files (uv, and rustup are files inside tools/).
         if !path.is_dir() {
             continue;
         }
@@ -767,4 +730,67 @@ fn format_dependency_list(deps: &[String], max_items: usize, max_chars: usize) -
         let _ = write!(&mut rendered, ", … (+{extra} more)");
     }
     truncate_end(&rendered, max_chars)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncate_end_returns_input_when_short_enough() {
+        assert_eq!(truncate_end("abc", 3), "abc");
+        assert_eq!(truncate_end("abc", 10), "abc");
+    }
+
+    #[test]
+    fn truncate_end_truncates_and_appends_ellipsis() {
+        assert_eq!(truncate_end("abcd", 3), "ab…");
+        assert_eq!(truncate_end("abcdef", 5), "abcd…");
+    }
+
+    #[test]
+    fn truncate_end_counts_chars_not_bytes() {
+        // 3 unicode scalar values.
+        assert_eq!(truncate_end("ééé", 3), "ééé");
+        assert_eq!(truncate_end("ééé", 2), "é…");
+    }
+
+    #[test]
+    fn split_repo_dependency_prefers_url_like_repo_at_rev() {
+        let mut deps = FxHashSet::default();
+        deps.insert("requests==2.32.0".to_string());
+        deps.insert("black==24.1.0".to_string());
+        deps.insert("https://github.com/pre-commit/pre-commit-hooks@v1.0.0".to_string());
+
+        let (repo_dep, rest) = split_repo_dependency(&deps);
+
+        assert_eq!(
+            repo_dep.as_deref(),
+            Some("https://github.com/pre-commit/pre-commit-hooks@v1.0.0")
+        );
+        assert_eq!(rest, vec!["black==24.1.0", "requests==2.32.0"]);
+    }
+
+    #[test]
+    fn split_repo_dependency_returns_none_when_no_repo_like_dep() {
+        let mut deps = FxHashSet::default();
+        deps.insert("requests==2.32.0".to_string());
+        deps.insert("black==24.1.0".to_string());
+
+        let (repo_dep, rest) = split_repo_dependency(&deps);
+        assert!(repo_dep.is_none());
+        assert_eq!(rest, vec!["black==24.1.0", "requests==2.32.0"]);
+    }
+
+    #[test]
+    fn format_dependency_list_includes_more_suffix() {
+        let deps = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        assert_eq!(format_dependency_list(&deps, 2, 200), "a, b, … (+1 more)");
+    }
+
+    #[test]
+    fn format_dependency_list_truncates_rendered_string() {
+        let deps = vec!["abcdef".to_string()];
+        assert_eq!(format_dependency_list(&deps, 6, 5), "abcd…");
+    }
 }

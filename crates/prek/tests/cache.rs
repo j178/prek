@@ -46,6 +46,32 @@ fn cache_gc_verbose_shows_removed_entries() {
     home.child("hooks/hook-env-dead")
         .create_dir_all()
         .expect("create hook env dir");
+    home.child("hooks/hook-env-dead/.prek-hook.json")
+        .write_str(
+            &serde_json::to_string_pretty(&json!({
+                "language": "python",
+                "language_version": "3.12.0",
+                "dependencies": [
+                    "https://example.com/repo@v1.0.0",
+                    "dep1",
+                    "dep2",
+                    "dep3",
+                    "dep4",
+                    "dep5",
+                    "dep6",
+                    "dep7",
+                ],
+                "env_path": home.child("hooks/hook-env-dead").path(),
+                "toolchain": "/usr/bin/python3",
+                "extra": {},
+            }))
+            .expect("serialize hook marker"),
+        )
+        .expect("write hook marker");
+
+    home.child("cache/go")
+        .create_dir_all()
+        .expect("create cache dir");
 
     // Have a tracked config that exists but references nothing (so everything above is unreferenced).
     let config_path = context.work_dir().child(CONFIG_FILE);
@@ -55,15 +81,22 @@ fn cache_gc_verbose_shows_removed_entries() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Removed 1 repo, 1 hook env ([SIZE])
+    Removed 1 repo, 1 hook env, 1 cache entry ([SIZE])
 
     Removed 1 repo:
     - https://github.com/pre-commit/pre-commit-hooks@v1.0.0
       path: [HOME]/repos/deadbeef
 
     Removed 1 hook env:
-    - hook-env-dead
+    - python env
       path: [HOME]/hooks/hook-env-dead
+      language: python (3.12.0)
+      repo: https://example.com/repo@v1.0.0
+      deps: dep1, dep2, dep3, dep4, dep5, dep6, … (+1 more)
+
+    Removed 1 cache entry:
+    - go
+      path: [HOME]/cache/go
 
     ----- stderr -----
     ");
@@ -220,10 +253,30 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
         repos:
           - repo: local
             hooks:
-            - id: local-python
-              name: Local Python Hook
-              entry: "python -c \"print(1)\""
-              language: python
+              - id: local-python
+                name: Local Python Hook
+                entry: "python -c \"print(1)\""
+                language: python
+              - id: local-pygrep
+                name: Local Pygrep Hook
+                entry: "python -c \"print(1)\""
+                language: pygrep
+              - id: local-node
+                name: Local Node Hook
+                entry: "node -e \"console.log(1)\""
+                language: node
+              - id: local-go
+                name: Local Go Hook
+                entry: "go version"
+                language: golang
+              - id: local-ruby
+                name: Local Ruby Hook
+                entry: "ruby -e 'puts 1'"
+                language: ruby
+              - id: local-rust
+                name: Local Rust Hook
+                entry: "rustc --version"
+                language: rust
     "#});
 
     let home = context.home_dir();
@@ -232,36 +285,88 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
     let config_path = context.work_dir().child(CONFIG_FILE);
     write_config_tracking_file(home, &[config_path.path()])?;
 
-    // Seed a "used" python hook env marker so GC can read `.prek-hook.json` and retain the
-    // corresponding Python tool version.
-    let env_dir = home.child("hooks/python-keep");
-    env_dir.create_dir_all()?;
+    // Seed "used" hook env markers so GC can read `.prek-hook.json` and retain the
+    // corresponding tool versions per language.
+    let env_py = home.child("hooks/python-keep");
+    let env_node = home.child("hooks/node-keep");
+    let env_go = home.child("hooks/go-keep");
+    let env_ruby = home.child("hooks/ruby-remove");
+    let env_rust = home.child("hooks/rust-remove");
+    env_py.create_dir_all()?;
+    env_node.create_dir_all()?;
+    env_go.create_dir_all()?;
+    env_ruby.create_dir_all()?;
+    env_rust.create_dir_all()?;
 
-    let py_312 = home.child("tools/python/3.12.0");
-    let py_311 = home.child("tools/python/3.11.0");
-    py_312.create_dir_all()?;
-    py_311.create_dir_all()?;
+    let py_keep = home.child("tools/python/3.12.0");
+    let py_remove = home.child("tools/python/3.11.0");
+    py_keep.create_dir_all()?;
+    py_remove.create_dir_all()?;
+
+    let node_keep = home.child("tools/node/22.0.0");
+    let node_remove = home.child("tools/node/21.0.0");
+    node_keep.create_dir_all()?;
+    node_remove.create_dir_all()?;
+
+    let go_keep = home.child("tools/go/1.24.0");
+    let go_remove = home.child("tools/go/1.23.0");
+    go_keep.create_dir_all()?;
+    go_remove.create_dir_all()?;
 
     // Match logic for local hooks: empty deps + language request is `Any` by default.
-    let marker = json!({
+    let marker_py = json!({
         "language": "python",
         "language_version": "3.12.0",
         "dependencies": [],
-        "env_path": env_dir.path(),
-        "toolchain": py_312.child("bin/python").path(),
+        "env_path": env_py.path(),
+        "toolchain": py_keep.child("bin/python").path(),
         "extra": {},
     });
-    env_dir
+    env_py
         .child(".prek-hook.json")
-        .write_str(&serde_json::to_string_pretty(&marker)?)?;
+        .write_str(&serde_json::to_string_pretty(&marker_py)?)?;
+
+    let marker_node = json!({
+        "language": "node",
+        "language_version": "22.0.0",
+        "dependencies": [],
+        "env_path": env_node.path(),
+        "toolchain": node_keep.child("bin/node").path(),
+        "extra": {},
+    });
+    env_node
+        .child(".prek-hook.json")
+        .write_str(&serde_json::to_string_pretty(&marker_node)?)?;
+
+    let marker_go = json!({
+        "language": "golang",
+        "language_version": "1.24.0",
+        "dependencies": [],
+        "env_path": env_go.path(),
+        "toolchain": go_keep.child("bin/go").path(),
+        "extra": {},
+    });
+    env_go
+        .child(".prek-hook.json")
+        .write_str(&serde_json::to_string_pretty(&marker_go)?)?;
 
     cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "--dry-run", "-v"]), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    Would remove 1 tool ([SIZE])
+    Would remove 2 hook envs, 3 tools ([SIZE])
 
-    Would remove 1 tool:
+    Would remove 2 hook envs:
+    - ruby-remove
+      path: [HOME]/hooks/ruby-remove
+    - rust-remove
+      path: [HOME]/hooks/rust-remove
+
+    Would remove 3 tools:
+    - go/1.23.0
+      path: [HOME]/tools/go/1.23.0
+    - node/21.0.0
+      path: [HOME]/tools/node/21.0.0
     - python/3.11.0
       path: [HOME]/tools/python/3.11.0
 
