@@ -17,7 +17,7 @@ use crate::fs::LockedFile;
 use crate::git::clone_repo;
 use crate::hook::InstallInfo;
 use crate::run::CONCURRENCY;
-use crate::workspace::HookInitReporter;
+use crate::workspace::{HookInitReporter, WorkspaceCache};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -227,12 +227,48 @@ impl Store {
         self.path.join("config-tracking.json")
     }
 
+    fn tracked_configs_raw(&self) -> Result<FxHashSet<PathBuf>, Error> {
+        let tracking_file = self.config_tracking_file();
+        match fs_err::read_to_string(&tracking_file) {
+            Ok(content) => serde_json::from_str(&content).or_else(|e| {
+                warn!("Failed to parse config tracking file: {e}, resetting");
+                Ok(FxHashSet::default())
+            }),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(FxHashSet::default()),
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    /// Seed `config-tracking.json` from the workspace discovery cache.
+    ///
+    /// This is a one-time upgrade helper: it only does work when tracking is empty.
+    fn bootstrap_tracked_configs(&self) -> Result<usize, Error> {
+        let tracked = self.tracked_configs_raw()?;
+        if !tracked.is_empty() {
+            return Ok(0);
+        }
+
+        let cached = WorkspaceCache::cached_config_paths(self);
+        if cached.is_empty() {
+            return Ok(0);
+        }
+
+        debug!(
+            count = cached.len(),
+            "Bootstrapping config tracking from workspace cache"
+        );
+        self.update_tracked_configs(&cached)?;
+        Ok(cached.len())
+    }
+
     /// Track new config files for GC.
     pub(crate) fn track_configs<'a>(
         &self,
         config_paths: impl Iterator<Item = &'a Path>,
     ) -> Result<(), Error> {
-        let mut tracked = self.tracked_configs()?;
+        let _ = self.bootstrap_tracked_configs()?;
+
+        let mut tracked = self.tracked_configs_raw()?;
         for config_path in config_paths {
             tracked.insert(config_path.to_path_buf());
         }
@@ -246,15 +282,13 @@ impl Store {
 
     /// Get all tracked config files.
     pub(crate) fn tracked_configs(&self) -> Result<FxHashSet<PathBuf>, Error> {
-        let tracking_file = self.config_tracking_file();
-        match fs_err::read_to_string(&tracking_file) {
-            Ok(content) => serde_json::from_str(&content).or_else(|e| {
-                warn!("Failed to parse config tracking file: {e}, resetting");
-                Ok(FxHashSet::default())
-            }),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(FxHashSet::default()),
-            Err(err) => Err(err.into()),
+        let tracked = self.tracked_configs_raw()?;
+        if tracked.is_empty() {
+            let _ = self.bootstrap_tracked_configs()?;
+            return self.tracked_configs_raw();
         }
+
+        Ok(tracked)
     }
 
     /// Update the tracked configs file.
