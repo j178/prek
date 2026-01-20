@@ -200,7 +200,6 @@ fn hook_env_keys_from_config(store: &Store, config: &config::Config) -> Vec<Hook
     for repo_config in &config.repos {
         match repo_config {
             ConfigRepo::Remote(repo_config) => {
-                // Only use already-cloned repos. Do not clone new ones.
                 let repo_path = store.repo_path(repo_config);
                 if !repo_path.is_dir() {
                     continue;
