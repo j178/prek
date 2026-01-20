@@ -5,6 +5,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use tracing::{debug, trace, warn};
 
@@ -24,12 +25,38 @@ enum RemovalKind {
 }
 
 impl RemovalKind {
-    fn as_str(self) -> &'static str {
-        match self {
-            RemovalKind::Repos => "repos",
-            RemovalKind::HookEnvs => "hook envs",
-            RemovalKind::Tools => "tools",
-            RemovalKind::CacheEntries => "cache entries",
+    fn display(self, count: usize) -> &'static str {
+        if count > 1 {
+            match self {
+                RemovalKind::Repos => "repos",
+                RemovalKind::HookEnvs => "hook envs",
+                RemovalKind::Tools => "tools",
+                RemovalKind::CacheEntries => "cache entries",
+            }
+        } else {
+            match self {
+                RemovalKind::Repos => "repo",
+                RemovalKind::HookEnvs => "hook env",
+                RemovalKind::Tools => "tool",
+                RemovalKind::CacheEntries => "cache entry",
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RemovalItem {
+    label: String,
+    abs_path: String,
+    lines: Vec<String>,
+}
+
+impl RemovalItem {
+    fn new(label: String, abs_path: String) -> Self {
+        Self {
+            label,
+            abs_path,
+            lines: Vec::new(),
         }
     }
 }
@@ -51,32 +78,26 @@ impl Removal {
             items: Vec::new(),
         }
     }
-
-    fn is_empty(&self) -> bool {
-        self.count == 0
-    }
 }
 
 impl Display for Removal {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", self.count.cyan().bold(), self.kind.as_str())
+        write!(
+            f,
+            "{} {}",
+            self.count.cyan().bold(),
+            self.kind.display(self.count)
+        )
     }
 }
 
-#[derive(Debug, Clone)]
-struct RemovalItem {
-    label: String,
-    abs_path: String,
-    lines: Vec<String>,
-}
+impl AddAssign for Removal {
+    fn add_assign(&mut self, rhs: Self) {
+        debug_assert_eq!(self.kind, rhs.kind);
 
-impl RemovalItem {
-    fn new(label: String, abs_path: String) -> Self {
-        Self {
-            label,
-            abs_path,
-            lines: Vec::new(),
-        }
+        self.count += rhs.count;
+        self.bytes = self.bytes.saturating_add(rhs.bytes);
+        self.items.extend(rhs.items);
     }
 }
 
@@ -129,6 +150,7 @@ pub(crate) async fn cache_gc(
     let mut used_repo_keys: FxHashSet<String> = FxHashSet::default();
     let mut used_hook_env_dirs: FxHashSet<String> = FxHashSet::default();
     let mut used_tools: FxHashSet<ToolBucket> = FxHashSet::default();
+    let mut used_tool_versions: FxHashMap<ToolBucket, FxHashSet<String>> = FxHashMap::default();
     let mut used_cache: FxHashSet<CacheBucket> = FxHashSet::default();
     let mut used_env_keys: Vec<HookEnvKey> = Vec::new();
 
@@ -175,6 +197,8 @@ pub(crate) async fn cache_gc(
     }
 
     // Mark hook environments by matching already-installed env metadata.
+    // While doing this, try to derive the specific tool *version* directories in use from
+    // `InstallInfo.toolchain` (which is persisted in `.prek-hook.json`).
     for info in &installed {
         if used_env_keys.iter().any(|k| k.matches_install_info(info)) {
             if let Some(dir) = info
@@ -185,6 +209,8 @@ pub(crate) async fn cache_gc(
             {
                 used_hook_env_dirs.insert(dir);
             }
+
+            mark_tool_versions_from_install_info(store, info, &mut used_tool_versions);
         }
     }
 
@@ -216,13 +242,20 @@ pub(crate) async fn cache_gc(
     let tools_root = store.tools_dir();
     let used_tool_names: FxHashSet<String> =
         used_tools.iter().map(|t| t.as_str().to_string()).collect();
-    let removed_tools = sweep_dir_by_name(
+    let removed_tool_buckets = sweep_dir_by_name(
         RemovalKind::Tools,
         &tools_root,
         &used_tool_names,
         dry_run,
         verbose,
     )?;
+
+    // Sweep tools/<bucket>/<version>
+    // Only do this when we can positively identify used versions (otherwise be conservative).
+    let removed_tool_versions = sweep_tool_versions(store, &used_tool_versions, dry_run, verbose)?;
+
+    let mut removed_tools = removed_tool_buckets;
+    removed_tools += removed_tool_versions;
 
     // Sweep cache/<bucket>
     let cache_root = store.cache_dir();
@@ -236,7 +269,7 @@ pub(crate) async fn cache_gc(
         verbose,
     )?;
 
-    // Always clear scratch, as it is only temporary data.
+    // Seep scratch/, as it is only temporary data.
     if !dry_run {
         let _ = fs_err::remove_dir_all(store.scratch_path());
     }
@@ -284,11 +317,11 @@ fn print_removed_details(printer: Printer, verb: &str, removal: &Removal) -> Res
     writeln!(
         printer.stdout(),
         "\n{}:",
-        format!("{verb} {} {}", removal.count.cyan(), removal.kind.as_str()).bold()
+        format!("{verb} {removal}").bold()
     )?;
 
     let mut items = removal.items.clone();
-    items.sort_by(|a, b| a.label.cmp(&b.label));
+    items.sort_unstable_by(|a, b| a.label.cmp(&b.label));
     for item in items {
         writeln!(printer.stdout(), "{} {}", "-".dimmed(), item.label.bold())?;
         writeln!(
@@ -367,7 +400,6 @@ fn hook_env_keys_from_config(store: &Store, config: &config::Config) -> Vec<Hook
     keys
 }
 
-// TODO: read `toolchain` from `.prek-hook.json`, and use that to determine tools/cache to keep.
 fn mark_tools_and_cache_for_language(
     language: Language,
     used_tools: &mut FxHashSet<ToolBucket>,
@@ -396,6 +428,137 @@ fn mark_tools_and_cache_for_language(
         }
         _ => {}
     }
+}
+
+fn mark_tool_versions_from_install_info(
+    store: &Store,
+    info: &InstallInfo,
+    used_tool_versions: &mut FxHashMap<ToolBucket, FxHashSet<String>>,
+) {
+    // NOTE: `InstallInfo.toolchain` is typically the executable path (e.g.
+    // tools/go/1.24.0/bin/go). We keep the first path component under the tool bucket.
+    // If we can't recognize it, we do nothing (and GC will keep all versions).
+    let buckets: &[ToolBucket] = match info.language {
+        Language::Python | Language::Pygrep => &[ToolBucket::Python, ToolBucket::Uv],
+        Language::Node => &[ToolBucket::Node],
+        Language::Golang => &[ToolBucket::Go],
+        Language::Ruby => &[ToolBucket::Ruby],
+        Language::Rust => &[ToolBucket::Rustup],
+        _ => &[],
+    };
+
+    for bucket in buckets {
+        let bucket_root = store.tools_path(*bucket);
+        if let Some(version) = tool_version_dir_name(&bucket_root, &info.toolchain) {
+            used_tool_versions
+                .entry(*bucket)
+                .or_default()
+                .insert(version);
+        }
+    }
+}
+
+fn tool_version_dir_name(bucket_root: &Path, toolchain: &Path) -> Option<String> {
+    let rel = toolchain.strip_prefix(bucket_root).ok()?;
+    let version = rel.components().next()?.as_os_str().to_str()?;
+    if version.is_empty() {
+        return None;
+    }
+    Some(version.to_string())
+}
+
+fn sweep_tool_versions(
+    store: &Store,
+    used_tool_versions: &FxHashMap<ToolBucket, FxHashSet<String>>,
+    dry_run: bool,
+    verbose: bool,
+) -> Result<Removal> {
+    let mut total = Removal::new(RemovalKind::Tools);
+
+    for (bucket, keep_versions) in used_tool_versions {
+        // If we don't have any positively-identified versions, be conservative.
+        if keep_versions.is_empty() {
+            continue;
+        }
+
+        let bucket_root = store.tools_path(*bucket);
+        let removed =
+            sweep_tool_bucket_versions(*bucket, &bucket_root, keep_versions, dry_run, verbose)?;
+        total += removed;
+    }
+
+    Ok(total)
+}
+
+fn sweep_tool_bucket_versions(
+    bucket: ToolBucket,
+    bucket_root: &Path,
+    keep_versions: &FxHashSet<String>,
+    dry_run: bool,
+    collect_names: bool,
+) -> Result<Removal> {
+    let mut removal = Removal::new(RemovalKind::Tools);
+
+    let entries = match fs_err::read_dir(bucket_root) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(Removal::new(RemovalKind::Tools));
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                warn!(%err, root = %bucket_root.display(), "Failed to read tool bucket entry");
+                continue;
+            }
+        };
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let Some(version_name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if keep_versions.contains(version_name) {
+            continue;
+        }
+
+        let entry_bytes = dir_size_bytes(&path);
+
+        let item = if collect_names {
+            Some(RemovalItem::new(
+                format!("{}/{version_name}", bucket.as_str()),
+                path.to_string_lossy().to_string(),
+            ))
+        } else {
+            None
+        };
+
+        if dry_run {
+            removal.count += 1;
+            removal.bytes = removal.bytes.saturating_add(entry_bytes);
+            if let Some(item) = item {
+                removal.items.push(item);
+            }
+            continue;
+        }
+
+        if let Err(err) = fs_err::remove_dir_all(&path) {
+            warn!(%err, path = %path.display(), "Failed to remove unused tool version");
+        } else {
+            removal.count += 1;
+            removal.bytes = removal.bytes.saturating_add(entry_bytes);
+            if let Some(item) = item {
+                removal.items.push(item);
+            }
+        }
+    }
+
+    Ok(removal)
 }
 
 fn sweep_dir_by_name(
