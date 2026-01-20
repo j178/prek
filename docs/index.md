@@ -15,7 +15,7 @@
 <!-- "--8<--" is used for includes, see https://facelessuser.github.io/pymdown-extensions/extensions/snippets/#snippets-notation -->
 
 --8<-- "README.md:features"
- 
+
 --8<-- "README.md:why"
 
 ## Badges
