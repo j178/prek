@@ -35,6 +35,7 @@ impl EnvVars {
     pub const PREK_INTERNAL__SKIP_POST_CHECKOUT: &'static str = "PREK_INTERNAL__SKIP_POST_CHECKOUT";
     pub const PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT: &'static str =
         "PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT";
+    pub const PREK_INTERNAL__BUN_BINARY_NAME: &'static str = "PREK_INTERNAL__BUN_BINARY_NAME";
     pub const PREK_INTERNAL__GO_BINARY_NAME: &'static str = "PREK_INTERNAL__GO_BINARY_NAME";
     pub const PREK_INTERNAL__NODE_BINARY_NAME: &'static str = "PREK_INTERNAL__NODE_BINARY_NAME";
     pub const PREK_INTERNAL__RUSTUP_BINARY_NAME: &'static str = "PREK_INTERNAL__RUSTUP_BINARY_NAME";
@@ -53,6 +54,12 @@ impl EnvVars {
     pub const NPM_CONFIG_USERCONFIG: &'static str = "NPM_CONFIG_USERCONFIG";
     pub const NPM_CONFIG_PREFIX: &'static str = "NPM_CONFIG_PREFIX";
     pub const NODE_PATH: &'static str = "NODE_PATH";
+
+    // Bun related
+    pub const BUN_INSTALL: &'static str = "BUN_INSTALL";
+
+    // GitHub API authentication (to avoid rate limits)
+    pub const GITHUB_TOKEN: &'static str = "GITHUB_TOKEN";
 
     // Go related
     pub const GOTOOLCHAIN: &'static str = "GOTOOLCHAIN";

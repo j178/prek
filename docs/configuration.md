@@ -858,6 +858,8 @@ prek supports the following environment variables:
     - `podman`
     - `container` (Apple's Container runtime on macOS, see [container](https://github.com/apple/container))
 
+- `GITHUB_TOKEN` — GitHub personal access token for API requests. Used when downloading Bun toolchains to avoid GitHub API rate limits (60 requests/hour unauthenticated vs 5,000/hour authenticated). This is already set automatically in GitHub Actions.
+
 Compatibility fallbacks:
 
 - `PRE_COMMIT_ALLOW_NO_CONFIG` — Fallback for `PREK_ALLOW_NO_CONFIG`.
