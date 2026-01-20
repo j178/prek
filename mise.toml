@@ -7,6 +7,7 @@ cargo-binstall = "latest"
 # For snapshot testing
 cargo-insta = "latest"
 "cargo:cargo-nextest" = "latest"
+uv = "latest"
 
 [tasks.lint]
 description = "Run formatting and linting"
