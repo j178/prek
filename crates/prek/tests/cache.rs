@@ -34,6 +34,15 @@ fn cache_gc_verbose_shows_removed_entries() {
     home.child("repos/deadbeef")
         .create_dir_all()
         .expect("create repo dir");
+    home.child("repos/deadbeef/.prek-repo.json")
+        .write_str(
+            &serde_json::to_string_pretty(&json!({
+                "repo": "https://github.com/pre-commit/pre-commit-hooks",
+                "rev": "v1.0.0",
+            }))
+            .expect("serialize repo marker"),
+        )
+        .expect("write repo marker");
     home.child("hooks/hook-env-dead")
         .create_dir_all()
         .expect("create hook env dir");
@@ -42,20 +51,21 @@ fn cache_gc_verbose_shows_removed_entries() {
     let config_path = context.work_dir().child(CONFIG_FILE);
     write_config_tracking_file(home, &[config_path.path()]).expect("write tracking file");
 
-    cmd_snapshot!(context.filters(), context
-        .command()
-        .args(["cache", "gc", "-v"]),
-        @r"
+    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "-v"]),@r"
     success: true
     exit_code: 0
     ----- stdout -----
     Removed 1 repos, 1 hook envs ([SIZE])
 
     Removed 1 repos:
-    - deadbeef
+    - https://github.com/pre-commit/pre-commit-hooks@v1.0.0
+      path: [HOME]/repos/deadbeef
+      url: https://github.com/pre-commit/pre-commit-hooks
+      rev: v1.0.0
 
     Removed 1 hook envs:
     - hook-env-dead
+      path: [HOME]/hooks/hook-env-dead
 
     ----- stderr -----
     ");
@@ -347,7 +357,7 @@ fn cache_gc_bootstraps_tracking_from_workspace_cache() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Removed 1 repos, 1 hook envs
+    Removed 1 repos, 1 hook envs ([SIZE])
 
     ----- stderr -----
     ");

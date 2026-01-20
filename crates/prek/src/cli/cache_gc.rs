@@ -11,9 +11,9 @@ use tracing::{debug, trace, warn};
 use crate::cli::ExitStatus;
 use crate::cli::cache_size::{dir_size_bytes, human_readable_bytes};
 use crate::config::{self, Error as ConfigError, Language, Repo as ConfigRepo, load_config};
-use crate::hook::{HookEnvKey, HookSpec, Repo as HookRepo};
+use crate::hook::{HOOK_MARKER, HookEnvKey, HookSpec, InstallInfo, Repo as HookRepo};
 use crate::printer::Printer;
-use crate::store::{CacheBucket, Store, ToolBucket};
+use crate::store::{CacheBucket, REPO_MARKER, Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum RemovalKind {
@@ -39,7 +39,7 @@ struct Removal {
     kind: RemovalKind,
     count: usize,
     bytes: u64,
-    names: Vec<String>,
+    items: Vec<RemovalItem>,
 }
 
 impl Removal {
@@ -48,7 +48,7 @@ impl Removal {
             kind,
             count: 0,
             bytes: 0,
-            names: Vec::new(),
+            items: Vec::new(),
         }
     }
 
@@ -60,6 +60,23 @@ impl Removal {
 impl Display for Removal {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {}", self.count.cyan().bold(), self.kind.as_str())
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RemovalItem {
+    label: String,
+    abs_path: String,
+    lines: Vec<String>,
+}
+
+impl RemovalItem {
+    fn new(label: String, abs_path: String) -> Self {
+        Self {
+            label,
+            abs_path,
+            lines: Vec::new(),
+        }
     }
 }
 
@@ -249,29 +266,39 @@ pub(crate) async fn cache_gc(
         )?;
 
         if verbose {
-            print_removed_details(printer, verb, removed_repos)?;
-            print_removed_details(printer, verb, removed_hooks)?;
-            print_removed_details(printer, verb, removed_tools)?;
-            print_removed_details(printer, verb, removed_cache)?;
+            print_removed_details(printer, verb, &removed_repos)?;
+            print_removed_details(printer, verb, &removed_hooks)?;
+            print_removed_details(printer, verb, &removed_tools)?;
+            print_removed_details(printer, verb, &removed_cache)?;
         }
     }
 
     Ok(ExitStatus::Success)
 }
 
-fn print_removed_details(printer: Printer, verb: &str, mut removal: Removal) -> Result<()> {
+fn print_removed_details(printer: Printer, verb: &str, removal: &Removal) -> Result<()> {
     if removal.count == 0 {
         return Ok(());
     }
 
-    removal.names.sort_unstable();
     writeln!(
         printer.stdout(),
         "\n{}:",
         format!("{verb} {} {}", removal.count.cyan(), removal.kind.as_str()).bold()
     )?;
-    for name in removal.names {
-        writeln!(printer.stdout(), "- {name}")?;
+
+    let mut items = removal.items.clone();
+    items.sort_by(|a, b| a.label.cmp(&b.label));
+    for item in items {
+        writeln!(
+            printer.stdout(),
+            "- {}\n  path: {}",
+            item.label,
+            item.abs_path
+        )?;
+        for line in item.lines {
+            writeln!(printer.stdout(), "  {line}")?;
+        }
     }
 
     Ok(())
@@ -405,11 +432,24 @@ fn sweep_dir_by_name(
 
         let entry_bytes = dir_size_bytes(&path);
 
+        let item = if collect_names {
+            let mut item = RemovalItem::new(name.to_string(), path.to_string_lossy().to_string());
+            if let Some(label) = label_for_entry(kind, &path) {
+                item.label = label;
+            }
+            item.lines = detail_lines_for_entry(kind, &path);
+            Some(item)
+        } else {
+            None
+        };
+
         if dry_run {
             removal.count += 1;
             removal.bytes = removal.bytes.saturating_add(entry_bytes);
             if collect_names {
-                removal.names.push(name.to_string());
+                if let Some(item) = item {
+                    removal.items.push(item);
+                }
             }
             continue;
         }
@@ -421,10 +461,134 @@ fn sweep_dir_by_name(
             removal.count += 1;
             removal.bytes = removal.bytes.saturating_add(entry_bytes);
             if collect_names {
-                removal.names.push(name.to_string());
+                if let Some(item) = item {
+                    removal.items.push(item);
+                }
             }
         }
     }
 
     Ok(removal)
+}
+
+fn label_for_entry(kind: RemovalKind, root: &Path) -> Option<String> {
+    match kind {
+        RemovalKind::Repos => {
+            read_repo_marker(root).map(|repo| format!("{}@{}", repo.repo, repo.rev))
+        }
+        RemovalKind::HookEnvs => read_hook_marker(root).map(|info| {
+            // Keep this short; more info goes in detail lines.
+            format!("{} env", info.language.as_str())
+        }),
+        _ => None,
+    }
+}
+
+fn detail_lines_for_entry(kind: RemovalKind, root: &Path) -> Vec<String> {
+    const MAX_VALUE_CHARS: usize = 140;
+
+    match kind {
+        RemovalKind::Repos => {
+            let Some(repo) = read_repo_marker(root) else {
+                return Vec::new();
+            };
+
+            let mut lines = Vec::new();
+            lines.push(format!("url: {}", repo.repo));
+            lines.push(format!("rev: {}", repo.rev));
+            lines
+        }
+        RemovalKind::HookEnvs => {
+            let Some(info) = read_hook_marker(root) else {
+                return Vec::new();
+            };
+
+            let mut lines = Vec::new();
+            lines.push(format!(
+                "language: {} ({})",
+                info.language.as_str(),
+                info.language_version
+            ));
+
+            let (repo_dep, deps) = split_repo_dependency(&info.dependencies);
+            if let Some(repo_dep) = repo_dep {
+                lines.push(format!("repo: {repo_dep}"));
+            }
+            if !deps.is_empty() {
+                let deps_str = format_dependency_list(&deps, 6, MAX_VALUE_CHARS);
+                lines.push(format!("deps: {deps_str}"));
+            }
+            lines
+        }
+        _ => Vec::new(),
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct RepoMarker {
+    repo: String,
+    rev: String,
+}
+
+fn read_repo_marker(root: &Path) -> Option<RepoMarker> {
+    // NOTE: `Store::clone_repo` serializes `RemoteRepo`, but with some fields skipped during
+    // serialization (e.g. `hooks`). That means deserializing back into `RemoteRepo` can fail.
+    // For GC display, we only need `repo` + `rev`.
+    let content = fs_err::read_to_string(root.join(REPO_MARKER)).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+fn read_hook_marker(root: &Path) -> Option<InstallInfo> {
+    let content = fs_err::read_to_string(root.join(HOOK_MARKER)).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+fn truncate_end(s: &str, max_chars: usize) -> String {
+    if s.chars().count() <= max_chars {
+        return s.to_string();
+    }
+    let mut out = s
+        .chars()
+        .take(max_chars.saturating_sub(1))
+        .collect::<String>();
+    out.push('…');
+    out
+}
+
+fn split_repo_dependency(deps: &FxHashSet<String>) -> (Option<String>, Vec<String>) {
+    // Best-effort: the remote repo dependency is typically `repo@rev`.
+    // Prefer URL-like values to avoid accidentally treating PEP508 deps as repo identifiers.
+    let mut repo_dep: Option<String> = None;
+    let mut rest = Vec::new();
+
+    for dep in deps {
+        if repo_dep.is_none()
+            && dep.contains('@')
+            && (dep.contains("://")
+                || dep.starts_with('/')
+                || dep.starts_with("..")
+                || dep.starts_with('.'))
+        {
+            repo_dep = Some(dep.clone());
+        } else {
+            rest.push(dep.clone());
+        }
+    }
+
+    rest.sort_unstable();
+    (repo_dep, rest)
+}
+
+fn format_dependency_list(deps: &[String], max_items: usize, max_chars: usize) -> String {
+    if deps.is_empty() {
+        return String::new();
+    }
+
+    let shown: Vec<&str> = deps.iter().take(max_items).map(String::as_str).collect();
+    let extra = deps.len().saturating_sub(shown.len());
+    let mut rendered = shown.join(", ");
+    if extra > 0 {
+        let _ = write!(&mut rendered, ", … (+{extra} more)");
+    }
+    truncate_end(&rendered, max_chars)
 }
