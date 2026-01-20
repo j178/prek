@@ -13,7 +13,7 @@
 
 </div>
 
-<!-- description:start -->
+<!-- --8<-- [start: description] -->
 
 [pre-commit](https://pre-commit.com/) is a framework to run hooks written in many languages, and it manages the
 language toolchain and dependencies for running the hooks.
@@ -22,14 +22,14 @@ language toolchain and dependencies for running the hooks.
 It is designed to be a faster, dependency-free and drop-in alternative for it,
 while also providing some additional long-requested features.
 
-<!-- description:end -->
+<!-- --8<-- [end: description] -->
 
 > [!NOTE]
 > Although prek is pretty new, it’s already powering real‑world projects like [CPython](https://github.com/python/cpython), [Apache Airflow](https://github.com/apache/airflow), [FastAPI](https://github.com/fastapi/fastapi), and more projects are picking it up—see [Who is using prek?](#who-is-using-prek). If you’re looking for an alternative to `pre-commit`, please give it a try—we’d love your feedback!
 >
 > Please note that some subcommands and languages are still missing for full drop‑in parity with `pre-commit`. Track the remaining gaps here: [TODO](https://prek.j178.dev/todo/).
 
-<!-- features:start -->
+<!-- --8<-- [start:features] -->
 
 ## Features
 
@@ -41,7 +41,7 @@ while also providing some additional long-requested features.
 - 🛠️ Improved toolchain installations for Python, Node.js, Go, Rust and Ruby, shared between hooks.
 - 📦 [Built-in](https://prek.j178.dev/builtin/) Rust-native implementation of some common hooks.
 
-<!-- features:end -->
+<!-- --8<-- [end:features] -->
 
 ## Table of contents
 
@@ -60,30 +60,30 @@ prek provides a standalone installer script to download and install the tool,
 
 On Linux and macOS:
 
-<!-- linux-standalone-install:start -->
+<!-- --8<-- [start: linux-standalone-install] -->
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.30/prek-installer.sh | sh
 ```
 
-<!-- linux-standalone-install:end -->
+<!-- --8<-- [end: linux-standalone-install] -->
 
 On Windows:
 
-<!-- windows-standalone-install:start -->
+<!-- --8<-- [start: windows-standalone-install] -->
 
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.30/prek-installer.ps1 | iex"
 ```
 
-<!-- windows-standalone-install:end -->
+<!-- --8<-- [end: windows-standalone-install] -->
 
 </details>
 
 <details>
 <summary>PyPI</summary>
 
-<!-- pypi-install:start -->
+<!-- --8<-- [start: pypi-install] -->
 
 prek is published as Python binary wheel to PyPI, you can install it using `pip`, `uv` (recommended), or `pipx`:
 
@@ -104,27 +104,27 @@ pip install prek
 pipx install prek
 ```
 
-<!-- pypi-install:end -->
+<!-- --8<-- [end: pypi-install] -->
 
 </details>
 
 <details>
 <summary>Homebrew</summary>
 
-<!-- homebrew-install:start -->
+<!-- --8<-- [start: homebrew-install] -->
 
 ```bash
 brew install prek
 ```
 
-<!-- homebrew-install:end -->
+<!-- --8<-- [end: homebrew-install] -->
 
 </details>
 
 <details>
 <summary>mise</summary>
 
-<!-- mise-install:start -->
+<!-- --8<-- [start: mise-install] -->
 
 To use prek with [mise](https://mise.jdx.dev) ([v2025.8.11](https://github.com/jdx/mise/releases/tag/v2025.8.11) or later):
 
@@ -132,14 +132,14 @@ To use prek with [mise](https://mise.jdx.dev) ([v2025.8.11](https://github.com/j
 mise use prek
 ```
 
-<!-- mise-install:end -->
+<!-- --8<-- [end: mise-install] -->
 
 </details>
 
 <details>
 <summary>Cargo binstall</summary>
 
-<!-- cargo-binstall:start -->
+<!-- --8<-- [start: cargo-binstall] -->
 
 Install pre-compiled binaries from GitHub using [cargo-binstall](https://github.com/cargo-bins/cargo-binstall):
 
@@ -147,14 +147,14 @@ Install pre-compiled binaries from GitHub using [cargo-binstall](https://github.
 cargo binstall prek
 ```
 
-<!-- cargo-binstall:end -->
+<!-- --8<-- [end: cargo-binstall] -->
 
 </details>
 
 <details>
 <summary>Cargo</summary>
 
-<!-- cargo-install:start -->
+<!-- --8<-- [start: cargo-install] -->
 
 Build from source using Cargo (Rust 1.89+ is required):
 
@@ -162,14 +162,14 @@ Build from source using Cargo (Rust 1.89+ is required):
 cargo install --locked prek
 ```
 
-<!-- cargo-install:end -->
+<!-- --8<-- [end: cargo-install] -->
 
 </details>
 
 <details>
 <summary>npmjs</summary>
 
-<!-- npmjs-install:start -->
+<!-- --8<-- [start: npmjs-install] -->
 
 prek is published as a Node.js package, you can install it using `npm`, `pnpm`, or `npx`:
 
@@ -190,14 +190,14 @@ npm install -g @j178/prek
 prek --version
 ```
 
-<!-- npmjs-install:end -->
+<!-- --8<-- [end: npmjs-install] -->
 
 </details>
 
 <details>
 <summary>Nix</summary>
 
-<!-- nix-install:start -->
+<!-- --8<-- [start: nix-install] -->
 
 prek is available via [Nixpkgs](https://search.nixos.org/packages?channel=unstable&show=prek&query=prek).
 
@@ -213,14 +213,14 @@ nix-env -iA nixos.prek
 nix profile install nixpkgs#prek
 ```
 
-<!-- nix-install:end -->
+<!-- --8<-- [end: nix-install] -->
 
 </details>
 
 <details>
 <summary>Conda</summary>
 
-<!-- conda-forge-install:start -->
+<!-- --8<-- [start: conda-forge-install] -->
 
 prek is available as `prek` via [conda-forge](https://anaconda.org/conda-forge/prek).
 
@@ -228,14 +228,14 @@ prek is available as `prek` via [conda-forge](https://anaconda.org/conda-forge/p
 conda install conda-forge::prek
 ```
 
-<!-- conda-forge-install:end -->
+<!-- --8<-- [end: conda-forge-install] -->
 
 </details>
 
 <details>
 <summary>Scoop (Windows)</summary>
 
-<!-- scoop-install:start -->
+<!-- --8<-- [start: scoop-install] -->
 
 prek is available via [Scoop](https://scoop.sh/#/apps?q=prek).
 
@@ -243,14 +243,14 @@ prek is available via [Scoop](https://scoop.sh/#/apps?q=prek).
 scoop install main/prek
 ```
 
-<!-- scoop-install:end -->
+<!-- --8<-- [end: scoop-install] -->
 
 </details>
 
 <details>
 <summary>MacPorts</summary>
 
-<!-- macports-install:start -->
+<!-- --8<-- [start: macports-install] -->
 
 prek is available via [MacPorts](https://ports.macports.org/port/prek/).
 
@@ -258,25 +258,25 @@ prek is available via [MacPorts](https://ports.macports.org/port/prek/).
 sudo port install prek
 ```
 
-<!-- macports-install:end -->
+<!-- --8<-- [end: macports-install] -->
 
 </details>
 
 <details>
 <summary>GitHub Releases</summary>
 
-<!-- pre-built-binaries:start -->
+<!-- --8<-- [start: pre-built-binaries] -->
 
 Pre-built binaries are available for download from the [GitHub releases](https://github.com/j178/prek/releases) page.
 
-<!-- pre-built-binaries:end -->
+<!-- --8<-- [end: pre-built-binaries] -->
 
 </details>
 
 <details>
 <summary>GitHub Actions</summary>
 
-<!-- github-actions:start -->
+<!-- --8<-- [start: github-actions] -->
 
 prek can be used in GitHub Actions via the [j178/prek-action](https://github.com/j178/prek-action) repository.
 
@@ -298,11 +298,11 @@ This action installs prek and runs `prek run --all-files` on your repository.
 
 prek is also available via [`taiki-e/install-action`](https://github.com/taiki-e/install-action) for installing various tools.
 
-<!-- github-actions:end -->
+<!-- --8<-- [end: github-actions] -->
 
 </details>
 
-<!-- self-update:start -->
+<!-- --8<-- [start: self-update] -->
 
 If installed via the standalone installer, prek can update itself to the latest version:
 
@@ -310,14 +310,14 @@ If installed via the standalone installer, prek can update itself to the latest 
 prek self update
 ```
 
-<!-- self-update:end -->
+<!-- --8<-- [end: self-update] -->
 
 ## Quick start
 
 - **I already use pre-commit:** follow the short migration checklist in the [quickstart guide](https://prek.j178.dev/quickstart/#already-using-pre-commit) to swap in `prek` safely.
 - **I'm new to pre-commit-style tools:** learn the basics—creating a config, running hooks, and installing git hooks—in the [beginner quickstart walkthrough](https://prek.j178.dev/quickstart/#new-to-pre-commit-style-workflows).
 
-<!-- why:start -->
+<!-- --8<-- [start: why] -->
 
 ## Why prek?
 
@@ -376,7 +376,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [ast-grep/ast-grep](https://github.com/ast-grep/ast-grep.github.io/commit/e30818144b2967a7f9172c8cf2f4596bba219bf5)
 - [commitizen-tools/commitizen](https://github.com/commitizen-tools/commitizen)
 
-<!-- why:end -->
+<!-- --8<-- [end: why] -->
 
 ## Acknowledgements
 
