@@ -537,7 +537,6 @@ pub(crate) struct LocalHook {
 /// It's the same as the manifest hook definition but with only a few predefined id allowed.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(try_from = "RemoteHook")]
 pub(crate) struct MetaHook {
     /// The id of the hook.
@@ -618,7 +617,6 @@ impl TryFrom<RemoteHook> for MetaHook {
 /// A builtin hook predefined in prek.
 /// Basically the same as meta hooks, but defined under `builtin` repo, and do other non-meta checks.
 #[derive(Debug, Clone, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(try_from = "RemoteHook")]
 pub(crate) struct BuiltinHook {
     /// The id of the hook.
@@ -670,6 +668,115 @@ impl TryFrom<RemoteHook> for BuiltinHook {
         builtin_hook.options.update(&hook_options.options);
 
         Ok(builtin_hook)
+    }
+}
+
+#[cfg(feature = "schemars")]
+fn predefined_hook_id_enum_schema(description: &str, allowed_ids: &[String]) -> serde_json::Value {
+    serde_json::json!({
+        "description": description,
+        "type": "string",
+        "enum": allowed_ids,
+    })
+}
+
+#[cfg(feature = "schemars")]
+fn predefined_hook_language_system_schema(description: &str) -> serde_json::Value {
+    serde_json::json!({
+        "anyOf": [
+            {
+                "description": description,
+                "type": "string",
+                "enum": ["system"],
+            },
+            { "type": "null" }
+        ]
+    })
+}
+
+#[cfg(feature = "schemars")]
+fn value_enum_names<T: clap::ValueEnum>() -> Vec<String> {
+    <T as clap::ValueEnum>::value_variants()
+        .iter()
+        .filter_map(|variant| {
+            clap::ValueEnum::to_possible_value(variant).map(|pv| pv.get_name().to_string())
+        })
+        .collect()
+}
+
+#[cfg(feature = "schemars")]
+fn predefined_hook_schema(
+    schema_gen: &mut schemars::SchemaGenerator,
+    description: &str,
+    allowed_ids: &[String],
+) -> schemars::Schema {
+    let mut schema = <RemoteHook as schemars::JsonSchema>::json_schema(schema_gen);
+
+    let root = schema.ensure_object();
+    root.insert(
+        "description".to_string(),
+        serde_json::Value::String(description.to_string()),
+    );
+
+    let properties = root
+        .get_mut("properties")
+        .and_then(serde_json::Value::as_object_mut);
+
+    if let Some(properties) = properties {
+        properties.insert(
+            "id".to_string(),
+            predefined_hook_id_enum_schema("The id of the hook.", allowed_ids),
+        );
+        properties.insert(
+            "language".to_string(),
+            predefined_hook_language_system_schema(
+                "Language must be `system` for predefined hooks (or omitted).",
+            ),
+        );
+        // `entry` is not allowed for predefined hooks.
+        properties.insert("entry".to_string(), serde_json::json!(false));
+    }
+
+    schema
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for MetaHook {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("MetaHook")
+    }
+
+    fn schema_id() -> Cow<'static, str> {
+        concat!(module_path!(), "::MetaHook").into()
+    }
+
+    fn json_schema(schema_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let allowed_ids = value_enum_names::<crate::hooks::MetaHooks>();
+        predefined_hook_schema(
+            schema_gen,
+            "A meta hook predefined in pre-commit.\n\nOnly a few predefined ids are allowed.\n`entry` is not allowed, and `language` may only be `system`.",
+            &allowed_ids,
+        )
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for BuiltinHook {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("BuiltinHook")
+    }
+
+    fn schema_id() -> Cow<'static, str> {
+        concat!(module_path!(), "::BuiltinHook").into()
+    }
+
+    fn json_schema(schema_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let allowed_ids = value_enum_names::<crate::hooks::BuiltinHooks>();
+        predefined_hook_schema(
+            schema_gen,
+            "A builtin hook predefined in prek.\n\nOnly predefined ids are allowed.\n`entry` is not allowed, and `language` may only be `system`.",
+            &allowed_ids,
+        )
     }
 }
 

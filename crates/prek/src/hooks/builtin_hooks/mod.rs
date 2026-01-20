@@ -9,7 +9,8 @@ use crate::store::Store;
 
 mod check_json5;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, clap::ValueEnum)]
+#[clap(rename_all = "kebab-case")]
 pub(crate) enum BuiltinHooks {
     CheckAddedLargeFiles,
     CheckCaseConflict,

@@ -150,7 +150,7 @@
   ],
   "definitions": {
     "BuiltinHook": {
-      "description": "A builtin hook predefined in prek.\nBasically the same as meta hooks, but defined under `builtin` repo, and do other non-meta checks.",
+      "description": "A builtin hook predefined in prek.\n\nOnly predefined ids are allowed.\n`entry` is not allowed, and `language` may only be `system`.",
       "type": "object",
       "properties": {
         "additional_dependencies": {
@@ -194,13 +194,7 @@
             "null"
           ]
         },
-        "entry": {
-          "description": "Override the entrypoint. Not documented in the official docs but works.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
+        "entry": false,
         "env": {
           "description": "Environment variables to set for the hook.",
           "type": [
@@ -253,13 +247,34 @@
         },
         "id": {
           "description": "The id of the hook.",
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "check-added-large-files",
+            "check-case-conflict",
+            "check-executables-have-shebangs",
+            "check-json",
+            "check-json5",
+            "check-merge-conflict",
+            "check-symlinks",
+            "check-toml",
+            "check-xml",
+            "check-yaml",
+            "detect-private-key",
+            "end-of-file-fixer",
+            "fix-byte-order-marker",
+            "mixed-line-ending",
+            "no-commit-to-branch",
+            "trailing-whitespace"
+          ]
         },
         "language": {
-          "description": "Override the language. Not documented in the official docs but works.",
           "anyOf": [
             {
-              "$ref": "#/definitions/Language"
+              "description": "Language must be `system` for predefined hooks (or omitted).",
+              "type": "string",
+              "enum": [
+                "system"
+              ]
             },
             {
               "type": "null"
@@ -691,7 +706,7 @@
       ]
     },
     "MetaHook": {
-      "description": "A meta hook predefined in pre-commit.\n\nIt's the same as the manifest hook definition but with only a few predefined id allowed.",
+      "description": "A meta hook predefined in pre-commit.\n\nOnly a few predefined ids are allowed.\n`entry` is not allowed, and `language` may only be `system`.",
       "type": "object",
       "properties": {
         "additional_dependencies": {
@@ -735,13 +750,7 @@
             "null"
           ]
         },
-        "entry": {
-          "description": "Override the entrypoint. Not documented in the official docs but works.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
+        "entry": false,
         "env": {
           "description": "Environment variables to set for the hook.",
           "type": [
@@ -794,13 +803,21 @@
         },
         "id": {
           "description": "The id of the hook.",
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "check-hooks-apply",
+            "check-useless-excludes",
+            "identity"
+          ]
         },
         "language": {
-          "description": "Override the language. Not documented in the official docs but works.",
           "anyOf": [
             {
-              "$ref": "#/definitions/Language"
+              "description": "Language must be `system` for predefined hooks (or omitted).",
+              "type": "string",
+              "enum": [
+                "system"
+              ]
             },
             {
               "type": "null"
