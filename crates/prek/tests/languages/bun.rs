@@ -123,7 +123,7 @@ fn language_version() -> Result<()> {
               - id: bun-version
                 name: bun version check
                 language: bun
-                language_version: "1"
+                language_version: ">1.2"
                 entry: bun -e 'console.log(`Bun ${Bun.version}`)'
                 always_run: true
                 verbose: true
@@ -152,6 +152,7 @@ fn language_version() -> Result<()> {
                 always_run: true
                 verbose: true
                 pass_filenames: false
+                additional_dependencies: ["cowsay"] # different dep to force create separate env
     "#});
 
     context.git_add(".");

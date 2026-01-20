@@ -40,12 +40,6 @@ impl FromStr for BunVersion {
     }
 }
 
-impl BunVersion {
-    pub(crate) fn new(version: semver::Version) -> Self {
-        Self(version)
-    }
-}
-
 /// `language_version` field of bun can be one of the following:
 /// - `default`: Find system installed bun, or download the latest version.
 /// - `system`: Find system installed bun, or error if not found.
