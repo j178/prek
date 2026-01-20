@@ -412,7 +412,7 @@ struct CachedConfigFile {
 
 /// Workspace discovery cache
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct WorkspaceCache {
+pub(crate) struct WorkspaceCache {
     /// Cache version for compatibility
     version: u32,
     /// Workspace root path
@@ -556,6 +556,66 @@ impl WorkspaceCache {
         let content = serde_json::to_string_pretty(self)?;
         std::fs::write(&cache_path, content)?;
         Ok(())
+    }
+
+    /// Best-effort source of config paths for bootstrapping config tracking.
+    ///
+    /// This is used on upgrades from older versions that didn't track configs yet.
+    /// It reads all cached workspace discovery entries under `cache/prek/workspace/*`
+    /// and collects any config file paths they mention.
+    pub(crate) fn cached_config_paths(store: &Store) -> FxHashSet<PathBuf> {
+        let mut paths: FxHashSet<PathBuf> = FxHashSet::default();
+
+        let workspace_cache_root = store.cache_path(CacheBucket::Prek).join("workspace");
+        let entries = match fs_err::read_dir(&workspace_cache_root) {
+            Ok(entries) => entries,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return paths,
+            Err(err) => {
+                debug!(path = %workspace_cache_root.display(), %err, "Failed to read workspace cache directory for tracking bootstrap");
+                return paths;
+            }
+        };
+
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) => {
+                    debug!(%err, "Failed to read workspace cache entry for tracking bootstrap");
+                    continue;
+                }
+            };
+
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+
+            let content = match fs_err::read_to_string(&path) {
+                Ok(content) => content,
+                Err(err) => {
+                    debug!(path = %path.display(), %err, "Failed to read workspace cache file for tracking bootstrap");
+                    continue;
+                }
+            };
+
+            let cache: WorkspaceCache = match serde_json::from_str(&content) {
+                Ok(cache) => cache,
+                Err(err) => {
+                    debug!(path = %path.display(), %err, "Failed to parse workspace cache file for tracking bootstrap");
+                    continue;
+                }
+            };
+
+            if cache.version != WorkspaceCache::CURRENT_VERSION {
+                continue;
+            }
+
+            for file in cache.config_files {
+                paths.insert(file.path);
+            }
+        }
+
+        paths
     }
 }
 

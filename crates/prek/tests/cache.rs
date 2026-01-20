@@ -2,6 +2,7 @@ use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCreateDir};
 use assert_fs::prelude::FileWriteStr;
 use prek_consts::CONFIG_FILE;
+use serde_json::json;
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -287,6 +288,75 @@ fn write_config_tracking_file(
         .collect();
     let content = serde_json::to_string_pretty(&configs)?;
     home.child("config-tracking.json").write_str(&content)?;
+    Ok(())
+}
+
+fn write_workspace_cache_file(
+    home: &ChildPath,
+    workspace_root: &std::path::Path,
+) -> anyhow::Result<()> {
+    use std::hash::{Hash as _, Hasher as _};
+    use std::time::SystemTime;
+
+    let config_path = workspace_root.join(CONFIG_FILE);
+    let metadata = fs_err::metadata(&config_path)?;
+    let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+    let size = metadata.len();
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    workspace_root.hash(&mut hasher);
+    let digest = hex::encode(hasher.finish().to_le_bytes());
+
+    let cache_path = home.child("cache/prek/workspace").child(digest);
+    let parent = cache_path.parent().expect("cache path has parent");
+    fs_err::create_dir_all(parent)?;
+
+    let content = json!({
+        "version": 1u32,
+        "workspace_root": workspace_root,
+        "created_at": serde_json::to_value(SystemTime::now())?,
+        "config_files": [
+            {
+                "path": config_path,
+                "modified": serde_json::to_value(modified)?,
+                "size": size,
+            }
+        ],
+    });
+
+    cache_path.write_str(&serde_json::to_string_pretty(&content)?)?;
+    Ok(())
+}
+
+#[test]
+fn cache_gc_bootstraps_tracking_from_workspace_cache() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config("repos: []\n");
+    context.git_add(".");
+
+    let home = context.home_dir();
+    write_workspace_cache_file(home, context.work_dir().path())?;
+
+    // Seed store entries that should be swept, even if `config-tracking.json` is missing.
+    home.child("repos/deadbeef").create_dir_all()?;
+    home.child("hooks/hook-env-dead").create_dir_all()?;
+
+    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("gc"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed 1 repos, 1 hook envs
+
+    ----- stderr -----
+    ");
+
+    home.child("repos/deadbeef")
+        .assert(predicates::path::missing());
+    home.child("hooks/hook-env-dead")
+        .assert(predicates::path::missing());
+
     Ok(())
 }
 
