@@ -290,12 +290,14 @@ fn print_removed_details(printer: Printer, verb: &str, removal: &Removal) -> Res
     let mut items = removal.items.clone();
     items.sort_by(|a, b| a.label.cmp(&b.label));
     for item in items {
+        writeln!(printer.stdout(), "{} {}", "-".dimmed(), item.label.bold())?;
         writeln!(
             printer.stdout(),
-            "- {}\n  path: {}",
-            item.label,
+            "  {}: {}",
+            "path".bold().dimmed(),
             item.abs_path
         )?;
+
         for line in item.lines {
             writeln!(printer.stdout(), "  {line}")?;
         }
@@ -433,11 +435,20 @@ fn sweep_dir_by_name(
         let entry_bytes = dir_size_bytes(&path);
 
         let item = if collect_names {
+            let repo_marker = (kind == RemovalKind::Repos)
+                .then(|| read_repo_marker(&path))
+                .flatten();
+            let hook_marker = (kind == RemovalKind::HookEnvs)
+                .then(|| read_hook_marker(&path))
+                .flatten();
+
             let mut item = RemovalItem::new(name.to_string(), path.to_string_lossy().to_string());
-            if let Some(label) = label_for_entry(kind, &path) {
+
+            if let Some(label) = label_for_entry(kind, repo_marker.as_ref(), hook_marker.as_ref()) {
                 item.label = label;
             }
-            item.lines = detail_lines_for_entry(kind, &path);
+
+            item.lines = detail_lines_for_entry(kind, repo_marker.as_ref(), hook_marker.as_ref());
             Some(item)
         } else {
             None
@@ -471,12 +482,14 @@ fn sweep_dir_by_name(
     Ok(removal)
 }
 
-fn label_for_entry(kind: RemovalKind, root: &Path) -> Option<String> {
+fn label_for_entry(
+    kind: RemovalKind,
+    repo_marker: Option<&RepoMarker>,
+    hook_marker: Option<&InstallInfo>,
+) -> Option<String> {
     match kind {
-        RemovalKind::Repos => {
-            read_repo_marker(root).map(|repo| format!("{}@{}", repo.repo, repo.rev))
-        }
-        RemovalKind::HookEnvs => read_hook_marker(root).map(|info| {
+        RemovalKind::Repos => repo_marker.map(|repo| format!("{}@{}", repo.repo, repo.rev)),
+        RemovalKind::HookEnvs => hook_marker.map(|info| {
             // Keep this short; more info goes in detail lines.
             format!("{} env", info.language.as_str())
         }),
@@ -484,39 +497,39 @@ fn label_for_entry(kind: RemovalKind, root: &Path) -> Option<String> {
     }
 }
 
-fn detail_lines_for_entry(kind: RemovalKind, root: &Path) -> Vec<String> {
+fn detail_lines_for_entry(
+    kind: RemovalKind,
+    _repo_marker: Option<&RepoMarker>,
+    hook_marker: Option<&InstallInfo>,
+) -> Vec<String> {
     const MAX_VALUE_CHARS: usize = 140;
 
     match kind {
-        RemovalKind::Repos => {
-            let Some(repo) = read_repo_marker(root) else {
-                return Vec::new();
-            };
-
-            let mut lines = Vec::new();
-            lines.push(format!("url: {}", repo.repo));
-            lines.push(format!("rev: {}", repo.rev));
-            lines
-        }
+        RemovalKind::Repos => vec![],
         RemovalKind::HookEnvs => {
-            let Some(info) = read_hook_marker(root) else {
+            let Some(info) = hook_marker else {
                 return Vec::new();
             };
 
             let mut lines = Vec::new();
             lines.push(format!(
-                "language: {} ({})",
+                "{}: {} ({})",
+                "language".dimmed().bold(),
                 info.language.as_str(),
                 info.language_version
             ));
 
             let (repo_dep, deps) = split_repo_dependency(&info.dependencies);
             if let Some(repo_dep) = repo_dep {
-                lines.push(format!("repo: {repo_dep}"));
+                lines.push(format!(
+                    "{}: {}",
+                    "repo".dimmed().bold(),
+                    truncate_end(&repo_dep, MAX_VALUE_CHARS)
+                ));
             }
             if !deps.is_empty() {
                 let deps_str = format_dependency_list(&deps, 6, MAX_VALUE_CHARS);
-                lines.push(format!("deps: {deps_str}"));
+                lines.push(format!("{}: {deps_str}", "deps".dimmed().bold()));
             }
             lines
         }

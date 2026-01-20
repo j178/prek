@@ -60,8 +60,6 @@ fn cache_gc_verbose_shows_removed_entries() {
     Removed 1 repos:
     - https://github.com/pre-commit/pre-commit-hooks@v1.0.0
       path: [HOME]/repos/deadbeef
-      url: https://github.com/pre-commit/pre-commit-hooks
-      rev: v1.0.0
 
     Removed 1 hook envs:
     - hook-env-dead
