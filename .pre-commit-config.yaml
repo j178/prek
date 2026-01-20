@@ -28,6 +28,7 @@ repos:
         additional_dependencies:
           - mdformat-mkdocs==5.1.3
           - mdformat-simple-breaks==0.1.0
+          - mdformat-frontmatter==2.0.10
 
   - repo: local
     hooks:
