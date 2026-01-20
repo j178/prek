@@ -537,7 +537,6 @@ pub(crate) struct LocalHook {
 /// It's the same as the manifest hook definition but with only a few predefined id allowed.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(try_from = "RemoteHook")]
 pub(crate) struct MetaHook {
     /// The id of the hook.
@@ -618,7 +617,6 @@ impl TryFrom<RemoteHook> for MetaHook {
 /// A builtin hook predefined in prek.
 /// Basically the same as meta hooks, but defined under `builtin` repo, and do other non-meta checks.
 #[derive(Debug, Clone, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(try_from = "RemoteHook")]
 pub(crate) struct BuiltinHook {
     /// The id of the hook.
@@ -670,6 +668,78 @@ impl TryFrom<RemoteHook> for BuiltinHook {
         builtin_hook.options.update(&hook_options.options);
 
         Ok(builtin_hook)
+    }
+}
+
+#[cfg(feature = "schemars")]
+fn predefined_hook_schema(
+    schema_gen: &mut schemars::SchemaGenerator,
+    description: &str,
+    id_schema: schemars::Schema,
+) -> schemars::Schema {
+    let mut schema = <RemoteHook as schemars::JsonSchema>::json_schema(schema_gen);
+
+    let root = schema.ensure_object();
+    root.insert("description".to_string(), serde_json::json!(description));
+    root.insert("required".to_string(), serde_json::json!(["id"]));
+
+    let properties = root
+        .get_mut("properties")
+        .and_then(serde_json::Value::as_object_mut);
+
+    if let Some(properties) = properties {
+        properties.insert("id".to_string(), id_schema.into());
+        properties.insert(
+            "language".to_string(),
+            serde_json::json!({
+                "anyOf": [
+                    {
+                        "type": "string",
+                        "enum": ["system"],
+                        "description": "Language must be `system` for predefined hooks (or omitted).",
+                    },
+                    { "type": "null" }
+                ]
+            })
+        );
+        // `entry` is not allowed for predefined hooks.
+        properties.insert(
+            "entry".to_string(),
+            serde_json::json!({
+                "const": false,
+                "description": "Entry is not allowed for predefined hooks.",
+            }),
+        );
+    }
+
+    schema
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for MetaHook {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("MetaHook")
+    }
+
+    fn json_schema(schema_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        use crate::hooks::MetaHooks;
+
+        let id_schema = schema_gen.subschema_for::<MetaHooks>();
+        predefined_hook_schema(schema_gen, "A meta hook predefined in prek.", id_schema)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for BuiltinHook {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("BuiltinHook")
+    }
+
+    fn json_schema(r#gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        use crate::hooks::BuiltinHooks;
+
+        let id_schema = r#gen.subschema_for::<BuiltinHooks>();
+        predefined_hook_schema(r#gen, "A builtin hook predefined in prek.", id_schema)
     }
 }
 
@@ -847,6 +917,10 @@ impl TryFrom<serde_json::Value> for Repo {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    schemars(title = "prek configuration file format")
+)]
 pub(crate) struct Config {
     pub repos: Vec<Repo>,
     /// A list of `--hook-types` which will be used by default when running `prek install`.
