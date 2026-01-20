@@ -249,35 +249,26 @@ pub(crate) async fn cache_gc(
         )?;
 
         if verbose {
-            if removed_repos.count > 0 {
-                print_removed_details(printer, verb, removed_repos.kind.as_str(), removed_repos)?;
-            }
-            if removed_hooks.count > 0 {
-                print_removed_details(printer, verb, removed_hooks.kind.as_str(), removed_hooks)?;
-            }
-            if removed_tools.count > 0 {
-                print_removed_details(printer, verb, removed_tools.kind.as_str(), removed_tools)?;
-            }
-            if removed_cache.count > 0 {
-                print_removed_details(printer, verb, removed_cache.kind.as_str(), removed_cache)?;
-            }
+            print_removed_details(printer, verb, removed_repos)?;
+            print_removed_details(printer, verb, removed_hooks)?;
+            print_removed_details(printer, verb, removed_tools)?;
+            print_removed_details(printer, verb, removed_cache)?;
         }
     }
 
     Ok(ExitStatus::Success)
 }
 
-fn print_removed_details(
-    printer: Printer,
-    verb: &str,
-    title: &str,
-    mut removal: Removal,
-) -> Result<()> {
+fn print_removed_details(printer: Printer, verb: &str, mut removal: Removal) -> Result<()> {
+    if removal.count == 0 {
+        return Ok(());
+    }
+
     removal.names.sort_unstable();
     writeln!(
         printer.stdout(),
         "\n{}:",
-        format!("{verb} {} {title}", removal.count.cyan()).bold()
+        format!("{verb} {} {}", removal.count.cyan(), removal.kind.as_str()).bold()
     )?;
     for name in removal.names {
         writeln!(printer.stdout(), "- {name}")?;
