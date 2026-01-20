@@ -327,6 +327,10 @@ impl HookBuilder {
 
     /// Build the hook.
     pub(crate) async fn build(mut self) -> Result<Hook, Error> {
+        // Ensure project-level defaults are applied in one place.
+        // This makes call sites simpler and avoids accidental divergence.
+        self.hook_spec.apply_project_defaults(self.project.config());
+
         self.check()?;
         self.fill_in_defaults();
 
@@ -564,14 +568,22 @@ impl Hook {
             return &self.additional_dependencies;
         }
         self.dependencies.get_or_init(|| {
-            // For remote hooks, itself is an implicit dependency of the hook.
-            let mut deps = FxHashSet::with_capacity_and_hasher(
-                self.additional_dependencies.len() + 1,
-                FxBuildHasher,
-            );
-            deps.extend(self.additional_dependencies.clone());
-            deps.insert(self.repo.to_string());
-            deps
+            env_key_dependencies(&self.additional_dependencies, Some(&self.repo.to_string()))
+        })
+    }
+
+    /// Returns a lightweight view of the hook environment identity used for reusing installs.
+    ///
+    /// Returns `None` for languages that do not install an environment.
+    pub(crate) fn env_key(&self) -> Option<HookEnvKeyRef<'_>> {
+        if !self.language.supports_install_env() {
+            return None;
+        }
+
+        Some(HookEnvKeyRef {
+            language: self.language,
+            dependencies: self.env_key_dependencies(),
+            language_request: &self.language_request,
         })
     }
 
@@ -595,6 +607,47 @@ pub(crate) struct HookEnvKey {
     pub(crate) language: Language,
     pub(crate) dependencies: FxHashSet<String>,
     pub(crate) language_request: LanguageRequest,
+}
+
+/// Borrowed form of [`HookEnvKey`] for comparing a hook to an existing installation
+/// without allocating/cloning dependency sets.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct HookEnvKeyRef<'a> {
+    pub(crate) language: Language,
+    pub(crate) dependencies: &'a FxHashSet<String>,
+    pub(crate) language_request: &'a LanguageRequest,
+}
+
+/// Builds the dependency set used to identify a hook environment.
+///
+/// For remote hooks, `remote_repo_dependency` is included so environments from different
+/// repositories are not reused accidentally.
+fn env_key_dependencies(
+    additional_dependencies: &FxHashSet<String>,
+    remote_repo_dependency: Option<&str>,
+) -> FxHashSet<String> {
+    let mut deps = FxHashSet::with_capacity_and_hasher(
+        additional_dependencies.len() + usize::from(remote_repo_dependency.is_some()),
+        FxBuildHasher,
+    );
+    deps.extend(additional_dependencies.iter().cloned());
+    if let Some(dep) = remote_repo_dependency {
+        deps.insert(dep.to_string());
+    }
+    deps
+}
+
+/// Shared matching logic between a computed hook env key (owned or borrowed) and an installed
+/// environment described by [`InstallInfo`].
+fn matches_install_info(
+    language: Language,
+    dependencies: &FxHashSet<String>,
+    language_request: &LanguageRequest,
+    info: &InstallInfo,
+) -> bool {
+    info.language == language
+        && info.dependencies == *dependencies
+        && language_request.satisfied_by(info)
 }
 
 impl HookEnvKey {
@@ -626,13 +679,13 @@ impl HookEnvKey {
             )
         })?;
 
-        let mut dependencies: FxHashSet<String> = FxHashSet::default();
-        if let Some(deps) = &hook_spec.options.additional_dependencies {
-            dependencies.extend(deps.iter().cloned());
-        }
-        if let Some(dep) = remote_repo_dependency {
-            dependencies.insert(dep.to_string());
-        }
+        let additional_dependencies: FxHashSet<String> = hook_spec
+            .options
+            .additional_dependencies
+            .as_ref()
+            .map_or_else(FxHashSet::default, |deps| deps.iter().cloned().collect());
+
+        let dependencies = env_key_dependencies(&additional_dependencies, remote_repo_dependency);
 
         Ok(Some(Self {
             language,
@@ -642,9 +695,24 @@ impl HookEnvKey {
     }
 
     pub(crate) fn matches_install_info(&self, info: &InstallInfo) -> bool {
-        info.language == self.language
-            && info.dependencies == self.dependencies
-            && self.language_request.satisfied_by(info)
+        matches_install_info(
+            self.language,
+            &self.dependencies,
+            &self.language_request,
+            info,
+        )
+    }
+}
+
+impl HookEnvKeyRef<'_> {
+    /// Returns true if this env key matches the given installed environment.
+    pub(crate) fn matches_install_info(&self, info: &InstallInfo) -> bool {
+        matches_install_info(
+            self.language,
+            self.dependencies,
+            self.language_request,
+            info,
+        )
     }
 }
 
@@ -796,9 +864,8 @@ impl InstallInfo {
     }
 
     pub(crate) fn matches(&self, hook: &Hook) -> bool {
-        self.language == hook.language
-            && &self.dependencies == hook.env_key_dependencies()
-            && hook.language_request.satisfied_by(self)
+        hook.env_key()
+            .is_some_and(|key| key.matches_install_info(self))
     }
 }
 

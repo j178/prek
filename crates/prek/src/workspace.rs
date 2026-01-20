@@ -326,21 +326,20 @@ impl Project {
                 config::Repo::Remote(repo_config) => {
                     for hook_config in &repo_config.hooks {
                         // Check hook id is valid.
-                        let Some(hook_spec) = repo.get_hook(&hook_config.id) else {
+                        let Some(manifest_hook) = repo.get_hook(&hook_config.id) else {
                             return Err(Error::HookNotFound {
                                 hook: hook_config.id.clone(),
                                 repo: repo.to_string(),
                             });
                         };
 
-                        let mut hook_spec = hook_spec.clone();
+                        let mut hook_spec = manifest_hook.clone();
                         hook_spec.apply_remote_hook_overrides(hook_config);
-                        hook_spec.apply_project_defaults(&self.config);
 
                         let builder = HookBuilder::new(
                             self.clone(),
                             Arc::clone(repo),
-                            hook_spec.clone(),
+                            hook_spec,
                             hooks.len(),
                         );
                         let hook = builder.build().await?;
@@ -350,8 +349,7 @@ impl Project {
                 }
                 config::Repo::Local(repo_config) => {
                     for hook_config in &repo_config.hooks {
-                        let mut hook_spec = HookSpec::from(hook_config.clone());
-                        hook_spec.apply_project_defaults(&self.config);
+                        let hook_spec = HookSpec::from(hook_config.clone());
 
                         let builder = HookBuilder::new(
                             self.clone(),
@@ -366,8 +364,7 @@ impl Project {
                 }
                 config::Repo::Meta(repo_config) => {
                     for hook_config in &repo_config.hooks {
-                        let mut hook_spec = HookSpec::from(hook_config.clone());
-                        hook_spec.apply_project_defaults(&self.config);
+                        let hook_spec = HookSpec::from(hook_config.clone());
 
                         let builder = HookBuilder::new(
                             self.clone(),
@@ -382,8 +379,7 @@ impl Project {
                 }
                 config::Repo::Builtin(repo_config) => {
                     for hook_config in &repo_config.hooks {
-                        let mut hook_spec = HookSpec::from(hook_config.clone());
-                        hook_spec.apply_project_defaults(&self.config);
+                        let hook_spec = HookSpec::from(hook_config.clone());
 
                         let builder = HookBuilder::new(
                             self.clone(),
