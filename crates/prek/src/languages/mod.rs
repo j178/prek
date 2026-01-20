@@ -15,7 +15,7 @@ use crate::config::Language;
 use crate::fs::{CWD, Simplified};
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::identify::parse_shebang;
-use crate::store::Store;
+use crate::store::{CacheBucket, Store, ToolBucket};
 use crate::{archive, hooks, warn_user_once};
 
 mod bun;
@@ -144,8 +144,29 @@ impl Language {
     pub fn supports_install_env(self) -> bool {
         !matches!(
             self,
-            Self::DockerImage | Self::Fail | Self::Pygrep | Self::Script | Self::System
+            Self::DockerImage | Self::Fail | Self::Script | Self::System
         )
+    }
+
+    pub fn tool_buckets(self) -> &'static [ToolBucket] {
+        match self {
+            Self::Bun => &[ToolBucket::Bun],
+            Self::Golang => &[ToolBucket::Go],
+            Self::Node => &[ToolBucket::Node],
+            Self::Python | Self::Pygrep => &[ToolBucket::Uv, ToolBucket::Python],
+            Self::Ruby => &[ToolBucket::Ruby],
+            Self::Rust => &[ToolBucket::Rustup],
+            _ => &[],
+        }
+    }
+
+    pub fn cache_buckets(self) -> &'static [CacheBucket] {
+        match self {
+            Self::Golang => &[CacheBucket::Go],
+            Self::Python | Self::Pygrep => &[CacheBucket::Uv, CacheBucket::Python],
+            Self::Rust => &[CacheBucket::Cargo],
+            _ => &[],
+        }
     }
 
     /// Return whether the language allows specifying the version, e.g. we can install a specific
