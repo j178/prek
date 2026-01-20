@@ -26,7 +26,7 @@ docker run --rm ghcr.io/j178/prek:v0.2.30 --version
 ## GitHub Actions
 
 {%
-  include-markdown "../README.md"
-  start="<!-- github-actions:start -->"
-  end="<!-- github-actions:end -->"
+include-markdown "../README.md"
+start="<!-- github-actions:start -->"
+end="<!-- github-actions:end -->"
 %}

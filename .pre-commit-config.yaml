@@ -19,6 +19,16 @@ repos:
     hooks:
       - id: typos
 
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        language: python  # ensures that Renovate can update additional_dependencies
+        args: [--number, --compact-tables, --align-semantic-breaks-in-lists]
+        additional_dependencies:
+          - mdformat-mkdocs==5.1.3
+          - mdformat-simple-breaks==0.1.0
+
   - repo: local
     hooks:
       - id: cargo-fmt

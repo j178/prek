@@ -14,12 +14,14 @@
 </div>
 
 <!-- description:start -->
+
 [pre-commit](https://pre-commit.com/) is a framework to run hooks written in many languages, and it manages the
 language toolchain and dependencies for running the hooks.
 
 *prek* is a reimagined version of pre-commit, built in Rust.
 It is designed to be a faster, dependency-free and drop-in alternative for it,
 while also providing some additional long-requested features.
+
 <!-- description:end -->
 
 > [!NOTE]
@@ -28,6 +30,7 @@ while also providing some additional long-requested features.
 > Please note that some subcommands and languages are still missing for full drop‑in parity with `pre-commit`. Track the remaining gaps here: [TODO](https://prek.j178.dev/todo/).
 
 <!-- features:start -->
+
 ## Features
 
 - 🚀 A single binary with no dependencies, does not require Python or any other runtime.
@@ -37,6 +40,7 @@ while also providing some additional long-requested features.
 - 🐍 Integration with [`uv`](https://github.com/astral-sh/uv) for managing Python virtual environments and dependencies.
 - 🛠️ Improved toolchain installations for Python, Node.js, Go, Rust and Ruby, shared between hooks.
 - 📦 [Built-in](https://prek.j178.dev/builtin/) Rust-native implementation of some common hooks.
+
 <!-- features:end -->
 
 ## Table of contents
@@ -57,17 +61,21 @@ prek provides a standalone installer script to download and install the tool,
 On Linux and macOS:
 
 <!-- linux-standalone-install:start -->
+
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.2.30/prek-installer.sh | sh
 ```
+
 <!-- linux-standalone-install:end -->
 
 On Windows:
 
 <!-- windows-standalone-install:start -->
+
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.2.30/prek-installer.ps1 | iex"
 ```
+
 <!-- windows-standalone-install:end -->
 
 </details>
@@ -76,6 +84,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases
 <summary>PyPI</summary>
 
 <!-- pypi-install:start -->
+
 prek is published as Python binary wheel to PyPI, you can install it using `pip`, `uv` (recommended), or `pipx`:
 
 ```bash
@@ -94,6 +103,7 @@ pip install prek
 # Using pipx
 pipx install prek
 ```
+
 <!-- pypi-install:end -->
 
 </details>
@@ -102,9 +112,11 @@ pipx install prek
 <summary>Homebrew</summary>
 
 <!-- homebrew-install:start -->
+
 ```bash
 brew install prek
 ```
+
 <!-- homebrew-install:end -->
 
 </details>
@@ -113,11 +125,13 @@ brew install prek
 <summary>mise</summary>
 
 <!-- mise-install:start -->
+
 To use prek with [mise](https://mise.jdx.dev) ([v2025.8.11](https://github.com/jdx/mise/releases/tag/v2025.8.11) or later):
 
 ```bash
 mise use prek
 ```
+
 <!-- mise-install:end -->
 
 </details>
@@ -126,11 +140,13 @@ mise use prek
 <summary>Cargo binstall</summary>
 
 <!-- cargo-binstall:start -->
+
 Install pre-compiled binaries from GitHub using [cargo-binstall](https://github.com/cargo-bins/cargo-binstall):
 
 ```bash
 cargo binstall prek
 ```
+
 <!-- cargo-binstall:end -->
 
 </details>
@@ -139,11 +155,13 @@ cargo binstall prek
 <summary>Cargo</summary>
 
 <!-- cargo-install:start -->
+
 Build from source using Cargo (Rust 1.89+ is required):
 
 ```bash
 cargo install --locked prek
 ```
+
 <!-- cargo-install:end -->
 
 </details>
@@ -152,6 +170,7 @@ cargo install --locked prek
 <summary>npmjs</summary>
 
 <!-- npmjs-install:start -->
+
 prek is published as a Node.js package, you can install it using `npm`, `pnpm`, or `npx`:
 
 ```bash
@@ -170,6 +189,7 @@ npm install -g @j178/prek
 # then use `prek` command
 prek --version
 ```
+
 <!-- npmjs-install:end -->
 
 </details>
@@ -178,6 +198,7 @@ prek --version
 <summary>Nix</summary>
 
 <!-- nix-install:start -->
+
 prek is available via [Nixpkgs](https://search.nixos.org/packages?channel=unstable&show=prek&query=prek).
 
 ```shell
@@ -191,6 +212,7 @@ nix-env -iA nixos.prek
 # Non-NixOS with flakes:
 nix profile install nixpkgs#prek
 ```
+
 <!-- nix-install:end -->
 
 </details>
@@ -199,11 +221,13 @@ nix profile install nixpkgs#prek
 <summary>Conda</summary>
 
 <!-- conda-forge-install:start -->
+
 prek is available as `prek` via [conda-forge](https://anaconda.org/conda-forge/prek).
 
 ```shell
 conda install conda-forge::prek
 ```
+
 <!-- conda-forge-install:end -->
 
 </details>
@@ -212,31 +236,39 @@ conda install conda-forge::prek
 <summary>Scoop (Windows)</summary>
 
 <!-- scoop-install:start -->
+
 prek is available via [Scoop](https://scoop.sh/#/apps?q=prek).
 
 ```powershell
 scoop install main/prek
 ```
+
 <!-- scoop-install:end -->
+
 </details>
 
 <details>
 <summary>MacPorts</summary>
 
 <!-- macports-install:start -->
+
 prek is available via [MacPorts](https://ports.macports.org/port/prek/).
 
 ```bash
 sudo port install prek
 ```
+
 <!-- macports-install:end -->
+
 </details>
 
 <details>
 <summary>GitHub Releases</summary>
 
 <!-- pre-built-binaries:start -->
+
 Pre-built binaries are available for download from the [GitHub releases](https://github.com/j178/prek/releases) page.
+
 <!-- pre-built-binaries:end -->
 
 </details>
@@ -245,6 +277,7 @@ Pre-built binaries are available for download from the [GitHub releases](https:/
 <summary>GitHub Actions</summary>
 
 <!-- github-actions:start -->
+
 prek can be used in GitHub Actions via the [j178/prek-action](https://github.com/j178/prek-action) repository.
 
 Example workflow:
@@ -264,15 +297,19 @@ jobs:
 This action installs prek and runs `prek run --all-files` on your repository.
 
 prek is also available via [`taiki-e/install-action`](https://github.com/taiki-e/install-action) for installing various tools.
+
 <!-- github-actions:end -->
+
 </details>
 
 <!-- self-update:start -->
+
 If installed via the standalone installer, prek can update itself to the latest version:
 
 ```bash
 prek self update
 ```
+
 <!-- self-update:end -->
 
 ## Quick start
@@ -281,6 +318,7 @@ prek self update
 - **I'm new to pre-commit-style tools:** learn the basics—creating a config, running hooks, and installing git hooks—in the [beginner quickstart walkthrough](https://prek.j178.dev/quickstart/#new-to-pre-commit-style-workflows).
 
 <!-- why:start -->
+
 ## Why prek?
 
 ### prek is faster

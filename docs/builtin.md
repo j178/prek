@@ -25,6 +25,7 @@ repos:
 ```
 
 !!! note
+
     In this mode, `prek` will still clone the repository and create the environment (e.g., a Python venv) to ensure full compatibility and fallback capabilities. However, the actual hook execution bypasses the environment and runs the native Rust code.
 
 ### Supported Hooks
