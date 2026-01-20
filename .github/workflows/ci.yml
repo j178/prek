@@ -321,6 +321,8 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: "Cargo test"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cargo llvm-cov nextest \
             --no-report \
@@ -410,6 +412,8 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: "Cargo test"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cargo nextest run \
             --workspace \
@@ -570,6 +574,8 @@ jobs:
 
       - name: "Cargo test"
         working-directory: ${{ env.PREK_WORKSPACE }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Remove msys64 from PATH for Rust compilation
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\msys64\\' }) -join ';'
