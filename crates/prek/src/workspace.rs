@@ -121,15 +121,29 @@ impl Project {
             "Loading project configuration"
         );
 
-        let config = read_config(&config_path)?;
+        let mut config = read_config(&config_path)?;
         let size = config.repos.len();
 
-        let root = root.unwrap_or_else(|| {
-            config_path
-                .parent()
-                .expect("config file must have a parent")
-                .to_path_buf()
-        });
+        let config_dir = config_path
+            .parent()
+            .expect("config file must have a parent");
+
+        // Resolve relative repo paths against the config file's directory.
+        // This ensures paths like `../hook-repo` are resolved from where the
+        // config file lives, not from the process's current working directory.
+        for repo in &mut config.repos {
+            if let config::Repo::Remote(remote) = repo {
+                let repo_path = Path::new(&remote.repo);
+                if repo_path.is_relative() {
+                    let resolved = config_dir.join(repo_path);
+                    if resolved.is_dir() {
+                        remote.repo = resolved.to_string_lossy().into_owned();
+                    }
+                }
+            }
+        }
+
+        let root = root.unwrap_or_else(|| config_dir.to_path_buf());
 
         Ok(Self {
             root,

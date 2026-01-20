@@ -1290,3 +1290,117 @@ fn orphan_projects() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that relative repo paths in subproject configs resolve from the config
+/// file's directory, not from the process's current working directory.
+///
+/// Regression test for <https://github.com/j178/prek/issues/1065>
+#[test]
+fn relative_repo_path_resolution() -> Result<()> {
+    use assert_fs::fixture::PathCreateDir;
+    use prek_consts::MANIFEST_FILE;
+
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+    context.disable_auto_crlf();
+
+    // Create a local hook repository at the root level
+    let hook_repo = context.work_dir().child("hook-repo");
+    hook_repo.create_dir_all()?;
+
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&hook_repo)
+        .assert()
+        .success();
+
+    Command::new("git")
+        .args(["config", "user.name", "Test"])
+        .current_dir(&hook_repo)
+        .assert()
+        .success();
+
+    Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(&hook_repo)
+        .assert()
+        .success();
+
+    Command::new("git")
+        .args(["config", "core.autocrlf", "false"])
+        .current_dir(&hook_repo)
+        .assert()
+        .success();
+
+    hook_repo.child(MANIFEST_FILE).write_str(indoc! {r"
+        - id: test-hook
+          name: Test Hook
+          entry: echo test
+          language: system
+          always_run: true
+    "})?;
+
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(&hook_repo)
+        .assert()
+        .success();
+
+    Command::new("git")
+        .args(["commit", "-m", "Initial commit"])
+        .current_dir(&hook_repo)
+        .assert()
+        .success();
+
+    // Get the commit SHA
+    let output = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(&hook_repo)
+        .output()?;
+    let commit_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    // Create a subproject that references the hook repo with a relative path
+    let subproject = context.work_dir().child("subproject");
+    subproject.create_dir_all()?;
+
+    // From subproject/, ../hook-repo should resolve to the hook-repo at root
+    subproject
+        .child(".pre-commit-config.yaml")
+        .write_str(&format!(
+            "repos:\n  - repo: ../hook-repo\n    rev: {commit_sha}\n    hooks:\n      - id: test-hook\n        always_run: true\n"
+        ))?;
+
+    subproject.child("test.txt").write_str("test content")?;
+
+    // Root config so workspace discovery works
+    context.write_pre_commit_config(indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: noop
+                name: Noop
+                entry: echo noop
+                language: system
+                always_run: true
+    "});
+
+    context.git_add(".");
+
+    // Run from the root directory - the relative path ../hook-repo should resolve
+    // from subproject/.pre-commit-config.yaml's location, not from CWD
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `subproject`:
+    Test Hook................................................................Passed
+
+    Running hooks for `.`:
+    Noop.....................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
