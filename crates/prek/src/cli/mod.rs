@@ -15,6 +15,7 @@ use crate::config::{HookType, Language, Stage};
 
 mod auto_update;
 mod cache_clean;
+mod cache_gc;
 mod cache_size;
 mod completion;
 mod hook_impl;
@@ -30,6 +31,7 @@ mod validate;
 
 pub(crate) use auto_update::auto_update;
 pub(crate) use cache_clean::cache_clean;
+pub(crate) use cache_gc::cache_gc;
 pub(crate) use cache_size::cache_size;
 use completion::selector_completer;
 pub(crate) use hook_impl::hook_impl;
@@ -225,7 +227,7 @@ pub(crate) enum Command {
     Cache(CacheNamespace),
     /// Clean unused cached repos.
     #[command(hide = true)]
-    GC,
+    GC(CacheGcArgs),
     /// Remove all prek cached data.
     #[command(hide = true)]
     Clean,
@@ -665,7 +667,7 @@ pub(crate) enum CacheCommand {
     /// Show the location of the prek cache.
     Dir,
     /// Remove unused cached repositories, hook environments, and other data.
-    GC,
+    GC(CacheGcArgs),
     /// Remove all prek cached data.
     Clean,
     /// Show the size of the prek cache.
@@ -677,6 +679,13 @@ pub struct SizeArgs {
     /// Display the cache size in human-readable format (e.g., `1.2 GiB` instead of raw bytes).
     #[arg(long = "human", short = 'H', alias = "human-readable")]
     pub(crate) human: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct CacheGcArgs {
+    /// Print what would be removed, but do not delete anything.
+    #[arg(long)]
+    pub(crate) dry_run: bool,
 }
 
 #[derive(Debug, Args)]

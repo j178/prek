@@ -4,7 +4,11 @@ This page tracks gaps that prevent `prek` from being a drop-in replacement for `
 
 ## Subcommands not implemented
 
-- `gc`
+All major subcommands of `pre-commit` have been implemented in `prek`.
+
+!!! Note "pre-commit hazmat"
+
+    The new `pre-commit hazmat` subcommand introduced in pre-commit [v4.5.0](https://github.com/pre-commit/pre-commit/releases/tag/v4.5.0) is a bit niche and unlikely to be widely used. It is not currently implemented in `prek`.
 
 ## Language support status
 

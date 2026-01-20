@@ -6,6 +6,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use etcetera::BaseStrategy;
 use futures::StreamExt;
+use rustc_hash::FxHashSet;
 use thiserror::Error;
 use tracing::{debug, warn};
 
@@ -39,6 +40,8 @@ fn expand_tilde(path: PathBuf) -> PathBuf {
     }
     path
 }
+
+pub(crate) const REPO_MARKER: &str = ".prek-repo.json";
 
 /// A store for managing repos.
 #[derive(Debug)]
@@ -99,7 +102,7 @@ impl Store {
     ) -> Result<PathBuf, Error> {
         // Check if the repo is already cloned.
         let target = self.repo_path(repo);
-        if target.join(".prek-repo.json").try_exists()? {
+        if target.join(REPO_MARKER).try_exists()? {
             return Ok(target);
         }
 
@@ -121,7 +124,7 @@ impl Store {
         fs_err::tokio::rename(temp, &target).await?;
 
         let content = serde_json::to_string_pretty(&repo)?;
-        fs_err::tokio::write(target.join(".prek-repo.json"), content).await?;
+        fs_err::tokio::write(target.join(REPO_MARKER), content).await?;
 
         if let Some((reporter, progress)) = progress {
             reporter.on_clone_complete(progress);
@@ -170,12 +173,16 @@ impl Store {
         LockedFile::acquire(self.path.join(".lock"), "store").await
     }
 
-    /// Returns the path to the cloned repo.
-    fn repo_path(&self, repo: &RemoteRepo) -> PathBuf {
+    /// Returns the path to where a remote repo would be stored.
+    pub(crate) fn repo_path(&self, repo: &RemoteRepo) -> PathBuf {
+        self.repos_dir().join(Self::repo_key(repo))
+    }
+
+    /// Returns the store key (directory name) for a remote repo.
+    pub(crate) fn repo_key(repo: &RemoteRepo) -> String {
         let mut hasher = DefaultHasher::new();
         repo.hash(&mut hasher);
-        let digest = to_hex(hasher.finish());
-        self.repos_dir().join(digest)
+        to_hex(hasher.finish())
     }
 
     pub(crate) fn repos_dir(&self) -> PathBuf {
@@ -190,13 +197,21 @@ impl Store {
         self.path.join("patches")
     }
 
+    pub(crate) fn tools_dir(&self) -> PathBuf {
+        self.path.join("tools")
+    }
+
+    pub(crate) fn cache_dir(&self) -> PathBuf {
+        self.path.join("cache")
+    }
+
     /// The path to the tool directory in the store.
     pub(crate) fn tools_path(&self, tool: ToolBucket) -> PathBuf {
-        self.path.join("tools").join(tool.as_str())
+        self.tools_dir().join(tool.as_str())
     }
 
     pub(crate) fn cache_path(&self, tool: CacheBucket) -> PathBuf {
-        self.path.join("cache").join(tool.as_str())
+        self.cache_dir().join(tool.as_str())
     }
 
     /// Scratch path for temporary files.
@@ -207,9 +222,52 @@ impl Store {
     pub(crate) fn log_file(&self) -> PathBuf {
         self.path.join("prek.log")
     }
+
+    pub(crate) fn config_tracking_file(&self) -> PathBuf {
+        self.path.join("config-tracking.json")
+    }
+
+    /// Track new config files for GC.
+    pub(crate) fn track_configs<'a>(
+        &self,
+        config_paths: impl Iterator<Item = &'a Path>,
+    ) -> Result<(), Error> {
+        let mut tracked = self.tracked_configs()?;
+        for config_path in config_paths {
+            tracked.insert(config_path.to_path_buf());
+        }
+
+        let tracking_file = self.config_tracking_file();
+        let content = serde_json::to_string_pretty(&tracked)?;
+        fs_err::write(&tracking_file, content)?;
+
+        Ok(())
+    }
+
+    /// Get all tracked config files.
+    pub(crate) fn tracked_configs(&self) -> Result<FxHashSet<PathBuf>, Error> {
+        let tracking_file = self.config_tracking_file();
+        match fs_err::read_to_string(&tracking_file) {
+            Ok(content) => serde_json::from_str(&content).or_else(|e| {
+                warn!("Failed to parse config tracking file: {e}, resetting");
+                Ok(FxHashSet::default())
+            }),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(FxHashSet::default()),
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    /// Update the tracked configs file.
+    pub(crate) fn update_tracked_configs(&self, configs: &FxHashSet<PathBuf>) -> Result<(), Error> {
+        let tracking_file = self.config_tracking_file();
+        let content = serde_json::to_string_pretty(configs)?;
+        fs_err::write(&tracking_file, content)?;
+
+        Ok(())
+    }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, Hash, PartialEq)]
 pub(crate) enum ToolBucket {
     Uv,
     Python,
@@ -232,7 +290,7 @@ impl ToolBucket {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, Hash, PartialEq)]
 pub(crate) enum CacheBucket {
     Uv,
     Go,
