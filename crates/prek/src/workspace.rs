@@ -326,57 +326,69 @@ impl Project {
                 config::Repo::Remote(repo_config) => {
                     for hook_config in &repo_config.hooks {
                         // Check hook id is valid.
-                        let Some(hook_spec) = repo.get_hook(&hook_config.id) else {
+                        let Some(manifest_hook) = repo.get_hook(&hook_config.id) else {
                             return Err(Error::HookNotFound {
                                 hook: hook_config.id.clone(),
                                 repo: repo.to_string(),
                             });
                         };
 
-                        let repo = Arc::clone(repo);
-                        let mut builder =
-                            HookBuilder::new(self.clone(), repo, hook_spec.clone(), hooks.len());
-                        builder.update(hook_config);
-                        builder.combine(&self.config);
+                        let mut hook_spec = manifest_hook.clone();
+                        hook_spec.apply_remote_hook_overrides(hook_config);
 
+                        let builder = HookBuilder::new(
+                            self.clone(),
+                            Arc::clone(repo),
+                            hook_spec,
+                            hooks.len(),
+                        );
                         let hook = builder.build().await?;
+
                         hooks.push(hook);
                     }
                 }
                 config::Repo::Local(repo_config) => {
                     for hook_config in &repo_config.hooks {
-                        let repo = Arc::clone(repo);
                         let hook_spec = HookSpec::from(hook_config.clone());
-                        let mut builder =
-                            HookBuilder::new(self.clone(), repo, hook_spec, hooks.len());
 
-                        builder.combine(&self.config);
-
+                        let builder = HookBuilder::new(
+                            self.clone(),
+                            Arc::clone(repo),
+                            hook_spec,
+                            hooks.len(),
+                        );
                         let hook = builder.build().await?;
+
                         hooks.push(hook);
                     }
                 }
                 config::Repo::Meta(repo_config) => {
                     for hook_config in &repo_config.hooks {
-                        let repo = Arc::clone(repo);
                         let hook_spec = HookSpec::from(hook_config.clone());
-                        let mut builder =
-                            HookBuilder::new(self.clone(), repo, hook_spec, hooks.len());
-                        builder.combine(&self.config);
 
+                        let builder = HookBuilder::new(
+                            self.clone(),
+                            Arc::clone(repo),
+                            hook_spec,
+                            hooks.len(),
+                        );
                         let hook = builder.build().await?;
+
                         hooks.push(hook);
                     }
                 }
                 config::Repo::Builtin(repo_config) => {
                     for hook_config in &repo_config.hooks {
-                        let repo = Arc::clone(repo);
                         let hook_spec = HookSpec::from(hook_config.clone());
-                        let mut builder =
-                            HookBuilder::new(self.clone(), repo, hook_spec, hooks.len());
-                        builder.combine(&self.config);
 
+                        let builder = HookBuilder::new(
+                            self.clone(),
+                            Arc::clone(repo),
+                            hook_spec,
+                            hooks.len(),
+                        );
                         let hook = builder.build().await?;
+
                         hooks.push(hook);
                     }
                 }
