@@ -373,6 +373,29 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
+    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "-v"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed 2 hook envs, 3 tools ([SIZE])
+
+    Removed 2 hook envs:
+    - ruby-remove
+      path: [HOME]/hooks/ruby-remove
+    - rust-remove
+      path: [HOME]/hooks/rust-remove
+
+    Removed 3 tools:
+    - go/1.23.0
+      path: [HOME]/tools/go/1.23.0
+    - node/21.0.0
+      path: [HOME]/tools/node/21.0.0
+    - python/3.11.0
+      path: [HOME]/tools/python/3.11.0
+
+    ----- stderr -----
+    ");
+
     Ok(())
 }
 
