@@ -203,6 +203,80 @@ fn cache_gc_removes_unreferenced_entries() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: local-python
+                name: Local Python Hook
+                entry: python -c "print('hello')"
+                language: python
+    "#});
+
+    cwd.child("file.txt").write_str("Hello\n")?;
+    context.git_add(".");
+
+    // Install + run the local hook so it creates a hook env under PREK_HOME/hooks.
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Local Python Hook........................................................Passed
+
+    ----- stderr -----
+    ");
+
+    let home = context.home_dir();
+    let hooks_dir = home.child("hooks");
+
+    let mut local_envs = Vec::new();
+    for entry in fs_err::read_dir(hooks_dir.path())? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with("python-") {
+            local_envs.push(name);
+        }
+    }
+
+    assert!(
+        !local_envs.is_empty(),
+        "expected at least one local hook env"
+    );
+
+    // Add an obviously-unused entry to ensure GC does work.
+    home.child("hooks/unused-hook-env").create_dir_all()?;
+
+    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed 1 hook envs
+
+    ----- stderr -----
+    ");
+
+    // The local hook env(s) should remain.
+    for env in local_envs {
+        home.child(format!("hooks/{env}"))
+            .assert(predicates::path::is_dir());
+    }
+    // Unused should be swept.
+    home.child("hooks/unused-hook-env")
+        .assert(predicates::path::missing());
+
+    Ok(())
+}
+
 fn write_config_tracking_file(
     home: &ChildPath,
     configs: &[&std::path::Path],
