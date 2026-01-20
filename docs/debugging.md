@@ -1,3 +1,7 @@
+---
+icon: lucide/bug-play
+---
+
 # Debugging
 
 To enable verbose tracing output, use the `-vvv` flag when running prek:

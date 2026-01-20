@@ -1,3 +1,7 @@
+---
+icon: lucide/terminal
+---
+
 # CLI Reference
 
 ## prek

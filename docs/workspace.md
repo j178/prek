@@ -1,3 +1,7 @@
+---
+icon: lucide/folder-tree
+---
+
 # Workspace Mode
 
 `prek` supports a powerful workspace mode that allows you to manage multiple projects with their own pre-commit configurations within a single repository. This is particularly useful for monorepos or projects with complex directory structures.

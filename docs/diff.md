@@ -1,3 +1,7 @@
+---
+icon: lucide/diff
+---
+
 # Difference from pre-commit
 
 ## General differences

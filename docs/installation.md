@@ -1,3 +1,7 @@
+---
+icon: lucide/package
+---
+
 # Installation
 
 prek provides multiple installation methods to suit different needs and environments.

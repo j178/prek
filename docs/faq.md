@@ -1,3 +1,7 @@
+---
+icon: lucide/circle-question-mark
+---
+
 # FAQ
 
 ## What does `prek install --install-hooks` do?

@@ -1,3 +1,7 @@
+---
+icon: lucide/code
+---
+
 # Language support
 
 ## What “language” means in prek

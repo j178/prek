@@ -1,3 +1,7 @@
+---
+icon: lucide/blocks
+---
+
 # Integrations
 
 This page documents common ways to integrate prek into CI and container workflows.

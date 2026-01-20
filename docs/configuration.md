@@ -1,3 +1,7 @@
+---
+icon: lucide/file-cog
+---
+
 # Configuration
 
 `prek` is **fully compatible** with the [`pre-commit`](https://pre-commit.com/) configuration file `.pre-commit-config.yaml`, so your existing configs work unchanged.

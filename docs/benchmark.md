@@ -1,3 +1,7 @@
+---
+icon: lucide/chart-bar-decreasing
+---
+
 # Benchmarks
 
 This page presents benchmarks comparing prek vs pre-commit.

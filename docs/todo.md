@@ -1,3 +1,7 @@
+---
+icon: lucide/list-todo
+---
+
 # TODO: Parity with pre-commit
 
 This page tracks gaps that prevent `prek` from being a drop-in replacement for `pre-commit`.

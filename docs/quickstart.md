@@ -1,3 +1,7 @@
+---
+icon: lucide/rocket
+---
+
 # Quickstart
 
 This page helps you get productive with **prek** in minutes, whether you are migrating from [pre-commit](https://pre-commit.com/) or starting from scratch.
