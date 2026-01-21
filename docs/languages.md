@@ -127,13 +127,13 @@ Pre-release strings (for example `go1.22rc1`) are not supported yet.
 
 **Status in prek:** Not supported yet.
 
-Tracking: Not yet tracked
+Tracking: [#1445](https://github.com/j178/prek/issues/1445)
 
 ### julia
 
 **Status in prek:** Not supported yet.
 
-Tracking: Not yet tracked
+Tracking: [#1446](https://github.com/j178/prek/issues/1446)
 
 ### lua
 
@@ -169,7 +169,7 @@ Supported formats:
 
 **Status in prek:** Not supported yet.
 
-Tracking: Not yet tracked
+Tracking: [#1447](https://github.com/j178/prek/issues/1447)
 
 ### python
 
