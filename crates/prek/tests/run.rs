@@ -2885,3 +2885,50 @@ fn version_info() {
     ----- stderr -----
     ");
 }
+
+#[test]
+fn expands_tilde_in_prek_home() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: ok
+                name: ok
+                entry: echo ok
+                language: system
+    "});
+    context.git_add(".");
+
+    let fake_home = context.work_dir().child("fake-home");
+    fake_home.create_dir_all()?;
+
+    cmd_snapshot!(context.filters(), context
+        .run()
+        .env("HOME", fake_home.path())
+        .env("USERPROFILE", fake_home.path()) // For Windows
+        .env(EnvVars::PREK_HOME, "~/prek-store"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ok.......................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    let store = fake_home.child("prek-store");
+    store.child("README").assert(predicate::path::exists());
+    store.child("repos").assert(predicate::path::is_dir());
+    store.child("hooks").assert(predicate::path::is_dir());
+    store.child("scratch").assert(predicate::path::is_dir());
+
+    // Ensure we didn't create a literal `./~` directory under the project.
+    context
+        .work_dir()
+        .child("~")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}

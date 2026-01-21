@@ -30,6 +30,16 @@ pub enum Error {
     Serde(#[from] serde_json::Error),
 }
 
+/// Expand a path starting with `~` to the user's home directory.
+fn expand_tilde(path: PathBuf) -> PathBuf {
+    if let Ok(stripped) = path.strip_prefix("~") {
+        if let Some(home) = std::env::home_dir() {
+            return home.join(stripped);
+        }
+    }
+    path
+}
+
 /// A store for managing repos.
 #[derive(Debug)]
 pub struct Store {
@@ -44,7 +54,7 @@ impl Store {
     /// Create a store from environment variables or default paths.
     pub(crate) fn from_settings() -> Result<Self, Error> {
         let path = if let Some(path) = EnvVars::var_os(EnvVars::PREK_HOME) {
-            Some(path.into())
+            Some(expand_tilde(PathBuf::from(path)))
         } else {
             etcetera::choose_base_strategy()
                 .map(|path| path.cache_dir().join("prek"))
