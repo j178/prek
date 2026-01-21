@@ -39,7 +39,7 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="prek-install--includes"><a href="#prek-install--includes"<code>HOOK|PROJECT</code></a></dt><dd><p>Include the specified hooks or projects.</p>
+<dl class="cli-reference"><dt id="prek-install--includes"><a href="#prek-install--includes"><code>HOOK|PROJECT</code></a></dt><dd><p>Include the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
 <li>
@@ -123,7 +123,7 @@ prek install-hooks [OPTIONS] [HOOK|PROJECT]...
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="prek-install-hooks--includes"><a href="#prek-install-hooks--includes"<code>HOOK|PROJECT</code></a></dt><dd><p>Include the specified hooks or projects.</p>
+<dl class="cli-reference"><dt id="prek-install-hooks--includes"><a href="#prek-install-hooks--includes"><code>HOOK|PROJECT</code></a></dt><dd><p>Include the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
 <li>
@@ -186,7 +186,7 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="prek-run--includes"><a href="#prek-run--includes"<code>HOOK|PROJECT</code></a></dt><dd><p>Include the specified hooks or projects.</p>
+<dl class="cli-reference"><dt id="prek-run--includes"><a href="#prek-run--includes"><code>HOOK|PROJECT</code></a></dt><dd><p>Include the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
 <li>
@@ -274,7 +274,7 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="prek-list--includes"><a href="#prek-list--includes"<code>HOOK|PROJECT</code></a></dt><dd><p>Include the specified hooks or projects.</p>
+<dl class="cli-reference"><dt id="prek-list--includes"><a href="#prek-list--includes"><code>HOOK|PROJECT</code></a></dt><dd><p>Include the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
 <li>
@@ -425,7 +425,7 @@ prek validate-config [OPTIONS] [CONFIG]...
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="prek-validate-config--configs"><a href="#prek-validate-config--configs"<code>CONFIG</code></a></dt><dd><p>The path to the configuration file</p>
+<dl class="cli-reference"><dt id="prek-validate-config--configs"><a href="#prek-validate-config--configs"><code>CONFIG</code></a></dt><dd><p>The path to the configuration file</p>
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
@@ -461,7 +461,7 @@ prek validate-manifest [OPTIONS] [MANIFEST]...
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="prek-validate-manifest--manifests"><a href="#prek-validate-manifest--manifests"<code>MANIFEST</code></a></dt><dd><p>The path to the manifest file</p>
+<dl class="cli-reference"><dt id="prek-validate-manifest--manifests"><a href="#prek-validate-manifest--manifests"><code>MANIFEST</code></a></dt><dd><p>The path to the manifest file</p>
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
@@ -710,7 +710,7 @@ prek init-template-dir [OPTIONS] <DIRECTORY>
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="prek-init-template-dir--directory"><a href="#prek-init-template-dir--directory"<code>DIRECTORY</code></a></dt><dd><p>The directory in which to write the hook script</p>
+<dl class="cli-reference"><dt id="prek-init-template-dir--directory"><a href="#prek-init-template-dir--directory"><code>DIRECTORY</code></a></dt><dd><p>The directory in which to write the hook script</p>
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
@@ -762,8 +762,8 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="prek-try-repo--repo"><a href="#prek-try-repo--repo"<code>REPO</code></a></dt><dd><p>Repository to source hooks from</p>
-</dd><dt id="prek-try-repo--includes"><a href="#prek-try-repo--includes"<code>HOOK|PROJECT</code></a></dt><dd><p>Include the specified hooks or projects.</p>
+<dl class="cli-reference"><dt id="prek-try-repo--repo"><a href="#prek-try-repo--repo"><code>REPO</code></a></dt><dd><p>Repository to source hooks from</p>
+</dd><dt id="prek-try-repo--includes"><a href="#prek-try-repo--includes"><code>HOOK|PROJECT</code></a></dt><dd><p>Include the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
 <li>
@@ -867,7 +867,7 @@ prek self update [OPTIONS] [TARGET_VERSION]
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="prek-self-update--target_version"><a href="#prek-self-update--target_version"<code>TARGET_VERSION</code></a></dt><dd><p>Update to the specified version. If not provided, prek will update to the latest version</p>
+<dl class="cli-reference"><dt id="prek-self-update--target_version"><a href="#prek-self-update--target_version"><code>TARGET_VERSION</code></a></dt><dd><p>Update to the specified version. If not provided, prek will update to the latest version</p>
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
