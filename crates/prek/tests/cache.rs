@@ -400,6 +400,89 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
 }
 
 #[test]
+fn cache_gc_prunes_tool_versions_without_positive_identification() -> anyhow::Result<()> {
+    let context = TestContext::new();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: local-python
+                name: Local Python Hook
+                entry: "python -c \"print(1)\""
+                language: python
+    "#});
+
+    let home = context.home_dir();
+
+    // Track the config so GC has something to mark from.
+    let config_path = context.work_dir().child(CONFIG_FILE);
+    write_config_tracking_file(home, &[config_path.path()])?;
+
+    // Seed a matching installed hook env marker, but use a toolchain path that is *not* inside
+    // PREK_HOME/tools. This means we cannot positively identify a used tool version, so all
+    // tool versions under the bucket are unused and should be pruned.
+    let env_py = home.child("hooks/python-keep");
+    env_py.create_dir_all()?;
+    let marker_py = json!({
+        "language": "python",
+        "language_version": "3.12.0",
+        "dependencies": [],
+        "env_path": env_py.path(),
+        "toolchain": "/usr/bin/python3",
+        "extra": {},
+    });
+    env_py
+        .child(".prek-hook.json")
+        .write_str(&serde_json::to_string_pretty(&marker_py)?)?;
+
+    // Seed tool versions that should be removed.
+    let py_312 = home.child("tools/python/3.12.0");
+    let py_311 = home.child("tools/python/3.11.0");
+    py_312.create_dir_all()?;
+    py_311.create_dir_all()?;
+
+    // Add a temp dir to ensure it is not removed.
+    home.child("repos/.temp").create_dir_all()?;
+    home.child("tools/.temp").create_dir_all()?;
+
+    cmd_snapshot!(
+        context.filters(),
+        context.command().args(["cache", "gc", "--dry-run", "-v"]),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Would remove 2 tools ([SIZE])
+
+    Would remove 2 tools:
+    - python/3.11.0
+      path: [HOME]/tools/python/3.11.0
+    - python/3.12.0
+      path: [HOME]/tools/python/3.12.0
+
+    ----- stderr -----
+    "
+    );
+
+    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed 2 tools ([SIZE])
+
+    ----- stderr -----
+    ");
+
+    py_312.assert(predicates::path::missing());
+    py_311.assert(predicates::path::missing());
+    home.child("tools/python")
+        .assert(predicates::path::is_dir());
+
+    Ok(())
+}
+
+#[test]
 fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
