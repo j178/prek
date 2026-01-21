@@ -4,6 +4,7 @@ use std::ops::AddAssign;
 use std::path::Path;
 
 use anyhow::Result;
+use clap::ValueEnum;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
@@ -252,7 +253,6 @@ pub(crate) async fn cache_gc(
     )?;
 
     // Sweep tools/<bucket>/<version>
-    // Only do this when we can positively identify used versions (otherwise be conservative).
     let removed_tool_versions = sweep_tool_versions(store, &used_tool_versions, dry_run, verbose)?;
 
     let mut removed_tools = removed_tool_buckets;
@@ -437,13 +437,9 @@ fn sweep_tool_versions(
 ) -> Result<Removal> {
     let mut total = Removal::new(RemovalKind::Tools);
 
-    for (bucket, keep_versions) in used_tool_versions {
-        // If we don't have any positively-identified versions, be conservative.
-        if keep_versions.is_empty() {
-            continue;
-        }
-
+    for bucket in ToolBucket::value_variants() {
         let bucket_root = store.tools_path(*bucket);
+        let keep_versions = used_tool_versions.get(bucket);
         let removed =
             sweep_tool_bucket_versions(*bucket, &bucket_root, keep_versions, dry_run, verbose)?;
         total += removed;
@@ -455,7 +451,7 @@ fn sweep_tool_versions(
 fn sweep_tool_bucket_versions(
     bucket: ToolBucket,
     bucket_root: &Path,
-    keep_versions: &FxHashSet<String>,
+    keep_versions: Option<&FxHashSet<String>>,
     dry_run: bool,
     collect_names: bool,
 ) -> Result<Removal> {
@@ -486,7 +482,11 @@ fn sweep_tool_bucket_versions(
         let Some(version_name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
-        if keep_versions.contains(version_name) {
+        // Skip hidden/system dirs.
+        if version_name.starts_with('.') {
+            continue;
+        }
+        if keep_versions.is_some_and(|keep| keep.contains(version_name)) {
             continue;
         }
 
@@ -554,6 +554,10 @@ fn sweep_dir_by_name(
         let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
+        // Skip hidden/system dirs.
+        if name.starts_with('.') {
+            continue;
+        }
         if keep_names.contains(name) {
             continue;
         }
