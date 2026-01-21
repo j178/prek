@@ -867,7 +867,7 @@ mod _gen {
                     let id = format!("{name_key}--{}", arg.get_id());
                     output.push_str(&format!("<dt id=\"{id}\">"));
                     output.push_str(&format!(
-                        "<a href=\"#{id}\"<code>{}</code></a>",
+                        "<a href=\"#{id}\"><code>{}</code></a>",
                         arg.get_value_names()
                             .unwrap()
                             .iter()
