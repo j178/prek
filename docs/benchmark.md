@@ -6,7 +6,7 @@ Caveats:
 
 - Benchmark performance may vary based on hardware, OS, network conditions, and other factors.
 - Benchmarks are not exhaustive; results may vary with different repositories and configurations.
-- Prek is under active development; performance may improve over time.
+- prek is under active development; performance may improve over time.
 
 Environment:
 
