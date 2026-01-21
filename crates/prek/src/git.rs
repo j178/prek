@@ -123,7 +123,7 @@ pub(crate) async fn get_changed_files(
         .arg("--diff-filter=ACMRT")
         .arg("--no-ext-diff") // Disable external diff drivers
         .arg("-z") // Use NUL as line terminator
-        .arg(format!("{old}...{new}"))
+        .arg(format!("{old}..{new}"))
         .arg("--")
         .arg(root)
         .check(true)
