@@ -217,7 +217,7 @@ pub(crate) async fn cache_gc(
     }
 
     // Update tracking file to drop configs that no longer exist.
-    if kept_configs.len() != tracked_configs.len() {
+    if !dry_run && kept_configs.len() != tracked_configs.len() {
         let kept_configs = kept_configs.into_iter().map(Path::to_path_buf).collect();
         store.update_tracked_configs(&kept_configs)?;
     }
@@ -587,10 +587,8 @@ fn sweep_dir_by_name(
         if dry_run {
             removal.count += 1;
             removal.bytes = removal.bytes.saturating_add(entry_bytes);
-            if collect_names {
-                if let Some(item) = item {
-                    removal.items.push(item);
-                }
+            if collect_names && let Some(item) = item {
+                removal.items.push(item);
             }
             continue;
         }

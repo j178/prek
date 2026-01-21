@@ -227,30 +227,27 @@ impl Store {
         self.path.join("config-tracking.json")
     }
 
-    fn tracked_configs_raw(&self) -> Result<FxHashSet<PathBuf>, Error> {
+    /// Get all tracked config files.
+    ///
+    /// Seed `config-tracking.json` from the workspace discovery cache if it doesn't exist.
+    /// This is a one-time upgrade helper: it only does work when tracking is empty.
+    pub(crate) fn tracked_configs(&self) -> Result<FxHashSet<PathBuf>, Error> {
         let tracking_file = self.config_tracking_file();
         match fs_err::read_to_string(&tracking_file) {
-            Ok(content) => serde_json::from_str(&content).or_else(|e| {
-                warn!("Failed to parse config tracking file: {e}, resetting");
-                Ok(FxHashSet::default())
-            }),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(FxHashSet::default()),
-            Err(err) => Err(err.into()),
-        }
-    }
-
-    /// Seed `config-tracking.json` from the workspace discovery cache.
-    ///
-    /// This is a one-time upgrade helper: it only does work when tracking is empty.
-    fn bootstrap_tracked_configs(&self) -> Result<usize, Error> {
-        let tracked = self.tracked_configs_raw()?;
-        if !tracked.is_empty() {
-            return Ok(0);
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+            Ok(content) => {
+                let tracked = serde_json::from_str(&content).unwrap_or_else(|e| {
+                    warn!("Failed to parse config tracking file: {e}, resetting");
+                    FxHashSet::default()
+                });
+                return Ok(tracked);
+            }
         }
 
         let cached = WorkspaceCache::cached_config_paths(self);
         if cached.is_empty() {
-            return Ok(0);
+            return Ok(FxHashSet::default());
         }
 
         debug!(
@@ -258,7 +255,8 @@ impl Store {
             "Bootstrapping config tracking from workspace cache"
         );
         self.update_tracked_configs(&cached)?;
-        Ok(cached.len())
+
+        Ok(cached)
     }
 
     /// Track new config files for GC.
@@ -266,9 +264,7 @@ impl Store {
         &self,
         config_paths: impl Iterator<Item = &'a Path>,
     ) -> Result<(), Error> {
-        let _ = self.bootstrap_tracked_configs()?;
-
-        let mut tracked = self.tracked_configs_raw()?;
+        let mut tracked = self.tracked_configs()?;
         for config_path in config_paths {
             tracked.insert(config_path.to_path_buf());
         }
@@ -278,17 +274,6 @@ impl Store {
         fs_err::write(&tracking_file, content)?;
 
         Ok(())
-    }
-
-    /// Get all tracked config files.
-    pub(crate) fn tracked_configs(&self) -> Result<FxHashSet<PathBuf>, Error> {
-        let tracked = self.tracked_configs_raw()?;
-        if tracked.is_empty() {
-            let _ = self.bootstrap_tracked_configs()?;
-            return self.tracked_configs_raw();
-        }
-
-        Ok(tracked)
     }
 
     /// Update the tracked configs file.
