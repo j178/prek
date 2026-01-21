@@ -1553,9 +1553,9 @@ dependencies = [
 
 [[package]]
 name = "mea"
-version = "0.6.2"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f58283c770154d70501efc965876e4d4ab7c85307b80f1b4adf589130140af1d"
+checksum = "6747f54621d156e1b47eb6b25f39a941b9fc347f98f67d25d8881ff99e8ed832"
 dependencies = [
  "slab",
 ]

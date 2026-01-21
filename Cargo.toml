@@ -17,11 +17,21 @@ anstream = { version = "0.6.15" }
 anstyle-query = { version = "1.1.5" }
 anyhow = { version = "1.0.86" }
 async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
-async_zip = { version = "0.0.17", package = "astral_async_zip", features = ["deflate", "tokio"] }
-axoupdater = { version = "0.9.0", default-features = false, features = ["github_releases"] }
+async_zip = { version = "0.0.17", package = "astral_async_zip", features = [
+    "deflate",
+    "tokio",
+] }
+axoupdater = { version = "0.9.0", default-features = false, features = [
+    "github_releases",
+] }
 bstr = { version = "1.11.0" }
 cargo_metadata = { version = "0.23.1" }
-clap = { version = "4.5.16", features = ["derive", "env", "string", "wrap_help"] }
+clap = { version = "4.5.16", features = [
+    "derive",
+    "env",
+    "string",
+    "wrap_help",
+] }
 clap_complete = { version = "4.5.37", features = ["unstable-dynamic"] }
 ctrlc = { version = "3.4.5" }
 dunce = { version = "1.0.5" }
@@ -43,7 +53,7 @@ libc = { version = "0.2.164" }
 # This is required for the `xz` feature in `async-compression`
 liblzma = { version = "0.4.5", features = ["static"] }
 libyaml = { version = "0.2.0" }
-mea = { version = "0.6.2" }
+mea = { version = "0.6.3" }
 memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
 path-clean = { version = "1.0.1" }
@@ -51,7 +61,13 @@ pprof = { version = "0.15.0" }
 quick-xml = { version = "0.38" }
 rand = { version = "0.9.0" }
 rayon = { version = "1.10.0" }
-reqwest = { version = "0.12.9", default-features = false, features = ["http2", "stream", "json", "rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
+reqwest = { version = "0.12.9", default-features = false, features = [
+    "http2",
+    "stream",
+    "json",
+    "rustls-tls-native-roots",
+    "rustls-tls-webpki-roots",
+] }
 rustc-hash = { version = "2.1.1" }
 rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
 same-file = { version = "1.0.6" }
@@ -66,10 +82,22 @@ smallvec = { version = "1.15.1" }
 target-lexicon = { version = "0.13.0" }
 tempfile = { version = "3.13.0" }
 thiserror = { version = "2.0.11" }
-tokio = { version = "1.47.1", features = ["fs", "process", "rt", "sync", "macros", "net"] }
+tokio = { version = "1.47.1", features = [
+    "fs",
+    "process",
+    "rt",
+    "sync",
+    "macros",
+    "net",
+] }
 tokio-tar = { version = "0.5.6", package = "astral-tokio-tar" }
 tokio-util = { version = "0.7.13" }
-toml = { version = "0.9.5", default-features = false, features = ["fast_hash", "parse", "preserve_order", "serde"] }
+toml = { version = "0.9.5", default-features = false, features = [
+    "fast_hash",
+    "parse",
+    "preserve_order",
+    "serde",
+] }
 tracing = { version = "0.1.40" }
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 unicode-width = { version = "0.2.0", default-features = false }
