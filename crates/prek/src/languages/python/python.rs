@@ -5,12 +5,12 @@ use std::process::Stdio;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
+use mea::once::OnceMap;
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
 use rustc_hash::FxBuildHasher;
 use serde::Deserialize;
 use tracing::{debug, trace};
-use uv_once_map::OnceMap;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::InstalledHook;
@@ -42,9 +42,8 @@ pub(crate) enum PythonInfoError {
     Message(String),
 }
 
-static PYTHON_INFO_CACHE: LazyLock<
-    OnceMap<PathBuf, Result<Arc<PythonInfo>, PythonInfoError>, FxBuildHasher>,
-> = LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
+static PYTHON_INFO_CACHE: LazyLock<OnceMap<PathBuf, Arc<PythonInfo>, FxBuildHasher>> =
+    LazyLock::new(|| OnceMap::with_hasher(FxBuildHasher));
 
 async fn query_python_info(python: &Path) -> Result<PythonInfo, PythonInfoError> {
     #[derive(Deserialize)]
@@ -86,22 +85,12 @@ pub(crate) async fn query_python_info_cached(
     python: &Path,
 ) -> Result<Arc<PythonInfo>, PythonInfoError> {
     let python = fs::canonicalize(python).unwrap_or_else(|_| python.to_path_buf());
-
-    if let Some(result) = PYTHON_INFO_CACHE.get(&python) {
-        return result;
-    }
-
-    if PYTHON_INFO_CACHE.register(python.clone()) {
-        let result = query_python_info(&python).await.map(Arc::new);
-        PYTHON_INFO_CACHE.done(python, result.clone());
-        return result;
-    }
-
-    PYTHON_INFO_CACHE.wait(&python).await.unwrap_or_else(|| {
-        Err(PythonInfoError::Message(
-            "Python info cache entry missing after wait".to_string(),
-        ))
-    })
+    PYTHON_INFO_CACHE
+        .try_compute(python.clone(), async move || {
+            let info = query_python_info(&python).await?;
+            Ok(Arc::new(info))
+        })
+        .await
 }
 
 impl LanguageImpl for Python {
