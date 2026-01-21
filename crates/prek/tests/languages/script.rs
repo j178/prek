@@ -251,6 +251,108 @@ mod unix {
     }
 
     #[test]
+    fn inline_script_with_sh_shebang() {
+        let context = TestContext::new();
+        context.init_project();
+        context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: inline
+                name: inline
+                language: script
+                entry: |
+                  #!/usr/bin/env sh
+                  echo "hello from sh"
+                pass_filenames: false
+                verbose: true
+        "#});
+        context.git_add(".");
+
+        cmd_snapshot!(context.filters(), context.run(), @r"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        inline...................................................................Passed
+        - hook id: inline
+        - duration: [TIME]
+
+          hello from sh
+
+        ----- stderr -----
+        ");
+    }
+
+    #[test]
+    fn inline_script_no_shebang_crlf_line_endings() {
+        let context = TestContext::new();
+        context.init_project();
+
+        // Ensure CRLF is accepted (common on Windows checkouts) even on unix.
+        let config = indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: inline
+                name: inline
+                language: script
+                entry: "echo one\r\necho two\r\n"
+                pass_filenames: false
+                verbose: true
+        "#}
+        .replace('\n', "\r\n");
+
+        context.write_pre_commit_config(&config);
+        context.git_add(".");
+
+        cmd_snapshot!(context.filters(), context.run(), @r"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        inline...................................................................Passed
+        - hook id: inline
+        - duration: [TIME]
+
+          one
+          two
+
+        ----- stderr -----
+        ");
+    }
+
+    #[test]
+    fn inline_script_no_shebang_stops_on_error() {
+        let context = TestContext::new();
+        context.init_project();
+        context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: inline
+                name: inline
+                language: script
+                entry: |
+                  false
+                  echo "should not print"
+                pass_filenames: false
+                verbose: true
+        "#});
+        context.git_add(".");
+
+        cmd_snapshot!(context.filters(), context.run(), @r"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+        inline...................................................................Failed
+        - hook id: inline
+        - duration: [TIME]
+        - exit code: 1
+
+        ----- stderr -----
+        ");
+    }
+
+    #[test]
     fn multiline_entry_still_script_path() -> Result<()> {
         let context = TestContext::new();
         context.init_project();

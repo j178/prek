@@ -74,7 +74,6 @@ impl ShellSpec {
 
 #[cfg(not(windows))]
 fn resolve_default_shell_spec() -> Result<ShellSpec> {
-    let tried = "bash, sh";
     if let Ok(path) = which::which("bash") {
         return Ok(ShellSpec {
             program: path.to_string_lossy().to_string(),
@@ -89,12 +88,11 @@ fn resolve_default_shell_spec() -> Result<ShellSpec> {
             extension: "sh",
         });
     }
-    anyhow::bail!("No suitable default shell found (tried {tried})")
+    anyhow::bail!("No suitable default shell found (tried bash, sh)")
 }
 
 #[cfg(windows)]
 fn resolve_default_shell_spec() -> Result<ShellSpec> {
-    let tried = "pwsh, powershell, cmd";
     // Prefer PowerShell 7+ if available.
     if let Ok(path) = which::which("pwsh") {
         return Ok(ShellSpec {
@@ -131,7 +129,7 @@ fn resolve_default_shell_spec() -> Result<ShellSpec> {
         });
     }
 
-    anyhow::bail!("No suitable default shell found (tried {tried})")
+    anyhow::bail!("No suitable default shell found (tried pwsh, powershell, cmd)")
 }
 
 fn extension_for_interpreter(interpreter: &str) -> &'static str {
