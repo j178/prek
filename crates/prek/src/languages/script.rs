@@ -77,6 +77,7 @@ fn resolve_default_shell_spec() -> Result<ShellSpec> {
     if let Ok(path) = which::which("bash") {
         return Ok(ShellSpec {
             program: path.to_string_lossy().to_string(),
+            // `-e` makes the script fail fast: stop on the first command that exits non-zero.
             prefix_args: vec!["-e".to_string()],
             extension: "sh",
         });
@@ -98,10 +99,15 @@ fn resolve_default_shell_spec() -> Result<ShellSpec> {
         return Ok(ShellSpec {
             program: path.to_string_lossy().to_string(),
             prefix_args: vec![
+                // Avoid loading user profile scripts (deterministic and faster).
                 "-NoProfile".to_string(),
+                // Avoid prompts / interactive behavior.
                 "-NonInteractive".to_string(),
+                // Allow running a temp script file in CI environments where execution policy
+                // would otherwise block it.
                 "-ExecutionPolicy".to_string(),
                 "Bypass".to_string(),
+                // Execute a script file.
                 "-File".to_string(),
             ],
             extension: "ps1",
@@ -124,7 +130,15 @@ fn resolve_default_shell_spec() -> Result<ShellSpec> {
     if let Ok(path) = which::which("cmd") {
         return Ok(ShellSpec {
             program: path.to_string_lossy().to_string(),
-            prefix_args: vec!["/d".to_string(), "/s".to_string(), "/c".to_string()],
+            prefix_args: vec![
+                // Disable execution of AutoRun commands from the registry (deterministic).
+                "/d".to_string(),
+                // Apply legacy parsing rules for the command string passed to /c.
+                // This makes cmd.exe behavior more consistent when the command contains quotes.
+                "/s".to_string(),
+                // Run the command and then terminate.
+                "/c".to_string(),
+            ],
             extension: "cmd",
         });
     }
@@ -182,7 +196,8 @@ async fn build_inline_entry(
         resolve_command(vec![script_path.to_string_lossy().to_string()], None)
     } else {
         // Execute via the chosen default shell by passing the script path.
-        let spec = default_shell.expect("default_shell must be set if shebang is None");
+        let spec = default_shell
+            .ok_or_else(|| anyhow::anyhow!("default shell must be set if no shebang is present"))?;
         spec.build_for_script(&script_path)
     };
 
