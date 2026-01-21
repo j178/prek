@@ -25,7 +25,7 @@ pub(crate) struct Script;
 /// - It contains newlines (YAML block scalar).
 /// - The first token does not resolve to a real file in the repo.
 fn is_inline_script(entry: &str, repo_path: &Path) -> bool {
-    // YAML block scalar chompping style:
+    // YAML block scalar chomping style:
     // |  => keep single trailing newline
     // |- => remove single trailing newline
     // |+ => keep all trailing newlines
