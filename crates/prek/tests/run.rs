@@ -2965,7 +2965,9 @@ fn run_with_tree_object_as_ref() -> Result<()> {
         .current_dir(cwd)
         .output()
         .expect("Failed to run git write-tree");
-    let tree_sha = String::from_utf8_lossy(&tree_output.stdout).trim().to_string();
+    let tree_sha = String::from_utf8_lossy(&tree_output.stdout)
+        .trim()
+        .to_string();
 
     // Run prek with tree object as to-ref (should work with .. syntax)
     cmd_snapshot!(context.filters(), context.run()
