@@ -1,4 +1,4 @@
-# Difference from pre-commit
+# Differences from pre-commit
 
 ## General differences
 

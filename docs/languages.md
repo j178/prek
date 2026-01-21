@@ -127,13 +127,13 @@ Pre-release strings (for example `go1.22rc1`) are not supported yet.
 
 **Status in prek:** Not supported yet.
 
-Tracking: —
+Tracking: [#1445](https://github.com/j178/prek/issues/1445)
 
 ### julia
 
 **Status in prek:** Not supported yet.
 
-Tracking: —
+Tracking: [#1446](https://github.com/j178/prek/issues/1446)
 
 ### lua
 
@@ -169,7 +169,7 @@ Supported formats:
 
 **Status in prek:** Not supported yet.
 
-Tracking: —
+Tracking: [#1447](https://github.com/j178/prek/issues/1447)
 
 ### python
 
@@ -347,6 +347,6 @@ Use `script` for simple repository scripts that only need file paths and no mana
 
 prek has experimental support in progress. pre-commit does not have a native `deno` language.
 
-Tracking: —
+Tracking: [#619](https://github.com/j178/prek/issues/619)
 
 If you want to help add support for the missing languages, check open issues or start a discussion in the repo.

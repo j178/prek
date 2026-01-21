@@ -102,7 +102,7 @@ That schema tracks what `prek` accepts today, but `prek` also intentionally tole
 
 This section documents the keys `prek` supports in `.pre-commit-config.yaml` / `.pre-commit-config.yml`.
 
-### Prek-only options
+### prek-only options
 
 The following configuration entries are extensions implemented by `prek` and are not part of the documented `pre-commit` configuration surface.
 If you run them with upstream `pre-commit`, expect them to be ignored or to trigger an “unknown key” warning.
@@ -823,7 +823,7 @@ Require a minimum `prek` version for this specific hook.
 
 ## Environment variables
 
-Prek supports the following environment variables:
+prek supports the following environment variables:
 
 - `PREK_HOME` — Override the prek data directory (caches, toolchains, hook envs). If beginning with `~`, it is expanded to the user’s home directory. Defaults to `~/.cache/prek` on macOS and Linux, and `%LOCALAPPDATA%\prek` on Windows.
 
