@@ -743,9 +743,48 @@ impl schemars::JsonSchema for BuiltinHook {
     }
 }
 
+#[cfg(feature = "schemars")]
+fn schema_repo_local(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({
+        "type": "string",
+        "const": "local",
+        "description": "Must be `local`.",
+    })
+}
+
+#[cfg(feature = "schemars")]
+fn schema_repo_meta(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({
+        "type": "string",
+        "const": "meta",
+        "description": "Must be `meta`.",
+    })
+}
+
+#[cfg(feature = "schemars")]
+fn schema_repo_builtin(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({
+        "type": "string",
+        "const": "builtin",
+        "description": "Must be `builtin`.",
+    })
+}
+
+#[cfg(feature = "schemars")]
+fn schema_repo_remote(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({
+        "type": "string",
+        "not": {
+            "enum": ["local", "meta", "builtin"],
+        },
+        "description": "Remote repository location. Must not be `local`, `meta`, or `builtin`.",
+    })
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct RemoteRepo {
+    #[cfg_attr(feature = "schemars", schemars(schema_with = "schema_repo_remote"))]
     pub repo: String,
     pub rev: String,
     #[serde(skip_serializing)]
@@ -791,6 +830,7 @@ impl Display for RemoteRepo {
 #[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct LocalRepo {
+    #[cfg_attr(feature = "schemars", schemars(schema_with = "schema_repo_local"))]
     pub repo: String,
     pub hooks: Vec<LocalHook>,
     #[serde(skip_serializing)]
@@ -807,6 +847,7 @@ impl Display for LocalRepo {
 #[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct MetaRepo {
+    #[cfg_attr(feature = "schemars", schemars(schema_with = "schema_repo_meta"))]
     pub repo: String,
     pub hooks: Vec<MetaHook>,
     #[serde(skip_serializing)]
@@ -823,6 +864,7 @@ impl Display for MetaRepo {
 #[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct BuiltinRepo {
+    #[cfg_attr(feature = "schemars", schemars(schema_with = "schema_repo_builtin"))]
     pub repo: String,
     pub hooks: Vec<BuiltinHook>,
     #[serde(skip_serializing)]
