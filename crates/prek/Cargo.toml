@@ -25,10 +25,10 @@ schemars = ["dep:schemars"]
 prek-consts = { workspace = true }
 
 anstream = { workspace = true }
-anstyle-query = {  workspace = true }
-anyhow = {  workspace = true }
-async-compression = {  workspace = true, features = ["gzip", "xz", "tokio"] }
-async_zip = {  workspace = true, features = ["deflate", "tokio"] }
+anstyle-query = { workspace = true }
+anyhow = { workspace = true }
+async-compression = { workspace = true, features = ["gzip", "xz", "tokio"] }
+async_zip = { workspace = true, features = ["deflate", "tokio"] }
 axoupdater = { workspace = true, default-features = false, features = ["github_releases"], optional = true }
 bstr = { workspace = true }
 cargo_metadata = { workspace = true }
@@ -36,10 +36,10 @@ clap = { workspace = true, features = ["derive", "env", "string", "wrap_help"] }
 clap_complete = { workspace = true, features = ["unstable-dynamic"] }
 ctrlc = { workspace = true }
 dunce = { workspace = true }
-etcetera = {  workspace = true }
-fancy-regex = {  workspace = true }
-fs-err = {  workspace = true, features = ["tokio"] }
-futures = {  workspace = true }
+etcetera = { workspace = true }
+fancy-regex = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
+futures = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
 ignore = { workspace = true }
@@ -54,6 +54,7 @@ globset = { workspace = true }
 # This is required for the `xz` feature in `async-compression`
 liblzma = { workspace = true, features = ["static"] }
 libyaml = { workspace = true }
+mea = { workspace = true }
 memchr = { workspace = true }
 owo-colors = { workspace = true }
 path-clean = { workspace = true }
@@ -81,7 +82,6 @@ toml = { workspace = true, default-features = false, features = ["fast_hash", "p
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 unicode-width = { workspace = true }
-uv-once-map = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
 
