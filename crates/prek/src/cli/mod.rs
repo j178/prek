@@ -708,7 +708,7 @@ pub(crate) struct SelfUpdateArgs {
 
     /// A GitHub token for authentication.
     /// A token is not required but can be used to reduce the chance of encountering rate limits.
-    #[arg(long, env = "GITHUB_TOKEN")]
+    #[arg(long, env = EnvVars::GITHUB_TOKEN)]
     pub token: Option<String>,
 }
 

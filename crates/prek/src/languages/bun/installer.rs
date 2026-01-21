@@ -7,14 +7,14 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use prek_consts::env_vars::EnvVars;
-use serde::Deserialize;
 use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
 use crate::fs::LockedFile;
+use crate::git;
 use crate::languages::bun::BunRequest;
 use crate::languages::bun::version::BunVersion;
-use crate::languages::{REQWEST_CLIENT, download_and_extract};
+use crate::languages::download_and_extract;
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -173,23 +173,29 @@ impl BunInstaller {
 
     /// List all versions of Bun available on GitHub releases.
     async fn list_remote_versions(&self) -> Result<Vec<BunVersion>> {
-        let url = "https://api.github.com/repos/oven-sh/bun/releases?per_page=100";
+        let output = git::git_cmd("list bun tags")?
+            .arg("ls-remote")
+            .arg("--tags")
+            .arg("https://github.com/oven-sh/bun")
+            .output()
+            .await?
+            .stdout;
+        let output_str = str::from_utf8(&output)?;
 
-        // Use GitHub token if available to avoid rate limits (60/hr unauthenticated vs 5000/hr authenticated)
-        let mut request = REQWEST_CLIENT.get(url);
-        if let Ok(token) = EnvVars::var(EnvVars::GITHUB_TOKEN) {
-            request = request.header("Authorization", format!("Bearer {token}"));
-        }
+        let versions: Vec<BunVersion> = output_str
+            .lines()
+            .filter_map(|line| {
+                let reference = line.split('\t').nth(1)?;
+                if reference.ends_with("^{}") {
+                    return None;
+                }
 
-        let releases: Vec<GitHubRelease> = request.send().await?.json().await?;
-
-        let versions: Vec<BunVersion> = releases
-            .into_iter()
-            .filter_map(|release| {
-                // Release tags are in format "bun-v1.1.0", we need to strip the "bun-v" prefix
-                let tag = release.tag_name.strip_prefix("bun-v")?;
+                let tag = reference.strip_prefix("refs/tags/")?;
+                // Tags are in format "bun-v1.1.0".
+                let tag = tag.strip_prefix("bun-v")?;
                 BunVersion::from_str(tag).ok()
             })
+            .sorted_unstable_by(|a, b| b.cmp(a))
             .collect();
 
         Ok(versions)
@@ -274,12 +280,6 @@ impl BunInstaller {
         debug!(?bun_request, "No system bun matches the requested version");
         Ok(None)
     }
-}
-
-/// GitHub release information from the API.
-#[derive(Debug, Deserialize)]
-struct GitHubRelease {
-    tag_name: String,
 }
 
 pub(crate) fn bin_dir(prefix: &Path) -> PathBuf {

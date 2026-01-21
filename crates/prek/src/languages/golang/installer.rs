@@ -181,7 +181,7 @@ impl GoInstaller {
             .output()
             .await?
             .stdout;
-        let output_str = String::from_utf8(output)?;
+        let output_str = str::from_utf8(&output)?;
         let versions: Vec<GoVersion> = output_str
             .lines()
             .filter_map(|line| {
