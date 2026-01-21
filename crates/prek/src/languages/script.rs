@@ -6,6 +6,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use fs_err::tokio as fs;
 use tempfile::TempDir;
+use tracing::trace;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::InstalledHook;
@@ -19,24 +20,30 @@ use crate::store::Store;
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Script;
 
-fn is_script_path_entry(entry: &str, repo_path: &Path) -> bool {
-    // Ignore trailing newlines so a path with a trailing line break isn't treated as inline.
-    let trimmed = entry.trim_end_matches(['\n', '\r']);
-    if !(trimmed.contains('\n') || trimmed.contains('\r')) {
-        return true;
+/// Determine if the entry is an inline script or a script path.
+/// An entry is considered an inline script if:
+/// - It contains newlines (YAML block scalar).
+/// - The first token does not resolve to a real file in the repo.
+fn is_inline_script(entry: &str, repo_path: &Path) -> bool {
+    // YAML block scalar chompping style:
+    // |  => keep single trailing newline
+    // |- => remove single trailing newline
+    // |+ => keep all trailing newlines
+    let entry = entry.trim_end_matches(['\n', '\r']);
+    if !(entry.contains('\n') || entry.contains('\r')) {
+        return false;
     }
 
     // If we can parse the first token and it resolves to a real file, treat it as a script path.
     // Otherwise, assume the entry is inline script content.
-    let Some(tokens) = shlex::split(trimmed) else {
+    if let Some(tokens) = shlex::split(entry)
+        && let Some(first) = tokens.first()
+        && repo_path.join(first).is_file()
+    {
         return false;
-    };
-    let Some(first) = tokens.first() else {
-        return false;
-    };
+    }
 
-    let candidate = repo_path.join(first);
-    candidate.is_file()
+    true
 }
 
 fn parse_inline_shebang(entry: &str) -> Option<Vec<String>> {
@@ -48,38 +55,95 @@ fn parse_inline_shebang(entry: &str) -> Option<Vec<String>> {
     }
 }
 
-fn inline_extension_from_interpreter(interpreter: Option<&str>) -> &'static str {
-    match interpreter.map(str::to_ascii_lowercase) {
-        Some(value) if value.contains("pwsh") || value.contains("powershell") => "ps1",
-        _ => "sh",
+#[derive(Debug, Clone)]
+struct ShellSpec {
+    program: String,
+    prefix_args: Vec<String>,
+    extension: &'static str,
+}
+
+impl ShellSpec {
+    fn build_for_script(&self, script_path: &Path) -> Vec<String> {
+        let mut cmd = Vec::with_capacity(1 + self.prefix_args.len() + 1);
+        cmd.push(self.program.clone());
+        cmd.extend(self.prefix_args.iter().cloned());
+        cmd.push(script_path.to_string_lossy().to_string());
+        cmd
     }
 }
 
-fn resolve_default_shell() -> Result<std::path::PathBuf> {
+#[cfg(not(windows))]
+fn resolve_default_shell_spec() -> Result<ShellSpec> {
+    let tried = "bash, sh";
     if let Ok(path) = which::which("bash") {
-        return Ok(path);
+        return Ok(ShellSpec {
+            program: path.to_string_lossy().to_string(),
+            prefix_args: vec!["-e".to_string()],
+            extension: "sh",
+        });
     }
     if let Ok(path) = which::which("sh") {
-        return Ok(path);
+        return Ok(ShellSpec {
+            program: path.to_string_lossy().to_string(),
+            prefix_args: vec!["-e".to_string()],
+            extension: "sh",
+        });
     }
-    anyhow::bail!("Inline script requires `bash` or `sh` in PATH")
+    anyhow::bail!("No suitable default shell found (tried {tried})")
 }
 
-fn inline_shebang_command(script_path: &Path, mut cmd: Vec<String>) -> Vec<String> {
-    let interpreter = cmd
-        .first()
-        .map(|value| value.to_ascii_lowercase())
-        .unwrap_or_default();
-    if interpreter.contains("pwsh") || interpreter.contains("powershell") {
-        cmd.push("-NoProfile".to_string());
-        cmd.push("-NonInteractive".to_string());
-        cmd.push("-File".to_string());
-        cmd.push(script_path.to_string_lossy().to_string());
-        return cmd;
+#[cfg(windows)]
+fn resolve_default_shell_spec() -> Result<ShellSpec> {
+    let tried = "pwsh, powershell, cmd";
+    // Prefer PowerShell 7+ if available.
+    if let Ok(path) = which::which("pwsh") {
+        return Ok(ShellSpec {
+            program: path.to_string_lossy().to_string(),
+            prefix_args: vec![
+                "-NoProfile".to_string(),
+                "-NonInteractive".to_string(),
+                "-ExecutionPolicy".to_string(),
+                "Bypass".to_string(),
+                "-File".to_string(),
+            ],
+            extension: "ps1",
+        });
+    }
+    if let Ok(path) = which::which("powershell") {
+        return Ok(ShellSpec {
+            program: path.to_string_lossy().to_string(),
+            prefix_args: vec![
+                "-NoProfile".to_string(),
+                "-NonInteractive".to_string(),
+                "-ExecutionPolicy".to_string(),
+                "Bypass".to_string(),
+                "-File".to_string(),
+            ],
+            extension: "ps1",
+        });
+    }
+    // As a last resort, try cmd.exe.
+    if let Ok(path) = which::which("cmd") {
+        return Ok(ShellSpec {
+            program: path.to_string_lossy().to_string(),
+            prefix_args: vec!["/d".to_string(), "/s".to_string(), "/c".to_string()],
+            extension: "cmd",
+        });
     }
 
-    cmd.push(script_path.to_string_lossy().to_string());
-    cmd
+    anyhow::bail!("No suitable default shell found (tried {tried})")
+}
+
+fn extension_for_interpreter(interpreter: &str) -> &'static str {
+    if interpreter.contains("pwsh") || interpreter.contains("powershell") {
+        "ps1"
+    } else if interpreter.contains("cmd") {
+        "cmd"
+    } else if interpreter.contains("python") {
+        "py"
+    } else {
+        "sh"
+    }
 }
 
 async fn build_inline_entry(
@@ -87,14 +151,25 @@ async fn build_inline_entry(
     hook_id: &str,
     store: &Store,
 ) -> Result<(Vec<String>, TempDir)> {
-    // Parse the shebang from the inline content (if any) to choose interpreter + extension.
-    let shebang = parse_inline_shebang(raw_entry);
-    let extension = inline_extension_from_interpreter(
-        shebang
-            .as_ref()
-            .and_then(|cmd| cmd.first())
-            .map(String::as_str),
-    );
+    // If there is a shebang, we can rely on `resolve_command([script_path])` later.
+    // If there is no shebang, we choose a reasonable platform-specific default shell.
+    let (shebang, default_shell) = if let Some(cmd) = parse_inline_shebang(raw_entry) {
+        (Some(cmd), None)
+    } else {
+        let spec = resolve_default_shell_spec()?;
+        trace!(program = %spec.program, "Selected default shell for inline script");
+        (None, Some(spec))
+    };
+
+    let extension = if let Some(cmd) = &shebang {
+        cmd.first()
+            .map(|s| extension_for_interpreter(s))
+            .unwrap_or("sh")
+    } else if let Some(spec) = &default_shell {
+        spec.extension
+    } else {
+        "sh"
+    };
 
     let temp_dir = tempfile::tempdir_in(store.scratch_path())?;
     let script_path = temp_dir
@@ -104,16 +179,13 @@ async fn build_inline_entry(
         .await
         .context("Failed to write inline script")?;
 
-    // Build the command line using the shebang if present; otherwise use bash/sh.
-    let entry = if let Some(cmd) = shebang {
-        let entry = inline_shebang_command(&script_path, cmd);
-        resolve_command(entry, None)
+    let entry = if shebang.is_some() {
+        // Run the temp script file, honoring its shebang.
+        resolve_command(vec![script_path.to_string_lossy().to_string()], None)
     } else {
-        let shell = resolve_default_shell()?;
-        vec![
-            shell.to_string_lossy().to_string(),
-            script_path.to_string_lossy().to_string(),
-        ]
+        // Execute via the chosen default shell by passing the script path.
+        let spec = default_shell.expect("default_shell must be set if shebang is None");
+        spec.build_for_script(&script_path)
     };
 
     Ok((entry, temp_dir))
@@ -149,7 +221,7 @@ impl LanguageImpl for Script {
 
         let raw_entry = hook.entry.raw();
         let repo_path = hook.repo_path().unwrap_or(hook.work_dir());
-        let is_inline = !is_script_path_entry(raw_entry, repo_path);
+        let is_inline = is_inline_script(raw_entry, repo_path);
         let mut inline_temp: Option<TempDir> = None;
 
         let entry = if is_inline {

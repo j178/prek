@@ -371,7 +371,75 @@ Use `system` for tools with special environment requirements that cannot run in 
 
 `script` runs repository-local scripts without a managed environment. For remote hooks, `entry` is resolved relative to the hook repository root; for local hooks, it is resolved relative to the current working directory.
 
-If `entry` contains a newline, it is treated as an inline script. Inline scripts are written to a temporary file and executed based on the script content. If the first line starts with a shebang (`#!`), that interpreter is used (for example, a `pwsh` shebang yields a `.ps1` file). If no shebang is present, `bash` is preferred when available, otherwise `sh` is used.
+#### Inline scripts
+
+prek supports **inline scripts** for `language: script`, so you can put a small script directly in `entry`.
+
+**How prek decides “inline script” vs “script path”**
+
+- If `entry` does *not* contain a newline, it is treated as a normal command/script path.
+- If `entry` *does* contain a newline, it is treated as an inline script **unless** the *first token* resolves to a real file in the repository (or current working directory for `repo: local`).
+
+This means YAML block scalars are safe to use for readability even when `entry` is a script path.
+
+**How inline scripts are executed**
+
+- The inline content is written to a temporary file.
+- If the first line has a shebang (`#!`), prek executes the temp file and lets the OS/shebang decide the interpreter.
+- If there is **no shebang**, prek chooses a default shell:
+    - On Unix: prefers `bash -e`, falls back to `sh -e`.
+    - On Windows: prefers `pwsh`, then `powershell`, then `cmd.exe`.
+
+Any hook arguments (`args`) and selected filenames are passed as arguments to the interpreter/script. For POSIX shells, use `"$@"` to read the filenames; for PowerShell, use `$args`.
+
+**Examples**
+
+Inline script without a shebang (uses the default shell):
+
+```yaml
+repos:
+    - repo: local
+        hooks:
+            - id: inline
+                name: inline
+                language: script
+                entry: |
+                    echo "hello"
+                    printf 'args:'
+                    printf ' %s' "$@"
+                    printf '\n'
+                verbose: true
+```
+
+Inline script with a shebang (interpreter comes from the script content):
+
+```yaml
+repos:
+    - repo: local
+        hooks:
+            - id: inline-bash
+                name: inline-bash
+                language: script
+                entry: |
+                    #!/usr/bin/env -S bash -e
+                    echo "running under bash"
+                    echo "args: $*"
+                verbose: true
+```
+
+Multiline `entry`, but still a script path (first token is an existing file):
+
+```yaml
+repos:
+    - repo: local
+        hooks:
+            - id: script-path
+                name: script-path
+                language: script
+                entry: |
+                    ./script.sh --from-entry
+                pass_filenames: false
+```
 
 Use `script` for simple repository scripts that only need file paths and no managed environment.
 

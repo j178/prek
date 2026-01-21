@@ -173,7 +173,7 @@ mod unix {
     }
 
     #[test]
-    fn inline_script_no_shebang() -> Result<()> {
+    fn inline_script_no_shebang() {
         let context = TestContext::new();
         context.init_project();
         context.write_pre_commit_config(indoc::indoc! {r#"
@@ -206,8 +206,6 @@ mod unix {
 
         ----- stderr -----
         ");
-
-        Ok(())
     }
 
     #[test]
@@ -259,7 +257,7 @@ mod unix {
 
         // Entry is written as a YAML block scalar (contains newlines) but the first token is a
         // real script path, so it should be treated as a normal `script` hook.
-        context.write_pre_commit_config(indoc::indoc! {r#"
+        context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -270,7 +268,7 @@ mod unix {
                   ./script.sh --from-entry
                 pass_filenames: false
                 verbose: true
-        "#});
+        "});
 
         let script = context.work_dir().child("script.sh");
         script.write_str(indoc::indoc! {r#"
