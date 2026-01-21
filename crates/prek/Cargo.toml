@@ -29,7 +29,9 @@ anstyle-query = { workspace = true }
 anyhow = { workspace = true }
 async-compression = { workspace = true, features = ["gzip", "xz", "tokio"] }
 async_zip = { workspace = true, features = ["deflate", "tokio"] }
-axoupdater = { workspace = true, default-features = false, features = ["github_releases"], optional = true }
+axoupdater = { workspace = true, default-features = false, features = [
+  "github_releases",
+], optional = true }
 bstr = { workspace = true }
 cargo_metadata = { workspace = true }
 clap = { workspace = true, features = ["derive", "env", "string", "wrap_help"] }
@@ -61,7 +63,13 @@ path-clean = { workspace = true }
 quick-xml = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
-reqwest = { workspace = true, default-features = false, features = ["http2", "stream", "json", "rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
+reqwest = { workspace = true, default-features = false, features = [
+  "http2",
+  "stream",
+  "json",
+  "rustls-tls-native-roots",
+  "rustls-tls-webpki-roots",
+] }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
@@ -78,7 +86,12 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-tar = { workspace = true }
 tokio-util = { workspace = true }
-toml = { workspace = true, default-features = false, features = ["fast_hash", "parse", "preserve_order", "serde"] }
+toml = { workspace = true, default-features = false, features = [
+  "fast_hash",
+  "parse",
+  "preserve_order",
+  "serde",
+] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 unicode-width = { workspace = true }

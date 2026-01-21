@@ -13,8 +13,8 @@ uv = "latest"
 [tasks.lint]
 description = "Run formatting and linting"
 run = [
-    "cargo fmt",
-    "cargo clippy --all-targets --all-features --workspace -- -D warnings"
+  "cargo fmt",
+  "cargo clippy --all-targets --all-features --workspace -- -D warnings",
 ]
 
 [tasks.test-unit]
