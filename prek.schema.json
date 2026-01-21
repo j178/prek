@@ -393,7 +393,9 @@
           }
         },
         "repo": {
-          "type": "string"
+          "description": "Must be `builtin`.",
+          "type": "string",
+          "const": "builtin"
         }
       },
       "additionalProperties": true,
@@ -701,7 +703,9 @@
           }
         },
         "repo": {
-          "type": "string"
+          "description": "Must be `local`.",
+          "type": "string",
+          "const": "local"
         }
       },
       "additionalProperties": true,
@@ -941,7 +945,9 @@
           }
         },
         "repo": {
-          "type": "string"
+          "description": "Must be `meta`.",
+          "type": "string",
+          "const": "meta"
         }
       },
       "additionalProperties": true,
@@ -1175,7 +1181,15 @@
           "writeOnly": true
         },
         "repo": {
-          "type": "string"
+          "description": "Remote repository location. Must not be `local`, `meta`, or `builtin`.",
+          "type": "string",
+          "not": {
+            "enum": [
+              "local",
+              "meta",
+              "builtin"
+            ]
+          }
         },
         "rev": {
           "type": "string"
