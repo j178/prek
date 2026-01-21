@@ -301,7 +301,7 @@ impl Store {
     }
 }
 
-#[derive(Copy, Clone, Eq, Hash, PartialEq)]
+#[derive(Copy, Clone, Eq, Hash, PartialEq, clap::ValueEnum)]
 pub(crate) enum ToolBucket {
     Uv,
     Python,
