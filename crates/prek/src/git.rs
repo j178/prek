@@ -117,15 +117,31 @@ pub(crate) async fn get_changed_files(
     new: &str,
     root: &Path,
 ) -> Result<Vec<PathBuf>, Error> {
-    let output = git_cmd("get changed files")?
-        .arg("diff")
-        .arg("--name-only")
-        .arg("--diff-filter=ACMRT")
-        .arg("--no-ext-diff") // Disable external diff drivers
-        .arg("-z") // Use NUL as line terminator
-        .arg(format!("{old}..{new}"))
-        .arg("--")
-        .arg(root)
+    let mut build_cmd = |range: String| -> Result<Cmd, Error> {
+        let mut cmd = git_cmd("get changed files")?;
+        cmd.arg("diff")
+            .arg("--name-only")
+            .arg("--diff-filter=ACMRT")
+            .arg("--no-ext-diff") // Disable external diff drivers
+            .arg("-z") // Use NUL as line terminator
+            .arg(range)
+            .arg("--")
+            .arg(root);
+        Ok(cmd)
+    };
+
+    // Try three-dot syntax first (merge-base diff), which works for commits
+    let output = build_cmd(format!("{old}...{new}"))?
+        .check(false)
+        .output()
+        .await?;
+
+    if output.status.success() {
+        return Ok(zsplit(&output.stdout)?);
+    }
+
+    // Fall back to two-dot syntax, which works with both commits and trees
+    let output = build_cmd(format!("{old}..{new}"))?
         .check(true)
         .output()
         .await?;
