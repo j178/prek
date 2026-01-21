@@ -2937,6 +2937,7 @@ fn expands_tilde_in_prek_home() -> Result<()> {
 fn run_with_tree_object_as_ref() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
+    context.configure_git_author();
 
     let cwd = context.work_dir();
     context.write_pre_commit_config(indoc::indoc! {r"

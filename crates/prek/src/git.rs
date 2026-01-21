@@ -117,7 +117,7 @@ pub(crate) async fn get_changed_files(
     new: &str,
     root: &Path,
 ) -> Result<Vec<PathBuf>, Error> {
-    let mut build_cmd = |range: String| -> Result<Cmd, Error> {
+    let build_cmd = |range: String| -> Result<Cmd, Error> {
         let mut cmd = git_cmd("get changed files")?;
         cmd.arg("diff")
             .arg("--name-only")
