@@ -825,7 +825,7 @@ Require a minimum `prek` version for this specific hook.
 
 Prek supports the following environment variables:
 
-- `PREK_HOME` — Override the prek data directory (caches, toolchains, hook envs). Defaults to `~/.cache/prek` on macOS and Linux, and `%LOCALAPPDATA%\prek` on Windows.
+- `PREK_HOME` — Override the prek data directory (caches, toolchains, hook envs). If beginning with `~`, it is expanded to the user’s home directory. Defaults to `~/.cache/prek` on macOS and Linux, and `%LOCALAPPDATA%\prek` on Windows.
 
 - `PREK_COLOR` — Control colored output: auto (default), always, or never.
 
