@@ -4,6 +4,9 @@
     'config:recommended',
     // https://docs.renovatebot.com/presets-default/#configmigration
     ':configMigration',
+    // https://docs.renovatebot.com/presets-customManagers/#custommanagersgithubactionsversions
+    // Update _VERSION environment variables in GitHub Action files.
+    'customManagers:githubActionsVersions',
   ],
   schedule: [
     '* * 1,15 * *'
