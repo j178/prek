@@ -53,7 +53,7 @@ depends = ["generate-cli-reference", "generate-json-schema"]
 
 [tasks.build-docs]
 description = "Build documentation"
-run = "uv tool run --with-requirements docs/requirements.txt zensical serve"
+run = "uvx --with-requirements docs/requirements.txt zensical serve"
 
 [tasks.release]
 description = "Prepare for a release"
