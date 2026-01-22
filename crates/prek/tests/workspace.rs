@@ -6,7 +6,7 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use indoc::indoc;
-use prek_consts::env_vars::EnvVars;
+use prek_consts::{CONFIG_FILE, env_vars::EnvVars};
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -1348,7 +1348,7 @@ fn relative_repo_path_resolution() -> Result<()> {
         .success();
 
     Command::new("git")
-        .args(["commit", "-m", "Initial commit"])
+        .args(["commit", "--no-si", "-m", "Initial commit"])
         .current_dir(&hook_repo)
         .assert()
         .success();
@@ -1366,10 +1366,15 @@ fn relative_repo_path_resolution() -> Result<()> {
 
     // From subproject/, ../hook-repo should resolve to the hook-repo at root
     subproject
-        .child(".pre-commit-config.yaml")
-        .write_str(&format!(
-            "repos:\n  - repo: ../hook-repo\n    rev: {commit_sha}\n    hooks:\n      - id: test-hook\n        always_run: true\n"
-        ))?;
+        .child(CONFIG_FILE)
+        .write_str(&indoc::formatdoc! {r"
+        repos:
+          - repo: ../hook-repo
+            rev: {commit_sha}
+            hooks:
+              - id: test-hook
+                always_run: true
+    "})?;
 
     subproject.child("test.txt").write_str("test content")?;
 
