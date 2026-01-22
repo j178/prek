@@ -1882,7 +1882,7 @@ dependencies = [
 
 [[package]]
 name = "prek"
-version = "0.2.30"
+version = "0.3.0"
 dependencies = [
  "anstream",
  "anstyle-query",
@@ -1959,14 +1959,14 @@ dependencies = [
 
 [[package]]
 name = "prek-consts"
-version = "0.2.30"
+version = "0.3.0"
 dependencies = [
  "tracing",
 ]
 
 [[package]]
 name = "prek-pty"
-version = "0.2.30"
+version = "0.3.0"
 dependencies = [
  "rustix",
  "tokio",

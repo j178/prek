@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.3.0
+
+Released on 2026-01-22.
+
+### Highlights
+
+- `prek cache gc` (also available via `prek gc` for pre-commit compatibility) is finally here! You can now run `prek cache gc` to clean up unused repos, hook envs and tool versions from prek cache.
+
+- `language: bun` is now supported, making it possible to write and run hooks with [Bun](https://bun.sh/).
+
+### Enhancements
+
+- Implement `prek cache gc` ([#1410](https://github.com/j178/prek/pull/1410))
+
+    - Bootstrap tracking configs from workspace cache ([#1417](https://github.com/j178/prek/pull/1417))
+    - Show total size `prek cache gc` removed ([#1418](https://github.com/j178/prek/pull/1418))
+    - Show accurate repo and hook details in `prek cache gc -v` ([#1420](https://github.com/j178/prek/pull/1420))
+    - `prek cache gc` remove specific unused tool versions ([#1422](https://github.com/j178/prek/pull/1422))
+    - Fix unused tool versions not removed in `prek cache gc` ([#1436](https://github.com/j178/prek/pull/1436))
+
+- Add `language: bun` support ([#1411](https://github.com/j178/prek/pull/1411))
+
+    - Use `git ls-remote --tags` to list bun versions ([#1439](https://github.com/j178/prek/pull/1439))
+
+- Accept `--stage` as an alias for `--hook-stage` in `prek run` ([#1398](https://github.com/j178/prek/pull/1398))
+
+- Expand `~` tilde in `PREK_HOME` ([#1431](https://github.com/j178/prek/pull/1431))
+
+- Support refs to trees ([#1449](https://github.com/j178/prek/pull/1449))
+
+### Bug fixes
+
+- Avoid file lock warning for in-process contention ([#1406](https://github.com/j178/prek/pull/1406))
+- Resolve relative repo paths from config file directory ([#1443](https://github.com/j178/prek/pull/1443))
+- fix: use `split()` instead of `resolve(None)` for builtin hook argument parsing ([#1415](https://github.com/j178/prek/pull/1415))
+
+### Documentation
+
+- Add `simple-icons` and `ast-grep` to the users of prek ([#1403](https://github.com/j178/prek/pull/1403))
+- Improve JSON schema for `repo` field ([#1432](https://github.com/j178/prek/pull/1432))
+- Improve JSON schema for builtin and meta hooks ([#1427](https://github.com/j178/prek/pull/1427))
+- Add pronunciation entry to FAQ ([#1442](https://github.com/j178/prek/pull/1442))
+- Add commitizen to the list of projects using prek ([#1413](https://github.com/j178/prek/pull/1413))
+- Move docs to zensical ([#1421](https://github.com/j178/prek/pull/1421))
+
+### Other Changes
+
+- Refactor config layout ([#1407](https://github.com/j178/prek/pull/1407))
+
+### Contributors
+
+- @shaanmajid
+- @KevinGimbel
+- @jtamagnan
+- @jmeickle-theaiinstitute
+- @YazdanRa
+- @j178
+- @mschoettle
+- @tisonkun
+
 ## 0.2.30
 
 Released on 2026-01-18.
