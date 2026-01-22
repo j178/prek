@@ -19,6 +19,9 @@ concurrency:
 
 permissions: {}
 
+env:
+  UV_VERSION: "0.9.26"
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -29,18 +32,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Setup Python
-        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: astral-sh/setup-uv@681c641aba71e4a1c380be3ab5e12ad51f415867 # v7.1.6
         with:
-          python-version: '3.14'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r docs/requirements.txt
+          version: ${{ env.UV_VERSION }}
+          cache-dependency-glob: |
+            **/docs/requirements.txt
 
       - name: Build documentation
-        run: zensical build
+        run: uvx zensical --with-requirements docs/requirements.txt build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
