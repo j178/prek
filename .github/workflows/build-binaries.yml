@@ -33,6 +33,8 @@ env:
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
+  # renovate: datasource=github-releases depName=PyO3/maturin versioning=semver
+  MATURIN_VERSION: "v1.11.5"
 
 jobs:
   sdist:
@@ -44,6 +46,7 @@ jobs:
       - name: Build sdist
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
           command: sdist
           args: --out dist
       - name: "Upload sdist"
@@ -70,6 +73,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
           args: --profile dist --locked --out dist --features self-update
           sccache: 'true'
@@ -108,6 +112,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
           args: --profile dist --locked --out dist --features self-update
           sccache: 'true'
@@ -149,6 +154,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.target }}
           # Generally, we try to build in a target docker container. In this case however, a
           # 32-bit compiler runs out of memory (4GB memory limit for 32-bit), so we cross compile
@@ -227,6 +233,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
           # On `aarch64`, use `manylinux: 2_28`; otherwise, use `manylinux: auto`.
           manylinux: ${{ matrix.platform.arch == 'aarch64' && '2_28' || 'auto' }}
@@ -273,6 +280,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
           manylinux: auto
           args: --profile dist --locked --out dist --features self-update
@@ -320,6 +328,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
           manylinux: auto
           args: --profile dist --locked --out dist --features self-update
@@ -364,6 +373,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
           args: --profile dist --locked --out dist --features self-update
@@ -411,6 +421,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           args: --profile dist --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}}
