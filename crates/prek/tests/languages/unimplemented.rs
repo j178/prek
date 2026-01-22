@@ -8,10 +8,10 @@ fn unimplemented_language() {
         repos:
           - repo: local
             hooks:
-            - id: swift-hook
-              name: swift-hook
-              language: swift
-              entry: cargo run
+            - id: haskell-hook
+              name: haskell-hook
+              language: haskell
+              entry: ghc --version
     "});
 
     context.git_add(".");
@@ -20,7 +20,7 @@ fn unimplemented_language() {
     success: true
     exit_code: 0
     ----- stdout -----
-    swift-hook...........................................(unimplemented yet)Skipped
+    haskell-hook.........................................(unimplemented yet)Skipped
 
     ----- stderr -----
     warning: Some hooks were skipped because their languages are unimplemented.
