@@ -326,9 +326,20 @@ Supported formats:
 
 ### swift
 
-**Status in prek:** Not supported yet.
+**Status in prek:** ✅ Supported.
 
-Tracking: [#46](https://github.com/j178/prek/issues/46)
+prek detects the system Swift installation and runs hooks using the configured `entry`. If the hook repository contains a `Package.swift`, prek builds it in release mode and adds the resulting binaries to PATH.
+
+Runtime behavior:
+
+- Uses the system Swift installation (no automatic toolchain management)
+- Builds Swift packages with `swift build -c release`
+- Build artifacts are stored in the hook environment's `.build/release/` directory
+- The `entry` command runs with built binaries available on PATH
+
+#### `language_version`
+
+Swift does not support `language_version` today. It uses the system `swift` installation.
 
 ### pygrep
 
