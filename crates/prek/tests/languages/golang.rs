@@ -324,3 +324,70 @@ fn local_additional_deps() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// Ensure `go.mod` metadata (go/toolchain directives) is used to constrain
+/// the Go version for remote hooks.
+#[test]
+fn remote_go_mod_metadata_sets_language_version() -> anyhow::Result<()> {
+    // Create a remote repo containing a golang hook.
+    let go_hook = TestContext::new();
+    go_hook.init_project();
+    go_hook.configure_git_author();
+    go_hook.disable_auto_crlf();
+
+    go_hook
+        .work_dir()
+        .child("go.mod")
+        .write_str(indoc::indoc! {r"
+      module example.com/go-hook
+
+      go 2.100 // unrealistic version to ensure the downloading fails
+      "})?;
+
+    go_hook
+        .work_dir()
+        .child(MANIFEST_FILE)
+        .write_str(indoc::indoc! {r"
+      - id: echo
+        name: echo
+        entry: echo
+        language: golang
+        verbose: true
+      "})?;
+
+    go_hook.git_add(".");
+    go_hook.git_commit("Initial commit");
+    Command::new("git")
+        .args(["tag", "v1.0", "-m", "v1.0"])
+        .current_dir(go_hook.work_dir())
+        .output()?;
+
+    // Use it as a remote repo in a separate project.
+    let context = TestContext::new();
+    context.init_project();
+
+    let hook_url = go_hook.work_dir().to_str().unwrap();
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+      repos:
+        - repo: {hook_url}
+          rev: v1.0
+          hooks:
+            - id: echo
+              verbose: true
+      ", hook_url = hook_url});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install hook `echo`
+      caused by: Failed to install go
+      caused by: Failed to resolve go version `>= 2.100.0`
+      caused by: Version `>= 2.100.0` not found on remote
+    ");
+
+    Ok(())
+}

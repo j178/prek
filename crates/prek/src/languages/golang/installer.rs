@@ -133,7 +133,7 @@ impl GoInstaller {
         let resolved_version = self
             .resolve_version(request)
             .await
-            .context("Failed to resolve Go version")?;
+            .with_context(|| format!("Failed to resolve go version `{request}`"))?;
         trace!(version = %resolved_version, "Installing go");
 
         self.download(store, &resolved_version).await
@@ -195,7 +195,7 @@ impl GoInstaller {
         let version = versions
             .into_iter()
             .find(|version| req.matches(version, None))
-            .context("Version not found on remote")?;
+            .with_context(|| format!("Version `{req}` not found on remote"))?;
         Ok(version)
     }
 
