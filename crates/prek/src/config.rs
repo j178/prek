@@ -805,7 +805,6 @@ impl RemoteRepo {
     }
 }
 
-// TODO: resolve if `repo` is a local relative path before comparing
 impl PartialEq for RemoteRepo {
     fn eq(&self, other: &Self) -> bool {
         self.repo == other.repo && self.rev == other.rev
