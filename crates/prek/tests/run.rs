@@ -2932,3 +2932,55 @@ fn expands_tilde_in_prek_home() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn run_with_tree_object_as_ref() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.configure_git_author();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo files
+                entry: echo
+                language: system
+                pass_filenames: true
+    "});
+
+    // Create initial commit
+    cwd.child("file1.txt").write_str("hello")?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    // Create some changes and stage them
+    cwd.child("file2.txt").write_str("world")?;
+    context.git_add("file2.txt");
+
+    // Get the tree object from the staged changes
+    let tree_output = Command::new("git")
+        .arg("write-tree")
+        .current_dir(cwd)
+        .output()
+        .expect("Failed to run git write-tree");
+    let tree_sha = String::from_utf8_lossy(&tree_output.stdout)
+        .trim()
+        .to_string();
+
+    // Run prek with tree object as to-ref (should work with .. syntax)
+    cmd_snapshot!(context.filters(), context.run()
+        .arg("--from-ref").arg("HEAD")
+        .arg("--to-ref").arg(&tree_sha), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo files...............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
