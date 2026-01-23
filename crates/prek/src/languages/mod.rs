@@ -30,6 +30,7 @@ mod python;
 mod ruby;
 mod rust;
 mod script;
+mod swift;
 mod system;
 pub mod version;
 
@@ -45,6 +46,7 @@ static PYTHON: python::Python = python::Python;
 static RUBY: ruby::Ruby = ruby::Ruby;
 static RUST: rust::Rust = rust::Rust;
 static SCRIPT: script::Script = script::Script;
+static SWIFT: swift::Swift = swift::Swift;
 static SYSTEM: system::System = system::System;
 static UNIMPLEMENTED: Unimplemented = Unimplemented;
 
@@ -137,6 +139,7 @@ impl Language {
                 | Self::Ruby
                 | Self::Rust
                 | Self::Script
+                | Self::Swift
                 | Self::System
         )
     }
@@ -216,6 +219,7 @@ impl Language {
             Self::Ruby => RUBY.install(hook, store, reporter).await,
             Self::Rust => RUST.install(hook, store, reporter).await,
             Self::Script => SCRIPT.install(hook, store, reporter).await,
+            Self::Swift => SWIFT.install(hook, store, reporter).await,
             Self::System => SYSTEM.install(hook, store, reporter).await,
             _ => UNIMPLEMENTED.install(hook, store, reporter).await,
         }
@@ -235,6 +239,7 @@ impl Language {
             Self::Ruby => RUBY.check_health(info).await,
             Self::Rust => RUST.check_health(info).await,
             Self::Script => SCRIPT.check_health(info).await,
+            Self::Swift => SWIFT.check_health(info).await,
             Self::System => SYSTEM.check_health(info).await,
             _ => UNIMPLEMENTED.check_health(info).await,
         }
@@ -283,6 +288,7 @@ impl Language {
             Self::Ruby => RUBY.run(hook, filenames, store, reporter).await,
             Self::Rust => RUST.run(hook, filenames, store, reporter).await,
             Self::Script => SCRIPT.run(hook, filenames, store, reporter).await,
+            Self::Swift => SWIFT.run(hook, filenames, store, reporter).await,
             Self::System => SYSTEM.run(hook, filenames, store, reporter).await,
             _ => UNIMPLEMENTED.run(hook, filenames, store, reporter).await,
         }

@@ -15,5 +15,6 @@ mod python;
 mod ruby;
 mod rust;
 mod script;
+mod swift;
 mod unimplemented;
 mod unsupported;
