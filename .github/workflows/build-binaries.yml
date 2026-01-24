@@ -6,6 +6,8 @@
 #
 # Adapted from https://github.com/astral-sh/uv/blob/main/.github/workflows/build-binaries.yml
 
+# test: trigger arm64 windows build
+
 name: "Build binaries"
 
 on:
