@@ -6,12 +6,13 @@ use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
+use mea::once::OnceCell;
+use mea::semaphore::Semaphore;
 use owo_colors::OwoColorize;
 use prek_consts::env_vars::EnvVars;
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
 use rustc_hash::{FxHashMap, FxHashSet};
-use tokio::sync::{OnceCell, Semaphore};
 use tracing::{debug, trace, warn};
 use unicode_width::UnicodeWidthStr;
 
@@ -286,17 +287,15 @@ impl LazyInstallInfo {
         let info = self.info.clone();
         *self
             .health
-            .get_or_init(|| async move {
-                match info.check_health().await {
-                    Ok(()) => true,
-                    Err(err) => {
-                        warn!(
-                            %err,
-                            path = %info.env_path.display(),
-                            "Skipping unhealthy installed hook"
-                        );
-                        false
-                    }
+            .get_or_init(async move || match info.check_health().await {
+                Ok(()) => true,
+                Err(err) => {
+                    warn!(
+                        %err,
+                        path = %info.env_path.display(),
+                        "Skipping unhealthy installed hook"
+                    );
+                    false
                 }
             })
             .await
@@ -383,15 +382,14 @@ pub async fn install_hooks(
 
                     if let Some(info) = matched_info {
                         debug!(
-                            "Found installed environment for hook `{}` at `{}`",
-                            &hook,
+                            "Found installed environment for hook `{hook}` at `{}`",
                             info.env_path.display()
                         );
                         hook_envs.push(InstalledHook::Installed { hook, info });
                         continue;
                     }
 
-                    let _permit = semaphore.acquire().await.unwrap();
+                    let _permit = semaphore.acquire(1).await;
 
                     let installed_hook = hook
                         .language
