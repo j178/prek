@@ -32,7 +32,7 @@ body:
       description: |
         Please attach or paste the contents of your `.pre-commit-config.yaml` file if relevant.
     validations:
-      required: false
+      required: true
 
   - type: textarea
     attributes:
@@ -46,4 +46,4 @@ body:
         prek -vvv [your command]
         ```
     validations:
-      required: false
+      required: true
