@@ -1757,7 +1757,8 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
 #[cfg(windows)]
 #[test]
 fn check_executables_have_shebangs_win() -> Result<()> {
-    use std::process::Command;
+    use crate::common::git_cmd;
+
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
@@ -1779,18 +1780,16 @@ fn check_executables_have_shebangs_win() -> Result<()> {
 
     context.git_add(".");
 
-    Command::new("git")
+    git_cmd(repo_path)
         .args(["update-index", "--chmod=+x", "win_script_with_shebang.sh"])
-        .current_dir(repo_path)
         .status()?;
 
-    Command::new("git")
+    git_cmd(repo_path)
         .args([
             "update-index",
             "--chmod=+x",
             "win_script_without_shebang.sh",
         ])
-        .current_dir(repo_path)
         .status()?;
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
@@ -1910,7 +1909,8 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
 #[cfg(windows)]
 #[test]
 fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
-    use std::process::Command;
+    use crate::common::git_cmd;
+
     let context = TestContext::new();
     context.init_project();
     context.configure_git_author();
@@ -1943,9 +1943,8 @@ fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
     ];
 
     for file in &executable_files {
-        Command::new("git")
+        git_cmd(cwd.path())
             .args(["update-index", "--chmod=+x", file])
-            .current_dir(cwd.path())
             .status()?;
     }
 

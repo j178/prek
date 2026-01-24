@@ -253,95 +253,86 @@ impl TestContext {
 
     /// Initialize a sample project for prek.
     pub fn init_project(&self) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("-c")
             .arg("init.defaultBranch=master")
             .arg("init")
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
 
     /// Configure git user and email.
     pub fn configure_git_author(&self) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("config")
             .arg("user.name")
             .arg("Prek Test")
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("config")
             .arg("user.email")
             .arg("test@prek.dev")
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
 
     pub fn disable_auto_crlf(&self) {
         // Disable autocrlf
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("config")
             .arg("core.autocrlf")
             .arg("false")
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
 
     /// Run `git add`.
     pub fn git_add(&self, path: impl AsRef<OsStr>) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("add")
             .arg(path)
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
 
     /// Run `git commit`.
     pub fn git_commit(&self, message: &str) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("commit")
             .arg("-m")
             .arg(message)
             .env(EnvVars::PREK_HOME, &**self.home_dir())
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
 
     /// Run `git tag`.
     pub fn git_tag(&self, tag: &str) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("tag")
             .arg(tag)
             .arg("-m")
             .arg(format!("Tag {tag}"))
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
 
     /// Run `git reset`.
     pub fn git_reset(&self, target: &str) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("reset")
             .arg(target)
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
 
     /// Run `git rm`.
     pub fn git_rm(&self, path: &str) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("rm")
             .arg("--cached")
             .arg(path)
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
         let file_path = self.temp_dir.child(path);
@@ -352,30 +343,27 @@ impl TestContext {
 
     /// Run `git clean`.
     pub fn git_clean(&self) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("clean")
             .arg("-fdx")
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
 
     /// Create a new git branch.
     pub fn git_branch(&self, branch_name: &str) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("branch")
             .arg(branch_name)
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
 
     /// Switch to a git branch.
     pub fn git_checkout(&self, branch_name: &str) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("checkout")
             .arg(branch_name)
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }

@@ -1,10 +1,8 @@
-use std::process::Command;
-
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::MANIFEST_FILE;
 use prek_consts::env_vars::EnvVars;
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 /// Test that a local Swift hook with a system command works.
 #[test]
@@ -180,9 +178,8 @@ fn local_package_build() -> anyhow::Result<()> {
     "})?;
     swift_hook.git_add(".");
     swift_hook.git_commit("Initial commit");
-    Command::new("git")
+    git_cmd(swift_hook.work_dir())
         .args(["tag", "v1.0", "-m", "v1.0"])
-        .current_dir(swift_hook.work_dir())
         .output()?;
 
     let context = TestContext::new();

@@ -1,11 +1,9 @@
-use std::process::Command;
-
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::env_vars::EnvVars;
 use prek_consts::{CONFIG_FILE, MANIFEST_FILE};
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 /// Test `language_version` parsing and installation for golang hooks.
 /// We use `setup-go` action to install go 1.24 in CI, so go 1.23 will be auto downloaded.
@@ -287,9 +285,8 @@ fn local_additional_deps() -> anyhow::Result<()> {
     "})?;
     go_hook.git_add(".");
     go_hook.git_commit("Initial commit");
-    Command::new("git")
+    git_cmd(go_hook.work_dir())
         .args(["tag", "v1.0", "-m", "v1.0"])
-        .current_dir(go_hook.work_dir())
         .output()?;
 
     let context = TestContext::new();
@@ -357,9 +354,8 @@ fn remote_go_mod_metadata_sets_language_version() -> anyhow::Result<()> {
 
     go_hook.git_add(".");
     go_hook.git_commit("Initial commit");
-    Command::new("git")
+    git_cmd(go_hook.work_dir())
         .args(["tag", "v1.0", "-m", "v1.0"])
-        .current_dir(go_hook.work_dir())
         .output()?;
 
     // Use it as a remote repo in a separate project.

@@ -1,5 +1,3 @@
-use std::process::Command;
-
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::ChildPath;
@@ -7,7 +5,7 @@ use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use prek_consts::CONFIG_FILE;
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 mod common;
 
@@ -16,32 +14,28 @@ fn create_local_git_repo(context: &TestContext, repo_name: &str, tags: &[&str]) 
     let repo_dir = context.home_dir().child(format!("test-repos/{repo_name}"));
     repo_dir.create_dir_all()?;
 
-    Command::new("git")
+    git_cmd(&repo_dir)
         .arg("-c")
         .arg("init.defaultBranch=master")
         .arg("init")
-        .current_dir(&repo_dir)
         .assert()
         .success();
-    Command::new("git")
+    git_cmd(&repo_dir)
         .arg("config")
         .arg("user.name")
         .arg("Prek Test")
-        .current_dir(&repo_dir)
         .assert()
         .success();
-    Command::new("git")
+    git_cmd(&repo_dir)
         .arg("config")
         .arg("user.email")
         .arg("test@prek.dev")
-        .current_dir(&repo_dir)
         .assert()
         .success();
-    Command::new("git")
+    git_cmd(&repo_dir)
         .arg("config")
         .arg("core.autocrlf")
         .arg("false")
-        .current_dir(&repo_dir)
         .assert()
         .success();
 
@@ -59,61 +53,51 @@ fn create_local_git_repo(context: &TestContext, repo_name: &str, tags: &[&str]) 
           language: python
     "#})?;
 
-    Command::new("git")
-        .arg("add")
-        .arg(".")
-        .current_dir(&repo_dir)
-        .assert()
-        .success();
+    git_cmd(&repo_dir).arg("add").arg(".").assert().success();
 
     let mut timestamp = 1_000_000_000;
 
-    Command::new("git")
+    git_cmd(&repo_dir)
         .arg("commit")
         .arg("-m")
         .arg("Initial commit")
         .env("GIT_AUTHOR_DATE", format!("{timestamp} +0000"))
         .env("GIT_COMMITTER_DATE", format!("{timestamp} +0000"))
-        .current_dir(&repo_dir)
         .assert()
         .success();
 
     // Create tags
     for tag in tags {
         timestamp += 100;
-        Command::new("git")
+        git_cmd(&repo_dir)
             .arg("commit")
             .arg("-m")
             .arg(format!("Release {tag}"))
             .arg("--allow-empty")
             .env("GIT_AUTHOR_DATE", format!("{timestamp} +0000"))
             .env("GIT_COMMITTER_DATE", format!("{timestamp} +0000"))
-            .current_dir(&repo_dir)
             .assert()
             .success();
-        Command::new("git")
+        git_cmd(&repo_dir)
             .arg("tag")
             .arg(tag)
             .arg("-m")
             .arg(tag)
-            .arg("--no-sign")
             .env("GIT_AUTHOR_DATE", format!("{timestamp} +0000"))
             .env("GIT_COMMITTER_DATE", format!("{timestamp} +0000"))
-            .current_dir(&repo_dir)
             .assert()
             .success();
     }
 
     timestamp += 100;
     // Add an extra commit to the tip
-    Command::new("git")
+    git_cmd(&repo_dir)
         .arg("commit")
         .arg("-m")
         .arg("tip")
         .arg("--allow-empty")
         .env("GIT_AUTHOR_DATE", format!("{timestamp} +0000"))
         .env("GIT_COMMITTER_DATE", format!("{timestamp} +0000"))
-        .current_dir(&repo_dir)
         .assert()
         .success();
 
@@ -500,13 +484,12 @@ fn auto_update_freeze() -> Result<()> {
 
     let repo_path = create_local_git_repo(&context, "freeze-repo", &["v1.0.0", "v1.1.0"])?;
     // Make sure the "# frozen: v1.1.0" comment works correctly by adding a tag without dot
-    Command::new("git")
+    git_cmd(&repo_path)
         .arg("tag")
         .arg("v1")
         .arg("-m")
         .arg("v1")
         .arg("v1.1.0^{}")
-        .current_dir(&repo_path)
         .assert()
         .success();
 
@@ -560,16 +543,14 @@ fn auto_update_freeze_uses_dereferenced_commit_for_annotated_tags() -> Result<()
     let repo_path =
         create_local_git_repo(&context, "freeze-annotated-repo", &["v1.0.0", "v1.1.0"])?;
 
-    let tag_object_sha = Command::new("git")
+    let tag_object_sha = git_cmd(&repo_path)
         .args(["rev-parse", "v1.1.0"])
-        .current_dir(&repo_path)
         .output()?
         .stdout;
     let tag_object_sha = str::from_utf8(&tag_object_sha)?.trim();
 
-    let commit_sha = Command::new("git")
+    let commit_sha = git_cmd(&repo_path)
         .args(["rev-parse", "v1.1.0^{}"])
-        .current_dir(&repo_path)
         .output()?
         .stdout;
     let commit_sha = str::from_utf8(&commit_sha)?.trim();
@@ -814,25 +795,18 @@ fn missing_hook_ids() -> Result<()> {
           language: python
     "#})?;
 
-    Command::new("git")
-        .arg("add")
-        .arg(".")
-        .current_dir(&repo_path)
-        .assert()
-        .success();
-    Command::new("git")
+    git_cmd(&repo_path).arg("add").arg(".").assert().success();
+    git_cmd(&repo_path)
         .arg("commit")
         .arg("-m")
         .arg("Remove test-hook")
-        .current_dir(&repo_path)
         .assert()
         .success();
-    Command::new("git")
+    git_cmd(&repo_path)
         .arg("tag")
         .arg("v2.0.0")
         .arg("-m")
         .arg("v2.0.0")
-        .current_dir(&repo_path)
         .assert()
         .success();
 
@@ -971,23 +945,21 @@ fn prefer_similar_tags() -> Result<()> {
     // - `levenshtein(v1.0.0, foo-v1.1.0) == 5`
     // Therefore, `v1.1.0` should be selected as the update target.
     // But if the newest SemVer-like tag (e.g v1.1.111111) were less similar than `foo-v1.1.0`, we would select `foo-v1.1.0` instead.
-    Command::new("git")
+    git_cmd(&repo_path)
         .arg("tag")
         .arg("foo-v1.1.0")
         .arg("-m")
         .arg("foo-v1.1.0")
         .arg("v1.1.0^{}")
-        .current_dir(&repo_path)
         .assert()
         .success();
     // Add tag v1 pointing to the same commit as v1.1.0
-    Command::new("git")
+    git_cmd(&repo_path)
         .arg("tag")
         .arg("v1")
         .arg("-m")
         .arg("v1")
         .arg("v1.1.0^{}")
-        .current_dir(&repo_path)
         .assert()
         .success();
 
