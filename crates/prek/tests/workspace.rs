@@ -992,7 +992,6 @@ fn submodule_discovery() -> Result<()> {
     let submodule_context = TestContext::new_at(submodule_path.to_path_buf());
 
     submodule_context.init_project();
-    submodule_context.configure_git_author();
     submodule_context.write_pre_commit_config(config);
     submodule_context.git_add(".");
     submodule_context.git_commit("Initial commit");
@@ -1299,8 +1298,6 @@ fn relative_repo_path_resolution() -> Result<()> {
 
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     // Create a local hook repository at the root level
     let hook_repo = context.work_dir().child("hook-repo");

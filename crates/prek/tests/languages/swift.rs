@@ -142,8 +142,6 @@ fn local_package_build() -> anyhow::Result<()> {
 
     let swift_hook = TestContext::new();
     swift_hook.init_project();
-    swift_hook.configure_git_author();
-    swift_hook.disable_auto_crlf();
 
     // Create a minimal Swift package
     swift_hook

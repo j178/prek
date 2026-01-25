@@ -287,8 +287,6 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
         )
     "#})?;
     repo.git_add(".");
-    repo.configure_git_author();
-    repo.disable_auto_crlf();
     repo.git_commit("Add manifest");
     repo.git_tag("v0.1.0");
 

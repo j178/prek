@@ -113,8 +113,6 @@ fn create_failing_hook_repo(context: &TestContext, repo_name: &str) -> Result<Pa
 fn try_repo_basic() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     context.work_dir().child("test.txt").write_str("test")?;
     context.git_add(".");
@@ -146,8 +144,6 @@ fn try_repo_basic() -> Result<()> {
 fn try_repo_failing_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     context.work_dir().child("test.txt").write_str("test")?;
     context.git_add(".");
@@ -181,8 +177,6 @@ fn try_repo_failing_hook() -> Result<()> {
 fn try_repo_specific_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     let repo_path = create_hook_repo(&context, "try-repo-specific-hook")?;
 
@@ -214,8 +208,6 @@ fn try_repo_specific_hook() -> Result<()> {
 fn try_repo_specific_rev() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     context.work_dir().child("test.txt").write_str("test")?;
     context.git_add(".");
@@ -278,8 +270,6 @@ fn try_repo_specific_rev() -> Result<()> {
 fn try_repo_uncommitted_changes() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     let repo_path = create_hook_repo(&context, "try-repo-uncommitted")?;
 
@@ -333,8 +323,6 @@ fn try_repo_uncommitted_changes() -> Result<()> {
 fn try_repo_relative_path() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     context.work_dir().child("test.txt").write_str("test")?;
     context.git_add(".");
