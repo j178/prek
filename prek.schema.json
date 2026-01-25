@@ -383,7 +383,8 @@
         "fix-byte-order-marker",
         "mixed-line-ending",
         "no-commit-to-branch",
-        "trailing-whitespace"
+        "trailing-whitespace",
+        "check-hook-updates"
       ]
     },
     "BuiltinRepo": {
