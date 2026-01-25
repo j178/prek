@@ -1,14 +1,12 @@
 mod common;
 
-use std::process::Command;
-
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use indoc::indoc;
 use prek_consts::{CONFIG_FILE, env_vars::EnvVars};
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 #[test]
 fn basic_discovery() -> Result<()> {
@@ -1000,9 +998,8 @@ fn submodule_discovery() -> Result<()> {
     submodule_context.git_commit("Initial commit");
 
     // Add submodule to the main project
-    Command::new("git")
+    git_cmd(cwd)
         .args(["submodule", "add", "./submodule"])
-        .current_dir(cwd)
         .assert()
         .success();
     context.git_add(".");
@@ -1309,27 +1306,20 @@ fn relative_repo_path_resolution() -> Result<()> {
     let hook_repo = context.work_dir().child("hook-repo");
     hook_repo.create_dir_all()?;
 
-    Command::new("git")
-        .args(["init"])
-        .current_dir(&hook_repo)
-        .assert()
-        .success();
+    git_cmd(&hook_repo).args(["init"]).assert().success();
 
-    Command::new("git")
+    git_cmd(&hook_repo)
         .args(["config", "user.name", "Test"])
-        .current_dir(&hook_repo)
         .assert()
         .success();
 
-    Command::new("git")
+    git_cmd(&hook_repo)
         .args(["config", "user.email", "test@test.com"])
-        .current_dir(&hook_repo)
         .assert()
         .success();
 
-    Command::new("git")
+    git_cmd(&hook_repo)
         .args(["config", "core.autocrlf", "false"])
-        .current_dir(&hook_repo)
         .assert()
         .success();
 
@@ -1341,23 +1331,15 @@ fn relative_repo_path_resolution() -> Result<()> {
           always_run: true
     "})?;
 
-    Command::new("git")
-        .args(["add", "."])
-        .current_dir(&hook_repo)
-        .assert()
-        .success();
+    git_cmd(&hook_repo).args(["add", "."]).assert().success();
 
-    Command::new("git")
+    git_cmd(&hook_repo)
         .args(["commit", "--no-si", "-m", "Initial commit"])
-        .current_dir(&hook_repo)
         .assert()
         .success();
 
     // Get the commit SHA
-    let output = Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .current_dir(&hook_repo)
-        .output()?;
+    let output = git_cmd(&hook_repo).args(["rev-parse", "HEAD"]).output()?;
     let commit_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     // Create a subproject that references the hook repo with a relative path
