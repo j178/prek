@@ -242,8 +242,6 @@ fn remote_hook() {
 fn local_additional_deps() -> anyhow::Result<()> {
     let go_hook = TestContext::new();
     go_hook.init_project();
-    go_hook.configure_git_author();
-    go_hook.disable_auto_crlf();
 
     // Create a local go hook with additional_dependencies.
     go_hook
@@ -329,8 +327,6 @@ fn remote_go_mod_metadata_sets_language_version() -> anyhow::Result<()> {
     // Create a remote repo containing a golang hook.
     let go_hook = TestContext::new();
     go_hook.init_project();
-    go_hook.configure_git_author();
-    go_hook.disable_auto_crlf();
 
     go_hook
         .work_dir()

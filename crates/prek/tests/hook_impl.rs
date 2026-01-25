@@ -24,7 +24,6 @@ fn hook_impl() {
     "});
 
     context.git_add(".");
-    context.configure_git_author();
 
     let mut commit = git_cmd(context.work_dir());
     commit
@@ -72,9 +71,7 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
              entry: echo "hook ran successfully"
              always_run: true
     "#});
-
     context.git_add(".");
-    context.configure_git_author();
 
     let mut commit = git_cmd(context.work_dir());
     commit
@@ -183,8 +180,6 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
 fn run_worktree() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
     context.write_pre_commit_config(indoc! { r"
         repos:
         - repo: local
@@ -249,8 +244,6 @@ fn run_worktree() -> anyhow::Result<()> {
 fn git_dir_respected() {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
     context.write_pre_commit_config(indoc! { r#"
         repos:
         - repo: local
@@ -303,8 +296,6 @@ fn git_dir_respected() {
 fn workspace_hook_impl_root() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     let config = indoc! {r#"
     repos:
@@ -384,8 +375,6 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
     let context = TestContext::new();
     let cwd = context.work_dir();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     let config = indoc! {r#"
     repos:
@@ -454,8 +443,6 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
     let context = TestContext::new();
     let cwd = context.work_dir();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     let config = indoc! {r#"
     repos:
@@ -533,8 +520,6 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
 fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     // Create a directory without .pre-commit-config.yaml
     let empty_dir = context.work_dir().child("empty");
@@ -647,8 +632,6 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
 fn hook_impl_does_not_fail_when_no_hooks_match_stage() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     // Only a manual-stage hook; a pre-commit hook run should find nothing for the stage.
     context
@@ -712,8 +695,6 @@ fn workspace_hook_impl_with_selectors() -> anyhow::Result<()> {
     let context = TestContext::new();
     let cwd = context.work_dir();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     let config = indoc! {r#"
     repos:

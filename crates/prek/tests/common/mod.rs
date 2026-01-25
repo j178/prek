@@ -16,7 +16,10 @@ pub fn git_cmd(dir: impl AsRef<Path>) -> Command {
     let mut cmd = Command::new("git");
     cmd.current_dir(dir)
         .args(["-c", "commit.gpgsign=false"])
-        .args(["-c", "tag.gpgsign=false"]);
+        .args(["-c", "tag.gpgsign=false"])
+        .args(["-c", "core.autocrlf=false"])
+        .args(["-c", "user.name=Prek Test"])
+        .args(["-c", "user.email=test@prek.dev"]);
     cmd
 }
 
@@ -147,7 +150,7 @@ impl TestContext {
     }
 
     pub fn command(&self) -> Command {
-        if EnvVars::is_set(EnvVars::PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT) {
+        let mut cmd = if EnvVars::is_set(EnvVars::PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT) {
             // Run the original pre-commit to check compatibility.
             let mut cmd = Command::new("pre-commit");
             cmd.current_dir(self.work_dir());
@@ -164,7 +167,14 @@ impl TestContext {
             cmd.env(EnvVars::PREK_HOME, &**self.home_dir());
             cmd.env(EnvVars::PREK_INTERNAL__SORT_FILENAMES, "1");
             cmd
-        }
+        };
+
+        // Disable git autocrlf to avoid line ending issues in tests.
+        cmd.env("GIT_CONFIG_COUNT", "1")
+            .env("GIT_CONFIG_KEY_0", "core.autocrlf")
+            .env("GIT_CONFIG_VALUE_0", "false");
+
+        cmd
     }
 
     pub fn run(&self) -> Command {
@@ -254,32 +264,6 @@ impl TestContext {
             .arg("-c")
             .arg("init.defaultBranch=master")
             .arg("init")
-            .assert()
-            .success();
-    }
-
-    /// Configure git user and email.
-    pub fn configure_git_author(&self) {
-        git_cmd(&self.temp_dir)
-            .arg("config")
-            .arg("user.name")
-            .arg("Prek Test")
-            .assert()
-            .success();
-        git_cmd(&self.temp_dir)
-            .arg("config")
-            .arg("user.email")
-            .arg("test@prek.dev")
-            .assert()
-            .success();
-    }
-
-    pub fn disable_auto_crlf(&self) {
-        // Disable autocrlf
-        git_cmd(&self.temp_dir)
-            .arg("config")
-            .arg("core.autocrlf")
-            .arg("false")
             .assert()
             .success();
     }

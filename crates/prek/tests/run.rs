@@ -1383,7 +1383,6 @@ fn merge_conflicts() -> Result<()> {
     let cwd = context.work_dir();
     cwd.child("file.txt").write_str("Hello, world!")?;
     context.git_add(".");
-    context.configure_git_author();
     context.git_commit("Initial commit");
 
     git_cmd(cwd)
@@ -1619,7 +1618,6 @@ fn types_directory() -> Result<()> {
 fn run_last_commit() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     let cwd = context.work_dir();
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -2044,8 +2042,6 @@ fn shebang_script() -> Result<()> {
 fn git_commit_a() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -2453,7 +2449,6 @@ fn alternate_config_file() -> Result<()> {
 fn show_diff_on_failure() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.disable_auto_crlf();
 
     let config = indoc::indoc! {r#"
         repos:
@@ -2945,7 +2940,6 @@ fn expands_tilde_in_prek_home() -> Result<()> {
 fn run_with_tree_object_as_ref() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     let cwd = context.work_dir();
     context.write_pre_commit_config(indoc::indoc! {r"
