@@ -522,6 +522,7 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::process::Cmd;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     async fn setup_test_repo() -> tempfile::TempDir {
@@ -587,18 +588,17 @@ mod tests {
         tmp
     }
 
+    fn git_cmd(dir: impl AsRef<Path>, summary: &str) -> Cmd {
+        let mut cmd = git::git_cmd(summary).unwrap();
+        cmd.current_dir(dir)
+            .args(["-c", "commit.gpgsign=false"])
+            .args(["-c", "tag.gpgsign=false"]);
+        cmd
+    }
+
     async fn create_commit(repo: &Path, message: &str) {
-        git::git_cmd("git commit")
-            .unwrap()
-            .args([
-                "-c",
-                "commit.gpgsign=false",
-                "commit",
-                "--allow-empty",
-                "-m",
-                message,
-            ])
-            .current_dir(repo)
+        git_cmd(repo, "git commit")
+            .args(["commit", "--allow-empty", "-m", message])
             .remove_git_envs()
             .output()
             .await
@@ -614,19 +614,10 @@ mod tests {
 
         let date_str = format!("{timestamp} +0000");
 
-        git::git_cmd("git commit")
-            .unwrap()
-            .args([
-                "-c",
-                "commit.gpgsign=false",
-                "commit",
-                "--allow-empty",
-                "-m",
-                message,
-            ])
+        git_cmd(repo, "git commit")
+            .args(["commit", "--allow-empty", "-m", message])
             .env("GIT_AUTHOR_DATE", &date_str)
             .env("GIT_COMMITTER_DATE", &date_str)
-            .current_dir(repo)
             .remove_git_envs()
             .output()
             .await
@@ -634,12 +625,9 @@ mod tests {
     }
 
     async fn create_lightweight_tag(repo: &Path, tag: &str) {
-        git::git_cmd("git tag")
-            .unwrap()
+        git_cmd(repo, "git tag")
             .arg("tag")
             .arg(tag)
-            .arg("--no-sign")
-            .current_dir(repo)
             .remove_git_envs()
             .output()
             .await
@@ -655,16 +643,13 @@ mod tests {
 
         let date_str = format!("{timestamp} +0000");
 
-        git::git_cmd("git tag")
-            .unwrap()
+        git_cmd(repo, "git tag")
             .arg("tag")
             .arg(tag)
-            .arg("--no-sign")
             .arg("-m")
             .arg(tag)
             .env("GIT_AUTHOR_DATE", &date_str)
             .env("GIT_COMMITTER_DATE", &date_str)
-            .current_dir(repo)
             .remove_git_envs()
             .output()
             .await

@@ -15,11 +15,8 @@ use prek_consts::env_vars::EnvVars;
 pub fn git_cmd(dir: impl AsRef<Path>) -> Command {
     let mut cmd = Command::new("git");
     cmd.current_dir(dir)
-        .env("GIT_CONFIG_COUNT", "2")
-        .env("GIT_CONFIG_KEY_0", "commit.gpgsign")
-        .env("GIT_CONFIG_VALUE_0", "false")
-        .env("GIT_CONFIG_KEY_1", "tag.gpgsign")
-        .env("GIT_CONFIG_VALUE_1", "false");
+        .args(["-c", "commit.gpgsign=false"])
+        .args(["-c", "tag.gpgsign=false"]);
     cmd
 }
 
