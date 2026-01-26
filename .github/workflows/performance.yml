@@ -1,11 +1,12 @@
 name: Performance
 
 on:
-  pull_request:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: true
+  workflow_call:
+    inputs:
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
 
 permissions: {}
 
@@ -28,6 +29,8 @@ jobs:
           fetch-depth: 0
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
       - uses: taiki-e/install-action@2e9d707ef49c9b094d45955b60c7e5c0dfedeb14 # v2.66.5
         with:
           tool: cargo-bloat
@@ -92,14 +95,10 @@ jobs:
 
           Path("bloat-comparison.txt").write_text(comparison)
 
-      - name: Save bloat check results
-        run: |
-          mkdir -p /tmp/bloat-check
-          echo ${{ github.event.pull_request.number }} > /tmp/bloat-check/pr-number.txt
-          mv bloat-comparison.txt /tmp/bloat-check/bloat-comparison.txt
-
       - name: Upload bloat results
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
+          # NOTE: prek-ci-bot uses this artifact name to post comments on PRs.
+          # Make sure to update the bot if you rename the artifact.
           name: bloat-check-results
-          path: /tmp/bloat-check
+          path: bloat-comparison.txt

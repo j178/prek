@@ -621,6 +621,13 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
 
+  performance:
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
+    uses: ./.github/workflows/performance.yml
+    with:
+      save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
+
   ecosystem-cpython:
     name: "ecosystem | cpython"
     timeout-minutes: 10
