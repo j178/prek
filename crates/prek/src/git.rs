@@ -53,6 +53,7 @@ pub(crate) static GIT_ENV_TO_REMOVE: LazyLock<Vec<(String, String)>> = LazyLock:
         "GIT_SSL_CAINFO",
         "GIT_SSL_NO_VERIFY",
         "GIT_CONFIG_COUNT",
+        "GIT_CONFIG_PARAMETERS",
         "GIT_HTTP_PROXY_AUTHMETHOD",
         "GIT_ALLOW_PROTOCOL",
         "GIT_ASKPASS",
