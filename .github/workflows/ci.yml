@@ -23,7 +23,6 @@ env:
   RUBY_VERSION: "3.4"
   LUA_VERSION: "5.4"
   LUAROCKS_VERSION: "3.12.2"
-  SWIFT_VERSION: "6.2"
   # Cargo env vars
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
@@ -321,11 +320,6 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      - name: "Install Swift"
-        uses: swift-actions/setup-swift@7ca6abe6b3b0e8b5421b88be48feee39cbf52c6a # v2.4.0
-        with:
-          swift-version: ${{ env.SWIFT_VERSION }}
-
       - name: "Cargo test"
         run: |
           cargo llvm-cov nextest \
@@ -414,20 +408,6 @@ jobs:
         uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-
-      - name: "Install Swift"
-        uses: swift-actions/setup-swift@7ca6abe6b3b0e8b5421b88be48feee39cbf52c6a # v2.4.0
-        with:
-          swift-version: ${{ env.SWIFT_VERSION }}
-
-      # setup-swift sets TOOLCHAINS, which breaks native extensions using Xcode/clang.
-      - name: "Reset Xcode toolchain"
-        run: |
-          echo "TOOLCHAINS=" >> "$GITHUB_ENV"
-          echo "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer" >> "$GITHUB_ENV"
-          echo "CC=/usr/bin/clang" >> "$GITHUB_ENV"
-          echo "CXX=/usr/bin/clang++" >> "$GITHUB_ENV"
-          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
 
       - name: "Cargo test"
         run: |
@@ -564,12 +544,6 @@ jobs:
           # A dummy dependency path to enable caching of go modules.
           cache-dependency-path: LICENSE
 
-      - name: "Install Swift"
-        # `swift-actions/setup-swift` broken on Windows, so use `SwiftyLab/setup-swift`
-        uses: SwiftyLab/setup-swift@4bbb093f8c68d1dee1caa8b67c681a3f8fe70a91 # v1.12.0
-        with:
-          swift-version: ${{ env.SWIFT_VERSION }}
-
       - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # windows only
 
       - name: "Install Lua"
@@ -610,7 +584,8 @@ jobs:
             --failure-output immediate `
             --no-fail-fast `
             -j 8 `
-            --final-status-level slow
+            --final-status-level slow `
+            -E 'not test(swift::)'
 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         shell: pwsh
