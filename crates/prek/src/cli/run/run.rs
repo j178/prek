@@ -701,7 +701,7 @@ async fn run_hooks(
                     "\n{}: Some hooks made changes to the files.
                     If you are seeing this message in CI, reproduce locally with: `{}`
                     To run prek as part of git workflow, use `{}` to set up git hooks.\n",
-                    "Hint".yellow().bold(),
+                    "hint".yellow().bold(),
                     "prek run --all-files".cyan(),
                     "prek install".cyan()
                 }

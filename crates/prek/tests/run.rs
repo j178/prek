@@ -2480,7 +2480,7 @@ fn show_diff_on_failure() -> Result<()> {
     - duration: [TIME]
     - files were modified by this hook
 
-    Hint: Some hooks made changes to the files.
+    hint: Some hooks made changes to the files.
     If you are seeing this message in CI, reproduce locally with: `prek run --all-files`
     To run prek as part of git workflow, use `prek install` to set up git hooks.
 
