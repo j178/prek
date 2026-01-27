@@ -1164,7 +1164,7 @@ pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
             {}
             Mutable references are never updated after first install and are not supported.
             See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details.
-            Hint: `prek auto-update` often fixes this",
+            hint: `prek auto-update` often fixes this",
             "#,
             msg
             }
