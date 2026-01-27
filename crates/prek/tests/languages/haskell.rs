@@ -111,7 +111,7 @@ fn remote_hook() {
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/fllesser/haskell-hooks
+          - repo: https://github.com/prek-test-repos/haskell-hooks
             rev: v1.0.0
             hooks:
               - id: hello

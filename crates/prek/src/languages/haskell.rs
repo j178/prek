@@ -25,7 +25,7 @@ impl LanguageImpl for Haskell {
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
 
-        let info = InstallInfo::new(
+        let mut info = InstallInfo::new(
             hook.language,
             hook.env_key_dependencies().clone(),
             &store.hooks_dir(),
@@ -74,6 +74,8 @@ impl LanguageImpl for Haskell {
             .output()
             .await
             .context("Failed to install haskell dependencies")?;
+
+        info.persist_env_path();
 
         reporter.on_install_complete(progress);
 
