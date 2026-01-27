@@ -40,12 +40,17 @@ impl LanguageImpl for Haskell {
         let mut pkgs = Vec::new();
         let search_path = hook.repo_path().unwrap_or(hook.project().path());
         if let Ok(entries) = std::fs::read_dir(search_path) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) == Some("cabal") {
-                    pkgs.push(path.display().to_string());
-                }
-            }
+            pkgs.extend(
+                entries
+                    .filter_map(Result::ok)
+                    .map(|entry| entry.path())
+                    .filter(|path| path.is_file())
+                    .filter(|path| path.extension().is_some_and(|ext| ext == "cabal"))
+                    .filter_map(|path| {
+                        path.file_name()
+                            .map(|name| name.to_string_lossy().to_string())
+                    }),
+            );
         }
         pkgs.extend(hook.additional_dependencies.clone());
 
