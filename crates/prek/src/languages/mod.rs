@@ -23,6 +23,7 @@ mod docker;
 mod docker_image;
 mod fail;
 mod golang;
+mod haskell;
 mod lua;
 mod node;
 mod pygrep;
@@ -47,6 +48,7 @@ static RUBY: ruby::Ruby = ruby::Ruby;
 static RUST: rust::Rust = rust::Rust;
 static SCRIPT: script::Script = script::Script;
 static SWIFT: swift::Swift = swift::Swift;
+static HASKELL: haskell::Haskell = haskell::Haskell;
 static SYSTEM: system::System = system::System;
 static UNIMPLEMENTED: Unimplemented = Unimplemented;
 
@@ -141,6 +143,7 @@ impl Language {
                 | Self::Script
                 | Self::Swift
                 | Self::System
+                | Self::Haskell
         )
     }
 
@@ -220,6 +223,7 @@ impl Language {
             Self::Rust => RUST.install(hook, store, reporter).await,
             Self::Script => SCRIPT.install(hook, store, reporter).await,
             Self::Swift => SWIFT.install(hook, store, reporter).await,
+            Self::Haskell => HASKELL.install(hook, store, reporter).await,
             Self::System => SYSTEM.install(hook, store, reporter).await,
             _ => UNIMPLEMENTED.install(hook, store, reporter).await,
         }
@@ -240,6 +244,7 @@ impl Language {
             Self::Rust => RUST.check_health(info).await,
             Self::Script => SCRIPT.check_health(info).await,
             Self::Swift => SWIFT.check_health(info).await,
+            Self::Haskell => HASKELL.check_health(info).await,
             Self::System => SYSTEM.check_health(info).await,
             _ => UNIMPLEMENTED.check_health(info).await,
         }
@@ -289,6 +294,7 @@ impl Language {
             Self::Rust => RUST.run(hook, filenames, store, reporter).await,
             Self::Script => SCRIPT.run(hook, filenames, store, reporter).await,
             Self::Swift => SWIFT.run(hook, filenames, store, reporter).await,
+            Self::Haskell => HASKELL.run(hook, filenames, store, reporter).await,
             Self::System => SYSTEM.run(hook, filenames, store, reporter).await,
             _ => UNIMPLEMENTED.run(hook, filenames, store, reporter).await,
         }

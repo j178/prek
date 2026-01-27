@@ -8,19 +8,19 @@ fn unimplemented_language() {
         repos:
           - repo: local
             hooks:
-            - id: haskell-hook
-              name: haskell-hook
-              language: haskell
-              entry: ghc --version
+            - id: unimplemented-language-hook
+              name: r-hook
+              language: r
+              entry: rscript --version
     "});
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    haskell-hook.........................................(unimplemented yet)Skipped
+    r-hook...............................................(unimplemented yet)Skipped
 
     ----- stderr -----
     warning: Some hooks were skipped because their languages are unimplemented.
