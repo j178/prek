@@ -8,6 +8,7 @@ use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks;
 use crate::store::Store;
 
+mod check_hook_updates;
 mod check_json5;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -17,6 +18,7 @@ pub(crate) enum BuiltinHooks {
     CheckAddedLargeFiles,
     CheckCaseConflict,
     CheckExecutablesHaveShebangs,
+    CheckHookUpdates,
     CheckJson,
     CheckJson5,
     CheckMergeConflict,
@@ -30,7 +32,6 @@ pub(crate) enum BuiltinHooks {
     MixedLineEnding,
     NoCommitToBranch,
     TrailingWhitespace,
-    CheckHookUpdates,
 }
 
 impl FromStr for BuiltinHooks {
@@ -41,6 +42,7 @@ impl FromStr for BuiltinHooks {
             "check-added-large-files" => Ok(Self::CheckAddedLargeFiles),
             "check-case-conflict" => Ok(Self::CheckCaseConflict),
             "check-executables-have-shebangs" => Ok(Self::CheckExecutablesHaveShebangs),
+            "check-hook-updates" => Ok(Self::CheckHookUpdates),
             "check-json" => Ok(Self::CheckJson),
             "check-json5" => Ok(Self::CheckJson5),
             "check-merge-conflict" => Ok(Self::CheckMergeConflict),
@@ -54,7 +56,6 @@ impl FromStr for BuiltinHooks {
             "mixed-line-ending" => Ok(Self::MixedLineEnding),
             "no-commit-to-branch" => Ok(Self::NoCommitToBranch),
             "trailing-whitespace" => Ok(Self::TrailingWhitespace),
-            "check-hook-updates" => Ok(Self::CheckHookUpdates),
             _ => Err(()),
         }
     }
@@ -75,6 +76,7 @@ impl BuiltinHooks {
             Self::CheckExecutablesHaveShebangs => {
                 pre_commit_hooks::check_executables_have_shebangs(hook, filenames).await
             }
+            Self::CheckHookUpdates => check_hook_updates::check_hook_updates(hook, filenames).await,
             Self::CheckJson => pre_commit_hooks::check_json(hook, filenames).await,
             Self::CheckJson5 => check_json5::check_json5(hook, filenames).await,
             Self::CheckMergeConflict => {
@@ -94,7 +96,6 @@ impl BuiltinHooks {
             Self::TrailingWhitespace => {
                 pre_commit_hooks::fix_trailing_whitespace(hook, filenames).await
             }
-            Self::CheckHookUpdates => pre_commit_hooks::check_hook_updates(hook, filenames).await,
         }
     }
 }

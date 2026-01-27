@@ -371,6 +371,7 @@
         "check-added-large-files",
         "check-case-conflict",
         "check-executables-have-shebangs",
+        "check-hook-updates",
         "check-json",
         "check-json5",
         "check-merge-conflict",
@@ -383,8 +384,7 @@
         "fix-byte-order-marker",
         "mixed-line-ending",
         "no-commit-to-branch",
-        "trailing-whitespace",
-        "check-hook-updates"
+        "trailing-whitespace"
       ]
     },
     "BuiltinRepo": {
