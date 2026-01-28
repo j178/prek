@@ -883,3 +883,29 @@ fn workspace_init_template_dir() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// Test that a warning is shown when the config file exists but is invalid.
+#[test]
+fn install_invalid_config_warning() {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Write an invalid config (missing required `rev` field).
+    context.write_pre_commit_config(indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            hooks:
+              - id: trailing-whitespace
+    "});
+
+    // Install should succeed but show a warning about the invalid config.
+    cmd_snapshot!(context.filters(), context.install(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    warning: Failed to parse `.pre-commit-config.yaml`: Invalid remote repo: missing field `rev`
+    "#);
+}
