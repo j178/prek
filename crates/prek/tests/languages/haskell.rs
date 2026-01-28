@@ -42,14 +42,12 @@ fn local_hook() -> anyhow::Result<()> {
         .write_str(indoc::indoc! {r#"
             module Main where
             main :: IO ()
-            main = putStrLn "Hello from Haskell!"
+            main = putStrLn "Hello Haskell!"
         "#})?;
 
     context.git_add(".");
 
-    let filters = context.filters();
-
-    cmd_snapshot!(filters, context.run(), @"
+    cmd_snapshot!(context.filters(), context.run(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -57,7 +55,21 @@ fn local_hook() -> anyhow::Result<()> {
     - hook id: hello
     - duration: [TIME]
 
-      Hello from Haskell!
+      Hello Haskell!
+
+    ----- stderr -----
+    ");
+
+    // Run again to check `health_check` works correctly.
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello....................................................................Passed
+    - hook id: hello
+    - duration: [TIME]
+
+      Hello Haskell!
 
     ----- stderr -----
     ");
