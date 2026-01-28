@@ -23,6 +23,9 @@ env:
   RUBY_VERSION: "3.4"
   LUA_VERSION: "5.4"
   LUAROCKS_VERSION: "3.12.2"
+  GHC_VERSION: "9"
+  CABAL_VERSION: "3.16"
+
   # Cargo env vars
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
@@ -128,7 +131,7 @@ jobs:
   cargo-clippy-linux:
     name: "cargo clippy | ubuntu"
     needs: plan
-    if : ${{ needs.plan.outputs.test-code == 'true' }}
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
@@ -148,7 +151,7 @@ jobs:
   cargo-clippy-windows:
     name: "cargo clippy | windows"
     needs: plan
-    if : ${{ needs.plan.outputs.test-code == 'true' }}
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
     timeout-minutes: 15
     runs-on: windows-latest
     steps:
@@ -179,7 +182,7 @@ jobs:
   cargo-shear:
     name: "cargo shear"
     needs: plan
-    if : ${{ needs.plan.outputs.test-code == 'true' }}
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
@@ -253,6 +256,8 @@ jobs:
     timeout-minutes: 5
     runs-on: ubuntu-latest
     name: "cargo test | ubuntu"
+    env:
+      PREK_INTERNAL__SKIP_CABAL_UPDATE: 1
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -320,6 +325,12 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: "Install Haskell"
+        uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{env.CABAL_VERSION}}
+
       - name: "Cargo test"
         run: |
           cargo llvm-cov nextest \
@@ -347,6 +358,8 @@ jobs:
     runs-on: macos-latest
     name: "cargo test | macos"
     timeout-minutes: 10
+    env:
+      PREK_INTERNAL__SKIP_CABAL_UPDATE: 1
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -408,6 +421,12 @@ jobs:
         uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
         with:
           bun-version: ${{ env.BUN_VERSION }}
+
+      - name: "Install Haskell"
+        uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{env.CABAL_VERSION}}
 
       - name: "Cargo test"
         run: |
@@ -480,6 +499,8 @@ jobs:
     needs: build-windows-artifact
     runs-on: windows-latest
     timeout-minutes: 15
+    env:
+      PREK_INTERNAL__SKIP_CABAL_UPDATE: 1
     strategy:
       fail-fast: false
       matrix:
@@ -567,6 +588,18 @@ jobs:
         uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
         with:
           bun-version: ${{ env.BUN_VERSION }}
+
+      - name: "Install Haskell"
+        uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{env.CABAL_VERSION}}
+
+      - name: "Find node and npm versions"
+        run: |
+          Get-Command node -All
+          Get-Command npm -All
+        shell: pwsh
 
       - name: "Cargo test"
         working-directory: ${{ env.PREK_WORKSPACE }}

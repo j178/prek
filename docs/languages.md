@@ -150,9 +150,15 @@ Pre-release strings (for example `go1.22rc1`) are not supported yet.
 
 ### haskell
 
-**Status in prek:** Not supported yet.
+**Status in prek:** ✅ Supported.
 
-Tracking: [#1445](https://github.com/j178/prek/issues/1445)
+prek installs Haskell hooks via Cabal and runs the configured entry. Please ensure the repository contains a `.cabal` file or configured `additional_dependencies` for proper dependency management.
+
+#### `language_version`
+
+`language_version` is not supported for Haskell hooks yet. It uses the system `cabal` and `ghc` installations.
+
+The hook `entry` should point at an executable installed by `cabal`.
 
 ### julia
 
