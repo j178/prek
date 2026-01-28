@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::sync::Arc;
+use tokio::sync::OnceCell;
 
 use anyhow::{Context, Result};
 use prek_consts::env_vars::EnvVars;
@@ -12,6 +13,8 @@ use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::Store;
+
+static CABAL_UPDATE: OnceCell<()> = OnceCell::const_new();
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Haskell;
@@ -58,13 +61,18 @@ impl LanguageImpl for Haskell {
             anyhow::bail!("Expected .cabal files or additional_dependencies");
         }
 
-        // cabal update
-        Cmd::new("cabal", "update cabal package database")
-            .arg("update")
-            .check(true)
-            .output()
-            .await
-            .context("Failed to run cabal update")?;
+        // cabal update，execute once
+        CABAL_UPDATE
+            .get_or_try_init(|| async {
+                Cmd::new("cabal", "update cabal package database")
+                    .arg("update")
+                    .check(true)
+                    .output()
+                    .await
+                    .context("Failed to run cabal update")
+                    .map(|_| ())
+            })
+            .await?;
 
         // cabal install --install-method copy --installdir <bindir> <pkgs>
         Cmd::new("cabal", "install haskell dependencies")
