@@ -11,6 +11,53 @@ use crate::hook::Hook;
 use crate::printer::Printer;
 use crate::workspace;
 
+const SPINNER_TICK: Duration = Duration::from_millis(200);
+
+// Windows VT keep-alive to prevent ANSI corruption during subprocess execution.
+//
+// Some Windows tools (uv, pip, npm) disable ENABLE_VIRTUAL_TERMINAL_PROCESSING on exit,
+// causing indicatif's spinner output to render as raw escape sequences. This background
+// thread re-enables VT mode periodically while progress bars are active.
+#[cfg(windows)]
+mod vt_keepalive {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::thread::{self, JoinHandle};
+
+    pub(super) struct VtKeepAlive {
+        stop: Arc<AtomicBool>,
+        handle: Option<JoinHandle<()>>,
+    }
+
+    impl VtKeepAlive {
+        pub(super) fn new() -> Self {
+            let stop = Arc::new(AtomicBool::new(false));
+            let stop_clone = stop.clone();
+
+            let handle = thread::spawn(move || {
+                while !stop_clone.load(Ordering::Relaxed) {
+                    let _ = anstyle_query::windows::enable_ansi_colors();
+                    thread::sleep(super::SPINNER_TICK);
+                }
+            });
+
+            Self {
+                stop,
+                handle: Some(handle),
+            }
+        }
+    }
+
+    impl Drop for VtKeepAlive {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::Relaxed);
+            if let Some(handle) = self.handle.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+}
+
 /// Current progress reporter used to suspend rendering while printing normal output.
 static CURRENT_REPORTER: Mutex<Option<Weak<ProgressReporter>>> = Mutex::new(None);
 
@@ -53,15 +100,27 @@ struct ProgressReporter {
     root: ProgressBar,
     state: Arc<Mutex<BarState>>,
     children: MultiProgress,
+    #[cfg(windows)]
+    _vt_keepalive: Option<vt_keepalive::VtKeepAlive>,
 }
 
 impl ProgressReporter {
     fn new(root: ProgressBar, children: MultiProgress, printer: Printer) -> Self {
+        // Only spawn the VT keep-alive when progress bars are visible and color is enabled.
+        #[cfg(windows)]
+        let vt_keepalive = if printer == Printer::Default && *crate::run::USE_COLOR {
+            Some(vt_keepalive::VtKeepAlive::new())
+        } else {
+            None
+        };
+
         Self {
             printer,
             root,
             state: Arc::default(),
             children,
+            #[cfg(windows)]
+            _vt_keepalive: vt_keepalive,
         }
     }
 
@@ -101,7 +160,7 @@ impl From<Printer> for ProgressReporter {
     fn from(printer: Printer) -> Self {
         let multi = MultiProgress::with_draw_target(printer.target());
         let root = multi.add(ProgressBar::with_draw_target(None, printer.target()));
-        root.enable_steady_tick(Duration::from_millis(200));
+        root.enable_steady_tick(SPINNER_TICK);
         root.set_style(
             ProgressStyle::with_template("{spinner:.white} {msg:.dim}")
                 .unwrap()
@@ -206,7 +265,7 @@ impl HookRunReporter {
         );
 
         let dots = self.dots.saturating_sub(hook.name.width());
-        progress.enable_steady_tick(Duration::from_millis(200));
+        progress.enable_steady_tick(SPINNER_TICK);
         progress.set_style(
             ProgressStyle::with_template(&format!("{{msg}}{{bar:{dots}.green/dim}}"))
                 .unwrap()
