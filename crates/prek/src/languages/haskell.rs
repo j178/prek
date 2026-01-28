@@ -1,6 +1,5 @@
-use serde::Deserialize;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tokio::sync::OnceCell;
 
 use anyhow::{Context, Result};
@@ -16,60 +15,8 @@ use crate::run::run_by_batch;
 use crate::store::Store;
 
 static CABAL_UPDATE: OnceCell<()> = OnceCell::const_new();
-
-pub(crate) const EXTRA_KEY_CABAL_VERSION: &str = "cabal_version";
-pub(crate) const EXTRA_KEY_COMPILER_ID: &str = "compiler_id";
-
-pub(crate) struct HaskellInfo {
-    pub(crate) cabal_version: String,
-    pub(crate) compiler_id: String,
-    pub(crate) compiler_executable: std::path::PathBuf,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "kebab-case")]
-struct CabalPathOutput {
-    // The version of cabal
-    // e.g. "3.6.2.0"
-    cabal_version: String,
-    compiler: CompilerInfo,
-}
-
-#[derive(Deserialize)]
-struct CompilerInfo {
-    // The version of the compiler
-    // e.g. "ghc-9.2.4", "hugs-2006.09", "uhc-1.1.9.0"
-    id: String,
-    // The path to the compiler executable
-    // e.g. "/usr/bin/ghc-9.2.4"
-    path: std::path::PathBuf,
-}
-
-pub(crate) async fn query_haskell_info() -> Result<HaskellInfo> {
-    let stdout = Cmd::new("cabal", "get haskell info")
-        .arg("path")
-        .arg("-z")
-        .arg("--compiler-info")
-        .arg("--output-format=json")
-        .check(true)
-        .output()
-        .await
-        .context("Failed to run cabal path")?
-        .stdout;
-
-    let output: CabalPathOutput =
-        serde_json::from_slice(&stdout).context("Failed to parse cabal path JSON output")?;
-
-    let cabal_version = output.cabal_version;
-    let compiler_id = output.compiler.id;
-    let compiler_executable = output.compiler.path;
-
-    Ok(HaskellInfo {
-        cabal_version,
-        compiler_id,
-        compiler_executable,
-    })
-}
+static SKIP_CABAL_UPDATE: LazyLock<bool> =
+    LazyLock::new(|| EnvVars::var(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE).is_ok());
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Haskell;
@@ -90,10 +37,6 @@ impl LanguageImpl for Haskell {
         )?;
 
         debug!(%hook, target = %info.env_path.display(), "Installing Haskell environment");
-
-        let haskell_info = query_haskell_info()
-            .await
-            .context("Failed to query Haskell info")?;
 
         let bindir = info.env_path.join("bin");
         std::fs::create_dir_all(&bindir).context("Failed to create bin directory")?;
@@ -120,18 +63,21 @@ impl LanguageImpl for Haskell {
             anyhow::bail!("Expected .cabal files or additional_dependencies");
         }
 
-        // cabal update，execute once
-        CABAL_UPDATE
-            .get_or_try_init(|| async {
-                Cmd::new("cabal", "update cabal package database")
-                    .arg("update")
-                    .check(true)
-                    .output()
-                    .await
-                    .context("Failed to run `cabal update`")
-                    .map(|_| ())
-            })
-            .await?;
+        // Skip cabal update in CI environment
+        if !*SKIP_CABAL_UPDATE {
+            // cabal update，execute once
+            CABAL_UPDATE
+                .get_or_try_init(|| async {
+                    Cmd::new("cabal", "update cabal package database")
+                        .arg("update")
+                        .check(true)
+                        .output()
+                        .await
+                        .context("Failed to run `cabal update`")
+                        .map(|_| ())
+                })
+                .await?;
+        }
 
         // cabal install --install-method copy --installdir <bindir> <pkgs>
         Cmd::new("cabal", "install haskell dependencies")
@@ -147,10 +93,6 @@ impl LanguageImpl for Haskell {
             .await
             .context("Failed to install haskell dependencies")?;
 
-        info.with_toolchain(haskell_info.compiler_executable)
-            .with_extra(EXTRA_KEY_CABAL_VERSION, &haskell_info.cabal_version)
-            .with_extra(EXTRA_KEY_COMPILER_ID, &haskell_info.compiler_id);
-
         info.persist_env_path();
 
         reporter.on_install_complete(progress);
@@ -161,39 +103,7 @@ impl LanguageImpl for Haskell {
         })
     }
 
-    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        let current_haskell_info = query_haskell_info()
-            .await
-            .context("Failed to query haskell info")?;
-
-        if current_haskell_info.compiler_executable != info.toolchain {
-            anyhow::bail!(
-                "Haskell executable mismatch: expected `{}`, found `{}`",
-                info.toolchain.display(),
-                current_haskell_info.compiler_executable.display()
-            );
-        }
-
-        if let Some(expected_cabal_version) = info.get_extra(EXTRA_KEY_CABAL_VERSION) {
-            if current_haskell_info.cabal_version != *expected_cabal_version {
-                anyhow::bail!(
-                    "Haskell cabal version mismatch: expected `{}`, found `{}`",
-                    expected_cabal_version,
-                    current_haskell_info.cabal_version
-                );
-            }
-        }
-
-        if let Some(expected_compiler_id) = info.get_extra(EXTRA_KEY_COMPILER_ID) {
-            if current_haskell_info.compiler_id != *expected_compiler_id {
-                anyhow::bail!(
-                    "Haskell compiler id mismatch: expected `{}`, found `{}`",
-                    expected_compiler_id,
-                    current_haskell_info.compiler_id
-                );
-            }
-        }
-
+    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
         Ok(())
     }
 

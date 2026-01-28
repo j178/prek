@@ -3,17 +3,8 @@ use assert_fs::fixture::{FileWriteStr, PathChild};
 
 use crate::common::{TestContext, cmd_snapshot};
 
-/// executing `cabal update` in a multi-process environment may introduce race conditions.
-/// so we need to serialize these tests.
 #[test]
-fn serial_test() -> anyhow::Result<()> {
-    test_local_hook()?;
-    test_additional_dependencies();
-    test_remote_hook();
-    Ok(())
-}
-
-fn test_local_hook() -> anyhow::Result<()> {
+fn local_hook() -> anyhow::Result<()> {
     let context = TestContext::new();
 
     context.init_project();
@@ -87,7 +78,8 @@ fn test_local_hook() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn test_additional_dependencies() {
+#[test]
+fn additional_dependencies() {
     let context = TestContext::new();
 
     context.init_project();
@@ -124,7 +116,8 @@ fn test_additional_dependencies() {
     ");
 }
 
-fn test_remote_hook() {
+#[test]
+fn remote_hook() {
     let context = TestContext::new();
 
     context.init_project();

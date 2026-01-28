@@ -32,6 +32,9 @@ env:
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
 
+  # Skip cabal update
+  PREK_INTERNAL__SKIP_CABAL_UPDATE: 1
+
 jobs:
   plan:
     runs-on: ubuntu-latest
