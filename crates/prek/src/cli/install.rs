@@ -1,3 +1,4 @@
+use std::error::Error as _;
 use std::fmt::Write as _;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -13,13 +14,13 @@ use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run;
 use crate::cli::run::{SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
-use crate::config::load_config;
+use crate::config::{Error as ConfigError, load_config};
 use crate::fs::{CWD, Simplified};
 use crate::git::{GIT_ROOT, git_cmd};
 use crate::printer::Printer;
 use crate::store::Store;
-use crate::workspace::{Project, Workspace};
-use crate::{git, warn_user};
+use crate::workspace::{Error as WorkspaceError, Project, Workspace};
+use crate::{git, warn_user, warn_user_once};
 
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
@@ -43,7 +44,15 @@ pub(crate) async fn install(
         );
     }
 
-    let project = Project::discover(config.as_deref(), &CWD).ok();
+    let project = match Project::discover(config.as_deref(), &CWD) {
+        Ok(project) => Some(project),
+        Err(err) => {
+            if let WorkspaceError::Config(err) = &err {
+                warn_for_config_error(err);
+            }
+            None
+        }
+    };
     let hook_types = get_hook_types(hook_types, project.as_ref(), config.as_deref());
 
     let hooks_path = if let Some(dir) = git_dir {
@@ -113,6 +122,20 @@ pub(crate) async fn install_hooks(
     Ok(ExitStatus::Success)
 }
 
+/// Warn the user if the config error is a parse error (not "file not found").
+fn warn_for_config_error(err: &ConfigError) {
+    if matches!(
+        err,
+        ConfigError::Yaml(..) | ConfigError::YamlMerge(..) | ConfigError::Io(_)
+    ) {
+        if let Some(source) = err.source() {
+            warn_user_once!("{err}: {source}");
+        } else {
+            warn_user_once!("{err}");
+        }
+    }
+}
+
 fn get_hook_types(
     mut hook_types: Vec<HookType>,
     project: Option<&Project>,
@@ -133,13 +156,17 @@ fn get_hook_types(
             .iter()
             .map(Path::new)
             .filter(|p| p.exists());
-        config
-            .into_iter()
-            .chain(fallbacks)
-            .next()
-            .and_then(|p| load_config(p).ok())
-            .and_then(|cfg| cfg.default_install_hook_types.clone())
-            .unwrap_or_default()
+        if let Some(path) = config.into_iter().chain(fallbacks).next() {
+            match load_config(path) {
+                Ok(cfg) => cfg.default_install_hook_types.clone().unwrap_or_default(),
+                Err(err) => {
+                    warn_for_config_error(&err);
+                    vec![]
+                }
+            }
+        } else {
+            vec![]
+        }
     };
     if hook_types.is_empty() {
         hook_types = vec![HookType::PreCommit];
