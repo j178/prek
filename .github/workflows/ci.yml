@@ -23,8 +23,8 @@ env:
   RUBY_VERSION: "3.4"
   LUA_VERSION: "5.4"
   LUAROCKS_VERSION: "3.12.2"
-  GHC_VERSION: "9"
-  CABAL_VERSION: "3.16"
+  GHC_VERSION: "9.14.1"
+  CABAL_VERSION: "3.16.1.0"
 
   # Cargo env vars
   CARGO_INCREMENTAL: 0
@@ -422,8 +422,14 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      # - name: "Install Haskell"
+      #   uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c
+      #   with:
+      #     ghc-version: ${{ env.GHC_VERSION }}
+      #     cabal-version: ${{env.CABAL_VERSION}}
+
       - name: "Install Haskell"
-        uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c
+        uses: actions/setup-haskell@048c29979717135f04282c42c2186bb5945b2d8f # different from windows/ubuntu, because haskell-actions/setup is very slow on macOS
         with:
           ghc-version: ${{ env.GHC_VERSION }}
           cabal-version: ${{env.CABAL_VERSION}}
