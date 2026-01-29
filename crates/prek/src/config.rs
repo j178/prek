@@ -1262,7 +1262,8 @@ fn validate_minimum_prek_version(path: &Path, config: &Config) -> Result<(), Err
             .map(str::trim)
             .filter(|suggestion| !suggestion.is_empty())
         {
-            message.push_str(&format!(" Upgrade suggestion: {suggestion}"));
+            use std::fmt::Write as _;
+            let _ = write!(&mut message, " Upgrade suggestion: {suggestion}");
         }
         return Err(Error::InvalidConfig(
             path.user_display().to_string(),

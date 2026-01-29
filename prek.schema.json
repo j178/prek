@@ -133,17 +133,17 @@
       ],
       "default": null
     },
-    "prek_upgrade_suggestion": {
-      "description": "Optional suggestion shown when the minimum prek version is higher than the current version.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
     "orphan": {
       "description": "Set to true to isolate this project from parent configurations in workspace mode.\nWhen true, files in this project are \"consumed\" by this project and will not be processed\nby parent projects.\nWhen false (default), files in subprojects are processed by both the subproject and\nany parent projects that contain them.",
       "type": [
         "boolean",
+        "null"
+      ]
+    },
+    "prek_upgrade_suggestion": {
+      "description": "Optional suggestion shown when the minimum prek version is higher than the current version.",
+      "type": [
+        "string",
         "null"
       ]
     },

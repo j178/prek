@@ -973,6 +973,7 @@ mod tests {
                     exclude: None,
                     fail_fast: None,
                     minimum_prek_version: None,
+                    prek_upgrade_suggestion: None,
                     orphan: None,
                     _unused_keys: {},
                 },
