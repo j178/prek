@@ -196,6 +196,43 @@ fn additional_dependencies() {
     ");
 }
 
+/// Test that npm install works without system node in PATH.
+/// Regression test for #1492: `install()` must use the provisioned toolchain.
+#[test]
+fn additional_dependencies_without_system_node() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: node
+                name: node
+                language: node
+                entry: cowsay Hello
+                additional_dependencies: ["cowsay"]
+                always_run: true
+                pass_filenames: false
+    "#});
+
+    context.git_add(".");
+
+    #[allow(clippy::disallowed_methods)]
+    let new_path = remove_bin_from_path("node", None)?;
+
+    cmd_snapshot!(context.filters(), context.run().env("PATH", new_path), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    node.....................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 /// Test `https://github.com/thlorenz/doctoc` works correctly with prek.
 /// Previously, prek did not install its dependencies correctly.
 #[ignore = "slow and flaky"]
