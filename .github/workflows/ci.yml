@@ -23,7 +23,7 @@ env:
   RUBY_VERSION: "3.4"
   LUA_VERSION: "5.4"
   LUAROCKS_VERSION: "3.12.2"
-  GHC_VERSION: "9.14.1"
+  GHC_VERSION: "9.10.3"
   CABAL_VERSION: "3.16.1.0"
 
   # Cargo env vars
@@ -422,11 +422,17 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      # - name: "Install Haskell"
+      #   uses: haskell/ghcup-setup@2860d0b41e2c5aa7d005bcbc2bd2506a09557ed8
+      #   with:
+      #     ghc: ${{ env.GHC_VERSION }}
+      #     cabal: ${{ env.CABAL_VERSION }}
+
       - name: "Install Haskell"
-        uses: haskell/ghcup-setup@2860d0b41e2c5aa7d005bcbc2bd2506a09557ed8
+        uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c
         with:
-          ghc: ${{ env.GHC_VERSION }}
-          cabal: ${{ env.CABAL_VERSION }}
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{env.CABAL_VERSION}}
 
       - name: "Cargo test"
         run: |
