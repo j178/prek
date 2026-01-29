@@ -1,4 +1,3 @@
-use std::env::consts::EXE_EXTENSION;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -68,13 +67,6 @@ impl LanguageImpl for Bun {
         fs_err::tokio::create_dir_all(&bin_dir).await?;
         fs_err::tokio::create_dir_all(&lib_dir).await?;
 
-        // Create symlink or copy on Windows
-        crate::fs::create_symlink_or_copy(
-            bun.bun(),
-            &bin_dir.join("bun").with_extension(EXE_EXTENSION),
-        )
-        .await?;
-
         // 3. Install dependencies
         let deps = hook.install_dependencies();
         if deps.is_empty() {
@@ -133,7 +125,15 @@ impl LanguageImpl for Bun {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let env_dir = hook.env_path().expect("Bun must have env path");
-        let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
+        let info = hook
+            .install_info()
+            .expect("Bun hook must have install info");
+        let bun_bin = info
+            .toolchain
+            .parent()
+            .expect("Bun binary must have parent");
+        let new_path =
+            prepend_paths(&[&bin_dir(env_dir), bun_bin]).context("Failed to join PATH")?;
 
         let entry = hook.entry.resolve(Some(&new_path))?;
         let run = async |batch: &[&Path]| {

@@ -1,4 +1,3 @@
-use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -69,15 +68,6 @@ impl LanguageImpl for Node {
         let lib_dir = lib_dir(&info.env_path);
         fs_err::tokio::create_dir_all(&bin_dir).await?;
         fs_err::tokio::create_dir_all(&lib_dir).await?;
-
-        // TODO: do we really need to create a symlink for `node` and `npm`?
-        //   What about adding them to PATH directly?
-        // Create symlink or copy on Windows
-        crate::fs::create_symlink_or_copy(
-            node.node(),
-            &bin_dir.join("node").with_extension(EXE_EXTENSION),
-        )
-        .await?;
 
         // 3. Install dependencies
         let deps = hook.install_dependencies();
@@ -152,7 +142,15 @@ impl LanguageImpl for Node {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let env_dir = hook.env_path().expect("Node must have env path");
-        let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
+        let info = hook
+            .install_info()
+            .expect("Node hook must have install info");
+        let node_bin = info
+            .toolchain
+            .parent()
+            .expect("Node binary must have parent");
+        let new_path =
+            prepend_paths(&[&bin_dir(env_dir), node_bin]).context("Failed to join PATH")?;
 
         let entry = hook.entry.resolve(Some(&new_path))?;
         let run = async |batch: &[&Path]| {
