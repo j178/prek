@@ -422,17 +422,11 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      # - name: "Install Haskell"
-      #   uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c
-      #   with:
-      #     ghc-version: ${{ env.GHC_VERSION }}
-      #     cabal-version: ${{env.CABAL_VERSION}}
-
       - name: "Install Haskell"
-        uses: actions/setup-haskell@048c29979717135f04282c42c2186bb5945b2d8f # different from windows/ubuntu, because haskell-actions/setup is very slow on macOS
+        uses: haskell/ghcup-setup@2860d0b41e2c5aa7d005bcbc2bd2506a09557ed8
         with:
-          ghc-version: ${{ env.GHC_VERSION }}
-          cabal-version: ${{env.CABAL_VERSION}}
+          ghc: ${{ env.GHC_VERSION }}
+          cabal: ${{ env.CABAL_VERSION }}
 
       - name: "Cargo test"
         run: |
