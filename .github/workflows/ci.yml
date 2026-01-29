@@ -23,7 +23,7 @@ env:
   RUBY_VERSION: "3.4"
   LUA_VERSION: "5.4"
   LUAROCKS_VERSION: "3.12.2"
-  GHC_VERSION: "9.10.3"
+  GHC_VERSION: "9.4.8"
   CABAL_VERSION: "3.16.1.0"
 
   # Cargo env vars
