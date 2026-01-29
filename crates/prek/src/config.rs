@@ -982,8 +982,10 @@ pub(crate) struct Config {
     /// Default is false.
     pub fail_fast: Option<bool>,
     /// The minimum version of prek required to run this configuration.
-    #[serde(deserialize_with = "deserialize_and_validate_minimum_version", default)]
+    #[serde(deserialize_with = "deserialize_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
+    /// Optional suggestion shown when the minimum prek version is higher than the current version.
+    pub prek_upgrade_suggestion: Option<String>,
     /// Set to true to isolate this project from parent configurations in workspace mode.
     /// When true, files in this project are "consumed" by this project and will not be processed
     /// by parent projects.
@@ -1009,6 +1011,9 @@ pub(crate) enum Error {
 
     #[error("Failed to merge keys in `{0}`")]
     YamlMerge(String, #[source] yaml::MergeKeyError),
+
+    #[error("Invalid configuration in `{0}`: {1}")]
+    InvalidConfig(String, String),
 }
 
 /// Keys that prek does not use.
@@ -1125,6 +1130,8 @@ pub(crate) fn load_config(path: &Path) -> Result<Config, Error> {
     let config: Config = serde_yaml::from_value(config)
         .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
 
+    validate_minimum_prek_version(path, &config)?;
+
     Ok(config)
 }
 
@@ -1196,12 +1203,12 @@ fn deserialize_and_validate_minimum_version<'de, D>(
 where
     D: Deserializer<'de>,
 {
-    let s = String::deserialize(deserializer)?;
-    if s.is_empty() {
+    let s = deserialize_minimum_version(deserializer)?;
+    let Some(version) = s.as_deref() else {
         return Ok(None);
-    }
+    };
 
-    let version = s
+    let version = version
         .parse::<semver::Version>()
         .map_err(serde::de::Error::custom)?;
     let cur_version = version::version()
@@ -1214,7 +1221,56 @@ where
         )));
     }
 
+    Ok(s)
+}
+
+fn deserialize_minimum_version<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if s.is_empty() {
+        return Ok(None);
+    }
+
+    s.parse::<semver::Version>()
+        .map_err(serde::de::Error::custom)?;
+
     Ok(Some(s))
+}
+
+fn validate_minimum_prek_version(path: &Path, config: &Config) -> Result<(), Error> {
+    let Some(min_version) = config.minimum_prek_version.as_deref() else {
+        return Ok(());
+    };
+
+    let min_version = min_version
+        .parse::<semver::Version>()
+        .expect("Invalid minimum prek version");
+    let cur_version = version::version()
+        .version
+        .parse::<semver::Version>()
+        .expect("Invalid prek version");
+
+    if min_version > cur_version {
+        let mut message = format!(
+            "Required minimum prek version `{min_version}` is greater than current version `{cur_version}`. Please consider updating prek."
+        );
+        if let Some(suggestion) = config
+            .prek_upgrade_suggestion
+            .as_deref()
+            .map(str::trim)
+            .filter(|suggestion| !suggestion.is_empty())
+        {
+            message.push_str(&format!(" Upgrade suggestion: {suggestion}"));
+        }
+        return Err(Error::InvalidConfig(
+            path.user_display().to_string(),
+            message,
+        ));
+    }
+
+    Ok(())
 }
 
 /// Deserializes a vector of strings and validates that each is a known file type tag.
@@ -1239,6 +1295,7 @@ where
 mod tests {
     use super::*;
     use std::io::Write as _;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn parse_file_patterns_regex_and_glob() {
@@ -1394,6 +1451,7 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
+                prek_upgrade_suggestion: None,
                 orphan: None,
                 _unused_keys: {},
             },
@@ -1472,6 +1530,7 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
+                prek_upgrade_suggestion: None,
                 orphan: None,
                 _unused_keys: {},
             },
@@ -1575,6 +1634,7 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
+                prek_upgrade_suggestion: None,
                 orphan: None,
                 _unused_keys: {},
             },
@@ -1749,6 +1809,7 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
+                prek_upgrade_suggestion: None,
                 orphan: None,
                 _unused_keys: {},
             },
@@ -1892,6 +1953,7 @@ mod tests {
                 exclude: None,
                 fail_fast: None,
                 minimum_prek_version: None,
+                prek_upgrade_suggestion: None,
                 orphan: None,
                 _unused_keys: {},
             },
@@ -1958,7 +2020,24 @@ mod tests {
             minimum_prek_version: '10.0.0'
         "};
         let result = serde_yaml::from_str::<Config>(yaml);
-        assert!(result.is_err());
+        assert!(result.is_ok());
+
+        // Test that config-level minimum version validation includes upgrade suggestion.
+        let current_version = version::version()
+            .version
+            .parse::<semver::Version>()
+            .expect("Invalid prek version");
+        let higher_version = semver::Version::new(current_version.major + 1, 0, 0);
+        let mut file = NamedTempFile::new().expect("temp file");
+        write!(
+            file,
+            "\
+repos:\n  - repo: local\n    hooks:\n      - id: test-hook\n        name: Test Hook\n        entry: echo test\n        language: system\nminimum_prek_version: '{higher_version}'\nprek_upgrade_suggestion: 'Run uv tool install prek to upgrade'\n"
+        )
+        .expect("write config");
+        let err = read_config(file.path()).unwrap_err().to_string();
+        assert!(err.contains("Required minimum prek version"));
+        assert!(err.contains("Run uv tool install prek to upgrade"));
 
         // Test that valid minimum_prek_version field works in hook config
         let yaml = indoc::indoc! {r"
@@ -2183,6 +2262,7 @@ mod tests {
             exclude: None,
             fail_fast: None,
             minimum_prek_version: None,
+            prek_upgrade_suggestion: None,
             orphan: None,
             _unused_keys: {},
         }
@@ -2272,6 +2352,7 @@ mod tests {
             exclude: None,
             fail_fast: None,
             minimum_prek_version: None,
+            prek_upgrade_suggestion: None,
             orphan: None,
             _unused_keys: {
                 "local": Object {
