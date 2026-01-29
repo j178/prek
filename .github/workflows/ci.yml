@@ -595,12 +595,6 @@ jobs:
           ghc-version: ${{ env.GHC_VERSION }}
           cabal-version: ${{env.CABAL_VERSION}}
 
-      - name: "Find node and npm versions"
-        run: |
-          Get-Command node -All
-          Get-Command npm -All
-        shell: pwsh
-
       - name: "Cargo test"
         working-directory: ${{ env.PREK_WORKSPACE }}
         run: |
