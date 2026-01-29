@@ -83,9 +83,10 @@ impl LanguageImpl for Node {
             // NOTE: If you want to install the content of a directory like a package from the registry
             // instead of creating a link, you would need to use the --install-links option.
 
-            // `npm` is a script uses `/usr/bin/env node`, we need add `bin_dir` to PATH
-            // so that `npm` can find `node`.
-            let new_path = prepend_paths(&[&bin_dir]).context("Failed to join PATH")?;
+            // `npm` is a script that uses `/usr/bin/env node`, so we need to add the
+            // node toolchain directory to PATH so that `npm` can find `node`.
+            let node_bin = node.node().parent().expect("Node binary must have parent");
+            let new_path = prepend_paths(&[&bin_dir, node_bin]).context("Failed to join PATH")?;
 
             Cmd::new(node.npm(), "npm install")
                 .arg("install")

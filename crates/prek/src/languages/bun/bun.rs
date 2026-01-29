@@ -72,8 +72,9 @@ impl LanguageImpl for Bun {
         if deps.is_empty() {
             debug!("No dependencies to install");
         } else {
-            // `bun` needs to be in PATH for shebang scripts
-            let new_path = prepend_paths(&[&bin_dir]).context("Failed to join PATH")?;
+            // `bun` needs to be in PATH for shebang scripts that use `/usr/bin/env bun`
+            let bun_bin = bun.bun().parent().expect("Bun binary must have parent");
+            let new_path = prepend_paths(&[&bin_dir, bun_bin]).context("Failed to join PATH")?;
 
             // Use BUN_INSTALL to set where global packages are installed
             // This makes `bun install -g` install to our hook environment
