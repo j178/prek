@@ -1,12 +1,14 @@
-use anyhow::Result;
 use std::path::Path;
 use std::str::FromStr;
+
+use anyhow::Result;
 
 use crate::config::{BuiltinHook, HookOptions, Stage};
 use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks;
 use crate::store::Store;
 
+mod check_hook_updates;
 mod check_json5;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -16,6 +18,7 @@ pub(crate) enum BuiltinHooks {
     CheckAddedLargeFiles,
     CheckCaseConflict,
     CheckExecutablesHaveShebangs,
+    CheckHookUpdates,
     CheckJson,
     CheckJson5,
     CheckMergeConflict,
@@ -39,6 +42,7 @@ impl FromStr for BuiltinHooks {
             "check-added-large-files" => Ok(Self::CheckAddedLargeFiles),
             "check-case-conflict" => Ok(Self::CheckCaseConflict),
             "check-executables-have-shebangs" => Ok(Self::CheckExecutablesHaveShebangs),
+            "check-hook-updates" => Ok(Self::CheckHookUpdates),
             "check-json" => Ok(Self::CheckJson),
             "check-json5" => Ok(Self::CheckJson5),
             "check-merge-conflict" => Ok(Self::CheckMergeConflict),
@@ -72,6 +76,7 @@ impl BuiltinHooks {
             Self::CheckExecutablesHaveShebangs => {
                 pre_commit_hooks::check_executables_have_shebangs(hook, filenames).await
             }
+            Self::CheckHookUpdates => check_hook_updates::check_hook_updates(hook, filenames).await,
             Self::CheckJson => pre_commit_hooks::check_json(hook, filenames).await,
             Self::CheckJson5 => check_json5::check_json5(hook, filenames).await,
             Self::CheckMergeConflict => {
@@ -285,6 +290,21 @@ impl BuiltinHook {
                 options: HookOptions {
                     description: Some("trims trailing whitespace.".to_string()),
                     types: Some(vec!["text".to_string()]),
+                    stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::CheckHookUpdates => BuiltinHook {
+                id: "check-hook-updates".to_string(),
+                name: "check for hook updates".to_string(),
+                entry: "check-hook-updates".to_string(),
+                priority: None,
+                options: HookOptions {
+                    description: Some(
+                        "checks if configured hooks have newer versions available.".to_string(),
+                    ),
+                    pass_filenames: Some(false),
+                    always_run: Some(true),
                     stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
                     ..Default::default()
                 },

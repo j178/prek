@@ -223,7 +223,7 @@ async fn update_repo(
     Ok(Revision { rev, frozen })
 }
 
-async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Result<()> {
+pub(crate) async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Result<()> {
     git::init_repo(repo_url, repo_path).await?;
     git::git_cmd("git config")?
         .arg("config")
@@ -288,7 +288,7 @@ async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<String>> {
 }
 
 /// Returns all tags and their Unix timestamps (newest first).
-async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
+pub(crate) async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
     let output = git::git_cmd("git for-each-ref")?
         .arg("for-each-ref")
         .arg("--sort=-creatordate")
@@ -314,6 +314,39 @@ async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
         .collect())
 }
 
+/// Find the best tag that meets the cooldown requirement.
+///
+/// Given a list of tags sorted newest-to-oldest with timestamps, finds the first tag
+/// that is at least `cooldown_days` old, then picks the best version-like tag pointing
+/// to the same commit.
+///
+/// Returns `None` if no tags meet the cooldown requirement.
+pub(crate) async fn find_eligible_tag(
+    repo_path: &Path,
+    tags_with_ts: &[(String, u64)],
+    current_rev: &str,
+    cooldown_days: u8,
+) -> Result<Option<String>> {
+    let cutoff_secs = u64::from(cooldown_days) * 86400;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    let cutoff = now.saturating_sub(cutoff_secs);
+
+    // tags_with_ts is sorted newest -> oldest; find the first bucket where ts <= cutoff.
+    let left = match tags_with_ts.binary_search_by(|(_, ts)| ts.cmp(&cutoff).reverse()) {
+        Ok(i) | Err(i) => i,
+    };
+
+    let Some((target_tag, _)) = tags_with_ts.get(left) else {
+        return Ok(None);
+    };
+
+    let best = get_best_candidate_tag(repo_path, target_tag, current_rev)
+        .await
+        .unwrap_or_else(|_| target_tag.clone());
+
+    Ok(Some(best))
+}
+
 async fn resolve_revision(
     repo_path: &Path,
     current_rev: &str,
@@ -326,44 +359,50 @@ async fn resolve_revision(
 
     let tags_with_ts = get_tag_timestamps(repo_path).await?;
 
-    let cutoff_secs = u64::from(cooldown_days) * 86400;
-    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let cutoff = now.saturating_sub(cutoff_secs);
+    let best = find_eligible_tag(repo_path, &tags_with_ts, current_rev, cooldown_days).await?;
 
-    // tags_with_ts is sorted newest -> oldest; find the first bucket where ts <= cutoff.
-    let left = match tags_with_ts.binary_search_by(|(_, ts)| ts.cmp(&cutoff).reverse()) {
-        Ok(i) | Err(i) => i,
-    };
+    if let Some(ref tag) = best {
+        debug!("Using best candidate tag `{tag}`");
+    } else {
+        trace!("No tags meet cooldown cutoff");
+    }
 
-    let Some((target_tag, target_ts)) = tags_with_ts.get(left) else {
-        trace!("No tags meet cooldown cutoff {cutoff_secs}s");
-        return Ok(None);
-    };
-
-    debug!("Using tag `{target_tag}` cutoff timestamp {target_ts}");
-
-    let best = get_best_candidate_tag(repo_path, target_tag, current_rev)
-        .await
-        .unwrap_or_else(|_| target_tag.clone());
-    debug!("Using best candidate tag `{best}` for revision `{target_tag}`");
-
-    Ok(Some(best))
+    Ok(best)
 }
 
-async fn freeze_revision(repo_path: &Path, rev: &str) -> Result<Option<String>> {
-    let exact = git::git_cmd("git rev-parse")?
+/// Resolve a revision (tag, branch, etc.) to its dereferenced commit hash.
+///
+/// Returns `None` if the revision cannot be resolved.
+pub(crate) async fn resolve_rev_to_commit_hash(
+    repo_path: &Path,
+    rev: &str,
+) -> Result<Option<String>> {
+    let output = git::git_cmd("git rev-parse")?
         .arg("rev-parse")
         .arg(format!("{rev}^{{}}"))
+        .check(false)
         .current_dir(repo_path)
         .remove_git_envs()
         .output()
-        .await?
-        .stdout;
-    let exact = str::from_utf8(&exact)?.trim();
+        .await?;
+
+    if output.status.success() {
+        Ok(Some(
+            String::from_utf8_lossy(&output.stdout).trim().to_string(),
+        ))
+    } else {
+        Ok(None)
+    }
+}
+
+async fn freeze_revision(repo_path: &Path, rev: &str) -> Result<Option<String>> {
+    let Some(exact) = resolve_rev_to_commit_hash(repo_path, rev).await? else {
+        return Ok(None);
+    };
     if rev == exact {
         Ok(None)
     } else {
-        Ok(Some(exact.to_string()))
+        Ok(Some(exact))
     }
 }
 
@@ -427,7 +466,11 @@ async fn checkout_and_validate_manifest(
 /// Multiple tags can exist on an SHA. Sometimes a moving tag is attached
 /// to a version tag. Try to pick the tag that looks like a version and most similar
 /// to the current revision.
-async fn get_best_candidate_tag(repo: &Path, rev: &str, current_rev: &str) -> Result<String> {
+pub(crate) async fn get_best_candidate_tag(
+    repo: &Path,
+    rev: &str,
+    current_rev: &str,
+) -> Result<String> {
     let stdout = git::git_cmd("git tag")?
         .arg("tag")
         .arg("--points-at")
