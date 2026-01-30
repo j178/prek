@@ -126,13 +126,7 @@ impl LanguageImpl for Bun {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let env_dir = hook.env_path().expect("Bun must have env path");
-        let info = hook
-            .install_info()
-            .expect("Bun hook must have install info");
-        let bun_bin = info
-            .toolchain
-            .parent()
-            .expect("Bun binary must have parent");
+        let bun_bin = hook.toolchain_dir().expect("Bun binary must have parent");
         let new_path =
             prepend_paths(&[&bin_dir(env_dir), bun_bin]).context("Failed to join PATH")?;
 
