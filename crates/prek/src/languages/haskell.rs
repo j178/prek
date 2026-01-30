@@ -1,8 +1,8 @@
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
-use tokio::sync::OnceCell;
 
 use anyhow::{Context, Result};
+use mea::once::OnceCell;
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
 use tracing::debug;
@@ -14,7 +14,7 @@ use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::Store;
 
-static CABAL_UPDATE: OnceCell<()> = OnceCell::const_new();
+static CABAL_UPDATE_ONCE: OnceCell<()> = OnceCell::new();
 static SKIP_CABAL_UPDATE: LazyLock<bool> =
     LazyLock::new(|| EnvVars::var(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE).is_ok());
 
@@ -42,22 +42,24 @@ impl LanguageImpl for Haskell {
         std::fs::create_dir_all(&bindir).context("Failed to create bin directory")?;
 
         // Identify packages: *.cabal files in repo + additional_dependencies
-        let mut pkgs = Vec::new();
         let search_path = hook.repo_path().unwrap_or(hook.project().path());
-        if let Ok(entries) = std::fs::read_dir(search_path) {
-            pkgs.extend(
-                entries
-                    .filter_map(Result::ok)
-                    .map(|entry| entry.path())
-                    .filter(|path| path.is_file())
-                    .filter(|path| path.extension().is_some_and(|ext| ext == "cabal"))
-                    .filter_map(|path| {
-                        path.file_name()
-                            .map(|name| name.to_string_lossy().to_string())
-                    }),
-            );
-        }
-        pkgs.extend(hook.additional_dependencies.clone());
+        let pkgs = fs_err::read_dir(search_path)?
+            .flatten()
+            .filter_map(|entry| {
+                let path = entry.path();
+                if path.is_file()
+                    && path
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("cabal"))
+                {
+                    path.file_name()
+                        .map(|name| name.to_string_lossy().to_string())
+                } else {
+                    None
+                }
+            })
+            .chain(hook.additional_dependencies.iter().cloned())
+            .collect::<Vec<_>>();
 
         if pkgs.is_empty() {
             anyhow::bail!("Expected .cabal files or additional_dependencies");
@@ -65,8 +67,8 @@ impl LanguageImpl for Haskell {
 
         // Skip cabal update in CI environment
         if !*SKIP_CABAL_UPDATE {
-            // cabal update，execute once
-            CABAL_UPDATE
+            // `cabal update` is slow, so only run it once per process.
+            CABAL_UPDATE_ONCE
                 .get_or_try_init(|| async {
                     Cmd::new("cabal", "update cabal package database")
                         .arg("update")
@@ -115,8 +117,8 @@ impl LanguageImpl for Haskell {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let env_dir = hook.env_path().expect("Haskell must have env path");
-        let bindir = env_dir.join("bin");
-        let new_path = prepend_paths(&[&bindir]).context("Failed to join PATH")?;
+        let bin_dir = env_dir.join("bin");
+        let new_path = prepend_paths(&[&bin_dir]).context("Failed to join PATH")?;
 
         let entry = hook.entry.resolve(Some(&new_path))?;
 

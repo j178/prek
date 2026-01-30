@@ -256,8 +256,6 @@ jobs:
     timeout-minutes: 5
     runs-on: ubuntu-latest
     name: "cargo test | ubuntu"
-    env:
-      PREK_INTERNAL__SKIP_CABAL_UPDATE: 1
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -358,8 +356,6 @@ jobs:
     runs-on: macos-latest
     name: "cargo test | macos"
     timeout-minutes: 10
-    env:
-      PREK_INTERNAL__SKIP_CABAL_UPDATE: 1
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -508,8 +504,6 @@ jobs:
     needs: build-windows-artifact
     runs-on: windows-latest
     timeout-minutes: 15
-    env:
-      PREK_INTERNAL__SKIP_CABAL_UPDATE: 1
     strategy:
       fail-fast: false
       matrix:

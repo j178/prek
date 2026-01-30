@@ -1,5 +1,6 @@
 use anyhow::Ok;
 use assert_fs::fixture::{FileWriteStr, PathChild};
+use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -48,7 +49,7 @@ fn local_hook() -> anyhow::Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @"
+    cmd_snapshot!(context.filters(), context.run().env(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE, "1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -62,7 +63,7 @@ fn local_hook() -> anyhow::Result<()> {
     ");
 
     // Run again to check `health_check` works correctly.
-    cmd_snapshot!(context.filters(), context.run(), @"
+    cmd_snapshot!(context.filters(), context.run().env(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE, "1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -102,7 +103,7 @@ fn additional_dependencies() {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters, context.run(), @"
+    cmd_snapshot!(filters, context.run().env(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE, "1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -136,7 +137,7 @@ fn remote_hook() {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters, context.run(), @"
+    cmd_snapshot!(filters, context.run().env(EnvVars::PREK_INTERNAL__SKIP_CABAL_UPDATE, "1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
