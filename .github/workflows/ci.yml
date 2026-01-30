@@ -330,9 +330,9 @@ jobs:
         uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306
         with:
           path: |
-            ~/.ghcup
-            ~/.cabal/store
-            ~/.cabal/packages
+            /usr/local/.ghcup
+            /home/runner/.cabal/store
+            /home/runner/.cabal/packages
           key: ${{ runner.os }}-${{ env.GHC_VERSION }}-${{ env.CABAL_VERSION }}
           restore-keys: ${{ runner.os }}-${{ env.GHC_VERSION }}-${{ env.CABAL_VERSION }}
 
