@@ -143,13 +143,7 @@ impl LanguageImpl for Node {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let env_dir = hook.env_path().expect("Node must have env path");
-        let info = hook
-            .install_info()
-            .expect("Node hook must have install info");
-        let node_bin = info
-            .toolchain
-            .parent()
-            .expect("Node binary must have parent");
+        let node_bin = hook.toolchain_dir().expect("Node binary must have parent");
         let new_path =
             prepend_paths(&[&bin_dir(env_dir), node_bin]).context("Failed to join PATH")?;
 

@@ -747,6 +747,14 @@ impl InstalledHook {
         }
     }
 
+    /// Get the directory the toolchain is installed in.
+    pub(crate) fn toolchain_dir(&self) -> Option<&Path> {
+        match self {
+            InstalledHook::Installed { info, .. } => info.toolchain.parent(),
+            InstalledHook::NoNeedInstall(_) => None,
+        }
+    }
+
     /// Get the install info of the hook if it is installed.
     pub(crate) fn install_info(&self) -> Option<&InstallInfo> {
         match self {
