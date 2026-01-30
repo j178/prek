@@ -325,7 +325,15 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      - name: "Install Haskell"
+      - name: "Cache GHC"
+        id: cache-haskell
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: /usr/local/.ghcup
+          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
+          restore-keys: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
+
+      - name: "Install GHC and Cabal"
         uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c # v2.10.3
         with:
           ghc-version: ${{ env.GHC_VERSION }}
@@ -422,18 +430,15 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      - name: "Cache Haskell"
+      - name: "Cache GHC"
         id: cache-haskell
         uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
-          path: |
-            ~/.ghcup
-            ~/.cabal/store
-            ~/.cabal/packages
-          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-cabal-${{ env.CABAL_VERSION }}
-          restore-keys: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}-cabal-${{ env.CABAL_VERSION }}
+          path: ~/.ghcup
+          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
+          restore-keys: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
 
-      - name: "Install Haskell"
+      - name: "Install GHC and Cabal"
         # if: steps.cache-haskell.outputs.cache-hit != 'true'
         uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c # v2.10.3
         with:
@@ -601,7 +606,15 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      - name: "Install Haskell"
+      - name: "Cache GHC"
+        id: cache-haskell
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: C:\ghcup
+          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
+          restore-keys: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
+
+      - name: "Install GHC and Cabal"
         uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c # v2.10.3
         with:
           ghc-version: ${{ env.GHC_VERSION }}
