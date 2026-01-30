@@ -1,4 +1,3 @@
-use std::error::Error as _;
 use std::fmt::Write as _;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -14,13 +13,13 @@ use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run;
 use crate::cli::run::{SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
-use crate::config::{Error as ConfigError, load_config};
+use crate::config::load_config;
 use crate::fs::{CWD, Simplified};
 use crate::git::{GIT_ROOT, git_cmd};
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::workspace::{Error as WorkspaceError, Project, Workspace};
-use crate::{git, warn_user, warn_user_once};
+use crate::{git, warn_user};
 
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
@@ -48,7 +47,7 @@ pub(crate) async fn install(
         Ok(project) => Some(project),
         Err(err) => {
             if let WorkspaceError::Config(err) = &err {
-                warn_for_config_error(err);
+                err.warn_parse_error();
             }
             None
         }
@@ -122,20 +121,6 @@ pub(crate) async fn install_hooks(
     Ok(ExitStatus::Success)
 }
 
-/// Warn the user if the config error is a parse error (not "file not found").
-fn warn_for_config_error(err: &ConfigError) {
-    if matches!(
-        err,
-        ConfigError::Yaml(..) | ConfigError::YamlMerge(..) | ConfigError::Io(_)
-    ) {
-        if let Some(source) = err.source() {
-            warn_user_once!("{err}: {source}");
-        } else {
-            warn_user_once!("{err}");
-        }
-    }
-}
-
 fn get_hook_types(
     mut hook_types: Vec<HookType>,
     project: Option<&Project>,
@@ -160,7 +145,7 @@ fn get_hook_types(
             match load_config(path) {
                 Ok(cfg) => cfg.default_install_hook_types.clone().unwrap_or_default(),
                 Err(err) => {
-                    warn_for_config_error(&err);
+                    err.warn_parse_error();
                     vec![]
                 }
             }
