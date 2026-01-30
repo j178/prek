@@ -23,7 +23,7 @@ env:
   RUBY_VERSION: "3.4"
   LUA_VERSION: "5.4"
   LUAROCKS_VERSION: "3.12.2"
-  GHC_VERSION: "9.10.3"
+  GHC_VERSION: "9.8.2"
   CABAL_VERSION: "3.16.1.0"
 
   # Cargo env vars
@@ -325,7 +325,19 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: "Cache Haskell"
+        id: cache-haskell
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306
+        with:
+          path: |
+            ~/.ghcup
+            ~/.cabal/store
+            ~/.cabal/packages
+          key: ${{ runner.os }}-${{ env.GHC_VERSION }}-${{ env.CABAL_VERSION }}
+          restore-keys: ${{ runner.os }}-${{ env.GHC_VERSION }}-${{ env.CABAL_VERSION }}
+
       - name: "Install Haskell"
+        if: steps.cache-haskell.outputs.cache-hit != 'true'
         uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c
         with:
           ghc-version: ${{ env.GHC_VERSION }}
@@ -422,13 +434,19 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      # - name: "Install Haskell"
-      #   uses: haskell/ghcup-setup@2860d0b41e2c5aa7d005bcbc2bd2506a09557ed8
-      #   with:
-      #     ghc: ${{ env.GHC_VERSION }}
-      #     cabal: ${{ env.CABAL_VERSION }}
+      - name: "Cache Haskell"
+        id: cache-haskell
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306
+        with:
+          path: |
+            ~/.ghcup
+            ~/.cabal/store
+            ~/.cabal/packages
+          key: ${{ runner.os }}-${{ env.GHC_VERSION }}-${{ env.CABAL_VERSION }}
+          restore-keys: ${{ runner.os }}-${{ env.GHC_VERSION }}-${{ env.CABAL_VERSION }}
 
       - name: "Install Haskell"
+        if: steps.cache-haskell.outputs.cache-hit != 'true'
         uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c
         with:
           ghc-version: ${{ env.GHC_VERSION }}
@@ -595,7 +613,19 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: "Cache Haskell"
+        id: cache-haskell
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306
+        with:
+          path: |
+            C:\ghcup
+            C:\Users\runneradmin\AppData\Roaming\cabal\store
+            C:\Users\runneradmin\AppData\Roaming\cabal\packages
+          key: ${{ runner.os }}-${{ env.GHC_VERSION }}-${{ env.CABAL_VERSION }}
+          restore-keys: ${{ runner.os }}-${{ env.GHC_VERSION }}-${{ env.CABAL_VERSION }}
+
       - name: "Install Haskell"
+        if: steps.cache-haskell.outputs.cache-hit != 'true'
         uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c
         with:
           ghc-version: ${{ env.GHC_VERSION }}
