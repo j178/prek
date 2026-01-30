@@ -171,23 +171,23 @@ cargo install --locked prek
 
 <!-- --8<-- [start: npmjs-install] -->
 
-prek is published as a Node.js package, you can install it using `npm`, `pnpm`, or `npx`:
+prek is published as a [Node.js package](https://www.npmjs.com/package/@j178/prek)
+and can be installed with any npm-compatible package manager:
 
 ```bash
-# Using npm
+# As a dev dependency
 npm add -D @j178/prek
-
-# Using pnpm
 pnpm add -D @j178/prek
+bun add -D @j178/prek
 
-# Using npx
-npx @j178/prek --version
-
-# or install globally
+# Or install globally
 npm install -g @j178/prek
+pnpm add -g @j178/prek
+bun install -g @j178/prek
 
-# then use `prek` command
-prek --version
+# Or run directly without installing
+npx @j178/prek --version
+bunx @j178/prek --version
 ```
 
 <!-- --8<-- [end: npmjs-install] -->
