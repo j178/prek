@@ -468,3 +468,59 @@ fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// Test that health check passes when Python toolchain path involves symlinks.
+/// The stored toolchain path and the queried path should be canonicalized before comparison.
+///
+/// Regression test for symlink-related "Python executable mismatch" errors.
+#[test]
+#[cfg(unix)]
+fn health_check_with_symlinked_toolchain() -> anyhow::Result<()> {
+    use std::os::unix::fs::symlink;
+
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: python
+                entry: python -c 'print("hello")'
+                always_run: true
+                pass_filenames: false
+    "#});
+
+    context.git_add(".");
+
+    // First run installs the hook
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local....................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    // Create a symlink to the hooks directory and update HOME to use it.
+    // This simulates the scenario where a parent directory is a symlink.
+    let home_dir = context.home_dir();
+    let home_link = context.work_dir().child("home_link");
+    symlink(home_dir.path(), home_link.path())?;
+
+    // Second run triggers health check with symlinked path
+    cmd_snapshot!(context.filters(), context.run()
+        .env(prek_consts::env_vars::EnvVars::HOME, home_link.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local....................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
