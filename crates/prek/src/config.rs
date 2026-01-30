@@ -1,6 +1,7 @@
 #[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::error::Error as _;
 use std::fmt::Display;
 use std::ops::RangeInclusive;
 use std::path::Path;
@@ -17,6 +18,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use crate::fs::Simplified;
 use crate::version;
 use crate::warn_user;
+use crate::warn_user_once;
 use crate::{identify, yaml};
 
 pub(crate) static CONFIG_FILE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
@@ -1009,6 +1011,20 @@ pub(crate) enum Error {
 
     #[error("Failed to merge keys in `{0}`")]
     YamlMerge(String, #[source] yaml::MergeKeyError),
+}
+
+impl Error {
+    /// Warn the user if the config error is a parse error (not "file not found").
+    pub(crate) fn warn_parse_error(&self) {
+        if matches!(self, Self::NotFound(_)) {
+            return;
+        }
+        if let Some(cause) = self.source() {
+            warn_user_once!("{self}: {cause}");
+        } else {
+            warn_user_once!("{self}");
+        }
+    }
 }
 
 /// Keys that prek does not use.
