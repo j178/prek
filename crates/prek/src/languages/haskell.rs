@@ -79,12 +79,10 @@ impl LanguageImpl for Haskell {
                 .await?;
         }
 
-        // cabal install --install-method copy --installdir <bindir> <pkgs>
+        // cabal v2-install --installdir <bindir> <pkgs> (default install-method is copy)
         Cmd::new("cabal", "install haskell dependencies")
             .current_dir(search_path)
-            .arg("install")
-            .arg("--install-method")
-            .arg("copy")
+            .arg("v2-install")
             .arg("--installdir")
             .arg(&bindir)
             .args(pkgs)
