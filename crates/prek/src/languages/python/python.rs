@@ -74,8 +74,6 @@ async fn query_python_info(python: &Path) -> Result<PythonInfo, PythonInfoError>
     let info: QueryPythonInfo =
         serde_json::from_slice(&stdout).map_err(|err| PythonInfoError::Parse(err.to_string()))?;
     let python_exec = python_exec(&info.base_exec_prefix);
-    // Canonicalize to resolve symlinks for consistent comparison
-    let python_exec = fs::canonicalize(&python_exec).unwrap_or(python_exec);
 
     Ok(PythonInfo {
         version: info.version,
@@ -196,16 +194,6 @@ impl LanguageImpl for Python {
                 "Python version mismatch: expected {}, found {}",
                 info.language_version,
                 python_info.version
-            );
-        }
-
-        let expected_toolchain =
-            fs::canonicalize(&info.toolchain).unwrap_or_else(|_| info.toolchain.clone());
-        if python_info.python_exec != expected_toolchain {
-            anyhow::bail!(
-                "Python executable mismatch: expected {}, found {}",
-                expected_toolchain.display(),
-                python_info.python_exec.display()
             );
         }
 

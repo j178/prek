@@ -153,6 +153,7 @@ impl GoRequest {
             GoRequest::MajorMinorPatch(major, minor, patch) => {
                 version.0.major == *major && version.0.minor == *minor && version.0.patch == *patch
             }
+            // FIXME: consider resolving symlinks and normalizing paths before comparison
             GoRequest::Path(path) => toolchain.is_some_and(|t| t == path),
             GoRequest::Range(req, _) => req.matches(&version.0),
         }

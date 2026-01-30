@@ -99,6 +99,7 @@ impl RubyRequest {
             }
             Self::MajorMinor(maj, min) => version.major == *maj && version.minor == *min,
             Self::Major(maj) => version.major == *maj,
+            // FIXME: consider resolving symlinks and normalizing paths before comparison
             Self::Path(path) => toolchain.is_some_and(|t| t == path),
             Self::Range(req, _) => req.matches(version),
         }
