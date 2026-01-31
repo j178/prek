@@ -11,10 +11,16 @@ test-threads = 8
 inherits = "ci-core"
 default-filter = "binary_id(prek::languages) and test(bun::)"
 
+[profile.lang-docker]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages) and (test(docker::) or test(docker_image::))"
 
 [profile.lang-golang]
 inherits = "ci-core"
 default-filter = "binary_id(prek::languages) and test(golang::)"
+
+[test-groups]
+serial = { max-threads = 1 }
 
 [profile.lang-lua]
 inherits = "ci-core"
@@ -23,7 +29,7 @@ default-filter = "binary_id(prek::languages) and test(lua::)"
 [[profile.lang-lua.overrides]]
 # Run Lua language tests sequentially on Windows.
 platform = "cfg(windows)"
-test-threads = 1
+test-group = "serial"
 
 [profile.lang-node]
 inherits = "ci-core"

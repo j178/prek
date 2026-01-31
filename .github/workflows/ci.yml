@@ -312,6 +312,7 @@ jobs:
   cargo-test-windows:
     name: "cargo test | windows"
     needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -379,7 +380,7 @@ jobs:
         uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: lcov.info
+          files: ${{ env.PREK_WORKSPACE }}/lcov.info
 
   language-tests:
     name: "language tests | ${{ matrix.language }} | ${{ matrix.os }}"
@@ -396,6 +397,7 @@ jobs:
           - windows-latest
         language:
           - bun
+          - docker
           - golang
           - lua
           - node
@@ -405,6 +407,10 @@ jobs:
           - swift
         # Run swift tests only on macOS, as it doesn't need to install Swift on macOS runners.
         exclude:
+          - os: macos-latest
+            language: docker
+          - os: windows-latest
+            language: docker
           - os: ubuntu-latest
             language: swift
           - os: windows-latest
@@ -420,6 +426,9 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
+
+      - name: "Install Rust toolchain"
+        run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
@@ -510,6 +519,8 @@ jobs:
             --cargo-profile fast-build `
             --features schemars `
             --profile lang-${{ matrix.language }}
+
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
