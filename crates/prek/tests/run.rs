@@ -2870,6 +2870,10 @@ fn run_with_stdin_closed() {
 /// Test `prek --version` outputs version info.
 #[test]
 fn version_info() {
+    // skip if not built in the git repository
+    if option_env!("PREK_COMMIT_HASH").is_none() {
+        return;
+    }
     let context = TestContext::new();
     let filters = context
         .filters()
