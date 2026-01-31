@@ -23,6 +23,7 @@ mod docker;
 mod docker_image;
 mod fail;
 mod golang;
+mod haskell;
 mod lua;
 mod node;
 mod pygrep;
@@ -39,6 +40,7 @@ static DOCKER: docker::Docker = docker::Docker;
 static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
 static FAIL: fail::Fail = fail::Fail;
 static GOLANG: golang::Golang = golang::Golang;
+static HASKELL: haskell::Haskell = haskell::Haskell;
 static LUA: lua::Lua = lua::Lua;
 static NODE: node::Node = node::Node;
 static PYGREP: pygrep::Pygrep = pygrep::Pygrep;
@@ -132,6 +134,7 @@ impl Language {
                 | Self::DockerImage
                 | Self::Fail
                 | Self::Golang
+                | Self::Haskell
                 | Self::Lua
                 | Self::Node
                 | Self::Pygrep
@@ -212,6 +215,7 @@ impl Language {
             Self::DockerImage => DOCKER_IMAGE.install(hook, store, reporter).await,
             Self::Fail => FAIL.install(hook, store, reporter).await,
             Self::Golang => GOLANG.install(hook, store, reporter).await,
+            Self::Haskell => HASKELL.install(hook, store, reporter).await,
             Self::Lua => LUA.install(hook, store, reporter).await,
             Self::Node => NODE.install(hook, store, reporter).await,
             Self::Pygrep => PYGREP.install(hook, store, reporter).await,
@@ -232,6 +236,7 @@ impl Language {
             Self::DockerImage => DOCKER_IMAGE.check_health(info).await,
             Self::Fail => FAIL.check_health(info).await,
             Self::Golang => GOLANG.check_health(info).await,
+            Self::Haskell => HASKELL.check_health(info).await,
             Self::Lua => LUA.check_health(info).await,
             Self::Node => NODE.check_health(info).await,
             Self::Pygrep => PYGREP.check_health(info).await,
@@ -281,6 +286,7 @@ impl Language {
             Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, store, reporter).await,
             Self::Fail => FAIL.run(hook, filenames, store, reporter).await,
             Self::Golang => GOLANG.run(hook, filenames, store, reporter).await,
+            Self::Haskell => HASKELL.run(hook, filenames, store, reporter).await,
             Self::Lua => LUA.run(hook, filenames, store, reporter).await,
             Self::Node => NODE.run(hook, filenames, store, reporter).await,
             Self::Pygrep => PYGREP.run(hook, filenames, store, reporter).await,

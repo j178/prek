@@ -19,6 +19,10 @@ default-filter = "binary_id(prek::languages) and (test(docker::) or test(docker_
 inherits = "ci-core"
 default-filter = "binary_id(prek::languages) and test(golang::)"
 
+[profile.lang-haskell]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages) and test(haskell::)"
+
 [test-groups]
 serial = { max-threads = 1 }
 
