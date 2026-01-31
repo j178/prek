@@ -220,11 +220,6 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
-      - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
-        with:
-          tool: cargo-llvm-cov
-
       - name: "Cargo test without uv"
         run: |
           echo "::group::Test install uv with auto select"
@@ -314,12 +309,11 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
 
-  build-windows-artifact:
+  cargo-test-windows:
+    name: "cargo test | windows"
     needs: plan
-    if: ${{ needs.plan.outputs.test-code == 'true' }}
-    name: "build tests archive | windows"
-    timeout-minutes: 10
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -351,67 +345,6 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
-      - name: Build and archive tests
-        working-directory: ${{ env.PREK_WORKSPACE }}
-        shell: pwsh
-        run: |
-          cargo llvm-cov nextest-archive `
-            --no-report `
-            --workspace `
-            --features schemars `
-            --cargo-profile fast-build `
-            --profile ci-core `
-            --archive-file nextest-archive.tar.zst
-
-      - name: Upload archive to workflow
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        with:
-          name: nextest-archive
-          path: ${{ env.PREK_WORKSPACE }}/nextest-archive.tar.zst
-
-  cargo-test-windows:
-    name: "cargo test | windows ${{ matrix.partition }}/3"
-    needs: build-windows-artifact
-    runs-on: windows-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        partition: [1, 2, 3]
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Create Dev Drive
-        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
-
-      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
-      - name: Copy Git Repo to Dev Drive
-        run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
-
-      - name: "Install Rust toolchain"
-        run: rustup component add llvm-tools-preview
-
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
-        with:
-          tool: cargo-nextest
-
-      - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
-        with:
-          tool: cargo-llvm-cov
-
-      - name: Download tests archive
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
-        with:
-          name: nextest-archive
-          # `path` must be a directory. If you set it to a file path, download-artifact
-          # creates a directory with that name, and nextest later fails to read it.
-          path: ${{ env.PREK_WORKSPACE }}
-
       - name: "Install uv"
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
         with:
@@ -427,6 +360,7 @@ jobs:
 
       - name: "Cargo test"
         working-directory: ${{ env.PREK_WORKSPACE }}
+        shell: pwsh
         run: |
           # Remove msys64 from PATH for Rust compilation
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\msys64\\' }) -join ';'
@@ -434,12 +368,12 @@ jobs:
           cargo llvm-cov nextest `
             --lcov `
             --output-path lcov.info `
-            --partition hash:${{ matrix.partition }}/3 `
-            --archive-file nextest-archive.tar.zst `
+            --workspace `
+            --cargo-profile fast-build `
+            --features schemars `
             --profile ci-core
 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        shell: pwsh
 
       - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
@@ -465,7 +399,6 @@ jobs:
           - golang
           - lua
           - node
-          - pygrep
           - python
           - ruby
           - rust

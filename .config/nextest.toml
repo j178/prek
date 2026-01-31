@@ -1,12 +1,11 @@
 [profile.ci-core]
-# Exclude language-specific integration tests from the main CI runs (except unimplemented/unsupported/script/fail).
-default-filter = "not binary_id(prek::languages) or (binary_id(prek::languages) and (test(unimplemented::) or test(unsupported::) or test(script::) or test(fail::)))"
+# Exclude language-specific integration tests from the main CI runs (except unimplemented/unsupported/script/fail/pygrep).
+default-filter = "not binary_id(prek::languages) or (binary_id(prek::languages) and (test(unimplemented::) or test(unsupported::) or test(script::) or test(fail::) or test(pygrep::)))"
 status-level = "skip"
 final-status-level = "slow"
 failure-output = "immediate"
 fail-fast = false
-threads = 8
-color = "always"
+test-threads = 8
 
 [profile.lang-bun]
 inherits = "ci-core"
@@ -21,13 +20,14 @@ default-filter = "binary_id(prek::languages) and test(golang::)"
 inherits = "ci-core"
 default-filter = "binary_id(prek::languages) and test(lua::)"
 
+[[profile.lang-lua.overrides]]
+# Run Lua language tests sequentially on Windows.
+platform = "cfg(windows)"
+test-threads = 1
+
 [profile.lang-node]
 inherits = "ci-core"
 default-filter = "binary_id(prek::languages) and test(node::)"
-
-[profile.lang-pygrep]
-inherits = "ci-core"
-default-filter = "binary_id(prek::languages) and test(pygrep::)"
 
 [profile.lang-python]
 inherits = "ci-core"
