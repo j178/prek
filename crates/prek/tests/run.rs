@@ -2635,6 +2635,52 @@ fn run_quiet() {
     ");
 }
 
+/// Test `PREK_QUIET` environment variable.
+#[test]
+fn run_quiet_env() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: success
+                name: success
+                entry: echo
+                language: system
+              - id: fail
+                name: fail
+                entry: fail
+                language: fail
+    "});
+    context.git_add(".");
+
+    // Run with `PREK_QUIET=1`, only print failed hooks.
+    cmd_snapshot!(context.filters(), context.run().env(EnvVars::PREK_QUIET, "1"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fail.....................................................................Failed
+    - hook id: fail
+    - exit code: 1
+
+      fail
+
+      .pre-commit-config.yaml
+
+    ----- stderr -----
+    ");
+
+    // Run with `PREK_QUIET=2`, does not print anything (silent mode).
+    cmd_snapshot!(context.filters(), context.run().env(EnvVars::PREK_QUIET, "2"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+}
+
 /// Test `prek run --log-file <file>` flag.
 #[test]
 fn run_log_file() {

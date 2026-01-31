@@ -829,6 +829,8 @@ prek supports the following environment variables:
 
 - `PREK_COLOR` — Control colored output: auto (default), always, or never.
 
+- `PREK_QUIET` — Control quiet output mode. Set to `1` for quiet mode (equivalent to `-q`, only shows failed hooks), or `2` for silent mode (equivalent to `-qq`, no output to stdout).
+
 - `PREK_SKIP` — Comma-separated list of hook IDs to skip (e.g. black,ruff). See [Skipping Projects or Hooks](workspace.md#skipping-projects-or-hooks) for details.
 
 - `PREK_ALLOW_NO_CONFIG` — Allow running without a .pre-commit-config.yaml (useful for ad‑hoc runs).
