@@ -686,9 +686,7 @@ async fn run_hooks(
     if has_unimplemented {
         warn_user!(
             "Some hooks were skipped because their languages are unimplemented.\nWe're working hard to support more languages. Check out current support status at {}.",
-            "https://prek.j178.dev/todo/#language-support-status"
-                .cyan()
-                .underline()
+            "https://prek.j178.dev/languages/".cyan().underline()
         );
     }
 

@@ -24,6 +24,6 @@ fn unimplemented_language() {
 
     ----- stderr -----
     warning: Some hooks were skipped because their languages are unimplemented.
-    We're working hard to support more languages. Check out current support status at https://prek.j178.dev/todo/#language-support-status.
+    We're working hard to support more languages. Check out current support status at https://prek.j178.dev/languages/.
     ");
 }
