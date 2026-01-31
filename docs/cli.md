@@ -90,7 +90,7 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-install--overwrite"><a href="#prek-install--overwrite"><code>--overwrite</code></a>, <code>-f</code></dt><dd><p>Overwrite existing hooks</p>
 </dd><dt id="prek-install--quiet"><a href="#prek-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-install--refresh"><a href="#prek-install--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-install--refresh"><a href="#prek-install--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-install--skip"><a href="#prek-install--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
@@ -155,7 +155,7 @@ prek install-hooks [OPTIONS] [HOOK|PROJECT]...
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-install-hooks--quiet"><a href="#prek-install-hooks--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-install-hooks--refresh"><a href="#prek-install-hooks--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-install-hooks--refresh"><a href="#prek-install-hooks--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-install-hooks--skip"><a href="#prek-install-hooks--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
@@ -226,7 +226,7 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-run--quiet"><a href="#prek-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-run--refresh"><a href="#prek-run--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-run--refresh"><a href="#prek-run--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-run--show-diff-on-failure"><a href="#prek-run--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
 </dd><dt id="prek-run--skip"><a href="#prek-run--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
@@ -349,7 +349,7 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 <li><code>json</code></li>
 </ul></dd><dt id="prek-list--quiet"><a href="#prek-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-list--refresh"><a href="#prek-list--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-list--refresh"><a href="#prek-list--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-list--skip"><a href="#prek-list--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
@@ -409,7 +409,7 @@ prek uninstall [OPTIONS]
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-uninstall--quiet"><a href="#prek-uninstall--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-uninstall--refresh"><a href="#prek-uninstall--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-uninstall--refresh"><a href="#prek-uninstall--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-uninstall--verbose"><a href="#prek-uninstall--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-uninstall--version"><a href="#prek-uninstall--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
@@ -445,7 +445,7 @@ prek validate-config [OPTIONS] [CONFIG]...
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-validate-config--quiet"><a href="#prek-validate-config--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-validate-config--refresh"><a href="#prek-validate-config--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-validate-config--refresh"><a href="#prek-validate-config--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-validate-config--verbose"><a href="#prek-validate-config--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-validate-config--version"><a href="#prek-validate-config--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
@@ -481,7 +481,7 @@ prek validate-manifest [OPTIONS] [MANIFEST]...
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-validate-manifest--quiet"><a href="#prek-validate-manifest--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-validate-manifest--refresh"><a href="#prek-validate-manifest--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-validate-manifest--refresh"><a href="#prek-validate-manifest--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-validate-manifest--verbose"><a href="#prek-validate-manifest--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-validate-manifest--version"><a href="#prek-validate-manifest--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
@@ -513,7 +513,7 @@ prek sample-config [OPTIONS]
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-sample-config--quiet"><a href="#prek-sample-config--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-sample-config--refresh"><a href="#prek-sample-config--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-sample-config--refresh"><a href="#prek-sample-config--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-sample-config--verbose"><a href="#prek-sample-config--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-sample-config--version"><a href="#prek-sample-config--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
@@ -550,7 +550,7 @@ prek auto-update [OPTIONS]
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-auto-update--quiet"><a href="#prek-auto-update--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-auto-update--refresh"><a href="#prek-auto-update--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-auto-update--refresh"><a href="#prek-auto-update--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-auto-update--repo"><a href="#prek-auto-update--repo"><code>--repo</code></a> <i>repo</i></dt><dd><p>Only update this repository. This option may be specified multiple times</p>
 </dd><dt id="prek-auto-update--verbose"><a href="#prek-auto-update--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-auto-update--version"><a href="#prek-auto-update--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
@@ -600,7 +600,7 @@ prek cache dir [OPTIONS]
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-cache-dir--quiet"><a href="#prek-cache-dir--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-cache-dir--refresh"><a href="#prek-cache-dir--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-cache-dir--refresh"><a href="#prek-cache-dir--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-cache-dir--verbose"><a href="#prek-cache-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-cache-dir--version"><a href="#prek-cache-dir--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
@@ -632,7 +632,7 @@ prek cache gc [OPTIONS]
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-cache-gc--quiet"><a href="#prek-cache-gc--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-cache-gc--refresh"><a href="#prek-cache-gc--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-cache-gc--refresh"><a href="#prek-cache-gc--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-cache-gc--verbose"><a href="#prek-cache-gc--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-cache-gc--version"><a href="#prek-cache-gc--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
@@ -663,7 +663,7 @@ prek cache clean [OPTIONS]
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-cache-clean--quiet"><a href="#prek-cache-clean--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-cache-clean--refresh"><a href="#prek-cache-clean--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-cache-clean--refresh"><a href="#prek-cache-clean--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-cache-clean--verbose"><a href="#prek-cache-clean--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-cache-clean--version"><a href="#prek-cache-clean--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
@@ -695,7 +695,7 @@ prek cache size [OPTIONS]
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-cache-size--quiet"><a href="#prek-cache-size--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-cache-size--refresh"><a href="#prek-cache-size--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-cache-size--refresh"><a href="#prek-cache-size--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-cache-size--verbose"><a href="#prek-cache-size--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-cache-size--version"><a href="#prek-cache-size--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
@@ -747,7 +747,7 @@ prek init-template-dir [OPTIONS] <DIRECTORY>
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-init-template-dir--quiet"><a href="#prek-init-template-dir--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-init-template-dir--refresh"><a href="#prek-init-template-dir--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-init-template-dir--refresh"><a href="#prek-init-template-dir--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-init-template-dir--verbose"><a href="#prek-init-template-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-init-template-dir--version"><a href="#prek-init-template-dir--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
@@ -805,7 +805,7 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-try-repo--quiet"><a href="#prek-try-repo--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-try-repo--refresh"><a href="#prek-try-repo--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-try-repo--refresh"><a href="#prek-try-repo--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-try-repo--rev"><a href="#prek-try-repo--rev"><code>--rev</code></a>, <code>--ref</code> <i>rev</i></dt><dd><p>Manually select a rev to run against, otherwise the <code>HEAD</code> revision will be used</p>
 </dd><dt id="prek-try-repo--show-diff-on-failure"><a href="#prek-try-repo--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
 </dd><dt id="prek-try-repo--skip"><a href="#prek-try-repo--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
@@ -888,7 +888,7 @@ prek self update [OPTIONS] [TARGET_VERSION]
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-self-update--quiet"><a href="#prek-self-update--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-</dd><dt id="prek-self-update--refresh"><a href="#prek-self-update--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-self-update--refresh"><a href="#prek-self-update--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-self-update--token"><a href="#prek-self-update--token"><code>--token</code></a> <i>token</i></dt><dd><p>A GitHub token for authentication. A token is not required but can be used to reduce the chance of encountering rate limits</p>
 <p>May also be set with the <code>GITHUB_TOKEN</code> environment variable.</p></dd><dt id="prek-self-update--verbose"><a href="#prek-self-update--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-self-update--version"><a href="#prek-self-update--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>

@@ -173,7 +173,7 @@ pub(crate) struct GlobalArgs {
     ///
     /// Repeating this option, e.g., `-qq`, will enable a silent mode in which
     /// prek will write no output to stdout.
-    #[arg(global = true, short, long, conflicts_with = "verbose", action = ArgAction::Count)]
+    #[arg(global = true, short, long, env = EnvVars::PREK_QUIET, conflicts_with = "verbose", action = ArgAction::Count)]
     pub quiet: u8,
 
     /// Use verbose output.
