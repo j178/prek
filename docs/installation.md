@@ -6,13 +6,23 @@ prek provides multiple installation methods to suit different needs and environm
 
 The standalone installer automatically downloads and installs the correct binary for your platform:
 
-### Linux and macOS
+=== "macOS and Linux"
 
---8<-- "README.md:linux-standalone-install"
+    Use `curl` to download the script and execute it with `sh`:
 
-### Windows
+    --8<-- "README.md:linux-standalone-install"
 
---8<-- "README.md:windows-standalone-install"
+=== "Windows"
+
+    Use `irm` to download the script and execute it with `iex`:
+
+    --8<-- "README.md:windows-standalone-install"
+
+    Changing the [execution policy](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies) allows running a script from the internet.
+
+!!! tip
+
+    The installation script may be inspected before use. Alternatively, binaries can be downloaded directly from [GitHub Releases](#github-releases).
 
 ## Package Managers
 
@@ -28,9 +38,27 @@ The standalone installer automatically downloads and installs the correct binary
 
 --8<-- "README.md:mise-install"
 
-### npmjs
+### npm
 
---8<-- "README.md:npmjs-install"
+prek is published as a [Node.js package](https://www.npmjs.com/package/@j178/prek)
+and can be installed with any npm-compatible package manager:
+
+```bash
+# npm
+npm install -g @j178/prek
+
+# pnpm
+pnpm add -g @j178/prek
+
+# bun
+bun install -g @j178/prek
+```
+
+Or as a project dependency:
+
+```bash
+npm add -D @j178/prek
+```
 
 ### Nix
 
@@ -44,21 +72,28 @@ The standalone installer automatically downloads and installs the correct binary
 
 --8<-- "README.md:scoop-install"
 
-### MacPorts (macOS)
+### MacPorts
 
 --8<-- "README.md:macports-install"
 
-### Install from Pre-Built Binaries
+### cargo-binstall
 
 --8<-- "README.md:cargo-binstall"
+
+## Docker
+
+prek provides a Docker image at
+[`ghcr.io/j178/prek`](https://github.com/j178/prek/pkgs/container/prek).
+
+See the guide on [using prek in Docker](integrations.md#docker) for more details.
+
+## GitHub Releases
+
+--8<-- "README.md:pre-built-binaries"
 
 ## Build from Source
 
 --8<-- "README.md:cargo-install"
-
-## Download from GitHub Releases
-
---8<-- "README.md:pre-built-binaries"
 
 ## Updating
 
@@ -68,31 +103,37 @@ For other installation methods, follow the same installation steps again.
 
 ## Shell Completion
 
-prek supports shell completion for Bash, Zsh, Fish, and PowerShell. To install completions:
+!!! tip
 
-### Bash
+    Run `echo $SHELL` to determine your shell.
 
-```bash
-COMPLETE=bash prek > /etc/bash_completion.d/prek
-```
+To enable shell autocompletion for prek commands, run one of the following:
 
-### Zsh
+=== "Bash"
 
-```bash
-COMPLETE=zsh prek > "${fpath[1]}/_prek"
-```
+    ```bash
+    echo 'eval "$(COMPLETE=bash prek)"' >> ~/.bashrc
+    ```
 
-### Fish
+=== "Zsh"
 
-```bash
-COMPLETE=fish prek > ~/.config/fish/completions/prek.fish
-```
+    ```bash
+    echo 'eval "$(COMPLETE=zsh prek)"' >> ~/.zshrc
+    ```
 
-### PowerShell
+=== "Fish"
 
-```powershell
-COMPLETE=powershell prek >> $PROFILE
-```
+    ```bash
+    echo 'COMPLETE=fish prek | source' >> ~/.config/fish/config.fish
+    ```
+
+=== "PowerShell"
+
+    ```powershell
+    Add-Content -Path $PROFILE -Value '(COMPLETE=powershell prek) | Out-String | Invoke-Expression'
+    ```
+
+Then restart your shell or source the config file.
 
 ## Artifact Verification
 
