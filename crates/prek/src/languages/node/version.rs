@@ -240,6 +240,7 @@ impl NodeRequest {
             NodeRequest::MajorMinorPatch(major, minor, patch) => {
                 version.major() == *major && version.minor() == *minor && version.patch() == *patch
             }
+            // FIXME: consider resolving symlinks and normalizing paths before comparison
             NodeRequest::Path(path) => toolchain.is_some_and(|t| t == path),
             NodeRequest::Range(req) => req.matches(version.version()),
             NodeRequest::Lts => version.lts.code_name().is_some(),

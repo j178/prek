@@ -254,24 +254,6 @@ impl HookBuilder {
         }
     }
 
-    /// Fill in the default values for the hook configuration.
-    fn fill_in_defaults(&mut self) {
-        let options = &mut self.hook_spec.options;
-        options.language_version.get_or_insert_default();
-        options.alias.get_or_insert_default();
-        options.args.get_or_insert_default();
-        options.env.get_or_insert_default();
-        options.types.get_or_insert(vec!["file".to_string()]);
-        options.types_or.get_or_insert_default();
-        options.exclude_types.get_or_insert_default();
-        options.always_run.get_or_insert(false);
-        options.fail_fast.get_or_insert(false);
-        options.pass_filenames.get_or_insert(true);
-        options.require_serial.get_or_insert(false);
-        options.verbose.get_or_insert(false);
-        options.additional_dependencies.get_or_insert_default();
-    }
-
     /// Check the hook configuration.
     fn check(&self) -> Result<(), Error> {
         let language = self.hook_spec.language;
@@ -332,10 +314,26 @@ impl HookBuilder {
         self.hook_spec.apply_project_defaults(self.project.config());
 
         self.check()?;
-        self.fill_in_defaults();
 
         let options = self.hook_spec.options;
-        let language_version = options.language_version.expect("language_version not set");
+        let language_version = options.language_version.unwrap_or_default();
+        let alias = options.alias.unwrap_or_default();
+        let args = options.args.unwrap_or_default();
+        let env = options.env.unwrap_or_default();
+        let types = options.types.unwrap_or_else(|| vec!["file".to_string()]);
+        let types_or = options.types_or.unwrap_or_default();
+        let exclude_types = options.exclude_types.unwrap_or_default();
+        let always_run = options.always_run.unwrap_or_default();
+        let fail_fast = options.fail_fast.unwrap_or_default();
+        let pass_filenames = options.pass_filenames.unwrap_or(true);
+        let require_serial = options.require_serial.unwrap_or(false);
+        let verbose = options.verbose.unwrap_or(false);
+        let additional_dependencies = options
+            .additional_dependencies
+            .unwrap_or_default()
+            .into_iter()
+            .collect::<FxHashSet<_>>();
+
         let language_request = LanguageRequest::parse(self.hook_spec.language, &language_version)
             .map_err(|e| Error::Hook {
             hook: self.hook_spec.id.clone(),
@@ -343,12 +341,6 @@ impl HookBuilder {
         })?;
 
         let entry = Entry::new(self.hook_spec.id.clone(), self.hook_spec.entry);
-
-        let additional_dependencies = options
-            .additional_dependencies
-            .expect("additional_dependencies should not be None")
-            .into_iter()
-            .collect::<FxHashSet<_>>();
 
         let stages = match options.stages {
             Some(stages) => {
@@ -368,10 +360,6 @@ impl HookBuilder {
             .unwrap_or(u32::try_from(self.idx).expect("idx too large"));
 
         let mut hook = Hook {
-            entry,
-            stages,
-            language_request,
-            additional_dependencies,
             dependencies: OnceLock::new(),
             project: self.project,
             repo: self.repo,
@@ -379,23 +367,28 @@ impl HookBuilder {
             id: self.hook_spec.id,
             name: self.hook_spec.name,
             language: self.hook_spec.language,
-            alias: options.alias.expect("alias not set"),
+
+            priority,
+            entry,
+            stages,
+            language_request,
+            additional_dependencies,
+            alias,
+            types,
+            types_or,
+            exclude_types,
+            args,
+            env,
+            always_run,
+            fail_fast,
+            pass_filenames,
+            require_serial,
+            verbose,
             files: options.files,
             exclude: options.exclude,
-            types: options.types.expect("types not set"),
-            types_or: options.types_or.expect("types_or not set"),
-            exclude_types: options.exclude_types.expect("exclude_types not set"),
-            args: options.args.expect("args not set"),
-            env: options.env.expect("env not set"),
-            always_run: options.always_run.expect("always_run not set"),
-            fail_fast: options.fail_fast.expect("fail_fast not set"),
-            pass_filenames: options.pass_filenames.expect("pass_filenames not set"),
             description: options.description,
             log_file: options.log_file,
-            require_serial: options.require_serial.expect("require_serial not set"),
-            verbose: options.verbose.expect("verbose not set"),
             minimum_prek_version: options.minimum_prek_version,
-            priority,
         };
 
         if let Err(err) = extract_metadata_from_entry(&mut hook).await {
@@ -750,6 +743,14 @@ impl InstalledHook {
     pub(crate) fn env_path(&self) -> Option<&Path> {
         match self {
             InstalledHook::Installed { info, .. } => Some(&info.env_path),
+            InstalledHook::NoNeedInstall(_) => None,
+        }
+    }
+
+    /// Get the directory the toolchain is installed in.
+    pub(crate) fn toolchain_dir(&self) -> Option<&Path> {
+        match self {
+            InstalledHook::Installed { info, .. } => info.toolchain.parent(),
             InstalledHook::NoNeedInstall(_) => None,
         }
     }

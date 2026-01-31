@@ -1,4 +1,3 @@
-use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -70,15 +69,6 @@ impl LanguageImpl for Node {
         fs_err::tokio::create_dir_all(&bin_dir).await?;
         fs_err::tokio::create_dir_all(&lib_dir).await?;
 
-        // TODO: do we really need to create a symlink for `node` and `npm`?
-        //   What about adding them to PATH directly?
-        // Create symlink or copy on Windows
-        crate::fs::create_symlink_or_copy(
-            node.node(),
-            &bin_dir.join("node").with_extension(EXE_EXTENSION),
-        )
-        .await?;
-
         // 3. Install dependencies
         let deps = hook.install_dependencies();
         if deps.is_empty() {
@@ -93,9 +83,10 @@ impl LanguageImpl for Node {
             // NOTE: If you want to install the content of a directory like a package from the registry
             // instead of creating a link, you would need to use the --install-links option.
 
-            // `npm` is a script uses `/usr/bin/env node`, we need add `bin_dir` to PATH
-            // so that `npm` can find `node`.
-            let new_path = prepend_paths(&[&bin_dir]).context("Failed to join PATH")?;
+            // `npm` is a script that uses `/usr/bin/env node`, so we need to add the
+            // node toolchain directory to PATH so that `npm` can find `node`.
+            let node_bin = node.node().parent().expect("Node binary must have parent");
+            let new_path = prepend_paths(&[&bin_dir, node_bin]).context("Failed to join PATH")?;
 
             Cmd::new(node.npm(), "npm install")
                 .arg("install")
@@ -152,7 +143,9 @@ impl LanguageImpl for Node {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let env_dir = hook.env_path().expect("Node must have env path");
-        let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
+        let node_bin = hook.toolchain_dir().expect("Node binary must have parent");
+        let new_path =
+            prepend_paths(&[&bin_dir(env_dir), node_bin]).context("Failed to join PATH")?;
 
         let entry = hook.entry.resolve(Some(&new_path))?;
         let run = async |batch: &[&Path]| {

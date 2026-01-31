@@ -1,4 +1,3 @@
-use std::env::consts::EXE_EXTENSION;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -68,20 +67,14 @@ impl LanguageImpl for Bun {
         fs_err::tokio::create_dir_all(&bin_dir).await?;
         fs_err::tokio::create_dir_all(&lib_dir).await?;
 
-        // Create symlink or copy on Windows
-        crate::fs::create_symlink_or_copy(
-            bun.bun(),
-            &bin_dir.join("bun").with_extension(EXE_EXTENSION),
-        )
-        .await?;
-
         // 3. Install dependencies
         let deps = hook.install_dependencies();
         if deps.is_empty() {
             debug!("No dependencies to install");
         } else {
-            // `bun` needs to be in PATH for shebang scripts
-            let new_path = prepend_paths(&[&bin_dir]).context("Failed to join PATH")?;
+            // `bun` needs to be in PATH for shebang scripts that use `/usr/bin/env bun`
+            let bun_bin = bun.bun().parent().expect("Bun binary must have parent");
+            let new_path = prepend_paths(&[&bin_dir, bun_bin]).context("Failed to join PATH")?;
 
             // Use BUN_INSTALL to set where global packages are installed
             // This makes `bun install -g` install to our hook environment
@@ -133,7 +126,9 @@ impl LanguageImpl for Bun {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let env_dir = hook.env_path().expect("Bun must have env path");
-        let new_path = prepend_paths(&[&bin_dir(env_dir)]).context("Failed to join PATH")?;
+        let bun_bin = hook.toolchain_dir().expect("Bun binary must have parent");
+        let new_path =
+            prepend_paths(&[&bin_dir(env_dir), bun_bin]).context("Failed to join PATH")?;
 
         let entry = hook.entry.resolve(Some(&new_path))?;
         let run = async |batch: &[&Path]| {

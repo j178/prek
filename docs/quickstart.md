@@ -48,7 +48,13 @@ repos:
       - id: end-of-file-fixer
 ```
 
-This config downloads a couple of community-maintained hooks that validate YAML files and ensure files end with a newline.
+This configuration uses the `pre-commit-hooks` repository and enables two hooks: one validates YAML files, and the other ensures every file ends with a newline.
+
+!!! note
+
+    `.pre-commit-config.yaml` is the configuration file name used by **pre-commit**, a widely-used git hook manager. prek reads the same configuration file today. In the future, prek might introduce its own configuration file.
+
+Once you’re happy with your setup, you can stage the config file with `git add .pre-commit-config.yaml`.
 
 ### 2. Run hooks on demand
 

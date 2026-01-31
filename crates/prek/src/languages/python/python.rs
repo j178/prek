@@ -197,14 +197,6 @@ impl LanguageImpl for Python {
             );
         }
 
-        if python_info.python_exec != info.toolchain {
-            anyhow::bail!(
-                "Python executable mismatch: expected {}, found {}",
-                info.toolchain.display(),
-                python_info.python_exec.display()
-            );
-        }
-
         Ok(())
     }
 

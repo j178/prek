@@ -59,7 +59,10 @@ fn platform_max_cli_length() -> usize {
             usize::try_from(maximum).expect("SC_ARG_MAX too large")
         };
         let maximum = maximum.saturating_sub(ARG_HEADROOM);
-        maximum.clamp(1 << 12, 1 << 20)
+        // macOS reports ARG_MAX as 1<<20, but in practice other overhead can
+        // consume part of that space. When filenames approach 1<<20, exec can
+        // fail with "Argument list too long", so we cap at 1<<19 for safety.
+        maximum.clamp(1 << 12, 1 << 19)
     }
     #[cfg(windows)]
     {
@@ -71,19 +74,18 @@ fn platform_max_cli_length() -> usize {
     }
 }
 
-// Adapted from https://github.com/uutils/findutils/blob/main/src/xargs/mod.rs
-#[cfg(windows)]
-fn count_osstr_chars_for_exec(s: &OsStr) -> usize {
-    use std::os::windows::ffi::OsStrExt;
-    // Include +1 for either the null terminator or trailing space.
-    s.encode_wide().count() + 1
-}
-
-#[cfg(unix)]
-fn count_osstr_chars_for_exec(s: &OsStr) -> usize {
-    use std::os::unix::ffi::OsStrExt;
-    // Include +1 for the null terminator.
-    s.as_bytes().len() + 1
+/// Required size for a single KEY=VAR environment variable string and the
+/// corresponding pointer in envp**.
+fn environment_variable_size<O: AsRef<OsStr>>(key: O, value: O) -> usize {
+    /// We make a conservative guess for the size of a single pointer (64-bit) here
+    /// in order to support scenarios where a 32-bit binary is launching a 64-bit
+    /// binary.
+    const POINTER_SIZE_CONSERVATIVE: usize = 8;
+    POINTER_SIZE_CONSERVATIVE // size for the pointer in envp**
+      + key.as_ref().len()    // size for the variable name
+      + 1                     // size for the '=' sign
+      + value.as_ref().len()  // size for the value
+      + 1 // terminating NULL
 }
 
 impl<'a> Partitions<'a> {
@@ -120,17 +122,14 @@ impl<'a> Partitions<'a> {
                         // key is in hook.env; add it later.
                         0
                     } else {
-                        count_osstr_chars_for_exec(&key) + count_osstr_chars_for_exec(&value)
+                        environment_variable_size(&key, &value)
                     }
                 })
                 .sum::<usize>()
                 + hook
                     .env
                     .iter()
-                    .map(|(key, value)| {
-                        // On UNIX, the OS string equivalent is the same length
-                        key.len() + value.len() + 2 // key=value\0
-                    })
+                    .map(|(key, value)| environment_variable_size(key, value))
                     .sum::<usize>();
             max_cli_length = max_cli_length.saturating_sub(env_size);
         }

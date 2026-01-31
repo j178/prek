@@ -5,6 +5,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 
+use crate::cli::reporter::HookRunReporter;
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
 use crate::config::{self, CONFIG_FILE_REGEX, FilePattern, HookOptions, Language, MetaHook};
 use crate::hook::Hook;
@@ -46,12 +47,16 @@ impl MetaHooks {
         store: &Store,
         hook: &Hook,
         filenames: &[&Path],
+        reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
-        match self {
+        let progress = reporter.on_run_start(hook, filenames.len());
+        let result = match self {
             Self::CheckHooksApply => check_hooks_apply(store, hook, filenames).await,
             Self::CheckUselessExcludes => check_useless_excludes(hook, filenames).await,
             Self::Identity => Ok(identity(hook, filenames)),
-        }
+        };
+        reporter.on_run_complete(progress);
+        result
     }
 }
 

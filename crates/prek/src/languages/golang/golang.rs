@@ -127,11 +127,10 @@ impl LanguageImpl for Golang {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let env_dir = hook.env_path().expect("Node hook must have env path");
-        let info = hook.install_info().expect("Node hook must be installed");
 
         let go_bin = bin_dir(env_dir);
         let go_tools = store.tools_path(ToolBucket::Go);
-        let go_root_bin = info.toolchain.parent().expect("Go root should exist");
+        let go_root_bin = hook.toolchain_dir().expect("Go root should exist");
         let go_root = go_root_bin.parent().expect("Go root should exist");
         let go_cache = store.cache_path(CacheBucket::Go);
 

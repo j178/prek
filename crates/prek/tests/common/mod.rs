@@ -421,9 +421,8 @@ macro_rules! cmd_snapshot {
 #[allow(unused_imports)]
 pub(crate) use cmd_snapshot;
 
-#[allow(clippy::disallowed_methods)]
 pub(crate) fn remove_bin_from_path(bin: &str, path: Option<OsString>) -> anyhow::Result<OsString> {
-    let path = path.unwrap_or(std::env::var_os("PATH").expect("PATH not set"));
+    let path = path.unwrap_or(EnvVars::var_os(EnvVars::PATH).expect("Path must be set"));
     let Ok(dirs) = which::which_all(bin) else {
         return Ok(path);
     };

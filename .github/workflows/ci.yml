@@ -227,6 +227,7 @@ jobs:
         run: |
           echo "::group::Test install uv with auto select"
           cargo llvm-cov nextest \
+            --profile ci-core \
             --cargo-profile fast-build \
             --no-report \
             -E 'binary_id(prek::run) and test(run_basic)'
@@ -236,6 +237,7 @@ jobs:
             echo "::group::Test install uv from $source"
             export PREK_UV_SOURCE=$source
             cargo llvm-cov nextest \
+              --profile ci-core \
               --cargo-profile fast-build \
               --no-report \
               -E 'binary_id(prek::run) and test(run_basic)'
@@ -250,12 +252,18 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
 
-  cargo-test-linux:
+  cargo-test:
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
-    timeout-minutes: 5
-    runs-on: ubuntu-latest
-    name: "cargo test | ubuntu"
+    timeout-minutes: 10
+    runs-on: ${{ matrix.os }}
+    name: "cargo test | ${{ matrix.os }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -288,61 +296,15 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: "Install Node.js"
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          # A dummy dependency path to enable caching of go modules.
-          cache-dependency-path: LICENSE
-
-      - name: "Install Go"
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          # A dummy dependency path to enable caching of go modules.
-          cache-dependency-path: LICENSE
-
-      - name: "Install Lua"
-        uses: leafo/gh-actions-lua@8c9e175e7a3d77e21f809eefbee34a19b858641b # v12
-        with:
-          luaVersion: ${{ env.LUA_VERSION }}
-
-      - name: "Install LuaRocks"
-        uses: luarocks/gh-actions-luarocks@7c85eeff60655651b444126f2a78be784e836a0a #v6
-        with:
-          luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
-
-      - name: "Install Ruby"
-        uses: ruby/setup-ruby@80740b3b13bf9857e28854481ca95a84e78a2bdf # v1.284.0
-        with:
-          ruby-version: ${{ env.RUBY_VERSION }}
-
-      - name: "Install Bun"
-        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: "Install GHC and Cabal"
-        uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c # v2.10.3
-        with:
-          ghc-version: ${{ env.GHC_VERSION }}
-          cabal-version: ${{env.CABAL_VERSION}}
-
       - name: "Cargo test"
         run: |
           cargo llvm-cov nextest \
-            --no-report \
+            --lcov \
+            --output-path lcov.info \
             --workspace \
             --cargo-profile fast-build \
-            --features schemars \
-            --status-level skip \
-            --failure-output immediate \
-            --no-fail-fast \
-            -j 8 \
-            --final-status-level slow
-
-          cargo llvm-cov report --profile fast-build --lcov --output-path lcov.info
+            --profile ci-core \
+            --features schemars
 
       - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
@@ -350,107 +312,12 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
 
-  cargo-test-macos:
+  cargo-test-windows:
+    name: "cargo test | windows"
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
-    runs-on: macos-latest
-    name: "cargo test | macos"
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
-        with:
-          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
-
-      - name: "Install Rust toolchain"
-        run: rustup show
-
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
-        with:
-          tool: cargo-nextest
-
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
-        with:
-          version: ${{ env.UV_VERSION }}
-
-      - name: "Install Python"
-        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: "Install Node.js"
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          # A dummy dependency path to enable caching of go modules.
-          cache-dependency-path: LICENSE
-
-      - name: "Install Go"
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          # A dummy dependency path to enable caching of go modules.
-          cache-dependency-path: LICENSE
-
-      - name: "Install Lua"
-        uses: leafo/gh-actions-lua@8c9e175e7a3d77e21f809eefbee34a19b858641b # v12
-        with:
-          luaVersion: ${{ env.LUA_VERSION }}
-
-      - name: "Install LuaRocks"
-        uses: luarocks/gh-actions-luarocks@7c85eeff60655651b444126f2a78be784e836a0a #v6
-        with:
-          luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
-
-      - name: "Install Ruby"
-        uses: ruby/setup-ruby@80740b3b13bf9857e28854481ca95a84e78a2bdf # v1.284.0
-        with:
-          ruby-version: ${{ env.RUBY_VERSION }}
-
-      - name: "Install Bun"
-        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: "Cache GHC"
-        id: cache-haskell
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
-        with:
-          path: ~/.ghcup
-          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
-          restore-keys: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
-
-      - name: "Install GHC and Cabal"
-        # if: steps.cache-haskell.outputs.cache-hit != 'true'
-        uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c # v2.10.3
-        with:
-          ghc-version: ${{ env.GHC_VERSION }}
-          cabal-version: ${{env.CABAL_VERSION}}
-
-      - name: "Cargo test"
-        run: |
-          cargo nextest run \
-            --workspace \
-            --cargo-profile fast-build \
-            --features schemars \
-            --status-level skip \
-            --failure-output immediate \
-            --no-fail-fast \
-            -j 8 \
-            --final-status-level slow
-
-  build-windows-artifact:
-    needs: plan
-    if: ${{ needs.plan.outputs.test-code == 'true' }}
-    name: "build tests archive | windows"
-    timeout-minutes: 10
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -482,44 +349,87 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
-      - name: Build and archive tests
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
+
+      - name: "Install Python"
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # windows only
+
+      - name: "Cargo test"
         working-directory: ${{ env.PREK_WORKSPACE }}
         shell: pwsh
         run: |
-          cargo llvm-cov nextest-archive `
-            --no-report `
+          # Remove msys64 from PATH for Rust compilation
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\msys64\\' }) -join ';'
+
+          cargo llvm-cov nextest `
+            --lcov `
+            --output-path lcov.info `
             --workspace `
-            --features schemars `
             --cargo-profile fast-build `
-            --archive-file nextest-archive.tar.zst
+            --features schemars `
+            --profile ci-core
 
-      - name: Upload archive to workflow
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: "Upload coverage reports to Codecov"
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
-          name: nextest-archive
-          path: ${{ env.PREK_WORKSPACE }}/nextest-archive.tar.zst
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ env.PREK_WORKSPACE }}/lcov.info
 
-  cargo-test-windows:
-    name: "cargo test | windows ${{ matrix.partition }}/3"
-    needs: build-windows-artifact
-    runs-on: windows-latest
-    timeout-minutes: 15
+  language-tests:
+    name: "language tests | ${{ matrix.language }} | ${{ matrix.os }}"
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
+    timeout-minutes: 10
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        partition: [1, 2, 3]
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        language:
+          - bun
+          - docker
+          - golang
+          - haskell
+          - lua
+          - node
+          - python
+          - ruby
+          - rust
+          - swift
+        # Run swift tests only on macOS, as it doesn't need to install Swift on macOS runners.
+        exclude:
+          - os: macos-latest
+            language: docker
+          - os: windows-latest
+            language: docker
+          - os: ubuntu-latest
+            language: swift
+          - os: windows-latest
+            language: swift
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: Create Dev Drive
-        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+        if: ${{ matrix.os == 'ubuntu-latest' }}
 
-      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
-      - name: Copy Git Repo to Dev Drive
-        run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
         run: rustup component add llvm-tools-preview
@@ -534,91 +444,95 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
-      - name: Download tests archive
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
-        with:
-          name: nextest-archive
-          # `path` must be a directory. If you set it to a file path, download-artifact
-          # creates a directory with that name, and nextest later fails to read it.
-          path: ${{ env.PREK_WORKSPACE }}
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # windows only
+        if: ${{ matrix.os == 'windows-latest' }}
 
       - name: "Install uv"
+        if: ${{ matrix.language == 'python' }}
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
         with:
           version: ${{ env.UV_VERSION }}
-          cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
 
       - name: "Install Python"
+        if: ${{ matrix.language == 'python' }}
         uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: "Install Node.js"
+        if: ${{ matrix.language == 'node' }}
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          # A dummy dependency path to enable caching of go modules.
           cache-dependency-path: LICENSE
 
       - name: "Install Go"
+        if: ${{ matrix.language == 'golang' }}
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version: ${{ env.GO_VERSION }}
-          # A dummy dependency path to enable caching of go modules.
           cache-dependency-path: LICENSE
 
-      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # windows only
-
       - name: "Install Lua"
-        # luarocks/gh-actions-lua doesn't cache the built lua, use `leafo/gh-actions-lua` instead.
+        if: ${{ matrix.language == 'lua' }}
         uses: leafo/gh-actions-lua@8c9e175e7a3d77e21f809eefbee34a19b858641b # v12
         with:
           luaVersion: ${{ env.LUA_VERSION }}
 
       - name: "Install LuaRocks"
-        # `leafo/gh-actions-lua` doesn't support windows, so we have to use `luarocks/gh-actions-luarocks`.
+        if: ${{ matrix.language == 'lua' }}
         uses: luarocks/gh-actions-luarocks@7c85eeff60655651b444126f2a78be784e836a0a #v6
         with:
           luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
 
       - name: "Install Ruby"
+        if: ${{ matrix.language == 'ruby' }}
         uses: ruby/setup-ruby@80740b3b13bf9857e28854481ca95a84e78a2bdf # v1.284.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
 
       - name: "Install Bun"
+        if: ${{ matrix.language == 'bun' }}
         uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: "Install GHC and Cabal"
+        if : ${{ matrix.language == 'haskell' }}
         uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c # v2.10.3
         with:
           ghc-version: ${{ env.GHC_VERSION }}
           cabal-version: ${{env.CABAL_VERSION}}
+          cabal-update: false
 
-      - name: "Cargo test"
-        working-directory: ${{ env.PREK_WORKSPACE }}
+      - name: "Run language tests"
+        if: ${{ matrix.os != 'windows-latest' }}
+        run: |
+          cargo llvm-cov nextest \
+            --lcov \
+            --output-path lcov.info \
+            --workspace \
+            --cargo-profile fast-build \
+            --features schemars \
+            --profile lang-${{ matrix.language }}
+
+      - name: "Run language tests (windows)"
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: pwsh
         run: |
           # Remove msys64 from PATH for Rust compilation
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\msys64\\' }) -join ';'
 
           cargo llvm-cov nextest `
-            --color always `
             --lcov `
             --output-path lcov.info `
-            --partition hash:${{ matrix.partition }}/3 `
-            --archive-file nextest-archive.tar.zst `
-            --status-level skip `
-            --failure-output immediate `
-            --no-fail-fast `
-            -j 8 `
-            --final-status-level slow `
-            -E 'not test(swift::)'
+            --workspace `
+            --cargo-profile fast-build `
+            --features schemars `
+            --profile lang-${{ matrix.language }}
 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        shell: pwsh
 
       - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2

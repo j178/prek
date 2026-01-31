@@ -18,7 +18,7 @@ use crate::fs::{CWD, Simplified};
 use crate::git::{GIT_ROOT, git_cmd};
 use crate::printer::Printer;
 use crate::store::Store;
-use crate::workspace::{Project, Workspace};
+use crate::workspace::{Error as WorkspaceError, Project, Workspace};
 use crate::{git, warn_user};
 
 #[allow(clippy::fn_params_excessive_bools)]
@@ -43,7 +43,15 @@ pub(crate) async fn install(
         );
     }
 
-    let project = Project::discover(config.as_deref(), &CWD).ok();
+    let project = match Project::discover(config.as_deref(), &CWD) {
+        Ok(project) => Some(project),
+        Err(err) => {
+            if let WorkspaceError::Config(err) = &err {
+                err.warn_parse_error();
+            }
+            None
+        }
+    };
     let hook_types = get_hook_types(hook_types, project.as_ref(), config.as_deref());
 
     let hooks_path = if let Some(dir) = git_dir {
@@ -133,13 +141,17 @@ fn get_hook_types(
             .iter()
             .map(Path::new)
             .filter(|p| p.exists());
-        config
-            .into_iter()
-            .chain(fallbacks)
-            .next()
-            .and_then(|p| load_config(p).ok())
-            .and_then(|cfg| cfg.default_install_hook_types.clone())
-            .unwrap_or_default()
+        if let Some(path) = config.into_iter().chain(fallbacks).next() {
+            match load_config(path) {
+                Ok(cfg) => cfg.default_install_hook_types.clone().unwrap_or_default(),
+                Err(err) => {
+                    err.warn_parse_error();
+                    vec![]
+                }
+            }
+        } else {
+            vec![]
+        }
     };
     if hook_types.is_empty() {
         hook_types = vec![HookType::PreCommit];
