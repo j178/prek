@@ -134,3 +134,23 @@ To enable shell autocompletion for prek commands, run one of the following:
     ```
 
 Then restart your shell or source the config file.
+
+## Artifact Verification
+
+Release artifacts are signed with
+[GitHub Attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations)
+to provide cryptographic proof of their origin. Verify downloads using the
+[GitHub CLI](https://cli.github.com/):
+
+```console
+$ gh attestation verify prek-x86_64-unknown-linux-gnu.tar.gz --repo j178/prek
+Loaded digest sha256:xxxx... for file://prek-x86_64-unknown-linux-gnu.tar.gz
+Loaded 1 attestation from GitHub API
+✓ Verification succeeded!
+
+- Attestation #1
+  - Build repo:..... j178/prek
+  - Build workflow:. .github/workflows/release.yml@refs/tags/vX.Y.Z
+```
+
+This confirms the artifact was built by the official release workflow.

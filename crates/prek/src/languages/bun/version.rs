@@ -132,6 +132,7 @@ impl BunRequest {
             Self::MajorMinorPatch(major, minor, patch) => {
                 version.major == *major && version.minor == *minor && version.patch == *patch
             }
+            // FIXME: consider resolving symlinks and normalizing paths before comparison
             Self::Path(path) => toolchain.is_some_and(|toolchain_path| toolchain_path == path),
             Self::Range(req) => req.matches(version),
         }

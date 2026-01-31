@@ -468,3 +468,82 @@ fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// Test that health check passes when Python toolchain path involves symlinks.
+/// The stored toolchain path and the queried path should be canonicalized before comparison.
+///
+/// Regression test for symlink-related "Python executable mismatch" errors.
+#[test]
+#[cfg(unix)]
+fn health_check_with_symlinked_toolchain() -> anyhow::Result<()> {
+    use prek_consts::prepend_paths;
+    use std::os::unix::fs::symlink;
+
+    let context = TestContext::new();
+    context.init_project();
+
+    // Find a Python executable, create a symlinked directory to its parent,
+    // and prepend that to PATH so that prek picks up the symlinked path.
+    let python_executable = which::which("python3")?;
+    let symlinked_bin = context.work_dir().child("symlinked-bin");
+    symlink(python_executable.parent().unwrap(), &symlinked_bin)?;
+    let new_path = prepend_paths(&[&*symlinked_bin])?;
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: python
+                entry: python -c 'print("hello")'
+                always_run: true
+                pass_filenames: false
+    "#});
+    context.git_add(".");
+
+    // First run installs the hook
+    cmd_snapshot!(context.filters(), context.run().env(EnvVars::PATH, new_path), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local....................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    let hooks_dir = context.home_dir().child("hooks");
+    let hook_envs = hooks_dir
+        .read_dir()?
+        .flatten()
+        .filter(|d| d.file_name().to_string_lossy().starts_with("python-"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        hook_envs.len(),
+        1,
+        "Expected one installed hook env, found: {hook_envs:?}",
+    );
+
+    // Second run triggers health check with a symlinked toolchain path
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local....................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    let hook_envs = hooks_dir
+        .read_dir()?
+        .flatten()
+        .filter(|d| d.file_name().to_string_lossy().starts_with("python-"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        hook_envs.len(),
+        1,
+        "Expected one installed hook env, found: {hook_envs:?}",
+    );
+
+    Ok(())
+}
