@@ -5,6 +5,7 @@ use std::sync::LazyLock;
 
 use prek_consts::env_vars::EnvVars;
 
+use crate::cli::reporter::HookRunReporter;
 use crate::hook::{Hook, Repo};
 pub(crate) use crate::hooks::builtin_hooks::BuiltinHooks;
 pub(crate) use crate::hooks::meta_hooks::MetaHooks;
@@ -38,8 +39,11 @@ pub async fn run_fast_path(
     _store: &Store,
     hook: &Hook,
     filenames: &[&Path],
+    reporter: &HookRunReporter,
 ) -> anyhow::Result<(i32, Vec<u8>)> {
-    match hook.repo() {
+    let progress = reporter.on_run_start(hook, filenames.len());
+
+    let result = match hook.repo() {
         Repo::Remote { url, .. } if is_pre_commit_hooks(url) => {
             PreCommitHooks::from_str(hook.id.as_str())
                 .unwrap()
@@ -47,7 +51,11 @@ pub async fn run_fast_path(
                 .await
         }
         _ => unreachable!(),
-    }
+    };
+
+    reporter.on_run_complete(progress);
+
+    result
 }
 
 pub(crate) async fn run_concurrent_file_checks<'a, I, F, Fut>(

@@ -1,7 +1,9 @@
-use anyhow::Result;
 use std::path::Path;
 use std::str::FromStr;
 
+use anyhow::Result;
+
+use crate::cli::reporter::HookRunReporter;
 use crate::config::{BuiltinHook, HookOptions, Stage};
 use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks;
@@ -63,8 +65,10 @@ impl BuiltinHooks {
         _store: &Store,
         hook: &Hook,
         filenames: &[&Path],
+        reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
-        match self {
+        let progress = reporter.on_run_start(hook, filenames.len());
+        let result = match self {
             Self::CheckAddedLargeFiles => {
                 pre_commit_hooks::check_added_large_files(hook, filenames).await
             }
@@ -91,7 +95,9 @@ impl BuiltinHooks {
             Self::TrailingWhitespace => {
                 pre_commit_hooks::fix_trailing_whitespace(hook, filenames).await
             }
-        }
+        };
+        reporter.on_run_complete(progress);
+        result
     }
 }
 
