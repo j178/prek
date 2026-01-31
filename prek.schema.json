@@ -371,6 +371,7 @@
         "check-added-large-files",
         "check-case-conflict",
         "check-executables-have-shebangs",
+        "check-hook-updates",
         "check-json",
         "check-json5",
         "check-merge-conflict",

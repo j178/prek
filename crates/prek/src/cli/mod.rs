@@ -13,7 +13,7 @@ use prek_consts::env_vars::EnvVars;
 
 use crate::config::{HookType, Language, Stage};
 
-mod auto_update;
+pub(crate) mod auto_update;
 mod cache_clean;
 mod cache_gc;
 mod cache_size;

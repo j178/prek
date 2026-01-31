@@ -2244,3 +2244,161 @@ fn builtin_hooks_ignore_system_path_binaries() -> Result<()> {
 
     Ok(())
 }
+
+/// Tests that `check-hook-updates` hook is recognized as a valid builtin hook.
+#[test]
+fn check_hook_updates_hook_recognized() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-hook-updates
+    "});
+    context.git_add(".");
+
+    // The hook should be recognized and run (it will pass since there are no remote repos to check)
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for hook updates...................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+/// Tests that `check-hook-updates` hook with `--fail-on-updates` argument is recognized.
+#[test]
+fn check_hook_updates_hook_with_args() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-hook-updates
+                args: ['--cooldown-days=7', '--fail-on-updates']
+    "});
+    context.git_add(".");
+
+    // The hook should be recognized and run with the arguments
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for hook updates...................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+/// Tests that `check-hook-updates` hook with `--check-interval-hours=0` runs every time.
+#[test]
+fn check_hook_updates_check_interval_zero_runs_every_time() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-hook-updates
+                args: ['--check-interval-hours=0']
+    "});
+    context.git_add(".");
+
+    // First run
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for hook updates...................................................Passed
+
+    ----- stderr -----
+    ");
+
+    // Second run should also execute (not skip)
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for hook updates...................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+/// Tests that `check-hook-updates` hook detects available updates for remote repos.
+/// Without `--fail-on-updates`, the hook passes but outputs available updates.
+#[test]
+fn check_hook_updates_detects_outdated_repo() {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Use an old version of pre-commit-hooks that has newer versions available
+    // Use --check-interval-hours=0 to ensure the check runs
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-hook-updates
+                args: ['--check-interval-hours=0']
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v4.0.0
+            hooks:
+              - id: trailing-whitespace
+    "});
+    context.git_add(".");
+
+    // The hook should detect that v4.0.0 is outdated and report available updates (but still pass)
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for hook updates...................................................Passed
+    Trim Trailing Whitespace.................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
+/// Tests that `check-hook-updates` hook fails when `--fail-on-updates` is set and updates are available.
+#[test]
+fn check_hook_updates_fails_on_updates() {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Use an old version with --fail-on-updates
+    // Use --check-interval-hours=0 to ensure the check runs
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-hook-updates
+                args: ['--fail-on-updates', '--check-interval-hours=0']
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v4.0.0
+            hooks:
+              - id: trailing-whitespace
+    "});
+    context.git_add(".");
+
+    // The hook should fail because updates are available
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for hook updates...................................................Failed
+    - hook id: check-hook-updates
+    - exit code: 1
+
+      https://github.com/pre-commit/pre-commit-hooks: v4.0.0 -> v6.0.0 available
+    Trim Trailing Whitespace.................................................Passed
+
+    ----- stderr -----
+    ");
+}
