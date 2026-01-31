@@ -1,5 +1,46 @@
-[[profile.default.overrides]]
-# Retry flaky node tests due to npm 403 errors
-filter = 'binary_id(prek::languages) and test(node::)'
-retries = 2
-slow-timeout = { period = "30s", terminate-after = 3 }
+[profile.ci-core]
+# Exclude language-specific integration tests from the main CI runs (except unimplemented/unsupported/script/fail).
+default-filter = "not binary_id(prek::languages) or (binary_id(prek::languages) and (test(unimplemented::) or test(unsupported::) or test(script::) or test(fail::)))"
+status-level = "skip"
+final-status-level = "slow"
+failure-output = "immediate"
+fail-fast = false
+threads = 8
+color = "always"
+
+[profile.lang-bun]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages) and test(bun::)"
+
+
+[profile.lang-golang]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages) and test(golang::)"
+
+[profile.lang-lua]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages) and test(lua::)"
+
+[profile.lang-node]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages) and test(node::)"
+
+[profile.lang-pygrep]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages) and test(pygrep::)"
+
+[profile.lang-python]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages) and test(python::)"
+
+[profile.lang-ruby]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages) and test(ruby::)"
+
+[profile.lang-rust]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages) and test(rust::)"
+
+[profile.lang-swift]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages) and test(swift::)"
