@@ -257,19 +257,19 @@ impl Language {
             Repo::Meta { .. } => {
                 return hooks::MetaHooks::from_str(&hook.id)
                     .unwrap()
-                    .run(store, hook, filenames)
+                    .run(store, hook, filenames, reporter)
                     .await;
             }
             Repo::Builtin { .. } => {
                 return hooks::BuiltinHooks::from_str(&hook.id)
                     .unwrap()
-                    .run(store, hook, filenames)
+                    .run(store, hook, filenames, reporter)
                     .await;
             }
             Repo::Remote { .. } => {
                 // Fast path for hooks implemented in Rust
                 if hooks::check_fast_path(hook) {
-                    return hooks::run_fast_path(store, hook, filenames).await;
+                    return hooks::run_fast_path(store, hook, filenames, reporter).await;
                 }
             }
             Repo::Local { .. } => {}
