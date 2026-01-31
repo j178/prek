@@ -207,6 +207,7 @@ pub(crate) async fn run(
         fail_fast,
         dry_run,
         verbose,
+        should_stash, // worktree_cleaned: when stashing, worktree is clean before hooks
         printer,
     )
     .await
@@ -578,6 +579,7 @@ async fn run_hooks(
     fail_fast: bool,
     dry_run: bool,
     verbose: bool,
+    worktree_cleaned: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     debug_assert!(!hooks.is_empty(), "No hooks to run");
@@ -601,6 +603,8 @@ async fn run_hooks(
     let mut first = true;
     let mut file_modified = false;
     let mut has_unimplemented = false;
+    // Track if any modifications have occurred, used to invalidate worktree_cleaned optimization
+    let mut any_modifications_detected = false;
 
     // Track files that have been consumed by orphan projects.
     let mut consumed_files = FxHashSet::default();
@@ -631,7 +635,13 @@ async fn run_hooks(
             })?;
             first = false;
         }
-        let mut prev_diff = git::get_diff(project.path()).await?;
+        // Use `has_worktree_changes` only when worktree was cleaned and no prior group modified files.
+        let can_use_quick_check = worktree_cleaned && !any_modifications_detected;
+        let mut prev_diff: Option<Vec<u8>> = if can_use_quick_check {
+            None
+        } else {
+            Some(git::get_diff(project.path()).await?)
+        };
 
         let project_fail_fast = fail_fast || project.config().fail_fast.unwrap_or(false);
 
@@ -646,16 +656,28 @@ async fn run_hooks(
             // Check if any files were modified by this group of hooks.
             let all_skipped = group_results.iter().all(|r| r.status.is_skipped());
             let group_modified_files = if !all_skipped {
-                let curr_diff = git::get_diff(project.path()).await?;
-                let group_modified_files = curr_diff != prev_diff;
-                prev_diff = curr_diff;
-                group_modified_files
+                match &mut prev_diff {
+                    None => {
+                        let has_changes = git::has_worktree_changes(project.path()).await?;
+                        if has_changes {
+                            prev_diff = Some(git::get_diff(project.path()).await?);
+                        }
+                        has_changes
+                    }
+                    Some(prev) => {
+                        let curr_diff = git::get_diff(project.path()).await?;
+                        let modified = &curr_diff != prev;
+                        *prev = curr_diff;
+                        modified
+                    }
+                }
             } else {
                 false
             };
 
             if group_modified_files {
                 file_modified = true;
+                any_modifications_detected = true;
             }
 
             reporter.suspend(|| {
