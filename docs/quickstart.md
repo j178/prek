@@ -52,9 +52,9 @@ This configuration uses the `pre-commit-hooks` repository and enables two hooks:
 
 !!! note
 
-    `.pre-commit-config.yaml` is the configuration file name used by **pre-commit**, a widely-used git hook manager that prek is implemented from. prek reads the same configuration file today. In the future, prek might introduce its own configuration file.
+    `.pre-commit-config.yaml` is the configuration file name used by **pre-commit**, a widely-used git hook manager. prek reads the same configuration file today. In the future, prek might introduce its own configuration file.
 
-Then run `git add .pre-commit-config.yaml` to stage the new file.
+Once you’re happy with your setup, you can stage the config file with `git add .pre-commit-config.yaml`.
 
 ### 2. Run hooks on demand
 
