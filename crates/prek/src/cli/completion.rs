@@ -4,6 +4,7 @@ use std::path::Path;
 
 use clap::builder::StyledStr;
 use clap_complete::CompletionCandidate;
+use rustc_hash::FxHashSet;
 
 use crate::config;
 use crate::fs::CWD;
@@ -141,7 +142,7 @@ pub(crate) fn selector_completer(current: &OsStr) -> Vec<CompletionCandidate> {
     let mut uniq: BTreeMap<String, Option<String>> = BTreeMap::new();
     for proj in workspace.projects() {
         for (id, name) in all_hooks(proj) {
-            if id.contains(current_str) || id.starts_with(current_str) {
+            if id.contains(current_str) {
                 uniq.entry(id).or_insert(name);
             }
         }
@@ -160,7 +161,7 @@ fn all_hooks(proj: &Project) -> Vec<(String, Option<String>)> {
         match repo {
             config::Repo::Remote(cfg) => {
                 for h in &cfg.hooks {
-                    out.push((h.id.clone(), h.name.as_ref().map(ToString::to_string)));
+                    out.push((h.id.clone(), h.name.clone()));
                 }
             }
             config::Repo::Local(cfg) => {
@@ -207,10 +208,7 @@ fn list_subdirs(
         }
     }
     for name in first_components {
-        if filter_prefix.is_empty()
-            || name.starts_with(filter_prefix)
-            || name.contains(filter_prefix)
-        {
+        if filter_prefix.is_empty() || name.contains(filter_prefix) {
             let mut value = String::new();
             value.push_str(shown_prefix);
             value.push_str(&name);
@@ -233,11 +231,7 @@ fn list_direct_project_colons(
     workspace: &Workspace,
 ) -> Vec<CompletionCandidate> {
     // Build a set of absolute project paths for quick lookup
-    let proj_paths: BTreeSet<_> = workspace
-        .projects()
-        .iter()
-        .map(|p| p.path().to_path_buf())
-        .collect();
+    let proj_paths: FxHashSet<_> = workspace.projects().iter().map(|p| p.path()).collect();
 
     // Compute immediate child names that lead to at least one project (same logic as list_subdirs)
     // then keep only those where `base/child` is itself a project root.
@@ -252,7 +246,7 @@ fn list_direct_project_colons(
                 let name = first.as_os_str().to_string_lossy().to_string();
                 // Only keep if this immediate child is a project root
                 let child_abs = base.join(&name);
-                if proj_paths.contains(&child_abs) {
+                if proj_paths.contains(child_abs.as_path()) {
                     names.insert(name);
                 }
             }
@@ -261,10 +255,7 @@ fn list_direct_project_colons(
 
     let mut out = Vec::new();
     for name in names {
-        if filter_prefix.is_empty()
-            || name.starts_with(filter_prefix)
-            || name.contains(filter_prefix)
-        {
+        if filter_prefix.is_empty() || name.contains(filter_prefix) {
             let mut value = String::new();
             value.push_str(shown_prefix);
             value.push_str(&name);
