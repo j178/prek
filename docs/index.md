@@ -10,7 +10,7 @@
 
     Although prek is pretty new, it's already powering real‑world projects—see [Who is using prek?](#who-is-using-prek). If you're looking for an alternative to `pre-commit`, please give it a try—we'd love your feedback!
 
-    Please note that some subcommands and languages are still missing for full drop‑in parity with `pre-commit`. Track the remaining gaps here: [TODO](https://prek.j178.dev/todo/).
+    Please note that some languages are not yet supported for full drop‑in parity with `pre-commit`. See [Language Support](https://prek.j178.dev/languages/) for current status.
 
 <!-- "--8<--" is used for includes, see https://facelessuser.github.io/pymdown-extensions/extensions/snippets/#snippets-notation -->
 

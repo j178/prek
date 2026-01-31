@@ -52,3 +52,9 @@ See the dedicated [Language Support](languages.md) page for a complete list of s
 - `prek cache dir` to show the cache directory.
 
 `prek clean` and `prek gc` are also available but hidden, as `prek cache` is preferred.
+
+## Not implemented
+
+The `pre-commit hazmat` subcommand introduced in pre-commit
+[v4.5.0](https://github.com/pre-commit/pre-commit/releases/tag/v4.5.0) is not
+implemented. This command is niche and unlikely to be widely used.
