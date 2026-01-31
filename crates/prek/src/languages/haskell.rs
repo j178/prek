@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::process::Stdio;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
@@ -38,8 +39,8 @@ impl LanguageImpl for Haskell {
 
         debug!(%hook, target = %info.env_path.display(), "Installing Haskell environment");
 
-        let bindir = info.env_path.join("bin");
-        std::fs::create_dir_all(&bindir).context("Failed to create bin directory")?;
+        let bin_dir = info.env_path.join("bin");
+        fs_err::tokio::create_dir_all(&bin_dir).await?;
 
         // Identify packages: *.cabal files in repo + additional_dependencies
         let search_path = hook.repo_path().unwrap_or(hook.project().path());
@@ -65,7 +66,7 @@ impl LanguageImpl for Haskell {
             anyhow::bail!("Expected .cabal files or additional_dependencies");
         }
 
-        // Skip cabal update in CI environment
+        // Run `cabal update` unless explicitly skipped via PREK_INTERNAL__SKIP_CABAL_UPDATE (e.g., in CI)
         if !*SKIP_CABAL_UPDATE {
             // `cabal update` is slow, so only run it once per process.
             CABAL_UPDATE_ONCE
@@ -86,7 +87,7 @@ impl LanguageImpl for Haskell {
             .current_dir(search_path)
             .arg("v2-install")
             .arg("--installdir")
-            .arg(&bindir)
+            .arg(&bin_dir)
             .args(pkgs)
             .check(true)
             .output()
@@ -127,9 +128,11 @@ impl LanguageImpl for Haskell {
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
+                .envs(&hook.env)
                 .args(&hook.args)
                 .args(batch)
                 .check(false)
+                .stdin(Stdio::null())
                 .pty_output()
                 .await?;
 

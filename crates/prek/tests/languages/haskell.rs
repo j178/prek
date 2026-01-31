@@ -1,4 +1,3 @@
-use anyhow::Ok;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use prek_consts::env_vars::EnvVars;
 
