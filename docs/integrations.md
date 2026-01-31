@@ -14,13 +14,13 @@ A common pattern is to copy the binary into your own image:
 
 ```dockerfile
 FROM debian:bookworm-slim
-COPY --from=ghcr.io/j178/prek:v0.3.0 /prek /usr/local/bin/prek
+COPY --from=ghcr.io/j178/prek:v0.3.1 /prek /usr/local/bin/prek
 ```
 
 If you prefer, you can also run the distroless image directly:
 
 ```bash
-docker run --rm ghcr.io/j178/prek:v0.3.0 --version
+docker run --rm ghcr.io/j178/prek:v0.3.1 --version
 ```
 
 ### Verifying Images
@@ -43,7 +43,7 @@ Loaded 1 attestation from GitHub API
 
 !!! tip
 
-    Use a specific version tag (e.g., `ghcr.io/j178/prek:v0.3.0`) or image
+    Use a specific version tag (e.g., `ghcr.io/j178/prek:v0.3.1`) or image
     digest rather than `latest` for verification.
 
 ## GitHub Actions

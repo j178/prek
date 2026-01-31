@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.3.1
+
+Released on 2026-01-31.
+
+### Enhancements
+
+- Add `language: swift` support ([#1463](https://github.com/j178/prek/pull/1463))
+- Add `language: haskell` support ([#1484](https://github.com/j178/prek/pull/1484))
+- Extract go version constraint from `go.mod` ([#1457](https://github.com/j178/prek/pull/1457))
+- Warn when config file exists but fails to parse ([#1487](https://github.com/j178/prek/pull/1487))
+- Add GitHub artifact attestations to release and build-docker workflow ([#1494](https://github.com/j178/prek/pull/1494), [#1497](https://github.com/j178/prek/pull/1497))
+- Allow `GIT_CONFIG_PARAMETERS` for private repository authentication ([#1472](https://github.com/j178/prek/pull/1472))
+- Show progress bar when running builtin hooks ([#1504](https://github.com/j178/prek/pull/1504))
+
+### Bug fixes
+
+- Cap ARG_MAX at `1<<19` for safety ([#1506](https://github.com/j178/prek/pull/1506))
+- Don't check Python executable path in health check ([#1496](https://github.com/j178/prek/pull/1496))
+
+### Documentation
+
+- Include `CocoIndex` as a project using prek ([#1477](https://github.com/j178/prek/pull/1477))
+- Add commands for artifact verification using GitHub Attestations ([#1500](https://github.com/j178/prek/pull/1500))
+
+### Contributors
+
+- @halms
+- @Haleshot
+- @simono
+- @tisonkun
+- @fllesser
+- @j178
+- @shaanmajid
+
 ## 0.3.0
 
 Released on 2026-01-22.
@@ -7,7 +41,6 @@ Released on 2026-01-22.
 ### Highlights
 
 - `prek cache gc` (also available via `prek gc` for pre-commit compatibility) is finally here! You can now run `prek cache gc` to clean up unused repos, hook envs and tool versions from prek cache.
-
 - `language: bun` is now supported, making it possible to write and run hooks with [Bun](https://bun.sh/).
 
 ### Enhancements
