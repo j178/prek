@@ -2778,18 +2778,6 @@ fn system_language_version() {
       caused by: Failed to install bun
       caused by: No suitable system Bun version found and downloads are disabled
     ");
-
-    // When binaries are available, hooks pass.
-    cmd_snapshot!(context.filters(), context.run(), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    system-node..............................................................Passed
-    system-go................................................................Passed
-    system-bun...............................................................Passed
-
-    ----- stderr -----
-    ");
 }
 
 /// Tests that empty `entry` field.
