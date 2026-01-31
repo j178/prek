@@ -1926,8 +1926,7 @@ fn minimum_prek_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `.pre-commit-config.yaml`
-      caused by: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek.
+    error: Invalid configuration in `.pre-commit-config.yaml`: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek.
     "#);
 }
 

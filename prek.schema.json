@@ -140,6 +140,13 @@
         "null"
       ]
     },
+    "prek_upgrade_suggestion": {
+      "description": "Optional suggestion shown when the minimum prek version is higher than the current version.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "repos": {
       "type": "array",
       "items": {

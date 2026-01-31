@@ -304,6 +304,7 @@ Config {
         true,
     ),
     minimum_prek_version: None,
+    prek_upgrade_suggestion: None,
     orphan: None,
     _unused_keys: {},
 }
