@@ -162,9 +162,19 @@ The hook `entry` should point at an executable installed by `cabal`.
 
 ### julia
 
-**Status in prek:** Not supported yet.
+**Status in prek:** ✅ Supported.
 
-Tracking: [#1446](https://github.com/j178/prek/issues/1446)
+prek installs Julia hooks into an isolated environment using Julia's built-in package manager (`Pkg`).
+
+The hook repository can include a `Project.toml` (or `JuliaProject.toml`) and optionally a `Manifest.toml` (or `JuliaManifest.toml`). If these files are present, prek will use them to instantiate the environment. If no project file is found, an empty one is created to ensure the environment is correctly initialized.
+
+`additional_dependencies` are supported and will be added to the environment via `Pkg.add`.
+
+#### `language_version`
+
+`language_version` is not supported for Julia hooks yet. It uses the system `julia` installation.
+
+The hook `entry` should be a path to a julia source file relative to the hook repository (optionally with arguments). It is executed using `julia --project=<env_path> --startup-file=no`.
 
 ### lua
 

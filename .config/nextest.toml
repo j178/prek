@@ -23,6 +23,10 @@ default-filter = "binary_id(prek::languages) and test(golang::)"
 inherits = "ci-core"
 default-filter = "binary_id(prek::languages) and test(haskell::)"
 
+[profile.lang-julia]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages) and test(julia::)"
+
 [test-groups]
 serial = { max-threads = 1 }
 

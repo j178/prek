@@ -50,6 +50,9 @@
         "haskell": {
           "type": "string"
         },
+        "julia": {
+          "type": "string"
+        },
         "lua": {
           "type": "string"
         },
@@ -476,16 +479,17 @@
         "fail",
         "golang",
         "haskell",
+        "julia",
         "lua",
         "node",
         "perl",
+        "pygrep",
         "python",
         "r",
         "ruby",
         "rust",
-        "swift",
-        "pygrep",
         "script",
+        "swift",
         "system"
       ]
     },

@@ -328,16 +328,17 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 <li><code>fail</code></li>
 <li><code>golang</code></li>
 <li><code>haskell</code></li>
+<li><code>julia</code></li>
 <li><code>lua</code></li>
 <li><code>node</code></li>
 <li><code>perl</code></li>
+<li><code>pygrep</code></li>
 <li><code>python</code></li>
 <li><code>r</code></li>
 <li><code>ruby</code></li>
 <li><code>rust</code></li>
-<li><code>swift</code></li>
-<li><code>pygrep</code></li>
 <li><code>script</code></li>
+<li><code>swift</code></li>
 <li><code>system</code></li>
 </ul></dd><dt id="prek-list--log-file"><a href="#prek-list--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
 </dd><dt id="prek-list--no-progress"><a href="#prek-list--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
