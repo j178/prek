@@ -184,6 +184,7 @@ pub enum Language {
     Rust,
     Swift,
     Pygrep,
+    Julia,
     #[serde(alias = "unsupported_script")]
     Script,
     #[serde(alias = "unsupported")]
@@ -212,6 +213,7 @@ impl Language {
             Self::Rust => "rust",
             Self::Swift => "swift",
             Self::Pygrep => "pygrep",
+            Self::Julia => "julia",
             Self::Script => "script",
             Self::System => "system",
         }

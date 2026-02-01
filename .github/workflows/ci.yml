@@ -25,6 +25,7 @@ env:
   LUAROCKS_VERSION: "3.12.2"
   GHC_VERSION: "9.8.2" # Don't upgrade, because higher version is very slow to build
   CABAL_VERSION: "3.16.1.0"
+  JULIA_VERSION: "1.12.4"
 
   # Cargo env vars
   CARGO_INCREMENTAL: 0
@@ -403,6 +404,7 @@ jobs:
           - docker
           - golang
           - haskell
+          - julia
           - lua
           - node
           - python
@@ -513,6 +515,12 @@ jobs:
         with:
           ghc-version: ${{ env.GHC_VERSION }}
           cabal-version: ${{ env.CABAL_VERSION }}
+
+      - name: "Install Julia"
+        if: ${{ matrix.language == 'julia' }}
+        uses: julia-actions/setup-julia@5c9647d97b78a5debe5164e9eec09d653d29bd71 # v2.6.1
+        with:
+          version: ${{ env.JULIA_VERSION }}
 
       - name: "Run language tests"
         if: ${{ matrix.os != 'windows-latest' }}

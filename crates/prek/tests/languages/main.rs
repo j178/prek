@@ -9,6 +9,7 @@ mod docker_image;
 mod fail;
 mod golang;
 mod haskell;
+mod julia;
 mod lua;
 mod node;
 mod pygrep;
