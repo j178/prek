@@ -70,7 +70,7 @@ impl LanguageImpl for Haskell {
         if !*SKIP_CABAL_UPDATE {
             // `cabal update` is slow, so only run it once per process.
             CABAL_UPDATE_ONCE
-                .get_or_try_init(|| async {
+                .get_or_try_init(async || {
                     Cmd::new("cabal", "update cabal package database")
                         .arg("update")
                         .check(true)

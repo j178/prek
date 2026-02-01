@@ -6,6 +6,7 @@ use std::sync::LazyLock;
 use anstream::ColorChoice;
 use futures::{StreamExt, TryStreamExt};
 use prek_consts::env_vars::EnvVars;
+use rustc_hash::FxHashMap;
 use tracing::trace;
 
 use crate::hook::Hook;
@@ -36,10 +37,57 @@ fn target_concurrency(serial: bool) -> usize {
 struct Partitions<'a> {
     filenames: &'a [&'a Path],
     current_index: usize,
-    command_length: usize,
     max_per_batch: usize,
-    max_cli_length: usize,
+    remaining_arg_length: usize,
 }
+
+/// We make a conservative guess for the size of a single pointer (64-bit) here
+/// in order to support scenarios where a 32-bit binary is launching a 64-bit
+/// binary.
+const POINTER_SIZE_CONSERVATIVE: usize = 8;
+
+/// POSIX requires that we leave 2048 bytes of space so that the child processes
+/// can have room to set their own environment variables.
+const ARG_HEADROOM: usize = 2048;
+
+// Adapted from https://github.com/sharkdp/argmax
+/// Required size for a single KEY=VAR environment variable string and the
+/// corresponding pointer in envp**.
+fn environment_variable_size<O: AsRef<OsStr>>(key: O, value: O) -> usize {
+    POINTER_SIZE_CONSERVATIVE   // size for the pointer in envp**
+        + key.as_ref().len()    // size for the variable name
+        + 1                     // size for the '=' sign
+        + value.as_ref().len()  // size for the value
+        + 1 // terminating NULL
+}
+
+/// Required size to store a single ARG argument and the corresponding
+/// pointer in argv**.
+fn arg_size<O: AsRef<OsStr>>(arg: O) -> usize {
+    POINTER_SIZE_CONSERVATIVE  // size for the pointer in argv**
+        + arg.as_ref().len()   // size for argument string
+        + 1 // terminating NULL
+}
+
+#[cfg(unix)]
+static ARG_MAX: LazyLock<usize> = LazyLock::new(|| {
+    let arg_max = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
+    if arg_max <= 0 {
+        1 << 12
+    } else {
+        usize::try_from(arg_max).expect("SC_ARG_MAX too large")
+    }
+});
+
+#[cfg(unix)]
+static PAGE_SIZE: LazyLock<usize> = LazyLock::new(|| {
+    let page_size = unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) };
+    if page_size < 4096 {
+        4096
+    } else {
+        usize::try_from(page_size).expect("SC_PAGE_SIZE too large")
+    }
+});
 
 // https://www.in-ulm.de/~mascheck/various/argmax/
 // https://cgit.git.savannah.gnu.org/cgit/findutils.git/tree/xargs/xargs.c
@@ -47,22 +95,15 @@ struct Partitions<'a> {
 // https://github.com/uutils/findutils/blob/af48c151fe9b29cb7d25471b5388013ca15748ba/src/xargs/mod.rs#L177
 // https://github.com/sharkdp/argmax
 fn platform_max_cli_length() -> usize {
-    // POSIX requires that we leave 2048 bytes of space so that the child processes
-    // can have room to set their own environment variables.
-    const ARG_HEADROOM: usize = 2048;
     #[cfg(unix)]
     {
-        let maximum = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
-        let maximum = if maximum <= 0 {
-            1 << 12
-        } else {
-            usize::try_from(maximum).expect("SC_ARG_MAX too large")
-        };
-        let maximum = maximum.saturating_sub(ARG_HEADROOM);
-        // macOS reports ARG_MAX as 1<<20, but in practice other overhead can
-        // consume part of that space. When filenames approach 1<<20, exec can
-        // fail with "Argument list too long", so we cap at 1<<19 for safety.
-        maximum.clamp(1 << 12, 1 << 19)
+        let mut arg_max = *ARG_MAX;
+        // Assume arguments are counted with the granularity of a single page,
+        // so allow a one page cushion to account for rounding up
+        arg_max -= *PAGE_SIZE;
+        // POSIX recommends an additional 2048 bytes of headroom
+        arg_max -= ARG_HEADROOM;
+        arg_max.clamp(1 << 12, 1 << 20)
     }
     #[cfg(windows)]
     {
@@ -74,18 +115,25 @@ fn platform_max_cli_length() -> usize {
     }
 }
 
-/// Required size for a single KEY=VAR environment variable string and the
-/// corresponding pointer in envp**.
-fn environment_variable_size<O: AsRef<OsStr>>(key: O, value: O) -> usize {
-    /// We make a conservative guess for the size of a single pointer (64-bit) here
-    /// in order to support scenarios where a 32-bit binary is launching a 64-bit
-    /// binary.
-    const POINTER_SIZE_CONSERVATIVE: usize = 8;
-    POINTER_SIZE_CONSERVATIVE // size for the pointer in envp**
-      + key.as_ref().len()    // size for the variable name
-      + 1                     // size for the '=' sign
-      + value.as_ref().len()  // size for the value
-      + 1 // terminating NULL
+fn env_size(override_envs: &FxHashMap<String, String>) -> usize {
+    std::env::vars_os()
+        .map(|(key, value)| {
+            if key
+                .to_str()
+                .map(|key| override_envs.contains_key(key))
+                .unwrap_or(false)
+            {
+                // key is in override_envs; add it later.
+                0
+            } else {
+                environment_variable_size(&key, &value)
+            }
+        })
+        .sum::<usize>()
+        + override_envs
+            .iter()
+            .map(|(key, value)| environment_variable_size(key, value))
+            .sum::<usize>()
 }
 
 impl<'a> Partitions<'a> {
@@ -96,7 +144,7 @@ impl<'a> Partitions<'a> {
         concurrency: usize,
     ) -> anyhow::Result<Self> {
         let max_per_batch = max(4, filenames.len().div_ceil(concurrency));
-        let mut max_cli_length = platform_max_cli_length();
+        let mut arg_max = platform_max_cli_length();
 
         let cmd = Path::new(&entry[0]);
         if cfg!(windows)
@@ -107,54 +155,34 @@ impl<'a> Partitions<'a> {
             // Reduce max length for batch files on Windows due to cmd.exe limitations.
             // 1024 is additionally subtracted to give headroom for further
             // expansion inside the batch file.
-            max_cli_length = 8192 - 1024;
+            arg_max = 8192 - 1024;
+        } else if cfg!(unix) {
+            // We have to share space with the environment variables
+            arg_max -= env_size(&hook.env);
+            // Account for the terminating NULL entry
+            arg_max -= POINTER_SIZE_CONSERVATIVE;
         }
 
-        if cfg!(unix) {
-            // Reserve space for environment variables.
-            let env_size = std::env::vars_os()
-                .map(|(key, value)| {
-                    if key
-                        .to_str()
-                        .map(|key| hook.env.contains_key(key))
-                        .unwrap_or(false)
-                    {
-                        // key is in hook.env; add it later.
-                        0
-                    } else {
-                        environment_variable_size(&key, &value)
-                    }
-                })
-                .sum::<usize>()
-                + hook
-                    .env
-                    .iter()
-                    .map(|(key, value)| environment_variable_size(key, value))
-                    .sum::<usize>();
-            max_cli_length = max_cli_length.saturating_sub(env_size);
-        }
+        let args_size = entry
+            .iter()
+            .chain(hook.args.iter())
+            .map(arg_size)
+            .sum::<usize>()
+            + POINTER_SIZE_CONSERVATIVE; // terminating NULL
 
-        let command_length = entry.iter().map(String::len).sum::<usize>()
-            + entry.len()
-            + hook.args.iter().map(String::len).sum::<usize>()
-            + hook.args.len();
-
-        // `+ 1` is the space/null separator between the fixed command and the first filename.
-        let fixed_bytes = command_length + 1;
-
-        if fixed_bytes >= max_cli_length {
+        if args_size >= arg_max {
             anyhow::bail!(
-                "Command line length ({fixed_bytes} bytes) exceeds platform limit ({max_cli_length} bytes).
+                "Command line length ({args_size} bytes) exceeds platform limit ({arg_max} bytes).
                 \nhint: Shorten the hook `entry`/`args` or wrap the command in a script to reduce command-line length.",
             );
         }
+        arg_max -= args_size;
 
         Ok(Self {
             filenames,
             current_index: 0,
-            command_length,
             max_per_batch,
-            max_cli_length,
+            remaining_arg_length: arg_max,
         })
     }
 }
@@ -174,19 +202,17 @@ impl<'a> Iterator for Partitions<'a> {
         }
 
         let start_index = self.current_index;
-        let mut current_length = self.command_length + 1;
+        let mut remaining_length = self.remaining_arg_length;
 
         while self.current_index < self.filenames.len() {
             let filename = self.filenames[self.current_index];
-            let length = filename.as_os_str().len() + 1;
+            let length = arg_size(filename);
 
-            if current_length + length > self.max_cli_length
-                || self.current_index - start_index >= self.max_per_batch
-            {
+            if length > remaining_length || self.current_index - start_index >= self.max_per_batch {
                 break;
             }
 
-            current_length += length;
+            remaining_length -= length;
             self.current_index += 1;
         }
 
@@ -194,12 +220,10 @@ impl<'a> Iterator for Partitions<'a> {
             // If we couldn't add even a single file to this batch, it means the file
             // is too long to fit in the command line by itself.
             let filename = self.filenames[self.current_index];
-            let filename_length = filename.as_os_str().len() + 1;
+            let length = arg_size(filename);
             panic!(
-                "Filename `{}` is too long ({filename_length} bytes) to fit in command line (max_cli_length = {}, command_length = {})",
+                "Filename `{}` is too long ({length} bytes) to fit in command line (remaining {remaining_length} bytes).",
                 filename.display(),
-                self.max_cli_length,
-                self.command_length,
             );
         } else {
             Some(&self.filenames[start_index..self.current_index])
@@ -247,16 +271,14 @@ mod tests {
     /// This bypasses the Hook requirement by directly constructing the struct.
     fn create_test_partitions<'a>(
         filenames: &'a [&'a Path],
-        command_length: usize,
-        max_cli_length: usize,
+        remaining_arg_length: usize,
         max_per_batch: usize,
     ) -> Partitions<'a> {
         Partitions {
             filenames,
             current_index: 0,
-            command_length,
+            remaining_arg_length,
             max_per_batch,
-            max_cli_length,
         }
     }
 
@@ -267,7 +289,7 @@ mod tests {
         let file3 = PathBuf::from("file3.txt");
         let filenames: Vec<&Path> = vec![&file1, &file2, &file3];
 
-        let partitions = create_test_partitions(&filenames, 100, 4096, 10);
+        let partitions = create_test_partitions(&filenames, 4096, 10);
 
         let total_files: usize = partitions.map(<[&Path]>::len).sum();
 
@@ -279,7 +301,7 @@ mod tests {
     fn test_partitions_empty_filenames() {
         let filenames: Vec<&Path> = vec![];
 
-        let mut partitions = create_test_partitions(&filenames, 100, 4096, 10);
+        let mut partitions = create_test_partitions(&filenames, 4096, 10);
 
         // Should return empty slice once, then None
         let batch = partitions.next();
@@ -299,7 +321,7 @@ mod tests {
         let file3 = PathBuf::from("file3.txt");
         let filenames: Vec<&Path> = vec![&file1, &long_file, &file3];
 
-        let mut partitions = create_test_partitions(&filenames, 100, 1000, 10);
+        let mut partitions = create_test_partitions(&filenames, 1000, 10);
 
         // First batch should succeed with file1
         let batch1 = partitions.next();
@@ -318,7 +340,7 @@ mod tests {
             .collect();
         let file_refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
 
-        let partitions = create_test_partitions(&file_refs, 100, 100_000, 25);
+        let partitions = create_test_partitions(&file_refs, 100_000, 25);
 
         let all_batches: Vec<_> = partitions.map(<[&Path]>::len).collect();
 
@@ -339,7 +361,7 @@ mod tests {
         let file_refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
 
         // Set a small max_cli_length to force multiple batches
-        let partitions = create_test_partitions(&file_refs, 50, 150, 100);
+        let partitions = create_test_partitions(&file_refs, 100, 100);
 
         let all_batches: Vec<_> = partitions.map(<[&Path]>::len).collect();
 
