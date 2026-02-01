@@ -174,7 +174,7 @@ The hook repository can include a `Project.toml` (or `JuliaProject.toml`) and op
 
 `language_version` is not supported for Julia hooks yet. It uses the system `julia` installation.
 
-The hook `entry` is executed using `julia --project=<env_path> --startup-file=no`.
+The hook `entry` should be a path to a julia source file relative to the hook repository (optionally with arguments). It is executed using `julia --project=<env_path> --startup-file=no`.
 
 ### lua
 
