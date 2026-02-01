@@ -26,6 +26,7 @@ env:
   GHC_VERSION: "9.14.1" # Preinstalled in ubuntu-24.04 runner image
   CABAL_VERSION: "3.16.1.0"
   JULIA_VERSION: "1.12.4"
+  DENO_VERSION: "2"
 
   # Cargo env vars
   CARGO_INCREMENTAL: 0
@@ -410,6 +411,7 @@ jobs:
           - windows-latest
         language:
           - bun
+          - deno
           - docker
           - golang
           - haskell
@@ -513,6 +515,20 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: "Install Deno"
+        if: ${{ matrix.language == 'deno' }}
+        uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+
+      - name: "Cache GHC"
+        if: ${{ matrix.language == 'haskell' }}
+        id: cache-haskell
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: ~/.ghcup
+          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
+          restore-keys: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
       - name: "Install GHC and Cabal"
         if: ${{ matrix.language == 'haskell' }}
         uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c # v2.10.3
