@@ -32,7 +32,7 @@ impl LanguageImpl for Julia {
 
         debug!(%hook, target = %info.env_path.display(), "Installing Julia environment");
 
-        std::fs::create_dir_all(&info.env_path)?;
+        fs_err::tokio::create_dir_all(&info.env_path).await?;
         let search_path = hook.repo_path().unwrap_or_else(|| hook.work_dir());
 
         let find_src = |names: &[&str]| {
@@ -45,24 +45,24 @@ impl LanguageImpl for Julia {
         // Copy Project.toml if exists
         let project_dest = info.env_path.join("Project.toml");
         if let Some(src) = find_src(&["JuliaProject.toml", "Project.toml"]) {
-            std::fs::copy(src, project_dest)?;
+            fs_err::tokio::copy(src, project_dest).await?;
         } else {
             // Create an empty file to ensure this is a Julia project
-            std::fs::File::create(project_dest)?;
+            fs_err::tokio::File::create(project_dest).await?;
         }
 
         // Copy Manifest.toml (lock) if exists
         if let Some(src) = find_src(&["JuliaManifest.toml", "Manifest.toml"]) {
-            std::fs::copy(src, info.env_path.join("Manifest.toml"))?;
+            fs_err::tokio::copy(src, info.env_path.join("Manifest.toml")).await?;
         }
 
-        let julia_code = r"
+        let julia_code = indoc::indoc! {r"
             using Pkg
             Pkg.instantiate()
             if !isempty(ARGS)
                 Pkg.add(ARGS)
             end
-        ";
+        "};
 
         Cmd::new("julia", "instantiate julia environment")
             .current_dir(search_path)
