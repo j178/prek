@@ -171,3 +171,38 @@ fn script_file() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn remote_hook() {
+    let context = TestContext::new();
+
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/prek-test-repos/julia-hooks
+            rev: v1.0.0
+            hooks:
+              - id: hello
+                always_run: true
+                verbose: true
+    "});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters, context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello....................................................................Passed
+    - hook id: hello
+    - duration: [TIME]
+
+      This is a remote julia hook
+      Args: hello
+
+    ----- stderr -----
+    ");
+}

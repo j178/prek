@@ -107,7 +107,14 @@ impl LanguageImpl for Julia {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let env_dir = hook.env_path().expect("Julia must have env path");
-        let entry = hook.entry.resolve(None)?;
+
+        let mut entry = hook.entry.split()?;
+        if let Some(repo_path) = hook.repo_path() {
+            let jl_path = repo_path.join(&entry[0]);
+            if jl_path.exists() {
+                entry[0] = jl_path.to_string_lossy().to_string();
+            }
+        }
 
         let run = async |batch: &[&Path]| {
             let mut output = Cmd::new("julia", "run julia hook")
