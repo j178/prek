@@ -36,6 +36,7 @@ impl EnvVars {
     pub const PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT: &'static str =
         "PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT";
     pub const PREK_INTERNAL__BUN_BINARY_NAME: &'static str = "PREK_INTERNAL__BUN_BINARY_NAME";
+    pub const PREK_INTERNAL__DENO_BINARY_NAME: &'static str = "PREK_INTERNAL__DENO_BINARY_NAME";
     pub const PREK_INTERNAL__GO_BINARY_NAME: &'static str = "PREK_INTERNAL__GO_BINARY_NAME";
     pub const PREK_INTERNAL__NODE_BINARY_NAME: &'static str = "PREK_INTERNAL__NODE_BINARY_NAME";
     pub const PREK_INTERNAL__RUSTUP_BINARY_NAME: &'static str = "PREK_INTERNAL__RUSTUP_BINARY_NAME";
@@ -58,6 +59,9 @@ impl EnvVars {
 
     // Bun related
     pub const BUN_INSTALL: &'static str = "BUN_INSTALL";
+
+    // Deno related
+    pub const DENO_DIR: &'static str = "DENO_DIR";
 
     // GitHub API authentication (to avoid rate limits)
     pub const GITHUB_TOKEN: &'static str = "GITHUB_TOKEN";

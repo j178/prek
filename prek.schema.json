@@ -32,6 +32,9 @@
         "dart": {
           "type": "string"
         },
+        "deno": {
+          "type": "string"
+        },
         "docker": {
           "type": "string"
         },
@@ -470,6 +473,7 @@
         "conda",
         "coursier",
         "dart",
+        "deno",
         "docker",
         "docker_image",
         "dotnet",
