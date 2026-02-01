@@ -160,15 +160,19 @@ fn invalid_config() {
     context.write_pre_commit_config("invalid: config");
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to parse `.pre-commit-config.yaml`
-      caused by: missing field `repos`
-    "#);
+      caused by: error: line 1 column 1: missing field `repos` at line 1, column 1
+     --> <input>:1:1
+      |
+    1 | invalid: config
+      | ^ missing field `repos` at line 1, column 1
+    ");
 
     context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
@@ -1920,15 +1924,22 @@ fn minimum_prek_version() {
         )])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters, context.run(), @r#"
+    cmd_snapshot!(filters, context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to parse `.pre-commit-config.yaml`
-      caused by: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek.
-    "#);
+      caused by: error: line 1 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek. at line 1, column 23
+     --> <input>:1:23
+      |
+    1 | minimum_prek_version: 10.0.0
+      |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek. at line 1, column 23
+    2 | repos:
+    3 |   - repo: local
+      |
+    ");
 }
 
 /// Run hooks that would echo color.

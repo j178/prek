@@ -381,10 +381,10 @@ async fn collect_files_from_args(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::GlobPatterns;
 
     fn glob_pattern(pattern: &str) -> FilePattern {
-        serde_yaml::from_str::<FilePattern>(&format!("glob: {pattern}"))
-            .expect("glob pattern should deserialize")
+        FilePattern::Glob(GlobPatterns::new(vec![pattern.to_string()]).unwrap())
     }
 
     #[test]

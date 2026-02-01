@@ -899,13 +899,21 @@ fn install_invalid_config_warning() {
     "});
 
     // Install should succeed but show a warning about the invalid config.
-    cmd_snapshot!(context.filters(), context.install(), @r#"
+    cmd_snapshot!(context.filters(), context.install(), @"
     success: true
     exit_code: 0
     ----- stdout -----
     prek installed at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    warning: Failed to parse `.pre-commit-config.yaml`: Invalid remote repo: missing field `rev`
-    "#);
+    warning: Failed to parse `.pre-commit-config.yaml`: error: line 2 column 5: Invalid remote repo: missing field `rev` at line 2, column 5
+     --> <input>:2:5
+      |
+    1 | repos:
+    2 |   - repo: https://github.com/pre-commit/pre-commit-hooks
+      |     ^ Invalid remote repo: missing field `rev` at line 2, column 5
+    3 |     hooks:
+    4 |       - id: trailing-whitespace
+      |
+    ");
 }

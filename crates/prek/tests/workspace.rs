@@ -812,14 +812,18 @@ fn skips() -> Result<()> {
     context.git_add(".");
 
     // Should error out because of the invalid config
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to parse `project3/.pre-commit-config.yaml`
-      caused by: did not find expected node content at line 2 column 1, while parsing a flow node
+      caused by: error: line 1 column 15: unclosed bracket '[' at line 1, column 15
+     --> <input>:1:15
+      |
+    1 | invalid_yaml: [
+      |               ^ unclosed bracket '[' at line 1, column 15
     ");
 
     // Should skip the invalid config

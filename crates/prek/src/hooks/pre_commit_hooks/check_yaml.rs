@@ -2,7 +2,6 @@ use std::path::Path;
 
 use anyhow::Result;
 use clap::Parser;
-use serde::Deserialize;
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
@@ -43,22 +42,30 @@ async fn check_file(
         return Ok((0, Vec::new()));
     }
 
-    let deserializer = serde_yaml::Deserializer::from_slice(&content);
+    let options = serde_saphyr::Options {
+        ignore_binary_tag_for_string: true,
+        ..Default::default()
+    };
     if allow_multi_docs {
-        for doc in deserializer {
-            if let Err(e) = serde_yaml::Value::deserialize(doc) {
-                let error_message =
-                    format!("{}: Failed to yaml decode ({e})\n", filename.display());
-                return Ok((1, error_message.into_bytes()));
-            }
+        if let Err(e) = serde_saphyr::from_slice_multiple_with_options::<serde_json::Value>(
+            &content,
+            options.clone(),
+        ) {
+            let error_message = format!("{}: Failed to yaml decode ({e})\n", filename.display());
+            return Ok((1, error_message.into_bytes()));
         }
         Ok((0, Vec::new()))
     } else {
-        match serde_yaml::from_slice::<serde_yaml::Value>(&content) {
+        match serde_saphyr::from_slice_with_options::<serde_json::Value>(&content, options) {
             Ok(_) => Ok((0, Vec::new())),
             Err(e) => {
+                // Remove programmatic suggestion from error message
+                // TODO: bring up an issue in serde-saphyr to improve error messages
+                let err = e
+                    .to_string()
+                    .replace("; use from_multiple or from_multiple_with_options", "");
                 let error_message =
-                    format!("{}: Failed to yaml decode ({e})\n", filename.display());
+                    format!("{}: Failed to yaml decode ({err})\n", filename.display());
                 Ok((1, error_message.into_bytes()))
             }
         }

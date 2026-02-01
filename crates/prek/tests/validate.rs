@@ -20,14 +20,14 @@ fn validate_config() -> anyhow::Result<()> {
     ");
 
     context.write_pre_commit_config(indoc::indoc! {r"
-            repos:
-              - repo: https://github.com/pre-commit/pre-commit-hooks
-                rev: v5.0.0
-                hooks:
-                  - id: trailing-whitespace
-                  - id: end-of-file-fixer
-                  - id: check-json
-        "});
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: trailing-whitespace
+              - id: end-of-file-fixer
+              - id: check-json
+    "});
     // Validate one file.
     cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @r"
     success: true
@@ -47,17 +47,85 @@ fn validate_config() -> anyhow::Result<()> {
         "})?;
 
     // Validate multiple files.
-    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE).arg("config-1.yaml"), @r"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE).arg("config-1.yaml"), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to parse `config-1.yaml`
-      caused by: Invalid remote repo: missing field `rev`
+      caused by: error: line 2 column 5: Invalid remote repo: missing field `rev` at line 2, column 5
+     --> <input>:2:5
+      |
+    1 | repos:
+    2 |   - repo: https://github.com/pre-commit/pre-commit-hooks
+      |     ^ Invalid remote repo: missing field `rev` at line 2, column 5
     ");
 
     Ok(())
+}
+
+#[test]
+fn invalid_config_error() {
+    let context = TestContext::new();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            hooks:
+              - id: trailing-whitespace
+              - id: end-of-file-fixer
+              - id: check-json
+            rev: 1.0
+    "});
+
+    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: error: line 2 column 5: Invalid remote repo: invalid type: floating point `1.0`, expected a string at line 2, column 5
+     --> <input>:2:5
+      |
+    1 | repos:
+    2 |   - repo: https://github.com/pre-commit/pre-commit-hooks
+      |     ^ Invalid remote repo: invalid type: floating point `1.0`, expected a string at line 2, column 5
+    3 |     hooks:
+    4 |       - id: trailing-whitespace
+      |
+    ");
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v6.0.0
+            hooks:
+              - id: trailing-whitespace
+              - id: end-of-file-fixer
+          - repo: local
+            hooks:
+              - name: check-json
+    "});
+
+    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: error: line 7 column 5: Invalid local repo: missing field `id` at line 7, column 5
+     --> <input>:7:5
+      |
+    5 |       - id: trailing-whitespace
+    6 |       - id: end-of-file-fixer
+    7 |   - repo: local
+      |     ^ Invalid local repo: missing field `id` at line 7, column 5
+    8 |     hooks:
+    9 |       - name: check-json
+      |
+    ");
 }
 
 #[test]
@@ -109,14 +177,21 @@ fn validate_manifest() -> anyhow::Result<()> {
         "})?;
 
     // Validate multiple files.
-    cmd_snapshot!(context.filters(), context.validate_manifest().arg(".pre-commit-hooks.yaml").arg("hooks-1.yaml"), @r"
+    cmd_snapshot!(context.filters(), context.validate_manifest().arg(".pre-commit-hooks.yaml").arg("hooks-1.yaml"), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to parse `hooks-1.yaml`
-      caused by: .[0]: missing field `entry` at line 1 column 5
+      caused by: error: line 1 column 5: missing field `entry` at line 1, column 5
+     --> <input>:1:5
+      |
+    1 | -   id: check-added-large-files
+      |     ^ missing field `entry` at line 1, column 5
+    2 |     name: check for added large files
+    3 |     description: prevents giant files from being committed.
+      |
     ");
 
     Ok(())
