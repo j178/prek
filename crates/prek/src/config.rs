@@ -241,6 +241,7 @@ pub enum Language {
     Conda,
     Coursier,
     Dart,
+    Deno,
     Docker,
     DockerImage,
     Dotnet,
