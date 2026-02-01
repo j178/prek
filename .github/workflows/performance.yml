@@ -31,7 +31,7 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-      - uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+      - uses: taiki-e/install-action@386d9ef5a1dde23219d42c562ab251ed9ce92f98 # v2.67.9
         with:
           tool: cargo-bloat
 
