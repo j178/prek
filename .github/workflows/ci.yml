@@ -25,6 +25,7 @@ env:
   LUAROCKS_VERSION: "3.12.2"
   GHC_VERSION: "9.8.2" # Don't upgrade, because higher version is very slow to build
   CABAL_VERSION: "3.16.1.0"
+  DENO_VERSION: "2"
 
   # Cargo env vars
   CARGO_INCREMENTAL: 0
@@ -400,6 +401,7 @@ jobs:
           - windows-latest
         language:
           - bun
+          - deno
           - docker
           - golang
           - haskell
@@ -497,6 +499,12 @@ jobs:
         uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
         with:
           bun-version: ${{ env.BUN_VERSION }}
+
+      - name: "Install Deno"
+        if: ${{ matrix.language == 'deno' }}
+        uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
 
       - name: "Cache GHC"
         if: ${{ matrix.language == 'haskell' }}

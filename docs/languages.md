@@ -29,6 +29,7 @@ Languages with managed toolchain downloads in prek today:
 - [Python](#python)
 - [Node](#node)
 - [Bun](#bun)
+- [Deno](#deno)
 - [Golang](#golang)
 - [Rust](#rust)
 
@@ -385,10 +386,74 @@ Use `script` for simple repository scripts that only need file paths and no mana
 
 ### deno
 
-**Status in prek:** 🚧 WIP.
+**Status in prek:** ✅ Supported.
 
-prek has experimental support in progress. pre-commit does not have a native `deno` language.
+prek installs Deno hooks by running `deno cache` for the entry script and `deno add` for additional dependencies. The hook runs with an isolated `DENO_DIR` for cache separation.
 
-Tracking: [#619](https://github.com/j178/prek/issues/619)
+Deno hooks run without needing a pre-installed Deno runtime when toolchain download is available.
+
+#### `language_version`
+
+Supported formats:
+
+- `default` or `system`
+- `deno`, `deno@latest`
+- `deno@x`, `x` (major version)
+- `deno@x.y`, `x.y` (major.minor version)
+- `deno@x.y.z`, `x.y.z` (exact version)
+- Semver ranges like `>=x.y, <x+1.0`
+- Absolute path to a Deno executable
+
+#### Using npm packages
+
+Deno supports npm packages via the `npm:` prefix. For hooks that use npm packages, specify the entry using `deno run npm:package`:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: eslint
+        name: ESLint
+        language: deno
+        entry: deno run -A npm:eslint
+        types: [ts, tsx, js, jsx]
+```
+
+For JSR packages, use the `jsr:` prefix:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: deno-lint
+        name: Deno Lint
+        language: deno
+        entry: deno lint
+        types: [ts, tsx, js, jsx]
+```
+
+#### Built-in commands
+
+Deno's built-in commands (`deno fmt`, `deno lint`, `deno check`) work directly:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: deno-fmt
+        name: Deno Format
+        language: deno
+        entry: deno fmt
+        types: [ts, tsx, js, jsx, json, md]
+      - id: deno-lint
+        name: Deno Lint
+        language: deno
+        entry: deno lint
+        types: [ts, tsx, js, jsx]
+```
+
+!!! note "prek-only"
+
+    Deno language support is a prek extension. pre-commit does not have native `deno` support.
 
 If you want to help add support for the missing languages, check open issues or start a discussion in the repo.

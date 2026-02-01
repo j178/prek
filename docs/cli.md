@@ -322,6 +322,7 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 <li><code>conda</code></li>
 <li><code>coursier</code></li>
 <li><code>dart</code></li>
+<li><code>deno</code></li>
 <li><code>docker</code></li>
 <li><code>docker-image</code></li>
 <li><code>dotnet</code></li>
