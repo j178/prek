@@ -19,6 +19,7 @@ use crate::store::{CacheBucket, Store, ToolBucket};
 use crate::{archive, hooks, warn_user_once};
 
 mod bun;
+mod deno;
 mod docker;
 mod docker_image;
 mod fail;
@@ -36,6 +37,7 @@ mod system;
 pub mod version;
 
 static BUN: bun::Bun = bun::Bun;
+static DENO: deno::Deno = deno::Deno;
 static DOCKER: docker::Docker = docker::Docker;
 static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
 static FAIL: fail::Fail = fail::Fail;
@@ -130,6 +132,7 @@ impl Language {
         matches!(
             lang,
             Self::Bun
+                | Self::Deno
                 | Self::Docker
                 | Self::DockerImage
                 | Self::Fail
@@ -157,6 +160,7 @@ impl Language {
     pub fn tool_buckets(self) -> &'static [ToolBucket] {
         match self {
             Self::Bun => &[ToolBucket::Bun],
+            Self::Deno => &[ToolBucket::Deno],
             Self::Golang => &[ToolBucket::Go],
             Self::Node => &[ToolBucket::Node],
             Self::Python | Self::Pygrep => &[ToolBucket::Uv, ToolBucket::Python],
@@ -168,6 +172,7 @@ impl Language {
 
     pub fn cache_buckets(self) -> &'static [CacheBucket] {
         match self {
+            Self::Deno => &[CacheBucket::Deno],
             Self::Golang => &[CacheBucket::Go],
             Self::Python | Self::Pygrep => &[CacheBucket::Uv, CacheBucket::Python],
             Self::Rust => &[CacheBucket::Cargo],
@@ -181,7 +186,13 @@ impl Language {
     pub fn supports_language_version(self) -> bool {
         matches!(
             self,
-            Self::Bun | Self::Golang | Self::Node | Self::Python | Self::Ruby | Self::Rust
+            Self::Bun
+                | Self::Deno
+                | Self::Golang
+                | Self::Node
+                | Self::Python
+                | Self::Ruby
+                | Self::Rust
         )
     }
 
@@ -211,6 +222,7 @@ impl Language {
     ) -> Result<InstalledHook> {
         match self {
             Self::Bun => BUN.install(hook, store, reporter).await,
+            Self::Deno => DENO.install(hook, store, reporter).await,
             Self::Docker => DOCKER.install(hook, store, reporter).await,
             Self::DockerImage => DOCKER_IMAGE.install(hook, store, reporter).await,
             Self::Fail => FAIL.install(hook, store, reporter).await,
@@ -232,6 +244,7 @@ impl Language {
     pub async fn check_health(&self, info: &InstallInfo) -> Result<()> {
         match self {
             Self::Bun => BUN.check_health(info).await,
+            Self::Deno => DENO.check_health(info).await,
             Self::Docker => DOCKER.check_health(info).await,
             Self::DockerImage => DOCKER_IMAGE.check_health(info).await,
             Self::Fail => FAIL.check_health(info).await,
@@ -282,6 +295,7 @@ impl Language {
 
         match self {
             Self::Bun => BUN.run(hook, filenames, store, reporter).await,
+            Self::Deno => DENO.run(hook, filenames, store, reporter).await,
             Self::Docker => DOCKER.run(hook, filenames, store, reporter).await,
             Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, store, reporter).await,
             Self::Fail => FAIL.run(hook, filenames, store, reporter).await,

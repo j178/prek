@@ -295,12 +295,14 @@ pub(crate) enum ToolBucket {
     Ruby,
     Rustup,
     Bun,
+    Deno,
 }
 
 impl ToolBucket {
     pub(crate) fn as_str(&self) -> &str {
         match self {
             ToolBucket::Bun => "bun",
+            ToolBucket::Deno => "deno",
             ToolBucket::Go => "go",
             ToolBucket::Node => "node",
             ToolBucket::Python => "python",
@@ -317,12 +319,14 @@ pub(crate) enum CacheBucket {
     Go,
     Python,
     Cargo,
+    Deno,
     Prek,
 }
 
 impl CacheBucket {
     pub(crate) fn as_str(&self) -> &str {
         match self {
+            CacheBucket::Deno => "deno",
             CacheBucket::Go => "go",
             CacheBucket::Prek => "prek",
             CacheBucket::Python => "python",
