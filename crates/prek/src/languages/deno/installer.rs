@@ -219,8 +219,7 @@ impl DenoInstaller {
         };
 
         let filename = format!("deno-{arch}-{os}.zip");
-        let url =
-            format!("https://github.com/denoland/deno/releases/download/v{version}/{filename}");
+        let url = format!("https://dl.deno.land/release/v{version}/{filename}");
         let target = self.root.join(version.to_string());
 
         download_and_extract(&url, &filename, store, async |extracted| {
