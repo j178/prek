@@ -337,6 +337,7 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 <li><code>rust</code></li>
 <li><code>swift</code></li>
 <li><code>pygrep</code></li>
+<li><code>julia</code></li>
 <li><code>script</code></li>
 <li><code>system</code></li>
 </ul></dd><dt id="prek-list--log-file"><a href="#prek-list--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>

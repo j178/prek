@@ -50,6 +50,9 @@
         "haskell": {
           "type": "string"
         },
+        "julia": {
+          "type": "string"
+        },
         "lua": {
           "type": "string"
         },
@@ -485,6 +488,7 @@
         "rust",
         "swift",
         "pygrep",
+        "julia",
         "script",
         "system"
       ]
