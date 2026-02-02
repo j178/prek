@@ -104,7 +104,7 @@ jobs:
       - name: "rustfmt"
         run: cargo fmt --all --check
       - name: Run prek checks
-        uses: j178/prek-action@9d6a3097e0c1865ecce00cfb89fe80f2ee91b547 # v1.0.12
+        uses: j178/prek-action@564dda4cfa5e96aafdc4a5696c4bf7b46baae5ac  # v1.1.0
         env:
           PREK_SKIP: cargo-fmt,cargo-clippy
 
@@ -192,7 +192,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@81a2f66614862089b24532663f669a485d79c889 # v2.67.10
+        uses: taiki-e/install-action@650c5ca14212efbbf3e580844b04bdccf68dac31  # v2.67.18
         with:
           tool: cargo-shear
       - run: cargo shear
@@ -216,12 +216,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@81a2f66614862089b24532663f669a485d79c889 # v2.67.10
+        uses: taiki-e/install-action@650c5ca14212efbbf3e580844b04bdccf68dac31  # v2.67.18
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@81a2f66614862089b24532663f669a485d79c889 # v2.67.10
+        uses: taiki-e/install-action@650c5ca14212efbbf3e580844b04bdccf68dac31  # v2.67.18
         with:
           tool: cargo-llvm-cov
 
@@ -280,17 +280,17 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@81a2f66614862089b24532663f669a485d79c889 # v2.67.10
+        uses: taiki-e/install-action@650c5ca14212efbbf3e580844b04bdccf68dac31  # v2.67.18
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@81a2f66614862089b24532663f669a485d79c889 # v2.67.10
+        uses: taiki-e/install-action@650c5ca14212efbbf3e580844b04bdccf68dac31  # v2.67.18
         with:
           tool: cargo-llvm-cov
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
+        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41  # v7.2.1
         with:
           version: ${{ env.UV_VERSION }}
 
@@ -343,17 +343,17 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@81a2f66614862089b24532663f669a485d79c889 # v2.67.10
+        uses: taiki-e/install-action@650c5ca14212efbbf3e580844b04bdccf68dac31  # v2.67.18
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@81a2f66614862089b24532663f669a485d79c889 # v2.67.10
+        uses: taiki-e/install-action@650c5ca14212efbbf3e580844b04bdccf68dac31  # v2.67.18
         with:
           tool: cargo-llvm-cov
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
+        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41  # v7.2.1
         with:
           version: ${{ env.UV_VERSION }}
           cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
@@ -438,12 +438,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@81a2f66614862089b24532663f669a485d79c889 # v2.67.10
+        uses: taiki-e/install-action@650c5ca14212efbbf3e580844b04bdccf68dac31  # v2.67.18
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@81a2f66614862089b24532663f669a485d79c889 # v2.67.10
+        uses: taiki-e/install-action@650c5ca14212efbbf3e580844b04bdccf68dac31  # v2.67.18
         with:
           tool: cargo-llvm-cov
 
@@ -452,7 +452,7 @@ jobs:
 
       - name: "Install uv"
         if: ${{ matrix.language == 'python' }}
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
+        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41  # v7.2.1
         with:
           version: ${{ env.UV_VERSION }}
 
