@@ -378,6 +378,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [ast-grep/ast-grep](https://github.com/ast-grep/ast-grep.github.io/commit/e30818144b2967a7f9172c8cf2f4596bba219bf5)
 - [commitizen-tools/commitizen](https://github.com/commitizen-tools/commitizen)
 - [cocoindex-io/cocoindex](https://github.com/cocoindex-io/cocoindex/pull/1564)
+- [cachix/devenv](https://github.com/cachix/devenv/pull/2304)
 
 <!-- --8<-- [end: why] -->
 
