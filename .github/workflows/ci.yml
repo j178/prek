@@ -111,6 +111,7 @@ jobs:
   check-release:
     name: "check release"
     needs: plan
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -270,6 +271,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+        if: ${{ matrix.os == 'ubuntu-latest' }}
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
@@ -411,14 +413,13 @@ jobs:
           - ruby
           - rust
           - swift
-        # Run swift tests only on macOS, as it doesn't need to install Swift on macOS runners.
         exclude:
+          # Docker is only available on ubuntu-latest
           - os: macos-latest
             language: docker
           - os: windows-latest
             language: docker
-          - os: ubuntu-latest
-            language: swift
+          # Swift is preinstalled on ubuntu and macOS; Windows requires setup which is slow
           - os: windows-latest
             language: swift
     steps:
@@ -467,6 +468,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+          # Dummy dependency path to satisfy required input while enabling caching
           cache-dependency-path: LICENSE
 
       - name: "Install Go"
@@ -474,6 +476,7 @@ jobs:
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version: ${{ env.GO_VERSION }}
+          # Dummy dependency path to satisfy required input while enabling caching
           cache-dependency-path: LICENSE
 
       - name: "Install Lua"
@@ -558,13 +561,15 @@ jobs:
 
   performance:
     needs: plan
-    if: ${{ needs.plan.outputs.test-code == 'true' }}
+    if: ${{ needs.plan.outputs.run-bench == 'true' }}
     uses: ./.github/workflows/performance.yml
     with:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
 
   ecosystem-cpython:
     name: "ecosystem | cpython"
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
@@ -627,8 +632,6 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
