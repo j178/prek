@@ -41,6 +41,8 @@ mod process;
 #[cfg(all(unix, feature = "profiler"))]
 mod profiler;
 mod run;
+#[cfg(feature = "schemars")]
+mod schema;
 mod store;
 mod version;
 mod warnings;
