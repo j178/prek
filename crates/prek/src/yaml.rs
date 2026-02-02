@@ -4,43 +4,57 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use anyhow::Result;
-use bstr::ByteSlice;
-use libyaml::{Emitter, Encoding, Event, ScalarStyle};
+use std::fmt::Write;
 
 /// Serialize a YAML scalar while preserving the caller's quote style.
-pub(crate) fn serialize_yaml_scalar(value: &str, quote: &str) -> Result<String> {
-    let style = match quote {
-        "'" => Some(ScalarStyle::SingleQuoted),
-        "\"" => Some(ScalarStyle::DoubleQuoted),
-        _ => None,
-    };
-
-    let mut writer = Vec::new();
-    {
-        let mut emitter = Emitter::new(&mut writer)?;
-        emitter.emit(Event::StreamStart {
-            encoding: Some(Encoding::Utf8),
-        })?;
-        emitter.emit(Event::DocumentStart {
-            version: None,
-            tags: vec![],
-            implicit: true,
-        })?;
-        emitter.emit(Event::Scalar {
-            anchor: None,
-            tag: None,
-            value: value.to_owned(),
-            plain_implicit: true,
-            quoted_implicit: true,
-            style,
-        })?;
-        emitter.emit(Event::DocumentEnd { implicit: true })?;
-        emitter.emit(Event::StreamEnd {})?;
-        emitter.flush()?;
+pub(crate) fn serialize_yaml_scalar(value: &str, quote: &str) -> anyhow::Result<String> {
+    match quote {
+        "'" => Ok(format!("'{}'", escape_single_quoted(value))),
+        "\"" => Ok(format!("\"{}\"", escape_double_quoted(value))),
+        _ => {
+            if is_simple_plain(value) {
+                Ok(value.to_owned())
+            } else {
+                // Defer to serde-saphyr to select quoting/escaping for non-trivial scalars.
+                let rendered = serde_saphyr::to_string(&value)?;
+                Ok(rendered.trim_end_matches('\n').to_owned())
+            }
+        }
     }
-    let trimmed = writer.trim_end();
-    Ok(str::from_utf8(trimmed)?.to_owned())
+}
+
+/// Fast-path: allow simple, plain scalars we want to keep unquoted.
+fn is_simple_plain(value: &str) -> bool {
+    if value.is_empty() {
+        return false;
+    }
+    value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_' | '/' | '+' | '@'))
+}
+
+/// YAML single-quoted strings escape a single quote by doubling it.
+fn escape_single_quoted(value: &str) -> String {
+    value.replace('\'', "''")
+}
+
+/// YAML double-quoted strings use backslash escapes for control characters.
+fn escape_double_quoted(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\t' => escaped.push_str("\\t"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            c if c.is_control() => {
+                let _ = write!(escaped, "\\u{:04X}", c as u32);
+            }
+            c => escaped.push(c),
+        }
+    }
+    escaped
 }
 
 #[cfg(test)]
@@ -61,11 +75,32 @@ mod tests {
         assert_eq!(rendered, "'123'");
         let rendered = serialize_yaml_scalar("123", "\"").unwrap();
         assert_eq!(rendered, "\"123\"");
+        let rendered = serialize_yaml_scalar("a:b", "").unwrap();
+        assert_eq!(rendered, "a:b");
         let rendered = serialize_yaml_scalar("a:b", "'").unwrap();
         assert_eq!(rendered, "'a:b'");
         let rendered = serialize_yaml_scalar("a\"b", "\"").unwrap();
         assert_eq!(rendered, "\"a\\\"b\"");
         let rendered = serialize_yaml_scalar("a'b", "'").unwrap();
         assert_eq!(rendered, "'a''b'");
+
+        let rendered = serialize_yaml_scalar("abc def", "").unwrap();
+        assert_eq!(rendered, "abc def");
+        let rendered = serialize_yaml_scalar("abc def", "'").unwrap();
+        assert_eq!(rendered, "'abc def'");
+        let rendered = serialize_yaml_scalar("abc def", "\"").unwrap();
+        assert_eq!(rendered, "\"abc def\"");
+    }
+
+    #[test]
+    fn serialize_yaml_scalar_quotes_and_escapes() {
+        let rendered = serialize_yaml_scalar("a\\b", "\"").unwrap();
+        assert_eq!(rendered, "\"a\\\\b\"");
+        let rendered = serialize_yaml_scalar("a\nb", "\"").unwrap();
+        assert_eq!(rendered, "\"a\\nb\"");
+        let rendered = serialize_yaml_scalar("a\tb", "\"").unwrap();
+        assert_eq!(rendered, "\"a\\tb\"");
+        let rendered = serialize_yaml_scalar("a\\b", "'").unwrap();
+        assert_eq!(rendered, "'a\\b'");
     }
 }
