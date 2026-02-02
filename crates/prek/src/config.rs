@@ -1362,6 +1362,60 @@ mod tests {
         "};
         let result = serde_saphyr::from_str::<Config>(yaml).unwrap();
         insta::assert_debug_snapshot!(result);
+
+        let yaml = indoc::indoc! {r"
+            repos:
+              - rev: v1.0.0
+                repo: local
+                hooks:
+                  - id: typos
+        "};
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 5 column 9: missing field `name` at line 5, column 9
+         --> <input>:5:9
+          |
+        3 |     repo: local
+        4 |     hooks:
+        5 |       - id: typos
+          |         ^ missing field `name` at line 5, column 9
+        ");
+
+        let yaml = indoc::indoc! {r"
+            repos:
+              - rev: v1.0.0
+                repo: meta
+                hooks:
+                  - id: typos
+        "};
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 5 column 9: unknown meta hook id `typos` at line 5, column 9
+         --> <input>:5:9
+          |
+        3 |     repo: meta
+        4 |     hooks:
+        5 |       - id: typos
+          |         ^ unknown meta hook id `typos` at line 5, column 9
+        ");
+
+        let yaml = indoc::indoc! {r"
+            repos:
+              - rev: v1.0.0
+                repo: builtin
+                hooks:
+                  - id: typos
+        "};
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 5 column 9: unknown builtin hook id `typos` at line 5, column 9
+         --> <input>:5:9
+          |
+        3 |     repo: builtin
+        4 |     hooks:
+        5 |       - id: typos
+          |         ^ unknown builtin hook id `typos` at line 5, column 9
+        ");
     }
 
     #[test]
