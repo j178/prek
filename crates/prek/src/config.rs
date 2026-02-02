@@ -1126,12 +1126,24 @@ fn deserialize_and_validate_minimum_version<'de, D>(
 where
     D: Deserializer<'de>,
 {
-    let s = String::deserialize(deserializer)?;
-    if s.is_empty() {
+    let raw = String::deserialize(deserializer)?;
+    let (version_str, upgrade_hint) = match raw.split_once(';') {
+        Some((version, hint)) => {
+            let trimmed_hint = hint.trim();
+            if trimmed_hint.is_empty() {
+                (version, None)
+            } else {
+                (version, Some(trimmed_hint))
+            }
+        }
+        None => (raw.as_str(), None),
+    };
+    let version_str = version_str.trim();
+    if version_str.is_empty() {
         return Ok(None);
     }
 
-    let version = s
+    let version = version_str
         .parse::<semver::Version>()
         .map_err(serde::de::Error::custom)?;
     let cur_version = version::version()
@@ -1139,12 +1151,13 @@ where
         .parse::<semver::Version>()
         .expect("Invalid prek version");
     if version > cur_version {
+        let hint = upgrade_hint.unwrap_or("Please consider updating prek.");
         return Err(serde::de::Error::custom(format!(
-            "Required minimum prek version `{version}` is greater than current version `{cur_version}`. Please consider updating prek.",
+            "Required minimum prek version `{version}` is greater than current version `{cur_version}`. {hint}",
         )));
     }
 
-    Ok(Some(s))
+    Ok(Some(version_str.to_string()))
 }
 
 /// Deserializes a vector of strings and validates that each is a known file type tag.
@@ -1632,6 +1645,52 @@ mod tests {
         2 |   name: Test Hook
         3 |   entry: echo test
           |
+        ");
+    }
+
+    #[test]
+    fn test_upgrade_hint() {
+        // Test that hint is included in error message when version is too new
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: test-hook
+                    name: Test Hook
+                    entry: echo test
+                    language: system
+            minimum_prek_version: '10.0.0; Use `brew upgrade` to upgrade prek'
+        "};
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 8 column 23: Required minimum prek version `10.0.0` is greater than current version `0.3.1`. Use `brew upgrade` to upgrade prek at line 8, column 23
+         --> <input>:8:23
+          |
+        6 |         entry: echo test
+        7 |         language: system
+        8 | minimum_prek_version: '10.0.0; Use `brew upgrade` to upgrade prek'
+          |                       ^ Required minimum prek version `10.0.0` is greater than current version `0.3.1`. Use `brew upgrade` to upgrade prek at line 8, column 23
+        ");
+
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: test-hook
+                    name: Test Hook
+                    entry: echo test
+                    language: system
+            minimum_prek_version: '10.0.0; '
+        "};
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 8 column 23: Required minimum prek version `10.0.0` is greater than current version `0.3.1`. Please consider updating prek. at line 8, column 23
+         --> <input>:8:23
+          |
+        6 |         entry: echo test
+        7 |         language: system
+        8 | minimum_prek_version: '10.0.0; '
+          |                       ^ Required minimum prek version `10.0.0` is greater than current version `0.3.1`. Please consider updating prek. at line 8, column 23
         ");
     }
 

@@ -301,6 +301,15 @@ Example:
 minimum_prek_version: '0.2.0'
 ```
 
+You can append an optional upgrade hint after a semicolon. The hint is shown only
+when validation fails.
+
+Example:
+
+```yaml
+minimum_prek_version: '0.2.0; Use brew upgrade to upgrade prek'
+```
+
 #### `orphan`
 
 <a id="prek-only-orphan"></a>
@@ -820,6 +829,20 @@ Require a minimum `prek` version for this specific hook.
 
 - Type: string (version)
 - Default: unset
+
+You can append an optional upgrade hint after a semicolon. The hint is shown only
+when validation fails.
+
+Example:
+
+```yaml
+hooks:
+  - id: my-hook
+    name: My Hook
+    language: system
+    entry: echo hello
+    minimum_prek_version: '0.2.0; Use brew upgrade to upgrade prek'
+```
 
 ## Environment variables
 
