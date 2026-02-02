@@ -59,14 +59,22 @@ fn builtin_hooks_unknown_hook() {
     "});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to parse `.pre-commit-config.yaml`
-      caused by: Invalid builtin repo: unknown builtin hook id `this-hook-does-not-exist`
+      caused by: error: line 2 column 5: Invalid builtin repo: unknown builtin hook id `this-hook-does-not-exist` at line 2, column 5
+     --> <input>:2:5
+      |
+    1 | repos:
+    2 |   - repo: builtin
+      |     ^ Invalid builtin repo: unknown builtin hook id `this-hook-does-not-exist` at line 2, column 5
+    3 |     hooks:
+    4 |       - id: this-hook-does-not-exist
+      |
     ");
 }
 
@@ -166,7 +174,7 @@ fn check_yaml_hook() -> Result<()> {
     context.git_add(".");
 
     // First run: hooks should fail
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -174,11 +182,20 @@ fn check_yaml_hook() -> Result<()> {
     - hook id: check-yaml
     - exit code: 1
 
-      duplicate.yaml: Failed to yaml decode (duplicate entry with key "a")
-      invalid.yaml: Failed to yaml decode (mapping values are not allowed in this context at line 1 column 5)
+      duplicate.yaml: Failed to yaml decode (error: line 2 column 1: duplicate mapping key: a at line 2, column 1
+       --> <input>:2:1
+        |
+      1 | a: 1
+      2 | a: 2
+        | ^ duplicate mapping key: a at line 2, column 1)
+      invalid.yaml: Failed to yaml decode (error: line 1 column 5: mapping values are not allowed in this context at line 1, column 5
+       --> <input>:1:5
+        |
+      1 | a: b: c
+        |     ^ mapping values are not allowed in this context at line 1, column 5)
 
     ----- stderr -----
-    "#);
+    ");
 
     // Fix the files
     cwd.child("invalid.yaml").write_str("a:\n  b: c")?;
@@ -199,8 +216,6 @@ fn check_yaml_hook() -> Result<()> {
     Ok(())
 }
 
-/// `--allow-multiple-documents` feature is not implemented in Rust,
-/// it should work by delegating to the original Python implementation.
 #[test]
 fn check_yaml_multiple_document() -> Result<()> {
     let context = TestContext::new();
@@ -211,10 +226,10 @@ fn check_yaml_multiple_document() -> Result<()> {
           - repo: builtin
             hooks:
               - id: check-yaml
-                name: Python version
+                name: allow multiple documents
                 args: [ --allow-multiple-documents ]
               - id: check-yaml
-                name: Rust version
+                name: disallow multiple documents
     "});
 
     context
@@ -230,16 +245,22 @@ fn check_yaml_multiple_document() -> Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @"
     success: false
     exit_code: 1
     ----- stdout -----
-    Python version...........................................................Passed
-    Rust version.............................................................Failed
+    allow multiple documents.................................................Passed
+    disallow multiple documents..............................................Failed
     - hook id: check-yaml
     - exit code: 1
 
-      multiple.yaml: Failed to yaml decode (deserializing from YAML containing more than one document is not supported)
+      multiple.yaml: Failed to yaml decode (error: line 4 column 1: multiple YAML documents detected at line 4, column 1
+       --> <input>:4:1
+        |
+      2 | a: 1
+      3 | ---
+      4 | b: 2
+        | ^ multiple YAML documents detected at line 4, column 1)
 
     ----- stderr -----
     ");
@@ -655,7 +676,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     context.git_add(".");
 
     // First run: expect failures and auto-fixes where applicable.
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -692,8 +713,17 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     - hook id: check-yaml
     - exit code: 1
 
-      duplicate.yaml: Failed to yaml decode (duplicate entry with key "a")
-      invalid.yaml: Failed to yaml decode (mapping values are not allowed in this context at line 1 column 5)
+      duplicate.yaml: Failed to yaml decode (error: line 2 column 1: duplicate mapping key: a at line 2, column 1
+       --> <input>:2:1
+        |
+      1 | a: 1
+      2 | a: 2
+        | ^ duplicate mapping key: a at line 2, column 1)
+      invalid.yaml: Failed to yaml decode (error: line 1 column 5: mapping values are not allowed in this context at line 1, column 5
+       --> <input>:1:5
+        |
+      1 | a: b: c
+        |     ^ mapping values are not allowed in this context at line 1, column 5)
     check json...............................................................Failed
     - hook id: check-json
     - exit code: 1
@@ -735,7 +765,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
       app/trailing_ws.txt
 
     ----- stderr -----
-    "#);
+    ");
 
     // Fix YAML and JSON issues, then stage.
     app.child("invalid.yaml").write_str("a:\n  b: c")?;
