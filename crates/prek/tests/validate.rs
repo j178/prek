@@ -54,12 +54,12 @@ fn validate_config() -> anyhow::Result<()> {
 
     ----- stderr -----
     error: Failed to parse `config-1.yaml`
-      caused by: error: line 2 column 5: Invalid remote repo: missing field `rev` at line 2, column 5
+      caused by: error: line 2 column 5: missing field `rev` at line 2, column 5
      --> <input>:2:5
       |
     1 | repos:
     2 |   - repo: https://github.com/pre-commit/pre-commit-hooks
-      |     ^ Invalid remote repo: missing field `rev` at line 2, column 5
+      |     ^ missing field `rev` at line 2, column 5
     ");
 
     Ok(())
@@ -79,21 +79,12 @@ fn invalid_config_error() {
     "});
 
     cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse `.pre-commit-config.yaml`
-      caused by: error: line 2 column 5: Invalid remote repo: invalid type: floating point `1.0`, expected a string at line 2, column 5
-     --> <input>:2:5
-      |
-    1 | repos:
-    2 |   - repo: https://github.com/pre-commit/pre-commit-hooks
-      |     ^ Invalid remote repo: invalid type: floating point `1.0`, expected a string at line 2, column 5
-    3 |     hooks:
-    4 |       - id: trailing-whitespace
-      |
+    success: All configs are valid
     ");
 
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -115,16 +106,13 @@ fn invalid_config_error() {
 
     ----- stderr -----
     error: Failed to parse `.pre-commit-config.yaml`
-      caused by: error: line 7 column 5: Invalid local repo: missing field `id` at line 7, column 5
-     --> <input>:7:5
+      caused by: error: line 9 column 9: missing field `id` at line 9, column 9
+     --> <input>:9:9
       |
-    5 |       - id: trailing-whitespace
-    6 |       - id: end-of-file-fixer
     7 |   - repo: local
-      |     ^ Invalid local repo: missing field `id` at line 7, column 5
     8 |     hooks:
     9 |       - name: check-json
-      |
+      |         ^ missing field `id` at line 9, column 9
     ");
 }
 

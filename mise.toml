@@ -49,7 +49,7 @@ env = { PREK_GENERATE = "1" }
 
 [tasks.generate]
 description = "Generate CLI reference and JSON schema"
-depends = ["generate-cli-reference", "generate-json-schema"]
+run = [{ task = "generate-cli-reference" }, { task = "generate-json-schema" }]
 
 [tasks.build-docs]
 description = "Build documentation"
