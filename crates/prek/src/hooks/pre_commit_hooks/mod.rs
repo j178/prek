@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::str::FromStr;
 
 use anyhow::Result;
 use tracing::debug;
@@ -39,6 +38,8 @@ pub(crate) use mixed_line_ending::mixed_line_ending;
 pub(crate) use no_commit_to_branch::no_commit_to_branch;
 
 /// Hooks from `https://github.com/pre-commit/pre-commit-hooks`.
+#[derive(strum::EnumString)]
+#[strum(serialize_all = "kebab-case")]
 pub(crate) enum PreCommitHooks {
     CheckAddedLargeFiles,
     CheckCaseConflict,
@@ -55,31 +56,6 @@ pub(crate) enum PreCommitHooks {
     DetectPrivateKey,
     NoCommitToBranch,
     TrailingWhitespace,
-}
-
-impl FromStr for PreCommitHooks {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "check-added-large-files" => Ok(Self::CheckAddedLargeFiles),
-            "check-case-conflict" => Ok(Self::CheckCaseConflict),
-            "check-executables-have-shebangs" => Ok(Self::CheckExecutablesHaveShebangs),
-            "end-of-file-fixer" => Ok(Self::EndOfFileFixer),
-            "fix-byte-order-marker" => Ok(Self::FixByteOrderMarker),
-            "check-json" => Ok(Self::CheckJson),
-            "check-merge-conflict" => Ok(Self::CheckMergeConflict),
-            "check-toml" => Ok(Self::CheckToml),
-            "check-symlinks" => Ok(Self::CheckSymlinks),
-            "check-xml" => Ok(Self::CheckXml),
-            "check-yaml" => Ok(Self::CheckYaml),
-            "mixed-line-ending" => Ok(Self::MixedLineEnding),
-            "detect-private-key" => Ok(Self::DetectPrivateKey),
-            "no-commit-to-branch" => Ok(Self::NoCommitToBranch),
-            "trailing-whitespace" => Ok(Self::TrailingWhitespace),
-            _ => Err(()),
-        }
-    }
 }
 
 impl PreCommitHooks {

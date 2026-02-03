@@ -4,10 +4,10 @@ use std::ops::AddAssign;
 use std::path::Path;
 
 use anyhow::Result;
-use clap::ValueEnum;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
+use strum::IntoEnumIterator;
 use tracing::{debug, trace, warn};
 
 use crate::cli::ExitStatus;
@@ -242,8 +242,7 @@ pub(crate) async fn cache_gc(
 
     // Sweep tools/<bucket>
     let tools_root = store.tools_dir();
-    let used_tool_names: FxHashSet<String> =
-        used_tools.iter().map(|t| t.as_str().to_string()).collect();
+    let used_tool_names: FxHashSet<String> = used_tools.iter().map(ToString::to_string).collect();
     let removed_tool_buckets = sweep_dir_by_name(
         RemovalKind::Tools,
         &tools_root,
@@ -260,8 +259,7 @@ pub(crate) async fn cache_gc(
 
     // Sweep cache/<bucket>
     let cache_root = store.cache_dir();
-    let used_cache_names: FxHashSet<String> =
-        used_cache.iter().map(|c| c.as_str().to_string()).collect();
+    let used_cache_names: FxHashSet<String> = used_cache.iter().map(ToString::to_string).collect();
     let removed_cache = sweep_dir_by_name(
         RemovalKind::CacheEntries,
         &cache_root,
@@ -437,11 +435,11 @@ fn sweep_tool_versions(
 ) -> Result<Removal> {
     let mut total = Removal::new(RemovalKind::Tools);
 
-    for bucket in ToolBucket::value_variants() {
-        let bucket_root = store.tools_path(*bucket);
-        let keep_versions = used_tool_versions.get(bucket);
+    for bucket in ToolBucket::iter() {
+        let bucket_root = store.tools_path(bucket);
+        let keep_versions = used_tool_versions.get(&bucket);
         let removed =
-            sweep_tool_bucket_versions(*bucket, &bucket_root, keep_versions, dry_run, verbose)?;
+            sweep_tool_bucket_versions(bucket, &bucket_root, keep_versions, dry_run, verbose)?;
         total += removed;
     }
 
@@ -494,7 +492,7 @@ fn sweep_tool_bucket_versions(
 
         let item = if collect_names {
             Some(RemovalItem::new(
-                format!("{}/{version_name}", bucket.as_str()),
+                format!("{bucket}/{version_name}"),
                 path.to_string_lossy().to_string(),
             ))
         } else {
@@ -619,7 +617,7 @@ fn label_for_entry(
         RemovalKind::Repos => repo_marker.map(|repo| format!("{}@{}", repo.repo, repo.rev)),
         RemovalKind::HookEnvs => hook_marker.map(|info| {
             // Keep this short; more info goes in detail lines.
-            format!("{} env", info.language.as_str())
+            format!("{} env", info.language.as_ref())
         }),
         _ => None,
     }
@@ -643,7 +641,7 @@ fn detail_lines_for_entry(
             lines.push(format!(
                 "{}: {} ({})",
                 "language".dimmed().bold(),
-                info.language.as_str(),
+                info.language.as_ref(),
                 info.language_version
             ));
 

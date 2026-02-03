@@ -96,7 +96,7 @@ pub(crate) async fn list(
                         printer.stdout(),
                         "  {} {}",
                         "Language:".bold().cyan(),
-                        hook.language.as_str()
+                        hook.language.as_ref()
                     )?;
                     writeln!(
                         printer.stdout(),

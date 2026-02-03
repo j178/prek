@@ -207,11 +207,11 @@ impl Store {
 
     /// The path to the tool directory in the store.
     pub(crate) fn tools_path(&self, tool: ToolBucket) -> PathBuf {
-        self.tools_dir().join(tool.as_str())
+        self.tools_dir().join(tool.as_ref())
     }
 
     pub(crate) fn cache_path(&self, tool: CacheBucket) -> PathBuf {
-        self.cache_dir().join(tool.as_str())
+        self.cache_dir().join(tool.as_ref())
     }
 
     /// Scratch path for temporary files.
@@ -286,7 +286,8 @@ impl Store {
     }
 }
 
-#[derive(Copy, Clone, Eq, Hash, PartialEq, clap::ValueEnum)]
+#[derive(Copy, Clone, Eq, Hash, PartialEq, strum::EnumIter, strum::AsRefStr, strum::Display)]
+#[strum(serialize_all = "lowercase")]
 pub(crate) enum ToolBucket {
     Uv,
     Python,
@@ -297,39 +298,14 @@ pub(crate) enum ToolBucket {
     Bun,
 }
 
-impl ToolBucket {
-    pub(crate) fn as_str(&self) -> &str {
-        match self {
-            ToolBucket::Bun => "bun",
-            ToolBucket::Go => "go",
-            ToolBucket::Node => "node",
-            ToolBucket::Python => "python",
-            ToolBucket::Ruby => "ruby",
-            ToolBucket::Rustup => "rustup",
-            ToolBucket::Uv => "uv",
-        }
-    }
-}
-
-#[derive(Copy, Clone, Eq, Hash, PartialEq)]
+#[derive(Copy, Clone, Eq, Hash, PartialEq, strum::AsRefStr, strum::Display)]
+#[strum(serialize_all = "lowercase")]
 pub(crate) enum CacheBucket {
     Uv,
     Go,
     Python,
     Cargo,
     Prek,
-}
-
-impl CacheBucket {
-    pub(crate) fn as_str(&self) -> &str {
-        match self {
-            CacheBucket::Go => "go",
-            CacheBucket::Prek => "prek",
-            CacheBucket::Python => "python",
-            CacheBucket::Cargo => "cargo",
-            CacheBucket::Uv => "uv",
-        }
-    }
 }
 
 /// Convert a u64 to a hex string.

@@ -19,26 +19,14 @@ use crate::workspace::Project;
 // When matching files (files or exclude), we need to match against the filenames
 // relative to the project root.
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, strum::AsRefStr, strum::Display, strum::EnumString)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(rename_all = "kebab-case"))]
+#[strum(serialize_all = "kebab-case")]
 pub(crate) enum MetaHooks {
     CheckHooksApply,
     CheckUselessExcludes,
     Identity,
-}
-
-impl FromStr for MetaHooks {
-    type Err = ();
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "check-hooks-apply" => Ok(Self::CheckHooksApply),
-            "check-useless-excludes" => Ok(Self::CheckUselessExcludes),
-            "identity" => Ok(Self::Identity),
-            _ => Err(()),
-        }
-    }
 }
 
 impl MetaHooks {
@@ -62,7 +50,7 @@ impl MetaHooks {
 
 impl MetaHook {
     pub(crate) fn from_id(id: &str) -> Result<Self, ()> {
-        let hook_id = MetaHooks::from_str(id)?;
+        let hook_id = MetaHooks::from_str(id).map_err(|_| ())?;
         let config_file_regex = CONFIG_FILE_REGEX.clone();
 
         Ok(match hook_id {

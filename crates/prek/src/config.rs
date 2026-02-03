@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::error::Error as _;
-use std::fmt::{Display, Formatter};
+use std::fmt::Display;
 use std::ops::RangeInclusive;
 use std::path::Path;
 use std::sync::LazyLock;
@@ -115,8 +115,21 @@ impl TryFrom<FilePatternWire> for FilePattern {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, clap::ValueEnum)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Deserialize,
+    Serialize,
+    clap::ValueEnum,
+    strum::AsRefStr,
+    strum::Display,
+)]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[non_exhaustive]
 pub enum Language {
@@ -146,43 +159,11 @@ pub enum Language {
     System,
 }
 
-impl Language {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Bun => "bun",
-            Self::Conda => "conda",
-            Self::Coursier => "coursier",
-            Self::Dart => "dart",
-            Self::Docker => "docker",
-            Self::DockerImage => "docker_image",
-            Self::Dotnet => "dotnet",
-            Self::Fail => "fail",
-            Self::Golang => "golang",
-            Self::Haskell => "haskell",
-            Self::Julia => "julia",
-            Self::Lua => "lua",
-            Self::Node => "node",
-            Self::Perl => "perl",
-            Self::Pygrep => "pygrep",
-            Self::Python => "python",
-            Self::R => "r",
-            Self::Ruby => "ruby",
-            Self::Rust => "rust",
-            Self::Script => "script",
-            Self::Swift => "swift",
-            Self::System => "system",
-        }
-    }
-}
-
-impl Display for Language {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, Deserialize, clap::ValueEnum)]
+#[derive(
+    Debug, Clone, Copy, Default, Deserialize, clap::ValueEnum, strum::AsRefStr, strum::Display,
+)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) enum HookType {
     CommitMsg,
@@ -199,21 +180,6 @@ pub(crate) enum HookType {
 }
 
 impl HookType {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::CommitMsg => "commit-msg",
-            Self::PostCheckout => "post-checkout",
-            Self::PostCommit => "post-commit",
-            Self::PostMerge => "post-merge",
-            Self::PostRewrite => "post-rewrite",
-            Self::PreCommit => "pre-commit",
-            Self::PreMergeCommit => "pre-merge-commit",
-            Self::PrePush => "pre-push",
-            Self::PreRebase => "pre-rebase",
-            Self::PrepareCommitMsg => "prepare-commit-msg",
-        }
-    }
-
     /// Return the number of arguments this hook type expects.
     pub fn num_args(self) -> RangeInclusive<usize> {
         match self {
@@ -231,16 +197,22 @@ impl HookType {
     }
 }
 
-impl Display for HookType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Default, Hash, Deserialize, Serialize, clap::ValueEnum,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Hash,
+    Deserialize,
+    Serialize,
+    clap::ValueEnum,
+    strum::AsRefStr,
+    strum::Display,
 )]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) enum Stage {
     Manual,
@@ -274,30 +246,6 @@ impl From<HookType> for Stage {
             HookType::PreRebase => Self::PreRebase,
             HookType::PrepareCommitMsg => Self::PrepareCommitMsg,
         }
-    }
-}
-
-impl Stage {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Manual => "manual",
-            Self::CommitMsg => "commit-msg",
-            Self::PostCheckout => "post-checkout",
-            Self::PostCommit => "post-commit",
-            Self::PostMerge => "post-merge",
-            Self::PostRewrite => "post-rewrite",
-            Self::PreCommit => "pre-commit",
-            Self::PreMergeCommit => "pre-merge-commit",
-            Self::PrePush => "pre-push",
-            Self::PreRebase => "pre-rebase",
-            Self::PrepareCommitMsg => "prepare-commit-msg",
-        }
-    }
-}
-
-impl Display for Stage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
     }
 }
 
@@ -533,7 +481,7 @@ pub(crate) enum PredefinedHookKind {
 }
 
 impl Display for PredefinedHookKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Meta => f.write_str("meta"),
             Self::Builtin => f.write_str("builtin"),
@@ -672,7 +620,7 @@ impl std::hash::Hash for RemoteRepo {
 }
 
 impl Display for RemoteRepo {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}@{}", self.repo, self.rev)
     }
 }
@@ -689,7 +637,7 @@ pub(crate) struct LocalRepo {
 }
 
 impl Display for LocalRepo {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("local")
     }
 }
@@ -706,7 +654,7 @@ pub(crate) struct MetaRepo {
 }
 
 impl Display for MetaRepo {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("meta")
     }
 }
@@ -740,7 +688,7 @@ impl<'de> Deserialize<'de> for Repo {
         impl<'de> Visitor<'de> for RepoVisitor {
             type Value = Repo;
 
-            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 formatter.write_str("a repo mapping")
             }
 
