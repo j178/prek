@@ -15,8 +15,14 @@ Config {
                         options: HookOptions {
                             alias: None,
                             files: Some(
-                                Regex(
-                                    ^\.pre-commit-config\.yaml|\.pre-commit-config\.yml$,
+                                Glob(
+                                    GlobPatterns {
+                                        patterns: [
+                                            ".pre-commit-config.yaml",
+                                            ".pre-commit-config.yml",
+                                        ],
+                                        ..
+                                    },
                                 ),
                             ),
                             exclude: None,
@@ -46,8 +52,14 @@ Config {
                         options: HookOptions {
                             alias: None,
                             files: Some(
-                                Regex(
-                                    ^\.pre-commit-config\.yaml|\.pre-commit-config\.yml$,
+                                Glob(
+                                    GlobPatterns {
+                                        patterns: [
+                                            ".pre-commit-config.yaml",
+                                            ".pre-commit-config.yml",
+                                        ],
+                                        ..
+                                    },
                                 ),
                             ),
                             exclude: None,

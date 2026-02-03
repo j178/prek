@@ -3,13 +3,11 @@ use std::error::Error as _;
 use std::fmt::Display;
 use std::ops::RangeInclusive;
 use std::path::Path;
-use std::sync::LazyLock;
 
 use anyhow::Result;
 use fancy_regex::Regex;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use itertools::Itertools;
-use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use rustc_hash::FxHashMap;
 use serde::de::{Error as DeError, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -22,16 +20,7 @@ use crate::version;
 use crate::warn_user;
 use crate::warn_user_once;
 
-pub(crate) static CONFIG_FILE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    let pattern = format!(
-        "^{}|{}$",
-        fancy_regex::escape(CONFIG_FILE),
-        fancy_regex::escape(ALT_CONFIG_FILE)
-    );
-    Regex::new(&pattern).expect("config regex must compile")
-});
-
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct GlobPatterns {
     patterns: Vec<String>,
     set: GlobSet,
@@ -49,6 +38,14 @@ impl GlobPatterns {
 
     fn is_match(&self, value: &str) -> bool {
         self.set.is_match(Path::new(value))
+    }
+}
+
+impl std::fmt::Debug for GlobPatterns {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GlobPatterns")
+            .field("patterns", &self.patterns)
+            .finish_non_exhaustive()
     }
 }
 
@@ -77,6 +74,14 @@ pub(crate) enum FilePattern {
 }
 
 impl FilePattern {
+    pub(crate) fn new_glob(patterns: Vec<String>) -> Result<Self, globset::Error> {
+        Ok(Self::Glob(GlobPatterns::new(patterns)?))
+    }
+
+    pub(crate) fn new_regex(pattern: &str) -> Result<Self, fancy_regex::Error> {
+        Ok(Self::Regex(Regex::new(pattern)?))
+    }
+
     pub(crate) fn is_match(&self, str: &str) -> bool {
         match self {
             FilePattern::Regex(regex) => regex.is_match(str).unwrap_or(false),
@@ -94,12 +99,6 @@ impl Display for FilePattern {
                 write!(f, "glob: [{patterns}]")
             }
         }
-    }
-}
-
-impl From<Regex> for FilePattern {
-    fn from(regex: Regex) -> Self {
-        FilePattern::Regex(regex)
     }
 }
 
