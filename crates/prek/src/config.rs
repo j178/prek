@@ -1172,6 +1172,12 @@ mod tests {
     use super::*;
     use std::io::Write as _;
 
+    /// Filter to replace dynamic version in snapshots
+    const VERSION_FILTER: (&str, &str) = (
+        r"current version `\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?`",
+        "current version `[CURRENT_VERSION]`",
+    );
+
     #[test]
     fn parse_file_patterns_regex_and_glob() {
         #[derive(Debug, Deserialize)]
@@ -1658,15 +1664,17 @@ mod tests {
             minimum_prek_version: '10.0.0'
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
-        insta::assert_snapshot!(err, @"
-        error: line 8 column 23: Required minimum prek version `10.0.0` is greater than current version `0.3.1`. Please consider updating prek. at line 8, column 23
-         --> <input>:8:23
-          |
-        6 |         entry: echo test
-        7 |         language: system
-        8 | minimum_prek_version: '10.0.0'
-          |                       ^ Required minimum prek version `10.0.0` is greater than current version `0.3.1`. Please consider updating prek. at line 8, column 23
-        ");
+        insta::with_settings!({ filters => vec![VERSION_FILTER] }, {
+            insta::assert_snapshot!(err, @"
+            error: line 8 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek. at line 8, column 23
+             --> <input>:8:23
+              |
+            6 |         entry: echo test
+            7 |         language: system
+            8 | minimum_prek_version: '10.0.0'
+              |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek. at line 8, column 23
+            ");
+        });
 
         // Test that valid minimum_prek_version field works in hook config
         let yaml = indoc::indoc! {r"
@@ -1677,16 +1685,18 @@ mod tests {
             minimum_prek_version: '10.0.0'
         "};
         let err = serde_saphyr::from_str::<Manifest>(yaml).unwrap_err();
-        insta::assert_snapshot!(err, @"
-        error: line 1 column 3: Required minimum prek version `10.0.0` is greater than current version `0.3.1`. Please consider updating prek. at line 1, column 3
-         --> <input>:1:3
-          |
-        1 | - id: test-hook
-          |   ^ Required minimum prek version `10.0.0` is greater than current version `0.3.1`. Please consider updating prek. at line 1, column 3
-        2 |   name: Test Hook
-        3 |   entry: echo test
-          |
-        ");
+        insta::with_settings!({ filters => vec![VERSION_FILTER] }, {
+            insta::assert_snapshot!(err, @"
+            error: line 1 column 3: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek. at line 1, column 3
+             --> <input>:1:3
+              |
+            1 | - id: test-hook
+              |   ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek. at line 1, column 3
+            2 |   name: Test Hook
+            3 |   entry: echo test
+              |
+            ");
+        });
     }
 
     #[test]
