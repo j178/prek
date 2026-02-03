@@ -35,6 +35,7 @@ mod git;
 mod hook;
 mod hooks;
 mod identify;
+mod install_source;
 mod languages;
 mod printer;
 mod process;
@@ -381,10 +382,23 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }) => cli::self_update(target_version, token, printer).await,
         #[cfg(not(feature = "self-update"))]
         Command::Self_(_) => {
-            anyhow::bail!(
-                "prek was installed through an external package manager, and self-update \
-                is not available. Please use your package manager to update prek."
-            );
+            use crate::install_source::InstallSource;
+
+            let msg = InstallSource::detect()
+                .map(|s| {
+                    format!(
+                        "prek was installed via {} and cannot self-update. To update, run `{}`",
+                        s.description(),
+                        s.update_instructions()
+                    )
+                })
+                .unwrap_or_else(|| {
+                    "prek was installed via an external package manager and cannot self-update. \
+                     Please use your package manager to update prek."
+                        .into()
+                });
+
+            anyhow::bail!("{msg}");
         }
 
         Command::GenerateShellCompletion(args) => {

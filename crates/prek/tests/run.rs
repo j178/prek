@@ -1931,11 +1931,11 @@ fn minimum_prek_version() {
 
     ----- stderr -----
     error: Failed to parse `.pre-commit-config.yaml`
-      caused by: error: line 1 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek. at line 1, column 23
+      caused by: error: line 1 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. at line 1, column 23
      --> <input>:1:23
       |
     1 | minimum_prek_version: 10.0.0
-      |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek. at line 1, column 23
+      |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. at line 1, column 23
     2 | repos:
     3 |   - repo: local
       |

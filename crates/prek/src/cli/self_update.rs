@@ -29,7 +29,25 @@ use owo_colors::OwoColorize;
 use tracing::{debug, enabled};
 
 use crate::cli::ExitStatus;
+use crate::install_source::InstallSource;
 use crate::printer::Printer;
+
+fn format_install_hint() -> String {
+    match InstallSource::detect() {
+        Some(s) => format!(
+            "{}{} You installed prek via {}. To update, run `{}`",
+            "hint".cyan().bold(),
+            ":".bold(),
+            s.description(),
+            s.update_instructions()
+        ),
+        None => format!(
+            "{}{} Please use your package manager to update prek.",
+            "hint".cyan().bold(),
+            ":".bold()
+        ),
+    }
+}
 
 /// Attempt to update the prek binary.
 pub(crate) async fn self_update(
@@ -55,18 +73,11 @@ pub(crate) async fn self_update(
         debug!("no receipt found; assuming prek was installed via a package manager");
         writeln!(
             printer.stderr(),
-            "{}",
-            format_args!(
-                concat!(
-                    "{}{} Self-update is only available for prek binaries installed via the standalone installation scripts.",
-                    "\n",
-                    "\n",
-                    "If you installed prek with pip, brew, or another package manager, update prek with `pip install --upgrade`, `brew upgrade`, or similar."
-                ),
-                "warning".yellow().bold(),
-                ":".bold()
-            )
+            "{}{} prek was installed via an external package manager and cannot self-update.",
+            "error".red().bold(),
+            ":".bold(),
         )?;
+        writeln!(printer.stderr(), "{}", format_install_hint())?;
         return Ok(ExitStatus::Error);
     };
 
@@ -79,18 +90,11 @@ pub(crate) async fn self_update(
         );
         writeln!(
             printer.stderr(),
-            "{}",
-            format_args!(
-                concat!(
-                    "{}{} Self-update is only available for prek binaries installed via the standalone installation scripts.",
-                    "\n",
-                    "\n",
-                    "If you installed prek with pip, brew, or another package manager, update prek with `pip install --upgrade`, `brew upgrade`, or similar."
-                ),
-                "warning".yellow().bold(),
-                ":".bold()
-            )
+            "{}{} prek was installed via an external package manager and cannot self-update.",
+            "error".red().bold(),
+            ":".bold(),
         )?;
+        writeln!(printer.stderr(), "{}", format_install_hint())?;
         return Ok(ExitStatus::Error);
     }
 
