@@ -1978,7 +1978,7 @@ mod _gen {
     use pretty_assertions::StrComparison;
     use std::path::PathBuf;
 
-    const ROOT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../");
+    const ROOT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/");
 
     enum Mode {
         /// Update the content.
