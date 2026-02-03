@@ -14,6 +14,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::fs::Simplified;
 use crate::identify;
+use crate::install_source::InstallSource;
 #[cfg(feature = "schemars")]
 use crate::schema::{schema_repo_builtin, schema_repo_local, schema_repo_meta, schema_repo_remote};
 use crate::version;
@@ -1086,8 +1087,12 @@ where
         .parse::<semver::Version>()
         .expect("Invalid prek version");
     if version > cur_version {
+        let hint = InstallSource::detect()
+            .map(|s| format!("To update, run `{}`.", s.update_instructions()))
+            .unwrap_or("Please consider updating prek".to_string());
+
         return Err(serde::de::Error::custom(format!(
-            "Required minimum prek version `{version}` is greater than current version `{cur_version}`. Please consider updating prek.",
+            "Required minimum prek version `{version}` is greater than current version `{cur_version}`; {hint}",
         )));
     }
 
@@ -1613,13 +1618,13 @@ mod tests {
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::with_settings!({ filters => vec![VERSION_FILTER] }, {
             insta::assert_snapshot!(err, @"
-            error: line 8 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek. at line 8, column 23
+            error: line 8 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek at line 8, column 23
              --> <input>:8:23
               |
             6 |         entry: echo test
             7 |         language: system
             8 | minimum_prek_version: '10.0.0'
-              |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek. at line 8, column 23
+              |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek at line 8, column 23
             ");
         });
 
@@ -1634,11 +1639,11 @@ mod tests {
         let err = serde_saphyr::from_str::<Manifest>(yaml).unwrap_err();
         insta::with_settings!({ filters => vec![VERSION_FILTER] }, {
             insta::assert_snapshot!(err, @"
-            error: line 1 column 3: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek. at line 1, column 3
+            error: line 1 column 3: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek at line 1, column 3
              --> <input>:1:3
               |
             1 | - id: test-hook
-              |   ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek. at line 1, column 3
+              |   ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek at line 1, column 3
             2 |   name: Test Hook
             3 |   entry: echo test
               |
