@@ -42,7 +42,7 @@ fn format_install_hint() -> String {
             s.update_instructions()
         ),
         None => format!(
-            "{}{} Please use your package manager to update prek.",
+            "{}{} If you installed prek with pip, brew, or another package manager, update prek with `pip install --upgrade`, `brew upgrade`, or similar.",
             "hint".cyan().bold(),
             ":".bold()
         ),
@@ -73,7 +73,7 @@ pub(crate) async fn self_update(
         debug!("no receipt found; assuming prek was installed via a package manager");
         writeln!(
             printer.stderr(),
-            "{}{} prek was installed via an external package manager and cannot self-update.",
+            "{}{} Self-update is only available for prek binaries installed via the standalone installation scripts.",
             "error".red().bold(),
             ":".bold(),
         )?;
@@ -90,7 +90,7 @@ pub(crate) async fn self_update(
         );
         writeln!(
             printer.stderr(),
-            "{}{} prek was installed via an external package manager and cannot self-update.",
+            "{}{} Self-update is only available for prek binaries installed via the standalone installation scripts.",
             "error".red().bold(),
             ":".bold(),
         )?;

@@ -1,7 +1,5 @@
-use std::{
-    ffi::OsStr,
-    path::{Path, PathBuf},
-};
+use std::ffi::OsStr;
+use std::path::{Component, Path, PathBuf};
 
 /// Represents how prek was installed on the system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,10 +12,7 @@ impl InstallSource {
     /// Detect the install source from a given path.
     fn from_path(path: &Path) -> Option<Self> {
         let canonical = path.canonicalize().unwrap_or_else(|_| PathBuf::from(path));
-        let components: Vec<_> = canonical
-            .components()
-            .map(|c| c.as_os_str().to_owned())
-            .collect();
+        let components: Vec<_> = canonical.components().map(Component::as_os_str).collect();
 
         // Check for Homebrew Cellar installation: .../Cellar/prek/...
         let cellar = OsStr::new("Cellar");
@@ -56,7 +51,7 @@ impl InstallSource {
     pub(crate) fn update_instructions(self) -> &'static str {
         match self {
             Self::Homebrew => "brew update && brew upgrade prek",
-            Self::Cargo => "cargo install prek",
+            Self::Cargo => "cargo install --locked prek",
         }
     }
 }
