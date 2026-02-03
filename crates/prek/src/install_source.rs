@@ -5,7 +5,6 @@ use std::path::{Component, Path, PathBuf};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InstallSource {
     Homebrew,
-    Cargo,
 }
 
 impl InstallSource {
@@ -24,13 +23,6 @@ impl InstallSource {
             return Some(Self::Homebrew);
         }
 
-        // Check for cargo bin installation: .../.cargo/bin/...
-        let cargo = OsStr::new(".cargo");
-        let bin = OsStr::new("bin");
-        if components.windows(2).any(|w| w[0] == cargo && w[1] == bin) {
-            return Some(Self::Cargo);
-        }
-
         None
     }
 
@@ -43,7 +35,6 @@ impl InstallSource {
     pub(crate) fn description(self) -> &'static str {
         match self {
             Self::Homebrew => "Homebrew",
-            Self::Cargo => "cargo",
         }
     }
 
@@ -51,7 +42,6 @@ impl InstallSource {
     pub(crate) fn update_instructions(self) -> &'static str {
         match self {
             Self::Homebrew => "brew update && brew upgrade prek",
-            Self::Cargo => "cargo install --locked prek",
         }
     }
 }
@@ -77,22 +67,6 @@ mod tests {
     }
 
     #[test]
-    fn detects_cargo_bin_macos() {
-        assert_eq!(
-            InstallSource::from_path(Path::new("/Users/user/.cargo/bin/prek")),
-            Some(InstallSource::Cargo)
-        );
-    }
-
-    #[test]
-    fn detects_cargo_bin_linux() {
-        assert_eq!(
-            InstallSource::from_path(Path::new("/home/user/.cargo/bin/prek")),
-            Some(InstallSource::Cargo)
-        );
-    }
-
-    #[test]
     fn returns_none_for_unknown_unix_path() {
         assert_eq!(
             InstallSource::from_path(Path::new("/usr/local/bin/prek")),
@@ -105,15 +79,6 @@ mod tests {
         assert_eq!(
             InstallSource::from_path(Path::new("/opt/homebrew/Cellar/other/0.1.0/bin/prek")),
             None
-        );
-    }
-
-    #[test]
-    #[cfg(windows)]
-    fn detects_cargo_bin_windows() {
-        assert_eq!(
-            InstallSource::from_path(Path::new(r"C:\Users\user\.cargo\bin\prek.exe")),
-            Some(InstallSource::Cargo)
         );
     }
 
