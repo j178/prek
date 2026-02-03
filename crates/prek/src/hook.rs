@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
@@ -344,7 +345,7 @@ impl HookBuilder {
 
         let stages = match options.stages {
             Some(stages) => {
-                let stages: FxHashSet<_> = stages.into_iter().collect();
+                let stages: BTreeSet<_> = stages.into_iter().collect();
                 if stages.is_empty() || stages.len() == Stage::value_variants().len() {
                     Stages::All
                 } else {
@@ -407,7 +408,7 @@ impl HookBuilder {
 #[derive(Debug, Clone)]
 pub(crate) enum Stages {
     All,
-    Some(FxHashSet<Stage>),
+    Some(BTreeSet<Stage>),
 }
 
 impl Stages {
