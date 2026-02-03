@@ -326,7 +326,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }) => match cache_command {
             CacheCommand::Clean => cli::cache_clean(&store, printer),
             CacheCommand::Dir => {
-                writeln!(printer.stdout(), "{}", store.path().display().cyan())?;
+                writeln!(
+                    printer.stdout_important(),
+                    "{}",
+                    store.path().display().cyan()
+                )?;
                 Ok(ExitStatus::Success)
             }
             CacheCommand::GC(args) => {
@@ -348,7 +352,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
             cli::validate_manifest(args.manifests, printer)
         }
-        Command::SampleConfig(args) => cli::sample_config(args.file, printer),
+        Command::SampleConfig(args) => cli::sample_config(args.file.into(), args.format, printer),
         Command::AutoUpdate(args) => {
             cli::auto_update(
                 &store,
