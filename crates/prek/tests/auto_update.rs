@@ -3,7 +3,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
-use prek_consts::PRE_COMMIT_CONFIG_YAML;
+use prek_consts::{PRE_COMMIT_CONFIG_YAML, PREK_TOML};
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
@@ -1126,6 +1126,273 @@ fn auto_update_with_invalid_config_file() -> Result<()> {
     1 | invalid_yaml: [unclosed_list
       |               ^ unclosed bracket '[' at line 1, column 15
     ");
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_toml() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path =
+        create_local_git_repo(&context, "test-repo-toml", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
+
+    context
+        .work_dir()
+        .child(PREK_TOML)
+        .write_str(&indoc::formatdoc! {r#"
+        [[repos]]
+        repo = "{}"
+        rev = "v1.0.0"
+        hooks = [
+          {{ id = "test-hook" }},
+        ]
+      "#, repo_path.replace('\\', "/")})?;
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/test-repo-toml] updating v1.0.0 -> v2.0.0
+
+    ----- stderr -----
+    "#);
+
+    insta::with_settings!(
+      { filters => filters.clone() },
+      {
+        assert_snapshot!(context.read(PREK_TOML), @r#"
+        [[repos]]
+        repo = "[HOME]/test-repos/test-repo-toml"
+        rev = "v2.0.0"
+        hooks = [
+          { id = "test-hook" },
+        ]
+        "#);
+      }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_toml_with_comment() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path =
+        create_local_git_repo(&context, "test-repo-toml", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
+
+    context
+        .work_dir()
+        .child(PREK_TOML)
+        .write_str(&indoc::formatdoc! {r#"
+        [[repos]]
+        repo = "{}"
+        rev = "v1.0.0" # This is a comment
+        hooks = [
+          {{ id = "test-hook" }},
+        ]
+      "#, repo_path.replace('\\', "/")})?;
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/test-repo-toml] updating v1.0.0 -> v2.0.0
+
+    ----- stderr -----
+    "#);
+
+    insta::with_settings!(
+      { filters => filters.clone() },
+      {
+        assert_snapshot!(context.read(PREK_TOML), @r#"
+        [[repos]]
+        repo = "[HOME]/test-repos/test-repo-toml"
+        rev = "v2.0.0" # This is a comment
+        hooks = [
+          { id = "test-hook" },
+        ]
+        "#);
+      }
+    );
+
+    // "frozen: xx" comment should be removed
+    context
+        .work_dir()
+        .child(PREK_TOML)
+        .write_str(&indoc::formatdoc! {r#"
+        [[repos]]
+        repo = "{}"
+        rev = "v1.0.0" # frozen: v1.0.0
+        hooks = [
+          {{ id = "test-hook" }},
+        ]
+      "#, repo_path.replace('\\', "/")})?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/test-repo-toml] updating v1.0.0 -> v2.0.0
+
+    ----- stderr -----
+    "#);
+
+    insta::with_settings!(
+      { filters => filters.clone() },
+      {
+        assert_snapshot!(context.read(PREK_TOML), @r#"
+        [[repos]]
+        repo = "[HOME]/test-repos/test-repo-toml"
+        rev = "v2.0.0"
+        hooks = [
+          { id = "test-hook" },
+        ]
+        "#);
+      }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_freeze_toml() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(&context, "freeze-repo", &["v1.0.0", "v1.1.0"])?;
+    // Make sure the "# frozen: v1.1.0" comment works correctly by adding a tag without dot
+    git_cmd(&repo_path)
+        .arg("tag")
+        .arg("v1")
+        .arg("-m")
+        .arg("v1")
+        .arg("v1.1.0^{}")
+        .assert()
+        .success();
+
+    context
+        .work_dir()
+        .child(PREK_TOML)
+        .write_str(&indoc::formatdoc! {r#"
+        [[repos]]
+        repo = "{}"
+        rev = "v1.0.0"
+        hooks = [
+          {{ id = "test-hook" }},
+        ]
+    "#, repo_path.replace('\\', "/")})?;
+
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"[a-f0-9]{40}", r"[COMMIT_SHA]")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("0"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/freeze-repo] updating v1.0.0 -> [COMMIT_SHA]
+
+    ----- stderr -----
+    ");
+
+    // Should contain frozen comment
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PREK_TOML), @r#"
+            [[repos]]
+            repo = "[HOME]/test-repos/freeze-repo"
+            rev = "[COMMIT_SHA]" # frozen: v1.1.0
+            hooks = [
+              { id = "test-hook" },
+            ]
+            "#);
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_freeze_toml_with_comment() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(&context, "freeze-repo", &["v1.0.0", "v1.1.0"])?;
+    // Make sure the "# frozen: v1.1.0" comment works correctly by adding a tag without dot
+    git_cmd(&repo_path)
+        .arg("tag")
+        .arg("v1")
+        .arg("-m")
+        .arg("v1")
+        .arg("v1.1.0^{}")
+        .assert()
+        .success();
+
+    context
+        .work_dir()
+        .child(PREK_TOML)
+        .write_str(&indoc::formatdoc! {r#"
+        [[repos]]
+        repo = "{}"
+        # A comment above
+        rev = "v1.0.0" # This is a comment
+        # A comment below
+        hooks = [
+          {{ id = "test-hook" }},
+        ]
+    "#, repo_path.replace('\\', "/")})?;
+
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"[a-f0-9]{40}", r"[COMMIT_SHA]")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("0"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/freeze-repo] updating v1.0.0 -> [COMMIT_SHA]
+
+    ----- stderr -----
+    ");
+
+    // Should contain frozen comment
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PREK_TOML), @r#"
+            [[repos]]
+            repo = "[HOME]/test-repos/freeze-repo"
+            # A comment above
+            rev = "[COMMIT_SHA]" # frozen: v1.1.0
+            # A comment below
+            hooks = [
+              { id = "test-hook" },
+            ]
+            "#);
+        }
+    );
 
     Ok(())
 }
