@@ -92,6 +92,7 @@ toml = { workspace = true, default-features = false, features = [
   "preserve_order",
   "serde",
 ] }
+toml_edit = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 unicode-width = { workspace = true }
