@@ -1,5 +1,6 @@
 use std::cmp::max;
 use std::ffi::OsStr;
+use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::LazyLock;
 
@@ -18,6 +19,25 @@ pub(crate) static USE_COLOR: LazyLock<bool> =
         // We just asked anstream for a choice, that can't be auto
         ColorChoice::Auto => unreachable!(),
     });
+
+fn term_is_dumb() -> bool {
+    EnvVars::var_os(EnvVars::TERM)
+        .and_then(|term| term.to_str().map(|term| term.eq_ignore_ascii_case("dumb")))
+        .unwrap_or(false)
+}
+
+pub(crate) fn supports_progress() -> bool {
+    if !std::io::stderr().is_terminal() {
+        return false;
+    }
+    if term_is_dumb() {
+        return false;
+    }
+    if !std::io::stdin().is_terminal() {
+        return false;
+    }
+    true
+}
 
 pub(crate) static CONCURRENCY: LazyLock<usize> = LazyLock::new(|| {
     if EnvVars::is_set(EnvVars::PREK_NO_CONCURRENCY) {

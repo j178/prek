@@ -43,7 +43,13 @@ impl Printer {
         match self {
             Self::Silent => ProgressDrawTarget::hidden(),
             Self::Quiet => ProgressDrawTarget::hidden(),
-            Self::Default => ProgressDrawTarget::stderr(),
+            Self::Default => {
+                if crate::run::supports_progress() {
+                    ProgressDrawTarget::stderr()
+                } else {
+                    ProgressDrawTarget::hidden()
+                }
+            }
             // Confusingly, hide the progress bar when in verbose mode.
             // Otherwise, it gets interleaved with debug messages.
             Self::Verbose => ProgressDrawTarget::hidden(),
