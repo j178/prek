@@ -5,6 +5,7 @@ use std::path::{Component, Path, PathBuf};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InstallSource {
     Homebrew,
+    StandaloneInstaller,
 }
 
 impl InstallSource {
@@ -23,7 +24,24 @@ impl InstallSource {
             return Some(Self::Homebrew);
         }
 
+        // Check for standalone installer installation
+        #[cfg(feature = "self-update")]
+        match Self::is_standalone_installer() {
+            Ok(true) => return Some(Self::StandaloneInstaller),
+            Ok(false) => {}
+            Err(e) => tracing::warn!("Failed to check for standalone installer: {}", e),
+        }
+
         None
+    }
+
+    #[cfg(feature = "self-update")]
+    fn is_standalone_installer() -> anyhow::Result<bool> {
+        use axoupdater::AxoUpdater;
+
+        let mut updater = AxoUpdater::new_for("prek");
+        let updater = updater.load_receipt()?;
+        Ok(updater.check_receipt_is_for_this_executable()?)
     }
 
     /// Detect the install source from the current executable path.
@@ -35,6 +53,7 @@ impl InstallSource {
     pub(crate) fn description(self) -> &'static str {
         match self {
             Self::Homebrew => "Homebrew",
+            Self::StandaloneInstaller => "the standalone installer",
         }
     }
 
@@ -42,6 +61,7 @@ impl InstallSource {
     pub(crate) fn update_instructions(self) -> &'static str {
         match self {
             Self::Homebrew => "brew update && brew upgrade prek",
+            Self::StandaloneInstaller => "prek self update",
         }
     }
 }
