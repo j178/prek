@@ -11,9 +11,10 @@ use crate::store::Store;
 
 mod check_json5;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, strum::AsRefStr, strum::Display, strum::EnumString)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(rename_all = "kebab-case"))]
+#[strum(serialize_all = "kebab-case")]
 pub(crate) enum BuiltinHooks {
     CheckAddedLargeFiles,
     CheckCaseConflict,
@@ -31,32 +32,6 @@ pub(crate) enum BuiltinHooks {
     MixedLineEnding,
     NoCommitToBranch,
     TrailingWhitespace,
-}
-
-impl FromStr for BuiltinHooks {
-    type Err = ();
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "check-added-large-files" => Ok(Self::CheckAddedLargeFiles),
-            "check-case-conflict" => Ok(Self::CheckCaseConflict),
-            "check-executables-have-shebangs" => Ok(Self::CheckExecutablesHaveShebangs),
-            "check-json" => Ok(Self::CheckJson),
-            "check-json5" => Ok(Self::CheckJson5),
-            "check-merge-conflict" => Ok(Self::CheckMergeConflict),
-            "check-symlinks" => Ok(Self::CheckSymlinks),
-            "check-toml" => Ok(Self::CheckToml),
-            "check-xml" => Ok(Self::CheckXml),
-            "check-yaml" => Ok(Self::CheckYaml),
-            "detect-private-key" => Ok(Self::DetectPrivateKey),
-            "end-of-file-fixer" => Ok(Self::EndOfFileFixer),
-            "fix-byte-order-marker" => Ok(Self::FixByteOrderMarker),
-            "mixed-line-ending" => Ok(Self::MixedLineEnding),
-            "no-commit-to-branch" => Ok(Self::NoCommitToBranch),
-            "trailing-whitespace" => Ok(Self::TrailingWhitespace),
-            _ => Err(()),
-        }
-    }
 }
 
 impl BuiltinHooks {
@@ -103,7 +78,7 @@ impl BuiltinHooks {
 
 impl BuiltinHook {
     pub(crate) fn from_id(id: &str) -> Result<Self, ()> {
-        let hook_id = BuiltinHooks::from_str(id)?;
+        let hook_id = BuiltinHooks::from_str(id).map_err(|_| ())?;
         Ok(match hook_id {
             BuiltinHooks::CheckAddedLargeFiles => BuiltinHook {
                 id: "check-added-large-files".to_string(),

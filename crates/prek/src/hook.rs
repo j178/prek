@@ -426,7 +426,7 @@ impl Display for Stages {
             Stages::Some(stages) => {
                 let stages_str = stages
                     .iter()
-                    .map(Stage::as_str)
+                    .map(Stage::as_ref)
                     .collect::<Vec<_>>()
                     .join(", ");
                 write!(f, "{stages_str}")
@@ -813,7 +813,7 @@ impl InstallInfo {
         hooks_dir: &Path,
     ) -> Result<Self, Error> {
         let env_path = tempfile::Builder::new()
-            .prefix(&format!("{}-", language.as_str()))
+            .prefix(&format!("{language}-"))
             .rand_bytes(20)
             .tempdir_in(hooks_dir)?;
 

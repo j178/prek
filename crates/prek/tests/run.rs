@@ -2879,7 +2879,7 @@ fn run_with_stdin_closed() {
               - id: check-stdin
                 name: check-stdin
                 language: python
-                entry: python -c 'import sys; sys.stdin.read(); print("STDIN closed")'
+                entry: python -c 'import sys; sys.stdin.read(); print("STDIN closed"); sys.stdout.flush()'
                 pass_filenames: false
                 verbose: true
     "#});

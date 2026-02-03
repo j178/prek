@@ -170,7 +170,7 @@ fn install_hook_script(
     skip_on_missing_config: bool,
     printer: Printer,
 ) -> Result<()> {
-    let hook_path = hooks_path.join(hook_type.as_str());
+    let hook_path = hooks_path.join(hook_type.as_ref());
 
     if hook_path.try_exists()? {
         if overwrite {
@@ -222,7 +222,7 @@ fn install_hook_script(
         }
     }
 
-    args.push(format!("--hook-type={}", hook_type.as_str()));
+    args.push(format!("--hook-type={hook_type}"));
 
     let mut hint = format!("prek installed at `{}`", hook_path.user_display().cyan());
 
@@ -330,8 +330,8 @@ pub(crate) async fn uninstall(
     let hooks_path = git::get_git_common_dir().await?.join("hooks");
 
     for hook_type in get_hook_types(hook_types, project.as_ref(), config.as_deref()) {
-        let hook_path = hooks_path.join(hook_type.as_str());
-        let legacy_path = hooks_path.join(format!("{}.legacy", hook_type.as_str()));
+        let hook_path = hooks_path.join(hook_type.as_ref());
+        let legacy_path = hooks_path.join(format!("{hook_type}.legacy"));
 
         if !hook_path.try_exists()? {
             writeln!(
@@ -350,7 +350,7 @@ pub(crate) async fn uninstall(
             writeln!(
                 printer.stdout(),
                 "Uninstalled `{}`",
-                hook_type.as_str().cyan()
+                hook_type.as_ref().cyan()
             )?;
 
             if legacy_path.try_exists()? {
