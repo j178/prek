@@ -6,7 +6,6 @@ use clap::builder::styling::{AnsiColor, Effects};
 use clap::builder::{ArgPredicate, Styles};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
 use clap_complete::engine::ArgValueCompleter;
-use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use prek_consts::env_vars::EnvVars;
 use serde::{Deserialize, Serialize};
 
@@ -589,6 +588,7 @@ pub(crate) struct ValidateManifestArgs {
     pub(crate) manifests: Vec<PathBuf>,
 }
 
+#[expect(clippy::option_option)]
 #[derive(Debug, Args)]
 pub(crate) struct SampleConfigArgs {
     /// Write the sample config to a file (`.pre-commit-config.yaml` by default).
@@ -596,9 +596,35 @@ pub(crate) struct SampleConfigArgs {
         short,
         long,
         num_args = 0..=1,
-        default_missing_value = PRE_COMMIT_CONFIG_YAML,
     )]
-    pub(crate) file: Option<PathBuf>,
+    pub(crate) file: Option<Option<PathBuf>>,
+
+    /// Select the sample configuration format.
+    #[arg(long, value_enum)]
+    pub(crate) format: Option<SampleConfigFormat>,
+}
+
+#[derive(Debug, Copy, Clone, clap::ValueEnum)]
+pub(crate) enum SampleConfigFormat {
+    Yaml,
+    Toml,
+}
+
+#[derive(Debug)]
+pub(crate) enum SampleConfigTarget {
+    Stdout,
+    DefaultFile,
+    Path(PathBuf),
+}
+
+impl From<Option<Option<PathBuf>>> for SampleConfigTarget {
+    fn from(value: Option<Option<PathBuf>>) -> Self {
+        match value {
+            None => Self::Stdout,
+            Some(None) => Self::DefaultFile,
+            Some(Some(path)) => Self::Path(path),
+        }
+    }
 }
 
 #[derive(Debug, Args)]
