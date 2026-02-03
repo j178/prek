@@ -203,6 +203,8 @@ impl HookType {
     Copy,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
     Default,
     Hash,
     Deserialize,
