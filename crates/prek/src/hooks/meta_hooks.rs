@@ -4,10 +4,11 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
+use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 
 use crate::cli::reporter::HookRunReporter;
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
-use crate::config::{self, CONFIG_FILE_REGEX, FilePattern, HookOptions, Language, MetaHook};
+use crate::config::{self, FilePattern, HookOptions, Language, MetaHook};
 use crate::hook::Hook;
 use crate::store::Store;
 use crate::workspace::Project;
@@ -51,7 +52,9 @@ impl MetaHooks {
 impl MetaHook {
     pub(crate) fn from_id(id: &str) -> Result<Self, ()> {
         let hook_id = MetaHooks::from_str(id).map_err(|_| ())?;
-        let config_file_regex = CONFIG_FILE_REGEX.clone();
+        let config_file_glob =
+            FilePattern::new_glob(vec![CONFIG_FILE.to_string(), ALT_CONFIG_FILE.to_string()])
+                .unwrap();
 
         Ok(match hook_id {
             MetaHooks::CheckHooksApply => MetaHook {
@@ -59,7 +62,7 @@ impl MetaHook {
                 name: "Check hooks apply".to_string(),
                 priority: None,
                 options: HookOptions {
-                    files: Some(FilePattern::from(config_file_regex)),
+                    files: Some(config_file_glob.clone()),
                     ..Default::default()
                 },
             },
@@ -68,7 +71,7 @@ impl MetaHook {
                 name: "Check useless excludes".to_string(),
                 priority: None,
                 options: HookOptions {
-                    files: Some(FilePattern::from(config_file_regex)),
+                    files: Some(config_file_glob),
                     ..Default::default()
                 },
             },
@@ -246,8 +249,7 @@ mod tests {
     use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 
     fn regex_pattern(pattern: &str) -> FilePattern {
-        let regex = fancy_regex::Regex::new(pattern).unwrap();
-        FilePattern::from(regex)
+        FilePattern::new_regex(pattern).unwrap()
     }
 
     #[test]
