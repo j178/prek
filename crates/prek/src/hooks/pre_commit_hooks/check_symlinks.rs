@@ -86,6 +86,10 @@ mod tests {
     #[tokio::test]
     #[cfg(windows)]
     async fn test_valid_symlink_windows() -> Result<()> {
+        if !is_elevated::is_elevated() {
+            // Skipping test: insufficient permissions for symlink creation on Windows
+            return Ok(());
+        }
         let dir = tempdir()?;
         let target = create_test_file(&dir, "target.txt", b"content").await?;
         let link_path = dir.path().join("link.txt");

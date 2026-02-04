@@ -102,6 +102,7 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 unicode-width = { version = "0.2.0", default-features = false }
 walkdir = { version = "2.5.0" }
 which = { version = "8.0.0" }
+is_elevated = { version = "0.1" }
 
 # dev-dependencies
 assert_cmd = { version = "2.0.16", features = ["color"] }
