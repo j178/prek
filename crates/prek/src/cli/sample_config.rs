@@ -24,7 +24,7 @@ repos:
 "};
 
 static SAMPLE_CONFIG_TOML: &str = indoc::indoc! {r#"
-#:schema: https://prek.j178.dev/prek.schema.json
+#:schema: https://json.schemastore.org/prek.json
 # Configuration file for `prek`, a git hook framework written in Rust.
 # See https://prek.j178.dev for more information.
 
