@@ -103,9 +103,6 @@ prek-pty = { workspace = true }
 libc = { workspace = true }
 pprof = { workspace = true, optional = true }
 
-[target.'cfg(windows)'.dependencies]
-is_elevated = { workspace = true }
-
 [build-dependencies]
 fs-err = { workspace = true }
 
@@ -115,6 +112,7 @@ assert_fs = { workspace = true }
 etcetera = { workspace = true }
 insta = { workspace = true, features = ["filters"] }
 insta-cmd = { workspace = true }
+is_elevated = { workspace = true }
 markdown = { workspace = true }
 predicates = { workspace = true }
 pretty_assertions = { workspace = true }
