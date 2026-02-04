@@ -55,6 +55,42 @@ plugins:
   - minify:
       minify_html: true
   - include-markdown
+  - llmstxt:
+      markdown_description: |
+        prek is a drop-in replacement for pre-commit, fully compatible with existing
+        `.pre-commit-config.yaml` files. It runs the same hooks faster, with better
+        toolchain management.
+
+        Key differences from pre-commit:
+        - Single binary, no Python runtime required
+        - Parallel hook execution by priority
+        - Built-in workspace/monorepo support
+        - Automatic toolchain installation (Python, Node, Go, Rust, Ruby)
+        - Integration with uv for Python environments
+
+        When fetching documentation, use explicit `index.md` paths for directories, e.g.,
+        `https://prek.j178.dev/configuration/index.md`. This returns clean markdown
+        instead of rendered HTML.
+      full_output: llms-full.txt
+      sections:
+        Getting Started:
+          - index.md
+          - installation.md
+          - quickstart.md
+        Usage:
+          - configuration.md
+          - languages.md
+          - cli.md
+          - builtin.md
+          - workspace.md
+          - integrations.md
+        Help:
+          - debugging.md
+          - faq.md
+        About:
+          - diff.md
+          - benchmark.md
+          - changelog.md
 
 nav:
   - Getting Started:
