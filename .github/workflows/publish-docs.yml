@@ -21,6 +21,8 @@ permissions: {}
 
 env:
   UV_VERSION: "0.9.26"
+  # Match version used to compile `docs/requirements.txt`
+  PYTHON_VERSION: "3.14"
 
 jobs:
   build:
@@ -35,11 +37,14 @@ jobs:
       - uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
         with:
           version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
           cache-dependency-glob: |
             **/docs/requirements.txt
 
       - name: Build documentation
-        run: uvx --with-requirements docs/requirements.txt zensical build
+        run: |
+          uvx --with-requirements docs/requirements.txt zensical build
+          uvx --with-requirements docs/requirements.txt llmstxt-standalone build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
