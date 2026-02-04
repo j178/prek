@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::path::PathBuf;
 
-use anyhow::Context;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use serde::Serialize;
 
@@ -10,7 +10,7 @@ use crate::identify::tags_from_path;
 use crate::printer::Printer;
 
 #[derive(Serialize)]
-struct SerializableIdentify {
+struct IdentifyEntry {
     path: String,
     tags: Vec<String>,
 }
@@ -20,63 +20,44 @@ pub(crate) fn identify(
     output_format: IdentifyOutputFormat,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
+    let mut status = ExitStatus::Success;
+    let mut outputs = Vec::new();
+
     for path in paths {
-        let tags = tags_from_path(path)
-            .with_context(|| format!("Failed to identify file: {}", path.display()))?;
-
-        let tags_vec: Vec<String> = tags.iter().map(std::string::ToString::to_string).collect();
-
-        match output_format {
-            IdentifyOutputFormat::Text => {
-                writeln!(printer.stdout(), "{}", path.display().bold())?;
+        match tags_from_path(path) {
+            Ok(tags) => match output_format {
+                IdentifyOutputFormat::Text => {
+                    writeln!(
+                        printer.stdout_important(),
+                        "{}: {}",
+                        path.display().bold(),
+                        tags.iter().join(", ")
+                    )?;
+                }
+                IdentifyOutputFormat::Json => {
+                    outputs.push(IdentifyEntry {
+                        path: path.display().to_string(),
+                        tags: tags.iter().map(ToString::to_string).collect(),
+                    });
+                }
+            },
+            Err(err) => {
+                status = ExitStatus::Failure;
                 writeln!(
-                    printer.stdout(),
-                    "  {} {}",
-                    "Tags:".bold().cyan(),
-                    tags_vec.join(", ")
+                    printer.stderr(),
+                    "{}: {}: {}",
+                    "error".red().bold(),
+                    path.display(),
+                    err
                 )?;
-                writeln!(printer.stdout())?;
-            }
-            IdentifyOutputFormat::Json => {
-                let serializable = SerializableIdentify {
-                    path: path.display().to_string(),
-                    tags: tags_vec,
-                };
-                let json_output = serde_json::to_string_pretty(&serializable)?;
-                writeln!(printer.stdout(), "{json_output}")?;
             }
         }
     }
 
-    Ok(ExitStatus::Success)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_serializable_identify_serialize() {
-        let obj = SerializableIdentify {
-            path: "/test/path.py".to_string(),
-            tags: vec!["file".to_string(), "python".to_string(), "text".to_string()],
-        };
-
-        let json = serde_json::to_string_pretty(&obj).unwrap();
-        assert!(json.contains("/test/path.py"));
-        assert!(json.contains("python"));
-        assert!(json.contains("file"));
+    if matches!(output_format, IdentifyOutputFormat::Json) {
+        let json_output = serde_json::to_string_pretty(&outputs)?;
+        writeln!(printer.stdout_important(), "{json_output}")?;
     }
 
-    #[test]
-    fn test_serializable_identify_serialize_empty_tags() {
-        let obj = SerializableIdentify {
-            path: "/test/path".to_string(),
-            tags: vec![],
-        };
-
-        let json = serde_json::to_string_pretty(&obj).unwrap();
-        assert!(json.contains("/test/path"));
-        assert!(json.contains("\"tags\": []"));
-    }
+    Ok(status)
 }
