@@ -51,9 +51,21 @@ env = { PREK_GENERATE = "1" }
 description = "Generate CLI reference and JSON schema"
 run = [{ task = "generate-cli-reference" }, { task = "generate-json-schema" }]
 
-[tasks.build-docs]
-description = "Build documentation"
+[tasks.docs-preview]
+description = "Serve documentation locally"
 run = "uvx --with-requirements docs/requirements.txt zensical serve"
+
+[tasks.docs-build]
+description = "Build documentation"
+run = [
+  "uvx --with-requirements docs/requirements.txt zensical build",
+  "uvx --with-requirements docs/requirements.txt llmstxt-standalone build",
+]
+
+[tasks.docs-compile]
+# Python version should match PYTHON_VERSION in .github/workflows/publish-docs.yml
+description = "Compile documentation dependencies"
+run = "uv pip compile docs/requirements.in -o docs/requirements.txt --python 3.14"
 
 [tasks.release]
 description = "Prepare for a release"
