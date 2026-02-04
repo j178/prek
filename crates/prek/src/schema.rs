@@ -12,18 +12,11 @@ impl schemars::JsonSchema for FilePattern {
 
     fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
         schemars::json_schema!({
-            "type": "object",
             "description": "A file pattern, either a regex or glob pattern(s).",
             "oneOf": [
                 {
-                    "type": "object",
-                    "properties": {
-                        "regex": {
-                            "type": "string",
-                            "description": "A regular expression pattern.",
-                        }
-                    },
-                    "required": ["regex"],
+                    "type": "string",
+                    "description": "A regular expression pattern.",
                 },
                 {
                     "type": "object",
