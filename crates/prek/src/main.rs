@@ -299,6 +299,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
+        Command::Identify(args) => {
+            show_settings!(args);
+
+            cli::identify(&args.paths, args.output_format, printer)
+        }
         Command::HookImpl(args) => {
             show_settings!(args);
 

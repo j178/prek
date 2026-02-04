@@ -16,6 +16,7 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 <dt><a href="#prek-install-hooks"><code>prek install-hooks</code></a></dt><dd><p>Create hook environments for all hooks used in the config file</p></dd>
 <dt><a href="#prek-run"><code>prek run</code></a></dt><dd><p>Run hooks</p></dd>
 <dt><a href="#prek-list"><code>prek list</code></a></dt><dd><p>List available hooks</p></dd>
+<dt><a href="#prek-identify"><code>prek identify</code></a></dt><dd><p>Show file identification tags</p></dd>
 <dt><a href="#prek-uninstall"><code>prek uninstall</code></a></dt><dd><p>Uninstall the prek git hook</p></dd>
 <dt><a href="#prek-validate-config"><code>prek validate-config</code></a></dt><dd><p>Validate <code>.pre-commit-config.yaml</code> files</p></dd>
 <dt><a href="#prek-validate-manifest"><code>prek validate-manifest</code></a></dt><dd><p>Validate <code>.pre-commit-hooks.yaml</code> files</p></dd>
@@ -367,6 +368,47 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 <p>Can be specified multiple times. Also accepts <code>PREK_SKIP</code> or <code>SKIP</code> environment variables (comma-delimited).</p>
 </dd><dt id="prek-list--verbose"><a href="#prek-list--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-list--version"><a href="#prek-list--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd></dl>
+
+## prek identify
+
+Show file identification tags
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+prek identify [OPTIONS] [PATH]...
+```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="prek-identify--paths"><a href="#prek-identify--paths"><code>PATH</code></a></dt><dd><p>The path(s) to the file(s) to identify</p>
+</dd></dl>
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt id="prek-identify--cd"><a href="#prek-identify--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
+</dd><dt id="prek-identify--color"><a href="#prek-identify--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
+<p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+<li><code>never</code>:  Disables colored output</li>
+</ul></dd><dt id="prek-identify--config"><a href="#prek-identify--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
+</dd><dt id="prek-identify--help"><a href="#prek-identify--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="prek-identify--log-file"><a href="#prek-identify--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
+</dd><dt id="prek-identify--no-progress"><a href="#prek-identify--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+<p>For example, spinners or progress bars.</p>
+</dd><dt id="prek-identify--output-format"><a href="#prek-identify--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>The output format</p>
+<p>[default: text]</p><p>Possible values:</p>
+<ul>
+<li><code>text</code></li>
+<li><code>json</code></li>
+</ul></dd><dt id="prek-identify--quiet"><a href="#prek-identify--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-identify--refresh"><a href="#prek-identify--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+</dd><dt id="prek-identify--verbose"><a href="#prek-identify--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
+</dd><dt id="prek-identify--version"><a href="#prek-identify--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek uninstall
