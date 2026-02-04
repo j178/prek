@@ -549,7 +549,8 @@ prek sample-config [OPTIONS]
 <li><code>always</code>:  Enables colored output regardless of the detected environment</li>
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-sample-config--config"><a href="#prek-sample-config--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
-</dd><dt id="prek-sample-config--file"><a href="#prek-sample-config--file"><code>--file</code></a>, <code>-f</code> <i>file</i></dt><dd><p>Write the sample config to a file (<code>.pre-commit-config.yaml</code> by default)</p>
+</dd><dt id="prek-sample-config--file"><a href="#prek-sample-config--file"><code>--file</code></a>, <code>-f</code> <i>file</i></dt><dd><p>Write the sample config to a file.</p>
+<p>Defaults to <code>.pre-commit-config.yaml</code> unless <code>--format toml</code> is set, which uses <code>prek.toml</code>. If a path is provided without <code>--format</code>, the format is inferred from the file extension (<code>.toml</code> uses TOML).</p>
 </dd><dt id="prek-sample-config--format"><a href="#prek-sample-config--format"><code>--format</code></a> <i>format</i></dt><dd><p>Select the sample configuration format</p>
 <p>Possible values:</p>
 <ul>

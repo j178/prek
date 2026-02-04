@@ -1,10 +1,62 @@
 # Configuration
 
-`prek` is **fully compatible** with the [`pre-commit`](https://pre-commit.com/) configuration file `.pre-commit-config.yaml`, so your existing configs work unchanged.
+`prek` reads **one configuration file per project**. You only need to choose **one** format:
 
-`prek` uses the same configuration model as [`pre-commit`](https://pre-commit.com/): you declare repositories under `repos:`, then enable and configure hooks from those repositories.
+- **prek.toml** (TOML) — recommended for new users
+- **.pre-commit-config.yaml** (YAML) — best if you already use pre-commit or rely on tool/editor support
 
-In addition to compatibility, `prek` adds a few extra keys (documented here) for features like workspace mode and parallel scheduling.
+Both formats are first-class and will be supported long-term. They describe the **same** configuration model: you list repositories under `repos`, then enable and configure hooks from those repositories.
+
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "https://github.com/pre-commit/pre-commit-hooks"
+    hooks = [{ id = "trailing-whitespace" }]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: https://github.com/pre-commit/pre-commit-hooks
+        hooks:
+          - id: trailing-whitespace
+    ```
+
+## Pre-commit compatibility
+
+`prek` is **fully compatible** with [`pre-commit`](https://pre-commit.com/) YAML configs, so your existing `.pre-commit-config.yaml` files work unchanged.
+
+If you use **`prek.toml`**, there’s nothing to worry about from a `pre-commit` perspective: upstream `pre-commit` does not read TOML.
+
+If you use the same `.pre-commit-config.yaml` with both tools, keep in mind:
+
+- `prek` supports several extensions beyond upstream `pre-commit`.
+- Upstream `pre-commit` may warn about unknown keys or error out on unsupported features.
+- To stay maximally portable, avoid the extensions listed below (or keep separate configs).
+
+Notable differences (when using YAML):
+
+- **Workspace mode** is a `prek` feature that can discover multiple projects; upstream `pre-commit` is single-project.
+- `files` / `exclude` can be written as **glob mappings** in `prek` (in addition to regex), which is not supported by upstream `pre-commit`.
+- `repo: builtin` adds fast built-in hooks in `prek`.
+- Upstream `pre-commit` uses `minimum_pre_commit_version`, while `prek` uses `minimum_prek_version` and intentionally ignores `minimum_pre_commit_version`.
+
+### Prek-only extensions
+
+These entries are implemented by `prek` and are not part of the documented upstream `pre-commit` configuration surface.
+They work in both YAML and TOML, but they only matter for compatibility if you share a YAML config with upstream `pre-commit`.
+
+- Top-level:
+    - [`minimum_prek_version`](#prek-only-minimum-prek-version-config)
+    - [`orphan`](#prek-only-orphan)
+- Repo type:
+    - [`repo: builtin`](#prek-only-repo-builtin)
+- Hook-level:
+    - [`env`](#prek-only-env)
+    - [`priority`](#prek-only-priority)
+    - [`minimum_prek_version`](#prek-only-minimum-prek-version-hook)
 
 ## Configuration file
 
@@ -27,41 +79,131 @@ If you pass `--config` / `-c`, workspace discovery is disabled and only that sin
 
 `prek` recognizes the following configuration filenames:
 
-- `.pre-commit-config.yaml` (preferred)
-- `.pre-commit-config.yml` (alternate)
+- `prek.toml` (TOML)
+- `.pre-commit-config.yaml` (YAML, preferred for pre-commit compatibility)
+- `.pre-commit-config.yml` (YAML, alternate)
 
 In workspace mode, each project uses one of these filenames in its own directory.
 
+!!! note "One format per repo"
+
+    We recommend using a **single format** across the whole repository to avoid confusion.
+
+    If multiple configuration files exist in the same directory, `prek` uses only one and ignores the rest.
+    The precedence order is:
+
+    1. `prek.toml`
+    2. `.pre-commit-config.yaml`
+    3. `.pre-commit-config.yml`
+
 ### File format
 
-The configuration file is YAML.
+Both `prek.toml` and `.pre-commit-config.yaml` map to the same configuration model (repositories under `repos`, then `hooks` under each repo).
+
+This section focuses on format-specific authoring notes and examples.
+
+#### TOML (`prek.toml`)
 
 Practical notes:
 
-- Keys are typically `snake_case`.
+- Structure is explicit and less indentation-sensitive.
+- Inline tables are common for hooks (e.g. `{ id = "ruff" }`).
+
+TOML supports both **inline tables** and **array-of-tables**, so you can choose between a compact or expanded hook style.
+
+Inline tables (best for small/simple hook configs):
+
+```toml
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+hooks = [
+  { id = "end-of-file-fixer", args = ["--fix"] },
+]
+```
+
+Array-of-tables (more readable for larger hook configs):
+
+```toml
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+
+[[repos.hooks]]
+id = "trailing-whitespace"
+
+[[repos.hooks]]
+id = "check-json"
+```
+
+Example:
+
+=== "prek.toml"
+
+    ```toml
+    default_language_version.python = "3.12"
+
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "ruff",
+        name = "ruff",
+        language = "system",
+        entry = "python3 -m ruff check",
+        files = "\\.py$",
+      },
+    ]
+    ```
+
+#### YAML (`.pre-commit-config.yaml` / `.yml`)
+
+Practical notes:
+
 - Regular expressions are provided as YAML strings.
   If your regex contains backslashes, quote it (e.g. `files: '\\.rs$'`).
 - YAML anchors/aliases and merge keys are supported, so you can de-duplicate repeated blocks.
 
-Example (small but complete):
+Example:
 
-```yaml
-default_language_version:
-  python: python3.12
+=== ".pre-commit-config.yaml"
 
-repos:
-  - repo: local
-    hooks:
-      - id: ruff
-        name: ruff
-        language: system
-        entry: python3 -m ruff check
-        files: '\\.py$'
-```
+    ```yaml
+    default_language_version:
+      python: "3.12"
+
+    repos:
+      - repo: local
+        hooks:
+          - id: ruff
+            name: ruff
+            language: system
+            entry: python3 -m ruff check
+            files: "\\.py$"
+    ```
+
+#### Choosing a format
+
+**`prek.toml`**
+
+- Clearer structure and less error-prone syntax.
+- Recommended for new users or new projects.
+
+**`.pre-commit-config.yaml`**
+
+- Long-established in the ecosystem with broad tool/editor support.
+- Fully compatible with upstream `pre-commit`.
+
+**Recommendation**
+
+- If you already use `.pre-commit-config.yaml`, keep it.
+- If you want a cleaner, more robust authoring experience, prefer `prek.toml`.
+
+If you want to switch, you have to do it manually for now; we might add `prek migrate` in the future to make it easy to convert YAML configs to `prek.toml`.
 
 ### Scope (per-project)
 
-Each `.pre-commit-config.yaml` / `.pre-commit-config.yml` file is scoped to the **project directory it lives in**.
+Each configuration file (`prek.toml`, `.pre-commit-config.yaml`, or `.pre-commit-config.yml`) is scoped to the **project directory it lives in**.
 
 In workspace mode, `prek` treats every discovered configuration file as a **distinct project**:
 
@@ -77,11 +219,20 @@ Example layout (monorepo with a nested project):
 
 If project `foo` config contains an `exclude` that matches `bar/**`, then hooks for project `foo` will not run on files under `foo/bar`:
 
-```yaml
-# foo/.pre-commit-config.yaml
-exclude:
-  glob: bar/**
-```
+=== "prek.toml"
+
+    ```toml
+    # foo/prek.toml
+    exclude = { glob = "bar/**" }
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    # foo/.pre-commit-config.yaml
+    exclude:
+      glob: "bar/**"
+    ```
 
 But if `foo/bar` is itself a project (has its own config), files under `foo/bar` are still eligible for hooks when running **in the context of project `foo/bar`**.
 
@@ -95,32 +246,15 @@ But if `foo/bar` is itself a project (has its own config), files under `foo/bar`
 
 Use `prek validate-config` to validate one or more config files.
 
-If you want IDE completion / validation, the repository ships a JSON schema in `prek.schema.json`.
+If you want IDE completion / validation, prek provides a JSON Schema at [https://prek.j178.dev/docs/prek.schema.json](https://prek.j178.dev/docs/prek.schema.json).
+
+And the schema is also submitted to the [JSON Schema Store](https://json.schemastore.org/prek.schema.json), so some editors may pick it up automatically.
+
 That schema tracks what `prek` accepts today, but `prek` also intentionally tolerates unknown keys for forward compatibility.
 
 ## Configuration reference
 
-This section documents the keys `prek` supports in `.pre-commit-config.yaml` / `.pre-commit-config.yml`.
-
-### prek-only options
-
-The following configuration entries are extensions implemented by `prek` and are not part of the documented `pre-commit` configuration surface.
-If you run them with upstream `pre-commit`, expect them to be ignored or to trigger an “unknown key” warning.
-
-- Top-level:
-
-    - [`minimum_prek_version`](#prek-only-minimum-prek-version-config)
-    - [`orphan`](#prek-only-orphan)
-
-- Repo type:
-
-    - [`repo: builtin`](#prek-only-repo-builtin)
-
-- Hook-level:
-
-    - [`env`](#prek-only-env)
-    - [`priority`](#prek-only-priority)
-    - [`minimum_prek_version`](#prek-only-minimum-prek-version-hook)
+This section documents the configuration keys that `prek` understands.
 
 ### Top-level keys
 
@@ -148,6 +282,14 @@ Global *include* regex applied before hook-level filtering.
 
 This is usually used to narrow down the universe of files in large repositories.
 
+!!! tip "Regex matching"
+
+    When `files` / `exclude` are regex strings, they are matched with *search* semantics (the pattern can match anywhere in the path).
+    Use `^` to anchor at the beginning and `$` at the end.
+
+    `prek` uses the Rust [`fancy-regex`](https://github.com/fancy-regex/fancy-regex) engine.
+    Most typical patterns are portable to upstream `pre-commit`, but very advanced regex features may differ from Python’s `re`.
+
 !!! note "prek-only globs"
 
     In addition to regex strings, `prek` supports glob patterns via:
@@ -161,20 +303,35 @@ This is usually used to narrow down the universe of files in large repositories.
 
 Examples:
 
-```yaml
-# Regex (portable to pre-commit)
-files: '\\.rs$'
+=== "prek.toml"
 
-# Glob (prek-only)
-files:
-  glob: src/**/*.rs
+    ```toml
+    # Regex (portable to pre-commit)
+    files = "\\.rs$"
 
-# Glob list (prek-only; matches if any glob matches)
-files:
-  glob:
-    - src/**/*.rs
-    - crates/**/src/**/*.rs
-```
+    # Glob (prek-only)
+    files = { glob = "src/**/*.rs" }
+
+    # Glob list (prek-only; matches if any glob matches)
+    files = { glob = ["src/**/*.rs", "crates/**/src/**/*.rs"] }
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    # Regex (portable to pre-commit)
+    files: "\\.rs$"
+
+    # Glob (prek-only)
+    files:
+      glob: "src/**/*.rs"
+
+    # Glob list (prek-only; matches if any glob matches)
+    files:
+      glob:
+        - "src/**/*.rs"
+        - "crates/**/src/**/*.rs"
+    ```
 
 <a id="top-level-exclude"></a>
 
@@ -190,25 +347,64 @@ Global *exclude* regex applied before hook-level filtering.
 !!! note "prek-only globs"
 
     Like `files`, `exclude` supports `glob` (single glob or glob list) as a `prek` extension.
-
-    For more information on the glob syntax, refer to the [globset documentation](https://docs.rs/globset/latest/globset/#syntax).
+    For glob syntax details, see the [globset documentation](https://docs.rs/globset/latest/globset/#syntax).
 
 Examples:
 
-```yaml
-# Regex (portable to pre-commit)
-exclude: '^target/'
+=== "prek.toml"
 
-# Glob (prek-only)
-exclude:
-  glob: target/**
+    ```toml
+    # Regex (portable to pre-commit)
+    exclude = "^target/"
 
-# Glob list (prek-only)
-exclude:
-  glob:
-    - target/**
-    - dist/**
-```
+    # Glob (prek-only)
+    exclude = { glob = "target/**" }
+
+    # Glob list (prek-only)
+    exclude = { glob = ["target/**", "dist/**"] }
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    # Regex (portable to pre-commit)
+    exclude: "^target/"
+
+    # Glob (prek-only)
+    exclude:
+      glob: "target/**"
+
+    # Glob list (prek-only)
+    exclude:
+      glob:
+        - "target/**"
+        - "dist/**"
+    ```
+
+Verbose regex example (useful for long allow/deny lists):
+
+=== "prek.toml"
+
+    ```toml
+    # `(?x)` enables "verbose" regex mode (whitespace and newlines are ignored).
+    exclude = """(?x)^(
+      docs/|
+      vendor/|
+      target/
+    )"""
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    # `(?x)` enables "verbose" regex mode (whitespace and newlines are ignored).
+    exclude: |
+      (?x)^(
+        docs/|
+        vendor/|
+        target/
+      )
+    ```
 
 #### `fail_fast`
 
@@ -228,11 +424,20 @@ Map a language name to the default `language_version` used by hooks of that lang
 
 Example:
 
-```yaml
-default_language_version:
-  python: python3.12
-  node: '20'
-```
+=== "prek.toml"
+
+    ```toml
+    default_language_version.python = "3.12"
+    default_language_version.node = "20"
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    default_language_version:
+      python: "3.12"
+      node: "20"
+    ```
 
 `prek` treats `language_version` as a version request (often a semver-like selector) and may install toolchains automatically. See [Difference from pre-commit](diff.md).
 
@@ -297,9 +502,17 @@ If the installed `prek` is older than the configured minimum, `prek` exits with 
 
 Example:
 
-```yaml
-minimum_prek_version: '0.2.0'
-```
+=== "prek.toml"
+
+    ```toml
+    minimum_prek_version = "0.2.0"
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    minimum_prek_version: "0.2.0"
+    ```
 
 #### `orphan`
 
@@ -318,14 +531,27 @@ When `orphan: true`, files under this project directory are handled only by this
 
 Example:
 
-```yaml
-orphan: true
-repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
-    hooks:
-      - id: ruff
-```
+=== "prek.toml"
+
+    ```toml
+    orphan = true
+
+    [[repos]]
+    repo = "https://github.com/astral-sh/ruff-pre-commit"
+    rev = "v0.8.4"
+    hooks = [{ id = "ruff" }]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    orphan: true
+    repos:
+      - repo: https://github.com/astral-sh/ruff-pre-commit
+        rev: v0.8.4
+        hooks:
+          - id: ruff
+    ```
 
 See [Workspace Mode - File Processing Behavior](workspace.md#file-processing-behavior) for details.
 
@@ -366,14 +592,25 @@ You can also add hook-level options (filters, args, stages, etc.) to customize b
 
 Example:
 
-```yaml
-repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
-    hooks:
-      - id: ruff
-        args: [--fix]
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "https://github.com/astral-sh/ruff-pre-commit"
+    rev = "v0.8.4"
+    hooks = [{ id = "ruff", args = ["--fix"] }]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: https://github.com/astral-sh/ruff-pre-commit
+        rev: v0.8.4
+        hooks:
+          - id: ruff
+            args: [--fix]
+    ```
 
 Notes:
 
@@ -391,16 +628,34 @@ Keys:
 
 Example:
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: cargo-fmt
-        name: cargo fmt
-        language: system
-        entry: cargo fmt
-        files: '\\.rs$'
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "cargo-fmt",
+        name = "cargo fmt",
+        language = "system",
+        entry = "cargo fmt",
+        files = "\\.rs$",
+      },
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: cargo-fmt
+            name: cargo fmt
+            language: system
+            entry: cargo fmt
+            files: "\\.rs$"
+    ```
 
 #### `repo: meta`
 
@@ -422,12 +677,22 @@ You may still configure normal hook options such as `files`, `exclude`, `stages`
 
 Example:
 
-```yaml
-repos:
-  - repo: meta
-    hooks:
-      - id: check-useless-excludes
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "meta"
+    hooks = [{ id = "check-useless-excludes" }]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: meta
+        hooks:
+          - id: check-useless-excludes
+    ```
 
 #### `repo: builtin`
 
@@ -447,13 +712,26 @@ Restrictions:
 
 Example:
 
-```yaml
-repos:
-  - repo: builtin
-    hooks:
-      - id: trailing-whitespace
-      - id: check-yaml
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "builtin"
+    hooks = [
+      { id = "trailing-whitespace" },
+      { id = "check-yaml" },
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: builtin
+        hooks:
+          - id: trailing-whitespace
+          - id: check-yaml
+    ```
 
 For the list of available built-in hooks and the “automatic fast path” behavior, see [Built-in Fast Hooks](builtin.md).
 
@@ -551,11 +829,19 @@ Extra arguments appended to the hook’s `entry`.
 
 Example:
 
-```yaml
-hooks:
-  - id: ruff
-    args: [--fix]
-```
+=== "prek.toml"
+
+    ```toml
+    hooks = [{ id = "ruff", args = ["--fix"] }]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    hooks:
+      - id: ruff
+        args: [--fix]
+    ```
 
 #### `env`
 
@@ -575,18 +861,37 @@ For `docker` / `docker_image` hooks, these variables are passed into the contain
 
 Example:
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: cargo-doc
-        name: cargo doc
-        language: system
-        entry: cargo doc --all-features --workspace --no-deps
-        env:
-          RUSTDOCFLAGS: -Dwarnings
-        pass_filenames: false
-```
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "cargo-doc",
+        name = "cargo doc",
+        language = "system",
+        entry = "cargo doc --all-features --workspace --no-deps",
+        env = { RUSTDOCFLAGS = "-Dwarnings" },
+        pass_filenames = false,
+      },
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: cargo-doc
+            name: cargo doc
+            language: system
+            entry: cargo doc --all-features --workspace --no-deps
+            env:
+              RUSTDOCFLAGS: -Dwarnings
+            pass_filenames: false
+    ```
 
 #### `files` / `exclude`
 
@@ -600,15 +905,38 @@ If you use both global and hook-level filters, the effective behavior is “glob
 By default (and for compatibility with upstream `pre-commit`), these are regex strings.
 As a `prek` extension, you can also specify globs using `glob` or a glob list.
 
-See [Top-level `files`](#top-level-files) and [Top-level `exclude`](#top-level-exclude) for the full syntax and examples.
+See [Top-level `files`](#top-level-files) and [Top-level `exclude`](#top-level-exclude) for syntax notes and examples.
 
 #### `types` / `types_or` / `exclude_types`
 
-File-type filters based on `identify` tags.
+File-type filters based on [`identify`](https://pre-commit.com/#filtering-files-with-types) tags.
+
+!!! tip
+
+    Use [`prek identify <path>`](cli.md#prek-identify) to see how prek tags a file when you’re troubleshooting `types` filters.
+
+Compared to regex-only filtering (`files` / `exclude`), tag-based filtering is often easier and more robust:
+
+- tags can match by **file extension** *and* by **shebang** (for extensionless scripts)
+- you can easily exclude things like **symlinks** or **binary files**
+
+Common tags include:
+
+- `file`, `text`, `binary`, `symlink`, `executable`
+
+- language-ish tags such as `python`, `rust`, `javascript`, `yaml`, `toml`, ...
 
 - `types`: all listed tags must match (logical AND)
+
 - `types_or`: at least one listed tag must match (logical OR)
+
 - `exclude_types`: tags that disqualify a file
+
+How these combine:
+
+- `files` / `exclude`, `types`, and `types_or` are combined with **AND**.
+- Tags within `types` are combined with **AND**.
+- Tags within `types_or` are combined with **OR**.
 
 Defaults:
 
@@ -617,6 +945,86 @@ Defaults:
 - `exclude_types`: `[]`
 
 These filters are applied in addition to regex filtering.
+
+Examples:
+
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      # AND: must be under `src/` AND have the `python` tag
+      {
+        id = "lint-py",
+        name = "Lint (py)",
+        language = "system",
+        entry = "python -m ruff check",
+        files = "^src/",
+        types = ["python"],
+        exclude_types = ["symlink"]
+      },
+
+      # OR: match any of the listed tags under `web/`
+      {
+        id = "lint-web",
+        name = "Lint (web)",
+        language = "system",
+        entry = "npm run lint",
+        files = "^web/",
+        types_or = ["javascript", "jsx", "ts", "tsx"]
+      },
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: lint-py
+            name: Lint (py)
+            language: system
+            entry: python -m ruff check
+            files: ^src/
+            types: [python]
+            exclude_types: [symlink]
+
+          - id: lint-web
+            name: Lint (web)
+            language: system
+            entry: npm run lint
+            files: ^web/
+            types_or: [javascript, jsx, ts, tsx]
+    ```
+
+If you need to match a path pattern that doesn’t align with a hook’s default `types` (common when reusing an existing hook in a nonstandard way), override it back to “all files” and use `files`:
+
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "meta"
+    hooks = [
+      {
+        id = "check-hooks-apply",
+        types = ["file"],
+        files = "\\.(yaml|yml|myext)$"
+      },
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: meta
+        hooks:
+          - id: check-hooks-apply
+            types: [file]
+            files: \.(yaml|yml|myext)$
+    ```
 
 #### `always_run`
 
@@ -689,31 +1097,66 @@ When `priority` is omitted, `prek` assigns an implicit value based on hook order
 
 Example:
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: format
-        name: Format
-        language: system
-        entry: python3 -m ruff format
-        always_run: true
-        priority: 0
+=== "prek.toml"
 
-      - id: lint
-        name: Lint
-        language: system
-        entry: python3 -m ruff check
-        always_run: true
-        priority: 10
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "format",
+        name = "Format",
+        language = "system",
+        entry = "python3 -m ruff format",
+        always_run = true,
+        priority = 0,
+      },
+      {
+        id = "lint",
+        name = "Lint",
+        language = "system",
+        entry = "python3 -m ruff check",
+        always_run = true,
+        priority = 10,
+      },
+      {
+        id = "tests",
+        name = "Tests",
+        language = "system",
+        entry = "just test",
+        always_run = true,
+        priority = 20,
+      },
+    ]
+    ```
 
-      - id: tests
-        name: Tests
-        language: system
-        entry: just test
-        always_run: true
-        priority: 20
-```
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: format
+            name: Format
+            language: system
+            entry: python3 -m ruff format
+            always_run: true
+            priority: 0
+
+          - id: lint
+            name: Lint
+            language: system
+            entry: python3 -m ruff check
+            always_run: true
+            priority: 10
+
+          - id: tests
+            name: Tests
+            language: system
+            entry: just test
+            always_run: true
+            priority: 20
+    ```
 
 !!! danger "Parallel hooks modifying files"
 
@@ -781,24 +1224,37 @@ If not set, `prek` may use `default_language_version` for the hook’s language.
 
     Examples:
 
-    ```yaml
-    hooks:
-      - id: ruff
-        language: python
-        language_version: python3.12
+    === "prek.toml"
 
-      - id: eslint
-        language: node
-        language_version: '20'
+        ```toml
+        hooks = [
+          { id = "ruff", language = "python", language_version = "3.12" },
+          { id = "eslint", language = "node", language_version = "20" },
+          { id = "cargo-fmt", language = "rust", language_version = "stable" },
+          { id = "my-tool", language = "system", language_version = "system" },
+        ]
+        ```
 
-      - id: cargo-fmt
-        language: rust
-        language_version: stable
+    === ".pre-commit-config.yaml"
 
-      - id: my-tool
-        language: system
-        language_version: system
-    ```
+        ```yaml
+        hooks:
+          - id: ruff
+            language: python
+            language_version: "3.12"
+
+          - id: eslint
+            language: node
+            language_version: "20"
+
+          - id: cargo-fmt
+            language: rust
+            language_version: stable
+
+          - id: my-tool
+            language: system
+            language_version: system
+        ```
 
 #### `additional_dependencies`
 
@@ -833,7 +1289,7 @@ prek supports the following environment variables:
 
 - `PREK_SKIP` — Comma-separated list of hook IDs to skip (e.g. black,ruff). See [Skipping Projects or Hooks](workspace.md#skipping-projects-or-hooks) for details.
 
-- `PREK_ALLOW_NO_CONFIG` — Allow running without a .pre-commit-config.yaml (useful for ad‑hoc runs).
+- `PREK_ALLOW_NO_CONFIG` — Allow running without a configuration file (useful for ad‑hoc runs).
 
 - `PREK_NO_CONCURRENCY` — Disable parallelism for installs and runs (set `PREK_NO_CONCURRENCY=1` to force concurrency to `1`).
 
@@ -851,9 +1307,9 @@ prek supports the following environment variables:
 
     If not set, prek automatically selects the best available source.
 
-- `PREK_NATIVE_TLS` - Use system's trusted store instead of the bundled `webpki-roots` crate.
+- `PREK_NATIVE_TLS` — Use the system trusted store instead of the bundled `webpki-roots` crate.
 
-- `PREK_CONTAINER_RUNTIME` - Specify the container runtime to use for container-based hooks (e.g., `docker`, `docker_image`). Options:
+- `PREK_CONTAINER_RUNTIME` — Specify the container runtime to use for container-based hooks (e.g., `docker`, `docker_image`). Options:
 
     - `auto` (default, auto-detect available runtime)
     - `docker`

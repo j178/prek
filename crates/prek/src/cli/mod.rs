@@ -591,7 +591,11 @@ pub(crate) struct ValidateManifestArgs {
 #[expect(clippy::option_option)]
 #[derive(Debug, Args)]
 pub(crate) struct SampleConfigArgs {
-    /// Write the sample config to a file (`.pre-commit-config.yaml` by default).
+    /// Write the sample config to a file.
+    ///
+    /// Defaults to `.pre-commit-config.yaml` unless `--format toml` is set,
+    /// which uses `prek.toml`. If a path is provided without `--format`,
+    /// the format is inferred from the file extension (`.toml` uses TOML).
     #[arg(
         short,
         long,
