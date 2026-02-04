@@ -19,6 +19,7 @@ mod cache_gc;
 mod cache_size;
 mod completion;
 mod hook_impl;
+mod identify;
 mod install;
 mod list;
 pub mod reporter;
@@ -35,6 +36,7 @@ pub(crate) use cache_gc::cache_gc;
 pub(crate) use cache_size::cache_size;
 use completion::selector_completer;
 pub(crate) use hook_impl::hook_impl;
+pub(crate) use identify::identify;
 pub(crate) use install::{init_template_dir, install, install_hooks, uninstall};
 pub(crate) use list::list;
 pub(crate) use run::run;
@@ -212,6 +214,8 @@ pub(crate) enum Command {
     Run(Box<RunArgs>),
     /// List available hooks.
     List(ListArgs),
+    /// Show file identification tags.
+    Identify(IdentifyArgs),
     /// Uninstall the prek git hook.
     Uninstall(UninstallArgs),
     /// Validate `.pre-commit-config.yaml` files.
@@ -509,6 +513,14 @@ pub(crate) enum ListOutputFormat {
     Json,
 }
 
+#[derive(Debug, Clone, Copy, clap::ValueEnum, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum IdentifyOutputFormat {
+    #[default]
+    Text,
+    Json,
+}
+
 #[derive(Debug, Clone, Default, Args)]
 pub(crate) struct ListArgs {
     /// Include the specified hooks or projects.
@@ -552,6 +564,16 @@ pub(crate) struct ListArgs {
     /// The output format.
     #[arg(long, value_enum, default_value_t = ListOutputFormat::Text)]
     pub(crate) output_format: ListOutputFormat,
+}
+
+#[derive(Debug, Clone, Default, Args)]
+pub(crate) struct IdentifyArgs {
+    /// The path(s) to the file(s) to identify.
+    #[arg(value_name = "PATH", value_hint = ValueHint::AnyPath)]
+    pub(crate) paths: Vec<PathBuf>,
+    /// The output format.
+    #[arg(long, value_enum, default_value_t = IdentifyOutputFormat::Text)]
+    pub(crate) output_format: IdentifyOutputFormat,
 }
 
 #[derive(Debug, Args)]

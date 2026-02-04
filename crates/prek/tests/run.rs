@@ -2172,6 +2172,7 @@ fn selectors_completion() -> Result<()> {
     install-hooks	Create hook environments for all hooks used in the config file
     run	Run hooks
     list	List available hooks
+    identify	Show file identification tags
     uninstall	Uninstall the prek git hook
     validate-config	Validate `.pre-commit-config.yaml` files
     validate-manifest	Validate `.pre-commit-hooks.yaml` files
