@@ -448,19 +448,10 @@
     },
     "FilePattern": {
       "description": "A file pattern, either a regex or glob pattern(s).",
-      "type": "object",
       "oneOf": [
         {
-          "type": "object",
-          "properties": {
-            "regex": {
-              "description": "A regular expression pattern.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "regex"
-          ]
+          "description": "A regular expression pattern.",
+          "type": "string"
         },
         {
           "type": "object",
