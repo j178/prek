@@ -248,7 +248,7 @@ Use `prek validate-config` to validate one or more config files.
 
 If you want IDE completion / validation, prek provides a JSON Schema at [https://prek.j178.dev/docs/prek.schema.json](https://prek.j178.dev/docs/prek.schema.json).
 
-And the schema is also submitted to the [JSON Schema Store](https://json.schemastore.org/prek.schema.json), so some editors may pick it up automatically.
+And the schema is also submitted to the [JSON Schema Store](https://www.schemastore.org/prek.schema.json), so some editors may pick it up automatically.
 
 That schema tracks what `prek` accepts today, but `prek` also intentionally tolerates unknown keys for forward compatibility.
 
