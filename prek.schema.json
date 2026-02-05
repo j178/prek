@@ -1,4 +1,5 @@
 {
+  "$id": "https://www.schemastore.org/prek.json",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "prek configuration file format",
   "type": "object",
