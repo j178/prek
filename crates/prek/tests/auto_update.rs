@@ -1331,6 +1331,120 @@ fn auto_update_freeze_toml() -> Result<()> {
 }
 
 #[test]
+fn auto_update_equal_timestamp_tags_picks_highest_version() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_dir = context.home_dir().child("test-repos/mirror-repo");
+    repo_dir.create_dir_all()?;
+
+    git_cmd(&repo_dir)
+        .arg("-c")
+        .arg("init.defaultBranch=master")
+        .arg("init")
+        .assert()
+        .success();
+    git_cmd(&repo_dir)
+        .arg("config")
+        .arg("user.name")
+        .arg("Prek Test")
+        .assert()
+        .success();
+    git_cmd(&repo_dir)
+        .arg("config")
+        .arg("user.email")
+        .arg("test@prek.dev")
+        .assert()
+        .success();
+    git_cmd(&repo_dir)
+        .arg("config")
+        .arg("core.autocrlf")
+        .arg("false")
+        .assert()
+        .success();
+
+    repo_dir
+        .child(".pre-commit-hooks.yaml")
+        .write_str(indoc::indoc! {r"
+        - id: test-hook
+          name: Test Hook
+          entry: echo
+          language: system
+    "})?;
+
+    git_cmd(&repo_dir).arg("add").arg(".").assert().success();
+
+    // All commits and tags share the same fixed timestamp.
+    let fixed_ts = "1485051945 +0000";
+
+    git_cmd(&repo_dir)
+        .arg("commit")
+        .arg("-m")
+        .arg("Initial")
+        .env("GIT_AUTHOR_DATE", fixed_ts)
+        .env("GIT_COMMITTER_DATE", fixed_ts)
+        .assert()
+        .success();
+
+    for tag in &["v1.0.0", "v1.0.1", "v1.0.2", "v1.0.3", "v1.0.4", "v1.0.5"] {
+        git_cmd(&repo_dir)
+            .arg("commit")
+            .arg("-m")
+            .arg(format!("Release {tag}"))
+            .arg("--allow-empty")
+            .env("GIT_AUTHOR_DATE", fixed_ts)
+            .env("GIT_COMMITTER_DATE", fixed_ts)
+            .assert()
+            .success();
+        git_cmd(&repo_dir)
+            .arg("tag")
+            .arg(tag)
+            .arg("-m")
+            .arg(tag)
+            .env("GIT_AUTHOR_DATE", fixed_ts)
+            .env("GIT_COMMITTER_DATE", fixed_ts)
+            .assert()
+            .success();
+    }
+
+    let repo_path = repo_dir.to_string_lossy();
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {repo_path}
+            rev: v1.0.3
+            hooks:
+              - id: test-hook
+    "});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/mirror-repo] updating v1.0.3 -> v1.0.5
+
+    ----- stderr -----
+    "#);
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            repos:
+              - repo: [HOME]/test-repos/mirror-repo
+                rev: v1.0.5
+                hooks:
+                  - id: test-hook
+            "#);
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
 fn auto_update_freeze_toml_with_comment() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
