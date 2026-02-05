@@ -10,6 +10,7 @@ use mea::once::OnceCell;
 use mea::semaphore::Semaphore;
 use owo_colors::OwoColorize;
 use prek_consts::env_vars::EnvVars;
+use prek_consts::{PRE_COMMIT_CONFIG_YAML, PREK_TOML};
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -109,9 +110,10 @@ pub(crate) async fn run(
         if selectors.has_project_selectors() {
             writeln!(
                 printer.stderr(),
-                "\n{} If you just added new `{}`, try rerun your command with the `{}` flag to rescan the workspace.",
+                "\n{} If you just added a new `{}` or `{}`, try rerunning your command with the `{}` flag to rescan the workspace.",
                 "hint:".bold().yellow(),
-                ".pre-commit-config.yaml".cyan(),
+                PREK_TOML.cyan(),
+                PRE_COMMIT_CONFIG_YAML.cyan(),
                 "--refresh".cyan(),
             )?;
         }
