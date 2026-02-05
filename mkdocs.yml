@@ -84,6 +84,7 @@ plugins:
           - builtin.md
           - workspace.md
           - integrations.md
+          - authoring-hooks.md
         Help:
           - debugging.md
           - faq.md
@@ -104,6 +105,7 @@ nav:
     - Built-in Hooks: builtin.md
     - Workspace Mode: workspace.md
     - Integrations: integrations.md
+    - Authoring Hooks: authoring-hooks.md
   - Help:
     - Debugging: debugging.md
     - FAQ: faq.md
