@@ -73,6 +73,10 @@ If you run **without** `--config`, `prek` then enables **workspace mode**:
 Workspace discovery respects `.gitignore`, and also supports `.prekignore` for excluding directories from discovery.
 For the full behavior and examples, see [Workspace Mode](workspace.md).
 
+!!! tip
+
+    After updating `.prekignore`, run with `--refresh` to force a fresh project discovery so the changes are picked up.
+
 If you pass `--config` / `-c`, workspace discovery is disabled and only that single config file is used.
 
 ### File name
@@ -241,6 +245,10 @@ But if `foo/bar` is itself a project (has its own config), files under `foo/bar`
     If `foo/bar/.pre-commit-config.yaml` exists but you *don’t* want it to be recognized as a project in workspace mode, exclude it from discovery using [`.prekignore`](workspace.md#discovery).
 
     Like `.gitignore`, `.prekignore` files can be placed anywhere in the workspace and apply to their directory and all subdirectories.
+
+!!! tip
+
+    After updating `.prekignore`, run with `--refresh` to force a fresh project discovery so the changes are picked up.
 
 ### Validation
 

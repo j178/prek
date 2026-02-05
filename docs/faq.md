@@ -1,5 +1,17 @@
 # FAQ
 
+## How is `prek` pronounced?
+
+Like "wreck", but with a "p" sound instead of the "w" at the beginning.
+
+## I updated `.prekignore`, why didn't discovery change?
+
+Workspace discovery is cached. If you edited `.prekignore`, run the command with `--refresh` to force a fresh project discovery so the changes are picked up. For example:
+
+```bash
+prek run --refresh
+```
+
 ## What does `prek install --install-hooks` do?
 
 In short, it installs the Git hooks **and** prepares the environments for the hooks managed by prek. It is inherited from the original Python-based `pre-commit` tool (I'll abbreviate it as **ppc** in this document) to maintain compatibility with existing workflows.
@@ -73,7 +85,3 @@ export GIT_CONFIG_PARAMETERS="'url.https://oauth2:${GITHUB_TOKEN}@github.com/.in
 
 > **Security note:** Be careful with tokens in environment variables. Ensure your
 > CI system masks secrets in logs.
-
-## How is `prek` pronounced?
-
-Like "wreck", but with a "p" sound instead of the "w" at the beginning.
