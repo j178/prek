@@ -19,7 +19,9 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
 use crate::cleanup::cleanup;
-use crate::cli::{CacheCommand, CacheNamespace, Cli, Command, ExitStatus};
+use crate::cli::{
+    CacheCommand, CacheNamespace, Cli, Command, ExitStatus, UtilCommand, UtilNamespace,
+};
 #[cfg(feature = "self-update")]
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::printer::Printer;
@@ -299,11 +301,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
-        Command::Identify(args) => {
-            show_settings!(args);
-
-            cli::identify(&args.paths, args.output_format, printer)
-        }
         Command::HookImpl(args) => {
             show_settings!(args);
 
@@ -381,6 +378,38 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
+        Command::Util(UtilNamespace { command }) => match command {
+            UtilCommand::Identify(args) => {
+                show_settings!(args);
+
+                cli::identify(&args.paths, args.output_format, printer)
+            }
+            UtilCommand::InitTemplateDir(args) => {
+                show_settings!(args);
+
+                cli::init_template_dir(
+                    &store,
+                    args.directory,
+                    cli.globals.config,
+                    args.hook_types,
+                    args.no_allow_missing_config,
+                    cli.globals.refresh,
+                    printer,
+                )
+                .await
+            }
+            UtilCommand::GenerateShellCompletion(args) => {
+                show_settings!(args);
+
+                let mut command = Cli::command();
+                let bin_name = command
+                    .get_bin_name()
+                    .unwrap_or_else(|| command.get_name())
+                    .to_owned();
+                clap_complete::generate(args.shell, &mut command, bin_name, &mut std::io::stdout());
+                Ok(ExitStatus::Success)
+            }
+        },
         #[cfg(feature = "self-update")]
         Command::Self_(SelfNamespace {
             command:
@@ -408,18 +437,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 });
 
             anyhow::bail!("{msg}");
-        }
-
-        Command::GenerateShellCompletion(args) => {
-            show_settings!(args);
-
-            let mut command = Cli::command();
-            let bin_name = command
-                .get_bin_name()
-                .unwrap_or_else(|| command.get_name())
-                .to_owned();
-            clap_complete::generate(args.shell, &mut command, bin_name, &mut std::io::stdout());
-            Ok(ExitStatus::Success)
         }
         Command::InitTemplateDir(args) => {
             show_settings!(args);

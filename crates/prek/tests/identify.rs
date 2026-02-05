@@ -18,6 +18,7 @@ fn identify_text_with_missing_paths() -> anyhow::Result<()> {
         context.filters(),
         context
             .command()
+            .arg("util")
             .arg("identify")
             .arg(".")
             .arg("hello.py")
@@ -50,6 +51,7 @@ fn identify_json_with_missing_paths() -> anyhow::Result<()> {
         context.filters(),
         context
             .command()
+            .arg("util")
             .arg("identify")
             .arg("--output-format")
             .arg("json")

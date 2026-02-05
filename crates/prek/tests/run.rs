@@ -2164,23 +2164,22 @@ fn selectors_completion() -> Result<()> {
     // Unrelated non-project dir should not appear in subdir suggestions
     cwd.child("scratch").create_dir_all()?;
 
-    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @r"
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    install	Install the prek git hook
-    install-hooks	Create hook environments for all hooks used in the config file
+    install	Install prek as a git hook under the `.git/hooks/` directory
+    install-hooks	Create environments for all hooks used in the config file
     run	Run hooks
     list	List available hooks
-    identify	Show file identification tags
-    uninstall	Uninstall the prek git hook
-    validate-config	Validate `.pre-commit-config.yaml` files
+    uninstall	Uninstall prek from git hooks
+    validate-config	Validate configuration files (prek.toml or .pre-commit-config.yaml)
     validate-manifest	Validate `.pre-commit-hooks.yaml` files
-    sample-config	Produce a sample `.pre-commit-config.yaml` file
-    auto-update	Auto-update pre-commit config to the latest repos' versions
+    sample-config	Produce a sample configuration file (prek.toml or .pre-commit-config.yaml)
+    auto-update	Auto-update the `rev` field of repositories in the config file to the latest version
     cache	Manage the prek cache
-    init-template-dir	Install hook script in a directory intended for use with `git config init.templateDir`
     try-repo	Try the pre-commit hooks in the current repo
+    util	Utility commands
     self	`prek` self management
     app/
     app:
