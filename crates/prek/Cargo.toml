@@ -91,6 +91,7 @@ toml = { workspace = true, default-features = false, features = [
   "parse",
   "preserve_order",
   "serde",
+  "display",
 ] }
 toml_edit = { workspace = true }
 tracing = { workspace = true }

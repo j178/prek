@@ -27,6 +27,7 @@ mod sample_config;
 mod self_update;
 mod try_repo;
 mod validate;
+mod yaml_to_toml;
 
 pub(crate) use auto_update::auto_update;
 pub(crate) use cache_clean::cache_clean;
@@ -43,6 +44,7 @@ pub(crate) use sample_config::sample_config;
 pub(crate) use self_update::self_update;
 pub(crate) use try_repo::try_repo;
 pub(crate) use validate::{validate_configs, validate_manifest};
+pub(crate) use yaml_to_toml::yaml_to_toml;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub(crate) enum ExitStatus {
@@ -723,9 +725,27 @@ pub(crate) enum UtilCommand {
     /// Install hook script in a directory intended for use with `git config init.templateDir`.
     #[command(alias = "init-templatedir")]
     InitTemplateDir(InitTemplateDirArgs),
+    /// Convert a YAML configuration file to prek.toml.
+    YamlToToml(YamlToTomlArgs),
     /// Generate shell completion scripts.
     #[command(hide = true)]
     GenerateShellCompletion(GenerateShellCompletionArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct YamlToTomlArgs {
+    /// The YAML configuration file to convert.
+    #[arg(value_name = "CONFIG", value_hint = ValueHint::FilePath)]
+    pub(crate) input: PathBuf,
+
+    /// Path to write the generated prek.toml file.
+    /// Defaults to `prek.toml` in the same directory as the input file.
+    #[arg(short, long, value_name = "OUTPUT", value_hint = ValueHint::FilePath)]
+    pub(crate) output: Option<PathBuf>,
+
+    /// Overwrite the output file if it already exists.
+    #[arg(long)]
+    pub(crate) force: bool,
 }
 
 #[derive(Debug, Subcommand)]

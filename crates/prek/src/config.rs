@@ -37,6 +37,10 @@ impl GlobPatterns {
         Ok(Self { patterns, set })
     }
 
+    pub(crate) fn patterns(&self) -> &[String] {
+        &self.patterns
+    }
+
     fn is_match(&self, value: &str) -> bool {
         self.set.is_match(Path::new(value))
     }
@@ -87,6 +91,20 @@ impl FilePattern {
         match self {
             FilePattern::Regex(regex) => regex.is_match(str).unwrap_or(false),
             FilePattern::Glob(globs) => globs.is_match(str),
+        }
+    }
+
+    pub(crate) fn regex_pattern(&self) -> Option<&str> {
+        match self {
+            FilePattern::Regex(regex) => Some(regex.as_str()),
+            FilePattern::Glob(_) => None,
+        }
+    }
+
+    pub(crate) fn glob_patterns(&self) -> Option<&[String]> {
+        match self {
+            FilePattern::Regex(_) => None,
+            FilePattern::Glob(globs) => Some(globs.patterns()),
         }
     }
 }

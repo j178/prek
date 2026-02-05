@@ -97,6 +97,7 @@ toml = { version = "0.9.5", default-features = false, features = [
   "parse",
   "preserve_order",
   "serde",
+  "display",
 ] }
 toml_edit = { version = "0.24.0" }
 tracing = { version = "0.1.40" }
