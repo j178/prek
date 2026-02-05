@@ -44,7 +44,7 @@ env = { PREK_GENERATE = "1" }
 
 [tasks.generate-json-schema]
 description = "Generate JSON schema"
-run = "cargo test --bin prek --features schemars config::_gen::generate_json_schema -- --exact"
+run = "cargo test --bin prek --features schemars schema::_gen::generate_json_schema -- --exact"
 env = { PREK_GENERATE = "1" }
 
 [tasks.generate]
