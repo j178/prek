@@ -23,7 +23,6 @@ fn sample_config() -> anyhow::Result<()> {
           - id: check-yaml
           - id: check-added-large-files
 
-
     ----- stderr -----
     ");
 
@@ -163,7 +162,6 @@ fn sample_config_format() {
           - id: end-of-file-fixer
           - id: check-yaml
           - id: check-added-large-files
-
 
     ----- stderr -----
     ");
