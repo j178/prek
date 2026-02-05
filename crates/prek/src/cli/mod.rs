@@ -46,7 +46,7 @@ pub(crate) use try_repo::try_repo;
 pub(crate) use validate::{validate_configs, validate_manifest};
 pub(crate) use yaml_to_toml::yaml_to_toml;
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum ExitStatus {
     /// The command succeeded.
     Success,

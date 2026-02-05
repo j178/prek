@@ -401,7 +401,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             UtilCommand::YamlToToml(args) => {
                 show_settings!(args);
 
-                cli::yaml_to_toml(args.input, args.output, args.force, printer)
+                cli::yaml_to_toml(&args.input, args.output, args.force, printer)
             }
             UtilCommand::GenerateShellCompletion(args) => {
                 show_settings!(args);

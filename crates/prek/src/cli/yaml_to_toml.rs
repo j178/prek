@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use prek_consts::PREK_TOML;
-use toml_edit::{Array, DocumentMut, InlineTable, Value};
+use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Table, Value};
 
 use crate::cli::ExitStatus;
 use crate::config;
@@ -13,30 +13,22 @@ use crate::fs::Simplified;
 use crate::printer::Printer;
 
 pub(crate) fn yaml_to_toml(
-    input: PathBuf,
+    input: &Path,
     output: Option<PathBuf>,
     force: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    config::load_config(&input).map_err(|err| {
+    config::load_config(input).map_err(|err| {
         anyhow::anyhow!("Failed to parse `{}`: {err}", input.simplified_display())
     })?;
 
-    let content = fs_err::read_to_string(&input)
+    let content = fs_err::read_to_string(input)
         .with_context(|| format!("Failed to read `{}`", input.simplified_display()))?;
     let value: serde_json::Value = serde_saphyr::from_str(&content).map_err(|err| {
-        anyhow::anyhow!(
-            "Failed to parse `{}`: {err}",
-            input.simplified_display()
-        )
+        anyhow::anyhow!("Failed to parse `{}`: {err}", input.simplified_display())
     })?;
 
-    let output = output.unwrap_or_else(|| {
-        input
-            .parent()
-            .unwrap_or(Path::new("."))
-            .join(PREK_TOML)
-    });
+    let output = output.unwrap_or_else(|| input.parent().unwrap_or(Path::new(".")).join(PREK_TOML));
 
     if output == input {
         anyhow::bail!(
@@ -94,7 +86,14 @@ fn json_to_toml(value: &serde_json::Value) -> Result<String> {
         if value.is_null() {
             continue;
         }
-        doc[key] = json_to_toml_value(value);
+        if key == "repos" {
+            let repos = value
+                .as_array()
+                .ok_or_else(|| anyhow::anyhow!("`repos` must be an array"))?;
+            doc["repos"] = repos_to_array_of_tables(repos)?.into();
+            continue;
+        }
+        doc[key] = json_to_toml_value(value).into();
     }
 
     Ok(doc.to_string())
@@ -132,7 +131,6 @@ fn json_array_to_value(values: &[serde_json::Value]) -> Value {
         array.push(value);
     }
     array.set_trailing_comma(false);
-    array.set_trailing_newline(false);
     Value::Array(array)
 }
 
@@ -145,6 +143,32 @@ fn json_object_to_inline(values: &serde_json::Map<String, serde_json::Value>) ->
         table.insert(key.as_str(), json_to_toml_value(value));
     }
     table
+}
+
+fn repos_to_array_of_tables(values: &[serde_json::Value]) -> Result<ArrayOfTables> {
+    let mut array = ArrayOfTables::new();
+    for value in values {
+        let map = value
+            .as_object()
+            .ok_or_else(|| anyhow::anyhow!("Each repo entry must be a mapping"))?;
+        let mut table = Table::new();
+        for (key, value) in map {
+            if value.is_null() {
+                continue;
+            }
+            if key == "hooks" {
+                if let Some(hooks) = value.as_array() {
+                    table[key] = json_array_to_value(hooks).into();
+                } else {
+                    table[key] = json_to_toml_value(value).into();
+                }
+                continue;
+            }
+            table[key] = json_to_toml_value(value).into();
+        }
+        array.push(table);
+    }
+    Ok(array)
 }
 
 #[cfg(test)]
@@ -164,7 +188,7 @@ mod tests {
             "repos:\n  - repo: local\n    hooks:\n      - id: rustfmt\n",
         )?;
 
-        let status = yaml_to_toml(input, None, false, Printer::Silent)?;
+        let status = yaml_to_toml(&input, None, false, Printer::Silent)?;
         assert_eq!(status, ExitStatus::Success);
 
         let output = temp.path().join(PREK_TOML);
