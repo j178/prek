@@ -212,8 +212,6 @@ pub(crate) enum Command {
     Run(Box<RunArgs>),
     /// List available hooks.
     List(ListArgs),
-    /// Show file identification tags.
-    Identify(IdentifyArgs),
     /// Uninstall the prek git hook.
     Uninstall(UninstallArgs),
     /// Validate `.pre-commit-config.yaml` files.
@@ -234,19 +232,18 @@ pub(crate) enum Command {
     #[command(hide = true)]
     Clean,
     /// Install hook script in a directory intended for use with `git config init.templateDir`.
-    #[command(alias = "init-templatedir")]
+    #[command(alias = "init-templatedir", hide = true)]
     InitTemplateDir(InitTemplateDirArgs),
     /// Try the pre-commit hooks in the current repo.
     TryRepo(Box<TryRepoArgs>),
     /// The implementation of the `pre-commit` hook.
     #[command(hide = true)]
     HookImpl(HookImplArgs),
+    /// Utility commands.
+    Util(UtilNamespace),
     /// `prek` self management.
     #[command(name = "self")]
     Self_(SelfNamespace),
-    /// Generate shell completion scripts.
-    #[command(hide = true)]
-    GenerateShellCompletion(GenerateShellCompletionArgs),
 }
 
 #[derive(Debug, Args)]
@@ -711,6 +708,24 @@ pub(crate) struct HookImplArgs {
 pub(crate) struct CacheNamespace {
     #[command(subcommand)]
     pub(crate) command: CacheCommand,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct UtilNamespace {
+    #[command(subcommand)]
+    pub(crate) command: UtilCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum UtilCommand {
+    /// Show file identification tags.
+    Identify(IdentifyArgs),
+    /// Install hook script in a directory intended for use with `git config init.templateDir`.
+    #[command(alias = "init-templatedir")]
+    InitTemplateDir(InitTemplateDirArgs),
+    /// Generate shell completion scripts.
+    #[command(hide = true)]
+    GenerateShellCompletion(GenerateShellCompletionArgs),
 }
 
 #[derive(Debug, Subcommand)]

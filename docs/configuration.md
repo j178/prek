@@ -918,7 +918,7 @@ File-type filters based on [`identify`](https://pre-commit.com/#filtering-files-
 
 !!! tip
 
-    Use [`prek identify <path>`](cli.md#prek-identify) to see how prek tags a file when you’re troubleshooting `types` filters.
+    Use [`prek util identify <path>`](cli.md#prek-util-identify) to see how prek tags a file when you’re troubleshooting `types` filters.
 
 Compared to regex-only filtering (`files` / `exclude`), tag-based filtering is often easier and more robust:
 
