@@ -202,9 +202,9 @@ pub(crate) struct GlobalArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Install the prek git hook.
+    /// Install prek as a git hook under the `.git/hooks/` directory.
     Install(InstallArgs),
-    /// Create hook environments for all hooks used in the config file.
+    /// Create environments for all hooks used in the config file.
     ///
     /// This command does not install the git hook. To install the git hook along with the hook environments in one command, use `prek install --install-hooks`.
     InstallHooks(InstallHooksArgs),
@@ -212,15 +212,15 @@ pub(crate) enum Command {
     Run(Box<RunArgs>),
     /// List available hooks.
     List(ListArgs),
-    /// Uninstall the prek git hook.
+    /// Uninstall prek from git hooks.
     Uninstall(UninstallArgs),
-    /// Validate `.pre-commit-config.yaml` files.
+    /// Validate configuration files (prek.toml or .pre-commit-config.yaml).
     ValidateConfig(ValidateConfigArgs),
     /// Validate `.pre-commit-hooks.yaml` files.
     ValidateManifest(ValidateManifestArgs),
-    /// Produce a sample `.pre-commit-config.yaml` file.
+    /// Produce a sample configuration file (prek.toml or .pre-commit-config.yaml).
     SampleConfig(SampleConfigArgs),
-    /// Auto-update pre-commit config to the latest repos' versions.
+    /// Auto-update the `rev` field of repositories in the config file to the latest version.
     #[command(alias = "autoupdate")]
     AutoUpdate(AutoUpdateArgs),
     /// Manage the prek cache.
@@ -236,7 +236,7 @@ pub(crate) enum Command {
     InitTemplateDir(InitTemplateDirArgs),
     /// Try the pre-commit hooks in the current repo.
     TryRepo(Box<TryRepoArgs>),
-    /// The implementation of the `pre-commit` hook.
+    /// The implementation of the prek hook script that is installed in the `.git/hooks/` directory.
     #[command(hide = true)]
     HookImpl(HookImplArgs),
     /// Utility commands.
@@ -284,7 +284,7 @@ pub(crate) struct InstallArgs {
     #[arg(short = 'f', long)]
     pub(crate) overwrite: bool,
 
-    /// Create hook environments for all hooks used in the config file.
+    /// Create environments for all hooks used in the config file.
     #[arg(long)]
     pub(crate) install_hooks: bool,
 
@@ -301,7 +301,7 @@ pub(crate) struct InstallArgs {
     #[arg(short = 't', long = "hook-type", value_name = "HOOK_TYPE", value_enum)]
     pub(crate) hook_types: Vec<HookType>,
 
-    /// Allow a missing `pre-commit` configuration file.
+    /// Allow a missing configuration file.
     #[arg(long)]
     pub(crate) allow_missing_config: bool,
 }

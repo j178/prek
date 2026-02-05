@@ -12,15 +12,15 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="#prek-install"><code>prek install</code></a></dt><dd><p>Install the prek git hook</p></dd>
-<dt><a href="#prek-install-hooks"><code>prek install-hooks</code></a></dt><dd><p>Create hook environments for all hooks used in the config file</p></dd>
+<dl class="cli-reference"><dt><a href="#prek-install"><code>prek install</code></a></dt><dd><p>Install prek as a git hook under the <code>.git/hooks/</code> directory</p></dd>
+<dt><a href="#prek-install-hooks"><code>prek install-hooks</code></a></dt><dd><p>Create environments for all hooks used in the config file</p></dd>
 <dt><a href="#prek-run"><code>prek run</code></a></dt><dd><p>Run hooks</p></dd>
 <dt><a href="#prek-list"><code>prek list</code></a></dt><dd><p>List available hooks</p></dd>
-<dt><a href="#prek-uninstall"><code>prek uninstall</code></a></dt><dd><p>Uninstall the prek git hook</p></dd>
-<dt><a href="#prek-validate-config"><code>prek validate-config</code></a></dt><dd><p>Validate <code>.pre-commit-config.yaml</code> files</p></dd>
+<dt><a href="#prek-uninstall"><code>prek uninstall</code></a></dt><dd><p>Uninstall prek from git hooks</p></dd>
+<dt><a href="#prek-validate-config"><code>prek validate-config</code></a></dt><dd><p>Validate configuration files (prek.toml or .pre-commit-config.yaml)</p></dd>
 <dt><a href="#prek-validate-manifest"><code>prek validate-manifest</code></a></dt><dd><p>Validate <code>.pre-commit-hooks.yaml</code> files</p></dd>
-<dt><a href="#prek-sample-config"><code>prek sample-config</code></a></dt><dd><p>Produce a sample <code>.pre-commit-config.yaml</code> file</p></dd>
-<dt><a href="#prek-auto-update"><code>prek auto-update</code></a></dt><dd><p>Auto-update pre-commit config to the latest repos' versions</p></dd>
+<dt><a href="#prek-sample-config"><code>prek sample-config</code></a></dt><dd><p>Produce a sample configuration file (prek.toml or .pre-commit-config.yaml)</p></dd>
+<dt><a href="#prek-auto-update"><code>prek auto-update</code></a></dt><dd><p>Auto-update the <code>rev</code> field of repositories in the config file to the latest version</p></dd>
 <dt><a href="#prek-cache"><code>prek cache</code></a></dt><dd><p>Manage the prek cache</p></dd>
 <dt><a href="#prek-try-repo"><code>prek try-repo</code></a></dt><dd><p>Try the pre-commit hooks in the current repo</p></dd>
 <dt><a href="#prek-util"><code>prek util</code></a></dt><dd><p>Utility commands</p></dd>
@@ -29,7 +29,7 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 
 ## prek install
 
-Install the prek git hook
+Install prek as a git hook under the `.git/hooks/` directory
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -57,7 +57,7 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt id="prek-install--allow-missing-config"><a href="#prek-install--allow-missing-config"><code>--allow-missing-config</code></a></dt><dd><p>Allow a missing <code>pre-commit</code> configuration file</p>
+<dl class="cli-reference"><dt id="prek-install--allow-missing-config"><a href="#prek-install--allow-missing-config"><code>--allow-missing-config</code></a></dt><dd><p>Allow a missing configuration file</p>
 </dd><dt id="prek-install--cd"><a href="#prek-install--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
 </dd><dt id="prek-install--color"><a href="#prek-install--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
 <p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
@@ -83,7 +83,7 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 <li><code>pre-push</code></li>
 <li><code>pre-rebase</code></li>
 <li><code>prepare-commit-msg</code></li>
-</ul></dd><dt id="prek-install--install-hooks"><a href="#prek-install--install-hooks"><code>--install-hooks</code></a></dt><dd><p>Create hook environments for all hooks used in the config file</p>
+</ul></dd><dt id="prek-install--install-hooks"><a href="#prek-install--install-hooks"><code>--install-hooks</code></a></dt><dd><p>Create environments for all hooks used in the config file</p>
 </dd><dt id="prek-install--log-file"><a href="#prek-install--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
 </dd><dt id="prek-install--no-progress"><a href="#prek-install--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
@@ -111,7 +111,7 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 
 ## prek install-hooks
 
-Create hook environments for all hooks used in the config file.
+Create environments for all hooks used in the config file.
 
 This command does not install the git hook. To install the git hook along with the hook environments in one command, use `prek install --install-hooks`.
 
@@ -371,7 +371,7 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 
 ## prek uninstall
 
-Uninstall the prek git hook
+Uninstall prek from git hooks
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -417,7 +417,7 @@ prek uninstall [OPTIONS]
 
 ## prek validate-config
 
-Validate `.pre-commit-config.yaml` files
+Validate configuration files (prek.toml or .pre-commit-config.yaml)
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -489,7 +489,7 @@ prek validate-manifest [OPTIONS] [MANIFEST]...
 
 ## prek sample-config
 
-Produce a sample `.pre-commit-config.yaml` file
+Produce a sample configuration file (prek.toml or .pre-commit-config.yaml)
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -527,7 +527,7 @@ prek sample-config [OPTIONS]
 
 ## prek auto-update
 
-Auto-update pre-commit config to the latest repos' versions
+Auto-update the `rev` field of repositories in the config file to the latest version
 
 <h3 class="cli-reference">Usage</h3>
 
