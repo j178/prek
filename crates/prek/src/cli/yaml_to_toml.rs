@@ -18,15 +18,13 @@ pub(crate) fn yaml_to_toml(
     force: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    // Validate the input file first.
     config::load_config(input).map_err(|err| {
         anyhow::anyhow!("Failed to parse `{}`: {err}", input.simplified_display())
     })?;
 
-    let content = fs_err::read_to_string(input)
-        .with_context(|| format!("Failed to read `{}`", input.simplified_display()))?;
-    let value: serde_json::Value = serde_saphyr::from_str(&content).map_err(|err| {
-        anyhow::anyhow!("Failed to parse `{}`: {err}", input.simplified_display())
-    })?;
+    let content = fs_err::read_to_string(input)?;
+    let value: serde_json::Value = serde_saphyr::from_str(&content)?;
 
     let output = output.unwrap_or_else(|| input.parent().unwrap_or(Path::new(".")).join(PREK_TOML));
 
@@ -77,19 +75,14 @@ pub(crate) fn yaml_to_toml(
 }
 
 fn json_to_toml(value: &serde_json::Value) -> Result<String> {
-    let Some(map) = value.as_object() else {
-        anyhow::bail!("Expected a top-level mapping in the config file");
-    };
+    let map = value
+        .as_object()
+        .context("Expected a top-level mapping in the config file")?;
 
     let mut doc = DocumentMut::new();
     for (key, value) in map {
-        if value.is_null() {
-            continue;
-        }
         if key == "repos" {
-            let repos = value
-                .as_array()
-                .ok_or_else(|| anyhow::anyhow!("`repos` must be an array"))?;
+            let repos = value.as_array().context("`repos` must be an array")?;
             doc["repos"] = repos_to_array_of_tables(repos)?.into();
             continue;
         }
@@ -116,33 +109,74 @@ fn json_to_toml_value(value: &serde_json::Value) -> Value {
             }
         }
         serde_json::Value::String(value) => Value::from(value.as_str()),
-        serde_json::Value::Array(values) => json_array_to_value(values),
+        serde_json::Value::Array(values) => {
+            json_array_to_value_with_indent(values, "  ", "  ", false)
+        }
         serde_json::Value::Object(values) => Value::InlineTable(json_object_to_inline(values)),
     }
 }
 
-fn json_array_to_value(values: &[serde_json::Value]) -> Value {
+fn json_array_to_value_with_indent(
+    values: &[serde_json::Value],
+    item_indent: &str,
+    closing_indent: &str,
+    force_multiline: bool,
+) -> Value {
     let mut array = Array::new();
+    if values.len() == 1 && !force_multiline {
+        let value = match &values[0] {
+            serde_json::Value::Object(map) => Value::InlineTable(json_object_to_inline(map)),
+            _ => json_to_toml_value(&values[0]),
+        };
+        array.push(value);
+        array.set_trailing("");
+        return Value::Array(array);
+    }
+
     for value in values {
-        let value = match value {
+        let mut value = match value {
             serde_json::Value::Object(map) => Value::InlineTable(json_object_to_inline(map)),
             _ => json_to_toml_value(value),
         };
+        value.decor_mut().set_prefix(format!("\n{item_indent}"));
         array.push(value);
     }
-    array.set_trailing_comma(false);
+    array.set_trailing(format!("\n{closing_indent}"));
     Value::Array(array)
 }
 
 fn json_object_to_inline(values: &serde_json::Map<String, serde_json::Value>) -> InlineTable {
     let mut table = InlineTable::new();
     for (key, value) in values {
-        if value.is_null() {
-            continue;
-        }
-        table.insert(key.as_str(), json_to_toml_value(value));
+        let value = match value {
+            serde_json::Value::Array(values) => {
+                json_array_to_value_with_indent(values, "      ", "    ", false)
+            }
+            _ => json_to_toml_value(value),
+        };
+        table.insert(key.as_str(), value);
     }
+    format_inline_table_multiline(&mut table);
     table
+}
+
+fn format_inline_table_multiline(table: &mut InlineTable) {
+    let len = table.len();
+    if len <= 1 {
+        return;
+    }
+    for (idx, (mut key, value)) in table.iter_mut().enumerate() {
+        key.leaf_decor_mut().set_prefix("\n    ");
+        key.leaf_decor_mut().set_suffix(" ");
+
+        let suffix = if idx + 1 == len { "\n  " } else { "" };
+        value.decor_mut().set_prefix(" ");
+        value.decor_mut().set_suffix(suffix);
+
+        if let Value::InlineTable(inner) = value {
+            format_inline_table_multiline(inner);
+        }
+    }
 }
 
 fn repos_to_array_of_tables(values: &[serde_json::Value]) -> Result<ArrayOfTables> {
@@ -150,18 +184,12 @@ fn repos_to_array_of_tables(values: &[serde_json::Value]) -> Result<ArrayOfTable
     for value in values {
         let map = value
             .as_object()
-            .ok_or_else(|| anyhow::anyhow!("Each repo entry must be a mapping"))?;
+            .context("Each repo entry must be a mapping")?;
         let mut table = Table::new();
         for (key, value) in map {
-            if value.is_null() {
-                continue;
-            }
             if key == "hooks" {
-                if let Some(hooks) = value.as_array() {
-                    table[key] = json_array_to_value(hooks).into();
-                } else {
-                    table[key] = json_to_toml_value(value).into();
-                }
+                let hooks = value.as_array().context("`hooks` must be an array")?;
+                table[key] = json_array_to_value_with_indent(hooks, "  ", "", true).into();
                 continue;
             }
             table[key] = json_to_toml_value(value).into();
