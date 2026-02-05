@@ -37,24 +37,25 @@ Follow this short example to experience how prek automates linting and formattin
 
 ### 1. Create a configuration
 
-In the root of your repository, add a `.pre-commit-config.yaml`:
+In the root of your repository, add a `prek.toml`:
 
-```yaml
-repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
-    hooks:
-      - id: check-yaml
-      - id: end-of-file-fixer
+```toml
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+hooks = [
+  { id = "check-yaml" },
+  { id = "end-of-file-fixer" },
+]
 ```
 
-This configuration uses the `pre-commit-hooks` repository and enables two hooks: one validates YAML files, and the other ensures every file ends with a newline.
+This configuration uses the `pre-commit-hooks` repository and enables two hooks: `check-yaml` validates YAML files, and `end-of-file-fixer` ensures every file ends with a newline.
 
 !!! note
 
-    `.pre-commit-config.yaml` is the configuration file name used by **pre-commit**, a widely-used git hook manager. prek reads the same configuration file today. In the future, prek might introduce its own configuration file.
+    `prek.toml` is the native configuration file for **prek**. If you already have a `.pre-commit-config.yaml`, prek can still read it today.
 
-Once you’re happy with your setup, you can stage the config file with `git add .pre-commit-config.yaml`.
+Once you’re happy with your setup, you can stage the config file with `git add prek.toml`.
 
 ### 2. Run hooks on demand
 
