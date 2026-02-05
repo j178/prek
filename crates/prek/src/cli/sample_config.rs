@@ -34,7 +34,8 @@ hooks = [
     { id = "trailing-whitespace" },
     { id = "end-of-file-fixer" },
     { id = "check-added-large-files" },
-]"#};
+]
+"#};
 
 pub(crate) fn sample_config(
     target: SampleConfigTarget,
@@ -90,10 +91,10 @@ pub(crate) fn sample_config(
     // TODO: default to prek.toml in the future?
     match format {
         SampleConfigFormat::Yaml => {
-            writeln!(printer.stdout_important(), "{SAMPLE_CONFIG_YAML}")?;
+            write!(printer.stdout_important(), "{SAMPLE_CONFIG_YAML}")?;
         }
         SampleConfigFormat::Toml => {
-            writeln!(printer.stdout_important(), "{SAMPLE_CONFIG_TOML}")?;
+            write!(printer.stdout_important(), "{SAMPLE_CONFIG_TOML}")?;
         }
     }
     Ok(ExitStatus::Success)
