@@ -343,6 +343,11 @@ Required keys:
 - `rev`: version to use (tag, branch, or commit SHA)
 - `hooks`: list of hook selections
 
+Remote hook definitions live inside the hook repository itself in the
+`.pre-commit-hooks.yaml` manifest (at the repo root). Your config only selects
+hooks by `id` and optionally overrides options. See [Authoring Hooks](authoring-hooks.md)
+if you maintain a hook repository.
+
 ##### `repo`
 
 Where to fetch hooks from.
