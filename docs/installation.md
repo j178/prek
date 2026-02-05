@@ -130,7 +130,7 @@ To enable shell autocompletion for prek commands, run one of the following:
 === "PowerShell"
 
     ```powershell
-    Add-Content -Path $PROFILE -Value '(COMPLETE=powershell prek) | Out-String | Invoke-Expression'
+    Add-Content -Path $PROFILE -Value '$env:COMPLETE = "powershell"; prek | Out-String | Invoke-Expression; Remove-Item Env:\COMPLETE'
     ```
 
 Then restart your shell or source the config file.
