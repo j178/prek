@@ -2,13 +2,13 @@ use std::fmt::Write as _;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use prek_consts::PREK_TOML;
 use toml_edit::{Array, DocumentMut, InlineTable, Value};
 
 use crate::cli::ExitStatus;
-use crate::config::{self, FilePattern, HookOptions, Repo};
+use crate::config;
 use crate::fs::Simplified;
 use crate::printer::Printer;
 
@@ -18,8 +18,17 @@ pub(crate) fn yaml_to_toml(
     force: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let config = config::load_config(&input).map_err(|err| {
+    config::load_config(&input).map_err(|err| {
         anyhow::anyhow!("Failed to parse `{}`: {err}", input.simplified_display())
+    })?;
+
+    let content = fs_err::read_to_string(&input)
+        .with_context(|| format!("Failed to read `{}`", input.simplified_display()))?;
+    let value: serde_json::Value = serde_saphyr::from_str(&content).map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to parse `{}`: {err}",
+            input.simplified_display()
+        )
     })?;
 
     let output = output.unwrap_or_else(|| {
@@ -36,7 +45,7 @@ pub(crate) fn yaml_to_toml(
         );
     }
 
-    let mut rendered = config_to_toml(&config);
+    let mut rendered = json_to_toml(&value)?;
     if !rendered.ends_with('\n') {
         rendered.push('\n');
     }
@@ -75,245 +84,51 @@ pub(crate) fn yaml_to_toml(
     Ok(ExitStatus::Success)
 }
 
-fn config_to_toml(config: &config::Config) -> String {
+fn json_to_toml(value: &serde_json::Value) -> Result<String> {
+    let Some(map) = value.as_object() else {
+        anyhow::bail!("Expected a top-level mapping in the config file");
+    };
+
     let mut doc = DocumentMut::new();
-
-    if let Some(value) = &config.minimum_prek_version {
-        doc["minimum_prek_version"] = value.as_str().into();
-    }
-    if let Some(value) = config.orphan {
-        doc["orphan"] = value.into();
-    }
-    if let Some(value) = config.fail_fast {
-        doc["fail_fast"] = value.into();
-    }
-    if let Some(value) = &config.files {
-        doc["files"] = file_pattern_to_value(value);
-    }
-    if let Some(value) = &config.exclude {
-        doc["exclude"] = file_pattern_to_value(value);
-    }
-    if let Some(values) = &config.default_install_hook_types {
-        doc["default_install_hook_types"] = inline_array(
-            values
-                .iter()
-                .map(|hook_type| hook_type.to_string())
-                .collect::<Vec<_>>(),
-        );
-    }
-    if let Some(values) = &config.default_stages {
-        doc["default_stages"] = inline_array(
-            values
-                .iter()
-                .map(|stage| stage.to_string())
-                .collect::<Vec<_>>(),
-        );
-    }
-    if let Some(values) = &config.default_language_version {
-        let mut table = InlineTable::new();
-        let mut entries: Vec<_> = values
-            .iter()
-            .map(|(lang, version)| (lang.as_ref().to_string(), version))
-            .collect();
-        entries.sort_by(|a, b| a.0.cmp(&b.0));
-        for (lang, version) in entries {
-            table.insert(&lang, Value::from(version.as_str()));
+    for (key, value) in map {
+        if value.is_null() {
+            continue;
         }
-        doc["default_language_version"] = Value::InlineTable(table);
+        doc[key] = json_to_toml_value(value);
     }
 
-    doc["repos"] = repos_to_value(&config.repos);
-
-    doc.to_string()
+    Ok(doc.to_string())
 }
 
-fn repos_to_value(repos: &[Repo]) -> Value {
-    let mut array = Array::new();
-    for repo in repos {
-        array.push(repo_to_inline_table(repo));
-    }
-    array.set_trailing_comma(false);
-    array.set_trailing_newline(false);
-    Value::Array(array)
-}
-
-fn repo_to_inline_table(repo: &Repo) -> InlineTable {
-    let mut table = InlineTable::new();
-    match repo {
-        Repo::Remote(remote) => {
-            table.insert("repo", Value::from(remote.repo.as_str()));
-            table.insert("rev", Value::from(remote.rev.as_str()));
-            table.insert("hooks", hooks_to_value_remote(&remote.hooks));
+fn json_to_toml_value(value: &serde_json::Value) -> Value {
+    match value {
+        serde_json::Value::Null => Value::from(""),
+        serde_json::Value::Bool(value) => Value::from(*value),
+        serde_json::Value::Number(value) => {
+            if let Some(value) = value.as_i64() {
+                Value::from(value)
+            } else if let Some(value) = value.as_u64() {
+                match i64::try_from(value) {
+                    Ok(value) => Value::from(value),
+                    Err(_) => Value::from(value as f64),
+                }
+            } else {
+                Value::from(value.as_f64().unwrap_or_default())
+            }
         }
-        Repo::Local(local) => {
-            table.insert("repo", Value::from(local.repo.as_str()));
-            table.insert("hooks", hooks_to_value_local(&local.hooks));
-        }
-        Repo::Meta(meta) => {
-            table.insert("repo", Value::from(meta.repo.as_str()));
-            table.insert("hooks", hooks_to_value_meta(&meta.hooks));
-        }
-        Repo::Builtin(builtin) => {
-            table.insert("repo", Value::from(builtin.repo.as_str()));
-            table.insert("hooks", hooks_to_value_builtin(&builtin.hooks));
-        }
-    }
-    table
-}
-
-fn hooks_to_value_remote(hooks: &[config::RemoteHook]) -> Value {
-    hooks_to_value(hooks.iter().map(|hook| {
-        let mut table = InlineTable::new();
-        table.insert("id", Value::from(hook.id.as_str()));
-        if let Some(name) = &hook.name {
-            table.insert("name", Value::from(name.as_str()));
-        }
-        if let Some(entry) = &hook.entry {
-            table.insert("entry", Value::from(entry.as_str()));
-        }
-        if let Some(language) = &hook.language {
-            table.insert("language", Value::from(language.as_ref()));
-        }
-        if let Some(priority) = hook.priority {
-            table.insert("priority", Value::from(priority));
-        }
-        add_hook_options(&mut table, &hook.options);
-        table
-    }))
-}
-
-fn hooks_to_value_local(hooks: &[config::LocalHook]) -> Value {
-    hooks_to_value(hooks.iter().map(|hook| {
-        let mut table = InlineTable::new();
-        table.insert("id", Value::from(hook.id.as_str()));
-        table.insert("name", Value::from(hook.name.as_str()));
-        table.insert("entry", Value::from(hook.entry.as_str()));
-        table.insert("language", Value::from(hook.language.as_ref()));
-        if let Some(priority) = hook.priority {
-            table.insert("priority", Value::from(priority));
-        }
-        add_hook_options(&mut table, &hook.options);
-        table
-    }))
-}
-
-fn hooks_to_value_meta(hooks: &[config::MetaHook]) -> Value {
-    hooks_to_value(hooks.iter().map(|hook| {
-        let mut table = InlineTable::new();
-        table.insert("id", Value::from(hook.id.as_str()));
-        table.insert("name", Value::from(hook.name.as_str()));
-        if let Some(priority) = hook.priority {
-            table.insert("priority", Value::from(priority));
-        }
-        add_hook_options(&mut table, &hook.options);
-        table
-    }))
-}
-
-fn hooks_to_value_builtin(hooks: &[config::BuiltinHook]) -> Value {
-    hooks_to_value(hooks.iter().map(|hook| {
-        let mut table = InlineTable::new();
-        table.insert("id", Value::from(hook.id.as_str()));
-        table.insert("name", Value::from(hook.name.as_str()));
-        table.insert("entry", Value::from(hook.entry.as_str()));
-        if let Some(priority) = hook.priority {
-            table.insert("priority", Value::from(priority));
-        }
-        add_hook_options(&mut table, &hook.options);
-        table
-    }))
-}
-
-fn hooks_to_value<I>(hooks: I) -> Value
-where
-    I: IntoIterator<Item = InlineTable>,
-{
-    let mut array = Array::new();
-    for hook in hooks {
-        array.push(hook);
-    }
-    array.set_trailing_comma(false);
-    array.set_trailing_newline(false);
-    Value::Array(array)
-}
-
-fn add_hook_options(table: &mut InlineTable, options: &HookOptions) {
-    if let Some(value) = &options.alias {
-        table.insert("alias", Value::from(value.as_str()));
-    }
-    if let Some(value) = &options.files {
-        table.insert("files", file_pattern_to_value(value));
-    }
-    if let Some(value) = &options.exclude {
-        table.insert("exclude", file_pattern_to_value(value));
-    }
-    if let Some(value) = &options.types {
-        table.insert("types", inline_array(value.clone()));
-    }
-    if let Some(value) = &options.types_or {
-        table.insert("types_or", inline_array(value.clone()));
-    }
-    if let Some(value) = &options.exclude_types {
-        table.insert("exclude_types", inline_array(value.clone()));
-    }
-    if let Some(value) = &options.additional_dependencies {
-        table.insert("additional_dependencies", inline_array(value.clone()));
-    }
-    if let Some(value) = &options.args {
-        table.insert("args", inline_array(value.clone()));
-    }
-    if let Some(value) = &options.env {
-        let mut env_table = InlineTable::new();
-        let mut entries: Vec<_> = value.iter().collect();
-        entries.sort_by(|a, b| a.0.cmp(b.0));
-        for (key, value) in entries {
-            env_table.insert(key.as_str(), Value::from(value.as_str()));
-        }
-        table.insert("env", Value::InlineTable(env_table));
-    }
-    if let Some(value) = options.always_run {
-        table.insert("always_run", Value::from(value));
-    }
-    if let Some(value) = options.fail_fast {
-        table.insert("fail_fast", Value::from(value));
-    }
-    if let Some(value) = options.pass_filenames {
-        table.insert("pass_filenames", Value::from(value));
-    }
-    if let Some(value) = &options.description {
-        table.insert("description", Value::from(value.as_str()));
-    }
-    if let Some(value) = &options.language_version {
-        table.insert("language_version", Value::from(value.as_str()));
-    }
-    if let Some(value) = &options.log_file {
-        table.insert("log_file", Value::from(value.as_str()));
-    }
-    if let Some(value) = options.require_serial {
-        table.insert("require_serial", Value::from(value));
-    }
-    if let Some(value) = &options.stages {
-        table.insert(
-            "stages",
-            inline_array(
-                value
-                    .iter()
-                    .map(|stage| stage.to_string())
-                    .collect::<Vec<_>>(),
-            ),
-        );
-    }
-    if let Some(value) = options.verbose {
-        table.insert("verbose", Value::from(value));
-    }
-    if let Some(value) = &options.minimum_prek_version {
-        table.insert("minimum_prek_version", Value::from(value.as_str()));
+        serde_json::Value::String(value) => Value::from(value.as_str()),
+        serde_json::Value::Array(values) => json_array_to_value(values),
+        serde_json::Value::Object(values) => Value::InlineTable(json_object_to_inline(values)),
     }
 }
 
-fn inline_array(values: Vec<String>) -> Value {
+fn json_array_to_value(values: &[serde_json::Value]) -> Value {
     let mut array = Array::new();
     for value in values {
+        let value = match value {
+            serde_json::Value::Object(map) => Value::InlineTable(json_object_to_inline(map)),
+            _ => json_to_toml_value(value),
+        };
         array.push(value);
     }
     array.set_trailing_comma(false);
@@ -321,26 +136,15 @@ fn inline_array(values: Vec<String>) -> Value {
     Value::Array(array)
 }
 
-fn file_pattern_to_value(pattern: &FilePattern) -> Value {
-    if let Some(regex) = pattern.regex_pattern() {
-        return Value::from(regex);
-    }
-    if let Some(globs) = pattern.glob_patterns() {
-        let mut table = InlineTable::new();
-        if globs.len() == 1 {
-            table.insert("glob", Value::from(globs[0].as_str()));
-        } else {
-            let mut array = Array::new();
-            for glob in globs {
-                array.push(glob.as_str());
-            }
-            array.set_trailing_comma(false);
-            array.set_trailing_newline(false);
-            table.insert("glob", Value::Array(array));
+fn json_object_to_inline(values: &serde_json::Map<String, serde_json::Value>) -> InlineTable {
+    let mut table = InlineTable::new();
+    for (key, value) in values {
+        if value.is_null() {
+            continue;
         }
-        return Value::InlineTable(table);
+        table.insert(key.as_str(), json_to_toml_value(value));
     }
-    Value::from("")
+    table
 }
 
 #[cfg(test)]
