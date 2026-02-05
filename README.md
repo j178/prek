@@ -379,6 +379,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [commitizen-tools/commitizen](https://github.com/commitizen-tools/commitizen)
 - [cocoindex-io/cocoindex](https://github.com/cocoindex-io/cocoindex/pull/1564)
 - [cachix/devenv](https://github.com/cachix/devenv/pull/2304)
+- [copper-project/copper-rs](https://github.com/copper-project/copper-rs/pull/783)
 
 <!-- --8<-- [end: why] -->
 
