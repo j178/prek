@@ -35,6 +35,10 @@ When you run `prek run` without the `--config` option, `prek` automatically disc
 
 - For additional control, `prek` also supports reading `.prekignore` files (following the same syntax rules as `.gitignore`) to exclude specific directories from workspace discovery beyond what's in `.gitignore`. Like `.gitignore`, `.prekignore` files can be placed anywhere in the workspace and apply to their directory and all subdirectories. This works similarly to the `--skip` option but is configured via files.
 
+!!! tip
+
+    After updating `.prekignore`, run with `--refresh` to force a fresh project discovery so the changes are picked up.
+
 ## Project Organization
 
 ### Example Structure
@@ -234,6 +238,10 @@ prek run frontend:lint src/backend:black
 You can skip specific projects or hooks using the `--skip` option, with the same syntax as for selecting projects or hooks.
 
 **Alternative**: You can also create `.prekignore` files (using `.gitignore` syntax) anywhere in the workspace to permanently exclude directories from project discovery during workspace setup. Note that `.gitignore` files are already respected by default, so `.prekignore` is only needed for excluding additional directories beyond what's in `.gitignore`.
+
+!!! tip
+
+    After updating `.prekignore`, run with `--refresh` to force a fresh project discovery so the changes are picked up.
 
 ```bash
 # Skip all hooks from a specific project
