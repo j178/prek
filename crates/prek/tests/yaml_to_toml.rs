@@ -1,6 +1,6 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
-use prek_consts::PREK_TOML;
+use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PREK_TOML};
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -251,4 +251,134 @@ fn yaml_to_toml_same_output() -> anyhow::Result<()> {
         .assert(predicates::path::missing());
 
     Ok(())
+}
+
+#[test]
+fn yaml_to_toml_discovers_pre_commit_config_yaml() -> anyhow::Result<()> {
+    let context = TestContext::new();
+
+    context
+        .work_dir()
+        .child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(YAML_CONFIG)?;
+
+    cmd_snapshot!(
+        context.filters(),
+        context.command().args(["util", "yaml-to-toml"]),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Written to `prek.toml`
+
+    ----- stderr -----
+    "#
+    );
+
+    context
+        .work_dir()
+        .child(PREK_TOML)
+        .assert(predicates::path::exists());
+
+    Ok(())
+}
+
+#[test]
+fn yaml_to_toml_discovers_pre_commit_config_yml() -> anyhow::Result<()> {
+    let context = TestContext::new();
+
+    context
+        .work_dir()
+        .child(PRE_COMMIT_CONFIG_YML)
+        .write_str(YAML_CONFIG)?;
+
+    cmd_snapshot!(
+        context.filters(),
+        context.command().args(["util", "yaml-to-toml"]),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Written to `prek.toml`
+
+    ----- stderr -----
+    "#
+    );
+
+    context
+        .work_dir()
+        .child(PREK_TOML)
+        .assert(predicates::path::exists());
+
+    Ok(())
+}
+
+#[test]
+fn yaml_to_toml_prefers_yaml_over_yml() -> anyhow::Result<()> {
+    let context = TestContext::new();
+
+    // Write different content to each file so we can verify which was used.
+    let yaml_only = indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: trailing-whitespace
+    "};
+    let yml_only = indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: end-of-file-fixer
+    "};
+
+    context
+        .work_dir()
+        .child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(yaml_only)?;
+    context
+        .work_dir()
+        .child(PRE_COMMIT_CONFIG_YML)
+        .write_str(yml_only)?;
+
+    cmd_snapshot!(
+        context.filters(),
+        context.command().args(["util", "yaml-to-toml"]),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Written to `prek.toml`
+
+    ----- stderr -----
+    "#
+    );
+
+    // The .yaml file contains trailing-whitespace, the .yml contains end-of-file-fixer.
+    let output = context.read(PREK_TOML);
+    assert!(
+        output.contains("trailing-whitespace"),
+        "Expected .yaml to be preferred over .yml"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn yaml_to_toml_error_when_no_config_found() {
+    let context = TestContext::new();
+
+    cmd_snapshot!(
+        context.filters(),
+        context.command().args(["util", "yaml-to-toml"]),
+        @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `.pre-commit-config.yaml` or `.pre-commit-config.yml` found in the current directory
+
+    hint: Provide a path explicitly: prek util yaml-to-toml <CONFIG>
+    "#
+    );
 }
