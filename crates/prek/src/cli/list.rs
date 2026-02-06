@@ -107,7 +107,6 @@ pub(crate) async fn list(
                     writeln!(printer.stdout())?;
                 }
             } else {
-                // TODO: add project prefix to hook id
                 for hook in &filtered_hooks {
                     writeln!(printer.stdout(), "{}", hook.full_id())?;
                 }
