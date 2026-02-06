@@ -9,8 +9,31 @@ use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 mod common;
 
-/// Helper function to create a local git repository with hooks
+const BASE_TIMESTAMP: u64 = 1_000_000_000;
+const INCREMENTING_STEP_SECS: u64 = 100;
+const FIXED_STEP_SECS: u64 = 0;
+
+/// Helper function to create a local git repository with hooks and incrementing timestamps.
 fn create_local_git_repo(context: &TestContext, repo_name: &str, tags: &[&str]) -> Result<String> {
+    create_local_git_repo_with_timestamps(context, repo_name, tags, INCREMENTING_STEP_SECS)
+}
+
+/// Like `create_local_git_repo`, but all commits and tags share a single fixed timestamp.
+/// Simulates mirror repos where all tags are imported simultaneously.
+fn create_local_git_repo_fixed_ts(
+    context: &TestContext,
+    repo_name: &str,
+    tags: &[&str],
+) -> Result<String> {
+    create_local_git_repo_with_timestamps(context, repo_name, tags, FIXED_STEP_SECS)
+}
+
+fn create_local_git_repo_with_timestamps(
+    context: &TestContext,
+    repo_name: &str,
+    tags: &[&str],
+    timestamp_step_secs: u64,
+) -> Result<String> {
     let repo_dir = context.home_dir().child(format!("test-repos/{repo_name}"));
     repo_dir.create_dir_all()?;
 
@@ -18,24 +41,6 @@ fn create_local_git_repo(context: &TestContext, repo_name: &str, tags: &[&str]) 
         .arg("-c")
         .arg("init.defaultBranch=master")
         .arg("init")
-        .assert()
-        .success();
-    git_cmd(&repo_dir)
-        .arg("config")
-        .arg("user.name")
-        .arg("Prek Test")
-        .assert()
-        .success();
-    git_cmd(&repo_dir)
-        .arg("config")
-        .arg("user.email")
-        .arg("test@prek.dev")
-        .assert()
-        .success();
-    git_cmd(&repo_dir)
-        .arg("config")
-        .arg("core.autocrlf")
-        .arg("false")
         .assert()
         .success();
 
@@ -55,7 +60,7 @@ fn create_local_git_repo(context: &TestContext, repo_name: &str, tags: &[&str]) 
 
     git_cmd(&repo_dir).arg("add").arg(".").assert().success();
 
-    let mut timestamp = 1_000_000_000;
+    let mut timestamp = BASE_TIMESTAMP;
 
     git_cmd(&repo_dir)
         .arg("commit")
@@ -68,7 +73,7 @@ fn create_local_git_repo(context: &TestContext, repo_name: &str, tags: &[&str]) 
 
     // Create tags
     for tag in tags {
-        timestamp += 100;
+        timestamp += timestamp_step_secs;
         git_cmd(&repo_dir)
             .arg("commit")
             .arg("-m")
@@ -89,7 +94,7 @@ fn create_local_git_repo(context: &TestContext, repo_name: &str, tags: &[&str]) 
             .success();
     }
 
-    timestamp += 100;
+    timestamp += timestamp_step_secs;
     // Add an extra commit to the tip
     git_cmd(&repo_dir)
         .arg("commit")
@@ -1323,6 +1328,174 @@ fn auto_update_freeze_toml() -> Result<()> {
             hooks = [
               { id = "test-hook" },
             ]
+            "#);
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_equal_timestamp_tags_picks_highest_version() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo_fixed_ts(
+        &context,
+        "mirror-repo",
+        &["v1.0.0", "v1.0.1", "v1.0.2", "v1.0.3", "v1.0.4", "v1.0.5"],
+    )?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.3
+            hooks:
+              - id: test-hook
+    ", repo_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/mirror-repo] updating v1.0.3 -> v1.0.5
+
+    ----- stderr -----
+    "#);
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            repos:
+              - repo: [HOME]/test-repos/mirror-repo
+                rev: v1.0.5
+                hooks:
+                  - id: test-hook
+            "#);
+        }
+    );
+
+    Ok(())
+}
+
+// When all tags share a timestamp and some are non-semver (e.g. "latest", "stable"),
+// semver tags should be preferred and sorted highest-first.
+#[test]
+fn auto_update_equal_timestamp_prefers_semver_over_nonsemver() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo_fixed_ts(
+        &context,
+        "mixed-tags-repo",
+        &["v1.0.0", "latest", "v2.0.0", "stable"],
+    )?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/mixed-tags-repo] updating v1.0.0 -> v2.0.0
+
+    ----- stderr -----
+    "#);
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            repos:
+              - repo: [HOME]/test-repos/mixed-tags-repo
+                rev: v2.0.0
+                hooks:
+                  - id: test-hook
+            "#);
+        }
+    );
+
+    Ok(())
+}
+
+// When tags span multiple timestamp groups, the newest group should be selected first.
+// Within an equal-timestamp group, semver tiebreaker picks the highest version.
+#[test]
+fn auto_update_mixed_timestamps_with_equal_subgroups() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Create base repo with v1.0.x tags at incrementing timestamps.
+    let repo_path = create_local_git_repo(&context, "mixed-ts-repo", &["v1.0.0", "v1.0.1"])?;
+
+    // Add a second group of tags sharing a single newer timestamp
+    // (must be in the past so the cooldown filter doesn't exclude them).
+    let newer_ts = "1500000000 +0000";
+    for tag in &["v2.0.1", "v2.0.0"] {
+        git_cmd(&repo_path)
+            .arg("commit")
+            .arg("-m")
+            .arg(format!("Release {tag}"))
+            .arg("--allow-empty")
+            .env("GIT_AUTHOR_DATE", newer_ts)
+            .env("GIT_COMMITTER_DATE", newer_ts)
+            .assert()
+            .success();
+        git_cmd(&repo_path)
+            .arg("tag")
+            .arg(tag)
+            .arg("-m")
+            .arg(tag)
+            .env("GIT_AUTHOR_DATE", newer_ts)
+            .env("GIT_COMMITTER_DATE", newer_ts)
+            .assert()
+            .success();
+    }
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/mixed-ts-repo] updating v1.0.0 -> v2.0.1
+
+    ----- stderr -----
+    "#);
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            repos:
+              - repo: [HOME]/test-repos/mixed-ts-repo
+                rev: v2.0.1
+                hooks:
+                  - id: test-hook
             "#);
         }
     );

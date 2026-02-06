@@ -11,6 +11,7 @@ use owo_colors::OwoColorize;
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
+use semver::Version;
 use toml_edit::DocumentMut;
 use tracing::{debug, trace};
 
@@ -289,6 +290,9 @@ async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<String>> {
 }
 
 /// Returns all tags and their Unix timestamps (newest first).
+///
+/// Within groups of tags sharing the same timestamp, semver-parseable tags
+/// are sorted highest version first; non-semver tags sort after them.
 async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
     let output = git::git_cmd("git for-each-ref")?
         .arg("for-each-ref")
@@ -303,7 +307,7 @@ async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
         .output()
         .await?;
 
-    Ok(String::from_utf8_lossy(&output.stdout)
+    let mut tags: Vec<(String, u64)> = String::from_utf8_lossy(&output.stdout)
         .lines()
         .filter_map(|line| {
             let mut parts = line.split_whitespace();
@@ -312,7 +316,26 @@ async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
             let ts: u64 = ts_str.parse().ok()?;
             Some((tag.to_string(), ts))
         })
-        .collect())
+        .collect();
+
+    // Deterministic sort: primary key is timestamp (newest first).
+    // Within equal timestamps, prefer higher semver versions; non-semver tags
+    // sort after semver ones. As a final tie-breaker, compare the tag refname
+    // so ordering is stable across platforms/filesystems.
+    tags.sort_by(|(tag_a, ts_a), (tag_b, ts_b)| {
+        ts_b.cmp(ts_a).then_with(|| {
+            let ver_a = Version::parse(tag_a.strip_prefix('v').unwrap_or(tag_a));
+            let ver_b = Version::parse(tag_b.strip_prefix('v').unwrap_or(tag_b));
+            match (ver_a, ver_b) {
+                (Ok(a), Ok(b)) => b.cmp(&a).then_with(|| tag_a.cmp(tag_b)),
+                (Ok(_), Err(_)) => std::cmp::Ordering::Less,
+                (Err(_), Ok(_)) => std::cmp::Ordering::Greater,
+                (Err(_), Err(_)) => tag_a.cmp(tag_b),
+            }
+        })
+    });
+
+    Ok(tags)
 }
 
 async fn resolve_revision(
@@ -907,5 +930,41 @@ mod tests {
         let rev = resolve_revision(repo, "v1.2.3", false, 1).await.unwrap();
 
         assert_eq!(rev, Some("v1.2.0".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_tag_timestamps_stable_order_for_equal_timestamps() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        // Create multiple tags on the same commit (same timestamp)
+        create_backdated_commit(repo, "release", 5).await;
+        create_lightweight_tag(repo, "v1.0.0").await;
+        create_lightweight_tag(repo, "v1.0.3").await;
+        create_lightweight_tag(repo, "v1.0.5").await;
+        create_lightweight_tag(repo, "v1.0.2").await;
+
+        let timestamps = get_tag_timestamps(repo).await.unwrap();
+
+        // All timestamps are equal (tags on same commit).
+        // Within equal timestamps, semver tags should sort highest version first.
+        let tags: Vec<&str> = timestamps.iter().map(|(t, _)| t.as_str()).collect();
+        assert_eq!(tags, vec!["v1.0.5", "v1.0.3", "v1.0.2", "v1.0.0"]);
+    }
+
+    #[tokio::test]
+    async fn test_get_tag_timestamps_deterministic_order_for_equal_timestamp_non_semver() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        // Lightweight tags on the same commit share a timestamp.
+        create_backdated_commit(repo, "release", 5).await;
+        create_lightweight_tag(repo, "beta").await;
+        create_lightweight_tag(repo, "alpha").await;
+        create_lightweight_tag(repo, "gamma").await;
+
+        let timestamps = get_tag_timestamps(repo).await.unwrap();
+        let tags: Vec<&str> = timestamps.iter().map(|(t, _)| t.as_str()).collect();
+        assert_eq!(tags, vec!["alpha", "beta", "gamma"]);
     }
 }
