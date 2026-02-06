@@ -1,5 +1,128 @@
 # Changelog
 
+## 0.3.2
+
+Released on 2026-02-06.
+
+### Highlights
+
+- **`prek.toml` is here!**
+
+    You can now use `prek.toml` as an alternative to `.pre-commit-config.yaml` for configuring prek. `prek.toml` mirrors the structure of `.pre-commit-config.yaml`, but TOML is less error-prone. Your existing `.pre-commit-config.yaml` will continue to work, but for new users and new projects, `prek.toml` may make more sense. If you want to switch, run `prek util yaml-to-toml` to convert YAML configs to `prek.toml`. See [configuration docs](configuration.md) for details.
+
+    For example, this config:
+
+    ```yaml
+    repos:
+      - repo: https://github.com/pre-commit/pre-commit-hooks
+        rev: v6.0.0
+        hooks:
+          - id: check-yaml
+    ```
+
+    Can be written as `prek.toml` like this:
+
+    ```toml
+    [[repos]]
+    repo = "https://github.com/pre-commit/pre-commit-hooks"
+    rev = "v6.0.0"
+    hooks = [ { id = "check-yaml" } ]
+    ```
+
+- **`serde-yaml` has been replaced with `serde-saphyr`**
+
+    We replaced the long-deprecated `serde-yaml` crate with [`serde-saphyr`](https://crates.io/crates/serde-saphyr) for YAML parsing. It is written in safe Rust and has better error messages, performance, and security. This lets us provide precise location information for configuration parsing errors, which should make it easier to fix config issues.
+
+    For example, this invalid config:
+
+    ```yaml
+    repos:
+      - repo: https://github.com/crate-ci/typos
+        hooks:
+          - id: typos
+    ```
+
+    Before:
+
+    ```console
+    $ prek run
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: Invalid remote repo: missing field `rev`
+    ```
+
+    Now:
+
+    ```console
+    $ prek run
+    error: Failed to parse `.pre-commit-config.yaml`
+    caused by: error: line 2 column 5: missing field `rev` at line 2, column 5
+    --> <input>:2:5
+      |
+    1 | repos:
+    2 |   - repo: https://github.com/crate-ci/typos
+      |     ^ missing field `rev` at line 2, column 5
+    3 |     hooks:
+    4 |       - id: typos
+      |
+    ```
+
+- **`prek util` subcommands**
+
+    We added a new `prek util` top-level command for miscellaneous utilities that don't fit into other categories. The first two utilities are:
+
+    - `prek util identify`: shows the identification tags of files that prek uses for file filtering, which can be useful for debugging and writing `types/types_or/exclude_types` filters.
+    - `prek util yaml-to-toml`: converts `.pre-commit-config.yaml` to `prek.toml`.
+
+    We also moved `prek init-template-dir` under `prek util` for better organization. The old `prek init-template-dir` command is still available (hidden) as an alias for backward compatibility.
+
+### Enhancements
+
+- Add `prek util identify` subcommand ([#1554](https://github.com/j178/prek/pull/1554))
+- Add `prek util yaml-to-toml` to convert `.pre-commit-config.yaml` to `prek.toml` ([#1584](https://github.com/j178/prek/pull/1584))
+- Detect install source for actionable upgrade hints ([#1540](https://github.com/j178/prek/pull/1540))
+- Detect prek installed by the standalone installer ([#1545](https://github.com/j178/prek/pull/1545))
+- Implement `serialize_yaml_scalar` using `serde-saphyr` ([#1534](https://github.com/j178/prek/pull/1534))
+- Improve max cli arguments length calculation ([#1518](https://github.com/j178/prek/pull/1518))
+- Move `identify` and `init-template-dir` under the `prek util` top-level command ([#1574](https://github.com/j178/prek/pull/1574))
+- Replace serde-yaml with serde-saphyr (again) ([#1520](https://github.com/j178/prek/pull/1520))
+- Show precise location for config parsing error ([#1530](https://github.com/j178/prek/pull/1530))
+- Support `Julia` language ([#1519](https://github.com/j178/prek/pull/1519))
+- Support `prek.toml` ([#1271](https://github.com/j178/prek/pull/1271))
+- Added `PREK_QUIET` environment variable support ([#1513](https://github.com/j178/prek/pull/1513))
+- Remove upper bound constraint of uv version ([#1588](https://github.com/j178/prek/pull/1588))
+
+### Bug fixes
+
+- Do not make the child a session leader ([#1586](https://github.com/j178/prek/pull/1586))
+- Fix FilePattern schema to accept plain strings ([#1564](https://github.com/j178/prek/pull/1564))
+- Use semver fallback sort when tag timestamps are equal ([#1579](https://github.com/j178/prek/pull/1579))
+
+### Documentation
+
+- Add `OpenClaw` to the list of users ([#1517](https://github.com/j178/prek/pull/1517))
+- Add `cachix/devenv`, `apache/lucene`, `copper-project/copper-rs` as projects using prek ([#1531](https://github.com/j178/prek/pull/1531), [#1514](https://github.com/j178/prek/pull/1514), [#1569](https://github.com/j178/prek/pull/1569))
+- Add document about authoring remote hooks ([#1571](https://github.com/j178/prek/pull/1571))
+- Add `llms.txt` generation for LLM-friendly documentation ([#1553](https://github.com/j178/prek/pull/1553))
+- Document using `--refresh` to pick up `.prekignore` changes ([#1575](https://github.com/j178/prek/pull/1575))
+- Fix PowerShell completion instruction syntax ([#1568](https://github.com/j178/prek/pull/1568))
+- Update quick start to use `prek.toml` ([#1576](https://github.com/j178/prek/pull/1576))
+
+### Other changes
+
+- Include `prek.toml` in run hint for config filename ([#1578](https://github.com/j178/prek/pull/1578))
+
+### Contributors
+
+- @fatelei
+- @domenkozar
+- @makeecat
+- @fllesser
+- @j178
+- @copilot-swe-agent
+- @oopscompiled
+- @rmuir
+- @shaanmajid
+
 ## 0.3.1
 
 Released on 2026-01-31.
