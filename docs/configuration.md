@@ -203,7 +203,10 @@ Example:
 - If you already use `.pre-commit-config.yaml`, keep it.
 - If you want a cleaner, more robust authoring experience, prefer `prek.toml`.
 
-If you want to switch, you have to do it manually for now; we might add `prek migrate` in the future to make it easy to convert YAML configs to `prek.toml`.
+!!! tip
+
+    If you want to switch, you can use [`prek util yaml-to-toml`](cli.md#prek-util-yaml-to-toml) to convert YAML configs to `prek.toml`.
+    YAML comments are not preserved during conversion.
 
 ### Scope (per-project)
 
