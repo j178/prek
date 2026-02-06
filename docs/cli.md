@@ -914,12 +914,12 @@ Convert a YAML configuration file to prek.toml
 <h3 class="cli-reference">Usage</h3>
 
 ```
-prek util yaml-to-toml [OPTIONS] <CONFIG>
+prek util yaml-to-toml [OPTIONS] [CONFIG]
 ```
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="prek-util-yaml-to-toml--input"><a href="#prek-util-yaml-to-toml--input"><code>CONFIG</code></a></dt><dd><p>The YAML configuration file to convert</p>
+<dl class="cli-reference"><dt id="prek-util-yaml-to-toml--input"><a href="#prek-util-yaml-to-toml--input"><code>CONFIG</code></a></dt><dd><p>The YAML configuration file to convert. If omitted, discovers <code>.pre-commit-config.yaml</code> or <code>.pre-commit-config.yml</code> in the current directory</p>
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
