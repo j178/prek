@@ -20,13 +20,8 @@
     'internal'
   ],
   semanticCommits: 'disabled',
-  // pre-commit is currently in beta testing, must opt in
-  'pre-commit': {
-    enabled: true
-  },
   enabledManagers: [
     'github-actions',
-    'pre-commit',
     'cargo',
     'custom.regex',
   ],
@@ -68,11 +63,6 @@
       // Pin GitHub Actions to immutable SHAs
       pinDigests: true
     },
-    {
-      groupName: 'pre-commit',
-      matchManagers: ['pre-commit'],
-      matchFileNames: ['.pre-commit-config.yaml']
-    },
     // Annotate GitHub Actions SHAs with a SemVer version.
     {
       extends: [
@@ -108,7 +98,7 @@
       enabled: false
     },
     {
-      matchManagers: [ 'cargo', 'pre-commit', 'github-actions', 'custom.regex' ],
+      matchManagers: [ 'cargo', 'github-actions', 'custom.regex' ],
       minimumReleaseAge: '7 days'
     }
   ]
