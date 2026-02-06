@@ -183,6 +183,49 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
     debug!("prek: {}", version::version());
 
+    // Resolve `GIT_DIR` and `GIT_INDEX_FILE` to absolute paths before any CWD changes.
+    //
+    // When git invokes a hook, it typically sets `GIT_DIR=.git` (a relative path).
+    // If prek later changes CWD (via `--cd` or `set_current_dir` to workspace root),
+    // the relative `.git` would resolve against the new CWD, potentially pointing to a
+    // different (or nonexistent) git directory. Meanwhile, `GIT_INDEX_FILE` still references
+    // the original repo's temporary index — causing git to read blob SHAs from that index
+    // but look them up in the wrong object store, resulting in:
+    //   `fatal: unable to read <sha>`
+    //
+    // By resolving these to absolute paths upfront, all subsequent git operations are
+    // immune to CWD drift.
+    //
+    // See: https://stackoverflow.com/q/24816803
+    //      https://github.com/pre-commit/pre-commit/blob/8416413/pre_commit/git.py#L32-L35
+    if let Some(git_dir) = EnvVars::var_os(EnvVars::GIT_DIR) {
+        let git_dir_path = std::path::PathBuf::from(&git_dir);
+        if git_dir_path.is_relative() {
+            let abs_git_dir = std::path::absolute(&git_dir_path)
+                .context("Failed to resolve GIT_DIR to absolute path")?;
+            debug!(
+                "Resolving {} from `{}` to `{}`",
+                EnvVars::GIT_DIR,
+                git_dir_path.display(),
+                abs_git_dir.display()
+            );
+            unsafe { std::env::set_var(EnvVars::GIT_DIR, &abs_git_dir) }
+        }
+    }
+    if let Some(index_file) = EnvVars::var_os("GIT_INDEX_FILE") {
+        let index_path = std::path::PathBuf::from(&index_file);
+        if index_path.is_relative() {
+            let abs_index = std::path::absolute(&index_path)
+                .context("Failed to resolve GIT_INDEX_FILE to absolute path")?;
+            debug!(
+                "Resolving GIT_INDEX_FILE from `{}` to `{}`",
+                index_path.display(),
+                abs_index.display()
+            );
+            unsafe { std::env::set_var("GIT_INDEX_FILE", &abs_index) }
+        }
+    }
+
     // If `GIT_DIR` is set, prek may be running from a git hook.
     // Git exports `GIT_DIR` but *not* `GIT_WORK_TREE`. Without `GIT_WORK_TREE`, git
     // treats the current working directory as the working tree. If prek changes the current

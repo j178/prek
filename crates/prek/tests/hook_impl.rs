@@ -295,6 +295,100 @@ fn git_dir_respected() {
     ");
 }
 
+/// Regression test: prek resolves relative `GIT_DIR` to an absolute path at startup.
+///
+/// When `git commit` invokes prek as a hook, it may set `GIT_DIR=.git` (relative).
+/// If prek's internal CWD changes (e.g., `set_current_dir(workspace.root())`), the
+/// relative `.git` resolves to the wrong directory, causing `fatal: unable to read <sha>`.
+///
+/// This test verifies prek resolves `GIT_DIR` to absolute before hooks run.
+///
+/// See: <https://stackoverflow.com/q/24816803>
+#[test]
+fn relative_git_dir_resolved_to_absolute() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc! { r#"
+        repos:
+        - repo: local
+          hooks:
+           - id: check-git-dir
+             name: Check GIT_DIR
+             language: python
+             entry: python -c 'import os, sys; gd = os.environ.get("GIT_DIR", ""); print("GIT_DIR:", gd); sys.exit(0 if os.path.isabs(gd) else 1)'
+             pass_filenames: false
+             always_run: true
+             verbose: true
+    "#});
+    context.git_add(".");
+
+    let cwd = context.work_dir();
+    let mut cmd = context.run();
+    // Simulate what git does when invoking a hook: set GIT_DIR=.git (relative).
+    // Prek should resolve this to an absolute path at startup.
+    cmd.env("GIT_DIR", ".git").env("GIT_WORK_TREE", &**cwd);
+
+    cmd_snapshot!(context.filters(), cmd, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Check GIT_DIR............................................................Passed
+    - hook id: check-git-dir
+    - duration: [TIME]
+
+      GIT_DIR: [TEMP_DIR]/.git
+
+    ----- stderr -----
+    ");
+}
+
+/// Regression test: prek resolves relative `GIT_INDEX_FILE` to an absolute path at startup.
+///
+/// When `git commit -a` invokes prek, it sets `GIT_INDEX_FILE` to a temporary index.
+/// If this path is relative and prek changes CWD, git reads blob SHAs from the wrong
+/// index, causing `fatal: unable to read <sha>`.
+///
+/// This test verifies prek resolves `GIT_INDEX_FILE` to absolute before hooks run.
+#[test]
+fn relative_git_index_file_resolved_to_absolute() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc! { r#"
+        repos:
+        - repo: local
+          hooks:
+           - id: check-index
+             name: Check GIT_INDEX_FILE
+             language: python
+             entry: python -c 'import os, sys; idx = os.environ.get("GIT_INDEX_FILE", ""); print("GIT_INDEX_FILE:", idx); sys.exit(0 if os.path.isabs(idx) else 1)'
+             pass_filenames: false
+             always_run: true
+             verbose: true
+    "#});
+    context.git_add(".");
+
+    let cwd = context.work_dir();
+    let mut cmd = context.run();
+    // Set a relative GIT_INDEX_FILE pointing to the actual index.
+    // Prek should resolve this to an absolute path at startup.
+    cmd.env("GIT_INDEX_FILE", ".git/index")
+        .env("GIT_DIR", cwd.join(".git"))
+        .env("GIT_WORK_TREE", &**cwd);
+
+    cmd_snapshot!(context.filters(), cmd, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Check GIT_INDEX_FILE.....................................................Passed
+    - hook id: check-index
+    - duration: [TIME]
+
+      GIT_INDEX_FILE: [TEMP_DIR]/.git/index
+
+    ----- stderr -----
+    ");
+}
+
 #[test]
 fn workspace_hook_impl_root() -> anyhow::Result<()> {
     let context = TestContext::new();
