@@ -200,7 +200,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     //      https://github.com/pre-commit/pre-commit/blob/8416413/pre_commit/git.py#L32-L35
     if let Some(git_dir) = EnvVars::var_os(EnvVars::GIT_DIR) {
         let git_dir_path = std::path::PathBuf::from(&git_dir);
-        if git_dir_path.is_relative() {
+        if git_dir_path.is_relative() && !git_dir_path.as_os_str().is_empty() {
             let abs_git_dir = std::path::absolute(&git_dir_path)
                 .context("Failed to resolve GIT_DIR to absolute path")?;
             debug!(
@@ -214,7 +214,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     }
     if let Some(index_file) = EnvVars::var_os("GIT_INDEX_FILE") {
         let index_path = std::path::PathBuf::from(&index_file);
-        if index_path.is_relative() {
+        if index_path.is_relative() && !index_path.as_os_str().is_empty() {
             let abs_index = std::path::absolute(&index_path)
                 .context("Failed to resolve GIT_INDEX_FILE to absolute path")?;
             debug!(
