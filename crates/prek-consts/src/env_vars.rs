@@ -50,6 +50,7 @@ impl EnvVars {
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
     pub const UV_MANAGED_PYTHON: &'static str = "UV_MANAGED_PYTHON";
     pub const UV_NO_MANAGED_PYTHON: &'static str = "UV_NO_MANAGED_PYTHON";
+    pub const UV_VENV_CLEAR: &'static str = "UV_VENV_CLEAR";
 
     // Node/Npm related
     pub const NPM_CONFIG_USERCONFIG: &'static str = "NPM_CONFIG_USERCONFIG";

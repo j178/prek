@@ -252,6 +252,8 @@ impl LanguageImpl for Python {
     }
 }
 
+const PYTHON_DEFAULT_VERSION_RANGE: &str = ">=3.10";
+
 fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
     match request {
         LanguageRequest::Any { .. } => None,
@@ -337,7 +339,8 @@ impl Python {
             .env_remove(EnvVars::UV_PYTHON)
             // `--managed_python` conflicts with `--python-preference`, ignore any user setting
             .env_remove(EnvVars::UV_MANAGED_PYTHON)
-            .env_remove(EnvVars::UV_NO_MANAGED_PYTHON);
+            .env_remove(EnvVars::UV_NO_MANAGED_PYTHON)
+            .env(EnvVars::UV_VENV_CLEAR, "1");
 
         if set_install_dir {
             cmd.env(
@@ -353,6 +356,8 @@ impl Python {
 
         if let Some(python) = to_uv_python_request(python_request) {
             cmd.arg("--python").arg(python);
+        } else {
+            cmd.arg("--python").arg(PYTHON_DEFAULT_VERSION_RANGE);
         }
 
         cmd
