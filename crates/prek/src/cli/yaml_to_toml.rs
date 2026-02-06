@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use prek_consts::PREK_TOML;
+use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PREK_TOML};
 use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Table, Value};
 
 use crate::cli::ExitStatus;
@@ -12,16 +12,45 @@ use crate::config;
 use crate::fs::Simplified;
 use crate::printer::Printer;
 
+/// Resolve the input config path, falling back to `.pre-commit-config.yaml` or
+/// `.pre-commit-config.yml` in the current directory.
+fn resolve_input(input: Option<&Path>) -> Result<PathBuf> {
+    if let Some(path) = input {
+        return Ok(path.to_path_buf());
+    }
+
+    let yaml = Path::new(PRE_COMMIT_CONFIG_YAML);
+    if yaml.is_file() {
+        return Ok(yaml.to_path_buf());
+    }
+
+    let yml = Path::new(PRE_COMMIT_CONFIG_YML);
+    if yml.is_file() {
+        return Ok(yml.to_path_buf());
+    }
+
+    anyhow::bail!(
+        "No `{}` or `{}` found in the current directory\n\n\
+         {} Provide a path explicitly: {}",
+        PRE_COMMIT_CONFIG_YAML.cyan(),
+        PRE_COMMIT_CONFIG_YML.cyan(),
+        "hint:".yellow().bold(),
+        "prek util yaml-to-toml <CONFIG>".cyan()
+    );
+}
+
 pub(crate) fn yaml_to_toml(
-    input: &Path,
+    input: Option<&Path>,
     output: Option<PathBuf>,
     force: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    // Validate the input file first.
-    let _ = config::load_config(input)?;
+    let input = resolve_input(input)?;
 
-    let content = fs_err::read_to_string(input)?;
+    // Validate the input file first.
+    let _ = config::load_config(&input)?;
+
+    let content = fs_err::read_to_string(&input)?;
     let value: serde_json::Value = serde_saphyr::from_str(&content)?;
 
     let output = output.unwrap_or_else(|| input.parent().unwrap_or(Path::new(".")).join(PREK_TOML));
