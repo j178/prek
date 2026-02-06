@@ -318,18 +318,19 @@ async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
         })
         .collect();
 
-    // Stable sort: within equal timestamps, prefer higher semver versions.
-    // `sort_by` is stable, so tags with different timestamps keep their
-    // `--sort=-creatordate` ordering from git.
+    // Deterministic sort: primary key is timestamp (newest first).
+    // Within equal timestamps, prefer higher semver versions; non-semver tags
+    // sort after semver ones. As a final tie-breaker, compare the tag refname
+    // so ordering is stable across platforms/filesystems.
     tags.sort_by(|(tag_a, ts_a), (tag_b, ts_b)| {
         ts_b.cmp(ts_a).then_with(|| {
             let ver_a = Version::parse(tag_a.strip_prefix('v').unwrap_or(tag_a));
             let ver_b = Version::parse(tag_b.strip_prefix('v').unwrap_or(tag_b));
             match (ver_a, ver_b) {
-                (Ok(a), Ok(b)) => b.cmp(&a),
+                (Ok(a), Ok(b)) => b.cmp(&a).then_with(|| tag_a.cmp(tag_b)),
                 (Ok(_), Err(_)) => std::cmp::Ordering::Less,
                 (Err(_), Ok(_)) => std::cmp::Ordering::Greater,
-                (Err(_), Err(_)) => std::cmp::Ordering::Equal,
+                (Err(_), Err(_)) => tag_a.cmp(tag_b),
             }
         })
     });
@@ -949,5 +950,21 @@ mod tests {
         // Within equal timestamps, semver tags should sort highest version first.
         let tags: Vec<&str> = timestamps.iter().map(|(t, _)| t.as_str()).collect();
         assert_eq!(tags, vec!["v1.0.5", "v1.0.3", "v1.0.2", "v1.0.0"]);
+    }
+
+    #[tokio::test]
+    async fn test_get_tag_timestamps_deterministic_order_for_equal_timestamp_non_semver() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        // Lightweight tags on the same commit share a timestamp.
+        create_backdated_commit(repo, "release", 5).await;
+        create_lightweight_tag(repo, "beta").await;
+        create_lightweight_tag(repo, "alpha").await;
+        create_lightweight_tag(repo, "gamma").await;
+
+        let timestamps = get_tag_timestamps(repo).await.unwrap();
+        let tags: Vec<&str> = timestamps.iter().map(|(t, _)| t.as_str()).collect();
+        assert_eq!(tags, vec!["alpha", "beta", "gamma"]);
     }
 }
