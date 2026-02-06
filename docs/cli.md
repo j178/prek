@@ -811,6 +811,7 @@ prek util [OPTIONS] <COMMAND>
 
 <dl class="cli-reference"><dt><a href="#prek-util-identify"><code>prek util identify</code></a></dt><dd><p>Show file identification tags</p></dd>
 <dt><a href="#prek-util-init-template-dir"><code>prek util init-template-dir</code></a></dt><dd><p>Install hook script in a directory intended for use with <code>git config init.templateDir</code></p></dd>
+<dt><a href="#prek-util-yaml-to-toml"><code>prek util yaml-to-toml</code></a></dt><dd><p>Convert a YAML configuration file to prek.toml</p></dd>
 </dl>
 
 ### prek util identify
@@ -904,6 +905,44 @@ prek util init-template-dir [OPTIONS] <DIRECTORY>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-util-init-template-dir--refresh"><a href="#prek-util-init-template-dir--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-util-init-template-dir--verbose"><a href="#prek-util-init-template-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-util-init-template-dir--version"><a href="#prek-util-init-template-dir--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd></dl>
+
+### prek util yaml-to-toml
+
+Convert a YAML configuration file to prek.toml
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+prek util yaml-to-toml [OPTIONS] <CONFIG>
+```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="prek-util-yaml-to-toml--input"><a href="#prek-util-yaml-to-toml--input"><code>CONFIG</code></a></dt><dd><p>The YAML configuration file to convert</p>
+</dd></dl>
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt id="prek-util-yaml-to-toml--cd"><a href="#prek-util-yaml-to-toml--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
+</dd><dt id="prek-util-yaml-to-toml--color"><a href="#prek-util-yaml-to-toml--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
+<p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+<li><code>never</code>:  Disables colored output</li>
+</ul></dd><dt id="prek-util-yaml-to-toml--config"><a href="#prek-util-yaml-to-toml--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
+</dd><dt id="prek-util-yaml-to-toml--force"><a href="#prek-util-yaml-to-toml--force"><code>--force</code></a></dt><dd><p>Overwrite the output file if it already exists</p>
+</dd><dt id="prek-util-yaml-to-toml--help"><a href="#prek-util-yaml-to-toml--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="prek-util-yaml-to-toml--log-file"><a href="#prek-util-yaml-to-toml--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
+</dd><dt id="prek-util-yaml-to-toml--no-progress"><a href="#prek-util-yaml-to-toml--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+<p>For example, spinners or progress bars.</p>
+</dd><dt id="prek-util-yaml-to-toml--output"><a href="#prek-util-yaml-to-toml--output"><code>--output</code></a>, <code>-o</code> <i>output</i></dt><dd><p>Path to write the generated prek.toml file. Defaults to <code>prek.toml</code> in the same directory as the input file</p>
+</dd><dt id="prek-util-yaml-to-toml--quiet"><a href="#prek-util-yaml-to-toml--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-util-yaml-to-toml--refresh"><a href="#prek-util-yaml-to-toml--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+</dd><dt id="prek-util-yaml-to-toml--verbose"><a href="#prek-util-yaml-to-toml--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
+</dd><dt id="prek-util-yaml-to-toml--version"><a href="#prek-util-yaml-to-toml--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek self
