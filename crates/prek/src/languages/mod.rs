@@ -310,12 +310,7 @@ impl Language {
 /// Try to extract metadata from the given hook entry if possible.
 pub(crate) async fn extract_metadata_from_entry(hook: &mut Hook) -> Result<()> {
     match hook.language {
-        Language::Python => {
-            // pyproject.toml runs first; PEP 723 runs second and unconditionally
-            // overwrites the language request, so PEP 723 > pyproject.toml > default.
-            python::extract_pyproject_metadata(hook).await?;
-            python::extract_pep723_metadata(hook).await
-        }
+        Language::Python => python::extract_metadata(hook).await,
         Language::Golang => golang::extract_go_mod_metadata(hook).await,
         _ => Ok(()),
     }
