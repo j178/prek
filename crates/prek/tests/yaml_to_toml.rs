@@ -79,6 +79,11 @@ fn yaml_to_toml_writes_default_output() -> anyhow::Result<()> {
     );
 
     insta::assert_snapshot!(context.read(PREK_TOML), @r#"
+    # Configuration file for `prek`, a git hook framework written in Rust.
+    # See https://prek.j178.dev for more information.
+    #:schema https://www.schemastore.org/prek.json
+    #:tombi toml-version = "v1.1.0"
+
     fail_fast = true
     default_install_hook_types = ["pre-push"]
     exclude = """
