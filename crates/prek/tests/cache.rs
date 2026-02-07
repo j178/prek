@@ -556,6 +556,92 @@ fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn cache_gc_keeps_self_repo_hook_env() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+
+    // Create a manifest with a Python hook (non-system language).
+    cwd.child(".pre-commit-hooks.yaml")
+        .write_str(indoc::indoc! {r#"
+    - id: self-python
+      name: Self Python Hook
+      entry: python -c "print('hello from self')"
+      language: python
+    "#})?;
+
+    // Self-repo Python hooks install the project root as a package, so provide
+    // a minimal setup.py to keep the installer happy.
+    cwd.child("setup.py")
+        .write_str("from setuptools import setup; setup(name='dummy', version='0.0.1')")?;
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: self
+            hooks:
+              - id: self-python
+    "});
+
+    cwd.child("file.txt").write_str("Hello\n")?;
+    context.git_add(".");
+
+    // Install + run the self-repo hook so it creates a hook env under PREK_HOME/hooks.
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Self Python Hook.........................................................Passed
+
+    ----- stderr -----
+    ");
+
+    let home = context.home_dir();
+    let hooks_dir = home.child("hooks");
+
+    let mut self_envs = Vec::new();
+    for entry in fs_err::read_dir(hooks_dir.path())? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with("python-") {
+            self_envs.push(name);
+        }
+    }
+
+    assert!(
+        !self_envs.is_empty(),
+        "expected at least one self-repo hook env"
+    );
+
+    // Add an obviously-unused entry to ensure GC does work.
+    home.child("hooks/unused-hook-env").create_dir_all()?;
+
+    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed 1 hook env ([SIZE])
+
+    ----- stderr -----
+    ");
+
+    // The self-repo hook env(s) should remain.
+    for env in self_envs {
+        home.child(format!("hooks/{env}"))
+            .assert(predicates::path::is_dir());
+    }
+    // Unused should be swept.
+    home.child("hooks/unused-hook-env")
+        .assert(predicates::path::missing());
+
+    Ok(())
+}
+
 fn write_config_tracking_file(
     home: &ChildPath,
     configs: &[&std::path::Path],
