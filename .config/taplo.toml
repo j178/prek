@@ -1,2 +1,4 @@
+exclude = ["prek.toml"]
+
 [formatting]
 align_comments = false

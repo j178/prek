@@ -1,0 +1,77 @@
+fail_fast = true
+default_install_hook_types = ["pre-push"]
+exclude = """
+(?x)^(
+  .*/(snapshots)/.*|
+)$
+"""
+
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "trailing-whitespace" },
+  { id = "mixed-line-ending" },
+  { id = "check-yaml" },
+  { id = "check-toml" },
+  { id = "end-of-file-fixer" }
+]
+
+[[repos]]
+repo = "https://github.com/crate-ci/typos"
+rev = "v1.42.3"
+hooks = [
+  { id = "typos" }
+]
+
+[[repos]]
+repo = "https://github.com/executablebooks/mdformat"
+rev = "1.0.0"
+hooks = [
+  {
+    id = "mdformat",
+    language = "python",
+    args = [
+      "--number",
+      "--compact-tables",
+      "--align-semantic-breaks-in-lists"
+    ],
+    additional_dependencies = [
+      "mdformat-mkdocs==5.1.4",
+      "mdformat-simple-breaks==0.1.0"
+    ]
+  }
+]
+
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "taplo-fmt",
+    name = "taplo fmt",
+    entry = "taplo fmt --config .config/taplo.toml",
+    language = "python",
+    additional_dependencies = ["taplo==0.9.3"],
+    types = ["toml"]
+  }
+]
+
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "cargo-fmt",
+    name = "cargo fmt",
+    entry = "cargo fmt --",
+    language = "system",
+    types = ["rust"],
+    pass_filenames = false
+  },
+  {
+    id = "cargo-clippy",
+    name = "cargo clippy",
+    language = "system",
+    types = ["rust"],
+    pass_filenames = false,
+    entry = "cargo clippy --all-targets --all-features -- -D warnings"
+  }
+]
