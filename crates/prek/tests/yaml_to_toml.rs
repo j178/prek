@@ -68,14 +68,14 @@ fn yaml_to_toml_writes_default_output() -> anyhow::Result<()> {
         context
             .command()
             .args(["util", "yaml-to-toml", "config.yaml"]),
-        @r#"
+        @"
     success: true
     exit_code: 0
     ----- stdout -----
-    Written to `prek.toml`
+    Converted `config.yaml` → `prek.toml`
 
     ----- stderr -----
-    "#
+    "
     );
 
     insta::assert_snapshot!(context.read(PREK_TOML), @r#"
@@ -180,7 +180,7 @@ fn yaml_to_toml_force_overwrite() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Written to `prek.toml`
+    Converted `config.yaml` → `prek.toml`
 
     ----- stderr -----
     "
@@ -265,14 +265,14 @@ fn yaml_to_toml_discovers_pre_commit_config_yaml() -> anyhow::Result<()> {
     cmd_snapshot!(
         context.filters(),
         context.command().args(["util", "yaml-to-toml"]),
-        @r#"
+        @"
     success: true
     exit_code: 0
     ----- stdout -----
-    Written to `prek.toml`
+    Converted `.pre-commit-config.yaml` → `prek.toml`
 
     ----- stderr -----
-    "#
+    "
     );
 
     context
@@ -295,14 +295,14 @@ fn yaml_to_toml_discovers_pre_commit_config_yml() -> anyhow::Result<()> {
     cmd_snapshot!(
         context.filters(),
         context.command().args(["util", "yaml-to-toml"]),
-        @r#"
+        @"
     success: true
     exit_code: 0
     ----- stdout -----
-    Written to `prek.toml`
+    Converted `.pre-commit-config.yml` → `prek.toml`
 
     ----- stderr -----
-    "#
+    "
     );
 
     context
@@ -343,14 +343,14 @@ fn yaml_to_toml_prefers_yaml_over_yml() -> anyhow::Result<()> {
     cmd_snapshot!(
         context.filters(),
         context.command().args(["util", "yaml-to-toml"]),
-        @r#"
+        @"
     success: true
     exit_code: 0
     ----- stdout -----
-    Written to `prek.toml`
+    Converted `.pre-commit-config.yaml` → `prek.toml`
 
     ----- stderr -----
-    "#
+    "
     );
 
     // The .yaml file contains trailing-whitespace, the .yml contains end-of-file-fixer.

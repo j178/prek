@@ -14,9 +14,9 @@ use crate::printer::Printer;
 
 /// Resolve the input config path, falling back to `.pre-commit-config.yaml` or
 /// `.pre-commit-config.yml` in the current directory.
-fn resolve_input(input: Option<&Path>) -> Result<PathBuf> {
+fn resolve_input(input: Option<PathBuf>) -> Result<PathBuf> {
     if let Some(path) = input {
-        return Ok(path.to_path_buf());
+        return Ok(path);
     }
 
     let yaml = Path::new(PRE_COMMIT_CONFIG_YAML);
@@ -40,7 +40,7 @@ fn resolve_input(input: Option<&Path>) -> Result<PathBuf> {
 }
 
 pub(crate) fn yaml_to_toml(
-    input: Option<&Path>,
+    input: Option<PathBuf>,
     output: Option<PathBuf>,
     force: bool,
     printer: Printer,
@@ -94,7 +94,8 @@ pub(crate) fn yaml_to_toml(
 
     writeln!(
         printer.stdout(),
-        "Written to `{}`",
+        "Converted `{}` → `{}`",
+        input.simplified_display().cyan(),
         output.simplified_display().cyan()
     )?;
 
