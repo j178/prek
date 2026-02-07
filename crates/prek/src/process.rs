@@ -37,6 +37,13 @@ use tracing::trace;
 
 use crate::git::GIT;
 
+#[cfg(windows)]
+fn reenable_vt() {
+    if *crate::run::USE_COLOR {
+        let _ = anstyle_query::windows::enable_ansi_colors();
+    }
+}
+
 /// An error from executing a Command
 #[derive(Debug, Error)]
 pub enum Error {
@@ -176,6 +183,12 @@ impl Cmd {
             summary: self.summary.clone(),
             cause,
         })?;
+
+        // Re-enable Windows VT mode in case subprocess corrupted console mode.
+        // Some tools disable ENABLE_VIRTUAL_TERMINAL_PROCESSING on exit.
+        #[cfg(windows)]
+        reenable_vt();
+
         self.maybe_check_output(&output)?;
         Ok(output)
     }
@@ -282,6 +295,8 @@ impl Cmd {
             summary: self.summary.clone(),
             cause,
         })?;
+        #[cfg(windows)]
+        reenable_vt();
         self.maybe_check_status(status)?;
         Ok(status)
     }
