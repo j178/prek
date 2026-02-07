@@ -4,6 +4,7 @@ use std::str::FromStr;
 use std::sync::LazyLock;
 
 use prek_consts::env_vars::EnvVars;
+use strum::IntoEnumIterator;
 
 use crate::cli::reporter::HookRunReporter;
 use crate::hook::{Hook, Repo};
@@ -15,6 +16,25 @@ use crate::store::Store;
 mod builtin_hooks;
 mod meta_hooks;
 mod pre_commit_hooks;
+
+/// Trait for special hook registries (builtin and meta).
+pub(crate) trait HookRegistry: IntoEnumIterator + Into<&'static str> + Copy {
+    /// The repo name used in config files (e.g., "builtin", "meta").
+    const REPO_NAME: &'static str;
+
+    /// Returns all hook IDs in this registry.
+    fn all_ids() -> impl Iterator<Item = &'static str> {
+        Self::iter().map(Into::into)
+    }
+}
+
+impl HookRegistry for BuiltinHooks {
+    const REPO_NAME: &'static str = "builtin";
+}
+
+impl HookRegistry for MetaHooks {
+    const REPO_NAME: &'static str = "meta";
+}
 
 static NO_FAST_PATH: LazyLock<bool> = LazyLock::new(|| EnvVars::is_set(EnvVars::PREK_NO_FAST_PATH));
 

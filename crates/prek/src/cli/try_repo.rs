@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
 use prek_consts::PREK_TOML;
 use tempfile::TempDir;
@@ -13,9 +13,20 @@ use crate::cli::run::Selectors;
 use crate::config;
 use crate::git;
 use crate::git::GIT_ROOT;
+use crate::hooks::{BuiltinHooks, HookRegistry, MetaHooks};
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::warn_user;
+
+/// Categorizes the repo argument into different types.
+enum RepoType<'a> {
+    /// A git repository (local path or remote URL)
+    Git { repo: &'a str, rev: Option<&'a str> },
+    /// The special "builtin" keyword for builtin hooks
+    Builtin,
+    /// The special "meta" keyword for meta hooks
+    Meta,
+}
 
 async fn get_head_rev(repo: &Path) -> Result<String> {
     let head_rev = git::git_cmd("get head rev")?
@@ -65,7 +76,7 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
     let mut add_u_cmd = git::git_cmd("add unstaged to shadow")?;
     add_u_cmd
         .arg("add")
-        .arg("--update") // Update tracked files
+        .arg("--update")
         .current_dir(repo_path)
         .env("GIT_INDEX_FILE", &index_path)
         .env("GIT_OBJECT_DIRECTORY", &objects_path)
@@ -136,11 +147,13 @@ async fn prepare_repo_and_rev<'a>(
     }
 }
 
-fn render_repo_config_toml(repo_path: &str, rev: &str, hooks: Vec<String>) -> String {
+fn render_repo_config_toml(repo_path: &str, rev: Option<&str>, hooks: Vec<String>) -> String {
     let mut doc = DocumentMut::new();
     let mut repo_table = toml_edit::Table::new();
     repo_table["repo"] = toml_edit::value(repo_path);
-    repo_table["rev"] = toml_edit::value(rev);
+    if let Some(rev) = rev {
+        repo_table["rev"] = toml_edit::value(rev);
+    }
 
     let mut hooks_array = Array::new();
     hooks_array.set_trailing_comma(true);
@@ -174,10 +187,118 @@ pub(crate) async fn try_repo(
         warn_user!("`--config` option is ignored when using `try-repo`");
     }
 
+    // Categorize the repo argument (case-insensitive for special keywords)
+    let repo_type = if repo.eq_ignore_ascii_case("builtin") {
+        if rev.is_some() {
+            warn_user!("`--ref` option is ignored for `builtin` repo");
+        }
+        RepoType::Builtin
+    } else if repo.eq_ignore_ascii_case("meta") {
+        if rev.is_some() {
+            warn_user!("`--ref` option is ignored for `meta` repo");
+        }
+        RepoType::Meta
+    } else {
+        RepoType::Git {
+            repo: &repo,
+            rev: rev.as_deref(),
+        }
+    };
+
+    match repo_type {
+        RepoType::Builtin => {
+            try_special_repo::<BuiltinHooks>(run_args, refresh, verbose, printer).await
+        }
+        RepoType::Meta => try_special_repo::<MetaHooks>(run_args, refresh, verbose, printer).await,
+        RepoType::Git { repo, rev } => {
+            try_git_repo(repo, rev, run_args, refresh, verbose, printer).await
+        }
+    }
+}
+
+/// Try hooks from a special repository (builtin or meta).
+async fn try_special_repo<H: HookRegistry>(
+    run_args: crate::cli::RunArgs,
+    refresh: bool,
+    verbose: bool,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    let repo_name = H::REPO_NAME;
+
+    let store = Store::from_settings()?;
+    let tmp_dir = TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
+    let store = Store::from_path(tmp_dir.path()).init()?;
+
+    let selectors = Selectors::load(&run_args.includes, &run_args.skips, GIT_ROOT.as_ref()?)?;
+
+    let hook_ids: Vec<_> = H::all_ids()
+        .filter(|id| selectors.matches_hook_id(id))
+        .collect();
+
+    if hook_ids.is_empty() {
+        bail!("No hooks matched the specified selectors for repo `{repo_name}`");
+    }
+
+    let hooks = hook_ids.into_iter().map(str::to_string).collect();
+    let config_str = render_repo_config_toml(repo_name, None, hooks);
+    let config_file = tmp_dir.path().join(PREK_TOML);
+    fs_err::tokio::write(&config_file, &config_str).await?;
+
+    writeln!(
+        printer.stdout(),
+        "{}",
+        format!("Using generated `{PREK_TOML}`:").cyan().bold()
+    )?;
+    writeln!(printer.stdout(), "{}", config_str.dimmed())?;
+
+    invoke_run(&store, config_file, run_args, refresh, verbose, printer).await
+}
+
+/// Helper to call `crate::cli::run` with common arguments.
+async fn invoke_run(
+    store: &Store,
+    config_file: PathBuf,
+    run_args: crate::cli::RunArgs,
+    refresh: bool,
+    verbose: bool,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    crate::cli::run(
+        store,
+        Some(config_file),
+        vec![],
+        vec![],
+        run_args.stage,
+        run_args.from_ref,
+        run_args.to_ref,
+        run_args.all_files,
+        run_args.files,
+        run_args.directory,
+        run_args.last_commit,
+        run_args.show_diff_on_failure,
+        run_args.fail_fast,
+        run_args.dry_run,
+        refresh,
+        run_args.extra,
+        verbose,
+        printer,
+    )
+    .await
+}
+
+/// Try hooks from a git repository (local path or remote URL).
+async fn try_git_repo(
+    repo: &str,
+    rev: Option<&str>,
+    run_args: crate::cli::RunArgs,
+    refresh: bool,
+    verbose: bool,
+    printer: Printer,
+) -> Result<ExitStatus> {
     let store = Store::from_settings()?;
     let tmp_dir = TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
 
-    let (repo_path, rev) = prepare_repo_and_rev(&repo, rev.as_deref(), tmp_dir.path())
+    let (repo_path, rev) = prepare_repo_and_rev(repo, rev, tmp_dir.path())
         .await
         .context("Failed to determine repository and revision")?;
 
@@ -201,7 +322,7 @@ pub(crate) async fn try_repo(
         .map(|hook| hook.id)
         .collect::<Vec<_>>();
 
-    let config_str = render_repo_config_toml(&repo_path, &rev, hooks);
+    let config_str = render_repo_config_toml(&repo_path, Some(&rev), hooks);
     let config_file = tmp_dir.path().join(PREK_TOML);
     fs_err::tokio::write(&config_file, &config_str).await?;
 
@@ -212,25 +333,5 @@ pub(crate) async fn try_repo(
     )?;
     writeln!(printer.stdout(), "{}", config_str.dimmed())?;
 
-    crate::cli::run(
-        &store,
-        Some(config_file),
-        vec![],
-        vec![],
-        run_args.stage,
-        run_args.from_ref,
-        run_args.to_ref,
-        run_args.all_files,
-        run_args.files,
-        run_args.directory,
-        run_args.last_commit,
-        run_args.show_diff_on_failure,
-        run_args.fail_fast,
-        run_args.dry_run,
-        refresh,
-        run_args.extra,
-        verbose,
-        printer,
-    )
-    .await
+    invoke_run(&store, config_file, run_args, refresh, verbose, printer).await
 }
