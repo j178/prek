@@ -301,6 +301,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
+        Command::ListBuiltins(args) => {
+            show_settings!(args);
+
+            cli::list_builtins(args.output_format, cli.globals.verbose > 0, printer)
+        }
         Command::HookImpl(args) => {
             show_settings!(args);
 

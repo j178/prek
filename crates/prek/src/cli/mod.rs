@@ -20,6 +20,7 @@ mod hook_impl;
 mod identify;
 mod install;
 mod list;
+mod list_builtins;
 pub mod reporter;
 pub mod run;
 mod sample_config;
@@ -38,6 +39,7 @@ pub(crate) use hook_impl::hook_impl;
 pub(crate) use identify::identify;
 pub(crate) use install::{init_template_dir, install, install_hooks, uninstall};
 pub(crate) use list::list;
+pub(crate) use list_builtins::list_builtins;
 pub(crate) use run::run;
 pub(crate) use sample_config::sample_config;
 #[cfg(feature = "self-update")]
@@ -212,8 +214,10 @@ pub(crate) enum Command {
     InstallHooks(InstallHooksArgs),
     /// Run hooks.
     Run(Box<RunArgs>),
-    /// List available hooks.
+    /// List hooks configured in the current project.
     List(ListArgs),
+    /// List all built-in hooks bundled with prek.
+    ListBuiltins(ListBuiltinsArgs),
     /// Uninstall prek from git hooks.
     Uninstall(UninstallArgs),
     /// Validate configuration files (prek.toml or .pre-commit-config.yaml).
@@ -516,6 +520,13 @@ pub(crate) enum IdentifyOutputFormat {
     #[default]
     Text,
     Json,
+}
+
+#[derive(Debug, Clone, Default, Args)]
+pub(crate) struct ListBuiltinsArgs {
+    /// The output format.
+    #[arg(long, value_enum, default_value_t = ListOutputFormat::Text)]
+    pub(crate) output_format: ListOutputFormat,
 }
 
 #[derive(Debug, Clone, Default, Args)]
