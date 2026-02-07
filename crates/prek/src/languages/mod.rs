@@ -282,7 +282,7 @@ impl Language {
                     return hooks::run_fast_path(store, hook, filenames, reporter).await;
                 }
             }
-            Repo::Local { .. } => {}
+            Repo::Local { .. } | Repo::SelfRepo { .. } => {}
         }
 
         match self {

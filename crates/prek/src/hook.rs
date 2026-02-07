@@ -161,6 +161,12 @@ pub(crate) enum Repo {
     Builtin {
         hooks: Vec<HookSpec>,
     },
+    #[expect(clippy::enum_variant_names)]
+    SelfRepo {
+        /// Path to the project root containing the manifest.
+        path: PathBuf,
+        hooks: Vec<HookSpec>,
+    },
 }
 
 impl Repo {
@@ -202,10 +208,25 @@ impl Repo {
         }
     }
 
-    /// Get the path to the cloned repo if it is a remote repo.
+    /// Construct a self repo from the project root, reading its manifest.
+    pub(crate) fn self_repo(project_root: PathBuf) -> Result<Self, Error> {
+        let manifest_path = project_root.join(PRE_COMMIT_HOOKS_YAML);
+        let manifest = read_manifest(&manifest_path).map_err(|e| Error::Manifest {
+            repo: "self".to_string(),
+            error: e,
+        })?;
+        let hooks = manifest.hooks.into_iter().map(Into::into).collect();
+
+        Ok(Self::SelfRepo {
+            path: project_root,
+            hooks,
+        })
+    }
+
+    /// Get the path to the repo if it is a remote or self repo.
     pub(crate) fn path(&self) -> Option<&Path> {
         match self {
-            Repo::Remote { path, .. } => Some(path),
+            Repo::Remote { path, .. } | Repo::SelfRepo { path, .. } => Some(path),
             _ => None,
         }
     }
@@ -213,10 +234,11 @@ impl Repo {
     /// Get a hook by id.
     pub(crate) fn get_hook(&self, id: &str) -> Option<&HookSpec> {
         let hooks = match self {
-            Repo::Remote { hooks, .. } => hooks,
-            Repo::Local { hooks } => hooks,
-            Repo::Meta { hooks } => hooks,
-            Repo::Builtin { hooks } => hooks,
+            Repo::Remote { hooks, .. }
+            | Repo::SelfRepo { hooks, .. }
+            | Repo::Local { hooks }
+            | Repo::Meta { hooks }
+            | Repo::Builtin { hooks } => hooks,
         };
         hooks.iter().find(|hook| hook.id == id)
     }
@@ -229,6 +251,7 @@ impl Display for Repo {
             Repo::Local { .. } => write!(f, "local"),
             Repo::Meta { .. } => write!(f, "meta"),
             Repo::Builtin { .. } => write!(f, "builtin"),
+            Repo::SelfRepo { .. } => write!(f, "self"),
         }
     }
 }

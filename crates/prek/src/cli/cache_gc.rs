@@ -5,6 +5,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
+use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use strum::IntoEnumIterator;
@@ -12,7 +13,7 @@ use tracing::{debug, trace, warn};
 
 use crate::cli::ExitStatus;
 use crate::cli::cache_size::{dir_size_bytes, human_readable_bytes};
-use crate::config::{self, Error as ConfigError, Repo as ConfigRepo, load_config};
+use crate::config::{self, Error as ConfigError, Repo as ConfigRepo, load_config, read_manifest};
 use crate::hook::{HOOK_MARKER, HookEnvKey, HookSpec, InstallInfo, Repo as HookRepo};
 use crate::printer::Printer;
 use crate::store::{CacheBucket, REPO_MARKER, Store, ToolBucket};
@@ -180,7 +181,7 @@ pub(crate) async fn cache_gc(
         };
         kept_configs.insert(config_path);
 
-        used_env_keys.extend(hook_env_keys_from_config(store, &config));
+        used_env_keys.extend(hook_env_keys_from_config(store, config_path, &config));
 
         // Mark repos referenced by this config (if present in store).
         // We do this via config parsing (no clone), so GC won't keep repos for missing configs.
@@ -338,7 +339,11 @@ fn print_removed_details(printer: Printer, verb: &str, removal: &Removal) -> Res
     Ok(())
 }
 
-fn hook_env_keys_from_config(store: &Store, config: &config::Config) -> Vec<HookEnvKey> {
+fn hook_env_keys_from_config(
+    store: &Store,
+    config_path: &Path,
+    config: &config::Config,
+) -> Vec<HookEnvKey> {
     let mut keys = Vec::new();
 
     for repo_config in &config.repos {
@@ -392,7 +397,32 @@ fn hook_env_keys_from_config(store: &Store, config: &config::Config) -> Vec<Hook
                     }
                 }
             }
-            _ => {} // Meta repos and builtin repos do not have hook envs.
+            ConfigRepo::SelfRepo(repo_config) => {
+                let Some(project_root) = config_path.parent() else {
+                    continue;
+                };
+                let manifest_path = project_root.join(PRE_COMMIT_HOOKS_YAML);
+                let Ok(manifest) = read_manifest(&manifest_path) else {
+                    continue;
+                };
+                for hook_config in &repo_config.hooks {
+                    let Some(manifest_hook) =
+                        manifest.hooks.iter().find(|h| h.id == hook_config.id)
+                    else {
+                        continue;
+                    };
+                    let mut hook_spec: HookSpec = manifest_hook.clone().into();
+                    hook_spec.apply_remote_hook_overrides(hook_config);
+                    match HookEnvKey::from_hook_spec(config, hook_spec, None) {
+                        Ok(Some(key)) => keys.push(key),
+                        Ok(None) => {}
+                        Err(err) => {
+                            warn!(hook = %hook_config.id, %err, "Failed to compute hook env key, skipping");
+                        }
+                    }
+                }
+            }
+            _ => {} // Meta and builtin repos do not have cached hook envs.
         }
     }
 
