@@ -1,10 +1,12 @@
 mod pep723;
+mod pyproject;
 #[allow(clippy::module_inception)]
 mod python;
 mod uv;
 mod version;
 
 pub(crate) use pep723::extract_pep723_metadata;
+pub(crate) use pyproject::extract_pyproject_metadata;
 pub(crate) use python::Python;
 pub(crate) use python::{python_exec, query_python_info_cached};
 pub(crate) use uv::Uv;
