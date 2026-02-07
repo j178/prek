@@ -18,14 +18,65 @@ use crate::printer::Printer;
 use crate::store::Store;
 use crate::warn_user;
 
-/// Categorizes the repo argument into different types.
 enum RepoType<'a> {
-    /// A git repository (local path or remote URL)
     Git { repo: &'a str, rev: Option<&'a str> },
-    /// The special "builtin" keyword for builtin hooks
     Builtin,
-    /// The special "meta" keyword for meta hooks
     Meta,
+}
+
+struct TryRepoContext {
+    store: Store,
+    tmp_dir: TempDir,
+}
+
+impl TryRepoContext {
+    fn new() -> Result<Self> {
+        let store = Store::from_settings()?;
+        let tmp_dir = TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
+        let store = Store::from_path(tmp_dir.path()).init()?;
+        Ok(Self { store, tmp_dir })
+    }
+
+    async fn run_with_config(
+        self,
+        config_str: &str,
+        run_args: crate::cli::RunArgs,
+        refresh: bool,
+        verbose: bool,
+        printer: Printer,
+    ) -> Result<ExitStatus> {
+        let config_file = self.tmp_dir.path().join(PREK_TOML);
+        fs_err::tokio::write(&config_file, config_str).await?;
+
+        writeln!(
+            printer.stdout(),
+            "{}",
+            format!("Using generated `{PREK_TOML}`:").cyan().bold()
+        )?;
+        writeln!(printer.stdout(), "{}", config_str.dimmed())?;
+
+        crate::cli::run(
+            &self.store,
+            Some(config_file),
+            vec![],
+            vec![],
+            run_args.stage,
+            run_args.from_ref,
+            run_args.to_ref,
+            run_args.all_files,
+            run_args.files,
+            run_args.directory,
+            run_args.last_commit,
+            run_args.show_diff_on_failure,
+            run_args.fail_fast,
+            run_args.dry_run,
+            refresh,
+            run_args.extra,
+            verbose,
+            printer,
+        )
+        .await
+    }
 }
 
 async fn get_head_rev(repo: &Path) -> Result<String> {
@@ -36,8 +87,7 @@ async fn get_head_rev(repo: &Path) -> Result<String> {
         .output()
         .await?
         .stdout;
-    let head_rev = String::from_utf8_lossy(&head_rev).trim().to_string();
-    Ok(head_rev)
+    Ok(String::from_utf8_lossy(&head_rev).trim().to_string())
 }
 
 async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> Result<PathBuf> {
@@ -73,8 +123,7 @@ async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> R
             .await?;
     }
 
-    let mut add_u_cmd = git::git_cmd("add unstaged to shadow")?;
-    add_u_cmd
+    git::git_cmd("add unstaged to shadow")?
         .arg("add")
         .arg("--update")
         .current_dir(repo_path)
@@ -119,7 +168,7 @@ async fn prepare_repo_and_rev<'a>(
         get_head_rev(repo_path).await?
     } else {
         // For remote repositories, use ls-remote
-        let head_rev = git::git_cmd("get head rev")?
+        let output = git::git_cmd("get head rev")?
             .arg("ls-remote")
             .arg("--exit-code")
             .arg(repo)
@@ -127,7 +176,7 @@ async fn prepare_repo_and_rev<'a>(
             .output()
             .await?
             .stdout;
-        String::from_utf8_lossy(&head_rev)
+        String::from_utf8_lossy(&output)
             .split_ascii_whitespace()
             .next()
             .ok_or_else(|| {
@@ -136,7 +185,7 @@ async fn prepare_repo_and_rev<'a>(
             .to_string()
     };
 
-    // If repo is a local repo with uncommitted changes, create a shadow repo to commit the changes.
+    // If repo is a local repo with uncommitted changes, create a shadow repo.
     if is_local && git::has_diff("HEAD", repo_path).await? {
         warn_user!("Creating temporary repo with uncommitted changes...");
         let shadow = clone_and_commit(repo_path, &head_rev, tmp_dir).await?;
@@ -150,7 +199,8 @@ async fn prepare_repo_and_rev<'a>(
 fn render_repo_config_toml(repo_path: &str, rev: Option<&str>, hooks: Vec<String>) -> String {
     let mut doc = DocumentMut::new();
     let mut repo_table = toml_edit::Table::new();
-    repo_table["repo"] = toml_edit::value(repo_path);
+    // Normalize path separators so toml_edit produces consistent quoting across platforms
+    repo_table["repo"] = toml_edit::value(repo_path.replace('\\', "/"));
     if let Some(rev) = rev {
         repo_table["rev"] = toml_edit::value(rev);
     }
@@ -187,7 +237,6 @@ pub(crate) async fn try_repo(
         warn_user!("`--config` option is ignored when using `try-repo`");
     }
 
-    // Categorize the repo argument (case-insensitive for special keywords)
     let repo_type = if repo.eq_ignore_ascii_case("builtin") {
         if rev.is_some() {
             warn_user!("`--ref` option is ignored for `builtin` repo");
@@ -216,7 +265,6 @@ pub(crate) async fn try_repo(
     }
 }
 
-/// Try hooks from a special repository (builtin or meta).
 async fn try_special_repo<H: HookRegistry>(
     run_args: crate::cli::RunArgs,
     refresh: bool,
@@ -224,10 +272,7 @@ async fn try_special_repo<H: HookRegistry>(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let repo_name = H::REPO_NAME;
-
-    let store = Store::from_settings()?;
-    let tmp_dir = TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
-    let store = Store::from_path(tmp_dir.path()).init()?;
+    let ctx = TryRepoContext::new()?;
 
     let selectors = Selectors::load(&run_args.includes, &run_args.skips, GIT_ROOT.as_ref()?)?;
 
@@ -241,52 +286,11 @@ async fn try_special_repo<H: HookRegistry>(
 
     let hooks = hook_ids.into_iter().map(str::to_string).collect();
     let config_str = render_repo_config_toml(repo_name, None, hooks);
-    let config_file = tmp_dir.path().join(PREK_TOML);
-    fs_err::tokio::write(&config_file, &config_str).await?;
 
-    writeln!(
-        printer.stdout(),
-        "{}",
-        format!("Using generated `{PREK_TOML}`:").cyan().bold()
-    )?;
-    writeln!(printer.stdout(), "{}", config_str.dimmed())?;
-
-    invoke_run(&store, config_file, run_args, refresh, verbose, printer).await
+    ctx.run_with_config(&config_str, run_args, refresh, verbose, printer)
+        .await
 }
 
-/// Helper to call `crate::cli::run` with common arguments.
-async fn invoke_run(
-    store: &Store,
-    config_file: PathBuf,
-    run_args: crate::cli::RunArgs,
-    refresh: bool,
-    verbose: bool,
-    printer: Printer,
-) -> Result<ExitStatus> {
-    crate::cli::run(
-        store,
-        Some(config_file),
-        vec![],
-        vec![],
-        run_args.stage,
-        run_args.from_ref,
-        run_args.to_ref,
-        run_args.all_files,
-        run_args.files,
-        run_args.directory,
-        run_args.last_commit,
-        run_args.show_diff_on_failure,
-        run_args.fail_fast,
-        run_args.dry_run,
-        refresh,
-        run_args.extra,
-        verbose,
-        printer,
-    )
-    .await
-}
-
-/// Try hooks from a git repository (local path or remote URL).
 async fn try_git_repo(
     repo: &str,
     rev: Option<&str>,
@@ -295,15 +299,14 @@ async fn try_git_repo(
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let store = Store::from_settings()?;
-    let tmp_dir = TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
+    let ctx = TryRepoContext::new()?;
 
-    let (repo_path, rev) = prepare_repo_and_rev(repo, rev, tmp_dir.path())
+    let (repo_path, rev) = prepare_repo_and_rev(repo, rev, ctx.tmp_dir.path())
         .await
         .context("Failed to determine repository and revision")?;
 
-    let store = Store::from_path(tmp_dir.path()).init()?;
-    let repo_clone_path = store
+    let repo_clone_path = ctx
+        .store
         .clone_repo(
             &config::RemoteRepo::new(repo_path.to_string(), rev.clone(), vec![]),
             None,
@@ -322,16 +325,12 @@ async fn try_git_repo(
         .map(|hook| hook.id)
         .collect::<Vec<_>>();
 
+    if hooks.is_empty() {
+        bail!("No hooks matched the specified selectors for repo `{repo_path}`");
+    }
+
     let config_str = render_repo_config_toml(&repo_path, Some(&rev), hooks);
-    let config_file = tmp_dir.path().join(PREK_TOML);
-    fs_err::tokio::write(&config_file, &config_str).await?;
 
-    writeln!(
-        printer.stdout(),
-        "{}",
-        format!("Using generated `{PREK_TOML}`:").cyan().bold()
-    )?;
-    writeln!(printer.stdout(), "{}", config_str.dimmed())?;
-
-    invoke_run(&store, config_file, run_args, refresh, verbose, printer).await
+    ctx.run_with_config(&config_str, run_args, refresh, verbose, printer)
+        .await
 }
