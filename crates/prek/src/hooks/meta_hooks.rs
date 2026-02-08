@@ -5,6 +5,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use prek_consts::CONFIG_FILENAMES;
+use strum::{AsRefStr, Display, EnumIter, EnumString, IntoStaticStr};
 
 use crate::cli::reporter::HookRunReporter;
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
@@ -20,7 +21,9 @@ use crate::workspace::Project;
 // When matching files (files or exclude), we need to match against the filenames
 // relative to the project root.
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, strum::AsRefStr, strum::Display, strum::EnumString)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, Eq, AsRefStr, Display, EnumIter, EnumString, IntoStaticStr,
+)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(rename_all = "kebab-case"))]
 #[strum(serialize_all = "kebab-case")]
@@ -290,5 +293,18 @@ mod tests {
         let identity = MetaHook::from_id("identity").expect("known meta hook");
         assert!(identity.options.files.is_none());
         assert_eq!(identity.options.verbose, Some(true));
+    }
+
+    #[test]
+    fn strum_derives_work() {
+        use strum::IntoEnumIterator;
+
+        assert_eq!(MetaHooks::iter().count(), 3);
+
+        for variant in MetaHooks::iter() {
+            let id: &'static str = variant.into();
+            let parsed = MetaHooks::from_str(id).expect("roundtrip should work");
+            assert_eq!(parsed, variant);
+        }
     }
 }

@@ -2,6 +2,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
+use strum::{AsRefStr, Display, EnumIter, EnumString, IntoStaticStr};
 
 use crate::cli::reporter::HookRunReporter;
 use crate::config::{BuiltinHook, HookOptions, Stage};
@@ -11,7 +12,9 @@ use crate::store::Store;
 
 mod check_json5;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, strum::AsRefStr, strum::Display, strum::EnumString)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, Eq, AsRefStr, Display, EnumIter, EnumString, IntoStaticStr,
+)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(rename_all = "kebab-case"))]
 #[strum(serialize_all = "kebab-case")]
@@ -271,5 +274,22 @@ impl BuiltinHook {
                 },
             },
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use strum::IntoEnumIterator;
+
+    #[test]
+    fn strum_derives_work() {
+        assert_eq!(BuiltinHooks::iter().count(), 16);
+
+        for variant in BuiltinHooks::iter() {
+            let id: &'static str = variant.into();
+            let parsed = BuiltinHooks::from_str(id).expect("roundtrip should work");
+            assert_eq!(parsed, variant);
+        }
     }
 }
