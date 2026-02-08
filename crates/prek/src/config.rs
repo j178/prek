@@ -16,7 +16,9 @@ use crate::fs::Simplified;
 use crate::identify;
 use crate::install_source::InstallSource;
 #[cfg(feature = "schemars")]
-use crate::schema::{schema_repo_builtin, schema_repo_local, schema_repo_meta, schema_repo_remote};
+use crate::schema::{
+    schema_repo_builtin, schema_repo_local, schema_repo_meta, schema_repo_remote, schema_repo_self,
+};
 use crate::version;
 use crate::warn_user;
 use crate::warn_user_once;
@@ -672,12 +674,31 @@ pub(crate) struct BuiltinRepo {
     _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub(crate) struct SelfRepo {
+    #[cfg_attr(feature = "schemars", schemars(schema_with = "schema_repo_self"))]
+    pub repo: String,
+    #[serde(skip_serializing)]
+    pub hooks: Vec<RemoteHook>,
+
+    #[serde(skip_serializing, flatten)]
+    _unused_keys: BTreeMap<String, serde_json::Value>,
+}
+
+impl Display for SelfRepo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("self")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum Repo {
     Remote(RemoteRepo),
     Local(LocalRepo),
     Meta(MetaRepo),
     Builtin(BuiltinRepo),
+    SelfRepo(SelfRepo),
 }
 
 impl<'de> Deserialize<'de> for Repo {
@@ -793,6 +814,22 @@ impl<'de> Deserialize<'de> for Repo {
                         };
                         Ok(Repo::Builtin(BuiltinRepo {
                             repo: "builtin".to_string(),
+                            hooks,
+                            _unused_keys: unused,
+                        }))
+                    }
+                    "self" => {
+                        if rev.is_some() {
+                            return Err(M::Error::custom("`rev` is not allowed for self repos"));
+                        }
+                        let hooks = match hooks.ok_or_else(|| M::Error::missing_field("hooks"))? {
+                            HooksValue::Remote(hooks) => hooks,
+                            HooksValue::Local(_) | HooksValue::Meta(_) | HooksValue::Builtin(_) => {
+                                return Err(M::Error::custom("invalid hooks for self repo"));
+                            }
+                        };
+                        Ok(Repo::SelfRepo(SelfRepo {
+                            repo: "self".to_string(),
                             hooks,
                             _unused_keys: unused,
                         }))
@@ -948,6 +985,10 @@ fn collect_unused_paths(config: &Config) -> Vec<String> {
                 Repo::Builtin(builtin) => (
                     &builtin._unused_keys,
                     Box::new(builtin.hooks.iter().map(|h| &h.options)),
+                ),
+                Repo::SelfRepo(self_repo) => (
+                    &self_repo._unused_keys,
+                    Box::new(self_repo.hooks.iter().map(|h| &h.options)),
                 ),
             };
 
@@ -1966,5 +2007,77 @@ mod tests {
         "};
         let config = serde_saphyr::from_str::<Config>(yaml).unwrap();
         insta::assert_debug_snapshot!(config);
+    }
+
+    #[test]
+    fn parse_self_repo() {
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: self
+                hooks:
+                  - id: my-hook
+        "};
+        let result = serde_saphyr::from_str::<Config>(yaml).unwrap();
+        insta::assert_debug_snapshot!(result);
+    }
+
+    #[test]
+    fn parse_self_repo_with_rev() {
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: self
+                rev: v1.0.0
+                hooks:
+                  - id: my-hook
+        "};
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @r"
+        error: line 2 column 5: `rev` is not allowed for self repos at line 2, column 5
+         --> <input>:2:5
+          |
+        1 | repos:
+        2 |   - repo: self
+          |     ^ `rev` is not allowed for self repos at line 2, column 5
+        3 |     rev: v1.0.0
+        4 |     hooks:
+          |
+        ");
+    }
+
+    #[test]
+    fn parse_self_repo_with_overrides() {
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: self
+                hooks:
+                  - id: my-hook
+                    args: [--flag]
+                    files: ^src/
+        "};
+        let result = serde_saphyr::from_str::<Config>(yaml).unwrap();
+        insta::assert_debug_snapshot!(result);
+    }
+
+    #[test]
+    fn parse_self_repo_rev_before_repo() {
+        let yaml = indoc::indoc! {r"
+            repos:
+              - rev: v1.0.0
+                repo: self
+                hooks:
+                  - id: my-hook
+        "};
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @r"
+        error: line 2 column 5: `rev` is not allowed for self repos at line 2, column 5
+         --> <input>:2:5
+          |
+        1 | repos:
+        2 |   - rev: v1.0.0
+          |     ^ `rev` is not allowed for self repos at line 2, column 5
+        3 |     repo: self
+        4 |     hooks:
+          |
+        ");
     }
 }

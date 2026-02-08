@@ -1,0 +1,54 @@
+---
+source: crates/prek/src/config.rs
+expression: result
+---
+Config {
+    repos: [
+        SelfRepo(
+            SelfRepo {
+                repo: "self",
+                hooks: [
+                    RemoteHook {
+                        id: "my-hook",
+                        name: None,
+                        entry: None,
+                        language: None,
+                        priority: None,
+                        options: HookOptions {
+                            alias: None,
+                            files: None,
+                            exclude: None,
+                            types: None,
+                            types_or: None,
+                            exclude_types: None,
+                            additional_dependencies: None,
+                            args: None,
+                            env: None,
+                            always_run: None,
+                            fail_fast: None,
+                            pass_filenames: None,
+                            description: None,
+                            language_version: None,
+                            log_file: None,
+                            require_serial: None,
+                            stages: None,
+                            verbose: None,
+                            minimum_prek_version: None,
+                            _unused_keys: {},
+                        },
+                    },
+                ],
+                _unused_keys: {},
+            },
+        ),
+    ],
+    default_install_hook_types: None,
+    default_language_version: None,
+    default_stages: None,
+    files: None,
+    exclude: None,
+    fail_fast: None,
+    minimum_prek_version: None,
+    orphan: None,
+    _unused_keys: {},
+}

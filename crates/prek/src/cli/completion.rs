@@ -178,6 +178,11 @@ fn all_hooks(proj: &Project) -> Vec<(String, Option<String>)> {
                     out.push((h.id.clone(), Some(h.name.clone())));
                 }
             }
+            config::Repo::SelfRepo(cfg) => {
+                for h in &cfg.hooks {
+                    out.push((h.id.clone(), h.name.as_ref().map(ToString::to_string)));
+                }
+            }
         }
     }
     out

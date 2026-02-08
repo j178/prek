@@ -517,7 +517,7 @@ fn render_updated_toml_config(
             .and_then(|value| value.as_str())
             .unwrap_or_default();
 
-        if matches!(repo_value, "local" | "meta" | "builtin") {
+        if matches!(repo_value, "local" | "meta" | "builtin" | "self") {
             continue;
         }
 

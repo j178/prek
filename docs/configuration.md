@@ -41,6 +41,7 @@ Notable differences (when using YAML):
 - **Workspace mode** is a `prek` feature that can discover multiple projects; upstream `pre-commit` is single-project.
 - `files` / `exclude` can be written as **glob mappings** in `prek` (in addition to regex), which is not supported by upstream `pre-commit`.
 - `repo: builtin` adds fast built-in hooks in `prek`.
+- `repo: self` lets a project consume its own `.pre-commit-hooks.yaml` hooks.
 - Upstream `pre-commit` uses `minimum_pre_commit_version`, while `prek` uses `minimum_prek_version` and intentionally ignores `minimum_pre_commit_version`.
 
 ### Prek-only extensions
@@ -53,6 +54,7 @@ They work in both YAML and TOML, but they only matter for compatibility if you s
     - [`orphan`](#prek-only-orphan)
 - Repo type:
     - [`repo: builtin`](#prek-only-repo-builtin)
+    - [`repo: self`](#prek-only-repo-self)
 - Hook-level:
     - [`env`](#prek-only-env)
     - [`priority`](#prek-only-priority)
@@ -279,6 +281,7 @@ Each entry is one of:
 - `repo: local` for hooks defined directly in your repository
 - `repo: meta` for built-in meta hooks
 - `repo: builtin` for `prek`'s built-in fast hooks
+- `repo: self` for consuming hooks from the project's own `.pre-commit-hooks.yaml`
 
 See [Repo entries](#repo-entries).
 
@@ -749,7 +752,50 @@ Example:
           - id: check-yaml
     ```
 
-For the list of available built-in hooks and the “automatic fast path” behavior, see [Built-in Fast Hooks](builtin.md).
+For the list of available built-in hooks and the "automatic fast path" behavior, see [Built-in Fast Hooks](builtin.md).
+
+#### `repo: self`
+
+<a id="prek-only-repo-self"></a>
+
+!!! note "prek-only"
+
+    `repo: self` is specific to `prek` and is not compatible with upstream `pre-commit`.
+
+For projects that publish hooks via a `.pre-commit-hooks.yaml` manifest, `repo: self`
+lets you consume those same hooks without duplicating their definitions as `repo: local`.
+
+`prek` reads `.pre-commit-hooks.yaml` from the project root and resolves hooks by `id`.
+Only `id` is required — all other fields are optional overrides, the same as remote hooks.
+
+`rev` is not allowed — the manifest is always read from the current project directory.
+
+If `.pre-commit-hooks.yaml` does not exist in the project root, `prek` reports an error
+at hook initialization time.
+
+Example:
+
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "self"
+    hooks = [
+      { id = "format-json" },
+      { id = "lint-shell", args = ["--severity=error"] },
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: self
+        hooks:
+          - id: format-json
+          - id: lint-shell
+            args: [--severity=error]
+    ```
 
 ### Hook entries
 
@@ -784,7 +830,7 @@ You can optionally provide `name` and normal hook options (filters, stages, etc)
 
 ### Common hook options
 
-These keys can appear on hooks (remote/local/builtin/meta), subject to the restrictions above.
+These keys can appear on hooks (remote/local/builtin/meta/self), subject to the restrictions above.
 
 #### `id`
 

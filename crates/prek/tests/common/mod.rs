@@ -400,8 +400,8 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"\\([\w\d]|\.\.|\.)", "/$1"),
     // The exact message is host language dependent
     (
-        r"Caused by: .* \(os error 2\)",
-        "Caused by: No such file or directory (os error 2)",
+        r"The system cannot find the file specified\. \(os error 2\)",
+        "No such file or directory (os error 2)",
     ),
     // Time seconds
     (r"\b(\d+\.)?\d+(ms|s)\b", "[TIME]"),

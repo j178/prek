@@ -203,6 +203,7 @@ pub(crate) async fn check_useless_excludes(
                 config::Repo::Local(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
                 config::Repo::Meta(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
                 config::Repo::Builtin(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
+                config::Repo::SelfRepo(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
             };
 
             for (hook_id, opts) in hooks_iter {
