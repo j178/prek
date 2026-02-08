@@ -15,7 +15,7 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 <dl class="cli-reference"><dt><a href="#prek-install"><code>prek install</code></a></dt><dd><p>Install prek as a git hook under the <code>.git/hooks/</code> directory</p></dd>
 <dt><a href="#prek-install-hooks"><code>prek install-hooks</code></a></dt><dd><p>Create environments for all hooks used in the config file</p></dd>
 <dt><a href="#prek-run"><code>prek run</code></a></dt><dd><p>Run hooks</p></dd>
-<dt><a href="#prek-list"><code>prek list</code></a></dt><dd><p>List available hooks</p></dd>
+<dt><a href="#prek-list"><code>prek list</code></a></dt><dd><p>List hooks configured in the current workspace</p></dd>
 <dt><a href="#prek-uninstall"><code>prek uninstall</code></a></dt><dd><p>Uninstall prek from git hooks</p></dd>
 <dt><a href="#prek-validate-config"><code>prek validate-config</code></a></dt><dd><p>Validate configuration files (prek.toml or .pre-commit-config.yaml)</p></dd>
 <dt><a href="#prek-validate-manifest"><code>prek validate-manifest</code></a></dt><dd><p>Validate <code>.pre-commit-hooks.yaml</code> files</p></dd>
@@ -264,7 +264,7 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 
 ## prek list
 
-List available hooks
+List hooks configured in the current workspace
 
 <h3 class="cli-reference">Usage</h3>
 
