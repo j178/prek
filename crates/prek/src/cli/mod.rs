@@ -216,8 +216,6 @@ pub(crate) enum Command {
     Run(Box<RunArgs>),
     /// List hooks configured in the current workspace.
     List(ListArgs),
-    /// List all built-in hooks bundled with prek.
-    ListBuiltins(ListBuiltinsArgs),
     /// Uninstall prek from git hooks.
     Uninstall(UninstallArgs),
     /// Validate configuration files (prek.toml or .pre-commit-config.yaml).
@@ -733,6 +731,8 @@ pub(crate) struct UtilNamespace {
 pub(crate) enum UtilCommand {
     /// Show file identification tags.
     Identify(IdentifyArgs),
+    /// List all built-in hooks bundled with prek.
+    ListBuiltins(ListBuiltinsArgs),
     /// Install hook script in a directory intended for use with `git config init.templateDir`.
     #[command(alias = "init-templatedir")]
     InitTemplateDir(InitTemplateDirArgs),

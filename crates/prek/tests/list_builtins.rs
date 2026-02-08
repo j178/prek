@@ -6,7 +6,7 @@ mod common;
 fn list_builtins_basic() {
     let context = TestContext::new();
 
-    cmd_snapshot!(context.filters(), context.list_builtins(), @r"
+    cmd_snapshot!(context.filters(), context.command().arg("util").arg("list-builtins"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -35,7 +35,7 @@ fn list_builtins_basic() {
 fn list_builtins_verbose() {
     let context = TestContext::new();
 
-    cmd_snapshot!(context.filters(), context.list_builtins().arg("--verbose"), @r"
+    cmd_snapshot!(context.filters(), context.command().arg("util").arg("list-builtins").arg("--verbose"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -95,7 +95,7 @@ fn list_builtins_verbose() {
 fn list_builtins_json() {
     let context = TestContext::new();
 
-    cmd_snapshot!(context.filters(), context.list_builtins().arg("--output-format=json"), @r#"
+    cmd_snapshot!(context.filters(), context.command().arg("util").arg("list-builtins").arg("--output-format=json"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----

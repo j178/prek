@@ -225,12 +225,6 @@ impl TestContext {
         command
     }
 
-    pub fn list_builtins(&self) -> Command {
-        let mut command = self.command();
-        command.arg("list-builtins");
-        command
-    }
-
     pub fn auto_update(&self) -> Command {
         let mut cmd = self.command();
         cmd.arg("auto-update");
