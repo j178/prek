@@ -5,6 +5,7 @@ use std::path::{Component, Path, PathBuf};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InstallSource {
     Homebrew,
+    Mise,
     StandaloneInstaller,
 }
 
@@ -22,6 +23,16 @@ impl InstallSource {
             .any(|w| w[0] == cellar && w[1] == prek)
         {
             return Some(Self::Homebrew);
+        }
+
+        // Check for mise installation: .../mise/installs/prek/...
+        let mise = OsStr::new("mise");
+        let installs = OsStr::new("installs");
+        if components
+            .windows(3)
+            .any(|w| w[0] == mise && w[1] == installs && w[2] == prek)
+        {
+            return Some(Self::Mise);
         }
 
         // Check for standalone installer installation
@@ -53,6 +64,7 @@ impl InstallSource {
     pub(crate) fn description(self) -> &'static str {
         match self {
             Self::Homebrew => "Homebrew",
+            Self::Mise => "mise",
             Self::StandaloneInstaller => "the standalone installer",
         }
     }
@@ -61,6 +73,7 @@ impl InstallSource {
     pub(crate) fn update_instructions(self) -> &'static str {
         match self {
             Self::Homebrew => "brew update && brew upgrade prek",
+            Self::Mise => "mise upgrade prek",
             Self::StandaloneInstaller => "prek self update",
         }
     }
@@ -90,6 +103,26 @@ mod tests {
     fn returns_none_for_unknown_unix_path() {
         assert_eq!(
             InstallSource::from_path(Path::new("/usr/local/bin/prek")),
+            None
+        );
+    }
+
+    #[test]
+    fn detects_mise_installs() {
+        assert_eq!(
+            InstallSource::from_path(Path::new(
+                "/Users/jo/.local/share/mise/installs/prek/0.3.1/bin/prek"
+            )),
+            Some(InstallSource::Mise)
+        );
+    }
+
+    #[test]
+    fn does_not_match_other_mise_tool() {
+        assert_eq!(
+            InstallSource::from_path(Path::new(
+                "/Users/jo/.local/share/mise/installs/ruby/3.4.6/bin/ruby"
+            )),
             None
         );
     }
