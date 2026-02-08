@@ -214,7 +214,7 @@ pub(crate) enum Command {
     InstallHooks(InstallHooksArgs),
     /// Run hooks.
     Run(Box<RunArgs>),
-    /// List hooks configured in the current project.
+    /// List hooks configured in the current workspace.
     List(ListArgs),
     /// List all built-in hooks bundled with prek.
     ListBuiltins(ListBuiltinsArgs),
@@ -745,9 +745,10 @@ pub(crate) enum UtilCommand {
 
 #[derive(Debug, Args)]
 pub(crate) struct YamlToTomlArgs {
-    /// The YAML configuration file to convert.
+    /// The YAML configuration file to convert. If omitted, discovers
+    /// `.pre-commit-config.yaml` or `.pre-commit-config.yml` in the current directory.
     #[arg(value_name = "CONFIG", value_hint = ValueHint::FilePath)]
-    pub(crate) input: PathBuf,
+    pub(crate) input: Option<PathBuf>,
 
     /// Path to write the generated prek.toml file.
     /// Defaults to `prek.toml` in the same directory as the input file.

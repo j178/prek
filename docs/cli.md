@@ -15,7 +15,7 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 <dl class="cli-reference"><dt><a href="#prek-install"><code>prek install</code></a></dt><dd><p>Install prek as a git hook under the <code>.git/hooks/</code> directory</p></dd>
 <dt><a href="#prek-install-hooks"><code>prek install-hooks</code></a></dt><dd><p>Create environments for all hooks used in the config file</p></dd>
 <dt><a href="#prek-run"><code>prek run</code></a></dt><dd><p>Run hooks</p></dd>
-<dt><a href="#prek-list"><code>prek list</code></a></dt><dd><p>List hooks configured in the current project</p></dd>
+<dt><a href="#prek-list"><code>prek list</code></a></dt><dd><p>List hooks configured in the current workspace</p></dd>
 <dt><a href="#prek-list-builtins"><code>prek list-builtins</code></a></dt><dd><p>List all built-in hooks bundled with prek</p></dd>
 <dt><a href="#prek-uninstall"><code>prek uninstall</code></a></dt><dd><p>Uninstall prek from git hooks</p></dd>
 <dt><a href="#prek-validate-config"><code>prek validate-config</code></a></dt><dd><p>Validate configuration files (prek.toml or .pre-commit-config.yaml)</p></dd>
@@ -265,7 +265,7 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 
 ## prek list
 
-List hooks configured in the current project
+List hooks configured in the current workspace
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -951,12 +951,12 @@ Convert a YAML configuration file to prek.toml
 <h3 class="cli-reference">Usage</h3>
 
 ```
-prek util yaml-to-toml [OPTIONS] <CONFIG>
+prek util yaml-to-toml [OPTIONS] [CONFIG]
 ```
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="prek-util-yaml-to-toml--input"><a href="#prek-util-yaml-to-toml--input"><code>CONFIG</code></a></dt><dd><p>The YAML configuration file to convert</p>
+<dl class="cli-reference"><dt id="prek-util-yaml-to-toml--input"><a href="#prek-util-yaml-to-toml--input"><code>CONFIG</code></a></dt><dd><p>The YAML configuration file to convert. If omitted, discovers <code>.pre-commit-config.yaml</code> or <code>.pre-commit-config.yml</code> in the current directory</p>
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
