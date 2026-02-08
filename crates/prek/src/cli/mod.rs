@@ -20,6 +20,7 @@ mod hook_impl;
 mod identify;
 mod install;
 mod list;
+mod list_builtins;
 pub mod reporter;
 pub mod run;
 mod sample_config;
@@ -38,6 +39,7 @@ pub(crate) use hook_impl::hook_impl;
 pub(crate) use identify::identify;
 pub(crate) use install::{init_template_dir, install, install_hooks, uninstall};
 pub(crate) use list::list;
+pub(crate) use list_builtins::list_builtins;
 pub(crate) use run::run;
 pub(crate) use sample_config::sample_config;
 #[cfg(feature = "self-update")]
@@ -519,6 +521,13 @@ pub(crate) enum IdentifyOutputFormat {
 }
 
 #[derive(Debug, Clone, Default, Args)]
+pub(crate) struct ListBuiltinsArgs {
+    /// The output format.
+    #[arg(long, value_enum, default_value_t = ListOutputFormat::Text)]
+    pub(crate) output_format: ListOutputFormat,
+}
+
+#[derive(Debug, Clone, Default, Args)]
 pub(crate) struct ListArgs {
     /// Include the specified hooks or projects.
     ///
@@ -722,6 +731,8 @@ pub(crate) struct UtilNamespace {
 pub(crate) enum UtilCommand {
     /// Show file identification tags.
     Identify(IdentifyArgs),
+    /// List all built-in hooks bundled with prek.
+    ListBuiltins(ListBuiltinsArgs),
     /// Install hook script in a directory intended for use with `git config init.templateDir`.
     #[command(alias = "init-templatedir")]
     InitTemplateDir(InitTemplateDirArgs),

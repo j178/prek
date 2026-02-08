@@ -384,6 +384,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
                 cli::identify(&args.paths, args.output_format, printer)
             }
+            UtilCommand::ListBuiltins(args) => {
+                show_settings!(args);
+
+                cli::list_builtins(args.output_format, cli.globals.verbose > 0, printer)
+            }
             UtilCommand::InitTemplateDir(args) => {
                 show_settings!(args);
 

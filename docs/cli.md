@@ -810,6 +810,7 @@ prek util [OPTIONS] <COMMAND>
 <h3 class="cli-reference">Commands</h3>
 
 <dl class="cli-reference"><dt><a href="#prek-util-identify"><code>prek util identify</code></a></dt><dd><p>Show file identification tags</p></dd>
+<dt><a href="#prek-util-list-builtins"><code>prek util list-builtins</code></a></dt><dd><p>List all built-in hooks bundled with prek</p></dd>
 <dt><a href="#prek-util-init-template-dir"><code>prek util init-template-dir</code></a></dt><dd><p>Install hook script in a directory intended for use with <code>git config init.templateDir</code></p></dd>
 <dt><a href="#prek-util-yaml-to-toml"><code>prek util yaml-to-toml</code></a></dt><dd><p>Convert a YAML configuration file to prek.toml</p></dd>
 </dl>
@@ -853,6 +854,42 @@ prek util identify [OPTIONS] [PATH]...
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-util-identify--refresh"><a href="#prek-util-identify--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-util-identify--verbose"><a href="#prek-util-identify--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-util-identify--version"><a href="#prek-util-identify--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd></dl>
+
+### prek util list-builtins
+
+List all built-in hooks bundled with prek
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+prek util list-builtins [OPTIONS]
+```
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt id="prek-util-list-builtins--cd"><a href="#prek-util-list-builtins--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
+</dd><dt id="prek-util-list-builtins--color"><a href="#prek-util-list-builtins--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
+<p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+<li><code>never</code>:  Disables colored output</li>
+</ul></dd><dt id="prek-util-list-builtins--config"><a href="#prek-util-list-builtins--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
+</dd><dt id="prek-util-list-builtins--help"><a href="#prek-util-list-builtins--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="prek-util-list-builtins--log-file"><a href="#prek-util-list-builtins--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
+</dd><dt id="prek-util-list-builtins--no-progress"><a href="#prek-util-list-builtins--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+<p>For example, spinners or progress bars.</p>
+</dd><dt id="prek-util-list-builtins--output-format"><a href="#prek-util-list-builtins--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>The output format</p>
+<p>[default: text]</p><p>Possible values:</p>
+<ul>
+<li><code>text</code></li>
+<li><code>json</code></li>
+</ul></dd><dt id="prek-util-list-builtins--quiet"><a href="#prek-util-list-builtins--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-util-list-builtins--refresh"><a href="#prek-util-list-builtins--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+</dd><dt id="prek-util-list-builtins--verbose"><a href="#prek-util-list-builtins--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
+</dd><dt id="prek-util-list-builtins--version"><a href="#prek-util-list-builtins--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ### prek util init-template-dir
