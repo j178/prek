@@ -212,7 +212,7 @@ pub(crate) enum Command {
     InstallHooks(InstallHooksArgs),
     /// Run hooks.
     Run(Box<RunArgs>),
-    /// List available hooks.
+    /// List hooks configured in the current workspace.
     List(ListArgs),
     /// Uninstall prek from git hooks.
     Uninstall(UninstallArgs),
