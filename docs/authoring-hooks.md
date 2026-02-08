@@ -20,7 +20,7 @@ Common optional fields include `args`, `files`, `exclude`, `types`, `types_or`,
 `require_serial`.
 
 `prek` follows the upstream pre-commit manifest format. For the full field list
-and semantics, see: https://pre-commit.com/#new-hooks
+and semantics, see: [https://pre-commit.com/#new-hooks](https://pre-commit.com/#new-hooks).
 
 Example:
 
