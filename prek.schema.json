@@ -157,7 +157,7 @@
   "additionalProperties": true,
   "definitions": {
     "Repo": {
-      "description": "A repository of hooks, which can be remote, local, meta, or builtin.",
+      "description": "A repository of hooks, which can be remote, local, meta, builtin, or self.",
       "type": "object",
       "oneOf": [
         {
@@ -171,6 +171,9 @@
         },
         {
           "$ref": "#/definitions/BuiltinRepo"
+        },
+        {
+          "$ref": "#/definitions/SelfRepo"
         }
       ]
     },
@@ -178,13 +181,14 @@
       "type": "object",
       "properties": {
         "repo": {
-          "description": "Remote repository location. Must not be `local`, `meta`, or `builtin`.",
+          "description": "Remote repository location. Must not be `local`, `meta`, `builtin`, or `self`.",
           "type": "string",
           "not": {
             "enum": [
               "local",
               "meta",
-              "builtin"
+              "builtin",
+              "self"
             ]
           }
         },
@@ -1220,6 +1224,28 @@
         "no-commit-to-branch",
         "trailing-whitespace"
       ]
+    },
+    "SelfRepo": {
+      "type": "object",
+      "properties": {
+        "repo": {
+          "description": "Must be `self`. References the project's own `.pre-commit-hooks.yaml`.",
+          "type": "string",
+          "const": "self"
+        },
+        "hooks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RemoteHook"
+          },
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "repo",
+        "hooks"
+      ],
+      "additionalProperties": true
     },
     "HookType": {
       "type": "string",

@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use crate::config::{
     BuiltinHook, BuiltinRepo, FilePattern, LocalRepo, MetaHook, MetaRepo, RemoteHook, RemoteRepo,
-    Repo,
+    Repo, SelfRepo,
 };
 
 impl schemars::JsonSchema for FilePattern {
@@ -141,15 +141,23 @@ pub(crate) fn schema_repo_builtin(
     })
 }
 
+pub(crate) fn schema_repo_self(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({
+        "type": "string",
+        "const": "self",
+        "description": "Must be `self`. References the project's own `.pre-commit-hooks.yaml`.",
+    })
+}
+
 pub(crate) fn schema_repo_remote(
     _gen: &mut schemars::generate::SchemaGenerator,
 ) -> schemars::Schema {
     schemars::json_schema!({
         "type": "string",
         "not": {
-            "enum": ["local", "meta", "builtin"],
+            "enum": ["local", "meta", "builtin", "self"],
         },
-        "description": "Remote repository location. Must not be `local`, `meta`, or `builtin`.",
+        "description": "Remote repository location. Must not be `local`, `meta`, `builtin`, or `self`.",
     })
 }
 
@@ -163,15 +171,17 @@ impl schemars::JsonSchema for Repo {
         let local_schema = r#gen.subschema_for::<LocalRepo>();
         let meta_schema = r#gen.subschema_for::<MetaRepo>();
         let builtin_schema = r#gen.subschema_for::<BuiltinRepo>();
+        let self_schema = r#gen.subschema_for::<SelfRepo>();
 
         schemars::json_schema!({
             "type": "object",
-            "description": "A repository of hooks, which can be remote, local, meta, or builtin.",
+            "description": "A repository of hooks, which can be remote, local, meta, builtin, or self.",
             "oneOf": [
                 remote_schema,
                 local_schema,
                 meta_schema,
                 builtin_schema,
+                self_schema,
             ],
         })
     }

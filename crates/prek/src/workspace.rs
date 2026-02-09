@@ -18,7 +18,7 @@ use tracing::{debug, error, instrument, trace};
 
 use crate::cli::run::Selectors;
 use crate::config::{self, Config, read_config};
-use crate::fs::Simplified;
+use crate::fs::{CWD, Simplified};
 use crate::git::GIT_ROOT;
 use crate::hook::HookSpec;
 use crate::hook::{self, Hook, HookBuilder, Repo};
@@ -116,6 +116,14 @@ impl Project {
         config_path: Cow<'_, Path>,
         root: Option<PathBuf>,
     ) -> Result<Self, Error> {
+        let mut config_path = config_path.into_owned();
+        if config_path.is_relative() {
+            config_path = CWD.join(config_path);
+        }
+        if let Ok(canonical) = fs_err::canonicalize(&config_path) {
+            config_path = canonical;
+        }
+
         debug!(
             path = %config_path.user_display(),
             "Loading project configuration"
@@ -147,11 +155,12 @@ impl Project {
         }
 
         let root = root.unwrap_or_else(|| config_dir.to_path_buf());
+        let root = fs_err::canonicalize(&root).unwrap_or(root);
 
         Ok(Self {
             root,
             config,
-            config_path: config_path.into_owned(),
+            config_path,
             idx: 0,
             relative_path: PathBuf::new(),
             repos: Vec::with_capacity(size),
@@ -344,6 +353,10 @@ impl Project {
                     let repo = Repo::builtin(repo.hooks.clone());
                     repos.push(Arc::new(repo));
                 }
+                config::Repo::SelfRepo(_) => {
+                    let repo = Repo::self_repo(self.root.clone())?;
+                    repos.push(Arc::new(repo));
+                }
             }
         }
 
@@ -415,6 +428,29 @@ impl Project {
                 config::Repo::Builtin(repo_config) => {
                     for hook_config in &repo_config.hooks {
                         let hook_spec = HookSpec::from(hook_config.clone());
+
+                        let builder = HookBuilder::new(
+                            self.clone(),
+                            Arc::clone(repo),
+                            hook_spec,
+                            hooks.len(),
+                        );
+                        let hook = builder.build().await?;
+
+                        hooks.push(hook);
+                    }
+                }
+                config::Repo::SelfRepo(repo_config) => {
+                    for hook_config in &repo_config.hooks {
+                        let Some(manifest_hook) = repo.get_hook(&hook_config.id) else {
+                            return Err(Error::HookNotFound {
+                                hook: hook_config.id.clone(),
+                                repo: repo.to_string(),
+                            });
+                        };
+
+                        let mut hook_spec = manifest_hook.clone();
+                        hook_spec.apply_remote_hook_overrides(hook_config);
 
                         let builder = HookBuilder::new(
                             self.clone(),
@@ -990,6 +1026,10 @@ impl Workspace {
                     }
                     config::Repo::Builtin(repo) => {
                         let repo = Repo::builtin(repo.hooks.clone());
+                        repos.push(Arc::new(repo));
+                    }
+                    config::Repo::SelfRepo(_) => {
+                        let repo = Repo::self_repo(project.root.clone())?;
                         repos.push(Arc::new(repo));
                     }
                 }

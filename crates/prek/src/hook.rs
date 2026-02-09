@@ -161,6 +161,12 @@ pub(crate) enum Repo {
     Builtin {
         hooks: Vec<HookSpec>,
     },
+    #[expect(clippy::enum_variant_names)]
+    SelfRepo {
+        /// Path to the project root containing the manifest.
+        path: PathBuf,
+        hooks: Vec<HookSpec>,
+    },
 }
 
 impl Repo {
@@ -202,10 +208,25 @@ impl Repo {
         }
     }
 
-    /// Get the path to the cloned repo if it is a remote repo.
+    /// Construct a self repo from the project root, reading its manifest.
+    pub(crate) fn self_repo(project_root: PathBuf) -> Result<Self, Error> {
+        let manifest_path = project_root.join(PRE_COMMIT_HOOKS_YAML);
+        let manifest = read_manifest(&manifest_path).map_err(|e| Error::Manifest {
+            repo: "self".to_string(),
+            error: e,
+        })?;
+        let hooks = manifest.hooks.into_iter().map(Into::into).collect();
+
+        Ok(Self::SelfRepo {
+            path: project_root,
+            hooks,
+        })
+    }
+
+    /// Get the path to the repo if it is a remote or self repo.
     pub(crate) fn path(&self) -> Option<&Path> {
         match self {
-            Repo::Remote { path, .. } => Some(path),
+            Repo::Remote { path, .. } | Repo::SelfRepo { path, .. } => Some(path),
             _ => None,
         }
     }
@@ -213,10 +234,11 @@ impl Repo {
     /// Get a hook by id.
     pub(crate) fn get_hook(&self, id: &str) -> Option<&HookSpec> {
         let hooks = match self {
-            Repo::Remote { hooks, .. } => hooks,
-            Repo::Local { hooks } => hooks,
-            Repo::Meta { hooks } => hooks,
-            Repo::Builtin { hooks } => hooks,
+            Repo::Remote { hooks, .. }
+            | Repo::SelfRepo { hooks, .. }
+            | Repo::Local { hooks }
+            | Repo::Meta { hooks }
+            | Repo::Builtin { hooks } => hooks,
         };
         hooks.iter().find(|hook| hook.id == id)
     }
@@ -229,6 +251,7 @@ impl Display for Repo {
             Repo::Local { .. } => write!(f, "local"),
             Repo::Meta { .. } => write!(f, "meta"),
             Repo::Builtin { .. } => write!(f, "builtin"),
+            Repo::SelfRepo { .. } => write!(f, "self"),
         }
     }
 }
@@ -557,14 +580,21 @@ impl Hook {
     /// Dependencies used to identify whether an existing hook environment can be reused.
     ///
     /// For remote hooks, the repo URL is included to avoid reusing an environment created
-    /// from a different remote repository.
+    /// from a different remote repository. For self-repo hooks, the project path is included
+    /// to avoid reusing an environment created from a different project.
     pub(crate) fn env_key_dependencies(&self) -> &FxHashSet<String> {
-        if !self.is_remote() {
-            return &self.additional_dependencies;
+        match &*self.repo {
+            Repo::Remote { .. } => self.dependencies.get_or_init(|| {
+                env_key_dependencies(&self.additional_dependencies, Some(&self.repo.to_string()))
+            }),
+            Repo::SelfRepo { path, .. } => self.dependencies.get_or_init(|| {
+                env_key_dependencies(
+                    &self.additional_dependencies,
+                    Some(&self_repo_dependency(path)),
+                )
+            }),
+            _ => &self.additional_dependencies,
         }
-        self.dependencies.get_or_init(|| {
-            env_key_dependencies(&self.additional_dependencies, Some(&self.repo.to_string()))
-        })
     }
 
     /// Returns a lightweight view of the hook environment identity used for reusing installs.
@@ -630,6 +660,14 @@ fn env_key_dependencies(
         deps.insert(dep.to_string());
     }
     deps
+}
+
+/// Build the dependency token used to isolate self-repo hook environments per project.
+pub(crate) fn self_repo_dependency(project_root: &Path) -> String {
+    fs_err::canonicalize(project_root)
+        .unwrap_or_else(|_| project_root.to_path_buf())
+        .to_string_lossy()
+        .to_string()
 }
 
 /// Shared matching logic between a computed hook env key (owned or borrowed) and an installed
