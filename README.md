@@ -45,9 +45,13 @@ while also providing some additional long-requested features.
 
 ## Table of contents
 
+- [Features](#features)
+- [Table of contents](#table-of-contents)
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [Why prek?](#why-prek)
+  - [prek is faster](#prek-is-faster)
+  - [prek provides a better user experience](#prek-provides-a-better-user-experience)
 - [Who is using prek?](#who-is-using-prek)
 - [Acknowledgements](#acknowledgements)
 
@@ -299,6 +303,21 @@ This action installs prek and runs `prek run --all-files` on your repository.
 prek is also available via [`taiki-e/install-action`](https://github.com/taiki-e/install-action) for installing various tools.
 
 <!-- --8<-- [end: github-actions] -->
+
+</details>
+
+<details>
+<summary>asdf</summary>
+
+<!-- --8<-- [start: asdf-install] -->
+```bash
+asdf plugin add prek https://github.com/AlliotTech/asdf-prek.git
+asdf list all prek
+asdf install prek latest
+# or
+asdf install prek <version>
+```
+<!-- --8<-- [end: asdf-install] -->
 
 </details>
 
