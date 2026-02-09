@@ -45,13 +45,9 @@ while also providing some additional long-requested features.
 
 ## Table of contents
 
-- [Features](#features)
-- [Table of contents](#table-of-contents)
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [Why prek?](#why-prek)
-  - [prek is faster](#prek-is-faster)
-  - [prek provides a better user experience](#prek-provides-a-better-user-experience)
 - [Who is using prek?](#who-is-using-prek)
 - [Acknowledgements](#acknowledgements)
 
