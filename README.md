@@ -306,6 +306,7 @@ prek is also available via [`taiki-e/install-action`](https://github.com/taiki-e
 <summary>asdf</summary>
 
 <!-- --8<-- [start: asdf-install] -->
+
 ```bash
 asdf plugin add prek https://github.com/AlliotTech/asdf-prek.git
 asdf list all prek
@@ -313,6 +314,7 @@ asdf install prek latest
 # or
 asdf install prek <version>
 ```
+
 <!-- --8<-- [end: asdf-install] -->
 
 </details>
