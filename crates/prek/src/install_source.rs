@@ -8,6 +8,7 @@ pub(crate) enum InstallSource {
     Mise,
     UvTool,
     Pipx,
+    Asdf,
     StandaloneInstaller,
 }
 
@@ -18,6 +19,7 @@ impl InstallSource {
         let components: Vec<_> = canonical.components().map(Component::as_os_str).collect();
 
         let prek = OsStr::new("prek");
+        let installs = OsStr::new("installs");
 
         // Homebrew: .../Cellar/prek/...
         let cellar = OsStr::new("Cellar");
@@ -48,9 +50,17 @@ impl InstallSource {
             return Some(Self::Pipx);
         }
 
+        // asdf: .../.asdf/installs/prek/...
+        let asdf = OsStr::new(".asdf");
+        if components
+            .windows(3)
+            .any(|w| w[0] == asdf && w[1] == installs && w[2] == prek)
+        {
+            return Some(Self::Asdf);
+        }
+
         // mise: .../mise/installs/prek/...
         let mise = OsStr::new("mise");
-        let installs = OsStr::new("installs");
         if components
             .windows(3)
             .any(|w| w[0] == mise && w[1] == installs && w[2] == prek)
@@ -90,6 +100,7 @@ impl InstallSource {
             Self::Mise => "mise",
             Self::UvTool => "uv tool",
             Self::Pipx => "pipx",
+            Self::Asdf => "asdf",
             Self::StandaloneInstaller => "the standalone installer",
         }
     }
@@ -101,6 +112,7 @@ impl InstallSource {
             Self::Mise => "mise upgrade prek",
             Self::UvTool => "uv tool upgrade prek",
             Self::Pipx => "pipx upgrade prek",
+            Self::Asdf => "asdf install prek latest",
             Self::StandaloneInstaller => "prek self update",
         }
     }
@@ -219,6 +231,24 @@ mod tests {
         assert_eq!(
             InstallSource::from_path(Path::new(
                 "/home/user/.local/pipx/venvs/black/bin/black"
+            )),
+            None
+        );
+    }
+
+    #[test]
+    fn detects_asdf() {
+        assert_eq!(
+            InstallSource::from_path(Path::new("/home/user/.asdf/installs/prek/0.3.1/bin/prek")),
+            Some(InstallSource::Asdf)
+        );
+    }
+
+    #[test]
+    fn does_not_match_other_asdf_plugin() {
+        assert_eq!(
+            InstallSource::from_path(Path::new(
+                "/home/user/.asdf/installs/python/3.12.0/bin/python"
             )),
             None
         );
