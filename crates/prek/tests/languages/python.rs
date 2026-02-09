@@ -1,5 +1,5 @@
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
 
@@ -321,6 +321,87 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn local_additional_dependencies_dot_uses_placeholder_repo() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // This must not run. Local Python hook installs should use a synthetic placeholder repo.
+    context
+        .work_dir()
+        .child("setup.py")
+        .write_str(indoc::indoc! {r#"
+        import sys
+        sys.exit("ERROR: project setup.py should not run for repo: local installs")
+    "#})?;
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: check-dot-extra
+                name: check-dot-extra
+                language: python
+                entry: python -c "print('ok')"
+                additional_dependencies: ["."]
+                always_run: true
+    "#});
+    context.git_add(".");
+
+    let output = context.run().output()?;
+    assert!(output.status.success());
+
+    Ok(())
+}
+
+/// For `repo: local`, relative path dependencies are resolved in the synthetic
+/// placeholder repository (pre-commit-compatible), not the project root.
+#[test]
+fn local_additional_dependencies_relative_path_not_from_project_root() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let pkg_dir = context.work_dir().child("local_pkg");
+    pkg_dir.create_dir_all()?;
+    pkg_dir.child("setup.py").write_str(indoc::indoc! {r#"
+        from setuptools import setup
+
+        setup(
+            name="local-pkg",
+            version="0.1.0",
+            py_modules=["local_pkg"],
+        )
+    "#})?;
+    pkg_dir
+        .child("local_pkg.py")
+        .write_str("def hello():\n    print('hello')\n")?;
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: local-relative-dep
+                name: local-relative-dep
+                language: python
+                entry: python -c "import local_pkg; local_pkg.hello()"
+                pass_filenames: false
+                always_run: true
+                additional_dependencies: ["./local_pkg"]
+    "#});
+    context.git_add(".");
+
+    let output = context.run().output()?;
+    assert!(
+        !output.status.success(),
+        "Expected local relative dependency install to fail because it should not resolve from project root"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Failed to install hook `local-relative-dep`"));
+
+    Ok(())
+}
+
 /// Ensure that stderr from hooks is captured and shown to the user.
 #[test]
 fn hook_stderr() -> anyhow::Result<()> {
@@ -428,14 +509,14 @@ fn pep723_script() -> anyhow::Result<()> {
 /// Regression test for <https://github.com/j178/prek/issues/1354>
 #[test]
 fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
+    let repo = TestContext::new();
+    repo.init_project();
+
     let context = TestContext::new();
-    context.init_project();
+    let repo_path = repo.work_dir();
 
     // setup.py that fails if GIT_DIR leaks into pip install
-    context
-        .work_dir()
-        .child("setup.py")
-        .write_str(indoc::indoc! {r#"
+    repo_path.child("setup.py").write_str(indoc::indoc! {r#"
         import os, sys
         from setuptools import setup
         if os.environ.get("GIT_DIR"):
@@ -443,17 +524,29 @@ fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
         setup(name="test", version="0.1.0", extras_require={"test": []})
     "#})?;
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    repo_path
+        .child(PRE_COMMIT_HOOKS_YAML)
+        .write_str(indoc::indoc! {r#"
+        - id: check-no-git-dir
+          name: check-no-git-dir
+          language: python
+          entry: python -c "print('ok')"
+          additional_dependencies: [".[test]"]
+    "#})?;
+    repo.git_add(".");
+    repo.git_commit("Add hook");
+    repo.git_tag("v0.1.0");
+
+    context.init_project();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
         repos:
-          - repo: local
+          - repo: {}
+            rev: v0.1.0
             hooks:
               - id: check-no-git-dir
-                name: check-no-git-dir
-                language: python
-                entry: python -c "print('ok')"
-                additional_dependencies: [".[test]"]
                 always_run: true
-    "#});
+    ", repo_path.display()});
 
     context.git_add(".");
 

@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::collections::BTreeSet;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -323,8 +322,7 @@ impl Docker {
 
         info.language.hash(&mut hasher);
         info.language_version.hash(&mut hasher);
-        let deps = info.dependencies.iter().collect::<BTreeSet<&String>>();
-        deps.hash(&mut hasher);
+        info.dependencies.hash(&mut hasher);
 
         let digest = hex::encode(hasher.finish().to_le_bytes());
         format!("prek-{digest}")
@@ -436,7 +434,7 @@ impl LanguageImpl for Docker {
 
         let mut info = InstallInfo::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_key_dependencies().to_vec(),
             &store.hooks_dir(),
         )?;
 

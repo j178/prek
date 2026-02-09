@@ -120,7 +120,6 @@ impl RubyRequest {
 mod tests {
     use super::*;
     use crate::config::Language;
-    use rustc_hash::FxHashSet;
 
     #[test]
     fn test_parse_ruby_request() {
@@ -165,8 +164,7 @@ mod tests {
     #[test]
     fn test_version_matching() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::new(Language::Ruby, FxHashSet::default(), temp_dir.path())?;
+        let mut install_info = InstallInfo::new(Language::Ruby, Vec::new(), temp_dir.path())?;
         install_info
             .with_language_version(semver::Version::new(3, 3, 6))
             .with_toolchain(PathBuf::from("/usr/bin/ruby"));
@@ -189,8 +187,7 @@ mod tests {
         );
 
         let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::new(Language::Ruby, FxHashSet::default(), temp_dir.path())?;
+        let mut install_info = InstallInfo::new(Language::Ruby, Vec::new(), temp_dir.path())?;
         install_info
             .with_language_version(semver::Version::new(3, 1, 0))
             .with_toolchain(PathBuf::from("/usr/bin/ruby3.1"));

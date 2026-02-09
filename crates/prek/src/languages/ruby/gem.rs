@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use prek_consts::env_vars::EnvVars;
-use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use crate::languages::ruby::installer::RubyResult;
@@ -84,7 +83,7 @@ pub(crate) async fn install_gems(
     ruby: &RubyResult,
     gem_home: &Path,
     repo_path: Option<&Path>,
-    additional_dependencies: &FxHashSet<String>,
+    additional_dependencies: &[String],
 ) -> Result<()> {
     let mut gem_files = Vec::new();
 

@@ -2280,26 +2280,11 @@ fn selectors_completion() -> Result<()> {
     Ok(())
 }
 
-/// Test reusing hook environments only when dependencies are exactly same. (ignore order)
+/// Test reusing hook environments only when dependencies are exactly the same.
 #[test]
 fn reuse_env() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-
-    let pkg_dir = context.work_dir().child("local_pkg");
-    pkg_dir.create_dir_all()?;
-    pkg_dir.child("setup.py").write_str(indoc::indoc! {r#"
-        from setuptools import setup
-
-        setup(
-            name="local-pkg",
-            version="0.1.0",
-            py_modules=["local_pkg"],
-        )
-    "#})?;
-    pkg_dir
-        .child("local_pkg.py")
-        .write_str("def hello():\n     print('hello')\n")?;
 
     context.write_pre_commit_config(indoc::indoc! {r#"
     repos:
@@ -2308,9 +2293,9 @@ fn reuse_env() -> Result<()> {
           - id: reuse-env
             name: reuse-env
             language: python
-            entry: python -c "import local_pkg; local_pkg.hello()"
+            entry: pyecho hello
             pass_filenames: false
-            additional_dependencies: ["./local_pkg"]
+            additional_dependencies: ["pyecho-cli"]
             verbose: true
     "#});
     context.git_add(".");
