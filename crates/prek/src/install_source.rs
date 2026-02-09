@@ -6,6 +6,7 @@ use std::path::{Component, Path, PathBuf};
 pub(crate) enum InstallSource {
     Homebrew,
     Mise,
+    UvTool,
     StandaloneInstaller,
 }
 
@@ -15,9 +16,10 @@ impl InstallSource {
         let canonical = path.canonicalize().unwrap_or_else(|_| PathBuf::from(path));
         let components: Vec<_> = canonical.components().map(Component::as_os_str).collect();
 
-        // Check for Homebrew Cellar installation: .../Cellar/prek/...
-        let cellar = OsStr::new("Cellar");
         let prek = OsStr::new("prek");
+
+        // Homebrew: .../Cellar/prek/...
+        let cellar = OsStr::new("Cellar");
         if components
             .windows(2)
             .any(|w| w[0] == cellar && w[1] == prek)
@@ -25,7 +27,17 @@ impl InstallSource {
             return Some(Self::Homebrew);
         }
 
-        // Check for mise installation: .../mise/installs/prek/...
+        // uv tool: .../uv/tools/prek/...
+        let uv = OsStr::new("uv");
+        let tools = OsStr::new("tools");
+        if components
+            .windows(3)
+            .any(|w| w[0] == uv && w[1] == tools && w[2] == prek)
+        {
+            return Some(Self::UvTool);
+        }
+
+        // mise: .../mise/installs/prek/...
         let mise = OsStr::new("mise");
         let installs = OsStr::new("installs");
         if components
@@ -65,6 +77,7 @@ impl InstallSource {
         match self {
             Self::Homebrew => "Homebrew",
             Self::Mise => "mise",
+            Self::UvTool => "uv tool",
             Self::StandaloneInstaller => "the standalone installer",
         }
     }
@@ -74,6 +87,7 @@ impl InstallSource {
         match self {
             Self::Homebrew => "brew update && brew upgrade prek",
             Self::Mise => "mise upgrade prek",
+            Self::UvTool => "uv tool upgrade prek",
             Self::StandaloneInstaller => "prek self update",
         }
     }
@@ -131,6 +145,40 @@ mod tests {
     fn does_not_match_other_cellar_formula() {
         assert_eq!(
             InstallSource::from_path(Path::new("/opt/homebrew/Cellar/other/0.1.0/bin/prek")),
+            None
+        );
+    }
+
+    #[test]
+    fn detects_uv_tool_macos() {
+        assert_eq!(
+            InstallSource::from_path(Path::new("/Users/user/.local/share/uv/tools/prek/bin/prek")),
+            Some(InstallSource::UvTool)
+        );
+    }
+
+    #[test]
+    fn detects_uv_tool_linux() {
+        assert_eq!(
+            InstallSource::from_path(Path::new("/home/user/.local/share/uv/tools/prek/bin/prek")),
+            Some(InstallSource::UvTool)
+        );
+    }
+
+    #[test]
+    fn detects_uv_tool_custom_xdg() {
+        assert_eq!(
+            InstallSource::from_path(Path::new("/opt/data/uv/tools/prek/bin/prek")),
+            Some(InstallSource::UvTool)
+        );
+    }
+
+    #[test]
+    fn does_not_match_other_uv_tool() {
+        assert_eq!(
+            InstallSource::from_path(Path::new(
+                "/home/user/.local/share/uv/tools/ruff/bin/ruff"
+            )),
             None
         );
     }
