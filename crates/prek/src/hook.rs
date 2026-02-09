@@ -20,7 +20,7 @@ use crate::config::{
     MetaHook, RemoteHook, Stage, read_manifest,
 };
 use crate::languages::version::LanguageRequest;
-use crate::languages::{extract_metadata_from_entry, resolve_command};
+use crate::languages::{extract_metadata, resolve_command};
 use crate::store::Store;
 use crate::workspace::Project;
 
@@ -393,7 +393,7 @@ impl HookBuilder {
             minimum_prek_version: options.minimum_prek_version,
         };
 
-        if let Err(err) = extract_metadata_from_entry(&mut hook).await {
+        if let Err(err) = extract_metadata(&mut hook).await {
             if err
                 .downcast_ref::<std::io::Error>()
                 .is_some_and(|e| e.kind() != std::io::ErrorKind::NotFound)
@@ -875,6 +875,7 @@ impl InstallInfo {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::path::PathBuf;
     use std::sync::Arc;
 
     use anyhow::Result;
@@ -883,9 +884,10 @@ mod tests {
 
     use crate::config::{HookOptions, Language, RemoteHook};
     use crate::hook::HookSpec;
+    use crate::languages::version::LanguageRequest;
     use crate::workspace::Project;
 
-    use super::{HookBuilder, Repo};
+    use super::{Hook, HookBuilder, Repo};
 
     #[tokio::test]
     async fn hook_builder_build_fills_and_merges_attributes() -> Result<()> {
@@ -1037,6 +1039,149 @@ mod tests {
         }
         "#);
 
+        Ok(())
+    }
+
+    /// Set up a temporary directory with a minimal `.pre-commit-config.yaml`
+    /// and a `remote-repo` subdirectory.
+    fn setup_python_hook_test() -> Result<(tempfile::TempDir, Arc<Project>)> {
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join(PRE_COMMIT_CONFIG_YAML);
+        fs_err::write(&config_path, "repos: []\n")?;
+
+        let project = Arc::new(Project::from_config_file(
+            Cow::Borrowed(&config_path),
+            None,
+        )?);
+
+        let repo_path = temp.path().join("remote-repo");
+        fs_err::create_dir_all(&repo_path)?;
+
+        Ok((temp, project))
+    }
+
+    /// Build a hook from the given repo path and options via `HookBuilder`.
+    async fn build_python_hook(
+        project: Arc<Project>,
+        repo_path: PathBuf,
+        language_version: Option<&str>,
+    ) -> Result<Hook> {
+        let repo = Arc::new(Repo::Remote {
+            path: repo_path,
+            url: "https://example.invalid/hooks".to_string(),
+            rev: "v0.1.0".to_string(),
+            hooks: vec![],
+        });
+
+        let hook_spec = HookSpec {
+            id: "test-hook".to_string(),
+            name: "test-hook".to_string(),
+            entry: "./hook.py".to_string(),
+            language: Language::Python,
+            priority: None,
+            options: HookOptions {
+                language_version: language_version.map(str::to_string),
+                ..Default::default()
+            },
+        };
+
+        Ok(HookBuilder::new(project, repo, hook_spec, 0)
+            .build()
+            .await?)
+    }
+
+    static PEP723_SCRIPT: &str = indoc::indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # ///
+        print("hello")
+    "#};
+
+    #[tokio::test]
+    async fn hook_builder_python_pep723_overrides_user_and_pyproject() -> Result<()> {
+        let (temp, project) = setup_python_hook_test()?;
+        let repo_path = temp.path().join("remote-repo");
+        fs_err::write(
+            repo_path.join("pyproject.toml"),
+            "[project]\nrequires-python = \">=3.8\"\n",
+        )?;
+        fs_err::write(repo_path.join("hook.py"), PEP723_SCRIPT)?;
+
+        let hook = build_python_hook(project, repo_path, Some("3.9")).await?;
+
+        assert_eq!(
+            hook.language_request,
+            LanguageRequest::parse(Language::Python, ">=3.11")?
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn hook_builder_python_user_language_version_overrides_pyproject() -> Result<()> {
+        let (temp, project) = setup_python_hook_test()?;
+        let repo_path = temp.path().join("remote-repo");
+        fs_err::write(
+            repo_path.join("pyproject.toml"),
+            "[project]\nrequires-python = \">=3.11\"\n",
+        )?;
+        fs_err::write(repo_path.join("hook.py"), "print(\"hello\")\n")?;
+
+        let hook = build_python_hook(project, repo_path, Some("3.9")).await?;
+
+        assert_eq!(
+            hook.language_request,
+            LanguageRequest::parse(Language::Python, "3.9")?
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn hook_builder_python_pep723_overrides_pyproject_without_user_version() -> Result<()> {
+        let (temp, project) = setup_python_hook_test()?;
+        let repo_path = temp.path().join("remote-repo");
+        fs_err::write(
+            repo_path.join("pyproject.toml"),
+            "[project]\nrequires-python = \">=3.8\"\n",
+        )?;
+        fs_err::write(repo_path.join("hook.py"), PEP723_SCRIPT)?;
+
+        let hook = build_python_hook(project, repo_path, None).await?;
+
+        assert_eq!(
+            hook.language_request,
+            LanguageRequest::parse(Language::Python, ">=3.11")?
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn hook_builder_python_defaults_to_any_without_version_sources() -> Result<()> {
+        let (temp, project) = setup_python_hook_test()?;
+        let repo_path = temp.path().join("remote-repo");
+        fs_err::write(repo_path.join("hook.py"), "print(\"hello\")\n")?;
+
+        let hook = build_python_hook(project, repo_path, None).await?;
+
+        assert!(hook.language_request.is_any());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn hook_builder_python_pyproject_provides_version_when_no_other_source() -> Result<()> {
+        let (temp, project) = setup_python_hook_test()?;
+        let repo_path = temp.path().join("remote-repo");
+        fs_err::write(
+            repo_path.join("pyproject.toml"),
+            "[project]\nrequires-python = \">=3.10\"\n",
+        )?;
+        fs_err::write(repo_path.join("hook.py"), "print(\"hello\")\n")?;
+
+        let hook = build_python_hook(project, repo_path, None).await?;
+
+        assert_eq!(
+            hook.language_request,
+            LanguageRequest::parse(Language::Python, ">=3.10")?
+        );
         Ok(())
     }
 }
