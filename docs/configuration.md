@@ -255,7 +255,7 @@ But if `foo/bar` is itself a project (has its own config), files under `foo/bar`
 
 ### Validation
 
-Use `prek validate-config` to validate one or more config files.
+Use [`prek validate-config`](cli.md#prek-validate-config) to validate one or more config files.
 
 If you want IDE completion / validation, prek provides a JSON Schema at [https://prek.j178.dev/docs/prek.schema.json](https://prek.j178.dev/docs/prek.schema.json).
 
@@ -1307,7 +1307,7 @@ prek supports the following environment variables:
 
 - `PREK_ALLOW_NO_CONFIG` — Allow running without a configuration file (useful for ad‑hoc runs).
 
-- `PREK_NO_CONCURRENCY` — Disable parallelism for installs and runs (set `PREK_NO_CONCURRENCY=1` to force concurrency to `1`).
+- `PREK_NO_CONCURRENCY` — Disable parallelism for installs and runs (If set, force concurrency to 1).
 
 - `PREK_NO_FAST_PATH` — Disable Rust-native built-in hooks; always use the original hook implementation. See [Built-in Fast Hooks](builtin.md) for details.
 
