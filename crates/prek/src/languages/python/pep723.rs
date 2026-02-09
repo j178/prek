@@ -273,7 +273,7 @@ pub(crate) async fn extract_pep723_metadata(hook: &mut Hook) -> Result<()> {
     };
 
     if let Some(dependencies) = script.metadata.dependencies {
-        hook.additional_dependencies = dependencies.into_iter().collect();
+        hook.additional_dependencies = dependencies;
     }
     if let Some(language_request) = script.metadata.requires_python {
         if !hook.language_request.is_any() {

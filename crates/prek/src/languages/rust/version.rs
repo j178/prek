@@ -236,7 +236,6 @@ mod tests {
     use super::*;
     use crate::config::Language;
     use crate::hook::InstallInfo;
-    use rustc_hash::FxHashSet;
     use std::path::PathBuf;
     use std::str::FromStr;
 
@@ -313,8 +312,7 @@ mod tests {
         let toolchain_path = temp_dir.path().join("rust-toolchain");
         std::fs::write(&toolchain_path, b"")?;
 
-        let mut install_info =
-            InstallInfo::new(Language::Rust, FxHashSet::default(), temp_dir.path())?;
+        let mut install_info = InstallInfo::new(Language::Rust, Vec::new(), temp_dir.path())?;
         install_info
             .with_language_version(semver::Version::new(1, 71, 0))
             .with_toolchain(toolchain_path.clone());
@@ -340,8 +338,7 @@ mod tests {
     #[test]
     fn test_satisfied_by_channel() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::new(Language::Rust, FxHashSet::default(), temp_dir.path())?;
+        let mut install_info = InstallInfo::new(Language::Rust, Vec::new(), temp_dir.path())?;
         install_info
             .with_language_version(semver::Version::new(1, 75, 0))
             .with_toolchain(PathBuf::from("/some/path"))
@@ -358,8 +355,7 @@ mod tests {
     #[test]
     fn test_satisfied_by_any_with_stable_channel() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::new(Language::Rust, FxHashSet::default(), temp_dir.path())?;
+        let mut install_info = InstallInfo::new(Language::Rust, Vec::new(), temp_dir.path())?;
         install_info
             .with_language_version(semver::Version::new(1, 75, 0))
             .with_toolchain(PathBuf::from("/some/path"))
@@ -374,8 +370,7 @@ mod tests {
     #[test]
     fn test_satisfied_by_any_without_channel() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::new(Language::Rust, FxHashSet::default(), temp_dir.path())?;
+        let mut install_info = InstallInfo::new(Language::Rust, Vec::new(), temp_dir.path())?;
         install_info
             .with_language_version(semver::Version::new(1, 75, 0))
             .with_toolchain(PathBuf::from("/some/path"));

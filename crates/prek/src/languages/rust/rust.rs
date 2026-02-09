@@ -346,7 +346,7 @@ impl LanguageImpl for Rust {
 
         let mut info = InstallInfo::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_key_dependencies().to_vec(),
             &store.hooks_dir(),
         )?;
         info.with_toolchain(rust.toolchain().to_path_buf())
