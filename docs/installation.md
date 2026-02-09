@@ -80,6 +80,10 @@ npm add -D @j178/prek
 
 --8<-- "README.md:cargo-binstall"
 
+### asdf  
+
+--8<-- "README.md:asdf-install"
+
 ## Docker
 
 prek provides a Docker image at
