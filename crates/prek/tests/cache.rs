@@ -104,16 +104,20 @@ fn cache_gc_verbose_shows_removed_entries() {
 
 #[test]
 fn cache_clean() -> anyhow::Result<()> {
-    let context = TestContext::new();
+    let context = TestContext::new().with_filtered_cache_clean_summary();
 
     let home = context.work_dir().child("home");
     home.create_dir_all()?;
+    home.child("cache/nested").create_dir_all()?;
+    home.child("cache/data.bin").write_str("hello")?;
+    home.child("cache/nested/data.bin").write_str("world!")?;
 
     cmd_snapshot!(context.filters(), context.command().arg("cache").arg("clean").env("PREK_HOME", &*home), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     Cleaned `[TEMP_DIR]/home`
+    Removed [N] file(s) ([SIZE])
 
     ----- stderr -----
     ");
@@ -122,11 +126,14 @@ fn cache_clean() -> anyhow::Result<()> {
 
     // Test `prek clean` works for backward compatibility
     home.create_dir_all()?;
+    home.child("cache").create_dir_all()?;
+    home.child("cache/one.txt").write_str("abc")?;
     cmd_snapshot!(context.filters(), context.command().arg("clean").env("PREK_HOME", &*home), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     Cleaned `[TEMP_DIR]/home`
+    Removed [N] file(s) ([SIZE])
 
     ----- stderr -----
     ");

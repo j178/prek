@@ -7,6 +7,7 @@ use crate::cli::ExitStatus;
 use crate::printer::Printer;
 use crate::store::Store;
 
+/// Aggregate statistics for files within a directory tree.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct DirStats {
     pub(crate) file_count: u64,

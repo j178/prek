@@ -390,6 +390,16 @@ impl TestContext {
         ));
         self
     }
+
+    /// Add extra filtering for `cache clean` summary output.
+    #[must_use]
+    pub fn with_filtered_cache_clean_summary(mut self) -> Self {
+        self.filters.push((
+            r"(?m)^Removed \d+ files? \([^)]+\)\n".to_string(),
+            "Removed [N] file(s) ([SIZE])\n".to_string(),
+        ));
+        self
+    }
 }
 
 #[doc(hidden)] // Macro and test context only, don't use directly.
