@@ -15,65 +15,45 @@ pub(crate) enum InstallSource {
 impl InstallSource {
     /// Detect the install source from a given path.
     fn from_path(path: &Path) -> Option<Self> {
+        // Resolve symlinks so e.g. ~/.local/bin/prek -> .../uv/tools/prek/bin/prek is detected.
         let canonical = path.canonicalize().unwrap_or_else(|_| PathBuf::from(path));
         let components: Vec<_> = canonical.components().map(Component::as_os_str).collect();
 
+        /// Check whether `components` contains a contiguous subsequence matching `pattern`.
+        fn contains_sequence(components: &[&OsStr], pattern: &[&OsStr]) -> bool {
+            components.windows(pattern.len()).any(|w| w == pattern)
+        }
+
         let prek = OsStr::new("prek");
-        let installs = OsStr::new("installs");
 
         // Homebrew: .../Cellar/prek/...
-        let cellar = OsStr::new("Cellar");
-        if components
-            .windows(2)
-            .any(|w| w[0] == cellar && w[1] == prek)
-        {
+        if contains_sequence(&components, &[OsStr::new("Cellar"), prek]) {
             return Some(Self::Homebrew);
         }
-
         // uv tool: .../uv/tools/prek/...
-        let uv = OsStr::new("uv");
-        let tools = OsStr::new("tools");
-        if components
-            .windows(3)
-            .any(|w| w[0] == uv && w[1] == tools && w[2] == prek)
-        {
+        if contains_sequence(&components, &[OsStr::new("uv"), OsStr::new("tools"), prek]) {
             return Some(Self::UvTool);
         }
-
         // pipx: .../pipx/venvs/prek/...
-        let pipx = OsStr::new("pipx");
-        let venvs = OsStr::new("venvs");
-        if components
-            .windows(3)
-            .any(|w| w[0] == pipx && w[1] == venvs && w[2] == prek)
-        {
+        if contains_sequence(
+            &components,
+            &[OsStr::new("pipx"), OsStr::new("venvs"), prek],
+        ) {
             return Some(Self::Pipx);
         }
-
         // asdf: .../.asdf/installs/prek/...
-        let asdf = OsStr::new(".asdf");
-        if components
-            .windows(3)
-            .any(|w| w[0] == asdf && w[1] == installs && w[2] == prek)
-        {
+        if contains_sequence(
+            &components,
+            &[OsStr::new(".asdf"), OsStr::new("installs"), prek],
+        ) {
             return Some(Self::Asdf);
         }
-
         // mise: .../mise/installs/prek/...
-        let mise = OsStr::new("mise");
-        if components
-            .windows(3)
-            .any(|w| w[0] == mise && w[1] == installs && w[2] == prek)
-        {
+        if contains_sequence(
+            &components,
+            &[OsStr::new("mise"), OsStr::new("installs"), prek],
+        ) {
             return Some(Self::Mise);
-        }
-
-        // Check for standalone installer installation
-        #[cfg(feature = "self-update")]
-        match Self::is_standalone_installer() {
-            Ok(true) => return Some(Self::StandaloneInstaller),
-            Ok(false) => {}
-            Err(e) => tracing::warn!("Failed to check for standalone installer: {}", e),
         }
 
         None
@@ -90,6 +70,13 @@ impl InstallSource {
 
     /// Detect the install source from the current executable path.
     pub(crate) fn detect() -> Option<Self> {
+        #[cfg(feature = "self-update")]
+        match Self::is_standalone_installer() {
+            Ok(true) => return Some(Self::StandaloneInstaller),
+            Ok(false) => {}
+            Err(e) => tracing::warn!("Failed to check for standalone installer: {e}"),
+        }
+
         Self::from_path(&std::env::current_exe().ok()?)
     }
 
@@ -201,9 +188,7 @@ mod tests {
     #[test]
     fn does_not_match_other_uv_tool() {
         assert_eq!(
-            InstallSource::from_path(Path::new(
-                "/home/user/.local/share/uv/tools/ruff/bin/ruff"
-            )),
+            InstallSource::from_path(Path::new("/home/user/.local/share/uv/tools/ruff/bin/ruff")),
             None
         );
     }
@@ -229,9 +214,7 @@ mod tests {
     #[test]
     fn does_not_match_other_pipx_package() {
         assert_eq!(
-            InstallSource::from_path(Path::new(
-                "/home/user/.local/pipx/venvs/black/bin/black"
-            )),
+            InstallSource::from_path(Path::new("/home/user/.local/pipx/venvs/black/bin/black")),
             None
         );
     }
