@@ -20,7 +20,7 @@ use crate::config::{
     MetaHook, RemoteHook, Stage, read_manifest,
 };
 use crate::languages::version::LanguageRequest;
-use crate::languages::{extract_metadata_from_entry, resolve_command};
+use crate::languages::{extract_metadata, resolve_command};
 use crate::store::Store;
 use crate::workspace::Project;
 
@@ -393,7 +393,7 @@ impl HookBuilder {
             minimum_prek_version: options.minimum_prek_version,
         };
 
-        if let Err(err) = extract_metadata_from_entry(&mut hook).await {
+        if let Err(err) = extract_metadata(&mut hook).await {
             if err
                 .downcast_ref::<std::io::Error>()
                 .is_some_and(|e| e.kind() != std::io::ErrorKind::NotFound)
