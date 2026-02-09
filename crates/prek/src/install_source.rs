@@ -7,6 +7,7 @@ pub(crate) enum InstallSource {
     Homebrew,
     Mise,
     UvTool,
+    Pipx,
     StandaloneInstaller,
 }
 
@@ -35,6 +36,16 @@ impl InstallSource {
             .any(|w| w[0] == uv && w[1] == tools && w[2] == prek)
         {
             return Some(Self::UvTool);
+        }
+
+        // pipx: .../pipx/venvs/prek/...
+        let pipx = OsStr::new("pipx");
+        let venvs = OsStr::new("venvs");
+        if components
+            .windows(3)
+            .any(|w| w[0] == pipx && w[1] == venvs && w[2] == prek)
+        {
+            return Some(Self::Pipx);
         }
 
         // mise: .../mise/installs/prek/...
@@ -78,6 +89,7 @@ impl InstallSource {
             Self::Homebrew => "Homebrew",
             Self::Mise => "mise",
             Self::UvTool => "uv tool",
+            Self::Pipx => "pipx",
             Self::StandaloneInstaller => "the standalone installer",
         }
     }
@@ -88,6 +100,7 @@ impl InstallSource {
             Self::Homebrew => "brew update && brew upgrade prek",
             Self::Mise => "mise upgrade prek",
             Self::UvTool => "uv tool upgrade prek",
+            Self::Pipx => "pipx upgrade prek",
             Self::StandaloneInstaller => "prek self update",
         }
     }
@@ -178,6 +191,34 @@ mod tests {
         assert_eq!(
             InstallSource::from_path(Path::new(
                 "/home/user/.local/share/uv/tools/ruff/bin/ruff"
+            )),
+            None
+        );
+    }
+
+    #[test]
+    fn detects_pipx_macos() {
+        assert_eq!(
+            InstallSource::from_path(Path::new("/Users/user/.local/pipx/venvs/prek/bin/prek")),
+            Some(InstallSource::Pipx)
+        );
+    }
+
+    #[test]
+    fn detects_pipx_linux() {
+        assert_eq!(
+            InstallSource::from_path(Path::new(
+                "/home/user/.local/share/pipx/venvs/prek/bin/prek"
+            )),
+            Some(InstallSource::Pipx)
+        );
+    }
+
+    #[test]
+    fn does_not_match_other_pipx_package() {
+        assert_eq!(
+            InstallSource::from_path(Path::new(
+                "/home/user/.local/pipx/venvs/black/bin/black"
             )),
             None
         );
