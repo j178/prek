@@ -31,15 +31,15 @@ pub(crate) fn list_builtins(
         ListOutputFormat::Text => {
             if verbose {
                 for hook in hooks {
-                    writeln!(printer.stdout(), "{}", hook.id.bold())?;
+                    writeln!(printer.stdout_important(), "{}", hook.id.bold())?;
                     if let Some(description) = &hook.options.description {
-                        writeln!(printer.stdout(), "  {description}")?;
+                        writeln!(printer.stdout_important(), "  {description}")?;
                     }
-                    writeln!(printer.stdout())?;
+                    writeln!(printer.stdout_important())?;
                 }
             } else {
                 for hook in hooks {
-                    writeln!(printer.stdout(), "{}", hook.id)?;
+                    writeln!(printer.stdout_important(), "{}", hook.id)?;
                 }
             }
         }
@@ -52,7 +52,7 @@ pub(crate) fn list_builtins(
                 })
                 .collect();
             let json_output = serde_json::to_string_pretty(&serializable)?;
-            writeln!(printer.stdout(), "{json_output}")?;
+            writeln!(printer.stdout_important(), "{json_output}")?;
         }
     }
 
