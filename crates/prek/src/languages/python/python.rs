@@ -14,7 +14,7 @@ use tracing::{debug, trace};
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::InstalledHook;
-use crate::hook::{Hook, InstallInfo};
+use crate::hook::{Hook, InstallInfo, Repo};
 use crate::languages::LanguageImpl;
 use crate::languages::python::PythonRequest;
 use crate::languages::python::uv::Uv;
@@ -109,7 +109,7 @@ impl LanguageImpl for Python {
 
         let mut info = InstallInfo::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_key_dependencies().to_vec(),
             &store.hooks_dir(),
         )?;
 
@@ -153,14 +153,29 @@ impl LanguageImpl for Python {
                 .output()
                 .await?;
         } else if !hook.additional_dependencies.is_empty() {
-            trace!(
-                "Installing additional dependencies: {:?}",
-                hook.additional_dependencies
-            );
-            pip_install()
-                .args(&hook.additional_dependencies)
-                .output()
-                .await?;
+            if matches!(hook.repo(), Repo::Local { .. }) {
+                let local_repo = store.local_repo_path()?;
+                trace!(
+                    "Installing dependencies from synthetic local repo path: {}",
+                    local_repo.display()
+                );
+                pip_install()
+                    .arg("--directory")
+                    .arg(local_repo)
+                    .arg(".")
+                    .args(&hook.additional_dependencies)
+                    .output()
+                    .await?;
+            } else {
+                trace!(
+                    "Installing additional dependencies: {:?}",
+                    hook.additional_dependencies
+                );
+                pip_install()
+                    .args(&hook.additional_dependencies)
+                    .output()
+                    .await?;
+            }
         } else {
             debug!("No dependencies to install");
         }

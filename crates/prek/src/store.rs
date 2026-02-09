@@ -42,6 +42,8 @@ fn expand_tilde(path: PathBuf) -> PathBuf {
 }
 
 pub(crate) const REPO_MARKER: &str = ".prek-repo.json";
+const LOCAL_REPO_DIR: &str = "local-repo";
+const LOCAL_PYTHON_SETUP_PY: &str = "from setuptools import setup\n\n\nsetup(name='pre-commit-placeholder-package', version='0.0.0', py_modules=[])\n";
 
 /// A store for managing repos.
 #[derive(Debug)]
@@ -187,6 +189,19 @@ impl Store {
 
     pub(crate) fn repos_dir(&self) -> PathBuf {
         self.path.join("repos")
+    }
+
+    /// Returns the synthetic local repository path for Python `repo: local` hooks.
+    pub(crate) fn local_repo_path(&self) -> Result<PathBuf, Error> {
+        let local_repo = self.path.join(LOCAL_REPO_DIR);
+        fs_err::create_dir_all(&local_repo)?;
+
+        let setup_py = local_repo.join("setup.py");
+        if !setup_py.try_exists()? {
+            fs_err::write(setup_py, LOCAL_PYTHON_SETUP_PY)?;
+        }
+
+        Ok(local_repo)
     }
 
     pub(crate) fn hooks_dir(&self) -> PathBuf {

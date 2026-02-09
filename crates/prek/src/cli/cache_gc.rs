@@ -694,7 +694,7 @@ fn truncate_end(s: &str, max_chars: usize) -> String {
     out
 }
 
-fn split_repo_dependency(deps: &FxHashSet<String>) -> (Option<String>, Vec<String>) {
+fn split_repo_dependency(deps: &[String]) -> (Option<String>, Vec<String>) {
     // Best-effort: the remote repo dependency is typically `repo@rev`.
     // Prefer URL-like values to avoid accidentally treating PEP508 deps as repo identifiers.
     let mut repo_dep: Option<String> = None;
@@ -714,7 +714,6 @@ fn split_repo_dependency(deps: &FxHashSet<String>) -> (Option<String>, Vec<Strin
         }
     }
 
-    rest.sort_unstable();
     (repo_dep, rest)
 }
 
@@ -757,10 +756,11 @@ mod tests {
 
     #[test]
     fn split_repo_dependency_prefers_url_like_repo_at_rev() {
-        let mut deps = FxHashSet::default();
-        deps.insert("requests==2.32.0".to_string());
-        deps.insert("black==24.1.0".to_string());
-        deps.insert("https://github.com/pre-commit/pre-commit-hooks@v1.0.0".to_string());
+        let deps = vec![
+            "requests==2.32.0".to_string(),
+            "black==24.1.0".to_string(),
+            "https://github.com/pre-commit/pre-commit-hooks@v1.0.0".to_string(),
+        ];
 
         let (repo_dep, rest) = split_repo_dependency(&deps);
 
@@ -768,18 +768,16 @@ mod tests {
             repo_dep.as_deref(),
             Some("https://github.com/pre-commit/pre-commit-hooks@v1.0.0")
         );
-        assert_eq!(rest, vec!["black==24.1.0", "requests==2.32.0"]);
+        assert_eq!(rest, vec!["requests==2.32.0", "black==24.1.0"]);
     }
 
     #[test]
     fn split_repo_dependency_returns_none_when_no_repo_like_dep() {
-        let mut deps = FxHashSet::default();
-        deps.insert("requests==2.32.0".to_string());
-        deps.insert("black==24.1.0".to_string());
+        let deps = vec!["requests==2.32.0".to_string(), "black==24.1.0".to_string()];
 
         let (repo_dep, rest) = split_repo_dependency(&deps);
         assert!(repo_dep.is_none());
-        assert_eq!(rest, vec!["black==24.1.0", "requests==2.32.0"]);
+        assert_eq!(rest, vec!["requests==2.32.0", "black==24.1.0"]);
     }
 
     #[test]

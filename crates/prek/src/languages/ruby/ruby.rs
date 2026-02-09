@@ -47,7 +47,7 @@ impl LanguageImpl for Ruby {
         // 2. Create InstallInfo
         let mut info = InstallInfo::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_key_dependencies().to_vec(),
             &store.hooks_dir(),
         )?;
 

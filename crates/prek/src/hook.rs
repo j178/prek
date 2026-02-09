@@ -9,7 +9,7 @@ use std::sync::{Arc, OnceLock};
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use thiserror::Error;
@@ -330,11 +330,7 @@ impl HookBuilder {
         let pass_filenames = options.pass_filenames.unwrap_or(true);
         let require_serial = options.require_serial.unwrap_or(false);
         let verbose = options.verbose.unwrap_or(false);
-        let additional_dependencies = options
-            .additional_dependencies
-            .unwrap_or_default()
-            .into_iter()
-            .collect::<FxHashSet<_>>();
+        let additional_dependencies = options.additional_dependencies.unwrap_or_default();
 
         let language_request = LanguageRequest::parse(self.hook_spec.language, &language_version)
             .map_err(|e| Error::Hook {
@@ -482,7 +478,7 @@ pub(crate) struct Hook {
     project: Arc<Project>,
     repo: Arc<Repo>,
     // Cached computed dependencies.
-    dependencies: OnceLock<FxHashSet<String>>,
+    dependencies: OnceLock<Vec<String>>,
 
     /// The index of the hook defined in the configuration file.
     pub idx: usize,
@@ -496,7 +492,7 @@ pub(crate) struct Hook {
     pub types: Vec<String>,
     pub types_or: Vec<String>,
     pub exclude_types: Vec<String>,
-    pub additional_dependencies: FxHashSet<String>,
+    pub additional_dependencies: Vec<String>,
     pub args: Vec<String>,
     pub env: FxHashMap<String, String>,
     pub always_run: bool,
@@ -558,7 +554,7 @@ impl Hook {
     ///
     /// For remote hooks, the repo URL is included to avoid reusing an environment created
     /// from a different remote repository.
-    pub(crate) fn env_key_dependencies(&self) -> &FxHashSet<String> {
+    pub(crate) fn env_key_dependencies(&self) -> &[String] {
         if !self.is_remote() {
             return &self.additional_dependencies;
         }
@@ -586,10 +582,11 @@ impl Hook {
     ///
     /// For remote hooks, this includes the local path to the cloned repository so that
     /// installers can install the hook's package/project itself.
-    pub(crate) fn install_dependencies(&self) -> Cow<'_, FxHashSet<String>> {
+    pub(crate) fn install_dependencies(&self) -> Cow<'_, [String]> {
         if let Some(repo_path) = self.repo_path() {
-            let mut deps = self.additional_dependencies.clone();
-            deps.insert(repo_path.to_string_lossy().to_string());
+            let mut deps = Vec::with_capacity(self.additional_dependencies.len() + 1);
+            deps.push(repo_path.to_string_lossy().to_string());
+            deps.extend(self.additional_dependencies.iter().cloned());
             Cow::Owned(deps)
         } else {
             Cow::Borrowed(&self.additional_dependencies)
@@ -600,7 +597,7 @@ impl Hook {
 #[derive(Debug, Clone)]
 pub(crate) struct HookEnvKey {
     pub(crate) language: Language,
-    pub(crate) dependencies: FxHashSet<String>,
+    pub(crate) dependencies: Vec<String>,
     pub(crate) language_request: LanguageRequest,
 }
 
@@ -609,25 +606,24 @@ pub(crate) struct HookEnvKey {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct HookEnvKeyRef<'a> {
     pub(crate) language: Language,
-    pub(crate) dependencies: &'a FxHashSet<String>,
+    pub(crate) dependencies: &'a [String],
     pub(crate) language_request: &'a LanguageRequest,
 }
 
-/// Builds the dependency set used to identify a hook environment.
+/// Builds the dependency list used to identify a hook environment.
 ///
 /// For remote hooks, `remote_repo_dependency` is included so environments from different
 /// repositories are not reused accidentally.
 fn env_key_dependencies(
-    additional_dependencies: &FxHashSet<String>,
+    additional_dependencies: &[String],
     remote_repo_dependency: Option<&str>,
-) -> FxHashSet<String> {
-    let mut deps = FxHashSet::with_capacity_and_hasher(
+) -> Vec<String> {
+    let mut deps = Vec::with_capacity(
         additional_dependencies.len() + usize::from(remote_repo_dependency.is_some()),
-        FxBuildHasher,
     );
     deps.extend(additional_dependencies.iter().cloned());
     if let Some(dep) = remote_repo_dependency {
-        deps.insert(dep.to_string());
+        deps.push(dep.to_string());
     }
     deps
 }
@@ -636,7 +632,7 @@ fn env_key_dependencies(
 /// environment described by [`InstallInfo`].
 fn matches_install_info(
     language: Language,
-    dependencies: &FxHashSet<String>,
+    dependencies: &[String],
     language_request: &LanguageRequest,
     info: &InstallInfo,
 ) -> bool {
@@ -674,11 +670,11 @@ impl HookEnvKey {
             )
         })?;
 
-        let additional_dependencies: FxHashSet<String> = hook_spec
+        let additional_dependencies: Vec<String> = hook_spec
             .options
             .additional_dependencies
-            .as_ref()
-            .map_or_else(FxHashSet::default, |deps| deps.iter().cloned().collect());
+            .clone()
+            .unwrap_or_default();
 
         let dependencies = env_key_dependencies(&additional_dependencies, remote_repo_dependency);
 
@@ -786,7 +782,7 @@ impl InstalledHook {
 pub(crate) struct InstallInfo {
     pub(crate) language: Language,
     pub(crate) language_version: semver::Version,
-    pub(crate) dependencies: FxHashSet<String>,
+    pub(crate) dependencies: Vec<String>,
     pub(crate) env_path: PathBuf,
     pub(crate) toolchain: PathBuf,
     extra: FxHashMap<String, String>,
@@ -811,7 +807,7 @@ impl Clone for InstallInfo {
 impl InstallInfo {
     pub(crate) fn new(
         language: Language,
-        dependencies: FxHashSet<String>,
+        dependencies: Vec<String>,
         hooks_dir: &Path,
     ) -> Result<Self, Error> {
         let env_path = tempfile::Builder::new()
@@ -1004,7 +1000,7 @@ mod tests {
             ],
             types_or: [],
             exclude_types: [],
-            additional_dependencies: {},
+            additional_dependencies: [],
             args: [
                 "--flag",
             ],
@@ -1036,6 +1032,85 @@ mod tests {
             priority: 42,
         }
         "#);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn hook_builder_preserves_additional_dependency_order_and_duplicates() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join(PRE_COMMIT_CONFIG_YAML);
+        fs_err::write(&config_path, "repos: []\n")?;
+
+        let project = Arc::new(Project::from_config_file(
+            Cow::Borrowed(&config_path),
+            None,
+        )?);
+        let repo = Arc::new(Repo::Local { hooks: vec![] });
+
+        let expected = vec![
+            "--index-url".to_string(),
+            "https://pypi.org/simple".to_string(),
+            "pyecho-cli".to_string(),
+            "pyecho-cli".to_string(),
+        ];
+
+        let hook_spec = HookSpec {
+            id: "ordered-deps".to_string(),
+            name: "ordered-deps".to_string(),
+            entry: "python -c 'print(1)'".to_string(),
+            language: Language::Python,
+            priority: None,
+            options: HookOptions {
+                additional_dependencies: Some(expected.clone()),
+                ..Default::default()
+            },
+        };
+
+        let hook = HookBuilder::new(project.clone(), repo.clone(), hook_spec, 0)
+            .build()
+            .await?;
+        assert_eq!(hook.additional_dependencies, expected);
+
+        let hook_a = HookBuilder::new(
+            project.clone(),
+            repo.clone(),
+            HookSpec {
+                id: "a".to_string(),
+                name: "a".to_string(),
+                entry: "python -c 'print(1)'".to_string(),
+                language: Language::Python,
+                priority: None,
+                options: HookOptions {
+                    additional_dependencies: Some(vec!["foo".to_string(), "bar".to_string()]),
+                    ..Default::default()
+                },
+            },
+            1,
+        )
+        .build()
+        .await?;
+
+        let hook_b = HookBuilder::new(
+            project,
+            repo,
+            HookSpec {
+                id: "b".to_string(),
+                name: "b".to_string(),
+                entry: "python -c 'print(1)'".to_string(),
+                language: Language::Python,
+                priority: None,
+                options: HookOptions {
+                    additional_dependencies: Some(vec!["bar".to_string(), "foo".to_string()]),
+                    ..Default::default()
+                },
+            },
+            2,
+        )
+        .build()
+        .await?;
+
+        assert_ne!(hook_a.env_key_dependencies(), hook_b.env_key_dependencies());
 
         Ok(())
     }
