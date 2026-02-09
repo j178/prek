@@ -1966,6 +1966,7 @@ fn color() -> Result<()> {
           print('\033[1;32mHello, world!\033[0m')
       else:
           print('Hello, world!')
+      sys.stdout.flush()
   "};
     context.work_dir().child("color.py").write_str(script)?;
 
