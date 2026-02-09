@@ -80,7 +80,7 @@ npm add -D @j178/prek
 
 --8<-- "README.md:cargo-binstall"
 
-### asdf  
+### asdf
 
 --8<-- "README.md:asdf-install"
 
