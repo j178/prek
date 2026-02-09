@@ -1,0 +1,50 @@
+name: "Publish to winget"
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release tag to publish (e.g., vX.Y.Z)."
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+    secrets:
+      WINGET_TOKEN:
+        required: true
+
+permissions: {}
+
+jobs:
+  winget:
+    name: Publish to winget
+    runs-on: ubuntu-latest
+    if: >-
+      ${{
+        inputs.plan == ''
+        || !fromJson(inputs.plan).announcement_is_prerelease
+      }}
+    steps:
+      - name: Determine release tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          PLAN_TAG: ${{ inputs.plan != '' && fromJson(inputs.plan).announcement_tag || '' }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            echo "value=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=$PLAN_TAG" >> "$GITHUB_OUTPUT"
+          fi
+        shell: bash
+
+      - name: Publish to winget
+        uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
+        with:
+          identifier: j178.Prek
+          release-tag: ${{ steps.tag.outputs.value }}
+          installers-regex: 'prek-.*\.zip$'
+          token: ${{ secrets.WINGET_TOKEN }}
