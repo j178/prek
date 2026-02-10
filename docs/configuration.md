@@ -773,6 +773,10 @@ Only `id` is required — all other fields are optional overrides, the same as r
 If `.pre-commit-hooks.yaml` does not exist in the project root, `prek` reports an error
 at hook initialization time.
 
+Hook environments for `repo: self` are ephemeral per run. `prek` may reuse them within the
+same invocation, but it does not reuse them across separate runs. This favors correctness and
+ensures source changes in the current project are picked up on the next run.
+
 Example:
 
 === "prek.toml"

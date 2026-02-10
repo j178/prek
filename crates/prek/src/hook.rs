@@ -580,8 +580,8 @@ impl Hook {
     /// Dependencies used to identify whether an existing hook environment can be reused.
     ///
     /// For remote hooks, the repo URL is included to avoid reusing an environment created
-    /// from a different remote repository. For self-repo hooks, the project path is included
-    /// to avoid reusing an environment created from a different project.
+    /// from a different remote repository. For self-repo hooks, the project path is included for
+    /// within-run environment identity and partitioning.
     pub(crate) fn env_key_dependencies(&self) -> &FxHashSet<String> {
         match &*self.repo {
             Repo::Remote { .. } => self.dependencies.get_or_init(|| {

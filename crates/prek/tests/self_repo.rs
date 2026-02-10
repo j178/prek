@@ -1,5 +1,7 @@
 mod common;
 
+use std::path::Path;
+
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 use assert_cmd::assert::OutputAssertExt;
@@ -147,9 +149,125 @@ fn self_repo_unknown_hook_id() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Two projects sharing the same `PREK_HOME` must not reuse each other's
-/// self-repo hook environments. Each project installs its own package
-/// into the env, so sharing would cause incorrect behavior.
+#[test]
+fn self_repo_refreshes_after_source_change_between_runs() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    cwd.child(".pre-commit-hooks.yaml")
+        .write_str(indoc::indoc! {r"
+    - id: showver
+      name: show version
+      entry: showver
+      language: python
+      pass_filenames: false
+    "})?;
+    cwd.child("setup.py").write_str(indoc::indoc! {r"
+    from setuptools import setup
+
+    setup(
+        name='showver',
+        version='0.0.1',
+        packages=['hookpkg'],
+        entry_points={'console_scripts': ['showver=hookpkg.cli:main']},
+    )
+    "})?;
+    cwd.child("hookpkg").create_dir_all()?;
+    cwd.child("hookpkg/__init__.py").write_str("")?;
+    cwd.child("hookpkg/cli.py")
+        .write_str("def main():\n    print('HOOK_VERSION=v1')\n    raise SystemExit(1)\n")?;
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: self
+            hooks:
+              - id: showver
+    "});
+    cwd.child("file.txt").write_str("hello\n")?;
+    context.git_add(".");
+
+    let output_v1 = context
+        .command()
+        .args(["run", "--all-files", "--verbose"])
+        .output()?;
+    assert!(!output_v1.status.success(), "expected first run to fail");
+    let stdout_v1 = String::from_utf8_lossy(&output_v1.stdout);
+    assert!(stdout_v1.contains("HOOK_VERSION=v1"));
+
+    cwd.child("hookpkg/cli.py")
+        .write_str("def main():\n    print('HOOK_VERSION=v2')\n    raise SystemExit(1)\n")?;
+
+    let output_v2 = context
+        .command()
+        .args(["run", "--all-files", "--verbose"])
+        .output()?;
+    assert!(!output_v2.status.success(), "expected second run to fail");
+    let stdout_v2 = String::from_utf8_lossy(&output_v2.stdout);
+    assert!(stdout_v2.contains("HOOK_VERSION=v2"));
+    assert!(!stdout_v2.contains("HOOK_VERSION=v1"));
+
+    assert_eq!(
+        python_env_count(context.home_dir().child("hooks").path())?,
+        0
+    );
+
+    Ok(())
+}
+
+#[test]
+fn self_repo_does_not_persist_env_across_runs() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+
+    cwd.child(".pre-commit-hooks.yaml")
+        .write_str(indoc::indoc! {r#"
+    - id: self-python
+      name: Self Python Hook
+      entry: python -c "print('ok')"
+      language: python
+      pass_filenames: false
+    "#})?;
+    cwd.child("setup.py")
+        .write_str("from setuptools import setup; setup(name='dummy', version='0.0.1')")?;
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: self
+            hooks:
+              - id: self-python
+    "});
+
+    cwd.child("file.txt").write_str("Hello\n")?;
+    context.git_add(".");
+
+    context
+        .command()
+        .args(["run", "--all-files"])
+        .assert()
+        .success();
+    assert_eq!(
+        python_env_count(context.home_dir().child("hooks").path())?,
+        0
+    );
+
+    context
+        .command()
+        .args(["run", "--all-files"])
+        .assert()
+        .success();
+    assert_eq!(
+        python_env_count(context.home_dir().child("hooks").path())?,
+        0
+    );
+
+    Ok(())
+}
+
+/// Two projects sharing the same `PREK_HOME` should both run successfully
+/// without relying on persisted self-repo environments.
 #[test]
 fn self_repo_cross_project_env_isolation() -> anyhow::Result<()> {
     // Use one TestContext for the shared PREK_HOME.
@@ -202,7 +320,6 @@ fn self_repo_cross_project_env_isolation() -> anyhow::Result<()> {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::PathBuf::from(assert_cmd::cargo::cargo_bin!("prek")));
 
-    // Run project A — installs its env.
     let output_a = std::process::Command::new(&prek_bin)
         .arg("run")
         .current_dir(&*project_a)
@@ -221,7 +338,6 @@ fn self_repo_cross_project_env_isolation() -> anyhow::Result<()> {
     );
     assert!(stdout_a.contains("Passed"), "project A hook did not pass");
 
-    // Run project B — must create a separate env, not reuse A's.
     let output_b = std::process::Command::new(&prek_bin)
         .arg("run")
         .current_dir(&*project_b)
@@ -240,21 +356,22 @@ fn self_repo_cross_project_env_isolation() -> anyhow::Result<()> {
     );
     assert!(stdout_b.contains("Passed"), "project B hook did not pass");
 
-    // Verify the hook envs are distinct (at least 2 python-* dirs under hooks/).
-    let hooks_dir = home.child("hooks");
-    let python_envs: Vec<_> = fs_err::read_dir(hooks_dir.path())?
-        .filter_map(Result::ok)
-        .filter(|e| {
-            e.file_type().map(|t| t.is_dir()).unwrap_or(false)
-                && e.file_name().to_string_lossy().starts_with("python-")
-        })
-        .collect();
-
-    assert!(
-        python_envs.len() >= 2,
-        "expected at least 2 separate python hook envs, found {}",
-        python_envs.len(),
-    );
+    assert_eq!(python_env_count(home.child("hooks").path())?, 0);
 
     Ok(())
+}
+
+fn python_env_count(hooks_dir: &Path) -> anyhow::Result<usize> {
+    let mut count = 0;
+    for entry in fs_err::read_dir(hooks_dir)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+
+        if entry.file_name().to_string_lossy().starts_with("python-") {
+            count += 1;
+        }
+    }
+    Ok(count)
 }

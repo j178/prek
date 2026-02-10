@@ -16,7 +16,9 @@ pub(crate) fn cache_clean(store: &Store, printer: Printer) -> Result<ExitStatus>
         return Ok(ExitStatus::Success);
     }
 
-    if let Err(e) = fix_permissions(store.cache_path(CacheBucket::Go)) {
+    if let Err(e) = fix_permissions(store.cache_path(CacheBucket::Go))
+        && e.kind() != io::ErrorKind::NotFound
+    {
         error!("Failed to fix permissions: {}", e);
     }
 

@@ -87,12 +87,7 @@ pub(crate) async fn run(
 
     let reporter = HookInitReporter::new(printer);
     let lock = store.lock_async().await?;
-    store.track_configs(
-        workspace
-            .projects()
-            .iter()
-            .map(|p| (p.config_file(), p.path())),
-    )?;
+    store.track_configs(workspace.projects().iter().map(|p| p.config_file()))?;
 
     let hooks = workspace
         .init_hooks(store, Some(&reporter))
@@ -166,57 +161,111 @@ pub(crate) async fn run(
     );
     let reporter = HookInstallReporter::new(printer);
     let installed_hooks = install_hooks(filtered_hooks, store, &reporter).await?;
+    let self_repo_env_paths = collect_self_repo_env_paths(&installed_hooks);
+    let _self_repo_env_cleanup_guard = SelfRepoEnvCleanupGuard::new(self_repo_env_paths);
 
-    // Release the store lock.
-    drop(lock);
+    async {
+        // Release the store lock.
+        drop(lock);
 
-    // Clear any unstaged changes from the git working directory.
-    let mut _guard = None;
-    if should_stash {
-        _guard = Some(
-            WorkTreeKeeper::clean(store, workspace.root())
-                .await
-                .context("Failed to clean work tree")?,
-        );
-    }
+        // Clear any unstaged changes from the git working directory.
+        let mut _guard = None;
+        if should_stash {
+            _guard = Some(
+                WorkTreeKeeper::clean(store, workspace.root())
+                    .await
+                    .context("Failed to clean work tree")?,
+            );
+        }
 
-    set_env_vars(from_ref.as_ref(), to_ref.as_ref(), &extra_args);
+        set_env_vars(from_ref.as_ref(), to_ref.as_ref(), &extra_args);
 
-    let filenames = collect_files(
-        workspace.root(),
-        CollectOptions {
-            hook_stage,
-            from_ref,
-            to_ref,
-            all_files,
-            files,
-            directories,
-            commit_msg_filename: extra_args.commit_msg_filename,
-        },
-    )
-    .await
-    .context("Failed to collect files")?;
-
-    // Change to the workspace root directory.
-    std::env::set_current_dir(workspace.root()).with_context(|| {
-        format!(
-            "Failed to change directory to `{}`",
-            workspace.root().display()
+        let filenames = collect_files(
+            workspace.root(),
+            CollectOptions {
+                hook_stage,
+                from_ref,
+                to_ref,
+                all_files,
+                files,
+                directories,
+                commit_msg_filename: extra_args.commit_msg_filename,
+            },
         )
-    })?;
+        .await
+        .context("Failed to collect files")?;
 
-    run_hooks(
-        &workspace,
-        &installed_hooks,
-        filenames,
-        store,
-        show_diff_on_failure,
-        fail_fast,
-        dry_run,
-        verbose,
-        printer,
-    )
+        // Change to the workspace root directory.
+        std::env::set_current_dir(workspace.root()).with_context(|| {
+            format!(
+                "Failed to change directory to `{}`",
+                workspace.root().display()
+            )
+        })?;
+
+        run_hooks(
+            &workspace,
+            &installed_hooks,
+            filenames,
+            store,
+            show_diff_on_failure,
+            fail_fast,
+            dry_run,
+            verbose,
+            printer,
+        )
+        .await
+    }
     .await
+}
+
+fn collect_self_repo_env_paths(installed_hooks: &[InstalledHook]) -> Vec<PathBuf> {
+    dedupe_paths(installed_hooks.iter().filter_map(|hook| {
+        matches!(hook.repo(), Repo::SelfRepo { .. })
+            .then(|| hook.env_path().map(std::path::Path::to_path_buf))
+            .flatten()
+    }))
+}
+
+fn dedupe_paths(paths: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
+    let mut seen = FxHashSet::default();
+    paths
+        .into_iter()
+        .filter(|path| seen.insert(path.clone()))
+        .collect()
+}
+
+fn cleanup_self_repo_env_paths(paths: &[PathBuf]) {
+    for path in paths {
+        match fs_err::remove_dir_all(path) {
+            Ok(()) => {
+                debug!("Removed ephemeral self-repo hook env `{}`", path.display());
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => {
+                warn!(
+                    "Failed to remove ephemeral self-repo hook env `{}`: {err}",
+                    path.display()
+                );
+            }
+        }
+    }
+}
+
+struct SelfRepoEnvCleanupGuard {
+    paths: Vec<PathBuf>,
+}
+
+impl SelfRepoEnvCleanupGuard {
+    fn new(paths: Vec<PathBuf>) -> Self {
+        Self { paths }
+    }
+}
+
+impl Drop for SelfRepoEnvCleanupGuard {
+    fn drop(&mut self) {
+        cleanup_self_repo_env_paths(&self.paths);
+    }
 }
 
 // `pre-commit` sets these environment variables for other git hooks.
@@ -376,7 +425,7 @@ pub async fn install_hooks(
                         }
                     }
 
-                    if matched_info.is_none() {
+                    if matched_info.is_none() && !matches!(hook.repo(), Repo::SelfRepo { .. }) {
                         for env in store_hooks.iter() {
                             if env.matches(&hook) {
                                 if env.ensure_healthy().await {
@@ -404,10 +453,14 @@ pub async fn install_hooks(
                         .await
                         .with_context(|| format!("Failed to install hook `{hook}`"))?;
 
-                    installed_hook
-                        .mark_as_installed(store)
-                        .await
-                        .with_context(|| format!("Failed to mark hook `{hook}` as installed"))?;
+                    if !matches!(hook.repo(), Repo::SelfRepo { .. }) {
+                        installed_hook
+                            .mark_as_installed(store)
+                            .await
+                            .with_context(|| {
+                                format!("Failed to mark hook `{hook}` as installed")
+                            })?;
+                    }
 
                     match &installed_hook {
                         InstalledHook::Installed { info, .. } => {
@@ -1068,4 +1121,59 @@ async fn run_hook(
         exit_status,
         output: hook_output,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SelfRepoEnvCleanupGuard, dedupe_paths};
+    use assert_fs::fixture::TempDir;
+    use std::path::PathBuf;
+
+    #[test]
+    fn dedupe_paths_keeps_first_seen_order() {
+        let a = PathBuf::from("/tmp/a");
+        let b = PathBuf::from("/tmp/b");
+        let c = PathBuf::from("/tmp/c");
+
+        let deduped = dedupe_paths(vec![
+            a.clone(),
+            b.clone(),
+            a.clone(),
+            c.clone(),
+            b.clone(),
+            c.clone(),
+        ]);
+
+        assert_eq!(deduped, vec![a, b, c]);
+    }
+
+    #[test]
+    fn cleanup_guard_removes_paths_on_drop() {
+        let temp = TempDir::new().expect("create temp dir");
+        let env_path = temp.path().join("hooks/self-repo-env");
+        fs_err::create_dir_all(&env_path).expect("create self-repo env dir");
+        fs_err::write(env_path.join("marker.txt"), b"hello").expect("create marker file");
+
+        {
+            let _guard = SelfRepoEnvCleanupGuard::new(vec![env_path.clone()]);
+        }
+
+        assert!(!env_path.exists());
+    }
+
+    #[test]
+    fn cleanup_guard_runs_on_panic_unwind() {
+        let temp = TempDir::new().expect("create temp dir");
+        let env_path = temp.path().join("hooks/self-repo-env");
+        fs_err::create_dir_all(&env_path).expect("create self-repo env dir");
+        fs_err::write(env_path.join("marker.txt"), b"hello").expect("create marker file");
+
+        let panic_result = std::panic::catch_unwind(|| {
+            let _guard = SelfRepoEnvCleanupGuard::new(vec![env_path.clone()]);
+            panic!("trigger unwind");
+        });
+
+        assert!(panic_result.is_err());
+        assert!(!env_path.exists());
+    }
 }

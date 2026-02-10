@@ -7,7 +7,7 @@ use anyhow::Result;
 use etcetera::BaseStrategy;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use thiserror::Error;
 use tracing::{debug, warn};
 
@@ -44,17 +44,16 @@ fn expand_tilde(path: PathBuf) -> PathBuf {
 
 pub(crate) const REPO_MARKER: &str = ".prek-repo.json";
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub(crate) struct TrackedConfig {
-    pub(crate) path: PathBuf,
-    pub(crate) project_root: PathBuf,
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum TrackedConfigsFile {
-    Entries(Vec<TrackedConfig>),
+    Entries(Vec<TrackedConfigEntry>),
     LegacyPaths(Vec<PathBuf>),
+}
+
+#[derive(Debug, Deserialize)]
+struct TrackedConfigEntry {
+    path: PathBuf,
 }
 
 /// A store for managing repos.
@@ -165,7 +164,7 @@ impl Store {
                 let info = match InstallInfo::from_env_path(&path).await {
                     Ok(info) => info,
                     Err(err) => {
-                        warn!(%err, path = %path.display(), "Skipping invalid installed hook");
+                        debug!(%err, path = %path.display(), "Skipping invalid installed hook");
                         return None;
                     }
                 };
@@ -245,7 +244,7 @@ impl Store {
     ///
     /// Seed `config-tracking.json` from the workspace discovery cache if it doesn't exist.
     /// This is a one-time upgrade helper: it only does work when tracking is empty.
-    pub(crate) fn tracked_configs(&self) -> Result<FxHashSet<TrackedConfig>, Error> {
+    pub(crate) fn tracked_configs(&self) -> Result<FxHashSet<PathBuf>, Error> {
         let tracking_file = self.config_tracking_file();
         match fs_err::read_to_string(&tracking_file) {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -254,15 +253,11 @@ impl Store {
                 let tracked = match serde_json::from_str::<TrackedConfigsFile>(&content) {
                     Ok(TrackedConfigsFile::Entries(entries)) => entries
                         .into_iter()
-                        .map(|entry| TrackedConfig {
-                            path: normalize_path(entry.path),
-                            project_root: normalize_path(entry.project_root),
-                        })
+                        .map(|entry| normalize_path(entry.path))
                         .collect(),
-                    Ok(TrackedConfigsFile::LegacyPaths(paths)) => paths
-                        .into_iter()
-                        .map(tracked_config_from_config_path)
-                        .collect(),
+                    Ok(TrackedConfigsFile::LegacyPaths(paths)) => {
+                        paths.into_iter().map(normalize_path).collect()
+                    }
                     Err(e) => {
                         warn!("Failed to parse config tracking file: {e}, resetting");
                         FxHashSet::default()
@@ -278,7 +273,7 @@ impl Store {
         }
         let cached = cached
             .into_iter()
-            .map(tracked_config_from_config_path)
+            .map(normalize_path)
             .collect::<FxHashSet<_>>();
 
         debug!(
@@ -293,14 +288,11 @@ impl Store {
     /// Track new config files for GC.
     pub(crate) fn track_configs<'a>(
         &self,
-        configs: impl Iterator<Item = (&'a Path, &'a Path)>,
+        config_paths: impl Iterator<Item = &'a Path>,
     ) -> Result<(), Error> {
         let mut tracked = self.tracked_configs()?;
-        for (config_path, project_root) in configs {
-            tracked.insert(TrackedConfig {
-                path: normalize_path(config_path.to_path_buf()),
-                project_root: normalize_path(project_root.to_path_buf()),
-            });
+        for config_path in config_paths {
+            tracked.insert(normalize_path(config_path.to_path_buf()));
         }
 
         let tracking_file = self.config_tracking_file();
@@ -311,10 +303,7 @@ impl Store {
     }
 
     /// Update the tracked configs file.
-    pub(crate) fn update_tracked_configs(
-        &self,
-        configs: &FxHashSet<TrackedConfig>,
-    ) -> Result<(), Error> {
+    pub(crate) fn update_tracked_configs(&self, configs: &FxHashSet<PathBuf>) -> Result<(), Error> {
         let tracking_file = self.config_tracking_file();
         let content = serde_json::to_string_pretty(configs)?;
         fs_err::write(&tracking_file, content)?;
@@ -355,13 +344,4 @@ fn normalize_path(mut path: PathBuf) -> PathBuf {
         path = CWD.join(path);
     }
     fs_err::canonicalize(&path).unwrap_or(path)
-}
-
-fn tracked_config_from_config_path(path: PathBuf) -> TrackedConfig {
-    let path = normalize_path(path);
-    let project_root = path
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| path.clone());
-    TrackedConfig { path, project_root }
 }
