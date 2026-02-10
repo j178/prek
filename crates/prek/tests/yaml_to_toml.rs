@@ -215,11 +215,11 @@ fn yaml_to_toml_rejects_invalid_config() -> anyhow::Result<()> {
 
     ----- stderr -----
     error: Failed to parse `config.yaml`
-      caused by: error: line 1 column 8: unexpected event: expected sequence start at line 1, column 8
+      caused by: error: line 1 column 8: unexpected event: expected sequence start
      --> <input>:1:8
       |
     1 | repos: 123
-      |        ^ unexpected event: expected sequence start at line 1, column 8
+      |        ^ unexpected event: expected sequence start
     "
     );
 

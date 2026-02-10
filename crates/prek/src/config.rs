@@ -1254,12 +1254,12 @@ mod tests {
         // Error on extra `rev` field, but not other fields
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 2 column 5: `rev` is not allowed for local repos at line 2, column 5
+        error: line 2 column 5: `rev` is not allowed for local repos
          --> <input>:2:5
           |
         1 | repos:
         2 |   - repo: local
-          |     ^ `rev` is not allowed for local repos at line 2, column 5
+          |     ^ `rev` is not allowed for local repos
         3 |     rev: v1.0.0
         4 |     hooks:
           |
@@ -1300,13 +1300,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 2 column 5: missing field `rev` at line 2, column 5
-         --> <input>:2:5
+        error: line 3 column 5: missing field `rev`
+         --> <input>:3:5
           |
         1 | repos:
         2 |   - repo: https://github.com/crate-ci/typos
-          |     ^ missing field `rev` at line 2, column 5
         3 |     hooks:
+          |     ^ missing field `rev`
         4 |       - id: typos
           |
         ");
@@ -1331,13 +1331,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 5 column 9: missing field `name` at line 5, column 9
+        error: line 5 column 9: missing field `name`
          --> <input>:5:9
           |
         3 |     repo: local
         4 |     hooks:
         5 |       - id: typos
-          |         ^ missing field `name` at line 5, column 9
+          |         ^ missing field `name`
         ");
 
         let yaml = indoc::indoc! {r"
@@ -1349,13 +1349,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 5 column 9: unknown meta hook id `typos` at line 5, column 9
+        error: line 5 column 9: unknown meta hook id `typos`
          --> <input>:5:9
           |
         3 |     repo: meta
         4 |     hooks:
         5 |       - id: typos
-          |         ^ unknown meta hook id `typos` at line 5, column 9
+          |         ^ unknown meta hook id `typos`
         ");
 
         let yaml = indoc::indoc! {r"
@@ -1367,13 +1367,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 5 column 9: unknown builtin hook id `typos` at line 5, column 9
+        error: line 5 column 9: unknown builtin hook id `typos`
          --> <input>:5:9
           |
         3 |     repo: builtin
         4 |     hooks:
         5 |       - id: typos
-          |         ^ unknown builtin hook id `typos` at line 5, column 9
+          |         ^ unknown builtin hook id `typos`
         ");
     }
 
@@ -1390,15 +1390,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 5 column 9: missing field `id` at line 5, column 9
-         --> <input>:5:9
+        error: line 6 column 9: missing field `id`
+         --> <input>:6:9
           |
-        3 |     rev: v1.0.0
         4 |     hooks:
         5 |       - name: typos
-          |         ^ missing field `id` at line 5, column 9
         6 |         alias: typo
-          |
+          |         ^ missing field `id`
         ");
 
         // Local hook should have `id`, `name`, and `entry` and `language`.
@@ -1414,15 +1412,14 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 4 column 9: missing field `language` at line 4, column 9
-         --> <input>:4:9
+        error: line 7 column 9: missing field `language`
+         --> <input>:7:9
           |
-        2 |   - repo: local
-        3 |     hooks:
-        4 |       - id: cargo-fmt
-          |         ^ missing field `language` at line 4, column 9
         5 |         name: cargo fmt
         6 |         entry: cargo fmt
+        7 |         types:
+          |         ^ missing field `language`
+        8 |           - rust
           |
         ");
 
@@ -1452,15 +1449,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 5 column 9: missing field `id` at line 5, column 9
-         --> <input>:5:9
+        error: line 6 column 9: missing field `id`
+         --> <input>:6:9
           |
-        3 |     rev: v1.0.0
         4 |     hooks:
         5 |       - name: typos
-          |         ^ missing field `id` at line 5, column 9
         6 |         alias: typo
-          |
+          |         ^ missing field `id`
         ");
 
         // Invalid meta hook id
@@ -1472,13 +1467,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 4 column 9: unknown meta hook id `hello` at line 4, column 9
+        error: line 4 column 9: unknown meta hook id `hello`
          --> <input>:4:9
           |
         2 |   - repo: meta
         3 |     hooks:
         4 |       - id: hello
-          |         ^ unknown meta hook id `hello` at line 4, column 9
+          |         ^ unknown meta hook id `hello`
         ");
 
         // Invalid language
@@ -1491,13 +1486,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 4 column 9: language must be `system` for meta hooks at line 4, column 9
+        error: line 4 column 9: language must be `system` for meta hooks
          --> <input>:4:9
           |
         2 |   - repo: meta
         3 |     hooks:
         4 |       - id: check-hooks-apply
-          |         ^ language must be `system` for meta hooks at line 4, column 9
+          |         ^ language must be `system` for meta hooks
         5 |         language: python
           |
         ");
@@ -1512,13 +1507,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 4 column 9: `entry` is not allowed for meta hooks at line 4, column 9
+        error: line 4 column 9: `entry` is not allowed for meta hooks
          --> <input>:4:9
           |
         2 |   - repo: meta
         3 |     hooks:
         4 |       - id: check-hooks-apply
-          |         ^ `entry` is not allowed for meta hooks at line 4, column 9
+          |         ^ `entry` is not allowed for meta hooks
         5 |         entry: echo hell world
           |
         ");
@@ -1725,13 +1720,13 @@ mod tests {
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::with_settings!({ filters => vec![VERSION_FILTER] }, {
             insta::assert_snapshot!(err, @"
-            error: line 8 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek at line 8, column 23
+            error: line 8 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
              --> <input>:8:23
               |
             6 |         entry: echo test
             7 |         language: system
             8 | minimum_prek_version: '10.0.0'
-              |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek at line 8, column 23
+              |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
             ");
         });
 
@@ -1746,11 +1741,11 @@ mod tests {
         let err = serde_saphyr::from_str::<Manifest>(yaml).unwrap_err();
         insta::with_settings!({ filters => vec![VERSION_FILTER] }, {
             insta::assert_snapshot!(err, @"
-            error: line 1 column 3: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek at line 1, column 3
+            error: line 1 column 3: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
              --> <input>:1:3
               |
             1 | - id: test-hook
-              |   ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek at line 1, column 3
+              |   ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
             2 |   name: Test Hook
             3 |   entry: echo test
               |
@@ -1808,13 +1803,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml_invalid_types).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 4 column 9: Type tag `pythoon` is not recognized. Check for typos or upgrade prek to get new tags. at line 4, column 9
+        error: line 4 column 9: Type tag `pythoon` is not recognized. Check for typos or upgrade prek to get new tags.
          --> <input>:4:9
           |
         2 |   - repo: local
         3 |     hooks:
         4 |       - id: my-hook
-          |         ^ Type tag `pythoon` is not recognized. Check for typos or upgrade prek to get new tags. at line 4, column 9
+          |         ^ Type tag `pythoon` is not recognized. Check for typos or upgrade prek to get new tags.
         5 |         name: My Hook
         6 |         entry: echo
           |
@@ -1833,13 +1828,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml_invalid_types_or).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 4 column 9: Type tag `invalidtag` is not recognized. Check for typos or upgrade prek to get new tags. at line 4, column 9
+        error: line 4 column 9: Type tag `invalidtag` is not recognized. Check for typos or upgrade prek to get new tags.
          --> <input>:4:9
           |
         2 |   - repo: local
         3 |     hooks:
         4 |       - id: my-hook
-          |         ^ Type tag `invalidtag` is not recognized. Check for typos or upgrade prek to get new tags. at line 4, column 9
+          |         ^ Type tag `invalidtag` is not recognized. Check for typos or upgrade prek to get new tags.
         5 |         name: My Hook
         6 |         entry: echo
           |
@@ -1858,13 +1853,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml_invalid_exclude_types).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 4 column 9: Type tag `not-a-real-tag` is not recognized. Check for typos or upgrade prek to get new tags. at line 4, column 9
+        error: line 4 column 9: Type tag `not-a-real-tag` is not recognized. Check for typos or upgrade prek to get new tags.
          --> <input>:4:9
           |
         2 |   - repo: local
         3 |     hooks:
         4 |       - id: my-hook
-          |         ^ Type tag `not-a-real-tag` is not recognized. Check for typos or upgrade prek to get new tags. at line 4, column 9
+          |         ^ Type tag `not-a-real-tag` is not recognized. Check for typos or upgrade prek to get new tags.
         5 |         name: My Hook
         6 |         entry: echo
           |
