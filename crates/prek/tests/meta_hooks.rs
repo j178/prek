@@ -90,13 +90,13 @@ fn meta_hooks_unknown_hook() {
 
     ----- stderr -----
     error: Failed to parse `.pre-commit-config.yaml`
-      caused by: error: line 4 column 9: unknown meta hook id `this-hook-does-not-exist` at line 4, column 9
+      caused by: error: line 4 column 9: unknown meta hook id `this-hook-does-not-exist`
      --> <input>:4:9
       |
     2 |   - repo: meta
     3 |     hooks:
     4 |       - id: this-hook-does-not-exist
-      |         ^ unknown meta hook id `this-hook-does-not-exist` at line 4, column 9
+      |         ^ unknown meta hook id `this-hook-does-not-exist`
     ");
 }
 

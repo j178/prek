@@ -944,13 +944,13 @@ fn install_invalid_config_warning() {
     prek installed at `.git/hooks/pre-commit`
 
     ----- stderr -----
-    warning: Failed to parse `.pre-commit-config.yaml`: error: line 2 column 5: missing field `rev` at line 2, column 5
-     --> <input>:2:5
+    warning: Failed to parse `.pre-commit-config.yaml`: error: line 3 column 5: missing field `rev`
+     --> <input>:3:5
       |
     1 | repos:
     2 |   - repo: https://github.com/pre-commit/pre-commit-hooks
-      |     ^ missing field `rev` at line 2, column 5
     3 |     hooks:
+      |     ^ missing field `rev`
     4 |       - id: trailing-whitespace
       |
     ");

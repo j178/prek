@@ -66,13 +66,13 @@ fn builtin_hooks_unknown_hook() {
 
     ----- stderr -----
     error: Failed to parse `.pre-commit-config.yaml`
-      caused by: error: line 4 column 9: unknown builtin hook id `this-hook-does-not-exist` at line 4, column 9
+      caused by: error: line 4 column 9: unknown builtin hook id `this-hook-does-not-exist`
      --> <input>:4:9
       |
     2 |   - repo: builtin
     3 |     hooks:
     4 |       - id: this-hook-does-not-exist
-      |         ^ unknown builtin hook id `this-hook-does-not-exist` at line 4, column 9
+      |         ^ unknown builtin hook id `this-hook-does-not-exist`
     ");
 }
 
@@ -180,17 +180,17 @@ fn check_yaml_hook() -> Result<()> {
     - hook id: check-yaml
     - exit code: 1
 
-      duplicate.yaml: Failed to yaml decode (error: line 2 column 1: duplicate mapping key: a at line 2, column 1
+      duplicate.yaml: Failed to yaml decode (error: line 2 column 1: duplicate mapping key: a not allowed here
        --> <input>:2:1
         |
       1 | a: 1
       2 | a: 2
-        | ^ duplicate mapping key: a at line 2, column 1)
-      invalid.yaml: Failed to yaml decode (error: line 1 column 5: mapping values are not allowed in this context at line 1, column 5
+        | ^ duplicate mapping key: a not allowed here)
+      invalid.yaml: Failed to yaml decode (error: line 1 column 5: mapping values are not allowed in this context
        --> <input>:1:5
         |
       1 | a: b: c
-        |     ^ mapping values are not allowed in this context at line 1, column 5)
+        |     ^ mapping values are not allowed in this context)
 
     ----- stderr -----
     ");
@@ -252,13 +252,13 @@ fn check_yaml_multiple_document() -> Result<()> {
     - hook id: check-yaml
     - exit code: 1
 
-      multiple.yaml: Failed to yaml decode (error: line 4 column 1: multiple YAML documents detected at line 4, column 1
+      multiple.yaml: Failed to yaml decode (error: line 4 column 1: only single YAML document expected but multiple found
        --> <input>:4:1
         |
       2 | a: 1
       3 | ---
       4 | b: 2
-        | ^ multiple YAML documents detected at line 4, column 1)
+        | ^ only single YAML document expected but multiple found)
 
     ----- stderr -----
     ");
@@ -712,17 +712,17 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     - hook id: check-yaml
     - exit code: 1
 
-      duplicate.yaml: Failed to yaml decode (error: line 2 column 1: duplicate mapping key: a at line 2, column 1
+      duplicate.yaml: Failed to yaml decode (error: line 2 column 1: duplicate mapping key: a not allowed here
        --> <input>:2:1
         |
       1 | a: 1
       2 | a: 2
-        | ^ duplicate mapping key: a at line 2, column 1)
-      invalid.yaml: Failed to yaml decode (error: line 1 column 5: mapping values are not allowed in this context at line 1, column 5
+        | ^ duplicate mapping key: a not allowed here)
+      invalid.yaml: Failed to yaml decode (error: line 1 column 5: mapping values are not allowed in this context
        --> <input>:1:5
         |
       1 | a: b: c
-        |     ^ mapping values are not allowed in this context at line 1, column 5)
+        |     ^ mapping values are not allowed in this context)
     check json...............................................................Failed
     - hook id: check-json
     - exit code: 1

@@ -1113,7 +1113,7 @@ dependencies = [
  "itoa",
  "pin-project-lite",
  "pin-utils",
- "smallvec 1.15.1",
+ "smallvec",
  "tokio",
  "want",
 ]
@@ -1195,7 +1195,7 @@ dependencies = [
  "icu_normalizer_data",
  "icu_properties",
  "icu_provider",
- "smallvec 1.15.1",
+ "smallvec",
  "zerovec",
 ]
 
@@ -1247,7 +1247,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b0875f23caa03898994f6ddc501886a45c7d3d62d04d2d90788d47be1b1e4de"
 dependencies = [
  "idna_adapter",
- "smallvec 1.15.1",
+ "smallvec",
  "utf8_iter",
 ]
 
@@ -1854,7 +1854,7 @@ dependencies = [
  "log",
  "nix 0.26.4",
  "once_cell",
- "smallvec 1.15.1",
+ "smallvec",
  "spin",
  "symbolic-demangle",
  "tempfile",
@@ -1961,7 +1961,7 @@ dependencies = [
  "serde_json",
  "serde_stacker",
  "shlex",
- "smallvec 1.15.1",
+ "smallvec",
  "strum",
  "target-lexicon",
  "tempfile",
@@ -2387,12 +2387,12 @@ dependencies = [
 
 [[package]]
 name = "saphyr-parser-bw"
-version = "0.0.607"
+version = "0.0.608"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f9bae8d059bf1ca32753cf3cdafbf5d391502de2fc2ca54510811fe9c100d90"
+checksum = "d55ae5ea09894b6d5382621db78f586df37ef18ab581bf32c754e75076b124b1"
 dependencies = [
  "arraydeque",
- "smallvec 2.0.0-alpha.12",
+ "smallvec",
  "thiserror 2.0.18",
 ]
 
@@ -2492,9 +2492,9 @@ dependencies = [
 
 [[package]]
 name = "serde-saphyr"
-version = "0.0.17"
+version = "0.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc14a55107113a16346915d7e3d78acc539a923458385db89670e22cac106d7a"
+checksum = "191a4f997fef5e095212c5790898516e9567d2d8502c4159317603ff0321e394"
 dependencies = [
  "ahash",
  "annotate-snippets",
@@ -2507,7 +2507,7 @@ dependencies = [
  "saphyr-parser-bw",
  "serde",
  "serde_json",
- "smallvec 2.0.0-alpha.12",
+ "smallvec",
  "zmij",
 ]
 
@@ -2636,12 +2636,6 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
-
-[[package]]
-name = "smallvec"
-version = "2.0.0-alpha.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef784004ca8777809dcdad6ac37629f0a97caee4c685fcea805278d81dd8b857"
 
 [[package]]
 name = "smawk"
@@ -3114,7 +3108,7 @@ dependencies = [
  "once_cell",
  "regex-automata",
  "sharded-slab",
- "smallvec 1.15.1",
+ "smallvec",
  "thread_local",
  "tracing",
  "tracing-core",

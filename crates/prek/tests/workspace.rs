@@ -819,11 +819,11 @@ fn skips() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse `project3/.pre-commit-config.yaml`
-      caused by: error: line 1 column 15: unclosed bracket '[' at line 1, column 15
+      caused by: error: line 1 column 15: unclosed bracket '['
      --> <input>:1:15
       |
     1 | invalid_yaml: [
-      |               ^ unclosed bracket '[' at line 1, column 15
+      |               ^ unclosed bracket '['
     ");
 
     // Should skip the invalid config
