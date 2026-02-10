@@ -112,14 +112,13 @@ fn cache_clean() -> anyhow::Result<()> {
     home.child("cache/data.bin").write_str("hello")?;
     home.child("cache/nested/data.bin").write_str("world!")?;
 
-    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("clean").env("PREK_HOME", &*home), @r"
+    cmd_snapshot!(context.filters(), context.command().arg("cache").arg("clean").env("PREK_HOME", &*home), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    Cleaning [TEMP_DIR]/home
-    Removed [N] file(s) ([SIZE])
 
     ----- stderr -----
+    Removed [N] file(s) ([SIZE])
     ");
 
     home.assert(predicates::path::missing());
@@ -128,14 +127,13 @@ fn cache_clean() -> anyhow::Result<()> {
     home.create_dir_all()?;
     home.child("cache").create_dir_all()?;
     home.child("cache/one.txt").write_str("abc")?;
-    cmd_snapshot!(context.filters(), context.command().arg("clean").env("PREK_HOME", &*home), @r"
+    cmd_snapshot!(context.filters(), context.command().arg("clean").env("PREK_HOME", &*home), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    Cleaning [TEMP_DIR]/home
-    Removed [N] file(s) ([SIZE])
 
     ----- stderr -----
+    Removed [N] file(s) ([SIZE])
     ");
 
     home.assert(predicates::path::missing());

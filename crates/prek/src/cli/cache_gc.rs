@@ -294,7 +294,7 @@ pub(crate) async fn cache_gc(
             printer.stdout(),
             "{verb} {} ({})",
             removed.joined(),
-            format!("{removed_bytes:.1} {removed_unit}").cyan().bold(),
+            format!("{removed_bytes:.1}{removed_unit}").cyan().bold(),
         )?;
 
         if verbose {
