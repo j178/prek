@@ -266,6 +266,54 @@ fn self_repo_does_not_persist_env_across_runs() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn self_repo_partial_install_failure_does_not_leak_envs() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    cwd.child(".pre-commit-hooks.yaml")
+        .write_str(indoc::indoc! {r#"
+    - id: ok
+      name: ok
+      entry: python -c "print('ok')"
+      language: python
+      pass_filenames: false
+    - id: badver
+      name: badver
+      entry: python -c "print('badver')"
+      language: python
+      pass_filenames: false
+    "#})?;
+    cwd.child("setup.py")
+        .write_str("from setuptools import setup; setup(name='selfhooks', version='0.0.1')")?;
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: self
+            hooks:
+              - id: ok
+              - id: badver
+                language_version: python9.9
+    "});
+    cwd.child("file.txt").write_str("Hello\n")?;
+    context.git_add(".");
+
+    let output = context.command().args(["run", "--all-files"]).output()?;
+    assert!(
+        !output.status.success(),
+        "run should fail due to invalid language_version"
+    );
+
+    assert_eq!(
+        python_env_count(context.home_dir().child("hooks").path())?,
+        0,
+        "ephemeral self-repo envs should be removed on install failure",
+    );
+
+    Ok(())
+}
+
 /// Two projects sharing the same `PREK_HOME` should both run successfully
 /// without relying on persisted self-repo environments.
 #[test]

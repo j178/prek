@@ -1,8 +1,8 @@
 use std::fmt::Write as _;
 use std::io::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -160,9 +160,15 @@ pub(crate) async fn run(
         filtered_hooks.iter().map(|h| &h.id).collect::<Vec<_>>()
     );
     let reporter = HookInstallReporter::new(printer);
-    let installed_hooks = install_hooks(filtered_hooks, store, &reporter).await?;
-    let self_repo_env_paths = collect_self_repo_env_paths(&installed_hooks);
-    let _self_repo_env_cleanup_guard = SelfRepoEnvCleanupGuard::new(self_repo_env_paths);
+    let self_repo_env_tracker = SelfRepoEnvTracker::default();
+    let _self_repo_env_cleanup_guard = SelfRepoEnvCleanupGuard::new(self_repo_env_tracker.clone());
+    let installed_hooks = install_hooks_with_tracker(
+        filtered_hooks,
+        store,
+        &reporter,
+        Some(&self_repo_env_tracker),
+    )
+    .await?;
 
     async {
         // Release the store lock.
@@ -219,14 +225,6 @@ pub(crate) async fn run(
     .await
 }
 
-fn collect_self_repo_env_paths(installed_hooks: &[InstalledHook]) -> Vec<PathBuf> {
-    dedupe_paths(installed_hooks.iter().filter_map(|hook| {
-        matches!(hook.repo(), Repo::SelfRepo { .. })
-            .then(|| hook.env_path().map(std::path::Path::to_path_buf))
-            .flatten()
-    }))
-}
-
 fn dedupe_paths(paths: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
     let mut seen = FxHashSet::default();
     paths
@@ -253,18 +251,56 @@ fn cleanup_self_repo_env_paths(paths: &[PathBuf]) {
 }
 
 struct SelfRepoEnvCleanupGuard {
-    paths: Vec<PathBuf>,
+    tracker: SelfRepoEnvTracker,
 }
 
 impl SelfRepoEnvCleanupGuard {
-    fn new(paths: Vec<PathBuf>) -> Self {
-        Self { paths }
+    fn new(tracker: SelfRepoEnvTracker) -> Self {
+        Self { tracker }
     }
 }
 
 impl Drop for SelfRepoEnvCleanupGuard {
     fn drop(&mut self) {
-        cleanup_self_repo_env_paths(&self.paths);
+        let paths = self.tracker.deduped_paths();
+        cleanup_self_repo_env_paths(&paths);
+    }
+}
+
+#[derive(Clone, Default)]
+struct SelfRepoEnvTracker {
+    paths: Arc<Mutex<Vec<PathBuf>>>,
+}
+
+impl SelfRepoEnvTracker {
+    fn record_path(&self, path: &Path) {
+        let mut paths = match self.paths.lock() {
+            Ok(paths) => paths,
+            Err(poisoned) => {
+                warn!("Self-repo env tracker lock poisoned while recording path");
+                poisoned.into_inner()
+            }
+        };
+        paths.push(path.to_path_buf());
+    }
+
+    fn record_from_hook(&self, hook: &InstalledHook) {
+        if matches!(hook.repo(), Repo::SelfRepo { .. })
+            && let Some(path) = hook.env_path()
+        {
+            self.record_path(path);
+        }
+    }
+
+    fn deduped_paths(&self) -> Vec<PathBuf> {
+        let paths = match self.paths.lock() {
+            Ok(paths) => paths.clone(),
+            Err(poisoned) => {
+                warn!("Self-repo env tracker lock poisoned while collecting paths");
+                poisoned.into_inner().clone()
+            }
+        };
+        dedupe_paths(paths)
     }
 }
 
@@ -363,6 +399,15 @@ pub async fn install_hooks(
     store: &Store,
     reporter: &HookInstallReporter,
 ) -> Result<Vec<InstalledHook>> {
+    install_hooks_with_tracker(hooks, store, reporter, None).await
+}
+
+async fn install_hooks_with_tracker(
+    hooks: Vec<Arc<Hook>>,
+    store: &Store,
+    reporter: &HookInstallReporter,
+    self_repo_env_tracker: Option<&SelfRepoEnvTracker>,
+) -> Result<Vec<InstalledHook>> {
     let num_hooks = hooks.len();
     let mut result = Vec::with_capacity(hooks.len());
 
@@ -441,7 +486,11 @@ pub async fn install_hooks(
                             "Found installed environment for hook `{hook}` at `{}`",
                             info.env_path.display()
                         );
-                        hook_envs.push(InstalledHook::Installed { hook, info });
+                        let installed_hook = InstalledHook::Installed { hook, info };
+                        if let Some(tracker) = self_repo_env_tracker {
+                            tracker.record_from_hook(&installed_hook);
+                        }
+                        hook_envs.push(installed_hook);
                         continue;
                     }
 
@@ -452,6 +501,9 @@ pub async fn install_hooks(
                         .install(hook.clone(), store, reporter)
                         .await
                         .with_context(|| format!("Failed to install hook `{hook}`"))?;
+                    if let Some(tracker) = self_repo_env_tracker {
+                        tracker.record_from_hook(&installed_hook);
+                    }
 
                     if !matches!(hook.repo(), Repo::SelfRepo { .. }) {
                         installed_hook
@@ -1125,7 +1177,7 @@ async fn run_hook(
 
 #[cfg(test)]
 mod tests {
-    use super::{SelfRepoEnvCleanupGuard, dedupe_paths};
+    use super::{SelfRepoEnvCleanupGuard, SelfRepoEnvTracker, dedupe_paths};
     use assert_fs::fixture::TempDir;
     use std::path::PathBuf;
 
@@ -1153,9 +1205,11 @@ mod tests {
         let env_path = temp.path().join("hooks/self-repo-env");
         fs_err::create_dir_all(&env_path).expect("create self-repo env dir");
         fs_err::write(env_path.join("marker.txt"), b"hello").expect("create marker file");
+        let tracker = SelfRepoEnvTracker::default();
+        tracker.record_path(&env_path);
 
         {
-            let _guard = SelfRepoEnvCleanupGuard::new(vec![env_path.clone()]);
+            let _guard = SelfRepoEnvCleanupGuard::new(tracker);
         }
 
         assert!(!env_path.exists());
@@ -1167,9 +1221,11 @@ mod tests {
         let env_path = temp.path().join("hooks/self-repo-env");
         fs_err::create_dir_all(&env_path).expect("create self-repo env dir");
         fs_err::write(env_path.join("marker.txt"), b"hello").expect("create marker file");
+        let tracker = SelfRepoEnvTracker::default();
+        tracker.record_path(&env_path);
 
         let panic_result = std::panic::catch_unwind(|| {
-            let _guard = SelfRepoEnvCleanupGuard::new(vec![env_path.clone()]);
+            let _guard = SelfRepoEnvCleanupGuard::new(tracker);
             panic!("trigger unwind");
         });
 
