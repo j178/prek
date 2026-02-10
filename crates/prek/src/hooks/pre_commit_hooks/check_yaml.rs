@@ -59,11 +59,7 @@ async fn check_file(
         match serde_saphyr::from_slice_with_options::<serde_json::Value>(&content, options) {
             Ok(_) => Ok((0, Vec::new())),
             Err(e) => {
-                // Remove programmatic suggestion from error message
-                // TODO: bring up an issue in serde-saphyr to improve error messages
-                let err = e
-                    .to_string()
-                    .replace("; use from_multiple or from_multiple_with_options", "");
+                let err = e.render_with_formatter(&serde_saphyr::UserMessageFormatter);
                 let error_message =
                     format!("{}: Failed to yaml decode ({err})\n", filename.display());
                 Ok((1, error_message.into_bytes()))
