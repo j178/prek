@@ -116,7 +116,7 @@ fn cache_clean() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Cleaned `[TEMP_DIR]/home`
+    Cleaning [TEMP_DIR]/home
     Removed [N] file(s) ([SIZE])
 
     ----- stderr -----
@@ -132,7 +132,7 @@ fn cache_clean() -> anyhow::Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Cleaned `[TEMP_DIR]/home`
+    Cleaning [TEMP_DIR]/home
     Removed [N] file(s) ([SIZE])
 
     ----- stderr -----

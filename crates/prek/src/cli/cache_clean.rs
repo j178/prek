@@ -13,9 +13,15 @@ use crate::store::{CacheBucket, Store};
 
 pub(crate) fn cache_clean(store: &Store, printer: Printer) -> Result<ExitStatus> {
     if !store.path().exists() {
-        writeln!(printer.stdout(), "Nothing to clean")?;
+        writeln!(printer.stdout(), "{}", "Nothing to clean".bold())?;
         return Ok(ExitStatus::Success);
     }
+
+    writeln!(
+        printer.stdout(),
+        "Cleaning {}",
+        store.path().display().cyan()
+    )?;
 
     if let Err(e) = fix_permissions(store.cache_path(CacheBucket::Go))
         && e.kind() != io::ErrorKind::NotFound
@@ -24,20 +30,13 @@ pub(crate) fn cache_clean(store: &Store, printer: Printer) -> Result<ExitStatus>
     }
 
     let stats = remove_dir_all_with_stats(store.path())?;
+    let (size, unit) = human_readable_bytes(stats.total_bytes);
     writeln!(
         printer.stdout(),
-        "Cleaned `{}`",
-        store.path().display().cyan()
+        "Removed {} ({})",
+        file_label(stats.file_count),
+        format!("{size:.1} {unit}").cyan().bold(),
     )?;
-    if stats.file_count > 0 {
-        let (size, unit) = human_readable_bytes(stats.total_bytes);
-        writeln!(
-            printer.stdout(),
-            "Removed {} ({}{unit})",
-            file_label(stats.file_count),
-            format!("{size:.1}").cyan().bold(),
-        )?;
-    }
 
     Ok(ExitStatus::Success)
 }

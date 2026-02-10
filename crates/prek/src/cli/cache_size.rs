@@ -24,7 +24,7 @@ pub(crate) fn cache_size(
     let total_bytes = dir_stats(store.path())?.total_bytes;
     if human_readable {
         let (bytes, unit) = human_readable_bytes(total_bytes);
-        writeln!(printer.stdout_important(), "{bytes:.1}{unit}")?;
+        writeln!(printer.stdout_important(), "{bytes:.1} {unit}")?;
     } else {
         writeln!(printer.stdout_important(), "{total_bytes}")?;
     }

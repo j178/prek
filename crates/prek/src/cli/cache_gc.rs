@@ -292,9 +292,9 @@ pub(crate) async fn cache_gc(
     } else {
         writeln!(
             printer.stdout(),
-            "{verb} {} ({}{removed_unit})",
+            "{verb} {} ({})",
             removed.joined(),
-            format!("{removed_bytes:.1}").cyan().bold(),
+            format!("{removed_bytes:.1} {removed_unit}").cyan().bold(),
         )?;
 
         if verbose {
