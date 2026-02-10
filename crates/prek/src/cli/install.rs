@@ -314,7 +314,7 @@ static PRIOR_HASHES: &[&str] = &[];
 static CURRENT_HASH: &str = "182c10f181da4464a3eec51b83331688";
 
 /// Checks if the script contains any of the hashes that `prek` has used in the past.
-fn is_our_script(hook_path: &Path) -> Result<bool> {
+fn is_our_script(hook_path: &Path) -> std::io::Result<bool> {
     let content = fs_err::read_to_string(hook_path)?;
     Ok(std::iter::once(CURRENT_HASH)
         .chain(PRIOR_HASHES.iter().copied())
@@ -333,34 +333,51 @@ pub(crate) async fn uninstall(
         let hook_path = hooks_path.join(hook_type.as_ref());
         let legacy_path = hooks_path.join(format!("{hook_type}.legacy"));
 
-        if !hook_path.try_exists()? {
+        if is_our_script(&legacy_path).unwrap_or(false) {
+            fs_err::remove_file(&legacy_path)?;
             writeln!(
                 printer.stderr(),
-                "`{}` does not exist, skipping.",
-                hook_path.user_display().cyan()
+                "Found legacy hook at `{}`, removing it.",
+                legacy_path.user_display().cyan()
             )?;
-        } else if !is_our_script(&hook_path)? {
-            writeln!(
-                printer.stderr(),
-                "`{}` is not managed by prek, skipping.",
-                hook_path.user_display().cyan()
-            )?;
-        } else {
-            fs_err::remove_file(&hook_path)?;
-            writeln!(
-                printer.stdout(),
-                "Uninstalled `{}`",
-                hook_type.as_ref().cyan()
-            )?;
+        }
 
-            if legacy_path.try_exists()? {
-                fs_err::rename(&legacy_path, &hook_path)?;
+        match is_our_script(&hook_path) {
+            Ok(true) => {}
+            Ok(false) => {
                 writeln!(
-                    printer.stdout(),
-                    "Restored previous hook to `{}`",
+                    printer.stderr(),
+                    "`{}` is not managed by prek, skipping.",
                     hook_path.user_display().cyan()
                 )?;
+                continue;
             }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                writeln!(
+                    printer.stderr(),
+                    "`{}` does not exist, skipping.",
+                    hook_path.user_display().cyan()
+                )?;
+                continue;
+            }
+            Err(err) => return Err(err.into()),
+        }
+
+        fs_err::remove_file(&hook_path)?;
+        writeln!(
+            printer.stdout(),
+            "Uninstalled `{}`",
+            hook_type.as_ref().cyan()
+        )?;
+
+        if legacy_path.try_exists()? {
+            fs_err::rename(&legacy_path, &hook_path)?;
+            writeln!(
+                printer.stdout(),
+                "Restored `{}` to `{}`",
+                legacy_path.user_display().cyan(),
+                hook_path.user_display().cyan()
+            )?;
         }
     }
 
