@@ -555,10 +555,15 @@ impl StatusPrinter {
         } else {
             (prefix.dimmed().to_string(), prefix.width())
         };
-        let dots = self.columns - prefix_width - hook_name.width() - suffix.width() - status_width;
+        let dots = self
+            .columns
+            .saturating_sub(prefix_width)
+            .saturating_sub(hook_name.width())
+            .saturating_sub(suffix.width())
+            .saturating_sub(status_width);
         let line = format!(
             "{prefix}{hook_name}{}{suffix}{status_line}",
-            ".".repeat(dots.max(0)),
+            ".".repeat(dots),
         );
         match status {
             RunStatus::Failed => {
