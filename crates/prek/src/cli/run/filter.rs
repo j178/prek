@@ -121,7 +121,14 @@ impl<'a> FileFilter<'a> {
                     true
                 }
             })
-            .filter(|filename| filter.filter(filename))
+            // Remove the relative_path from prefix for the filters
+            .filter(|filename| {
+                filter.filter(
+                    filename
+                        .strip_prefix(project.relative_path())
+                        .unwrap_or(filename),
+                )
+            })
             .collect::<Vec<_>>();
 
         Self {

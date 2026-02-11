@@ -934,6 +934,65 @@ fn gitignore_respected() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn nested_project_exclude_is_relative() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Top-level exclude should be applied to paths relative to each project,
+    // not the workspace root.
+    let config = indoc! {r#"
+    exclude: \.pre-commit-config\.yaml$|^noinclude$
+    repos:
+      - repo: local
+        hooks:
+        - id: show-files
+          name: Show Files
+          language: python
+          entry: python -c 'import sys; print("Processing {} files".format(len(sys.argv[1:]))); [print("  - {}".format(f)) for f in sys.argv[1:]]'
+          pass_filenames: true
+          verbose: true
+    "#};
+
+    // Workspace with a nested project.
+    context.setup_workspace(&["folder"], config)?;
+
+    // Files inside the nested project: one that should be included and one excluded.
+    context.work_dir().child("folder/include").write_str("")?;
+    context.work_dir().child("folder/noinclude").write_str("")?;
+
+    context.git_add(".");
+
+    // When running from the root with --all-files, the nested project's exclude
+    // pattern should see paths relative to `folder/`, so `noinclude` is excluded
+    // there but still visible from the root project.
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `folder`:
+    Show Files...............................................................Passed
+    - hook id: show-files
+    - duration: [TIME]
+
+      Processing 1 files
+        - include
+
+    Running hooks for `.`:
+    Show Files...............................................................Passed
+    - hook id: show-files
+    - duration: [TIME]
+
+      Processing 2 files
+        - folder/noinclude
+        - folder/include
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 /// Tests that `--files` arguments references files in other projects, should be filtered out properly.
 #[test]
 fn reference_files_across_projects() -> Result<()> {
