@@ -141,7 +141,8 @@
         {
           "$ref": "#/definitions/BuiltinRepo"
         }
-      ]
+      ],
+      "additionalProperties": true
     },
     "RemoteRepo": {
       "type": "object",

@@ -301,6 +301,7 @@ impl schemars::JsonSchema for Repo {
                 meta_schema,
                 builtin_schema,
             ],
+            "additionalProperties": true,
         })
     }
 }
