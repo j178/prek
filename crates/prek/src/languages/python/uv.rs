@@ -7,7 +7,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use http::header::ACCEPT;
 use semver::{Version, VersionReq};
-use target_lexicon::{Architecture, ArmArchitecture, HOST, OperatingSystem};
+use target_lexicon::{Architecture, ArmArchitecture, Environment, HOST, OperatingSystem};
 use tokio::task::JoinSet;
 use tracing::{debug, trace, warn};
 
@@ -24,46 +24,65 @@ const CUR_UV_VERSION: &str = "0.9.27";
 static UV_VERSION_RANGE: LazyLock<VersionReq> =
     LazyLock::new(|| VersionReq::parse(">=0.7.0").unwrap());
 
-// Get the uv wheel platform tag for the current host.
-fn get_wheel_platform_tag() -> Result<String> {
-    let platform_tag = match (HOST.operating_system, HOST.architecture) {
+fn wheel_platform_tag_for_host(
+    operating_system: OperatingSystem,
+    architecture: Architecture,
+    environment: Environment,
+) -> Result<&'static str> {
+    let platform_tag = match (operating_system, architecture, environment) {
         // Linux platforms
-        // TODO: support musllinux?
-        (OperatingSystem::Linux, Architecture::X86_64) => {
+        (OperatingSystem::Linux, Architecture::X86_64, Environment::Musl) => "musllinux_1_1_x86_64",
+        (OperatingSystem::Linux, Architecture::X86_64, _) => {
             "manylinux_2_17_x86_64.manylinux2014_x86_64"
         }
-        (OperatingSystem::Linux, Architecture::Aarch64(_)) => {
+        (OperatingSystem::Linux, Architecture::Aarch64(_), _) => {
             "manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64"
         }
-        (OperatingSystem::Linux, Architecture::Arm(ArmArchitecture::Armv7)) => {
+        (OperatingSystem::Linux, Architecture::Arm(ArmArchitecture::Armv7), Environment::Musl) => {
+            "manylinux_2_17_armv7l.manylinux2014_armv7l.musllinux_1_1_armv7l"
+        }
+        (OperatingSystem::Linux, Architecture::Arm(ArmArchitecture::Armv7), _) => {
             "manylinux_2_17_armv7l.manylinux2014_armv7l"
-        } // ARMv7
-        (OperatingSystem::Linux, Architecture::Arm(ArmArchitecture::Armv6)) => "linux_armv6l", // Raspberry Pi Zero/1
-        (OperatingSystem::Linux, Architecture::X86_32(_)) => {
+        }
+        (OperatingSystem::Linux, Architecture::Arm(ArmArchitecture::Armv6), _) => "linux_armv6l", // Raspberry Pi Zero/1
+        (OperatingSystem::Linux, Architecture::X86_32(_), Environment::Musl) => {
+            "musllinux_1_1_i686"
+        }
+        (OperatingSystem::Linux, Architecture::X86_32(_), _) => {
             "manylinux_2_17_i686.manylinux2014_i686"
         }
-        (OperatingSystem::Linux, Architecture::Powerpc64) => {
+        (OperatingSystem::Linux, Architecture::Powerpc64, _) => {
             "manylinux_2_17_ppc64.manylinux2014_ppc64"
         }
-        (OperatingSystem::Linux, Architecture::Powerpc64le) => {
+        (OperatingSystem::Linux, Architecture::Powerpc64le, _) => {
             "manylinux_2_17_ppc64le.manylinux2014_ppc64le"
         }
-        (OperatingSystem::Linux, Architecture::S390x) => "manylinux_2_17_s390x.manylinux2014_s390x",
-        (OperatingSystem::Linux, Architecture::Riscv64(_)) => "manylinux_2_31_riscv64",
+        (OperatingSystem::Linux, Architecture::S390x, _) => {
+            "manylinux_2_17_s390x.manylinux2014_s390x"
+        }
+        (OperatingSystem::Linux, Architecture::Riscv64(_), _) => "manylinux_2_31_riscv64",
 
         // macOS platforms
-        (OperatingSystem::Darwin(_), Architecture::X86_64) => "macosx_10_12_x86_64",
-        (OperatingSystem::Darwin(_), Architecture::Aarch64(_)) => "macosx_11_0_arm64",
+        (OperatingSystem::Darwin(_), Architecture::X86_64, _) => "macosx_10_12_x86_64",
+        (OperatingSystem::Darwin(_), Architecture::Aarch64(_), _) => "macosx_11_0_arm64",
 
         // Windows platforms
-        (OperatingSystem::Windows, Architecture::X86_64) => "win_amd64",
-        (OperatingSystem::Windows, Architecture::X86_32(_)) => "win32",
-        (OperatingSystem::Windows, Architecture::Aarch64(_)) => "win_arm64",
+        (OperatingSystem::Windows, Architecture::X86_64, _) => "win_amd64",
+        (OperatingSystem::Windows, Architecture::X86_32(_), _) => "win32",
+        (OperatingSystem::Windows, Architecture::Aarch64(_), _) => "win_arm64",
 
-        _ => bail!("Unsupported platform: {HOST}"),
+        _ => bail!(
+            "Unsupported platform: operating_system={operating_system:?}, architecture={architecture:?}, environment={environment:?}"
+        ),
     };
 
-    Ok(platform_tag.to_string())
+    Ok(platform_tag)
+}
+
+// Get the uv wheel platform tag for the current host.
+fn get_wheel_platform_tag() -> Result<String> {
+    wheel_platform_tag_for_host(HOST.operating_system, HOST.architecture, HOST.environment)
+        .map(str::to_string)
 }
 
 fn get_uv_version(uv_path: &Path) -> Result<Version> {
@@ -85,18 +104,38 @@ fn get_uv_version(uv_path: &Path) -> Result<Version> {
     Version::parse(version_str).map_err(Into::into)
 }
 
+fn validate_uv_binary(uv_path: &Path) -> Result<Version> {
+    let version = get_uv_version(uv_path)?;
+    if !UV_VERSION_RANGE.matches(&version) {
+        bail!(
+            "uv version `{version}` does not satisfy required range `{}`",
+            &*UV_VERSION_RANGE
+        );
+    }
+    Ok(version)
+}
+
+async fn replace_uv_binary(source: &Path, target_path: &Path) -> Result<()> {
+    if let Some(parent) = target_path.parent() {
+        fs_err::tokio::create_dir_all(parent).await?;
+    }
+
+    if target_path.exists() {
+        debug!(target = %target_path.display(), "Removing existing uv binary");
+        fs_err::tokio::remove_file(target_path).await?;
+    }
+
+    fs_err::tokio::rename(source, target_path).await?;
+    Ok(())
+}
+
 static UV_EXE: LazyLock<Option<(PathBuf, Version)>> = LazyLock::new(|| {
     for uv_path in which::which_all("uv").ok()? {
         debug!("Found uv in PATH: {}", uv_path.display());
 
-        if let Ok(version) = get_uv_version(&uv_path) {
-            if UV_VERSION_RANGE.matches(&version) {
-                return Some((uv_path, version));
-            }
-            warn!(
-                "Skip system uv version `{version}` — expected a version range: `{}`",
-                &*UV_VERSION_RANGE
-            );
+        match validate_uv_binary(&uv_path) {
+            Ok(version) => return Some((uv_path, version)),
+            Err(err) => warn!(uv = %uv_path.display(), error = %err, "Skipping incompatible uv"),
         }
     }
 
@@ -161,14 +200,9 @@ impl InstallSource {
             let source = extracted.join("uv").with_extension(EXE_EXTENSION);
             let target_path = target.join("uv").with_extension(EXE_EXTENSION);
 
-            if target_path.exists() {
-                debug!(target = %target.display(), "Removing existing uv");
-                fs_err::tokio::remove_dir_all(&target).await?;
-            }
-
             debug!(?source, target = %target_path.display(), "Moving uv to target");
             // TODO: retry on Windows
-            fs_err::tokio::rename(source, target_path).await?;
+            replace_uv_binary(&source, &target_path).await?;
 
             anyhow::Ok(())
         })
@@ -302,13 +336,9 @@ impl InstallSource {
 
             // Copy the binary to the target location
             let target_path = target.join("uv").with_extension(EXE_EXTENSION);
-            if target_path.exists() {
-                debug!(target = %target.display(), "Removing existing uv");
-                fs_err::tokio::remove_dir_all(&target).await?;
-            }
 
             debug!(?extracted_uv, target = %target_path.display(), "Moving uv to target");
-            fs_err::tokio::rename(&extracted_uv, &target_path).await?;
+            replace_uv_binary(&extracted_uv, &target_path).await?;
 
             // Set executable permissions on Unix
             #[cfg(unix)]
@@ -449,15 +479,14 @@ impl Uv {
         if let Some(prek_dir) = prek_exe.parent() {
             let uv_path = prek_dir.join("uv").with_extension(EXE_EXTENSION);
             if uv_path.is_file() {
-                if let Ok(version) = get_uv_version(&uv_path) {
-                    if UV_VERSION_RANGE.matches(&version) {
+                match validate_uv_binary(&uv_path) {
+                    Ok(_) => {
                         trace!(uv = %uv_path.display(), "Found compatible uv alongside prek binary");
                         return Ok(Self::new(uv_path));
                     }
-                    warn!(
-                        "Skip uv version `{version}` alongside prek binary — expected a version range: `{}`",
-                        &*UV_VERSION_RANGE
-                    );
+                    Err(err) => {
+                        warn!(uv = %uv_path.display(), error = %err, "Skipping incompatible uv");
+                    }
                 }
             }
         }
@@ -476,8 +505,15 @@ impl Uv {
         let uv_path = uv_dir.join("uv").with_extension(EXE_EXTENSION);
 
         if uv_path.is_file() {
-            trace!(uv = %uv_path.display(), "Found managed uv");
-            return Ok(Self::new(uv_path));
+            match validate_uv_binary(&uv_path) {
+                Ok(_) => {
+                    trace!(uv = %uv_path.display(), "Found compatible managed uv");
+                    return Ok(Self::new(uv_path));
+                }
+                Err(err) => {
+                    warn!(uv = %uv_path.display(), error = %err, "Skipping incompatible managed uv");
+                }
+            }
         }
 
         // Install new managed uv with proper locking
@@ -485,8 +521,15 @@ impl Uv {
         let _lock = LockedFile::acquire(uv_dir.join(".lock"), "uv").await?;
 
         if uv_path.is_file() {
-            trace!(uv = %uv_path.display(), "Found managed uv");
-            return Ok(Self::new(uv_path));
+            match validate_uv_binary(&uv_path) {
+                Ok(_) => {
+                    trace!(uv = %uv_path.display(), "Found compatible managed uv");
+                    return Ok(Self::new(uv_path));
+                }
+                Err(err) => {
+                    warn!(uv = %uv_path.display(), error = %err, "Skipping incompatible managed uv");
+                }
+            }
         }
 
         let source = if let Some(uv_source) = uv_source_from_env() {
@@ -525,4 +568,141 @@ fn ensure_cur_uv_version_in_range() {
         "CUR_UV_VERSION {CUR_UV_VERSION} does not satisfy the version requirement {}",
         &*UV_VERSION_RANGE
     );
+}
+
+#[test]
+fn wheel_platform_tag_x86_64_linux_gnu() -> Result<()> {
+    let tag = wheel_platform_tag_for_host(
+        OperatingSystem::Linux,
+        Architecture::X86_64,
+        Environment::Gnu,
+    )?;
+    assert_eq!(tag, "manylinux_2_17_x86_64.manylinux2014_x86_64");
+    Ok(())
+}
+
+#[test]
+fn wheel_platform_tag_x86_64_linux_musl() -> Result<()> {
+    let tag = wheel_platform_tag_for_host(
+        OperatingSystem::Linux,
+        Architecture::X86_64,
+        Environment::Musl,
+    )?;
+    assert_eq!(tag, "musllinux_1_1_x86_64");
+    Ok(())
+}
+
+#[test]
+fn wheel_platform_tag_i686_linux_gnu() -> Result<()> {
+    let tag = wheel_platform_tag_for_host(
+        OperatingSystem::Linux,
+        Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
+        Environment::Gnu,
+    )?;
+    assert_eq!(tag, "manylinux_2_17_i686.manylinux2014_i686");
+    Ok(())
+}
+
+#[test]
+fn wheel_platform_tag_i686_linux_musl() -> Result<()> {
+    let tag = wheel_platform_tag_for_host(
+        OperatingSystem::Linux,
+        Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
+        Environment::Musl,
+    )?;
+    assert_eq!(tag, "musllinux_1_1_i686");
+    Ok(())
+}
+
+#[test]
+fn wheel_platform_tag_aarch64_linux_gnu() -> Result<()> {
+    let tag = wheel_platform_tag_for_host(
+        OperatingSystem::Linux,
+        Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+        Environment::Gnu,
+    )?;
+    assert_eq!(
+        tag,
+        "manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64"
+    );
+    Ok(())
+}
+
+#[test]
+fn wheel_platform_tag_aarch64_linux_musl() -> Result<()> {
+    let tag = wheel_platform_tag_for_host(
+        OperatingSystem::Linux,
+        Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+        Environment::Musl,
+    )?;
+    // aarch64 uses a single dual-tagged wheel for both glibc and musl
+    assert_eq!(
+        tag,
+        "manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64"
+    );
+    Ok(())
+}
+
+#[test]
+fn wheel_platform_tag_armv7_linux_gnu() -> Result<()> {
+    let tag = wheel_platform_tag_for_host(
+        OperatingSystem::Linux,
+        Architecture::Arm(ArmArchitecture::Armv7),
+        Environment::Gnu,
+    )?;
+    assert_eq!(tag, "manylinux_2_17_armv7l.manylinux2014_armv7l");
+    Ok(())
+}
+
+#[test]
+fn wheel_platform_tag_armv7_linux_musl() -> Result<()> {
+    let tag = wheel_platform_tag_for_host(
+        OperatingSystem::Linux,
+        Architecture::Arm(ArmArchitecture::Armv7),
+        Environment::Musl,
+    )?;
+    assert_eq!(
+        tag,
+        "manylinux_2_17_armv7l.manylinux2014_armv7l.musllinux_1_1_armv7l"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn replace_uv_binary_overwrites_existing_file() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let source = temp.path().join("source-uv");
+    let target_dir = temp.path().join("tools").join("uv");
+    let target_path = target_dir.join("uv").with_extension(EXE_EXTENSION);
+
+    fs_err::create_dir_all(&target_dir)?;
+    fs_err::write(&source, b"new")?;
+    fs_err::write(&target_path, b"old")?;
+
+    replace_uv_binary(&source, &target_path).await?;
+
+    assert!(!source.exists());
+    assert_eq!(fs_err::read(&target_path)?, b"new");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn replace_uv_binary_recreates_missing_parent_dir() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let source = temp.path().join("source-uv");
+    let target_dir = temp.path().join("tools").join("uv");
+    let target_path = target_dir.join("uv").with_extension(EXE_EXTENSION);
+
+    fs_err::create_dir_all(&target_dir)?;
+    fs_err::write(&target_path, b"old")?;
+    fs_err::remove_dir_all(&target_dir)?;
+    fs_err::write(&source, b"new")?;
+
+    replace_uv_binary(&source, &target_path).await?;
+
+    assert!(target_dir.exists());
+    assert_eq!(fs_err::read(&target_path)?, b"new");
+
+    Ok(())
 }
