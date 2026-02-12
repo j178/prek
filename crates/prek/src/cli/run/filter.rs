@@ -72,10 +72,6 @@ impl<'a> FileTagFilter<'a> {
         }
         true
     }
-
-    pub(crate) fn for_hook(hook: &'a Hook) -> Self {
-        Self::new(&hook.types, &hook.types_or, &hook.exclude_types)
-    }
 }
 
 pub(crate) struct FileFilter<'a> {
@@ -84,7 +80,8 @@ pub(crate) struct FileFilter<'a> {
 }
 
 impl<'a> FileFilter<'a> {
-    // Here, `filenames` are paths relative to the workspace root.
+    /// Create a `FileFilter` for a project by filtering the input filenames with the project's relative path and include/exclude patterns.
+    /// `filenames` are paths relative to the workspace root.
     #[instrument(level = "trace", skip_all, fields(project = %project))]
     pub(crate) fn for_project<I>(
         filenames: I,
@@ -121,13 +118,12 @@ impl<'a> FileFilter<'a> {
                     true
                 }
             })
-            // Remove the relative_path from prefix for the filters
+            // Strip the project-relative prefix before applying project-level include/exclude patterns.
             .filter(|filename| {
-                filter.filter(
-                    filename
-                        .strip_prefix(project.relative_path())
-                        .unwrap_or(filename),
-                )
+                let relative = filename
+                    .strip_prefix(project.relative_path())
+                    .expect("Filename should start with project relative path");
+                filter.filter(relative)
             })
             .collect::<Vec<_>>();
 
@@ -172,15 +168,16 @@ impl<'a> FileFilter<'a> {
         let filter = FilenameFilter::new(hook.files.as_ref(), hook.exclude.as_ref());
 
         let filenames = self.filenames.par_iter().filter(|filename| {
-            if let Ok(stripped) = filename.strip_prefix(self.filename_prefix) {
-                filter.filter(stripped)
+            // Strip the project-relative prefix before applying hook-level include/exclude patterns.
+            if let Ok(relative) = filename.strip_prefix(self.filename_prefix) {
+                filter.filter(relative)
             } else {
                 false
             }
         });
 
         // Filter by hook `types`, `types_or` and `exclude_types`.
-        let filter = FileTagFilter::for_hook(hook);
+        let filter = FileTagFilter::new(&hook.types, &hook.types_or, &hook.exclude_types);
         let filenames = filenames.filter(|filename| match tags_from_path(filename) {
             Ok(tags) => filter.filter(&tags),
             Err(err) => {
@@ -193,7 +190,7 @@ impl<'a> FileFilter<'a> {
         let filenames: Vec<_> = filenames
             .map(|p| {
                 p.strip_prefix(self.filename_prefix)
-                    .expect("Failed to strip prefix")
+                    .expect("Filename should start with project relative path")
             })
             .collect();
 

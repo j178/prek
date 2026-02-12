@@ -939,10 +939,14 @@ fn nested_project_exclude_is_relative() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
-    // Top-level exclude should be applied to paths relative to each project,
-    // not the workspace root.
+    // Regression test for nested workspaces:
+    // `exclude` must be evaluated against paths *relative to each project root*.
+    //
+    // Concretely:
+    // - In the nested project, the file is seen as `excluded_by_project` and should be excluded by `^excluded_by_project$`.
+    // - In the root project, the same file is seen as `nested/excluded_by_project` and should NOT be excluded.
     let config = indoc! {r#"
-    exclude: \.pre-commit-config\.yaml$|^noinclude$
+    exclude: \.pre-commit-config\.yaml$|^excluded_by_project$
     repos:
       - repo: local
         hooks:
@@ -955,22 +959,33 @@ fn nested_project_exclude_is_relative() -> Result<()> {
     "#};
 
     // Workspace with a nested project.
-    context.setup_workspace(&["folder"], config)?;
+    context.setup_workspace(&["nested"], config)?;
+
+    // A root-level file which should be excluded by the root project (path is `excluded_by_project`).
+    // This keeps the snapshot focused on the nested files, while proving the regex is not
+    // accidentally matching `nested/excluded_by_project`.
+    context
+        .work_dir()
+        .child("excluded_by_project")
+        .write_str("")?;
 
     // Files inside the nested project: one that should be included and one excluded.
-    context.work_dir().child("folder/include").write_str("")?;
-    context.work_dir().child("folder/noinclude").write_str("")?;
+    context.work_dir().child("nested/include").write_str("")?;
+    context
+        .work_dir()
+        .child("nested/excluded_by_project")
+        .write_str("")?;
 
     context.git_add(".");
 
     // When running from the root with --all-files, the nested project's exclude
-    // pattern should see paths relative to `folder/`, so `noinclude` is excluded
+    // pattern should see paths relative to `nested/`, so `noinclude` is excluded
     // there but still visible from the root project.
     cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    Running hooks for `folder`:
+    Running hooks for `nested`:
     Show Files...............................................................Passed
     - hook id: show-files
     - duration: [TIME]
@@ -984,8 +999,8 @@ fn nested_project_exclude_is_relative() -> Result<()> {
     - duration: [TIME]
 
       Processing 2 files
-        - folder/noinclude
-        - folder/include
+        - nested/include
+        - nested/excluded_by_project
 
     ----- stderr -----
     ");
