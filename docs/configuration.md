@@ -293,6 +293,25 @@ Global *include* regex applied before hook-level filtering.
 
 This is usually used to narrow down the universe of files in large repositories.
 
+!!! note "What path is matched? (workspace + nested projects)"
+
+    `files` (and `exclude`) are matched against the file path **relative to the project root** — i.e. the directory containing the configuration file.
+
+    - For the root project, this is the workspace root.
+    - For a nested project, this is the nested project directory.
+
+    Example (workspace mode):
+
+    - Root project config: `./.pre-commit-config.yaml`
+    - Nested project config: `./nested/.pre-commit-config.yaml`
+
+    For a file at `nested/excluded_by_project`:
+
+    - Root project sees the path as `nested/excluded_by_project`
+    - Nested project sees the path as `excluded_by_project`
+
+    This matters most for anchored patterns like `^...$`.
+
 !!! tip "Regex matching"
 
     When `files` / `exclude` are regex strings, they are matched with *search* semantics (the pattern can match anywhere in the path).
@@ -354,6 +373,10 @@ Global *exclude* regex applied before hook-level filtering.
 - Default: no global exclude filter
 
 `exclude` is useful for generated folders, vendored code, or build outputs.
+
+!!! note "What path is matched?"
+
+    Same as [`files`](#top-level-files): the pattern is evaluated against the file path **relative to the project root** (the directory containing the config).
 
 !!! note "prek-only globs"
 
