@@ -170,8 +170,15 @@ pub(crate) async fn check_useless_excludes(
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
     let relative_path = hook.project().relative_path();
-    let input = collect_files(hook.work_dir(), CollectOptions::all_files()).await?;
-    let input: Vec<_> = input.into_iter().map(|f| relative_path.join(f)).collect();
+    // `collect_files` returns paths relative to the hook's project root.
+    // The meta hook itself runs from the workspace root, so we build both:
+    // - `input_project`: for matching `files`/`exclude` patterns (project-relative)
+    // - `input_workspace`: for `FileFilter` (workspace-relative)
+    let input_project = collect_files(hook.work_dir(), CollectOptions::all_files()).await?;
+    let input_workspace: Vec<_> = input_project
+        .iter()
+        .map(|f| relative_path.join(f))
+        .collect();
 
     let mut code = 0;
     let mut output = Vec::new();
@@ -182,7 +189,7 @@ pub(crate) async fn check_useless_excludes(
         project.with_relative_path(relative_path.to_path_buf());
 
         let config = project.config();
-        if !excludes_any(&input, None, config.exclude.as_ref()) {
+        if !excludes_any(&input_project, None, config.exclude.as_ref()) {
             code = 1;
             let display = config
                 .exclude
@@ -195,7 +202,7 @@ pub(crate) async fn check_useless_excludes(
             )?;
         }
 
-        let filter = FileFilter::for_project(input.iter(), &project, None);
+        let filter = FileFilter::for_project(input_workspace.iter(), &project, None);
 
         for repo in &config.repos {
             let hooks_iter: Box<dyn Iterator<Item = (&String, &HookOptions)>> = match repo {
@@ -212,7 +219,22 @@ pub(crate) async fn check_useless_excludes(
                     opts.exclude_types.as_deref().unwrap_or(&[]),
                 );
 
-                if !excludes_any(&filtered_files, opts.files.as_ref(), opts.exclude.as_ref()) {
+                // `filtered_files` is workspace-relative (it includes the project prefix).
+                // Match patterns against paths relative to the project root.
+                let filtered_files_relative: Vec<&Path> = if relative_path.as_os_str().is_empty() {
+                    filtered_files
+                } else {
+                    filtered_files
+                        .into_iter()
+                        .filter_map(|f| f.strip_prefix(relative_path).ok())
+                        .collect()
+                };
+
+                if !excludes_any(
+                    &filtered_files_relative,
+                    opts.files.as_ref(),
+                    opts.exclude.as_ref(),
+                ) {
                     code = 1;
                     let display = opts
                         .exclude

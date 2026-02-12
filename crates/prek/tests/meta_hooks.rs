@@ -221,3 +221,53 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn check_useless_excludes_workspace_paths_are_project_relative() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Workspace layout:
+    // - Root project has no hooks.
+    // - Nested project `app/` runs `check-useless-excludes`.
+    //
+    // Regression: in workspace mode, `files`/`exclude` matching must use paths *relative to the
+    // nested project root* (so anchored patterns like `^...$` work as expected).
+    let app = context.work_dir().child("app");
+    app.create_dir_all()?;
+    app.child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
+        exclude: '^global_excluded$'
+        repos:
+          - repo: meta
+            hooks:
+              - id: check-useless-excludes
+          - repo: local
+            hooks:
+              - id: ok
+                name: ok
+                language: system
+                entry: python3 -c 'import sys; sys.exit(0)'
+                exclude: '^hook_excluded$'
+        "})?;
+
+    // These files exist specifically so the anchored patterns above are NOT useless.
+    // If the meta hook mistakenly matches against `app/<name>` instead of `<name>`, it will fail.
+    app.child("global_excluded").write_str("ignored\n")?;
+    app.child("hook_excluded").write_str("ignored\n")?;
+
+    context.write_pre_commit_config("repos: []");
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("check-useless-excludes"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `app`:
+    Check useless excludes...................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
