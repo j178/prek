@@ -416,6 +416,10 @@ pub(crate) struct RemoteHook {
     ///
     /// This is only allowed in project config files (e.g. `.pre-commit-config.yaml`).
     /// It is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(with = "std::option::Option<crate::schema::PriorityNoFormat>")
+    )]
     pub priority: Option<u32>,
     #[serde(flatten)]
     pub options: HookOptions,
@@ -438,6 +442,10 @@ pub(crate) struct LocalHook {
     pub language: Language,
     /// Priority used by the scheduler to determine ordering and concurrency.
     /// Hooks with the same priority can run in parallel.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(with = "std::option::Option<crate::schema::PriorityNoFormat>")
+    )]
     pub priority: Option<u32>,
     #[serde(flatten)]
     pub options: HookOptions,
@@ -837,10 +845,13 @@ where
 // TODO: warn sensible regex
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(
     feature = "schemars",
-    schemars(title = "prek configuration file format")
+    derive(schemars::JsonSchema),
+    schemars(title = "prek.toml"),
+    schemars(description = "The configuration file for prek, a git hook manager written in Rust."),
+    schemars(extend("$id" = "https://www.schemastore.org/prek.json")),
+    schemars(extend("x-tombi-toml-version" = "v1.1.0")),
 )]
 pub(crate) struct Config {
     pub repos: Vec<Repo>,
