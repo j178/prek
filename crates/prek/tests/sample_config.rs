@@ -114,7 +114,6 @@ fn sample_config_toml() {
     # Configuration file for `prek`, a git hook framework written in Rust.
     # See https://prek.j178.dev for more information.
     #:schema https://www.schemastore.org/prek.json
-    #:tombi toml-version = "v1.1.0"
 
     [[repos]]
     repo = "builtin"
@@ -137,7 +136,6 @@ fn sample_config_format() {
     # Configuration file for `prek`, a git hook framework written in Rust.
     # See https://prek.j178.dev for more information.
     #:schema https://www.schemastore.org/prek.json
-    #:tombi toml-version = "v1.1.0"
 
     [[repos]]
     repo = "builtin"
@@ -227,7 +225,6 @@ fn respect_format_if_filename_missing() {
     # Configuration file for `prek`, a git hook framework written in Rust.
     # See https://prek.j178.dev for more information.
     #:schema https://www.schemastore.org/prek.json
-    #:tombi toml-version = "v1.1.0"
 
     [[repos]]
     repo = "builtin"
