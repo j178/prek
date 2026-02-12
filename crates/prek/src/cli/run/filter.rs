@@ -85,7 +85,6 @@ pub(crate) struct FileFilter<'a> {
 
 impl<'a> FileFilter<'a> {
     // Here, `filenames` are paths relative to the workspace root.
-    #[instrument(level = "trace", skip_all, fields(project = %project))]
     pub(crate) fn for_project<I>(
         filenames: I,
         project: &'a Project,
