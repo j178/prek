@@ -207,6 +207,7 @@ mod _gen {
             "$id".to_string(),
             "https://www.schemastore.org/prek.json".into(),
         );
+        schema.insert("x-tombi-toml-version".to_string(), "v1.1.0".into());
 
         serde_json::to_string_pretty(&schema).unwrap() + "\n"
     }

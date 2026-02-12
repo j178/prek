@@ -155,6 +155,7 @@
     "repos"
   ],
   "additionalProperties": true,
+  "x-tombi-toml-version": "v1.1.0",
   "definitions": {
     "Repo": {
       "description": "A repository of hooks, which can be remote, local, meta, or builtin.",
