@@ -330,3 +330,12 @@ jobs:
       "contents": "read"
       "id-token": "write"
       "pages": "write"
+
+  custom-publish-winget:
+    needs:
+      - plan
+      - announce
+    uses: ./.github/workflows/publish-winget.yml
+    with:
+      plan: ${{ needs.plan.outputs.val }}
+    secrets: inherit
