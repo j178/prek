@@ -27,17 +27,11 @@ default-filter = "binary_id(prek::languages) and test(haskell::)"
 inherits = "ci-core"
 default-filter = "binary_id(prek::languages) and test(julia::)"
 
-[test-groups]
-serial = { max-threads = 1 }
-
 [profile.lang-lua]
 inherits = "ci-core"
 default-filter = "binary_id(prek::languages) and test(lua::)"
-
-[[profile.lang-lua.overrides]]
-# Run Lua language tests sequentially on Windows.
-platform = "cfg(windows)"
-test-group = "serial"
+# LuaRocks can hit a race condition when multiple processes are installing the same package; run Lua tests serially.
+threads-required = "num-cpus"
 
 [profile.lang-node]
 inherits = "ci-core"
