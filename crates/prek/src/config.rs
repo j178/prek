@@ -416,10 +416,6 @@ pub(crate) struct RemoteHook {
     ///
     /// This is only allowed in project config files (e.g. `.pre-commit-config.yaml`).
     /// It is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(with = "std::option::Option<crate::schema::PriorityNoFormat>")
-    )]
     pub priority: Option<u32>,
     #[serde(flatten)]
     pub options: HookOptions,
@@ -442,10 +438,6 @@ pub(crate) struct LocalHook {
     pub language: Language,
     /// Priority used by the scheduler to determine ordering and concurrency.
     /// Hooks with the same priority can run in parallel.
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(with = "std::option::Option<crate::schema::PriorityNoFormat>")
-    )]
     pub priority: Option<u32>,
     #[serde(flatten)]
     pub options: HookOptions,

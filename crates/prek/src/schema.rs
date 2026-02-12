@@ -120,24 +120,6 @@ fn strip_null_acceptance(schema: &mut schemars::Schema) {
     }
 }
 
-/// A u32-like schema without `{"format": "uint32"}`.
-///
-/// We use this via `#[schemars(with = "...")]` on `Option<u32>` fields.
-pub(crate) struct PriorityNoFormat(u32);
-
-impl schemars::JsonSchema for PriorityNoFormat {
-    fn schema_name() -> Cow<'static, str> {
-        Cow::Borrowed("Priority")
-    }
-
-    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        schemars::json_schema!({
-            "type": "integer",
-            "minimum": 0,
-        })
-    }
-}
-
 impl schemars::JsonSchema for FilePattern {
     fn schema_name() -> Cow<'static, str> {
         Cow::Borrowed("FilePattern")
@@ -329,8 +311,9 @@ mod _gen {
     }
 
     fn generate() -> String {
-        let settings =
-            schemars::generate::SchemaSettings::draft07().with_transform(super::RemoveNullTypes);
+        let settings = schemars::generate::SchemaSettings::draft07()
+            .with_transform(schemars::transform::RestrictFormats::default())
+            .with_transform(super::RemoveNullTypes);
         let generator = schemars::SchemaGenerator::new(settings);
         let schema = generator.into_root_schema_for::<Config>();
         serde_json::to_string_pretty(&schema).unwrap() + "\n"

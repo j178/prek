@@ -198,7 +198,8 @@
         },
         "priority": {
           "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
-          "$ref": "#/definitions/Priority"
+          "type": "integer",
+          "minimum": 0
         },
         "alias": {
           "description": "Not documented in the official docs.",
@@ -330,10 +331,6 @@
         "system"
       ]
     },
-    "Priority": {
-      "type": "integer",
-      "minimum": 0
-    },
     "FilePattern": {
       "description": "A file pattern, either a regex or glob pattern(s).",
       "oneOf": [
@@ -425,7 +422,8 @@
         },
         "priority": {
           "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.",
-          "$ref": "#/definitions/Priority"
+          "type": "integer",
+          "minimum": 0
         },
         "alias": {
           "description": "Not documented in the official docs.",
@@ -578,7 +576,8 @@
         },
         "priority": {
           "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
-          "$ref": "#/definitions/Priority"
+          "type": "integer",
+          "minimum": 0
         },
         "alias": {
           "description": "Not documented in the official docs.",
@@ -736,7 +735,8 @@
         },
         "priority": {
           "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
-          "$ref": "#/definitions/Priority"
+          "type": "integer",
+          "minimum": 0
         },
         "alias": {
           "description": "Not documented in the official docs.",
