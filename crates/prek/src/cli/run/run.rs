@@ -555,12 +555,8 @@ impl StatusPrinter {
         } else {
             (prefix.dimmed().to_string(), prefix.width())
         };
-        let dots = self
-            .columns
-            .saturating_sub(prefix_width)
-            .saturating_sub(hook_name.width())
-            .saturating_sub(suffix.width())
-            .saturating_sub(status_width);
+        let used_width = prefix_width + hook_name.width() + suffix.width() + status_width;
+        let dots = self.columns.saturating_sub(used_width);
         let line = format!(
             "{prefix}{hook_name}{}{suffix}{status_line}",
             ".".repeat(dots),
@@ -1068,4 +1064,23 @@ async fn run_hook(
         exit_status,
         output: hook_output,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_printer_write_dots_saturates_instead_of_underflow() {
+        let status_printer = StatusPrinter {
+            printer: Printer::Silent,
+            columns: 10,
+        };
+
+        // This would underflow if computed with plain `-` on `usize`.
+        let long_name = "this hook name is definitely longer than ten columns";
+        status_printer
+            .write(long_name, "", RunStatus::Failed)
+            .expect("write should not fail");
+    }
 }
