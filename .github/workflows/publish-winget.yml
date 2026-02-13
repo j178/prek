@@ -22,6 +22,7 @@ jobs:
   winget:
     name: Publish to winget
     runs-on: ubuntu-latest
+    # Always skip prereleases; WinGet has no prerelease channel
     if: >-
       ${{
         inputs.plan == ''
