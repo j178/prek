@@ -116,6 +116,10 @@ fn language_version() -> anyhow::Result<()> {
         .read_dir()?
         .flatten()
         .filter_map(|d| {
+            if d.file_type().ok()?.is_symlink() {
+                // Skip symlinks, which may point to other versions.
+                return None;
+            }
             let filename = d.file_name().to_string_lossy().to_string();
             if filename.starts_with('.') {
                 None
