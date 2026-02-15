@@ -98,7 +98,7 @@ toml = { version = "0.9.5", default-features = false, features = [
   "preserve_order",
   "serde",
 ] }
-toml_edit = { version = "0.24.0" }
+toml_edit = { version = "0.25.0" }
 tracing = { version = "0.1.40" }
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 unicode-width = { version = "0.2.0", default-features = false }
