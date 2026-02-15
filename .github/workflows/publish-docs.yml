@@ -20,7 +20,7 @@ concurrency:
 permissions: {}
 
 env:
-  UV_VERSION: "0.9.27"
+  UV_VERSION: "0.10.2"
   # Match version used to compile `docs/requirements.txt`
   PYTHON_VERSION: "3.14"
 
