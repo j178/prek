@@ -3,15 +3,15 @@ members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
-version = "0.3.2"
+version = "0.3.3"
 edition = "2024"
 repository = "https://github.com/j178/prek"
 homepage = "https://prek.j178.dev/"
 license = "MIT"
 
 [workspace.dependencies]
-prek-consts = { path = "crates/prek-consts", version = "0.3.2" }
-prek-pty = { path = "crates/prek-pty", version = "0.3.2" }
+prek-consts = { path = "crates/prek-consts", version = "0.3.3" }
+prek-pty = { path = "crates/prek-pty", version = "0.3.3" }
 
 anstream = { version = "0.6.15" }
 anstyle-query = { version = "1.1.5" }
@@ -80,7 +80,7 @@ globset = { version = "0.4.18" }
 smallvec = { version = "1.15.1" }
 strum = { version = "0.27.2", features = ["derive"] }
 target-lexicon = { version = "0.13.0" }
-tempfile = { version = "3.13.0" }
+tempfile = { version = "3.25.0" }
 thiserror = { version = "2.0.11" }
 tokio = { version = "1.47.1", features = [
   "fs",
@@ -92,13 +92,13 @@ tokio = { version = "1.47.1", features = [
 ] }
 tokio-tar = { version = "0.5.6", package = "astral-tokio-tar" }
 tokio-util = { version = "0.7.13" }
-toml = { version = "0.9.5", default-features = false, features = [
+toml = { version = "1.0.1", default-features = false, features = [
   "fast_hash",
   "parse",
   "preserve_order",
   "serde",
 ] }
-toml_edit = { version = "0.24.0" }
+toml_edit = { version = "0.25.1" }
 tracing = { version = "0.1.40" }
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 unicode-width = { version = "0.2.0", default-features = false }

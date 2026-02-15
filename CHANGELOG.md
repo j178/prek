@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.3.3
+
+Released on 2026-02-15.
+
+### Enhancements
+
+- Read Python version specifier from hook repo `pyproject.toml` ([#1596](https://github.com/j178/prek/pull/1596))
+- Add `#:schema` directives to generated prek.toml ([#1597](https://github.com/j178/prek/pull/1597))
+- Add `prek util list-builtins` command ([#1600](https://github.com/j178/prek/pull/1600))
+- Expand install source detection to `mise`, `uv tool`, `pipx`, and `asdf` ([#1605](https://github.com/j178/prek/pull/1605), [#1607](https://github.com/j178/prek/pull/1607))
+- Add progress bar to `cache clean` and show removal summary ([#1616](https://github.com/j178/prek/pull/1616))
+- Make `yaml-to-toml` CONFIG argument optional ([#1593](https://github.com/j178/prek/pull/1593))
+- `prek uninstall` removes legacy scripts too ([#1622](https://github.com/j178/prek/pull/1622))
+
+### Bug fixes
+
+- Fix underflow when formatting summary output ([#1626](https://github.com/j178/prek/pull/1626))
+- Match `files/exclude` filter against relative path of nested project ([#1624](https://github.com/j178/prek/pull/1624))
+- Select `musllinux` wheel tag for uv on musl-based distros ([#1628](https://github.com/j178/prek/pull/1628))
+
+### Documentation
+
+- Clarify `prek list` description ([#1604](https://github.com/j178/prek/pull/1604))
+
+### Contributors
+
+- @ichoosetoaccept
+- @shaanmajid
+- @soraxas
+- @9999years
+- @j178
+
 ## 0.3.2
 
 Released on 2026-02-06.
