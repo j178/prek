@@ -15,7 +15,7 @@ permissions: {}
 env:
   # UV_VERSION should not greater than MAX_UV_VERSION in `languages/python/uv`.
   # Otherwise, tests jobs will install their own uv, and it will encounter concurrency issue.
-  UV_VERSION: "0.9.27"
+  UV_VERSION: "0.10.0"
   NODE_VERSION: "20"
   BUN_VERSION: "1.3"
   GO_VERSION: "1.24"
