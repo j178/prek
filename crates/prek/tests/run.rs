@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
@@ -7,9 +6,9 @@ use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use prek_consts::env_vars::EnvVars;
-use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
+use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PREK_TOML};
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 mod common;
 
@@ -75,6 +74,62 @@ fn run_basic() -> Result<()> {
 }
 
 #[test]
+fn run_glob_patterns_with_multiple_hooks() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-py
+                name: echo-py
+                entry: python3 -c "import sys; print('PY:' + ' '.join(sys.argv[2:]))" _
+                language: system
+                files:
+                  glob: src/**/*.py
+                verbose: true
+              - id: echo-md
+                name: echo-md
+                entry: python3 -c "import sys; print('MD:' + ' '.join(sys.argv[2:]))" _
+                language: system
+                files:
+                  glob: "**/*.md"
+                verbose: true
+    "#});
+
+    let src_dir = cwd.child("src");
+    src_dir.create_dir_all()?;
+    src_dir.child("main.py").write_str("print('hi')")?;
+    cwd.child("docs").create_dir_all()?;
+    cwd.child("docs/readme.md").write_str("# Docs")?;
+    cwd.child("notes.txt").write_str("note")?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-py..................................................................Passed
+    - hook id: echo-py
+    - duration: [TIME]
+
+      PY:src/main.py
+    echo-md..................................................................Passed
+    - hook id: echo-md
+    - duration: [TIME]
+
+      MD:docs/readme.md
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn run_in_non_git_repo() {
     let context = TestContext::new();
 
@@ -105,15 +160,19 @@ fn invalid_config() {
     context.write_pre_commit_config("invalid: config");
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to parse `.pre-commit-config.yaml`
-      caused by: missing field `repos`
-    "#);
+      caused by: error: line 1 column 1: missing field `repos`
+     --> <input>:1:1
+      |
+    1 | invalid: config
+      | ^ missing field `repos`
+    ");
 
     context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
@@ -524,7 +583,7 @@ fn config_not_staged() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
-    context.work_dir().child(CONFIG_FILE).touch()?;
+    context.work_dir().child(PRE_COMMIT_CONFIG_YAML).touch()?;
     context.git_add(".");
 
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -557,11 +616,7 @@ fn config_outside_repo() -> Result<()> {
     // Initialize a git repository in ./work.
     let root = context.work_dir().child("work");
     root.create_dir_all()?;
-    Command::new("git")
-        .arg("init")
-        .current_dir(&root)
-        .assert()
-        .success();
+    git_cmd(&root).arg("init").assert().success();
 
     // Create a configuration file in . (outside the repository).
     context
@@ -1332,24 +1387,21 @@ fn merge_conflicts() -> Result<()> {
     let cwd = context.work_dir();
     cwd.child("file.txt").write_str("Hello, world!")?;
     context.git_add(".");
-    context.configure_git_author();
     context.git_commit("Initial commit");
 
-    Command::new("git")
+    git_cmd(cwd)
         .arg("checkout")
         .arg("-b")
         .arg("feature")
-        .current_dir(cwd)
         .assert()
         .success();
     cwd.child("file.txt").write_str("Hello, world again!")?;
     context.git_add(".");
     context.git_commit("Feature commit");
 
-    Command::new("git")
+    git_cmd(cwd)
         .arg("checkout")
         .arg("master")
-        .current_dir(cwd)
         .assert()
         .success();
     cwd.child("file.txt")
@@ -1357,12 +1409,7 @@ fn merge_conflicts() -> Result<()> {
     context.git_add(".");
     context.git_commit("Master commit");
 
-    Command::new("git")
-        .arg("merge")
-        .arg("feature")
-        .current_dir(cwd)
-        .assert()
-        .code(1);
+    git_cmd(cwd).arg("merge").arg("feature").assert().code(1);
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -1575,7 +1622,6 @@ fn types_directory() -> Result<()> {
 fn run_last_commit() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     let cwd = context.work_dir();
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -1878,15 +1924,22 @@ fn minimum_prek_version() {
         )])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters, context.run(), @r#"
+    cmd_snapshot!(filters, context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to parse `.pre-commit-config.yaml`
-      caused by: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`. Please consider updating prek.
-    "#);
+      caused by: error: line 1 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
+     --> <input>:1:23
+      |
+    1 | minimum_prek_version: 10.0.0
+      |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
+    2 | repos:
+    3 |   - repo: local
+      |
+    ");
 }
 
 /// Run hooks that would echo color.
@@ -1913,6 +1966,7 @@ fn color() -> Result<()> {
           print('\033[1;32mHello, world!\033[0m')
       else:
           print('Hello, world!')
+      sys.stdout.flush()
   "};
     context.work_dir().child("color.py").write_str(script)?;
 
@@ -2000,8 +2054,6 @@ fn shebang_script() -> Result<()> {
 fn git_commit_a() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -2034,14 +2086,13 @@ fn git_commit_a() -> Result<()> {
     // Edit the file
     file.write_str("Hello, world again!\n")?;
 
-    let mut commit = Command::new("git");
+    let mut commit = git_cmd(cwd);
     commit
         .arg("commit")
         .arg("-a")
         .arg("-m")
         .arg("Update file")
-        .env(EnvVars::PREK_HOME, &**context.home_dir())
-        .current_dir(cwd);
+        .env(EnvVars::PREK_HOME, &**context.home_dir());
 
     let filters = context
         .filters()
@@ -2088,7 +2139,7 @@ fn write_pre_commit_config(path: &Path, hooks: &[(&str, &str)]) -> Result<()> {
     }
 
     std::fs::create_dir_all(path)?;
-    std::fs::write(path.join(CONFIG_FILE), yaml)?;
+    std::fs::write(path.join(PRE_COMMIT_CONFIG_YAML), yaml)?;
 
     Ok(())
 }
@@ -2114,22 +2165,22 @@ fn selectors_completion() -> Result<()> {
     // Unrelated non-project dir should not appear in subdir suggestions
     cwd.child("scratch").create_dir_all()?;
 
-    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @r"
+    cmd_snapshot!(context.filters(), context.run().env("COMPLETE", "fish").arg("--").arg("prek").arg(""), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    install	Install the prek git hook
-    install-hooks	Create hook environments for all hooks used in the config file
+    install	Install prek as a git hook under the `.git/hooks/` directory
+    install-hooks	Create environments for all hooks used in the config file
     run	Run hooks
-    list	List available hooks
-    uninstall	Uninstall the prek git hook
-    validate-config	Validate `.pre-commit-config.yaml` files
+    list	List hooks configured in the current workspace
+    uninstall	Uninstall prek from git hooks
+    validate-config	Validate configuration files (prek.toml or .pre-commit-config.yaml)
     validate-manifest	Validate `.pre-commit-hooks.yaml` files
-    sample-config	Produce a sample `.pre-commit-config.yaml` file
-    auto-update	Auto-update pre-commit config to the latest repos' versions
+    sample-config	Produce a sample configuration file (prek.toml or .pre-commit-config.yaml)
+    auto-update	Auto-update the `rev` field of repositories in the config file to the latest version
     cache	Manage the prek cache
-    init-template-dir	Install hook script in a directory intended for use with `git config init.templateDir`
     try-repo	Try the pre-commit hooks in the current repo
+    util	Utility commands
     self	`prek` self management
     app/
     app:
@@ -2143,7 +2194,7 @@ fn selectors_completion() -> Result<()> {
     --from-ref	The original ref in a `<from_ref>...<to_ref>` diff expression. Files changed in this diff will be run through the hooks
     --to-ref	The destination ref in a `from_ref...to_ref` diff expression. Defaults to `HEAD` if `from_ref` is specified
     --last-commit	Run hooks against the last commit. Equivalent to `--from-ref HEAD~1 --to-ref HEAD`
-    --hook-stage	The stage during which the hook is fired
+    --stage	The stage during which the hook is fired
     --show-diff-on-failure	When hooks fail, run `git diff` directly afterward
     --fail-fast	Stop running hooks after the first failure
     --dry-run	Do not run the hooks, but print the hooks that would have been run
@@ -2236,49 +2287,71 @@ fn reuse_env() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
-    context.write_pre_commit_config(indoc::indoc! {r"
+    let pkg_dir = context.work_dir().child("local_pkg");
+    pkg_dir.create_dir_all()?;
+    pkg_dir.child("setup.py").write_str(indoc::indoc! {r#"
+        from setuptools import setup
+
+        setup(
+            name="local-pkg",
+            version="0.1.0",
+            py_modules=["local_pkg"],
+        )
+    "#})?;
+    pkg_dir
+        .child("local_pkg.py")
+        .write_str("def hello():\n     print('hello')\n")?;
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
     repos:
-      - repo: https://github.com/PyCQA/flake8
-        rev: 7.1.1
+      - repo: local
         hooks:
-          - id: flake8
-            additional_dependencies: [flake8-errmsg]
-    "});
-
-    context
-        .work_dir()
-        .child("err.py")
-        .write_str("raise ValueError('error')\n")?;
-    context.git_add(".");
-
-    cmd_snapshot!(context.filters(), context.run(), @r"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-    flake8...................................................................Failed
-    - hook id: flake8
-    - exit code: 1
-
-      err.py:1:1: EM101 Exceptions must not use a string literal; assign to a variable first
-
-    ----- stderr -----
-    ");
-
-    // Remove dependencies, so the environment should not be reused.
-    context.write_pre_commit_config(indoc::indoc! {r"
-    repos:
-      - repo: https://github.com/PyCQA/flake8
-        rev: 7.1.1
-        hooks:
-          - id: flake8
-    "});
+          - id: reuse-env
+            name: reuse-env
+            language: python
+            entry: python -c "import local_pkg; local_pkg.hello()"
+            pass_filenames: false
+            additional_dependencies: ["./local_pkg"]
+            verbose: true
+    "#});
     context.git_add(".");
 
     cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    flake8...................................................................Passed
+    reuse-env................................................................Passed
+    - hook id: reuse-env
+    - duration: [TIME]
+
+      hello
+
+    ----- stderr -----
+    ");
+
+    // Remove dependencies, so the environment should not be reused.
+    context.write_pre_commit_config(indoc::indoc! {r#"
+    repos:
+      - repo: local
+        hooks:
+          - id: reuse-env
+            name: reuse-env
+            language: python
+            entry: python -c "print('ok')"
+            pass_filenames: false
+            verbose: true
+    "#});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    reuse-env................................................................Passed
+    - hook id: reuse-env
+    - duration: [TIME]
+
+      ok
 
     ----- stderr -----
     ");
@@ -2328,7 +2401,7 @@ fn alternate_config_file() -> Result<()> {
 
     context
         .work_dir()
-        .child(ALT_CONFIG_FILE)
+        .child(PRE_COMMIT_CONFIG_YML)
         .write_str(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -2355,7 +2428,7 @@ fn alternate_config_file() -> Result<()> {
 
     context
         .work_dir()
-        .child(CONFIG_FILE)
+        .child(PRE_COMMIT_CONFIG_YAML)
         .write_str(indoc::indoc! {r#"
         repos:
           - repo: local
@@ -2378,7 +2451,77 @@ fn alternate_config_file() -> Result<()> {
       Hello, world!
 
     ----- stderr -----
-    warning: Both `[TEMP_DIR]/.pre-commit-config.yaml` and `[TEMP_DIR]/.pre-commit-config.yml` exist, using `[TEMP_DIR]/.pre-commit-config.yaml` only
+    warning: Multiple configuration files found (`.pre-commit-config.yaml`, `.pre-commit-config.yml`); using `[TEMP_DIR]/.pre-commit-config.yaml`
+    ");
+
+    context
+        .work_dir()
+        .child(PREK_TOML)
+        .write_str(indoc::indoc! {r#"
+        [[repos]]
+        repo = "local"
+        hooks = [
+          {
+            id = "local-python-hook",
+            name = "local-python-hook",
+            language = "python",
+            entry = "python3 -c 'import sys; print(\"Hello, world!\")'"
+          }
+        ]
+    "#})?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--refresh").arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local-python-hook........................................................Passed
+    - hook id: local-python-hook
+    - duration: [TIME]
+
+      Hello, world!
+
+    ----- stderr -----
+    warning: Multiple configuration files found (`prek.toml`, `.pre-commit-config.yaml`, `.pre-commit-config.yml`); using `[TEMP_DIR]/prek.toml`
+    ");
+
+    Ok(())
+}
+
+/// Supports `prek.toml` as configuration file.
+#[test]
+fn prek_toml() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context
+        .work_dir()
+        .child(PREK_TOML)
+        .write_str(indoc::indoc! {r#"
+        [[repos]]
+        repo = "local"
+        hooks = [
+          {
+            id = "local-python-hook",
+            name = "local-python-hook",
+            language = "python",
+            entry = "python3 -c 'import sys; print(\"Hello, world!\")'"
+          }
+        ]
+    "#})?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local-python-hook........................................................Passed
+    - hook id: local-python-hook
+    - duration: [TIME]
+
+      Hello, world!
+
+    ----- stderr -----
     ");
 
     Ok(())
@@ -2388,7 +2531,6 @@ fn alternate_config_file() -> Result<()> {
 fn show_diff_on_failure() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.disable_auto_crlf();
 
     let config = indoc::indoc! {r#"
         repos:
@@ -2420,7 +2562,7 @@ fn show_diff_on_failure() -> Result<()> {
     - duration: [TIME]
     - files were modified by this hook
 
-    Hint: Some hooks made changes to the files.
+    hint: Some hooks made changes to the files.
     If you are seeing this message in CI, reproduce locally with: `prek run --all-files`
     To run prek as part of git workflow, use `prek install` to set up git hooks.
 
@@ -2466,14 +2608,9 @@ fn show_diff_on_failure() -> Result<()> {
     let app = context.work_dir().child("app");
     app.create_dir_all()?;
     app.child("file.txt").write_str("Original line\n")?;
-    app.child(CONFIG_FILE).write_str(config)?;
+    app.child(PRE_COMMIT_CONFIG_YAML).write_str(config)?;
 
-    Command::new("git")
-        .arg("add")
-        .arg(".")
-        .current_dir(&app)
-        .assert()
-        .success();
+    git_cmd(&app).arg("add").arg(".").assert().success();
 
     cmd_snapshot!(filters.clone(), context.run().env_remove(EnvVars::CI).current_dir(&app).arg("--show-diff-on-failure"), @r"
     success: false
@@ -2580,6 +2717,52 @@ fn run_quiet() {
     ");
 }
 
+/// Test `PREK_QUIET` environment variable.
+#[test]
+fn run_quiet_env() {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: success
+                name: success
+                entry: echo
+                language: system
+              - id: fail
+                name: fail
+                entry: fail
+                language: fail
+    "});
+    context.git_add(".");
+
+    // Run with `PREK_QUIET=1`, only print failed hooks.
+    cmd_snapshot!(context.filters(), context.run().env(EnvVars::PREK_QUIET, "1"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fail.....................................................................Failed
+    - hook id: fail
+    - exit code: 1
+
+      fail
+
+      .pre-commit-config.yaml
+
+    ----- stderr -----
+    ");
+
+    // Run with `PREK_QUIET=2`, does not print anything (silent mode).
+    cmd_snapshot!(context.filters(), context.run().env(EnvVars::PREK_QUIET, "2"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+}
+
 /// Test `prek run --log-file <file>` flag.
 #[test]
 fn run_log_file() {
@@ -2663,6 +2846,12 @@ fn system_language_version() {
                 language_version: system
                 entry: go version
                 pass_filenames: false
+              - id: system-bun
+                name: system-bun
+                language: bun
+                language_version: system
+                entry: bun -e 'console.log(`Bun ${Bun.version}`)'
+                pass_filenames: false
    "});
     context.git_add(".");
 
@@ -2672,7 +2861,8 @@ fn system_language_version() {
         context.run()
         .arg("system-node")
         .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
-        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist"), @r"
+        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist")
+        .env(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME, "bun-never-exist"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2688,7 +2878,8 @@ fn system_language_version() {
         context.run()
         .arg("system-go")
         .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
-        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist"), @r"
+        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist")
+        .env(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME, "bun-never-exist"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2699,15 +2890,21 @@ fn system_language_version() {
       caused by: No suitable system Go version found and downloads are disabled
     ");
 
-    // When binaries are available, hooks pass.
-    cmd_snapshot!(context.filters(), context.run(), @r"
-    success: true
-    exit_code: 0
+    cmd_snapshot!(
+        context.filters(),
+        context.run()
+        .arg("system-bun")
+        .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
+        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist")
+        .env(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME, "bun-never-exist"), @r"
+    success: false
+    exit_code: 2
     ----- stdout -----
-    system-node..............................................................Passed
-    system-go................................................................Passed
 
     ----- stderr -----
+    error: Failed to install hook `system-bun`
+      caused by: Failed to install bun
+      caused by: No suitable system Bun version found and downloads are disabled
     ");
 }
 
@@ -2753,7 +2950,7 @@ fn run_with_stdin_closed() {
               - id: check-stdin
                 name: check-stdin
                 language: python
-                entry: python -c 'import sys; sys.stdin.read(); print("STDIN closed")'
+                entry: python -c 'import sys; sys.stdin.read(); print("STDIN closed"); sys.stdout.flush()'
                 pass_filenames: false
                 verbose: true
     "#});
@@ -2784,4 +2981,127 @@ fn run_with_stdin_closed() {
 
     ----- stderr -----
     ");
+}
+
+/// Test `prek --version` outputs version info.
+#[test]
+fn version_info() {
+    // skip if not built in the git repository
+    if option_env!("PREK_COMMIT_HASH").is_none() {
+        return;
+    }
+    let context = TestContext::new();
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(
+            r"prek \d+\.\d+\.\d+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?(\+\d+)? \(\w{9} [\d\-T:\.]+\)",
+            "prek [CURRENT_VERSION] ([COMMIT] [DATE])",
+        )])
+        .collect::<Vec<_>>();
+    cmd_snapshot!(filters, context.command().arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek [CURRENT_VERSION] ([COMMIT] [DATE])
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn expands_tilde_in_prek_home() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: ok
+                name: ok
+                entry: echo ok
+                language: system
+    "});
+    context.git_add(".");
+
+    let fake_home = context.work_dir().child("fake-home");
+    fake_home.create_dir_all()?;
+
+    cmd_snapshot!(context.filters(), context
+        .run()
+        .env("HOME", fake_home.path())
+        .env("USERPROFILE", fake_home.path()) // For Windows
+        .env(EnvVars::PREK_HOME, "~/prek-store"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ok.......................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    let store = fake_home.child("prek-store");
+    store.child("README").assert(predicate::path::exists());
+    store.child("repos").assert(predicate::path::is_dir());
+    store.child("hooks").assert(predicate::path::is_dir());
+    store.child("scratch").assert(predicate::path::is_dir());
+
+    // Ensure we didn't create a literal `./~` directory under the project.
+    context
+        .work_dir()
+        .child("~")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+#[test]
+fn run_with_tree_object_as_ref() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo files
+                entry: echo
+                language: system
+                pass_filenames: true
+    "});
+
+    // Create initial commit
+    cwd.child("file1.txt").write_str("hello")?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    // Create some changes and stage them
+    cwd.child("file2.txt").write_str("world")?;
+    context.git_add("file2.txt");
+
+    // Get the tree object from the staged changes
+    let tree_output = git_cmd(cwd)
+        .arg("write-tree")
+        .output()
+        .expect("Failed to run git write-tree");
+    let tree_sha = String::from_utf8_lossy(&tree_output.stdout)
+        .trim()
+        .to_string();
+
+    // Run prek with tree object as to-ref (should work with .. syntax)
+    cmd_snapshot!(context.filters(), context.run()
+        .arg("--from-ref").arg("HEAD")
+        .arg("--to-ref").arg(&tree_sha), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo files...............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
 }

@@ -3,9 +3,10 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use itertools::Itertools;
 use owo_colors::OwoColorize;
+use prek_consts::PREK_TOML;
 use tempfile::TempDir;
+use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Value};
 
 use crate::cli::ExitStatus;
 use crate::cli::run::Selectors;
@@ -135,6 +136,31 @@ async fn prepare_repo_and_rev<'a>(
     }
 }
 
+fn render_repo_config_toml(repo_path: &str, rev: &str, hooks: Vec<String>) -> String {
+    let mut doc = DocumentMut::new();
+    let mut repo_table = toml_edit::Table::new();
+    repo_table["repo"] = toml_edit::value(repo_path);
+    repo_table["rev"] = toml_edit::value(rev);
+
+    let mut hooks_array = Array::new();
+    hooks_array.set_trailing_comma(true);
+    hooks_array.set_trailing("\n");
+    for hook_id in hooks {
+        let mut hook_table = InlineTable::new();
+        hook_table.insert("id", hook_id.into());
+        let mut value = Value::InlineTable(hook_table);
+        value.decor_mut().set_prefix("\n  ");
+        hooks_array.push(value);
+    }
+    repo_table.insert("hooks", Item::Value(Value::Array(hooks_array)));
+
+    let mut repos = ArrayOfTables::new();
+    repos.push(repo_table);
+    doc["repos"] = Item::ArrayOfTables(repos);
+
+    doc.to_string()
+}
+
 pub(crate) async fn try_repo(
     config: Option<PathBuf>,
     repo: String,
@@ -165,38 +191,33 @@ pub(crate) async fn try_repo(
 
     let selectors = Selectors::load(&run_args.includes, &run_args.skips, GIT_ROOT.as_ref()?)?;
 
-    let manifest = config::read_manifest(&repo_clone_path.join(prek_consts::MANIFEST_FILE))?;
-    let hooks_str = manifest
+    let manifest =
+        config::read_manifest(&repo_clone_path.join(prek_consts::PRE_COMMIT_HOOKS_YAML))?;
+
+    let hooks = manifest
         .hooks
         .into_iter()
         .filter(|hook| selectors.matches_hook_id(&hook.id))
-        .map(|hook| format!("{}- id: {}", " ".repeat(6), hook.id))
-        .join("\n");
+        .map(|hook| hook.id)
+        .collect::<Vec<_>>();
 
-    let config_str = indoc::formatdoc! {r"
-    repos:
-      - repo: {repo_path}
-        rev: {rev}
-        hooks:
-    {hooks_str}
-    ",
-        repo_path = repo_path,
-        rev = rev,
-        hooks_str = hooks_str,
-    };
-
-    let config_file = tmp_dir.path().join(prek_consts::CONFIG_FILE);
+    let config_str = render_repo_config_toml(&repo_path, &rev, hooks);
+    let config_file = tmp_dir.path().join(PREK_TOML);
     fs_err::tokio::write(&config_file, &config_str).await?;
 
-    writeln!(printer.stdout(), "{}", "Using config:".cyan().bold())?;
-    write!(printer.stdout(), "{}", config_str.dimmed())?;
+    writeln!(
+        printer.stdout(),
+        "{}",
+        format!("Using generated `{PREK_TOML}`:").cyan().bold()
+    )?;
+    writeln!(printer.stdout(), "{}", config_str.dimmed())?;
 
     crate::cli::run(
         &store,
         Some(config_file),
         vec![],
         vec![],
-        run_args.hook_stage,
+        run_args.stage,
         run_args.from_ref,
         run_args.to_ref,
         run_args.all_files,

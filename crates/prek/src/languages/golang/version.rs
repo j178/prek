@@ -64,6 +64,21 @@ pub(crate) enum GoRequest {
     // MajorMinorPrerelease(u64, u64, String),
 }
 
+impl Display for GoRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GoRequest::Any => write!(f, "any"),
+            GoRequest::Major(major) => write!(f, "go{major}"),
+            GoRequest::MajorMinor(major, minor) => write!(f, "go{major}.{minor}"),
+            GoRequest::MajorMinorPatch(major, minor, patch) => {
+                write!(f, "go{major}.{minor}.{patch}")
+            }
+            GoRequest::Path(path) => write!(f, "path: {}", path.display()),
+            GoRequest::Range(_, raw) => write!(f, "{raw}"),
+        }
+    }
+}
+
 impl FromStr for GoRequest {
     type Err = Error;
 
@@ -138,8 +153,103 @@ impl GoRequest {
             GoRequest::MajorMinorPatch(major, minor, patch) => {
                 version.0.major == *major && version.0.minor == *minor && version.0.patch == *patch
             }
+            // FIXME: consider resolving symlinks and normalizing paths before comparison
             GoRequest::Path(path) => toolchain.is_some_and(|t| t == path),
             GoRequest::Range(req, _) => req.matches(&version.0),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_go_request_from_str() {
+        let cases = vec![
+            ("", GoRequest::Any),
+            ("go", GoRequest::Any),
+            ("go1", GoRequest::Major(1)),
+            ("1", GoRequest::Major(1)),
+            ("go1.20", GoRequest::MajorMinor(1, 20)),
+            ("1.20", GoRequest::MajorMinor(1, 20)),
+            ("go1.20.3", GoRequest::MajorMinorPatch(1, 20, 3)),
+            ("1.20.3", GoRequest::MajorMinorPatch(1, 20, 3)),
+            (
+                ">= 1.20, < 1.22",
+                GoRequest::Range(
+                    semver::VersionReq::parse(">= 1.20, < 1.22").unwrap(),
+                    ">= 1.20, < 1.22".into(),
+                ),
+            ),
+        ];
+
+        for (input, expected) in cases {
+            let req = GoRequest::from_str(input).unwrap();
+            assert_eq!(req, expected, "Input: {input}");
+        }
+    }
+
+    #[test]
+    fn test_go_request_invalid() {
+        let invalid_cases = vec!["go1.20.3.4", "go1.beta", "invalid_version"];
+        for input in invalid_cases {
+            let req = GoRequest::from_str(input);
+            assert!(req.is_err(), "Input: {input}");
+        }
+    }
+
+    #[test]
+    fn test_go_request_matches() {
+        let version = GoVersion(semver::Version::new(1, 20, 3));
+        let cases = vec![
+            (GoRequest::Any, true),
+            (GoRequest::Major(1), true),
+            (GoRequest::Major(2), false),
+            (GoRequest::MajorMinor(1, 20), true),
+            (GoRequest::MajorMinor(1, 21), false),
+            (GoRequest::MajorMinorPatch(1, 20, 3), true),
+            (GoRequest::MajorMinorPatch(1, 20, 4), false),
+            (
+                GoRequest::Range(
+                    semver::VersionReq::parse(">= 1.19, < 1.21").unwrap(),
+                    ">= 1.19, < 1.21".into(),
+                ),
+                true,
+            ),
+            (
+                GoRequest::Range(
+                    semver::VersionReq::parse(">= 1.21").unwrap(),
+                    ">= 1.21".into(),
+                ),
+                false,
+            ),
+        ];
+
+        for (req, expected) in cases {
+            let result = req.matches(&version, None);
+            assert_eq!(result, expected, "Request: {req}");
+        }
+    }
+
+    #[test]
+    fn test_go_request_display() {
+        let cases = vec![
+            (GoRequest::Any, "any"),
+            (GoRequest::Major(1), "go1"),
+            (GoRequest::MajorMinor(1, 20), "go1.20"),
+            (GoRequest::MajorMinorPatch(1, 20, 3), "go1.20.3"),
+            (
+                GoRequest::Range(
+                    semver::VersionReq::parse(">= 1.20, < 1.22").unwrap(),
+                    ">= 1.20, < 1.22".into(),
+                ),
+                ">= 1.20, < 1.22",
+            ),
+        ];
+        for (req, expected) in cases {
+            let req_str = req.to_string();
+            assert_eq!(req_str, expected, "Request: {req:?}");
         }
     }
 }

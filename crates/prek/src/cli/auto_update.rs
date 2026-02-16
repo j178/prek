@@ -4,16 +4,15 @@ use std::process::Stdio;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
-use bstr::ByteSlice;
 use futures::StreamExt;
 use itertools::Itertools;
 use lazy_regex::regex;
 use owo_colors::OwoColorize;
-use prek_consts::MANIFEST_FILE;
+use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
-use serde::Serializer;
-use serde::ser::SerializeMap;
+use semver::Version;
+use toml_edit::DocumentMut;
 use tracing::{debug, trace};
 
 use crate::cli::ExitStatus;
@@ -25,6 +24,7 @@ use crate::printer::Printer;
 use crate::run::CONCURRENCY;
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
+use crate::yaml::serialize_yaml_scalar;
 use crate::{config, git};
 
 #[derive(Default, Clone)]
@@ -90,7 +90,7 @@ pub(crate) async fn auto_update(
         })
         .max(1);
 
-    let reporter = AutoUpdateReporter::from(printer);
+    let reporter = AutoUpdateReporter::new(printer);
 
     let mut tasks = futures::stream::iter(repo_updates.iter().filter(|(remote_repo, _)| {
         // Filter by user specified repositories
@@ -126,13 +126,9 @@ pub(crate) async fn auto_update(
     for (remote_repo, result) in tasks {
         match result {
             Ok(new_rev) => {
-                if remote_repo.rev == new_rev.rev {
-                    writeln!(
-                        printer.stdout(),
-                        "[{}] already up to date",
-                        remote_repo.repo.as_str().yellow()
-                    )?;
-                } else {
+                let is_changed = remote_repo.rev != new_rev.rev;
+
+                if is_changed {
                     writeln!(
                         printer.stdout(),
                         "[{}] updating {} -> {}",
@@ -140,10 +136,16 @@ pub(crate) async fn auto_update(
                         remote_repo.rev,
                         new_rev.rev
                     )?;
+                } else {
+                    writeln!(
+                        printer.stdout(),
+                        "[{}] already up to date",
+                        remote_repo.repo.as_str().yellow()
+                    )?;
                 }
 
                 // Apply this update to all projects that reference this repo
-                if let Some(projects) = repo_updates.get(&remote_repo) {
+                if is_changed && let Some(projects) = repo_updates.get(&remote_repo) {
                     for RepoInfo {
                         project,
                         remote_size,
@@ -288,6 +290,9 @@ async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<String>> {
 }
 
 /// Returns all tags and their Unix timestamps (newest first).
+///
+/// Within groups of tags sharing the same timestamp, semver-parseable tags
+/// are sorted highest version first; non-semver tags sort after them.
 async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
     let output = git::git_cmd("git for-each-ref")?
         .arg("for-each-ref")
@@ -302,7 +307,7 @@ async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
         .output()
         .await?;
 
-    Ok(String::from_utf8_lossy(&output.stdout)
+    let mut tags: Vec<(String, u64)> = String::from_utf8_lossy(&output.stdout)
         .lines()
         .filter_map(|line| {
             let mut parts = line.split_whitespace();
@@ -311,7 +316,26 @@ async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
             let ts: u64 = ts_str.parse().ok()?;
             Some((tag.to_string(), ts))
         })
-        .collect())
+        .collect();
+
+    // Deterministic sort: primary key is timestamp (newest first).
+    // Within equal timestamps, prefer higher semver versions; non-semver tags
+    // sort after semver ones. As a final tie-breaker, compare the tag refname
+    // so ordering is stable across platforms/filesystems.
+    tags.sort_by(|(tag_a, ts_a), (tag_b, ts_b)| {
+        ts_b.cmp(ts_a).then_with(|| {
+            let ver_a = Version::parse(tag_a.strip_prefix('v').unwrap_or(tag_a));
+            let ver_b = Version::parse(tag_b.strip_prefix('v').unwrap_or(tag_b));
+            match (ver_a, ver_b) {
+                (Ok(a), Ok(b)) => b.cmp(&a).then_with(|| tag_a.cmp(tag_b)),
+                (Ok(_), Err(_)) => std::cmp::Ordering::Less,
+                (Err(_), Ok(_)) => std::cmp::Ordering::Greater,
+                (Err(_), Err(_)) => tag_a.cmp(tag_b),
+            }
+        })
+    });
+
+    Ok(tags)
 }
 
 async fn resolve_revision(
@@ -377,7 +401,7 @@ async fn checkout_and_validate_manifest(
     if cfg!(windows) {
         git::git_cmd("git show")?
             .arg("show")
-            .arg(format!("{rev}:{MANIFEST_FILE}"))
+            .arg(format!("{rev}:{PRE_COMMIT_HOOKS_YAML}"))
             .current_dir(repo_path)
             .remove_git_envs()
             .stdout(Stdio::null())
@@ -391,7 +415,7 @@ async fn checkout_and_validate_manifest(
         .arg("--quiet")
         .arg(rev)
         .arg("--")
-        .arg(MANIFEST_FILE)
+        .arg(PRE_COMMIT_HOOKS_YAML)
         .current_dir(repo_path)
         .remove_git_envs()
         .stdout(Stdio::null())
@@ -399,7 +423,7 @@ async fn checkout_and_validate_manifest(
         .status()
         .await?;
 
-    let manifest = config::read_manifest(&repo_path.join(MANIFEST_FILE))?;
+    let manifest = config::read_manifest(&repo_path.join(PRE_COMMIT_HOOKS_YAML))?;
     let new_hook_ids = manifest
         .hooks
         .into_iter()
@@ -452,8 +476,104 @@ async fn get_best_candidate_tag(repo: &Path, rev: &str, current_rev: &str) -> Re
 }
 
 async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result<()> {
-    let mut lines = fs_err::tokio::read_to_string(path)
-        .await?
+    let content = fs_err::tokio::read_to_string(path).await?;
+    let new_content = match path.extension() {
+        Some(ext) if ext.eq_ignore_ascii_case("toml") => {
+            render_updated_toml_config(path, &content, revisions)?
+        }
+        _ => render_updated_yaml_config(path, &content, revisions)?,
+    };
+
+    fs_err::tokio::write(path, new_content)
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to write updated config file `{}`",
+                path.user_display()
+            )
+        })?;
+
+    Ok(())
+}
+
+fn render_updated_toml_config(
+    path: &Path,
+    content: &str,
+    revisions: &[Option<Revision>],
+) -> Result<String> {
+    let mut doc = content.parse::<DocumentMut>()?;
+    let Some(repos) = doc
+        .get_mut("repos")
+        .and_then(|item| item.as_array_of_tables_mut())
+    else {
+        anyhow::bail!("Missing `[[repos]]` array in `{}`", path.user_display());
+    };
+
+    let mut remote_repos = Vec::new();
+    for table in repos.iter_mut() {
+        let repo_value = table
+            .get("repo")
+            .and_then(|item| item.as_value())
+            .and_then(|value| value.as_str())
+            .unwrap_or_default();
+
+        if matches!(repo_value, "local" | "meta" | "builtin") {
+            continue;
+        }
+
+        if !table.contains_key("rev") {
+            anyhow::bail!(
+                "Found remote repo without `rev` in `{}`",
+                path.user_display()
+            );
+        }
+
+        remote_repos.push(table);
+    }
+
+    if remote_repos.len() != revisions.len() {
+        anyhow::bail!(
+            "Found {} remote repos in `{}` but expected {}, file content may have changed",
+            remote_repos.len(),
+            path.user_display(),
+            revisions.len()
+        );
+    }
+
+    for (table, revision) in remote_repos.into_iter().zip_eq(revisions) {
+        let Some(revision) = revision else {
+            continue;
+        };
+
+        let Some(value) = table.get_mut("rev").and_then(|item| item.as_value_mut()) else {
+            continue;
+        };
+
+        let suffix = value
+            .decor()
+            .suffix()
+            .and_then(|s| s.as_str())
+            .filter(|s| !s.trim_start().starts_with("# frozen:"))
+            .map(str::to_string);
+
+        *value = toml_edit::Value::from(revision.rev.clone());
+
+        if let Some(frozen) = &revision.frozen {
+            value.decor_mut().set_suffix(format!(" # frozen: {frozen}"));
+        } else if let Some(suffix) = suffix {
+            value.decor_mut().set_suffix(suffix);
+        }
+    }
+
+    Ok(doc.to_string())
+}
+
+fn render_updated_yaml_config(
+    path: &Path,
+    content: &str,
+    revisions: &[Option<Revision>],
+) -> Result<String> {
+    let mut lines = content
         .split_inclusive('\n')
         .map(ToString::to_string)
         .collect::<Vec<_>>();
@@ -487,25 +607,15 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
             continue;
         };
 
-        let mut new_rev = Vec::new();
-        let mut serializer = serde_yaml::Serializer::new(&mut new_rev);
-        serializer
-            .serialize_map(Some(1))?
-            .serialize_entry("rev", &revision.rev)?;
-        serializer.end()?;
-
-        let (_, new_rev) = new_rev
-            .to_str()?
-            .split_once(':')
-            .expect("Failed to split serialized revision");
-
         let caps = rev_regex
             .captures(&lines[*line_no])
             .context("Failed to capture rev line")?;
 
+        let new_rev = serialize_yaml_scalar(&revision.rev, &caps[3])?;
+
         let comment = if let Some(frozen) = &revision.frozen {
             format!("  # frozen: {frozen}")
-        } else if caps[5].trim().starts_with("# frozen:") {
+        } else if caps[5].trim_start().starts_with("# frozen:") {
             String::new()
         } else {
             caps[5].to_string()
@@ -513,29 +623,17 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
 
         lines[*line_no] = format!(
             "{}rev:{}{}{}{}",
-            &caps[1],
-            &caps[2],
-            new_rev.trim(),
-            comment,
-            &caps[6]
+            &caps[1], &caps[2], new_rev, comment, &caps[6]
         );
     }
 
-    fs_err::tokio::write(path, lines.join("").as_bytes())
-        .await
-        .with_context(|| {
-            format!(
-                "Failed to write updated config file `{}`",
-                path.user_display()
-            )
-        })?;
-
-    Ok(())
+    Ok(lines.join(""))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::process::Cmd;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     async fn setup_test_repo() -> tempfile::TempDir {
@@ -574,7 +672,14 @@ mod tests {
         // First commit (required before creating a branch)
         git::git_cmd("git commit")
             .unwrap()
-            .args(["commit", "--allow-empty", "-m", "initial"])
+            .args([
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "initial",
+            ])
             .current_dir(repo)
             .remove_git_envs()
             .output()
@@ -594,14 +699,17 @@ mod tests {
         tmp
     }
 
+    fn git_cmd(dir: impl AsRef<Path>, summary: &str) -> Cmd {
+        let mut cmd = git::git_cmd(summary).unwrap();
+        cmd.current_dir(dir)
+            .args(["-c", "commit.gpgsign=false"])
+            .args(["-c", "tag.gpgsign=false"]);
+        cmd
+    }
+
     async fn create_commit(repo: &Path, message: &str) {
-        git::git_cmd("git commit")
-            .unwrap()
-            .arg("commit")
-            .arg("--allow-empty")
-            .arg("-m")
-            .arg(message)
-            .current_dir(repo)
+        git_cmd(repo, "git commit")
+            .args(["commit", "--allow-empty", "-m", message])
             .remove_git_envs()
             .output()
             .await
@@ -617,15 +725,10 @@ mod tests {
 
         let date_str = format!("{timestamp} +0000");
 
-        git::git_cmd("git commit")
-            .unwrap()
-            .arg("commit")
-            .arg("--allow-empty")
-            .arg("-m")
-            .arg(message)
+        git_cmd(repo, "git commit")
+            .args(["commit", "--allow-empty", "-m", message])
             .env("GIT_AUTHOR_DATE", &date_str)
             .env("GIT_COMMITTER_DATE", &date_str)
-            .current_dir(repo)
             .remove_git_envs()
             .output()
             .await
@@ -633,12 +736,9 @@ mod tests {
     }
 
     async fn create_lightweight_tag(repo: &Path, tag: &str) {
-        git::git_cmd("git tag")
-            .unwrap()
+        git_cmd(repo, "git tag")
             .arg("tag")
             .arg(tag)
-            .arg("--no-sign")
-            .current_dir(repo)
             .remove_git_envs()
             .output()
             .await
@@ -654,15 +754,13 @@ mod tests {
 
         let date_str = format!("{timestamp} +0000");
 
-        git::git_cmd("git tag")
-            .unwrap()
+        git_cmd(repo, "git tag")
             .arg("tag")
             .arg(tag)
             .arg("-m")
             .arg(tag)
             .env("GIT_AUTHOR_DATE", &date_str)
             .env("GIT_COMMITTER_DATE", &date_str)
-            .current_dir(repo)
             .remove_git_envs()
             .output()
             .await
@@ -832,5 +930,41 @@ mod tests {
         let rev = resolve_revision(repo, "v1.2.3", false, 1).await.unwrap();
 
         assert_eq!(rev, Some("v1.2.0".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_tag_timestamps_stable_order_for_equal_timestamps() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        // Create multiple tags on the same commit (same timestamp)
+        create_backdated_commit(repo, "release", 5).await;
+        create_lightweight_tag(repo, "v1.0.0").await;
+        create_lightweight_tag(repo, "v1.0.3").await;
+        create_lightweight_tag(repo, "v1.0.5").await;
+        create_lightweight_tag(repo, "v1.0.2").await;
+
+        let timestamps = get_tag_timestamps(repo).await.unwrap();
+
+        // All timestamps are equal (tags on same commit).
+        // Within equal timestamps, semver tags should sort highest version first.
+        let tags: Vec<&str> = timestamps.iter().map(|(t, _)| t.as_str()).collect();
+        assert_eq!(tags, vec!["v1.0.5", "v1.0.3", "v1.0.2", "v1.0.0"]);
+    }
+
+    #[tokio::test]
+    async fn test_get_tag_timestamps_deterministic_order_for_equal_timestamp_non_semver() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        // Lightweight tags on the same commit share a timestamp.
+        create_backdated_commit(repo, "release", 5).await;
+        create_lightweight_tag(repo, "beta").await;
+        create_lightweight_tag(repo, "alpha").await;
+        create_lightweight_tag(repo, "gamma").await;
+
+        let timestamps = get_tag_timestamps(repo).await.unwrap();
+        let tags: Vec<&str> = timestamps.iter().map(|(t, _)| t.as_str()).collect();
+        assert_eq!(tags, vec!["alpha", "beta", "gamma"]);
     }
 }

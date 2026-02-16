@@ -11,7 +11,7 @@ use std::sync::{Arc, LazyLock};
 use anyhow::{Context, Result};
 use lazy_regex::regex;
 use prek_consts::env_vars::EnvVars;
-use tracing::{debug, trace, warn};
+use tracing::{trace, warn};
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::{Hook, InstallInfo, InstalledHook};
@@ -111,6 +111,7 @@ fn container_id_from_cgroup_v2(mount_info: impl AsRef<Path>) -> Result<String> {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum RuntimeKind {
     Auto,
+    AppleContainer,
     Docker,
     Podman,
 }
@@ -120,6 +121,7 @@ impl FromStr for RuntimeKind {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_str() {
+            "container" => Ok(RuntimeKind::AppleContainer),
             "docker" => Ok(RuntimeKind::Docker),
             "podman" => Ok(RuntimeKind::Podman),
             "auto" => Ok(RuntimeKind::Auto),
@@ -139,6 +141,7 @@ struct Mount {
 impl RuntimeKind {
     fn cmd(&self) -> &str {
         match self {
+            RuntimeKind::AppleContainer => "container",
             RuntimeKind::Docker => "docker",
             RuntimeKind::Podman => "podman",
             RuntimeKind::Auto => unreachable!("Auto should be resolved before use"),
@@ -148,6 +151,7 @@ impl RuntimeKind {
     /// Detect if the current runtime is rootless.
     fn detect_rootless(self) -> Result<bool> {
         match self {
+            RuntimeKind::AppleContainer => Ok(false),
             RuntimeKind::Docker => {
                 let output = Command::new(self.cmd())
                     .arg("info")
@@ -162,7 +166,7 @@ impl RuntimeKind {
                 let output = Command::new(self.cmd())
                     .arg("info")
                     .arg("--format")
-                    .arg("'{{ .Host.Security.Rootless }}'")
+                    .arg("{{ .Host.Security.Rootless -}}")
                     .output()?;
 
                 let stdout = str::from_utf8(&output.stdout)?;
@@ -206,20 +210,22 @@ struct ContainerRuntimeInfo {
 impl ContainerRuntimeInfo {
     /// Detect container runtime provider, prioritise docker over podman if
     /// both are on the path, unless `PREK_CONTAINER_RUNTIME` is set to override detection.
-    fn resolve_runtime_kind<DF, PF>(
+    fn resolve_runtime_kind<DF, PF, CF>(
         env_override: Option<String>,
         docker_available: DF,
         podman_available: PF,
+        apple_container_available: CF,
     ) -> RuntimeKind
     where
         DF: Fn() -> bool,
         PF: Fn() -> bool,
+        CF: Fn() -> bool,
     {
         if let Some(val) = env_override {
             match RuntimeKind::from_str(&val) {
                 Ok(runtime) => {
                     if runtime != RuntimeKind::Auto {
-                        debug!(
+                        trace!(
                             "Container runtime overridden by {}={}",
                             EnvVars::PREK_CONTAINER_RUNTIME,
                             val
@@ -243,8 +249,11 @@ impl ContainerRuntimeInfo {
         if podman_available() {
             return RuntimeKind::Podman;
         }
+        if apple_container_available() {
+            return RuntimeKind::AppleContainer;
+        }
 
-        debug!("No container runtime found on PATH, defaulting to docker");
+        trace!("No container runtime found on PATH, defaulting to docker");
         RuntimeKind::Docker
     }
 
@@ -253,6 +262,7 @@ impl ContainerRuntimeInfo {
             EnvVars::var(EnvVars::PREK_CONTAINER_RUNTIME).ok(),
             || which::which("docker").is_ok(),
             || which::which("podman").is_ok(),
+            || which::which("container").is_ok(),
         );
         let rootless = runtime.detect_rootless().unwrap_or_else(|e| {
             warn!("Failed to detect if container runtime is rootless: {e}, defaulting to rootful");
@@ -281,6 +291,10 @@ impl ContainerRuntimeInfo {
 
     fn is_podman(&self) -> bool {
         self.runtime == RuntimeKind::Podman
+    }
+
+    fn is_apple_container(&self) -> bool {
+        self.runtime == RuntimeKind::AppleContainer
     }
 
     /// Get the path of the current directory in the host.
@@ -386,15 +400,24 @@ impl Docker {
             // the same as current `uid:gid` on the host - see subuid / subgid.
         }
 
+        // https://docs.docker.com/reference/cli/docker/container/run/#volumes-from
+        // The `Z` option tells Docker to label the content with a private
+        // unshared label. Only the current container can use a private volume.
         let work_dir = CONTAINER_RUNTIME.map_to_host_path(work_dir);
-        command
-            // https://docs.docker.com/engine/reference/commandline/run/#mount-volumes-from-container-volumes-from
-            // The `Z` option tells Docker to label the content with a private
-            // unshared label. Only the current container can use a private volume.
-            .arg("--volume")
-            .arg(format!("{}:/src:rw,Z", work_dir.display()))
+        let z = if CONTAINER_RUNTIME.is_apple_container() {
+            "" // Not currently supported
+        } else {
+            ",Z"
+        };
+        let volume = format!("{}:/src:rw{z}", work_dir.display());
+
+        if !CONTAINER_RUNTIME.is_apple_container() {
             // Run an init inside the container that forwards signals and reaps processes
-            .arg("--init")
+            command.arg("--init");
+        }
+        command
+            .arg("--volume")
+            .arg(volume)
             .arg("--workdir")
             .arg("/src");
 
@@ -458,7 +481,7 @@ impl LanguageImpl for Docker {
         )
         .await
         .context("Failed to build docker image")?;
-        let entry = hook.entry.resolve(None)?;
+        let entry = hook.entry.split()?;
 
         let run = async |batch: &[&Path]| {
             // docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
@@ -673,52 +696,72 @@ mod tests {
             env_override: Option<&str>,
             docker_available: bool,
             podman_available: bool,
+            apple_container_available: bool,
         ) -> RuntimeKind {
             ContainerRuntimeInfo::resolve_runtime_kind(
                 env_override.map(ToString::to_string),
                 || docker_available,
                 || podman_available,
+                || apple_container_available,
             )
         }
 
-        assert_eq!(runtime_with(None, true, false), RuntimeKind::Docker);
-        assert_eq!(runtime_with(None, false, true), RuntimeKind::Podman);
-        assert_eq!(runtime_with(None, false, false), RuntimeKind::Docker);
-
-        assert_eq!(runtime_with(Some("auto"), true, false), RuntimeKind::Docker);
-        assert_eq!(runtime_with(Some("auto"), false, true), RuntimeKind::Podman);
+        assert_eq!(runtime_with(None, true, false, false), RuntimeKind::Docker);
+        assert_eq!(runtime_with(None, false, true, false), RuntimeKind::Podman);
         assert_eq!(
-            runtime_with(Some("auto"), false, false),
-            RuntimeKind::Docker
+            runtime_with(None, false, false, true),
+            RuntimeKind::AppleContainer
         );
+        assert_eq!(runtime_with(None, false, false, false), RuntimeKind::Docker);
 
         assert_eq!(
-            runtime_with(Some("docker"), true, false),
+            runtime_with(Some("auto"), true, false, false),
             RuntimeKind::Docker
         );
         assert_eq!(
-            runtime_with(Some("docker"), false, true),
-            RuntimeKind::Docker
-        );
-        assert_eq!(
-            runtime_with(Some("DOCKER"), false, false),
-            RuntimeKind::Docker
-        );
-        assert_eq!(
-            runtime_with(Some("podman"), true, false),
+            runtime_with(Some("auto"), false, true, false),
             RuntimeKind::Podman
         );
         assert_eq!(
-            runtime_with(Some("podman"), false, true),
-            RuntimeKind::Podman
+            runtime_with(Some("auto"), false, false, true),
+            RuntimeKind::AppleContainer
         );
         assert_eq!(
-            runtime_with(Some("podman"), false, false),
-            RuntimeKind::Podman
+            runtime_with(Some("auto"), false, false, false),
+            RuntimeKind::Docker
         );
 
         assert_eq!(
-            runtime_with(Some("invalid"), false, false),
+            runtime_with(Some("docker"), true, false, false),
+            RuntimeKind::Docker
+        );
+        assert_eq!(
+            runtime_with(Some("docker"), false, true, false),
+            RuntimeKind::Docker
+        );
+        assert_eq!(
+            runtime_with(Some("DOCKER"), false, false, false),
+            RuntimeKind::Docker
+        );
+        assert_eq!(
+            runtime_with(Some("podman"), true, false, false),
+            RuntimeKind::Podman
+        );
+        assert_eq!(
+            runtime_with(Some("podman"), false, true, false),
+            RuntimeKind::Podman
+        );
+        assert_eq!(
+            runtime_with(Some("podman"), false, false, false),
+            RuntimeKind::Podman
+        );
+        assert_eq!(
+            runtime_with(Some("container"), true, true, false),
+            RuntimeKind::AppleContainer
+        );
+
+        assert_eq!(
+            runtime_with(Some("invalid"), false, false, false),
             RuntimeKind::Docker
         );
     }

@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -10,6 +10,27 @@ use unicode_width::UnicodeWidthStr;
 use crate::hook::Hook;
 use crate::printer::Printer;
 use crate::workspace;
+
+/// Current progress reporter used to suspend rendering while printing normal output.
+static CURRENT_REPORTER: Mutex<Option<Weak<ProgressReporter>>> = Mutex::new(None);
+
+/// Set the current reporter for lock acquisition warnings.
+fn set_current_reporter(reporter: Option<&Arc<ProgressReporter>>) {
+    *CURRENT_REPORTER.lock().unwrap() = reporter.map(Arc::downgrade);
+}
+
+/// Suspend progress rendering while emitting normal output.
+///
+/// If a progress reporter is currently active, this runs `f` inside
+/// `indicatif::MultiProgress::suspend` to avoid corrupting the progress display.
+/// If no reporter is active (or it has already been dropped), this just runs `f`.
+pub(crate) fn suspend(f: impl FnOnce() + Send + 'static) {
+    let reporter = CURRENT_REPORTER.lock().unwrap().clone();
+    match reporter.and_then(|r| r.upgrade()) {
+        Some(reporter) => reporter.children.suspend(f),
+        None => f(),
+    }
+}
 
 #[derive(Default, Debug)]
 struct BarState {
@@ -92,14 +113,14 @@ impl From<Printer> for ProgressReporter {
 }
 
 pub(crate) struct HookInitReporter {
-    reporter: ProgressReporter,
+    reporter: Arc<ProgressReporter>,
 }
 
-impl From<Printer> for HookInitReporter {
-    fn from(printer: Printer) -> Self {
-        Self {
-            reporter: ProgressReporter::from(printer),
-        }
+impl HookInitReporter {
+    pub(crate) fn new(printer: Printer) -> Self {
+        let reporter = Arc::new(ProgressReporter::from(printer));
+        set_current_reporter(Some(&reporter));
+        Self { reporter }
     }
 }
 
@@ -107,7 +128,7 @@ impl workspace::HookInitReporter for HookInitReporter {
     fn on_clone_start(&self, repo: &str) -> usize {
         self.reporter
             .root
-            .set_message(format!("{}", "Initializing hooks...".bold().cyan()));
+            .set_message(format!("{}", "Cloning repos...".bold().cyan()));
 
         self.reporter
             .on_start(format!("{} {}", "Cloning".bold().cyan(), repo.dimmed()))
@@ -123,14 +144,14 @@ impl workspace::HookInitReporter for HookInitReporter {
 }
 
 pub(crate) struct HookInstallReporter {
-    reporter: ProgressReporter,
+    reporter: Arc<ProgressReporter>,
 }
 
-impl From<Printer> for HookInstallReporter {
-    fn from(printer: Printer) -> Self {
-        Self {
-            reporter: ProgressReporter::from(printer),
-        }
+impl HookInstallReporter {
+    pub(crate) fn new(printer: Printer) -> Self {
+        let reporter = Arc::new(ProgressReporter::from(printer));
+        set_current_reporter(Some(&reporter));
+        Self { reporter }
     }
 }
 
@@ -157,16 +178,16 @@ impl HookInstallReporter {
 }
 
 pub(crate) struct HookRunReporter {
-    reporter: ProgressReporter,
+    reporter: Arc<ProgressReporter>,
     dots: usize,
 }
 
 impl HookRunReporter {
     pub fn new(printer: Printer, dots: usize) -> Self {
-        Self {
-            reporter: ProgressReporter::from(printer),
-            dots,
-        }
+        let reporter = Arc::new(ProgressReporter::from(printer));
+        set_current_reporter(Some(&reporter));
+
+        Self { reporter, dots }
     }
 
     pub fn on_run_start(&self, hook: &Hook, len: usize) -> usize {
@@ -226,15 +247,16 @@ impl HookRunReporter {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct AutoUpdateReporter {
-    reporter: ProgressReporter,
+    reporter: Arc<ProgressReporter>,
 }
 
-impl From<Printer> for AutoUpdateReporter {
-    fn from(printer: Printer) -> Self {
-        Self {
-            reporter: ProgressReporter::from(printer),
-        }
+impl AutoUpdateReporter {
+    pub(crate) fn new(printer: Printer) -> Self {
+        let reporter = Arc::new(ProgressReporter::from(printer));
+        set_current_reporter(Some(&reporter));
+        Self { reporter }
     }
 }
 
@@ -254,5 +276,33 @@ impl AutoUpdateReporter {
 
     pub fn on_complete(&self) {
         self.reporter.on_complete();
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct CleaningReporter {
+    bar: ProgressBar,
+}
+
+impl CleaningReporter {
+    pub(crate) fn new(printer: Printer, max: usize) -> Self {
+        let bar = ProgressBar::with_draw_target(Some(max as u64), printer.target());
+        bar.set_style(
+            ProgressStyle::with_template("{prefix} [{bar:20}] {percent}%")
+                .unwrap()
+                .progress_chars("=> "),
+        );
+        bar.set_prefix(format!("{}", "Cleaning".bold().cyan()));
+        Self { bar }
+    }
+}
+
+impl CleaningReporter {
+    pub(crate) fn on_clean(&self) {
+        self.bar.inc(1);
+    }
+
+    pub(crate) fn on_complete(&self) {
+        self.bar.finish_and_clear();
     }
 }

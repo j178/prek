@@ -201,8 +201,20 @@ impl Cmd {
         self.inner.stdout(stdout);
         self.inner.stderr(stderr);
 
-        let session_leader = pts.session_leader();
-        unsafe { self.inner.pre_exec(session_leader) };
+        // We run some commands under a PTY so they behave like they do in an interactive terminal
+        // (colors, progress bars, etc.). However, this is still a *pseudo*-terminal and it doesn't
+        // necessarily provide a full/accurate terminal environment.
+        //
+        // Some libraries (for example Go's termenv) send OSC/CSI queries and wait for a response
+        // from the terminal. Our PTY doesn't emulate those responses, so they can block on a
+        // timeout if the program insists on probing capabilities.
+        //
+        // Previously, we tried to work around this by setting `TERM=dumb` in the environment,
+        // but that caused other issues (for example, some programs (e.g cargo), disable color entirely when they see `TERM=dumb`,
+        // even if the output is actually a terminal that supports color).
+        //
+        // We intentionally do not make the child a session leader/foreground process group here.
+        // When we did, termenv detected it as foreground and ran OSC probes, which then hung.
 
         let mut child = self.spawn()?;
 

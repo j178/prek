@@ -2,11 +2,11 @@ use std::path::Path;
 
 use anyhow::Result;
 use clap::Parser;
-use futures::StreamExt;
 use tokio::io::AsyncBufReadExt;
 
 use crate::git::get_git_dir;
 use crate::hook::Hook;
+use crate::hooks::run_concurrent_file_checks;
 use crate::run::CONCURRENCY;
 
 const CONFLICT_PATTERNS: &[&[u8]] = &[
@@ -30,27 +30,17 @@ pub(crate) async fn check_merge_conflict(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
+    let args = Args::try_parse_from(hook.entry.split()?.iter().chain(&hook.args))?;
 
     // Check if we're in a merge state or assuming merge
     if !args.assume_in_merge && !is_in_merge().await? {
         return Ok((0, Vec::new()));
     }
 
-    let mut tasks = futures::stream::iter(filenames)
-        .map(async |filename| check_file(hook.project().relative_path(), filename).await)
-        .buffered(*CONCURRENCY);
-
-    let mut code = 0;
-    let mut output = Vec::new();
-
-    while let Some(result) = tasks.next().await {
-        let (c, o) = result?;
-        code |= c;
-        output.extend(o);
-    }
-
-    Ok((code, output))
+    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
+        check_file(hook.project().relative_path(), filename)
+    })
+    .await
 }
 
 async fn is_in_merge() -> Result<bool> {

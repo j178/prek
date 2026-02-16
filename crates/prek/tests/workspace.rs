@@ -1,14 +1,12 @@
 mod common;
 
-use std::process::Command;
-
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use indoc::indoc;
 use prek_consts::env_vars::EnvVars;
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 #[test]
 fn basic_discovery() -> Result<()> {
@@ -814,14 +812,18 @@ fn skips() -> Result<()> {
     context.git_add(".");
 
     // Should error out because of the invalid config
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to parse `project3/.pre-commit-config.yaml`
-      caused by: did not find expected node content at line 2 column 1, while parsing a flow node
+      caused by: error: line 1 column 15: unclosed bracket '['
+     --> <input>:1:15
+      |
+    1 | invalid_yaml: [
+      |               ^ unclosed bracket '['
     ");
 
     // Should skip the invalid config
@@ -865,7 +867,7 @@ fn workspace_no_projects() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `.pre-commit-config.yaml` found in the current directory or parent directories.
+    error: No `prek.toml` or `.pre-commit-config.yaml` found in the current directory or parent directories.
 
     hint: If you just added one, rerun your command with the `--refresh` flag to rescan the workspace.
     ");
@@ -925,6 +927,80 @@ fn gitignore_respected() -> Result<()> {
 
       [TEMP_DIR]/
       ['.gitignore', '.pre-commit-config.yaml', 'src/.pre-commit-config.yaml']
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn nested_project_exclude_is_relative() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Regression test for nested workspaces:
+    // `exclude` must be evaluated against paths *relative to each project root*.
+    //
+    // Concretely:
+    // - In the nested project, the file is seen as `excluded_by_project` and should be excluded by `^excluded_by_project$`.
+    // - In the root project, the same file is seen as `nested/excluded_by_project` and should NOT be excluded.
+    let config = indoc! {r#"
+    exclude: \.pre-commit-config\.yaml$|^excluded_by_project$
+    repos:
+      - repo: local
+        hooks:
+        - id: show-files
+          name: Show Files
+          language: python
+          entry: python -c 'import sys; print("Processing {} files".format(len(sys.argv[1:]))); [print("  - {}".format(f)) for f in sys.argv[1:]]'
+          pass_filenames: true
+          verbose: true
+    "#};
+
+    // Workspace with a nested project.
+    context.setup_workspace(&["nested"], config)?;
+
+    // A root-level file which should be excluded by the root project (path is `excluded_by_project`).
+    // This keeps the snapshot focused on the nested files, while proving the regex is not
+    // accidentally matching `nested/excluded_by_project`.
+    context
+        .work_dir()
+        .child("excluded_by_project")
+        .write_str("")?;
+
+    // Files inside the nested project: one that should be included and one excluded.
+    context.work_dir().child("nested/include").write_str("")?;
+    context
+        .work_dir()
+        .child("nested/excluded_by_project")
+        .write_str("")?;
+
+    context.git_add(".");
+
+    // When running from the root with --all-files, the nested project's exclude
+    // pattern should see paths relative to `nested/`, so `noinclude` is excluded
+    // there but still visible from the root project.
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `nested`:
+    Show Files...............................................................Passed
+    - hook id: show-files
+    - duration: [TIME]
+
+      Processing 1 files
+        - include
+
+    Running hooks for `.`:
+    Show Files...............................................................Passed
+    - hook id: show-files
+    - duration: [TIME]
+
+      Processing 2 files
+        - nested/include
+        - nested/excluded_by_project
 
     ----- stderr -----
     ");
@@ -994,15 +1070,13 @@ fn submodule_discovery() -> Result<()> {
     let submodule_context = TestContext::new_at(submodule_path.to_path_buf());
 
     submodule_context.init_project();
-    submodule_context.configure_git_author();
     submodule_context.write_pre_commit_config(config);
     submodule_context.git_add(".");
     submodule_context.git_commit("Initial commit");
 
     // Add submodule to the main project
-    Command::new("git")
+    git_cmd(cwd)
         .args(["submodule", "add", "./submodule"])
-        .current_dir(cwd)
         .assert()
         .success();
     context.git_add(".");
@@ -1058,9 +1132,58 @@ fn submodule_discovery() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `.pre-commit-config.yaml` found in the current directory or parent directories.
+    error: No `prek.toml` or `.pre-commit-config.yaml` found in the current directory or parent directories.
 
     hint: If you just added one, rerun your command with the `--refresh` flag to rescan the workspace.
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn cookiecutter_template_directories_are_skipped() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let config = indoc! {r"
+    repos:
+      - repo: local
+        hooks:
+        - id: show-cwd
+          name: Show CWD
+          language: python
+          entry: python -c 'import sys, os; print(os.getcwd()); print(sys.argv[1:])'
+          verbose: true
+    "};
+
+    context.setup_workspace(&["project2", "{{cookiecutter.project_slug}}"], config)?;
+
+    // Stage only the configs that should participate in discovery.
+    context.git_add(".pre-commit-config.yaml");
+    context.git_add("project2/.pre-commit-config.yaml");
+
+    // The cookiecutter directory would otherwise be discovered as a project.
+    cmd_snapshot!(context.filters(), context.run().arg("--refresh").arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `project2`:
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+
+      [TEMP_DIR]/project2
+      ['.pre-commit-config.yaml']
+
+    Running hooks for `.`:
+    Show CWD.................................................................Passed
+    - hook id: show-cwd
+    - duration: [TIME]
+
+      [TEMP_DIR]/
+      ['project2/.pre-commit-config.yaml', '.pre-commit-config.yaml']
+
+    ----- stderr -----
     ");
 
     Ok(())
@@ -1235,6 +1358,108 @@ fn orphan_projects() -> Result<()> {
 
       Processing 1 files
         - test.py
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Test that relative repo paths in subproject configs resolve from the config
+/// file's directory, not from the process's current working directory.
+///
+/// Regression test for <https://github.com/j178/prek/issues/1065>
+#[test]
+fn relative_repo_path_resolution() -> Result<()> {
+    use assert_fs::fixture::PathCreateDir;
+    use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_HOOKS_YAML};
+
+    let context = TestContext::new();
+    context.init_project();
+
+    // Create a local hook repository at the root level
+    let hook_repo = context.work_dir().child("hook-repo");
+    hook_repo.create_dir_all()?;
+
+    git_cmd(&hook_repo).args(["init"]).assert().success();
+
+    git_cmd(&hook_repo)
+        .args(["config", "user.name", "Test"])
+        .assert()
+        .success();
+
+    git_cmd(&hook_repo)
+        .args(["config", "user.email", "test@test.com"])
+        .assert()
+        .success();
+
+    git_cmd(&hook_repo)
+        .args(["config", "core.autocrlf", "false"])
+        .assert()
+        .success();
+
+    hook_repo.child(PRE_COMMIT_HOOKS_YAML).write_str(indoc! {r"
+        - id: test-hook
+          name: Test Hook
+          entry: echo test
+          language: system
+          always_run: true
+    "})?;
+
+    git_cmd(&hook_repo).args(["add", "."]).assert().success();
+
+    git_cmd(&hook_repo)
+        .args(["commit", "--no-si", "-m", "Initial commit"])
+        .assert()
+        .success();
+
+    // Get the commit SHA
+    let output = git_cmd(&hook_repo).args(["rev-parse", "HEAD"]).output()?;
+    let commit_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    // Create a subproject that references the hook repo with a relative path
+    let subproject = context.work_dir().child("subproject");
+    subproject.create_dir_all()?;
+
+    // From subproject/, ../hook-repo should resolve to the hook-repo at root
+    subproject
+        .child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(&indoc::formatdoc! {r"
+        repos:
+          - repo: ../hook-repo
+            rev: {commit_sha}
+            hooks:
+              - id: test-hook
+                always_run: true
+    "})?;
+
+    subproject.child("test.txt").write_str("test content")?;
+
+    // Root config so workspace discovery works
+    context.write_pre_commit_config(indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: noop
+                name: Noop
+                entry: echo noop
+                language: system
+                always_run: true
+    "});
+
+    context.git_add(".");
+
+    // Run from the root directory - the relative path ../hook-repo should resolve
+    // from subproject/.pre-commit-config.yaml's location, not from CWD
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `subproject`:
+    Test Hook................................................................Passed
+
+    Running hooks for `.`:
+    Noop.....................................................................Passed
 
     ----- stderr -----
     ");

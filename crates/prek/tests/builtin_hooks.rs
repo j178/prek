@@ -1,10 +1,12 @@
 #[cfg(unix)]
+use prek_consts::env_vars::EnvVars;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
 use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
-use prek_consts::CONFIG_FILE;
+use prek_consts::PRE_COMMIT_CONFIG_YAML;
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -45,10 +47,39 @@ fn builtin_hooks_not_create_env() {
 }
 
 #[test]
+fn builtin_hooks_unknown_hook() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: this-hook-does-not-exist
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: error: line 4 column 9: unknown builtin hook id `this-hook-does-not-exist`
+     --> <input>:4:9
+      |
+    2 |   - repo: builtin
+    3 |     hooks:
+    4 |       - id: this-hook-does-not-exist
+      |         ^ unknown builtin hook id `this-hook-does-not-exist`
+    ");
+}
+
+#[test]
 fn end_of_file_fixer_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -122,7 +153,6 @@ fn end_of_file_fixer_hook() -> Result<()> {
 fn check_yaml_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -142,7 +172,7 @@ fn check_yaml_hook() -> Result<()> {
     context.git_add(".");
 
     // First run: hooks should fail
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -150,11 +180,20 @@ fn check_yaml_hook() -> Result<()> {
     - hook id: check-yaml
     - exit code: 1
 
-      duplicate.yaml: Failed to yaml decode (duplicate entry with key "a")
-      invalid.yaml: Failed to yaml decode (mapping values are not allowed in this context at line 1 column 5)
+      duplicate.yaml: Failed to yaml decode (error: line 2 column 1: duplicate mapping key: a not allowed here
+       --> <input>:2:1
+        |
+      1 | a: 1
+      2 | a: 2
+        | ^ duplicate mapping key: a not allowed here)
+      invalid.yaml: Failed to yaml decode (error: line 1 column 5: mapping values are not allowed in this context
+       --> <input>:1:5
+        |
+      1 | a: b: c
+        |     ^ mapping values are not allowed in this context)
 
     ----- stderr -----
-    "#);
+    ");
 
     // Fix the files
     cwd.child("invalid.yaml").write_str("a:\n  b: c")?;
@@ -175,23 +214,20 @@ fn check_yaml_hook() -> Result<()> {
     Ok(())
 }
 
-/// `--allow-multiple-documents` feature is not implemented in Rust,
-/// it should work by delegating to the original Python implementation.
 #[test]
 fn check_yaml_multiple_document() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: builtin
             hooks:
               - id: check-yaml
-                name: Python version
+                name: allow multiple documents
                 args: [ --allow-multiple-documents ]
               - id: check-yaml
-                name: Rust version
+                name: disallow multiple documents
     "});
 
     context
@@ -207,16 +243,22 @@ fn check_yaml_multiple_document() -> Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @"
     success: false
     exit_code: 1
     ----- stdout -----
-    Python version...........................................................Passed
-    Rust version.............................................................Failed
+    allow multiple documents.................................................Passed
+    disallow multiple documents..............................................Failed
     - hook id: check-yaml
     - exit code: 1
 
-      multiple.yaml: Failed to yaml decode (deserializing from YAML containing more than one document is not supported)
+      multiple.yaml: Failed to yaml decode (error: line 4 column 1: only single YAML document expected but multiple found
+       --> <input>:4:1
+        |
+      2 | a: 1
+      3 | ---
+      4 | b: 2
+        | ^ only single YAML document expected but multiple found)
 
     ----- stderr -----
     ");
@@ -228,7 +270,6 @@ fn check_yaml_multiple_document() -> Result<()> {
 fn check_json_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -287,8 +328,6 @@ fn check_json_hook() -> Result<()> {
 fn mixed_line_ending_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -445,7 +484,6 @@ fn mixed_line_ending_hook() -> Result<()> {
 fn check_added_large_files_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     // Create an initial commit
     let cwd = context.work_dir();
@@ -549,7 +587,6 @@ fn check_added_large_files_hook() -> Result<()> {
 fn tracked_file_exceeds_large_file_limit() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -587,8 +624,6 @@ fn tracked_file_exceeds_large_file_limit() -> Result<()> {
 fn builtin_hooks_workspace_mode() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -600,7 +635,8 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     // Subproject with built-in hooks.
     let app = context.work_dir().child("app");
     app.create_dir_all()?;
-    app.child(CONFIG_FILE).write_str(indoc::indoc! {r"
+    app.child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:
@@ -639,7 +675,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     context.git_add(".");
 
     // First run: expect failures and auto-fixes where applicable.
-    cmd_snapshot!(context.filters(), context.run(), @r#"
+    cmd_snapshot!(context.filters(), context.run(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -676,8 +712,17 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     - hook id: check-yaml
     - exit code: 1
 
-      duplicate.yaml: Failed to yaml decode (duplicate entry with key "a")
-      invalid.yaml: Failed to yaml decode (mapping values are not allowed in this context at line 1 column 5)
+      duplicate.yaml: Failed to yaml decode (error: line 2 column 1: duplicate mapping key: a not allowed here
+       --> <input>:2:1
+        |
+      1 | a: 1
+      2 | a: 2
+        | ^ duplicate mapping key: a not allowed here)
+      invalid.yaml: Failed to yaml decode (error: line 1 column 5: mapping values are not allowed in this context
+       --> <input>:1:5
+        |
+      1 | a: b: c
+        |     ^ mapping values are not allowed in this context)
     check json...............................................................Failed
     - hook id: check-json
     - exit code: 1
@@ -719,7 +764,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
       app/trailing_ws.txt
 
     ----- stderr -----
-    "#);
+    ");
 
     // Fix YAML and JSON issues, then stage.
     app.child("invalid.yaml").write_str("a:\n  b: c")?;
@@ -797,7 +842,6 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
 fn fix_byte_order_marker_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -862,7 +906,6 @@ fn fix_byte_order_marker_hook() -> Result<()> {
 fn check_symlinks_hook_unix() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -927,7 +970,6 @@ fn check_symlinks_hook_unix() -> Result<()> {
 fn check_symlinks_hook_windows() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -997,7 +1039,6 @@ fn check_symlinks_hook_windows() -> Result<()> {
 fn detect_private_key_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -1088,7 +1129,6 @@ fn detect_private_key_hook() -> Result<()> {
 fn check_merge_conflict_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -1168,7 +1208,6 @@ fn check_merge_conflict_hook() -> Result<()> {
 fn check_merge_conflict_without_assume_flag() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     // Without --assume-in-merge, hook should pass even with conflict markers
     // if we're not actually in a merge state
@@ -1208,7 +1247,6 @@ fn check_merge_conflict_without_assume_flag() -> Result<()> {
 fn check_xml_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -1308,7 +1346,6 @@ fn check_xml_hook() -> Result<()> {
 fn check_xml_with_features() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -1366,7 +1403,6 @@ fn check_xml_with_features() -> Result<()> {
 fn no_commit_to_branch_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -1440,7 +1476,6 @@ fn no_commit_to_branch_hook() -> Result<()> {
 fn no_commit_to_branch_hook_with_custom_branches() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -1515,7 +1550,6 @@ fn no_commit_to_branch_hook_with_custom_branches() -> Result<()> {
 fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -1648,7 +1682,6 @@ fn no_commit_to_branch_hook_with_patterns() -> Result<()> {
 fn check_executables_have_shebangs_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -1731,10 +1764,10 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
 #[cfg(windows)]
 #[test]
 fn check_executables_have_shebangs_win() -> Result<()> {
-    use std::process::Command;
+    use crate::common::git_cmd;
+
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     let repo_path = context.work_dir();
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -1753,18 +1786,16 @@ fn check_executables_have_shebangs_win() -> Result<()> {
 
     context.git_add(".");
 
-    Command::new("git")
+    git_cmd(repo_path)
         .args(["update-index", "--chmod=+x", "win_script_with_shebang.sh"])
-        .current_dir(repo_path)
         .status()?;
 
-    Command::new("git")
+    git_cmd(repo_path)
         .args([
             "update-index",
             "--chmod=+x",
             "win_script_without_shebang.sh",
         ])
-        .current_dir(repo_path)
         .status()?;
 
     cmd_snapshot!(context.filters(), context.run(), @r#"
@@ -1791,7 +1822,6 @@ fn check_executables_have_shebangs_win() -> Result<()> {
 fn check_executables_have_shebangs_various_cases() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
@@ -1884,10 +1914,10 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
 #[cfg(windows)]
 #[test]
 fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
-    use std::process::Command;
+    use crate::common::git_cmd;
+
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: builtin
@@ -1917,9 +1947,8 @@ fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
     ];
 
     for file in &executable_files {
-        Command::new("git")
+        git_cmd(cwd.path())
             .args(["update-index", "--chmod=+x", file])
-            .current_dir(cwd.path())
             .status()?;
     }
 
@@ -1964,7 +1993,6 @@ fn is_case_sensitive_filesystem(context: &TestContext) -> Result<bool> {
 fn check_case_conflict_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     if !is_case_sensitive_filesystem(&context)? {
         // Skipping test on case-insensitive filesystem
@@ -2028,7 +2056,6 @@ fn check_case_conflict_hook() -> Result<()> {
 fn check_case_conflict_directory() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     if !is_case_sensitive_filesystem(&context)? {
         // Skipping test on case-insensitive filesystem
@@ -2073,7 +2100,6 @@ fn check_case_conflict_directory() -> Result<()> {
 fn check_case_conflict_among_new_files() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
 
     if !is_case_sensitive_filesystem(&context)? {
         // Skipping test on case-insensitive filesystem
@@ -2112,6 +2138,138 @@ fn check_case_conflict_among_new_files() -> Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+#[test]
+fn check_json5() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-json5
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files
+    cwd.child("valid.json5").write_str(indoc::indoc! {r"
+        // This is a comment
+        {
+            unquotedKey: 'value', // Trailing comma
+            anotherKey: 12345,
+        }
+    "})?;
+    cwd.child("invalid_missing_comma.json5")
+        .write_str(indoc::indoc! {r"
+        {
+            key1: 'value1'
+            key2: 'value2', // Missing comma between key-value pairs
+        }
+    "})?;
+
+    context.git_add(".");
+
+    // First run: hooks should fail
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check json5..............................................................Failed
+    - hook id: check-json5
+    - exit code: 1
+
+      invalid_missing_comma.json5: Failed to json5 decode (expected comma at line 3 column 5)
+
+    ----- stderr -----
+    ");
+
+    // Fix the files
+    cwd.child("invalid_missing_comma.json5")
+        .write_str(indoc::indoc! {r"
+        {
+            key1: 'value1',
+            key2: 'value2',
+        }
+    "})?;
+    context.git_add(".");
+
+    // Second run: hooks should now pass
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check json5..............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Test that builtin hooks work correctly even when a system-wide binary with the
+/// same name exists on PATH (regression test for <https://github.com/j178/prek/issues/1412>).
+///
+/// When pre-commit-hooks is installed system-wide via pip, binaries like
+/// `trailing-whitespace-fixer` are placed in PATH. These binaries have shebangs
+/// (e.g., `#!/usr/bin/python3`). Before the fix, `resolve(None)` would find these
+/// binaries, parse their shebangs, and corrupt argument parsing.
+#[test]
+#[cfg(unix)]
+fn builtin_hooks_ignore_system_path_binaries() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Create a fake "trailing-whitespace-fixer" binary with a shebang in a temp dir.
+    // This simulates `pip install pre-commit-hooks` which places such binaries in PATH.
+    let fake_bin_dir = context.home_dir().child("fake_bin");
+    fake_bin_dir.create_dir_all()?;
+
+    let fake_binary = fake_bin_dir.child("trailing-whitespace-fixer");
+    fake_binary.write_str("#!/usr/bin/python3\n# fake binary\n")?;
+    std::fs::set_permissions(fake_binary.path(), std::fs::Permissions::from_mode(0o755))?;
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: trailing-whitespace
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("test.txt").write_str("hello world   \n")?;
+    context.git_add(".");
+
+    // Prepend the fake bin directory to PATH so the fake binary is found first.
+    let original_path = EnvVars::var_os(EnvVars::PATH).unwrap_or_default();
+    let mut new_path = std::ffi::OsString::from(fake_bin_dir.path());
+    new_path.push(":");
+    new_path.push(&original_path);
+
+    // Run prek with the modified PATH.
+    // Before the fix: this would fail with a clap argument parsing error like:
+    //   "unexpected argument '/path/to/trailing-whitespace-fixer' found"
+    // After the fix: this should pass because builtin hooks use split() not resolve(None).
+    cmd_snapshot!(context.filters(), context.run().env("PATH", new_path), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    trim trailing whitespace.................................................Failed
+    - hook id: trailing-whitespace
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing test.txt
+
+    ----- stderr -----
+    ");
+
+    // Verify the file was fixed (trailing whitespace removed).
+    assert_eq!(context.read("test.txt"), "hello world\n");
 
     Ok(())
 }

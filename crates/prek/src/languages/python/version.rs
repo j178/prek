@@ -100,6 +100,7 @@ impl PythonRequest {
             PythonRequest::MajorMinorPatch(major, minor, patch) => {
                 version.major == *major && version.minor == *minor && version.patch == *patch
             }
+            // FIXME: consider resolving symlinks and normalizing paths before comparison
             PythonRequest::Path(path) => path == &install_info.toolchain,
             PythonRequest::Range(req, _) => req.matches(version),
         }

@@ -6,20 +6,21 @@ use clap::builder::styling::{AnsiColor, Effects};
 use clap::builder::{ArgPredicate, Styles};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
 use clap_complete::engine::ArgValueCompleter;
-use serde::{Deserialize, Serialize};
-
-use prek_consts::CONFIG_FILE;
 use prek_consts::env_vars::EnvVars;
+use serde::{Deserialize, Serialize};
 
 use crate::config::{HookType, Language, Stage};
 
 mod auto_update;
 mod cache_clean;
+mod cache_gc;
 mod cache_size;
 mod completion;
 mod hook_impl;
+mod identify;
 mod install;
 mod list;
+mod list_builtins;
 pub mod reporter;
 pub mod run;
 mod sample_config;
@@ -27,22 +28,27 @@ mod sample_config;
 mod self_update;
 mod try_repo;
 mod validate;
+mod yaml_to_toml;
 
 pub(crate) use auto_update::auto_update;
 pub(crate) use cache_clean::cache_clean;
+pub(crate) use cache_gc::cache_gc;
 pub(crate) use cache_size::cache_size;
 use completion::selector_completer;
 pub(crate) use hook_impl::hook_impl;
+pub(crate) use identify::identify;
 pub(crate) use install::{init_template_dir, install, install_hooks, uninstall};
 pub(crate) use list::list;
+pub(crate) use list_builtins::list_builtins;
 pub(crate) use run::run;
 pub(crate) use sample_config::sample_config;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use try_repo::try_repo;
 pub(crate) use validate::{validate_configs, validate_manifest};
+pub(crate) use yaml_to_toml::yaml_to_toml;
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum ExitStatus {
     /// The command succeeded.
     Success,
@@ -171,7 +177,7 @@ pub(crate) struct GlobalArgs {
     ///
     /// Repeating this option, e.g., `-qq`, will enable a silent mode in which
     /// prek will write no output to stdout.
-    #[arg(global = true, short, long, conflicts_with = "verbose", action = ArgAction::Count)]
+    #[arg(global = true, short, long, env = EnvVars::PREK_QUIET, conflicts_with = "verbose", action = ArgAction::Count)]
     pub quiet: u8,
 
     /// Use verbose output.
@@ -200,49 +206,48 @@ pub(crate) struct GlobalArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Install the prek git hook.
+    /// Install prek as a git hook under the `.git/hooks/` directory.
     Install(InstallArgs),
-    /// Create hook environments for all hooks used in the config file.
+    /// Create environments for all hooks used in the config file.
     ///
     /// This command does not install the git hook. To install the git hook along with the hook environments in one command, use `prek install --install-hooks`.
     InstallHooks(InstallHooksArgs),
     /// Run hooks.
     Run(Box<RunArgs>),
-    /// List available hooks.
+    /// List hooks configured in the current workspace.
     List(ListArgs),
-    /// Uninstall the prek git hook.
+    /// Uninstall prek from git hooks.
     Uninstall(UninstallArgs),
-    /// Validate `.pre-commit-config.yaml` files.
+    /// Validate configuration files (prek.toml or .pre-commit-config.yaml).
     ValidateConfig(ValidateConfigArgs),
     /// Validate `.pre-commit-hooks.yaml` files.
     ValidateManifest(ValidateManifestArgs),
-    /// Produce a sample `.pre-commit-config.yaml` file.
+    /// Produce a sample configuration file (prek.toml or .pre-commit-config.yaml).
     SampleConfig(SampleConfigArgs),
-    /// Auto-update pre-commit config to the latest repos' versions.
+    /// Auto-update the `rev` field of repositories in the config file to the latest version.
     #[command(alias = "autoupdate")]
     AutoUpdate(AutoUpdateArgs),
     /// Manage the prek cache.
     Cache(CacheNamespace),
     /// Clean unused cached repos.
     #[command(hide = true)]
-    GC,
+    GC(CacheGcArgs),
     /// Remove all prek cached data.
     #[command(hide = true)]
     Clean,
     /// Install hook script in a directory intended for use with `git config init.templateDir`.
-    #[command(alias = "init-templatedir")]
+    #[command(alias = "init-templatedir", hide = true)]
     InitTemplateDir(InitTemplateDirArgs),
     /// Try the pre-commit hooks in the current repo.
     TryRepo(Box<TryRepoArgs>),
-    /// The implementation of the `pre-commit` hook.
+    /// The implementation of the prek hook script that is installed in the `.git/hooks/` directory.
     #[command(hide = true)]
     HookImpl(HookImplArgs),
+    /// Utility commands.
+    Util(UtilNamespace),
     /// `prek` self management.
     #[command(name = "self")]
     Self_(SelfNamespace),
-    /// Generate shell completion scripts.
-    #[command(hide = true)]
-    GenerateShellCompletion(GenerateShellCompletionArgs),
 }
 
 #[derive(Debug, Args)]
@@ -283,7 +288,7 @@ pub(crate) struct InstallArgs {
     #[arg(short = 'f', long)]
     pub(crate) overwrite: bool,
 
-    /// Create hook environments for all hooks used in the config file.
+    /// Create environments for all hooks used in the config file.
     #[arg(long)]
     pub(crate) install_hooks: bool,
 
@@ -300,7 +305,7 @@ pub(crate) struct InstallArgs {
     #[arg(short = 't', long = "hook-type", value_name = "HOOK_TYPE", value_enum)]
     pub(crate) hook_types: Vec<HookType>,
 
-    /// Allow a missing `pre-commit` configuration file.
+    /// Allow a missing configuration file.
     #[arg(long)]
     pub(crate) allow_missing_config: bool,
 }
@@ -359,11 +364,11 @@ pub(crate) struct RunExtraArgs {
     pub(crate) remote_branch: Option<String>,
     #[arg(long, hide = true)]
     pub(crate) local_branch: Option<String>,
-    #[arg(long, hide = true, required_if_eq("hook_stage", "pre-rebase"))]
+    #[arg(long, hide = true, required_if_eq("stage", "pre-rebase"))]
     pub(crate) pre_rebase_upstream: Option<String>,
     #[arg(long, hide = true)]
     pub(crate) pre_rebase_branch: Option<String>,
-    #[arg(long, hide = true, required_if_eq_any = [("hook_stage", "prepare-commit-msg"), ("hook_stage", "commit-msg")])]
+    #[arg(long, hide = true, required_if_eq_any = [("stage", "prepare-commit-msg"), ("stage", "commit-msg")])]
     pub(crate) commit_msg_filename: Option<String>,
     #[arg(long, hide = true)]
     pub(crate) prepare_commit_message_source: Option<String>,
@@ -467,8 +472,8 @@ pub(crate) struct RunArgs {
     /// `pre-commit`, or `pre-commit`) will run.
     /// Defaults to `pre-commit` if not specified.
     /// For hooks specified directly in the command line, fallback to `manual` stage if no hooks found for `pre-commit` stage.
-    #[arg(long, value_enum)]
-    pub(crate) hook_stage: Option<Stage>,
+    #[arg(long, value_enum, alias = "hook-stage")]
+    pub(crate) stage: Option<Stage>,
 
     /// When hooks fail, run `git diff` directly afterward.
     #[arg(long)]
@@ -505,6 +510,21 @@ pub(crate) enum ListOutputFormat {
     #[default]
     Text,
     Json,
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum IdentifyOutputFormat {
+    #[default]
+    Text,
+    Json,
+}
+
+#[derive(Debug, Clone, Default, Args)]
+pub(crate) struct ListBuiltinsArgs {
+    /// The output format.
+    #[arg(long, value_enum, default_value_t = ListOutputFormat::Text)]
+    pub(crate) output_format: ListOutputFormat,
 }
 
 #[derive(Debug, Clone, Default, Args)]
@@ -552,6 +572,16 @@ pub(crate) struct ListArgs {
     pub(crate) output_format: ListOutputFormat,
 }
 
+#[derive(Debug, Clone, Default, Args)]
+pub(crate) struct IdentifyArgs {
+    /// The path(s) to the file(s) to identify.
+    #[arg(value_name = "PATH", value_hint = ValueHint::AnyPath)]
+    pub(crate) paths: Vec<PathBuf>,
+    /// The output format.
+    #[arg(long, value_enum, default_value_t = IdentifyOutputFormat::Text)]
+    pub(crate) output_format: IdentifyOutputFormat,
+}
+
 #[derive(Debug, Args)]
 pub(crate) struct ValidateConfigArgs {
     /// The path to the configuration file.
@@ -566,16 +596,47 @@ pub(crate) struct ValidateManifestArgs {
     pub(crate) manifests: Vec<PathBuf>,
 }
 
+#[expect(clippy::option_option)]
 #[derive(Debug, Args)]
 pub(crate) struct SampleConfigArgs {
-    /// Write the sample config to a file (`.pre-commit-config.yaml` by default).
+    /// Write the sample config to a file.
+    ///
+    /// Defaults to `.pre-commit-config.yaml` unless `--format toml` is set,
+    /// which uses `prek.toml`. If a path is provided without `--format`,
+    /// the format is inferred from the file extension (`.toml` uses TOML).
     #[arg(
         short,
         long,
         num_args = 0..=1,
-        default_missing_value = CONFIG_FILE,
     )]
-    pub(crate) file: Option<PathBuf>,
+    pub(crate) file: Option<Option<PathBuf>>,
+
+    /// Select the sample configuration format.
+    #[arg(long, value_enum)]
+    pub(crate) format: Option<SampleConfigFormat>,
+}
+
+#[derive(Debug, Copy, Clone, clap::ValueEnum)]
+pub(crate) enum SampleConfigFormat {
+    Yaml,
+    Toml,
+}
+
+#[derive(Debug)]
+pub(crate) enum SampleConfigTarget {
+    Stdout,
+    DefaultFile,
+    Path(PathBuf),
+}
+
+impl From<Option<Option<PathBuf>>> for SampleConfigTarget {
+    fn from(value: Option<Option<PathBuf>>) -> Self {
+        match value {
+            None => Self::Stdout,
+            Some(None) => Self::DefaultFile,
+            Some(Some(path)) => Self::Path(path),
+        }
+    }
 }
 
 #[derive(Debug, Args)]
@@ -660,12 +721,51 @@ pub(crate) struct CacheNamespace {
     pub(crate) command: CacheCommand,
 }
 
+#[derive(Debug, Args)]
+pub(crate) struct UtilNamespace {
+    #[command(subcommand)]
+    pub(crate) command: UtilCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum UtilCommand {
+    /// Show file identification tags.
+    Identify(IdentifyArgs),
+    /// List all built-in hooks bundled with prek.
+    ListBuiltins(ListBuiltinsArgs),
+    /// Install hook script in a directory intended for use with `git config init.templateDir`.
+    #[command(alias = "init-templatedir")]
+    InitTemplateDir(InitTemplateDirArgs),
+    /// Convert a YAML configuration file to prek.toml.
+    YamlToToml(YamlToTomlArgs),
+    /// Generate shell completion scripts.
+    #[command(hide = true)]
+    GenerateShellCompletion(GenerateShellCompletionArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct YamlToTomlArgs {
+    /// The YAML configuration file to convert. If omitted, discovers
+    /// `.pre-commit-config.yaml` or `.pre-commit-config.yml` in the current directory.
+    #[arg(value_name = "CONFIG", value_hint = ValueHint::FilePath)]
+    pub(crate) input: Option<PathBuf>,
+
+    /// Path to write the generated prek.toml file.
+    /// Defaults to `prek.toml` in the same directory as the input file.
+    #[arg(short, long, value_name = "OUTPUT", value_hint = ValueHint::FilePath)]
+    pub(crate) output: Option<PathBuf>,
+
+    /// Overwrite the output file if it already exists.
+    #[arg(long)]
+    pub(crate) force: bool,
+}
+
 #[derive(Debug, Subcommand)]
 pub(crate) enum CacheCommand {
     /// Show the location of the prek cache.
     Dir,
     /// Remove unused cached repositories, hook environments, and other data.
-    GC,
+    GC(CacheGcArgs),
     /// Remove all prek cached data.
     Clean,
     /// Show the size of the prek cache.
@@ -677,6 +777,13 @@ pub struct SizeArgs {
     /// Display the cache size in human-readable format (e.g., `1.2 GiB` instead of raw bytes).
     #[arg(long = "human", short = 'H', alias = "human-readable")]
     pub(crate) human: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct CacheGcArgs {
+    /// Print what would be removed, but do not delete anything.
+    #[arg(long)]
+    pub(crate) dry_run: bool,
 }
 
 #[derive(Debug, Args)]
@@ -699,7 +806,7 @@ pub(crate) struct SelfUpdateArgs {
 
     /// A GitHub token for authentication.
     /// A token is not required but can be used to reduce the chance of encountering rate limits.
-    #[arg(long, env = "GITHUB_TOKEN")]
+    #[arg(long, env = EnvVars::GITHUB_TOKEN)]
     pub token: Option<String>,
 }
 
@@ -730,7 +837,6 @@ pub(crate) struct InitTemplateDirArgs {
     pub(crate) hook_types: Vec<HookType>,
 }
 
-#[cfg(unix)]
 #[cfg(test)]
 mod _gen {
     use crate::cli::Cli;
@@ -764,6 +870,13 @@ mod _gen {
 
         output.push_str("# CLI Reference\n\n");
         generate_command(&mut output, &cmd, &mut parents);
+
+        let mut output = output.replace("\r\n", "\n");
+        // Trim trailing whitespace
+        while output.ends_with('\n') {
+            output.pop();
+        }
+        output.push('\n');
 
         output
     }
@@ -861,7 +974,7 @@ mod _gen {
                     let id = format!("{name_key}--{}", arg.get_id());
                     output.push_str(&format!("<dt id=\"{id}\">"));
                     output.push_str(&format!(
-                        "<a href=\"#{id}\"<code>{}</code></a>",
+                        "<a href=\"#{id}\"><code>{}</code></a>",
                         arg.get_value_names()
                             .unwrap()
                             .iter()
@@ -1022,20 +1135,22 @@ mod _gen {
             Mode::DryRun => {
                 anstream::println!("{reference_string}");
             }
-            Mode::Check => match fs_err::read_to_string(reference_path) {
+            Mode::Check => match fs_err::read_to_string(&reference_path) {
                 Ok(current) => {
                     if current == reference_string {
                         anstream::println!("Up-to-date: {filename}");
                     } else {
                         let comparison = StrComparison::new(&current, &reference_string);
-                        bail!("{filename} changed, please run `mise run generate`:\n{comparison}");
+                        bail!(
+                            "{filename} changed, please run `mise run generate` to update:\n{comparison}"
+                        );
                     }
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    bail!("{filename} not found, please run `mise run generate`");
+                    bail!("{filename} not found, please run `mise run generate` to generate");
                 }
                 Err(err) => {
-                    bail!("{filename} changed, please run `mise run generate`:\n{err}");
+                    bail!("{filename} changed, please run `mise run generate` to update:\n{err}");
                 }
             },
             Mode::Write => match fs_err::read_to_string(&reference_path) {

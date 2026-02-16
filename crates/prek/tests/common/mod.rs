@@ -9,8 +9,19 @@ use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild, PathCreateDir};
 use etcetera::BaseStrategy;
 use rustc_hash::FxHashSet;
 
-use prek_consts::CONFIG_FILE;
+use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use prek_consts::env_vars::EnvVars;
+
+pub fn git_cmd(dir: impl AsRef<Path>) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.current_dir(dir)
+        .args(["-c", "commit.gpgsign=false"])
+        .args(["-c", "tag.gpgsign=false"])
+        .args(["-c", "core.autocrlf=false"])
+        .args(["-c", "user.name=Prek Test"])
+        .args(["-c", "user.email=test@prek.dev"]);
+    cmd
+}
 
 pub struct TestContext {
     temp_dir: ChildPath,
@@ -66,6 +77,13 @@ impl TestContext {
                 .map(|pattern| (pattern, "[HOME]/".to_string())),
         );
 
+        if let Some(current_exe) = EnvVars::var_os("NEXTEST_BIN_EXE_prek") {
+            filters.extend(
+                Self::path_patterns(current_exe)
+                    .into_iter()
+                    .map(|pattern| (pattern, "[CURRENT_EXE]".to_string())),
+            );
+        }
         let current_exe = assert_cmd::cargo::cargo_bin!("prek");
         filters.extend(
             Self::path_patterns(current_exe)
@@ -99,8 +117,9 @@ impl TestContext {
             // Trim the trailing separator for cross-platform directories filters
             r"{}\\?/?",
             regex::escape(&path.as_ref().display().to_string())
-                // Make separators platform agnostic because on Windows we will display
+                // Make separators platform-agnostic because on Windows we will display
                 // paths with Unix-style separators sometimes
+                .replace('/', r"(\\|\/)")
                 .replace(r"\\", r"(\\|\/)")
         )
     }
@@ -131,20 +150,31 @@ impl TestContext {
     }
 
     pub fn command(&self) -> Command {
-        if EnvVars::is_set(EnvVars::PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT) {
+        let mut cmd = if EnvVars::is_set(EnvVars::PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT) {
             // Run the original pre-commit to check compatibility.
             let mut cmd = Command::new("pre-commit");
             cmd.current_dir(self.work_dir());
             cmd.env(EnvVars::PRE_COMMIT_HOME, &**self.home_dir());
             cmd
         } else {
-            let bin = assert_cmd::cargo::cargo_bin!("prek");
+            // The absolute path to a binary target's executable. This is only set when running an integration test or benchmark.
+            // When reusing builds from an archive, this is set to the remapped path within the target directory.
+            let bin = EnvVars::var_os("NEXTEST_BIN_EXE_prek")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(assert_cmd::cargo::cargo_bin!("prek")));
             let mut cmd = Command::new(bin);
             cmd.current_dir(self.work_dir());
             cmd.env(EnvVars::PREK_HOME, &**self.home_dir());
             cmd.env(EnvVars::PREK_INTERNAL__SORT_FILENAMES, "1");
             cmd
-        }
+        };
+
+        // Disable git autocrlf to avoid line ending issues in tests.
+        cmd.env("GIT_CONFIG_COUNT", "1")
+            .env("GIT_CONFIG_KEY_0", "core.autocrlf")
+            .env("GIT_CONFIG_VALUE_0", "false");
+
+        cmd
     }
 
     pub fn run(&self) -> Command {
@@ -230,94 +260,60 @@ impl TestContext {
 
     /// Initialize a sample project for prek.
     pub fn init_project(&self) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("-c")
             .arg("init.defaultBranch=master")
             .arg("init")
-            .current_dir(&self.temp_dir)
-            .assert()
-            .success();
-    }
-
-    /// Configure git user and email.
-    pub fn configure_git_author(&self) {
-        Command::new("git")
-            .arg("config")
-            .arg("user.name")
-            .arg("Prek Test")
-            .current_dir(&self.temp_dir)
-            .assert()
-            .success();
-        Command::new("git")
-            .arg("config")
-            .arg("user.email")
-            .arg("test@prek.dev")
-            .current_dir(&self.temp_dir)
-            .assert()
-            .success();
-    }
-
-    pub fn disable_auto_crlf(&self) {
-        // Disable autocrlf
-        Command::new("git")
-            .arg("config")
-            .arg("core.autocrlf")
-            .arg("false")
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
 
     /// Run `git add`.
     pub fn git_add(&self, path: impl AsRef<OsStr>) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("add")
             .arg(path)
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
 
     /// Run `git commit`.
     pub fn git_commit(&self, message: &str) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("commit")
             .arg("-m")
             .arg(message)
-            .current_dir(&self.temp_dir)
+            .env(EnvVars::PREK_HOME, &**self.home_dir())
             .assert()
             .success();
     }
 
     /// Run `git tag`.
     pub fn git_tag(&self, tag: &str) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("tag")
             .arg(tag)
             .arg("-m")
             .arg(format!("Tag {tag}"))
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
 
     /// Run `git reset`.
     pub fn git_reset(&self, target: &str) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("reset")
             .arg(target)
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
 
     /// Run `git rm`.
     pub fn git_rm(&self, path: &str) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("rm")
             .arg("--cached")
             .arg(path)
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
         let file_path = self.temp_dir.child(path);
@@ -328,30 +324,27 @@ impl TestContext {
 
     /// Run `git clean`.
     pub fn git_clean(&self) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("clean")
             .arg("-fdx")
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
 
     /// Create a new git branch.
     pub fn git_branch(&self, branch_name: &str) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("branch")
             .arg(branch_name)
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
 
     /// Switch to a git branch.
     pub fn git_checkout(&self, branch_name: &str) {
-        Command::new("git")
+        git_cmd(&self.temp_dir)
             .arg("checkout")
             .arg(branch_name)
-            .current_dir(&self.temp_dir)
             .assert()
             .success();
     }
@@ -359,7 +352,7 @@ impl TestContext {
     /// Write a `.pre-commit-config.yaml` file in the temporary directory.
     pub fn write_pre_commit_config(&self, content: &str) {
         self.temp_dir
-            .child(CONFIG_FILE)
+            .child(PRE_COMMIT_CONFIG_YAML)
             .write_str(content)
             .expect("Failed to write pre-commit config");
     }
@@ -368,13 +361,17 @@ impl TestContext {
     /// This creates a tree-like directory structure for testing workspace functionality.
     pub fn setup_workspace(&self, project_paths: &[&str], config: &str) -> anyhow::Result<()> {
         // Always create root config
-        self.temp_dir.child(CONFIG_FILE).write_str(config)?;
+        self.temp_dir
+            .child(PRE_COMMIT_CONFIG_YAML)
+            .write_str(config)?;
 
         // Create each project directory and config
         for path in project_paths {
             let project_dir = self.temp_dir.child(path);
             project_dir.create_dir_all()?;
-            project_dir.child(CONFIG_FILE).write_str(config)?;
+            project_dir
+                .child(PRE_COMMIT_CONFIG_YAML)
+                .write_str(config)?;
         }
 
         Ok(())
@@ -388,8 +385,18 @@ impl TestContext {
             .push((r"(?m)^\d+\n".to_string(), "[SIZE]\n".to_string()));
         // Filter human-readable sizes (e.g., "384.2 KiB")
         self.filters.push((
-            r"(?m)^\d+(\.\d+)? [KMGT]i?B\n".to_string(),
+            r"(?m)^\d+(\.\d+)? ([KMGTPE]i)?B\n".to_string(),
             "[SIZE]\n".to_string(),
+        ));
+        self
+    }
+
+    /// Add extra filtering for `cache clean` summary output.
+    #[must_use]
+    pub fn with_filtered_cache_clean_summary(mut self) -> Self {
+        self.filters.push((
+            r"(?m)^Removed \d+ files? \([^)]+\)\n".to_string(),
+            "Removed [N] file(s) ([SIZE])\n".to_string(),
         ));
         self
     }
@@ -398,10 +405,9 @@ impl TestContext {
 #[doc(hidden)] // Macro and test context only, don't use directly.
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
     // File sizes
-    (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
+    (r"(\s|\()(\d+\.)?\d+\s?([KMGTPE]i)?B", "$1[SIZE]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d]|\.\.|\.)", "/$1"),
-    (r"prek.exe", "prek"),
     // The exact message is host language dependent
     (
         r"Caused by: .* \(os error 2\)",
@@ -409,8 +415,6 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
     // Time seconds
     (r"\b(\d+\.)?\d+(ms|s)\b", "[TIME]"),
-    // Windows shebang interpreter
-    (r"#!/bin/sh", "#!/usr/bin/env bash"),
 ];
 
 #[allow(unused_macros)]
@@ -431,9 +435,8 @@ macro_rules! cmd_snapshot {
 #[allow(unused_imports)]
 pub(crate) use cmd_snapshot;
 
-#[allow(clippy::disallowed_methods)]
 pub(crate) fn remove_bin_from_path(bin: &str, path: Option<OsString>) -> anyhow::Result<OsString> {
-    let path = path.unwrap_or(std::env::var_os("PATH").expect("PATH not set"));
+    let path = path.unwrap_or(EnvVars::var_os(EnvVars::PATH).expect("Path must be set"));
     let Ok(dirs) = which::which_all(bin) else {
         return Ok(path);
     };

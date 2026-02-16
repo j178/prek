@@ -2,10 +2,9 @@ use std::path::Path;
 
 use anyhow::Result;
 use clap::Parser;
-use futures::StreamExt;
-use serde::Deserialize;
 
 use crate::hook::Hook;
+use crate::hooks::run_concurrent_file_checks;
 use crate::run::CONCURRENCY;
 
 #[derive(Parser)]
@@ -21,29 +20,16 @@ struct Args {
 }
 
 pub(crate) async fn check_yaml(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
+    let args = Args::try_parse_from(hook.entry.split()?.iter().chain(&hook.args))?;
 
-    let mut tasks = futures::stream::iter(filenames)
-        .map(async |filename| {
-            check_file(
-                hook.project().relative_path(),
-                filename,
-                args.allow_multiple_documents,
-            )
-            .await
-        })
-        .buffered(*CONCURRENCY);
-
-    let mut code = 0;
-    let mut output = Vec::new();
-
-    while let Some(result) = tasks.next().await {
-        let (c, o) = result?;
-        code |= c;
-        output.extend(o);
-    }
-
-    Ok((code, output))
+    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
+        check_file(
+            hook.project().relative_path(),
+            filename,
+            args.allow_multiple_documents,
+        )
+    })
+    .await
 }
 
 async fn check_file(
@@ -56,22 +42,26 @@ async fn check_file(
         return Ok((0, Vec::new()));
     }
 
-    let deserializer = serde_yaml::Deserializer::from_slice(&content);
+    let options = serde_saphyr::Options {
+        ignore_binary_tag_for_string: true,
+        ..Default::default()
+    };
     if allow_multi_docs {
-        for doc in deserializer {
-            if let Err(e) = serde_yaml::Value::deserialize(doc) {
-                let error_message =
-                    format!("{}: Failed to yaml decode ({e})\n", filename.display());
-                return Ok((1, error_message.into_bytes()));
-            }
+        if let Err(e) = serde_saphyr::from_slice_multiple_with_options::<serde_json::Value>(
+            &content,
+            options.clone(),
+        ) {
+            let error_message = format!("{}: Failed to yaml decode ({e})\n", filename.display());
+            return Ok((1, error_message.into_bytes()));
         }
         Ok((0, Vec::new()))
     } else {
-        match serde_yaml::from_slice::<serde_yaml::Value>(&content) {
+        match serde_saphyr::from_slice_with_options::<serde_json::Value>(&content, options) {
             Ok(_) => Ok((0, Vec::new())),
             Err(e) => {
+                let err = e.render_with_formatter(&serde_saphyr::UserMessageFormatter);
                 let error_message =
-                    format!("{}: Failed to yaml decode ({e})\n", filename.display());
+                    format!("{}: Failed to yaml decode ({err})\n", filename.display());
                 Ok((1, error_message.into_bytes()))
             }
         }

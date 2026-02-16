@@ -1,6 +1,6 @@
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 /// Test basic Ruby hook with system Ruby
 #[test]
@@ -597,8 +597,6 @@ fn environment_isolation() -> anyhow::Result<()> {
 /// Test local Ruby hook repository with gemspec build and install
 #[test]
 fn local_hook_with_gemspec() -> anyhow::Result<()> {
-    use std::process::Command;
-
     let context = TestContext::new();
     context.init_project();
 
@@ -641,40 +639,28 @@ fn local_hook_with_gemspec() -> anyhow::Result<()> {
         "})?;
 
     // Initialize git repo in the hook directory (separate from main project)
-    let output = Command::new("git")
-        .args(["init"])
-        .current_dir(&hook_repo)
-        .output()?;
+    let output = git_cmd(&hook_repo).args(["init"]).output()?;
     assert!(output.status.success(), "git init failed: {output:?}");
 
     // Configure git user for this repo
-    Command::new("git")
+    git_cmd(&hook_repo)
         .args(["config", "user.name", "Test User"])
-        .current_dir(&hook_repo)
         .output()?;
 
-    Command::new("git")
+    git_cmd(&hook_repo)
         .args(["config", "user.email", "test@example.com"])
-        .current_dir(&hook_repo)
         .output()?;
 
-    let output = Command::new("git")
-        .args(["add", "."])
-        .current_dir(&hook_repo)
-        .output()?;
+    let output = git_cmd(&hook_repo).args(["add", "."]).output()?;
     assert!(output.status.success(), "git add failed: {output:?}");
 
-    let output = Command::new("git")
+    let output = git_cmd(&hook_repo)
         .args(["commit", "-m", "Initial commit"])
-        .current_dir(&hook_repo)
         .output()?;
     assert!(output.status.success(), "git commit failed: {output:?}");
 
     // Get the commit SHA
-    let rev_output = Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .current_dir(&hook_repo)
-        .output()?;
+    let rev_output = git_cmd(&hook_repo).args(["rev-parse", "HEAD"]).output()?;
     assert!(rev_output.status.success(), "git rev-parse failed");
     let rev = String::from_utf8_lossy(&rev_output.stdout)
         .trim()

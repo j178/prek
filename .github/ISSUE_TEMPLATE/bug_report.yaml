@@ -10,6 +10,14 @@ body:
     validations:
       required: true
 
+  - type: checkboxes
+    attributes:
+      label: Willing to submit a PR?
+      description: |
+        If you have time, we welcome pull requests.
+      options:
+        - label: Yes — I’m willing to open a PR to fix this.
+
   - type: input
     attributes:
       label: Platform
@@ -32,7 +40,7 @@ body:
       description: |
         Please attach or paste the contents of your `.pre-commit-config.yaml` file if relevant.
     validations:
-      required: false
+      required: true
 
   - type: textarea
     attributes:
@@ -46,4 +54,4 @@ body:
         prek -vvv [your command]
         ```
     validations:
-      required: false
+      required: true

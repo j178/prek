@@ -3,25 +3,35 @@ members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
-version = "0.2.25"
+version = "0.3.3"
 edition = "2024"
 repository = "https://github.com/j178/prek"
 homepage = "https://prek.j178.dev/"
 license = "MIT"
 
 [workspace.dependencies]
-prek-consts = { path = "crates/prek-consts", version = "0.2.25" }
-prek-pty = { path = "crates/prek-pty", version = "0.2.25" }
+prek-consts = { path = "crates/prek-consts", version = "0.3.3" }
+prek-pty = { path = "crates/prek-pty", version = "0.3.3" }
 
 anstream = { version = "0.6.15" }
 anstyle-query = { version = "1.1.5" }
 anyhow = { version = "1.0.86" }
 async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
-async_zip = { version = "0.0.17", package = "astral_async_zip", features = ["deflate", "tokio"] }
-axoupdater = { version = "0.9.0", default-features = false, features = ["github_releases"] }
+async_zip = { version = "0.0.17", package = "astral_async_zip", features = [
+  "deflate",
+  "tokio",
+] }
+axoupdater = { version = "0.9.0", default-features = false, features = [
+  "github_releases",
+] }
 bstr = { version = "1.11.0" }
 cargo_metadata = { version = "0.23.1" }
-clap = { version = "4.5.16", features = ["derive", "env", "string", "wrap_help"] }
+clap = { version = "4.5.16", features = [
+  "derive",
+  "env",
+  "string",
+  "wrap_help",
+] }
 clap_complete = { version = "4.5.37", features = ["unstable-dynamic"] }
 ctrlc = { version = "3.4.5" }
 dunce = { version = "1.0.5" }
@@ -35,20 +45,28 @@ ignore = { version = "0.4.23" }
 indicatif = { version = "0.18.0" }
 indoc = { version = "2.0.5" }
 itertools = { version = "0.14.0" }
+json5 = { version = "1.3.0" }
 lazy-regex = { version = "3.4.2" }
 levenshtein = { version = "1.0.5" }
 libc = { version = "0.2.164" }
 # Enable static linking for liblzma
 # This is required for the `xz` feature in `async-compression`
 liblzma = { version = "0.4.5", features = ["static"] }
+mea = { version = "0.6.3" }
 memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
 path-clean = { version = "1.0.1" }
 pprof = { version = "0.15.0" }
-quick-xml = { version = "0.38" }
+quick-xml = { version = "0.39" }
 rand = { version = "0.9.0" }
 rayon = { version = "1.10.0" }
-reqwest = { version = "0.12.9", default-features = false, features = ["http2", "stream", "json", "rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
+reqwest = { version = "0.12.9", default-features = false, features = [
+  "http2",
+  "stream",
+  "json",
+  "rustls-tls-native-roots",
+  "rustls-tls-webpki-roots",
+] }
 rustc-hash = { version = "2.1.1" }
 rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
 same-file = { version = "1.0.6" }
@@ -56,16 +74,31 @@ semver = { version = "1.0.24", features = ["serde"] }
 serde = { version = "1.0.210", features = ["derive"] }
 serde_json = { version = "1.0.132", features = ["unbounded_depth"] }
 serde_stacker = { version = "0.1.12" }
-serde_yaml = { version = "0.9.34" }
+serde-saphyr = { version = "0.0.18", default-features = false }
 shlex = { version = "1.3.0" }
+globset = { version = "0.4.18" }
 smallvec = { version = "1.15.1" }
+strum = { version = "0.27.2", features = ["derive"] }
 target-lexicon = { version = "0.13.0" }
-tempfile = { version = "3.13.0" }
+tempfile = { version = "3.25.0" }
 thiserror = { version = "2.0.11" }
-tokio = { version = "1.47.1", features = ["fs", "process", "rt", "sync", "macros", "net"] }
-tokio-tar = { version = "0.5.1", package = "astral-tokio-tar" }
+tokio = { version = "1.47.1", features = [
+  "fs",
+  "process",
+  "rt",
+  "sync",
+  "macros",
+  "net",
+] }
+tokio-tar = { version = "0.5.6", package = "astral-tokio-tar" }
 tokio-util = { version = "0.7.13" }
-toml = { version = "0.9.5", default-features = false, features = ["fast_hash", "parse", "preserve_order", "serde"] }
+toml = { version = "1.0.1", default-features = false, features = [
+  "fast_hash",
+  "parse",
+  "preserve_order",
+  "serde",
+] }
+toml_edit = { version = "0.25.1" }
 tracing = { version = "0.1.40" }
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 unicode-width = { version = "0.2.0", default-features = false }
@@ -104,6 +137,7 @@ similar_names = "allow"
 too_many_arguments = "allow"
 too_many_lines = "allow"
 used_underscore_binding = "allow"
+items_after_statements = "allow"
 # Disallowed restriction lints
 print_stdout = "warn"
 print_stderr = "warn"
@@ -130,6 +164,20 @@ ignored = ["liblzma"]
 insta.opt-level = 3
 similar.opt-level = 3
 
+# Profile for fast test execution: Skip debug info generation, and
+# apply basic optimization, which speed up build and running tests.
+[profile.fast-build]
+inherits = "dev"
+debug = 0
+strip = "debuginfo"
+
+# Profile for faster builds: Skip debug info generation, for faster
+# builds of smaller binaries.
+[profile.no-debug]
+inherits = "dev"
+debug = 0
+strip = "debuginfo"
+
 [profile.profiling]
 inherits = "release"
 strip = false
@@ -137,13 +185,15 @@ debug = "full"
 lto = false
 codegen-units = 16
 
-[profile.release]
+[profile.minimal-size]
+inherits = "release"
 # Enable Full LTO for the best optimizations
 lto = "fat"
 # Reduce codegen units to 1 for better optimizations
 codegen-units = 1
 strip = true
+panic = "abort"
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
-inherits = "release"
+inherits = "minimal-size"

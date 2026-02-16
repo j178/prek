@@ -7,12 +7,14 @@ cargo-binstall = "latest"
 # For snapshot testing
 cargo-insta = "latest"
 "cargo:cargo-nextest" = "latest"
+prek = "latest"
+uv = "latest"
 
 [tasks.lint]
 description = "Run formatting and linting"
 run = [
-    "cargo fmt",
-    "cargo clippy --all-targets --all-features --workspace -- -D warnings"
+  "cargo fmt",
+  "cargo clippy --all-targets --all-features --workspace -- -D warnings",
 ]
 
 [tasks.test-unit]
@@ -42,16 +44,28 @@ env = { PREK_GENERATE = "1" }
 
 [tasks.generate-json-schema]
 description = "Generate JSON schema"
-run = "cargo test --bin prek --features schemars config::_gen::generate_json_schema -- --exact"
+run = "cargo test --bin prek --features schemars schema::_gen::generate_json_schema -- --exact"
 env = { PREK_GENERATE = "1" }
 
 [tasks.generate]
 description = "Generate CLI reference and JSON schema"
-depends = ["generate-cli-reference", "generate-json-schema"]
+run = [{ task = "generate-cli-reference" }, { task = "generate-json-schema" }]
+
+[tasks.preview-docs]
+description = "Serve documentation locally"
+run = "uvx --with-requirements docs/requirements.txt zensical serve"
 
 [tasks.build-docs]
 description = "Build documentation"
-run = "uv tool run --with-requirements docs/requirements.txt mkdocs serve"
+run = [
+  "uvx --with-requirements docs/requirements.txt zensical build",
+  "uvx --with-requirements docs/requirements.txt llmstxt-standalone build",
+]
+
+[tasks.compile-docs-deps]
+# Python version should match PYTHON_VERSION in .github/workflows/publish-docs.yml
+description = "Compile documentation dependencies"
+run = "uv pip compile docs/requirements.in --universal -o docs/requirements.txt --python 3.14"
 
 [tasks.release]
 description = "Prepare for a release"

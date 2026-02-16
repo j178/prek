@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use prek_consts::env_vars::EnvVars;
+use prek_consts::prepend_paths;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
@@ -14,7 +15,7 @@ use crate::languages::ruby::gem::{build_gemspecs, install_gems};
 use crate::languages::ruby::installer::RubyInstaller;
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
-use crate::run::{prepend_paths, run_by_batch};
+use crate::run::run_by_batch;
 use crate::store::Store;
 
 #[derive(Debug, Copy, Clone)]
@@ -147,14 +148,12 @@ impl LanguageImpl for Ruby {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let env_dir = hook.env_path().expect("Ruby hook must have env path");
-        let info = hook.install_info().expect("Ruby hook must be installed");
 
         // Prepare PATH
         let gem_home = gem_home(env_dir);
         let gem_bin = gem_home.join("bin");
-        let ruby_bin = info
-            .toolchain
-            .parent()
+        let ruby_bin = hook
+            .toolchain_dir()
             .expect("Ruby toolchain should have parent");
 
         let new_path = prepend_paths(&[&gem_bin, ruby_bin]).context("Failed to join PATH")?;

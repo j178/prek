@@ -3,11 +3,12 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
-use fancy_regex::Regex;
 use itertools::Itertools;
+use prek_consts::CONFIG_FILENAMES;
 
+use crate::cli::reporter::HookRunReporter;
 use crate::cli::run::{CollectOptions, FileFilter, collect_files};
-use crate::config::{self, CONFIG_FILE_REGEX, HookOptions, Language, ManifestHook, MetaHook};
+use crate::config::{self, FilePattern, HookOptions, Language, MetaHook};
 use crate::hook::Hook;
 use crate::store::Store;
 use crate::workspace::Project;
@@ -19,24 +20,14 @@ use crate::workspace::Project;
 // When matching files (files or exclude), we need to match against the filenames
 // relative to the project root.
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, strum::AsRefStr, strum::Display, strum::EnumString)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(rename_all = "kebab-case"))]
+#[strum(serialize_all = "kebab-case")]
 pub(crate) enum MetaHooks {
     CheckHooksApply,
     CheckUselessExcludes,
     Identity,
-}
-
-impl FromStr for MetaHooks {
-    type Err = ();
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "check-hooks-apply" => Ok(Self::CheckHooksApply),
-            "check-useless-excludes" => Ok(Self::CheckUselessExcludes),
-            "identity" => Ok(Self::Identity),
-            _ => Err(()),
-        }
-    }
 }
 
 impl MetaHooks {
@@ -45,54 +36,55 @@ impl MetaHooks {
         store: &Store,
         hook: &Hook,
         filenames: &[&Path],
+        reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
-        match self {
+        let progress = reporter.on_run_start(hook, filenames.len());
+        let result = match self {
             Self::CheckHooksApply => check_hooks_apply(store, hook, filenames).await,
             Self::CheckUselessExcludes => check_useless_excludes(hook, filenames).await,
             Self::Identity => Ok(identity(hook, filenames)),
-        }
+        };
+        reporter.on_run_complete(progress);
+        result
     }
 }
 
 impl MetaHook {
     pub(crate) fn from_id(id: &str) -> Result<Self, ()> {
-        let config_file_regex = CONFIG_FILE_REGEX.clone();
-        let hook_id = MetaHooks::from_str(id)?;
+        let hook_id = MetaHooks::from_str(id).map_err(|_| ())?;
+        let config_file_glob =
+            FilePattern::new_glob(CONFIG_FILENAMES.iter().map(ToString::to_string).collect())
+                .unwrap();
 
-        let hook = match hook_id {
-            MetaHooks::CheckHooksApply => ManifestHook {
+        Ok(match hook_id {
+            MetaHooks::CheckHooksApply => MetaHook {
                 id: "check-hooks-apply".to_string(),
                 name: "Check hooks apply".to_string(),
-                language: Language::System,
-                entry: String::new(),
+                priority: None,
                 options: HookOptions {
-                    files: Some(config_file_regex),
+                    files: Some(config_file_glob.clone()),
                     ..Default::default()
                 },
             },
-            MetaHooks::CheckUselessExcludes => ManifestHook {
+            MetaHooks::CheckUselessExcludes => MetaHook {
                 id: "check-useless-excludes".to_string(),
                 name: "Check useless excludes".to_string(),
-                language: Language::System,
-                entry: String::new(),
+                priority: None,
                 options: HookOptions {
-                    files: Some(config_file_regex),
+                    files: Some(config_file_glob),
                     ..Default::default()
                 },
             },
-            MetaHooks::Identity => ManifestHook {
+            MetaHooks::Identity => MetaHook {
                 id: "identity".to_string(),
                 name: "identity".to_string(),
-                language: Language::System,
-                entry: String::new(),
+                priority: None,
                 options: HookOptions {
                     verbose: Some(true),
                     ..Default::default()
                 },
             },
-        };
-
-        Ok(MetaHook(hook))
+        })
     }
 }
 
@@ -146,8 +138,8 @@ pub(crate) async fn check_hooks_apply(
 // Returns true if the exclude pattern matches any files matching the include pattern.
 fn excludes_any(
     files: &[impl AsRef<Path>],
-    include: Option<&Regex>,
-    exclude: Option<&Regex>,
+    include: Option<&FilePattern>,
+    exclude: Option<&FilePattern>,
 ) -> bool {
     if exclude.is_none() {
         return true;
@@ -158,13 +150,13 @@ fn excludes_any(
             return false; // Skip files that cannot be converted to a string
         };
 
-        if let Some(re) = &include {
-            if !re.is_match(f).unwrap_or(false) {
+        if let Some(pattern) = &include {
+            if !pattern.is_match(f) {
                 return false;
             }
         }
-        if let Some(re) = &exclude {
-            if !re.is_match(f).unwrap_or(false) {
+        if let Some(pattern) = &exclude {
+            if !pattern.is_match(f) {
                 return false;
             }
         }
@@ -178,8 +170,15 @@ pub(crate) async fn check_useless_excludes(
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
     let relative_path = hook.project().relative_path();
-    let input = collect_files(hook.work_dir(), CollectOptions::all_files()).await?;
-    let input: Vec<_> = input.into_iter().map(|f| relative_path.join(f)).collect();
+    // `collect_files` returns paths relative to the hook's project root.
+    // The meta hook itself runs from the workspace root, so we build both:
+    // - `input_project`: for matching `files`/`exclude` patterns (project-relative)
+    // - `input_workspace`: for `FileFilter` (workspace-relative)
+    let input_project = collect_files(hook.work_dir(), CollectOptions::all_files()).await?;
+    let input_workspace: Vec<_> = input_project
+        .iter()
+        .map(|f| relative_path.join(f))
+        .collect();
 
     let mut code = 0;
     let mut output = Vec::new();
@@ -190,25 +189,27 @@ pub(crate) async fn check_useless_excludes(
         project.with_relative_path(relative_path.to_path_buf());
 
         let config = project.config();
-        if !excludes_any(&input, None, config.exclude.as_deref()) {
+        if !excludes_any(&input_project, None, config.exclude.as_ref()) {
             code = 1;
+            let display = config
+                .exclude
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_default();
             writeln!(
                 &mut output,
-                "The global exclude pattern `{}` does not match any files",
-                config.exclude.as_deref().map_or("", |r| r.as_str())
+                "The global exclude pattern `{display}` does not match any files"
             )?;
         }
 
-        let filter = FileFilter::for_project(input.iter(), &project, None);
+        let filter = FileFilter::for_project(input_workspace.iter(), &project, None);
 
         for repo in &config.repos {
             let hooks_iter: Box<dyn Iterator<Item = (&String, &HookOptions)>> = match repo {
                 config::Repo::Remote(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
                 config::Repo::Local(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
-                config::Repo::Meta(r) => Box::new(r.hooks.iter().map(|h| (&h.0.id, &h.0.options))),
-                config::Repo::Builtin(r) => {
-                    Box::new(r.hooks.iter().map(|h| (&h.0.id, &h.0.options)))
-                }
+                config::Repo::Meta(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
+                config::Repo::Builtin(r) => Box::new(r.hooks.iter().map(|h| (&h.id, &h.options))),
             };
 
             for (hook_id, opts) in hooks_iter {
@@ -218,16 +219,31 @@ pub(crate) async fn check_useless_excludes(
                     opts.exclude_types.as_deref().unwrap_or(&[]),
                 );
 
+                // `filtered_files` is workspace-relative (it includes the project prefix).
+                // Match patterns against paths relative to the project root.
+                let filtered_files_relative: Vec<&Path> = if relative_path.as_os_str().is_empty() {
+                    filtered_files
+                } else {
+                    filtered_files
+                        .into_iter()
+                        .filter_map(|f| f.strip_prefix(relative_path).ok())
+                        .collect()
+                };
+
                 if !excludes_any(
-                    &filtered_files,
-                    opts.files.as_deref(),
-                    opts.exclude.as_deref(),
+                    &filtered_files_relative,
+                    opts.files.as_ref(),
+                    opts.exclude.as_ref(),
                 ) {
                     code = 1;
+                    let display = opts
+                        .exclude
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_default();
                     writeln!(
                         &mut output,
-                        "The exclude pattern `{}` for `{hook_id}` does not match any files",
-                        opts.exclude.as_deref().map_or("", |r| r.as_str())
+                        "The exclude pattern `{display}` for `{hook_id}` does not match any files"
                     )?;
                 }
             }
@@ -252,6 +268,11 @@ pub fn identity(_hook: &Hook, filenames: &[&Path]) -> (i32, Vec<u8>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PREK_TOML};
+
+    fn regex_pattern(pattern: &str) -> FilePattern {
+        FilePattern::new_regex(pattern).unwrap()
+    }
 
     #[test]
     fn test_excludes_any() {
@@ -260,23 +281,36 @@ mod tests {
             Path::new("file2.txt"),
             Path::new("file3.txt"),
         ];
-        assert!(excludes_any(
-            &files,
-            Regex::new(r"file.*").ok().as_ref(),
-            Regex::new(r"file2\.txt").ok().as_ref()
-        ));
-        assert!(!excludes_any(
-            &files,
-            Regex::new(r"file.*").ok().as_ref(),
-            Regex::new(r"file4\.txt").ok().as_ref()
-        ));
+        let include = regex_pattern(r"file.*");
+        let exclude = regex_pattern(r"file2\.txt");
+        assert!(excludes_any(&files, Some(&include), Some(&exclude)));
+
+        let include = regex_pattern(r"file.*");
+        let exclude = regex_pattern(r"file4\.txt");
+        assert!(!excludes_any(&files, Some(&include), Some(&exclude)));
         assert!(excludes_any(&files, None, None));
 
         let files = vec![Path::new("html/file1.html"), Path::new("html/file2.html")];
-        assert!(excludes_any(
-            &files,
-            None,
-            Regex::new(r"^html/").ok().as_ref()
-        ));
+        let exclude = regex_pattern(r"^html/");
+        assert!(excludes_any(&files, None, Some(&exclude)));
+    }
+
+    #[test]
+    fn meta_hook_patterns_cover_config_files() {
+        let apply = MetaHook::from_id("check-hooks-apply").expect("known meta hook");
+        let apply_files = apply.options.files.as_ref().expect("files should be set");
+        assert!(apply_files.is_match(PRE_COMMIT_CONFIG_YAML));
+        assert!(apply_files.is_match(PRE_COMMIT_CONFIG_YML));
+        assert!(apply_files.is_match(PREK_TOML));
+
+        let useless = MetaHook::from_id("check-useless-excludes").expect("known meta hook");
+        let useless_files = useless.options.files.as_ref().expect("files should be set");
+        assert!(useless_files.is_match(PRE_COMMIT_CONFIG_YAML));
+        assert!(useless_files.is_match(PRE_COMMIT_CONFIG_YML));
+        assert!(useless_files.is_match(PREK_TOML));
+
+        let identity = MetaHook::from_id("identity").expect("known meta hook");
+        assert!(identity.options.files.is_none());
+        assert_eq!(identity.options.verbose, Some(true));
     }
 }

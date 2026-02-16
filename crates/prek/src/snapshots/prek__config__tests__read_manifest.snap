@@ -12,8 +12,8 @@ Manifest {
             options: HookOptions {
                 alias: None,
                 files: Some(
-                    SerdeRegex(
-                        "^requirements\\.(in|txt)$",
+                    Regex(
+                        ^requirements\.(in|txt)$,
                     ),
                 ),
                 exclude: None,
@@ -38,7 +38,6 @@ Manifest {
                 language_version: None,
                 log_file: None,
                 require_serial: None,
-                priority: None,
                 stages: None,
                 verbose: None,
                 minimum_prek_version: None,
@@ -55,8 +54,8 @@ Manifest {
             options: HookOptions {
                 alias: None,
                 files: Some(
-                    SerdeRegex(
-                        "^(uv\\.lock|pyproject\\.toml|uv\\.toml)$",
+                    Regex(
+                        ^(uv\.lock|pyproject\.toml|uv\.toml)$,
                     ),
                 ),
                 exclude: None,
@@ -81,7 +80,6 @@ Manifest {
                 language_version: None,
                 log_file: None,
                 require_serial: None,
-                priority: None,
                 stages: None,
                 verbose: None,
                 minimum_prek_version: None,
@@ -98,8 +96,8 @@ Manifest {
             options: HookOptions {
                 alias: None,
                 files: Some(
-                    SerdeRegex(
-                        "^uv\\.lock$",
+                    Regex(
+                        ^uv\.lock$,
                     ),
                 ),
                 exclude: None,
@@ -127,7 +125,6 @@ Manifest {
                 language_version: None,
                 log_file: None,
                 require_serial: None,
-                priority: None,
                 stages: None,
                 verbose: None,
                 minimum_prek_version: None,

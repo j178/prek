@@ -10,7 +10,7 @@ use tracing::debug;
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
-use crate::languages::python::{Uv, python_exec, query_python_info};
+use crate::languages::python::{Uv, python_exec, query_python_info_cached};
 use crate::process::Cmd;
 use crate::run::CONCURRENCY;
 use crate::store::{CacheBucket, Store, ToolBucket};
@@ -172,7 +172,7 @@ impl LanguageImpl for Pygrep {
     }
 
     async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        query_python_info(&info.toolchain)
+        query_python_info_cached(&info.toolchain)
             .await
             .context("Failed to query Python info")?;
 

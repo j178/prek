@@ -1,13 +1,10 @@
-use std::process::Command;
-
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use indoc::indoc;
-use prek_consts::CONFIG_FILE;
+use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use prek_consts::env_vars::EnvVars;
 
-use crate::common::TestContext;
-use crate::common::cmd_snapshot;
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 mod common;
 
@@ -27,12 +24,11 @@ fn hook_impl() {
     "});
 
     context.git_add(".");
-    context.configure_git_author();
 
-    let mut commit = Command::new("git");
+    let mut commit = git_cmd(context.work_dir());
     commit
         .arg("commit")
-        .current_dir(context.work_dir())
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("-m")
         .arg("Initial commit");
 
@@ -75,14 +71,12 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
              entry: echo "hook ran successfully"
              always_run: true
     "#});
-
     context.git_add(".");
-    context.configure_git_author();
 
-    let mut commit = Command::new("git");
+    let mut commit = git_cmd(context.work_dir());
     commit
         .arg("commit")
-        .current_dir(context.work_dir())
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("-m")
         .arg("Initial commit");
 
@@ -112,13 +106,12 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
     let remote_repo_path = context.home_dir().join("remote.git");
     std::fs::create_dir_all(&remote_repo_path)?;
 
-    let mut init_remote = Command::new("git");
+    let mut init_remote = git_cmd(&remote_repo_path);
     init_remote
         .arg("-c")
         .arg("init.defaultBranch=master")
         .arg("init")
-        .arg("--bare")
-        .current_dir(&remote_repo_path);
+        .arg("--bare");
     cmd_snapshot!(context.filters(), init_remote, @r#"
     success: true
     exit_code: 0
@@ -129,13 +122,12 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
     "#);
 
     // Add remote to local repo
-    let mut add_remote = Command::new("git");
+    let mut add_remote = git_cmd(context.work_dir());
     add_remote
         .arg("remote")
         .arg("add")
         .arg("origin")
-        .arg(&remote_repo_path)
-        .current_dir(context.work_dir());
+        .arg(&remote_repo_path);
     cmd_snapshot!(context.filters(), add_remote, @r#"
     success: true
     exit_code: 0
@@ -145,12 +137,12 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
     "#);
 
     // First push - should trigger the hook
-    let mut push_cmd = Command::new("git");
+    let mut push_cmd = git_cmd(context.work_dir());
     push_cmd
         .arg("push")
         .arg("origin")
         .arg("master")
-        .current_dir(context.work_dir());
+        .env(EnvVars::PREK_HOME, &**context.home_dir());
 
     cmd_snapshot!(context.filters(), push_cmd, @r"
     success: true
@@ -164,12 +156,12 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
     ");
 
     // Second push - should not trigger the hook (nothing new to push)
-    let mut push_cmd2 = Command::new("git");
+    let mut push_cmd2 = git_cmd(context.work_dir());
     push_cmd2
         .arg("push")
         .arg("origin")
         .arg("master")
-        .current_dir(context.work_dir());
+        .env(EnvVars::PREK_HOME, &**context.home_dir());
 
     cmd_snapshot!(context.filters(), push_cmd2, @r"
     success: true
@@ -188,8 +180,6 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
 fn run_worktree() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
     context.write_pre_commit_config(indoc! { r"
         repos:
         - repo: local
@@ -213,23 +203,25 @@ fn run_worktree() -> anyhow::Result<()> {
     "#);
 
     // Create a new worktree.
-    Command::new("git")
+    git_cmd(context.work_dir())
         .arg("worktree")
         .arg("add")
         .arg("worktree")
         .arg("HEAD")
-        .current_dir(context.work_dir())
         .output()?
         .assert()
         .success();
 
     // Modify the config in the main worktree
-    context.work_dir().child(CONFIG_FILE).write_str("")?;
+    context
+        .work_dir()
+        .child(PRE_COMMIT_CONFIG_YAML)
+        .write_str("")?;
 
-    let mut commit = Command::new("git");
+    let mut commit = git_cmd(context.work_dir().child("worktree"));
     commit
         .arg("commit")
-        .current_dir(context.work_dir().child("worktree"))
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("-m")
         .arg("Initial commit")
         .arg("--allow-empty");
@@ -255,8 +247,6 @@ fn run_worktree() -> anyhow::Result<()> {
 fn git_dir_respected() {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
     context.write_pre_commit_config(indoc! { r#"
         repos:
         - repo: local
@@ -279,13 +269,13 @@ fn git_dir_respected() {
     ----- stderr -----
     "#);
 
-    let mut commit = Command::new("git");
+    let mut commit = git_cmd(context.home_dir());
     commit
         .arg("--git-dir")
         .arg(cwd.join(".git"))
         .arg("--work-tree")
         .arg(&**cwd)
-        .current_dir(context.home_dir())
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("commit")
         .arg("-m")
         .arg("Test commit with GIT_DIR set");
@@ -309,8 +299,6 @@ fn git_dir_respected() {
 fn workspace_hook_impl_root() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     let config = indoc! {r#"
     repos:
@@ -336,9 +324,9 @@ fn workspace_hook_impl_root() -> anyhow::Result<()> {
     ----- stderr -----
     "#);
 
-    let mut commit = Command::new("git");
+    let mut commit = git_cmd(context.work_dir());
     commit
-        .current_dir(context.work_dir())
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("commit")
         .arg("-m")
         .arg("Test commit from subdirectory");
@@ -390,8 +378,6 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
     let context = TestContext::new();
     let cwd = context.work_dir();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     let config = indoc! {r#"
     repos:
@@ -419,9 +405,9 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
-    let mut commit = Command::new("git");
+    let mut commit = git_cmd(cwd);
     commit
-        .current_dir(cwd)
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("commit")
         .arg("-m")
         .arg("Test commit from subdirectory");
@@ -460,8 +446,6 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
     let context = TestContext::new();
     let cwd = context.work_dir();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     let config = indoc! {r#"
     repos:
@@ -491,12 +475,11 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
     ");
 
     // Create a new worktree.
-    Command::new("git")
+    git_cmd(cwd)
         .arg("worktree")
         .arg("add")
         .arg("worktree")
         .arg("HEAD")
-        .current_dir(cwd)
         .output()?
         .assert()
         .success();
@@ -505,12 +488,11 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
     context
         .work_dir()
         .child("project2")
-        .child(CONFIG_FILE)
+        .child(PRE_COMMIT_CONFIG_YAML)
         .write_str("")?;
 
-    let mut commit = Command::new("git");
+    let mut commit = git_cmd(cwd.child("worktree"));
     commit
-        .current_dir(cwd.child("worktree"))
         .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("commit")
         .arg("-m")
@@ -541,8 +523,6 @@ fn workspace_hook_impl_worktree_subdirectory() -> anyhow::Result<()> {
 fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     // Create a directory without .pre-commit-config.yaml
     let empty_dir = context.work_dir().child("empty");
@@ -561,9 +541,9 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     ");
 
     // Try to run hook-impl from directory without config
-    let mut commit = Command::new("git");
+    let mut commit = git_cmd(&empty_dir);
     commit
-        .current_dir(&empty_dir)
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("commit")
         .arg("-m")
         .arg("Test commit");
@@ -574,7 +554,7 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `.pre-commit-config.yaml` found in the current directory or parent directories.
+    error: No `prek.toml` or `.pre-commit-config.yaml` found in the current directory or parent directories.
 
     hint: If you just added one, rerun your command with the `--refresh` flag to rescan the workspace.
     - To temporarily silence this, run `PREK_ALLOW_NO_CONFIG=1 git ...`
@@ -583,9 +563,9 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     ");
 
     // Commit with `PREK_ALLOW_NO_CONFIG=1`
-    let mut commit = Command::new("git");
+    let mut commit = git_cmd(&empty_dir);
     commit
-        .current_dir(&empty_dir)
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .env(EnvVars::PREK_ALLOW_NO_CONFIG, "1")
         .arg("commit")
         .arg("-m")
@@ -612,7 +592,7 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     // Create the root `.pre-commit-config.yaml`
     context
         .work_dir()
-        .child(CONFIG_FILE)
+        .child(PRE_COMMIT_CONFIG_YAML)
         .write_str(indoc::indoc! {r"
         repos:
         - repo: local
@@ -625,9 +605,9 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
     context.git_add(".");
 
     // Commit with `PREK_ALLOW_NO_CONFIG=1` again, the hooks should run (and fail)
-    let mut commit = Command::new("git");
+    let mut commit = git_cmd(&empty_dir);
     commit
-        .current_dir(&empty_dir)
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .env(EnvVars::PREK_ALLOW_NO_CONFIG, "1")
         .arg("commit")
         .arg("-m")
@@ -652,12 +632,72 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
 }
 
 #[test]
+fn hook_impl_does_not_fail_when_no_hooks_match_stage() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Only a manual-stage hook; a pre-commit hook run should find nothing for the stage.
+    context
+        .work_dir()
+        .child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: manual-only
+                name: manual-only
+                language: system
+                entry: echo manual-only
+                stages: [ manual ]
+    "})?;
+
+    context.work_dir().child("file.txt").write_str("x")?;
+    context.git_add(".");
+
+    // Install the git hook (which invokes `prek hook-impl`).
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+
+    // Commit should succeed; the hook should not error just because no hooks match pre-commit.
+    let mut commit = git_cmd(context.work_dir());
+    commit
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
+        .arg("commit")
+        .arg("-m")
+        .arg("Test commit");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([("[a-f0-9]{7}", "abc1234")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, commit, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [master (root-commit) abc1234] Test commit
+     2 files changed, 9 insertions(+)
+     create mode 100644 .pre-commit-config.yaml
+     create mode 100644 file.txt
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn workspace_hook_impl_with_selectors() -> anyhow::Result<()> {
     let context = TestContext::new();
     let cwd = context.work_dir();
     context.init_project();
-    context.configure_git_author();
-    context.disable_auto_crlf();
 
     let config = indoc! {r#"
     repos:
@@ -682,9 +722,9 @@ fn workspace_hook_impl_with_selectors() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
-    let mut commit = Command::new("git");
+    let mut commit = git_cmd(cwd);
     commit
-        .current_dir(cwd)
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
         .arg("commit")
         .arg("-m")
         .arg("Test commit from subdirectory");

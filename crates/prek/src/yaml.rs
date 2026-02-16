@@ -4,93 +4,103 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// Adapted from https://crates.io/crates/yaml-merge-keys to remove `yaml-rust2` from dependency.
+use std::fmt::Write;
 
-use serde_yaml::{Mapping, Sequence, Value};
-
-/// Errors which may occur when performing the YAML merge key process.
-///
-/// This enum is `non_exhaustive`, but cannot be marked as such until it is stable. In the
-/// meantime, there is a hidden variant.
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum MergeKeyError {
-    /// A non-hash value was given as a value to merge into a hash.
-    ///
-    /// This happens with a document such as:
-    ///
-    /// ```yaml
-    /// -
-    ///   <<: 4
-    ///   x: 1
-    /// ```
-    #[error("only mappings and arrays of mappings may be merged")]
-    InvalidMergeValue,
-}
-
-/// Merge two hashes together.
-fn merge_hashes(mut hash: Mapping, rhs: Mapping) -> Mapping {
-    rhs.into_iter().for_each(|(key, value)| {
-        hash.entry(key).or_insert(value);
-    });
-    hash
-}
-
-/// Merge values together.
-fn merge_values(hash: Mapping, value: Value) -> Result<Mapping, MergeKeyError> {
-    let merge_values = match value {
-        Value::Sequence(arr) => {
-            let init: Result<Mapping, _> = Ok(Mapping::new());
-
-            arr.into_iter().fold(init, |res_hash, item| {
-                // Merge in the next item.
-                res_hash.and_then(move |res_hash| {
-                    if let Value::Mapping(next_hash) = item {
-                        Ok(merge_hashes(res_hash, next_hash))
-                    } else {
-                        // Non-hash values at this level are not allowed.
-                        Err(MergeKeyError::InvalidMergeValue)
-                    }
-                })
-            })?
+/// Serialize a YAML scalar while preserving the caller's quote style.
+pub(crate) fn serialize_yaml_scalar(value: &str, quote: &str) -> anyhow::Result<String> {
+    match quote {
+        "'" => Ok(format!("'{}'", escape_single_quoted(value))),
+        "\"" => Ok(format!("\"{}\"", escape_double_quoted(value))),
+        _ => {
+            if is_simple_plain(value) {
+                Ok(value.to_owned())
+            } else {
+                // Defer to serde-saphyr to select quoting/escaping for non-trivial scalars.
+                let rendered = serde_saphyr::to_string(&value)?;
+                Ok(rendered.trim_end_matches('\n').to_owned())
+            }
         }
-        Value::Mapping(merge_hash) => merge_hash,
-        _ => return Err(MergeKeyError::InvalidMergeValue),
-    };
-
-    Ok(merge_hashes(hash, merge_values))
-}
-
-/// Recurse into a hash and handle items with merge keys in them.
-fn merge_hash(hash: Mapping) -> Result<Value, MergeKeyError> {
-    let mut hash = hash
-        .into_iter()
-        // First handle any merge keys in the key or value...
-        .map(|(key, value)| {
-            merge_keys(key).and_then(|key| merge_keys(value).map(|value| (key, value)))
-        })
-        .collect::<Result<Mapping, _>>()?;
-
-    if let Some(merge_value) = hash.remove("<<") {
-        merge_values(hash, merge_value).map(Value::Mapping)
-    } else {
-        Ok(Value::Mapping(hash))
     }
 }
 
-/// Recurse into an array and handle items with merge keys in them.
-fn merge_array(arr: Sequence) -> Result<Value, MergeKeyError> {
-    arr.into_iter()
-        .map(merge_keys)
-        .collect::<Result<Sequence, _>>()
-        .map(Value::Sequence)
+/// Fast-path: allow simple, plain scalars we want to keep unquoted.
+fn is_simple_plain(value: &str) -> bool {
+    if value.is_empty() {
+        return false;
+    }
+    value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_' | '/' | '+' | '@'))
 }
 
-/// Handle merge keys in a YAML document.
-pub fn merge_keys(doc: Value) -> Result<Value, MergeKeyError> {
-    match doc {
-        Value::Mapping(hash) => merge_hash(hash),
-        Value::Sequence(arr) => merge_array(arr),
-        _ => Ok(doc),
+/// YAML single-quoted strings escape a single quote by doubling it.
+fn escape_single_quoted(value: &str) -> String {
+    value.replace('\'', "''")
+}
+
+/// YAML double-quoted strings use backslash escapes for control characters.
+fn escape_double_quoted(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\t' => escaped.push_str("\\t"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            c if c.is_control() => {
+                let _ = write!(escaped, "\\u{:04X}", c as u32);
+            }
+            c => escaped.push(c),
+        }
+    }
+    escaped
+}
+
+#[cfg(test)]
+mod tests {
+    use super::serialize_yaml_scalar;
+
+    #[test]
+    fn serialize_yaml_scalar_plain() {
+        let rendered = serialize_yaml_scalar("v1.2.3", "").unwrap();
+        assert_eq!(rendered, "v1.2.3");
+        let rendered = serialize_yaml_scalar("v1.2.3", "'").unwrap();
+        assert_eq!(rendered, "'v1.2.3'");
+        let rendered = serialize_yaml_scalar("v1.2.3", "\"").unwrap();
+        assert_eq!(rendered, "\"v1.2.3\"");
+        let rendered = serialize_yaml_scalar("123", "").unwrap();
+        assert_eq!(rendered, "123");
+        let rendered = serialize_yaml_scalar("123", "'").unwrap();
+        assert_eq!(rendered, "'123'");
+        let rendered = serialize_yaml_scalar("123", "\"").unwrap();
+        assert_eq!(rendered, "\"123\"");
+        let rendered = serialize_yaml_scalar("a:b", "").unwrap();
+        assert_eq!(rendered, "a:b");
+        let rendered = serialize_yaml_scalar("a:b", "'").unwrap();
+        assert_eq!(rendered, "'a:b'");
+        let rendered = serialize_yaml_scalar("a\"b", "\"").unwrap();
+        assert_eq!(rendered, "\"a\\\"b\"");
+        let rendered = serialize_yaml_scalar("a'b", "'").unwrap();
+        assert_eq!(rendered, "'a''b'");
+
+        let rendered = serialize_yaml_scalar("abc def", "").unwrap();
+        assert_eq!(rendered, "abc def");
+        let rendered = serialize_yaml_scalar("abc def", "'").unwrap();
+        assert_eq!(rendered, "'abc def'");
+        let rendered = serialize_yaml_scalar("abc def", "\"").unwrap();
+        assert_eq!(rendered, "\"abc def\"");
+    }
+
+    #[test]
+    fn serialize_yaml_scalar_quotes_and_escapes() {
+        let rendered = serialize_yaml_scalar("a\\b", "\"").unwrap();
+        assert_eq!(rendered, "\"a\\\\b\"");
+        let rendered = serialize_yaml_scalar("a\nb", "\"").unwrap();
+        assert_eq!(rendered, "\"a\\nb\"");
+        let rendered = serialize_yaml_scalar("a\tb", "\"").unwrap();
+        assert_eq!(rendered, "\"a\\tb\"");
+        let rendered = serialize_yaml_scalar("a\\b", "'").unwrap();
+        assert_eq!(rendered, "'a\\b'");
     }
 }

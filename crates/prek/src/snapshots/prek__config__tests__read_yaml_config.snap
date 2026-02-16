@@ -14,6 +14,7 @@ Config {
                         name: None,
                         entry: None,
                         language: None,
+                        priority: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
@@ -31,7 +32,6 @@ Config {
                             language_version: None,
                             log_file: None,
                             require_serial: None,
-                            priority: None,
                             stages: None,
                             verbose: None,
                             minimum_prek_version: None,
@@ -52,6 +52,9 @@ Config {
                         name: None,
                         entry: None,
                         language: None,
+                        priority: Some(
+                            10,
+                        ),
                         options: HookOptions {
                             alias: None,
                             files: None,
@@ -69,7 +72,6 @@ Config {
                             language_version: None,
                             log_file: None,
                             require_serial: None,
-                            priority: None,
                             stages: None,
                             verbose: None,
                             minimum_prek_version: None,
@@ -84,11 +86,12 @@ Config {
             LocalRepo {
                 repo: "local",
                 hooks: [
-                    ManifestHook {
+                    LocalHook {
                         id: "cargo-fmt",
                         name: "cargo fmt",
                         entry: "cargo fmt --",
                         language: System,
+                        priority: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
@@ -112,7 +115,6 @@ Config {
                             language_version: None,
                             log_file: None,
                             require_serial: None,
-                            priority: None,
                             stages: None,
                             verbose: None,
                             minimum_prek_version: None,
@@ -127,16 +129,17 @@ Config {
             LocalRepo {
                 repo: "local",
                 hooks: [
-                    ManifestHook {
+                    LocalHook {
                         id: "cargo-dev-generate-all",
                         name: "cargo dev generate-all",
                         entry: "cargo dev generate-all",
                         language: System,
+                        priority: None,
                         options: HookOptions {
                             alias: None,
                             files: Some(
-                                SerdeRegex(
-                                    "^crates/(uv-cli|uv-settings)/",
+                                Regex(
+                                    ^crates/(uv-cli|uv-settings)/,
                                 ),
                             ),
                             exclude: None,
@@ -159,7 +162,6 @@ Config {
                             language_version: None,
                             log_file: None,
                             require_serial: None,
-                            priority: None,
                             stages: None,
                             verbose: None,
                             minimum_prek_version: None,
@@ -180,6 +182,7 @@ Config {
                         name: None,
                         entry: None,
                         language: None,
+                        priority: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
@@ -202,7 +205,6 @@ Config {
                             language_version: None,
                             log_file: None,
                             require_serial: None,
-                            priority: None,
                             stages: None,
                             verbose: None,
                             minimum_prek_version: None,
@@ -223,6 +225,7 @@ Config {
                         name: None,
                         entry: None,
                         language: None,
+                        priority: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
@@ -240,7 +243,6 @@ Config {
                             language_version: None,
                             log_file: None,
                             require_serial: None,
-                            priority: None,
                             stages: None,
                             verbose: None,
                             minimum_prek_version: None,
@@ -252,6 +254,7 @@ Config {
                         name: None,
                         entry: None,
                         language: None,
+                        priority: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
@@ -274,7 +277,6 @@ Config {
                             language_version: None,
                             log_file: None,
                             require_serial: None,
-                            priority: None,
                             stages: None,
                             verbose: None,
                             minimum_prek_version: None,
@@ -291,8 +293,11 @@ Config {
     default_stages: None,
     files: None,
     exclude: Some(
-        SerdeRegex(
-            "(?x)^(\n  .*/(snapshots)/.*|\n)$\n",
+        Regex(
+            (?x)^(
+              .*/(snapshots)/.*|
+            )$
+            ,
         ),
     ),
     fail_fast: Some(

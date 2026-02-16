@@ -6,12 +6,14 @@ use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
+use mea::once::OnceCell;
+use mea::semaphore::Semaphore;
 use owo_colors::OwoColorize;
 use prek_consts::env_vars::EnvVars;
+use prek_consts::{PRE_COMMIT_CONFIG_YAML, PREK_TOML};
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
 use rustc_hash::{FxHashMap, FxHashSet};
-use tokio::sync::{OnceCell, Semaphore};
 use tracing::{debug, trace, warn};
 use unicode_width::UnicodeWidthStr;
 
@@ -83,8 +85,9 @@ pub(crate) async fn run(
         workspace.check_configs_staged().await?;
     }
 
-    let reporter = HookInitReporter::from(printer);
+    let reporter = HookInitReporter::new(printer);
     let lock = store.lock_async().await?;
+    store.track_configs(workspace.projects().iter().map(|p| p.config_file()))?;
 
     let hooks = workspace
         .init_hooks(store, Some(&reporter))
@@ -107,9 +110,10 @@ pub(crate) async fn run(
         if selectors.has_project_selectors() {
             writeln!(
                 printer.stderr(),
-                "\n{} If you just added new `{}`, try rerun your command with the `{}` flag to rescan the workspace.",
+                "\n{} If you just added a new `{}` or `{}`, try rerunning your command with the `{}` flag to rescan the workspace.",
                 "hint:".bold().yellow(),
-                ".pre-commit-config.yaml".cyan(),
+                PREK_TOML.cyan(),
+                PRE_COMMIT_CONFIG_YAML.cyan(),
                 "--refresh".cyan(),
             )?;
         }
@@ -144,20 +148,18 @@ pub(crate) async fn run(
     };
 
     if filtered_hooks.is_empty() {
-        writeln!(
-            printer.stderr(),
-            "{}: No hooks found for stage `{}` after filtering",
-            "error".red().bold(),
-            hook_stage.cyan()
-        )?;
-        return Ok(ExitStatus::Failure);
+        debug!(
+            stage = %hook_stage,
+            "No hooks found for stage after filtering, exit early"
+        );
+        return Ok(ExitStatus::Success);
     }
 
     debug!(
         "Hooks going to run: {:?}",
         filtered_hooks.iter().map(|h| &h.id).collect::<Vec<_>>()
     );
-    let reporter = HookInstallReporter::from(printer);
+    let reporter = HookInstallReporter::new(printer);
     let installed_hooks = install_hooks(filtered_hooks, store, &reporter).await?;
 
     // Release the store lock.
@@ -287,17 +289,15 @@ impl LazyInstallInfo {
         let info = self.info.clone();
         *self
             .health
-            .get_or_init(|| async move {
-                match info.check_health().await {
-                    Ok(()) => true,
-                    Err(err) => {
-                        warn!(
-                            %err,
-                            path = %info.env_path.display(),
-                            "Skipping unhealthy installed hook"
-                        );
-                        false
-                    }
+            .get_or_init(async move || match info.check_health().await {
+                Ok(()) => true,
+                Err(err) => {
+                    warn!(
+                        %err,
+                        path = %info.env_path.display(),
+                        "Skipping unhealthy installed hook"
+                    );
+                    false
                 }
             })
             .await
@@ -337,15 +337,14 @@ pub async fn install_hooks(
     }
 
     let mut futures = FuturesUnordered::new();
-    let semaphore = Arc::new(Semaphore::new(*CONCURRENCY));
+    let semaphore = Rc::new(Semaphore::new(*CONCURRENCY));
 
     for (_, hooks) in hooks_by_language {
-        let semaphore = semaphore.clone();
         let partitions = partition_hooks(&hooks);
 
         for hooks in partitions {
-            let semaphore = semaphore.clone();
-            let store_hooks = store_hooks.clone();
+            let semaphore = Rc::clone(&semaphore);
+            let store_hooks = Rc::clone(&store_hooks);
 
             futures.push(async move {
                 let mut hook_envs = Vec::with_capacity(hooks.len());
@@ -385,15 +384,14 @@ pub async fn install_hooks(
 
                     if let Some(info) = matched_info {
                         debug!(
-                            "Found installed environment for hook `{}` at `{}`",
-                            &hook,
+                            "Found installed environment for hook `{hook}` at `{}`",
                             info.env_path.display()
                         );
                         hook_envs.push(InstalledHook::Installed { hook, info });
                         continue;
                     }
 
-                    let _permit = semaphore.acquire().await.unwrap();
+                    let _permit = semaphore.acquire(1).await;
 
                     let installed_hook = hook
                         .language
@@ -557,10 +555,11 @@ impl StatusPrinter {
         } else {
             (prefix.dimmed().to_string(), prefix.width())
         };
-        let dots = self.columns - prefix_width - hook_name.width() - suffix.width() - status_width;
+        let used_width = prefix_width + hook_name.width() + suffix.width() + status_width;
+        let dots = self.columns.saturating_sub(used_width);
         let line = format!(
             "{prefix}{hook_name}{}{suffix}{status_line}",
-            ".".repeat(dots.max(0)),
+            ".".repeat(dots),
         );
         match status {
             RunStatus::Failed => {
@@ -645,16 +644,21 @@ async fn run_hooks(
                 run_priority_group(group_hooks, &filter, store, dry_run, &reporter).await?;
 
             // Print results in a stable order (same order as config within the project).
-            group_results.sort_by(|a, b| a.hook.idx.cmp(&b.hook.idx));
+            group_results.sort_unstable_by(|a, b| a.hook.idx.cmp(&b.hook.idx));
 
             // Check if any files were modified by this group of hooks.
-            let curr_diff = git::get_diff(project.path()).await?;
-            let group_modified_files = curr_diff != prev_diff;
-            prev_diff = curr_diff;
+            let all_skipped = group_results.iter().all(|r| r.status.is_skipped());
+            let group_modified_files = if !all_skipped {
+                let curr_diff = git::get_diff(project.path()).await?;
+                let group_modified_files = curr_diff != prev_diff;
+                prev_diff = curr_diff;
+                group_modified_files
+            } else {
+                false
+            };
 
             if group_modified_files {
                 file_modified = true;
-                success = false;
             }
 
             reporter.suspend(|| {
@@ -685,9 +689,7 @@ async fn run_hooks(
     if has_unimplemented {
         warn_user!(
             "Some hooks were skipped because their languages are unimplemented.\nWe're working hard to support more languages. Check out current support status at {}.",
-            "https://prek.j178.dev/todo/#language-support-status"
-                .cyan()
-                .underline()
+            "https://prek.j178.dev/languages/".cyan().underline()
         );
     }
 
@@ -700,7 +702,7 @@ async fn run_hooks(
                     "\n{}: Some hooks made changes to the files.
                     If you are seeing this message in CI, reproduce locally with: `{}`
                     To run prek as part of git workflow, use `{}` to set up git hooks.\n",
-                    "Hint".yellow().bold(),
+                    "hint".yellow().bold(),
                     "prek run --all-files".cyan(),
                     "prek install".cyan()
                 }
@@ -969,6 +971,10 @@ impl RunStatus {
     fn is_unimplemented(self) -> bool {
         matches!(self, Self::Unimplemented)
     }
+
+    fn is_skipped(self) -> bool {
+        matches!(self, Self::DryRun | Self::NoFiles | Self::Unimplemented)
+    }
 }
 
 struct RunResult {
@@ -1058,4 +1064,23 @@ async fn run_hook(
         exit_status,
         output: hook_output,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_printer_write_dots_saturates_instead_of_underflow() {
+        let status_printer = StatusPrinter {
+            printer: Printer::Silent,
+            columns: 10,
+        };
+
+        // This would underflow if computed with plain `-` on `usize`.
+        let long_name = "this hook name is definitely longer than ten columns";
+        status_printer
+            .write(long_name, "", RunStatus::Failed)
+            .expect("write should not fail");
+    }
 }

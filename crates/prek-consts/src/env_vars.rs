@@ -27,6 +27,7 @@ impl EnvVars {
     pub const PREK_NATIVE_TLS: &'static str = "PREK_NATIVE_TLS";
     pub const SSL_CERT_FILE: &'static str = "SSL_CERT_FILE";
     pub const PREK_CONTAINER_RUNTIME: &'static str = "PREK_CONTAINER_RUNTIME";
+    pub const PREK_QUIET: &'static str = "PREK_QUIET";
 
     // PREK internal environment variables
     pub const PREK_INTERNAL__TEST_DIR: &'static str = "PREK_INTERNAL__TEST_DIR";
@@ -34,9 +35,11 @@ impl EnvVars {
     pub const PREK_INTERNAL__SKIP_POST_CHECKOUT: &'static str = "PREK_INTERNAL__SKIP_POST_CHECKOUT";
     pub const PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT: &'static str =
         "PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT";
+    pub const PREK_INTERNAL__BUN_BINARY_NAME: &'static str = "PREK_INTERNAL__BUN_BINARY_NAME";
     pub const PREK_INTERNAL__GO_BINARY_NAME: &'static str = "PREK_INTERNAL__GO_BINARY_NAME";
     pub const PREK_INTERNAL__NODE_BINARY_NAME: &'static str = "PREK_INTERNAL__NODE_BINARY_NAME";
     pub const PREK_INTERNAL__RUSTUP_BINARY_NAME: &'static str = "PREK_INTERNAL__RUSTUP_BINARY_NAME";
+    pub const PREK_INTERNAL__SKIP_CABAL_UPDATE: &'static str = "PREK_INTERNAL__SKIP_CABAL_UPDATE";
     pub const PREK_GENERATE: &'static str = "PREK_GENERATE";
 
     // Python & uv related
@@ -52,6 +55,12 @@ impl EnvVars {
     pub const NPM_CONFIG_USERCONFIG: &'static str = "NPM_CONFIG_USERCONFIG";
     pub const NPM_CONFIG_PREFIX: &'static str = "NPM_CONFIG_PREFIX";
     pub const NODE_PATH: &'static str = "NODE_PATH";
+
+    // Bun related
+    pub const BUN_INSTALL: &'static str = "BUN_INSTALL";
+
+    // GitHub API authentication (to avoid rate limits)
+    pub const GITHUB_TOKEN: &'static str = "GITHUB_TOKEN";
 
     // Go related
     pub const GOTOOLCHAIN: &'static str = "GOTOOLCHAIN";

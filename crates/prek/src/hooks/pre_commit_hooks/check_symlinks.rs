@@ -1,26 +1,16 @@
 use std::path::Path;
 
 use anyhow::Result;
-use futures::StreamExt;
 
 use crate::hook::Hook;
+use crate::hooks::run_concurrent_file_checks;
 use crate::run::CONCURRENCY;
 
 pub(crate) async fn check_symlinks(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
-    let mut tasks = futures::stream::iter(filenames)
-        .map(|filename| check_file(hook.project().relative_path(), filename))
-        .buffered(*CONCURRENCY);
-
-    let mut code = 0;
-    let mut output = Vec::new();
-
-    while let Some(result) = tasks.next().await {
-        let (c, o) = result?;
-        code |= c;
-        output.extend(o);
-    }
-
-    Ok((code, output))
+    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
+        check_file(hook.project().relative_path(), filename)
+    })
+    .await
 }
 
 #[allow(clippy::unused_async)]
@@ -101,7 +91,10 @@ mod tests {
         let link_path = dir.path().join("link.txt");
 
         // Windows requires different APIs for file vs directory symlinks
-        tokio::fs::symlink_file(&target, &link_path).await?;
+        if tokio::fs::symlink_file(&target, &link_path).await.is_err() {
+            // Skipping test: insufficient permissions for symlink creation on Windows
+            return Ok(());
+        }
 
         let (code, output) = check_file(Path::new(""), &link_path).await?;
         assert_eq!(code, 0);

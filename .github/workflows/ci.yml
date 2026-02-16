@@ -3,8 +3,6 @@ name: CI
 on:
   push:
     branches: [master]
-    paths-ignore:
-      - "README.md"
   pull_request:
   workflow_dispatch:
 
@@ -17,44 +15,135 @@ permissions: {}
 env:
   # UV_VERSION should not greater than MAX_UV_VERSION in `languages/python/uv`.
   # Otherwise, tests jobs will install their own uv, and it will encounter concurrency issue.
-  UV_VERSION: "0.8.22"
+  UV_VERSION: "0.10.2"
   NODE_VERSION: "20"
+  BUN_VERSION: "1.3"
   GO_VERSION: "1.24"
   PYTHON_VERSION: "3.12"
   RUBY_VERSION: "3.4"
   LUA_VERSION: "5.4"
   LUAROCKS_VERSION: "3.12.2"
+  GHC_VERSION: "9.8.2" # Don't upgrade, because higher version is very slow to build
+  CABAL_VERSION: "3.16.1.0"
+  JULIA_VERSION: "1.12.4"
+
+  # Cargo env vars
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      test-code: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.any_code_changed == 'true' || github.ref == 'refs/heads/master') }}
+      save-rust-cache: ${{ github.ref == 'refs/heads/master' || steps.changed.outputs.cache_changed == 'true' }}
+      # Run benchmarks only if Rust code changed
+      run-bench: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.rust_code_changed == 'true' || github.ref == 'refs/heads/master') }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Determine changed files"
+        id: changed
+        shell: bash
+        run: |
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha || 'origin/master' }}...HEAD)
+
+          ANY_CODE_CHANGED=false
+          CACHE_CHANGED=false
+          RUST_CODE_CHANGED=false
+
+          while IFS= read -r file; do
+            # Check if cache-relevant files changed (Cargo files, toolchain, workflows)
+            if [[ "${file}" == "Cargo.lock" || "${file}" == "Cargo.toml" || "${file}" == "rust-toolchain.toml" || "${file}" == ".cargo/config.toml" || "${file}" =~ ^crates/.*/Cargo\.toml$ || "${file}" =~ ^\.github/workflows/.*\.yml$ ]]; then
+              echo "Detected cache-relevant change: ${file}"
+              CACHE_CHANGED=true
+            fi
+
+            # Check if Rust code changed (for benchmarks)
+            if [[ "${file}" =~ \.rs$ ]] || [[ "${file}" =~ Cargo\.toml$ ]] || [[ "${file}" == "Cargo.lock" ]] || [[ "${file}" == "rust-toolchain.toml" ]] || [[ "${file}" =~ ^\.cargo/ ]]; then
+              echo "Detected Rust code change: ${file}"
+              RUST_CODE_CHANGED=true
+            fi
+
+            if [[ "${file}" =~ ^docs/ ]]; then
+              echo "Skipping ${file} (matches docs/ pattern)"
+              continue
+            fi
+            if [[ "${file}" =~ ^mkdocs.*\.yml$ ]]; then
+              echo "Skipping ${file} (matches mkdocs*.yml pattern)"
+              continue
+            fi
+            if [[ "${file}" =~ \.md$ ]]; then
+              echo "Skipping ${file} (matches *.md pattern)"
+              continue
+            fi
+
+            echo "Detected code change in: ${file}"
+            ANY_CODE_CHANGED=true
+
+          done <<< "${CHANGED_FILES}"
+          echo "any_code_changed=${ANY_CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
+          echo "cache_changed=${CACHE_CHANGED}" >> "${GITHUB_OUTPUT}"
+          echo "rust_code_changed=${RUST_CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
+
   lint:
     name: "lint"
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
       - name: "rustfmt"
         run: cargo fmt --all --check
-      - name: Run prek hooks
-        uses: j178/prek-action@91fd7d7cf70ae1dee9f4f44e7dfa5d1073fe6623 # v1.0.11
+      - name: Run prek checks
+        uses: j178/prek-action@0bb87d7f00b0c99306c8bcb8b8beba1eb581c037 # v1.1.1
+        env:
+          PREK_SKIP: cargo-fmt,cargo-clippy
+
+  check-release:
+    name: "check release"
+    needs: plan
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          extra-args: "--all-files --skip cargo-fmt --skip cargo-clippy"
+          persist-credentials: false
+
+      - name: Install dist
+        shell: bash
+        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.30.3/cargo-dist-installer.sh | sh"
+
+      - name: Run dist plan
+        run: |
+          dist plan --output-format=json > plan-dist-manifest.json
+          echo "dist plan completed successfully"
+          cat plan-dist-manifest.json
 
   cargo-clippy-linux:
     name: "cargo clippy | ubuntu"
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
-          save-if: ${{ github.ref == 'refs/heads/master' }}
+          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
         run: rustup component add clippy
@@ -62,11 +151,13 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-clippy-windows:
+    name: "cargo clippy | windows"
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
     timeout-minutes: 15
     runs-on: windows-latest
-    name: "cargo clippy | windows"
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
@@ -81,7 +172,7 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           workspaces: ${{ env.PREK_WORKSPACE }}
-          save-if: ${{ github.ref == 'refs/heads/master' }}
+          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
         run: rustup component add clippy
@@ -92,41 +183,45 @@ jobs:
 
   cargo-shear:
     name: "cargo shear"
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
+        uses: taiki-e/install-action@f176c07a0a40cbfdd08ee9aa8bf1655701d11e69 # v2.67.25
         with:
           tool: cargo-shear
       - run: cargo shear
 
   cargo-test-without-uv:
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
     timeout-minutes: 5
     runs-on: ubuntu-latest
     name: "cargo test | without uv"
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
-          save-if: ${{ github.ref == 'refs/heads/master' }}
+          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
+        uses: taiki-e/install-action@f176c07a0a40cbfdd08ee9aa8bf1655701d11e69 # v2.67.25
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
+        uses: taiki-e/install-action@f176c07a0a40cbfdd08ee9aa8bf1655701d11e69 # v2.67.25
         with:
           tool: cargo-llvm-cov
 
@@ -134,192 +229,100 @@ jobs:
         run: |
           echo "::group::Test install uv with auto select"
           cargo llvm-cov nextest \
-          --no-report \
-          -E 'binary_id(prek::run) and test(run_basic)'
+            --profile ci-core \
+            --cargo-profile fast-build \
+            --no-report \
+            -E 'binary_id(prek::run) and test(run_basic)'
           echo "::endgroup::"
 
           for source in github pypi aliyun pip invalid; do
             echo "::group::Test install uv from $source"
             export PREK_UV_SOURCE=$source
             cargo llvm-cov nextest \
+              --profile ci-core \
+              --cargo-profile fast-build \
               --no-report \
               -E 'binary_id(prek::run) and test(run_basic)'
             echo "::endgroup::"
           done
 
-          cargo llvm-cov report --lcov --output-path lcov.info
+          cargo llvm-cov report --profile fast-build --lcov --output-path lcov.info
 
       - name: "Upload coverage reports to Codecov"
-        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
 
-  cargo-test-linux:
-    timeout-minutes: 5
-    runs-on: ubuntu-latest
-    name: "cargo test | ubuntu"
+  cargo-test:
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
+    timeout-minutes: 10
+    runs-on: ${{ matrix.os }}
+    name: "cargo test | ${{ matrix.os }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+        if: ${{ matrix.os == 'ubuntu-latest' }}
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
-          save-if: ${{ github.ref == 'refs/heads/master' }}
+          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
+        uses: taiki-e/install-action@f176c07a0a40cbfdd08ee9aa8bf1655701d11e69 # v2.67.25
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
+        uses: taiki-e/install-action@f176c07a0a40cbfdd08ee9aa8bf1655701d11e69 # v2.67.25
         with:
           tool: cargo-llvm-cov
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # v7.1.4
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
         with:
           version: ${{ env.UV_VERSION }}
 
       - name: "Install Python"
-        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: "Install Node.js"
-        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          # A dummy dependency path to enable caching of go modules.
-          cache-dependency-path: LICENSE
-
-      - name: "Install Go"
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          # A dummy dependency path to enable caching of go modules.
-          cache-dependency-path: LICENSE
-
-      - name: "Install Lua"
-        uses: leafo/gh-actions-lua@8c9e175e7a3d77e21f809eefbee34a19b858641b # v12
-        with:
-          luaVersion: ${{ env.LUA_VERSION }}
-
-      - name: "Install LuaRocks"
-        uses: luarocks/gh-actions-luarocks@7c85eeff60655651b444126f2a78be784e836a0a #v6
-        with:
-          luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
-
-      - name: "Install Ruby"
-        uses: ruby/setup-ruby@8aeb6ff8030dd539317f8e1769a044873b56ea71 # v1.268.0
-        with:
-          ruby-version: ${{ env.RUBY_VERSION }}
 
       - name: "Cargo test"
         run: |
           cargo llvm-cov nextest \
-            --no-report \
+            --lcov \
+            --output-path lcov.info \
             --workspace \
-            --features schemars \
-            --status-level skip \
-            --failure-output immediate \
-            --no-fail-fast \
-            -j 8 \
-            --final-status-level slow
-
-          cargo llvm-cov report --lcov --output-path lcov.info
+            --cargo-profile fast-build \
+            --profile ci-core \
+            --features schemars
 
       - name: "Upload coverage reports to Codecov"
-        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
 
-  cargo-test-macos:
-    runs-on: macos-latest
-    name: "cargo test | macos"
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
-        with:
-          persist-credentials: false
-      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/master' }}
-
-      - name: "Install Rust toolchain"
-        run: rustup show
-
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
-        with:
-          tool: cargo-nextest
-
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # v7.1.4
-        with:
-          version: ${{ env.UV_VERSION }}
-
-      - name: "Install Python"
-        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: "Install Node.js"
-        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          # A dummy dependency path to enable caching of go modules.
-          cache-dependency-path: LICENSE
-
-      - name: "Install Go"
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          # A dummy dependency path to enable caching of go modules.
-          cache-dependency-path: LICENSE
-
-      - name: "Install Lua"
-        uses: leafo/gh-actions-lua@8c9e175e7a3d77e21f809eefbee34a19b858641b # v12
-        with:
-          luaVersion: ${{ env.LUA_VERSION }}
-
-      - name: "Install LuaRocks"
-        uses: luarocks/gh-actions-luarocks@7c85eeff60655651b444126f2a78be784e836a0a #v6
-        with:
-          luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
-
-      - name: "Install Ruby"
-        uses: ruby/setup-ruby@8aeb6ff8030dd539317f8e1769a044873b56ea71 # v1.268.0
-        with:
-          ruby-version: ${{ env.RUBY_VERSION }}
-
-      - name: "Cargo test"
-        run: |
-          cargo nextest show-config test-groups
-          cargo nextest run \
-            --workspace \
-            --features schemars \
-            --status-level skip \
-            --failure-output immediate \
-            --no-fail-fast \
-            -j 8 \
-            --final-status-level slow
-
   cargo-test-windows:
-    runs-on: windows-latest
     name: "cargo test | windows"
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
+    runs-on: windows-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
@@ -334,89 +337,349 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           workspaces: ${{ env.PREK_WORKSPACE }}
-          save-if: ${{ github.ref == 'refs/heads/master' }}
+          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
+        uses: taiki-e/install-action@f176c07a0a40cbfdd08ee9aa8bf1655701d11e69 # v2.67.25
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
+        uses: taiki-e/install-action@f176c07a0a40cbfdd08ee9aa8bf1655701d11e69 # v2.67.25
         with:
           tool: cargo-llvm-cov
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # v7.1.4
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
         with:
           version: ${{ env.UV_VERSION }}
           cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
 
       - name: "Install Python"
-        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: "Install Node.js"
-        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          # A dummy dependency path to enable caching of go modules.
-          cache-dependency-path: LICENSE
-
-      - name: "Install Go"
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          # A dummy dependency path to enable caching of go modules.
-          cache-dependency-path: LICENSE
-
       - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # windows only
-
-      - name: "Install Lua"
-        # luarocks/gh-actions-lua doesn't cache the built lua, use `leafo/gh-actions-lua` instead.
-        uses: leafo/gh-actions-lua@8c9e175e7a3d77e21f809eefbee34a19b858641b # v12
-        with:
-          luaVersion: ${{ env.LUA_VERSION }}
-
-      - name: "Install LuaRocks"
-        # `leafo/gh-actions-lua` doesn't support windows, so we have to use `luarocks/gh-actions-luarocks`.
-        uses: luarocks/gh-actions-luarocks@7c85eeff60655651b444126f2a78be784e836a0a #v6
-        with:
-          luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
-
-      - name: "Install Ruby"
-        uses: ruby/setup-ruby@8aeb6ff8030dd539317f8e1769a044873b56ea71 # v1.268.0
-        with:
-          ruby-version: ${{ env.RUBY_VERSION }}
 
       - name: "Cargo test"
         working-directory: ${{ env.PREK_WORKSPACE }}
+        shell: pwsh
         run: |
           # Remove msys64 from PATH for Rust compilation
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\msys64\\' }) -join ';'
 
           cargo llvm-cov nextest `
-            --no-report `
+            --lcov `
+            --output-path lcov.info `
             --workspace `
+            --cargo-profile fast-build `
             --features schemars `
-            --status-level skip `
-            --failure-output immediate `
-            --no-fail-fast `
-            -j 8 `
-            --final-status-level slow
+            --profile ci-core
 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          cargo llvm-cov report --lcov --output-path lcov.info
+      - name: "Upload coverage reports to Codecov"
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ env.PREK_WORKSPACE }}/lcov.info
+
+  language-tests:
+    name: "language tests | ${{ matrix.language }} | ${{ matrix.os }}"
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
+    timeout-minutes: 10
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        language:
+          - bun
+          - docker
+          - golang
+          - haskell
+          - julia
+          - lua
+          - node
+          - python
+          - ruby
+          - rust
+          - swift
+        exclude:
+          # Docker is only available on ubuntu-latest
+          - os: macos-latest
+            language: docker
+          - os: windows-latest
+            language: docker
+          # Swift is preinstalled on ubuntu and macOS; Windows requires setup which is slow
+          - os: windows-latest
+            language: swift
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
+
+      - name: "Install Rust toolchain"
+        run: rustup component add llvm-tools-preview
+
+      - name: "Install cargo nextest"
+        uses: taiki-e/install-action@f176c07a0a40cbfdd08ee9aa8bf1655701d11e69 # v2.67.25
+        with:
+          tool: cargo-nextest
+
+      - name: "Install cargo-llvm-cov"
+        uses: taiki-e/install-action@f176c07a0a40cbfdd08ee9aa8bf1655701d11e69 # v2.67.25
+        with:
+          tool: cargo-llvm-cov
+
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # windows only
+        if: ${{ matrix.os == 'windows-latest' }}
+
+      - name: "Install uv"
+        if: ${{ matrix.language == 'python' }}
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: "Install Python"
+        if: ${{ matrix.language == 'python' }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: "Install Node.js"
+        if: ${{ matrix.language == 'node' }}
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          # Dummy dependency path to satisfy required input while enabling caching
+          cache-dependency-path: LICENSE
+
+      - name: "Install Go"
+        if: ${{ matrix.language == 'golang' }}
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          # Dummy dependency path to satisfy required input while enabling caching
+          cache-dependency-path: LICENSE
+
+      - name: "Install Lua"
+        if: ${{ matrix.language == 'lua' }}
+        uses: leafo/gh-actions-lua@8c9e175e7a3d77e21f809eefbee34a19b858641b # v12
+        with:
+          luaVersion: ${{ env.LUA_VERSION }}
+
+      - name: "Install LuaRocks"
+        if: ${{ matrix.language == 'lua' }}
+        uses: luarocks/gh-actions-luarocks@7c85eeff60655651b444126f2a78be784e836a0a #v6
+        with:
+          luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
+
+      - name: "Install Ruby"
+        if: ${{ matrix.language == 'ruby' }}
+        uses: ruby/setup-ruby@09a7688d3b55cf0e976497ff046b70949eeaccfd # v1.288.0
+        with:
+          ruby-version: ${{ env.RUBY_VERSION }}
+
+      - name: "Install Bun"
+        if: ${{ matrix.language == 'bun' }}
+        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: "Cache GHC"
+        if: ${{ matrix.language == 'haskell' }}
+        id: cache-haskell
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: ~/.ghcup
+          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
+          restore-keys: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
+
+      - name: "Install GHC and Cabal"
+        if: ${{ matrix.language == 'haskell' }}
+        uses: haskell-actions/setup@f9150cb1d140e9a9271700670baa38991e6fa25c # v2.10.3
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+
+      - name: "Install Julia"
+        if: ${{ matrix.language == 'julia' }}
+        uses: julia-actions/setup-julia@5c9647d97b78a5debe5164e9eec09d653d29bd71 # v2.6.1
+        with:
+          version: ${{ env.JULIA_VERSION }}
+
+      - name: "Run language tests"
+        if: ${{ matrix.os != 'windows-latest' }}
+        run: |
+          cargo llvm-cov nextest \
+            --lcov \
+            --output-path lcov.info \
+            --workspace \
+            --cargo-profile fast-build \
+            --features schemars \
+            --profile lang-${{ matrix.language }}
+
+      - name: "Run language tests (windows)"
+        if: ${{ matrix.os == 'windows-latest' }}
         shell: pwsh
+        run: |
+          # Remove msys64 from PATH for Rust compilation
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\msys64\\' }) -join ';'
+
+          cargo llvm-cov nextest `
+            --lcov `
+            --output-path lcov.info `
+            --workspace `
+            --cargo-profile fast-build `
+            --features schemars `
+            --profile lang-${{ matrix.language }}
+
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: "Upload coverage reports to Codecov"
-        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
+
+  performance:
+    needs: plan
+    if: ${{ needs.plan.outputs.run-bench == 'true' }}
+    uses: ./.github/workflows/performance.yml
+    with:
+      save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
+
+  ecosystem-cpython:
+    name: "ecosystem | cpython"
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Checkout python/cpython
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: python/cpython
+          ref: f3759d21dd5e6510361d7409a1df53f35ebd9a58
+          path: cpython
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
+
+      - name: Run prek on cpython
+        working-directory: cpython
+        run: cargo run -p prek -- --all-files
+
+  build-binary-linux-libc:
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    name: "build binary | linux libc"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
+
+      - name: "Build"
+        run: cargo build --profile no-debug --bin prek
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: prek-linux-libc-${{ github.sha }}
+          path: |
+            ./target/no-debug/prek
+          retention-days: 1
+
+  build-binary-macos-aarch64:
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
+    timeout-minutes: 10
+    runs-on: macos-latest
+    name: "build binary | macos aarch64"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
+
+      - name: "Build"
+        run: cargo build --profile no-debug --bin prek
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: prek-macos-aarch64-${{ github.sha }}
+          path: |
+            ./target/no-debug/prek
+          retention-days: 1
+
+  build-binary-windows-x86_64:
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
+    timeout-minutes: 10
+    runs-on: windows-latest
+    name: "build binary | windows x86_64"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          workspaces: ${{ env.PREK_WORKSPACE }}
+          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
+
+      - name: "Build"
+        working-directory: ${{ env.PREK_WORKSPACE }}
+        run: cargo build --profile no-debug --bin prek
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: prek-windows-x86_64-${{ github.sha }}
+          path: |
+            ${{ env.PREK_WORKSPACE }}/target/no-debug/prek.exe
+          retention-days: 1

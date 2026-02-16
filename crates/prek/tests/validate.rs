@@ -1,5 +1,5 @@
 use assert_fs::fixture::{FileWriteStr, PathChild};
-use prek_consts::CONFIG_FILE;
+use prek_consts::PRE_COMMIT_CONFIG_YAML;
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -20,16 +20,16 @@ fn validate_config() -> anyhow::Result<()> {
     ");
 
     context.write_pre_commit_config(indoc::indoc! {r"
-            repos:
-              - repo: https://github.com/pre-commit/pre-commit-hooks
-                rev: v5.0.0
-                hooks:
-                  - id: trailing-whitespace
-                  - id: end-of-file-fixer
-                  - id: check-json
-        "});
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v5.0.0
+            hooks:
+              - id: trailing-whitespace
+              - id: end-of-file-fixer
+              - id: check-json
+    "});
     // Validate one file.
-    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @r"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -47,17 +47,73 @@ fn validate_config() -> anyhow::Result<()> {
         "})?;
 
     // Validate multiple files.
-    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE).arg("config-1.yaml"), @r"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML).arg("config-1.yaml"), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to parse `config-1.yaml`
-      caused by: Invalid remote repo: missing field `rev`
+      caused by: error: line 2 column 5: missing field `rev`
+     --> <input>:2:5
+      |
+    1 | repos:
+    2 |   - repo: https://github.com/pre-commit/pre-commit-hooks
+      |     ^ missing field `rev`
     ");
 
     Ok(())
+}
+
+#[test]
+fn invalid_config_error() {
+    let context = TestContext::new();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            hooks:
+              - id: trailing-whitespace
+              - id: end-of-file-fixer
+              - id: check-json
+            rev: 1.0
+    "});
+
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    success: All configs are valid
+    ");
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/pre-commit-hooks
+            rev: v6.0.0
+            hooks:
+              - id: trailing-whitespace
+              - id: end-of-file-fixer
+          - repo: local
+            hooks:
+              - name: check-json
+    "});
+
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: error: line 9 column 9: missing field `id`
+     --> <input>:9:9
+      |
+    7 |   - repo: local
+    8 |     hooks:
+    9 |       - name: check-json
+      |         ^ missing field `id`
+    ");
 }
 
 #[test]
@@ -109,14 +165,20 @@ fn validate_manifest() -> anyhow::Result<()> {
         "})?;
 
     // Validate multiple files.
-    cmd_snapshot!(context.filters(), context.validate_manifest().arg(".pre-commit-hooks.yaml").arg("hooks-1.yaml"), @r"
+    cmd_snapshot!(context.filters(), context.validate_manifest().arg(".pre-commit-hooks.yaml").arg("hooks-1.yaml"), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to parse `hooks-1.yaml`
-      caused by: .[0]: missing field `entry` at line 1 column 5
+      caused by: error: line 6 column 5: missing field `entry`
+     --> <input>:6:5
+      |
+    4 |     language: python
+    5 |     stages: [pre-commit, pre-push, manual]
+    6 |     minimum_pre_commit_version: 3.2.0
+      |     ^ missing field `entry`
     ");
 
     Ok(())
@@ -140,7 +202,7 @@ fn unexpected_keys_warning() {
         minimum_pre_commit_version: 1.0.0
     "});
 
-    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @r"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -168,7 +230,7 @@ fn unexpected_keys_warning() {
         minimum_pre_commit_version: 1.0.0
     "});
 
-    cmd_snapshot!(context.filters(), context.validate_config().arg(CONFIG_FILE), @r"
+    cmd_snapshot!(context.filters(), context.validate_config().arg(PRE_COMMIT_CONFIG_YAML), @r"
     success: true
     exit_code: 0
     ----- stdout -----

@@ -3,10 +3,10 @@ use std::path::Path;
 use anyhow::Result;
 use bstr::ByteSlice;
 use clap::{Parser, ValueEnum};
-use futures::StreamExt;
 use rustc_hash::FxHashMap;
 
 use crate::hook::Hook;
+use crate::hooks::run_concurrent_file_checks;
 use crate::run::CONCURRENCY;
 
 const CRLF: &[u8] = b"\r\n";
@@ -42,22 +42,12 @@ enum FixMode {
 }
 
 pub(crate) async fn mixed_line_ending(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
+    let args = Args::try_parse_from(hook.entry.split()?.iter().chain(&hook.args))?;
 
-    let mut results = futures::stream::iter(filenames)
-        .map(|filename| fix_file(hook.project().relative_path(), filename, args.fix))
-        .buffered(*CONCURRENCY);
-
-    let mut exit_code = 0;
-    let mut output = Vec::new();
-
-    while let Some(result) = results.next().await {
-        let (c, o) = result?;
-        exit_code |= c;
-        output.extend(o);
-    }
-
-    Ok((exit_code, output))
+    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
+        fix_file(hook.project().relative_path(), filename, args.fix)
+    })
+    .await
 }
 
 // Process a single file for mixed line endings

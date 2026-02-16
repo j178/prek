@@ -1,11 +1,9 @@
-use std::process::Command;
-
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::env_vars::EnvVars;
-use prek_consts::{CONFIG_FILE, MANIFEST_FILE};
+use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_HOOKS_YAML};
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 /// Test `language_version` parsing and installation for golang hooks.
 /// We use `setup-go` action to install go 1.24 in CI, so go 1.23 will be auto downloaded.
@@ -244,8 +242,6 @@ fn remote_hook() {
 fn local_additional_deps() -> anyhow::Result<()> {
     let go_hook = TestContext::new();
     go_hook.init_project();
-    go_hook.configure_git_author();
-    go_hook.disable_auto_crlf();
 
     // Create a local go hook with additional_dependencies.
     go_hook
@@ -277,7 +273,7 @@ fn local_additional_deps() -> anyhow::Result<()> {
     "#})?;
     go_hook
         .work_dir()
-        .child(MANIFEST_FILE)
+        .child(PRE_COMMIT_HOOKS_YAML)
         .write_str(indoc::indoc! {r"
         - id: go-hook
           name: go-hook
@@ -287,9 +283,8 @@ fn local_additional_deps() -> anyhow::Result<()> {
     "})?;
     go_hook.git_add(".");
     go_hook.git_commit("Initial commit");
-    Command::new("git")
+    git_cmd(go_hook.work_dir())
         .args(["tag", "v1.0", "-m", "v1.0"])
-        .current_dir(go_hook.work_dir())
         .output()?;
 
     let context = TestContext::new();
@@ -298,7 +293,7 @@ fn local_additional_deps() -> anyhow::Result<()> {
 
     let hook_url = go_hook.work_dir().to_str().unwrap();
     work_dir
-        .child(CONFIG_FILE)
+        .child(PRE_COMMIT_CONFIG_YAML)
         .write_str(&indoc::formatdoc! {r"
         repos:
           - repo: {hook_url}
@@ -320,6 +315,70 @@ fn local_additional_deps() -> anyhow::Result<()> {
       Hello, Utility!
 
     ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Ensure `go.mod` metadata (go/toolchain directives) is used to constrain
+/// the Go version for remote hooks.
+#[test]
+fn remote_go_mod_metadata_sets_language_version() -> anyhow::Result<()> {
+    // Create a remote repo containing a golang hook.
+    let go_hook = TestContext::new();
+    go_hook.init_project();
+
+    go_hook
+        .work_dir()
+        .child("go.mod")
+        .write_str(indoc::indoc! {r"
+      module example.com/go-hook
+
+      go 2.100 // unrealistic version to ensure the downloading fails
+      "})?;
+
+    go_hook
+        .work_dir()
+        .child(PRE_COMMIT_HOOKS_YAML)
+        .write_str(indoc::indoc! {r"
+      - id: echo
+        name: echo
+        entry: echo
+        language: golang
+        verbose: true
+      "})?;
+
+    go_hook.git_add(".");
+    go_hook.git_commit("Initial commit");
+    git_cmd(go_hook.work_dir())
+        .args(["tag", "v1.0", "-m", "v1.0"])
+        .output()?;
+
+    // Use it as a remote repo in a separate project.
+    let context = TestContext::new();
+    context.init_project();
+
+    let hook_url = go_hook.work_dir().to_str().unwrap();
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+      repos:
+        - repo: {hook_url}
+          rev: v1.0
+          hooks:
+            - id: echo
+              verbose: true
+      ", hook_url = hook_url});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install hook `echo`
+      caused by: Failed to install go
+      caused by: Failed to resolve go version `>= 2.100.0`
+      caused by: Version `>= 2.100.0` not found on remote
     ");
 
     Ok(())

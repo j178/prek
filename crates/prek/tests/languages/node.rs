@@ -1,5 +1,5 @@
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::fixture::PathChild;
 use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot, remove_bin_from_path};
@@ -196,48 +196,77 @@ fn additional_dependencies() {
     ");
 }
 
-/// Test `https://github.com/thlorenz/doctoc` works correctly with prek.
-/// Previously, prek did not install its dependencies correctly.
-#[ignore = "slow and flaky"]
+/// Test that npm install works without system node in PATH.
+/// Regression test for #1492: `install()` must use the provisioned toolchain.
 #[test]
-fn doctoc() -> anyhow::Result<()> {
+fn additional_dependencies_without_system_node() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: node
+                name: node
+                language: node
+                entry: cowsay Hello
+                additional_dependencies: ["cowsay"]
+                always_run: true
+                pass_filenames: false
+    "#});
+
+    context.git_add(".");
+
+    let new_path = remove_bin_from_path("node", None)?;
+
+    cmd_snapshot!(context.filters(), context.run().env("PATH", new_path), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    node.....................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Test that `npm.cmd` can be found on Windows.
+#[test]
+fn npm_version() {
     let context = TestContext::new();
     context.init_project();
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/thlorenz/doctoc
-            rev: v2.2.0
+          - repo: local
             hooks:
-              - id: doctoc
-                name: Add TOC for Markdown
+              - id: npm-version
+                name: npm-version
+                language: system
+                entry: npm --version
+                always_run: true
+                pass_filenames: false
+                verbose: true
     "});
-    context.work_dir().child("README.md").write_str(
-        "# Hello World\n\nThis is a test file.\n\n## Subsection\n\nMore content here.\n",
-    )?;
     context.git_add(".");
 
-    #[allow(clippy::disallowed_methods)]
-    let new_path = remove_bin_from_path("node", None)?;
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\d+\.\d+\.\d+", "[NPM_VERSION]")])
+        .collect::<Vec<_>>();
 
-    // Set PATH to . to mask the system installed node,
-    // ensure that `npm` runs correctly.
-    cmd_snapshot!(context.filters(), context.run().env("PATH", new_path), @r#"
-    success: false
-    exit_code: 1
+    cmd_snapshot!(filters, context.run(), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
-    Add TOC for Markdown.....................................................Failed
-    - hook id: doctoc
-    - files were modified by this hook
-      DocToccing single file "README.md" for github.com.
+    npm-version..............................................................Passed
+    - hook id: npm-version
+    - duration: [TIME]
 
-      ==================
-
-      "README.md" will be updated
-
-      Everything is OK.
+      [NPM_VERSION]
 
     ----- stderr -----
-    "#);
-
-    Ok(())
+    ");
 }

@@ -1,0 +1,76 @@
+---
+source: crates/prek/src/config.rs
+expression: config
+---
+Config {
+    repos: [
+        Local(
+            LocalRepo {
+                repo: "local",
+                hooks: [
+                    LocalHook {
+                        id: "test-yaml",
+                        name: "Test YAML compatibility",
+                        entry: "prek --help",
+                        language: System,
+                        priority: None,
+                        options: HookOptions {
+                            alias: None,
+                            files: None,
+                            exclude: None,
+                            types: None,
+                            types_or: None,
+                            exclude_types: None,
+                            additional_dependencies: None,
+                            args: None,
+                            env: None,
+                            always_run: None,
+                            fail_fast: None,
+                            pass_filenames: Some(
+                                false,
+                            ),
+                            description: None,
+                            language_version: None,
+                            log_file: None,
+                            require_serial: Some(
+                                true,
+                            ),
+                            stages: Some(
+                                [
+                                    PreCommit,
+                                ],
+                            ),
+                            verbose: None,
+                            minimum_prek_version: None,
+                            _unused_keys: {},
+                        },
+                    },
+                ],
+                _unused_keys: {},
+            },
+        ),
+    ],
+    default_install_hook_types: None,
+    default_language_version: None,
+    default_stages: None,
+    files: None,
+    exclude: None,
+    fail_fast: None,
+    minimum_prek_version: None,
+    orphan: None,
+    _unused_keys: {
+        "local": Object {
+            "language": String("system"),
+            "pass_filenames": Bool(false),
+            "require_serial": Bool(true),
+        },
+        "local-commit": Object {
+            "stages": Array [
+                String("pre-commit"),
+            ],
+            "language": String("system"),
+            "pass_filenames": Bool(false),
+            "require_serial": Bool(true),
+        },
+    },
+}

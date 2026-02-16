@@ -40,7 +40,7 @@ impl Args {
 }
 
 pub(crate) async fn no_commit_to_branch(hook: &Hook) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
+    let args = Args::try_parse_from(hook.entry.split()?.iter().chain(&hook.args))?;
 
     let output = git_cmd("get current branch")?
         .arg("symbolic-ref")

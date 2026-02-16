@@ -1,0 +1,93 @@
+---
+source: crates/prek/src/config.rs
+expression: config
+---
+Config {
+    repos: [
+        Local(
+            LocalRepo {
+                repo: "local",
+                hooks: [
+                    LocalHook {
+                        id: "mypy-local",
+                        name: "Local mypy",
+                        entry: "python tools/pre_commit/mypy.py 0 \"local\"",
+                        language: Python,
+                        priority: None,
+                        options: HookOptions {
+                            alias: None,
+                            files: None,
+                            exclude: None,
+                            types: None,
+                            types_or: Some(
+                                [
+                                    "python",
+                                    "pyi",
+                                ],
+                            ),
+                            exclude_types: None,
+                            additional_dependencies: None,
+                            args: None,
+                            env: None,
+                            always_run: None,
+                            fail_fast: None,
+                            pass_filenames: None,
+                            description: None,
+                            language_version: None,
+                            log_file: None,
+                            require_serial: None,
+                            stages: None,
+                            verbose: None,
+                            minimum_prek_version: None,
+                            _unused_keys: {},
+                        },
+                    },
+                    LocalHook {
+                        id: "mypy-3.10",
+                        name: "Mypy 3.10",
+                        entry: "python tools/pre_commit/mypy.py 1 \"3.10\"",
+                        language: Python,
+                        priority: None,
+                        options: HookOptions {
+                            alias: None,
+                            files: None,
+                            exclude: None,
+                            types: None,
+                            types_or: Some(
+                                [
+                                    "python",
+                                    "pyi",
+                                ],
+                            ),
+                            exclude_types: None,
+                            additional_dependencies: None,
+                            args: None,
+                            env: None,
+                            always_run: None,
+                            fail_fast: None,
+                            pass_filenames: None,
+                            description: None,
+                            language_version: None,
+                            log_file: None,
+                            require_serial: None,
+                            stages: None,
+                            verbose: None,
+                            minimum_prek_version: None,
+                            _unused_keys: {},
+                        },
+                    },
+                ],
+                _unused_keys: {},
+            },
+        ),
+    ],
+    default_install_hook_types: None,
+    default_language_version: None,
+    default_stages: None,
+    files: None,
+    exclude: None,
+    fail_fast: None,
+    minimum_prek_version: None,
+    orphan: None,
+    _unused_keys: {},
+}

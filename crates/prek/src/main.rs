@@ -19,7 +19,9 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
 use crate::cleanup::cleanup;
-use crate::cli::{CacheCommand, CacheNamespace, Cli, Command, ExitStatus};
+use crate::cli::{
+    CacheCommand, CacheNamespace, Cli, Command, ExitStatus, UtilCommand, UtilNamespace,
+};
 #[cfg(feature = "self-update")]
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::printer::Printer;
@@ -35,12 +37,15 @@ mod git;
 mod hook;
 mod hooks;
 mod identify;
+mod install_source;
 mod languages;
 mod printer;
 mod process;
 #[cfg(all(unix, feature = "profiler"))]
 mod profiler;
 mod run;
+#[cfg(feature = "schemars")]
+mod schema;
 mod store;
 mod version;
 mod warnings;
@@ -262,7 +267,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 cli.globals.config,
                 args.includes,
                 args.skips,
-                args.hook_stage,
+                args.stage,
                 args.from_ref,
                 args.to_ref,
                 args.all_files,
@@ -318,16 +323,22 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }) => match cache_command {
             CacheCommand::Clean => cli::cache_clean(&store, printer),
             CacheCommand::Dir => {
-                writeln!(printer.stdout(), "{}", store.path().display().cyan())?;
+                writeln!(
+                    printer.stdout_important(),
+                    "{}",
+                    store.path().display().cyan()
+                )?;
                 Ok(ExitStatus::Success)
             }
-            CacheCommand::GC => {
-                writeln!(printer.stderr(), "Command not implemented yet")?;
-                Ok(ExitStatus::Failure)
+            CacheCommand::GC(args) => {
+                cli::cache_gc(&store, args.dry_run, cli.globals.verbose > 0, printer).await
             }
             CacheCommand::Size(cli::SizeArgs { human }) => cli::cache_size(&store, human, printer),
         },
         Command::Clean => cli::cache_clean(&store, printer),
+        Command::GC(args) => {
+            cli::cache_gc(&store, args.dry_run, cli.globals.verbose > 0, printer).await
+        }
         Command::ValidateConfig(args) => {
             show_settings!(args);
 
@@ -338,7 +349,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
             cli::validate_manifest(args.manifests, printer)
         }
-        Command::SampleConfig(args) => cli::sample_config(args.file, printer),
+        Command::SampleConfig(args) => cli::sample_config(args.file.into(), args.format, printer),
         Command::AutoUpdate(args) => {
             cli::auto_update(
                 &store,
@@ -367,6 +378,48 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
+        Command::Util(UtilNamespace { command }) => match command {
+            UtilCommand::Identify(args) => {
+                show_settings!(args);
+
+                cli::identify(&args.paths, args.output_format, printer)
+            }
+            UtilCommand::ListBuiltins(args) => {
+                show_settings!(args);
+
+                cli::list_builtins(args.output_format, cli.globals.verbose > 0, printer)
+            }
+            UtilCommand::InitTemplateDir(args) => {
+                show_settings!(args);
+
+                cli::init_template_dir(
+                    &store,
+                    args.directory,
+                    cli.globals.config,
+                    args.hook_types,
+                    args.no_allow_missing_config,
+                    cli.globals.refresh,
+                    printer,
+                )
+                .await
+            }
+            UtilCommand::YamlToToml(args) => {
+                show_settings!(args);
+
+                cli::yaml_to_toml(args.input, args.output, args.force, printer)
+            }
+            UtilCommand::GenerateShellCompletion(args) => {
+                show_settings!(args);
+
+                let mut command = Cli::command();
+                let bin_name = command
+                    .get_bin_name()
+                    .unwrap_or_else(|| command.get_name())
+                    .to_owned();
+                clap_complete::generate(args.shell, &mut command, bin_name, &mut std::io::stdout());
+                Ok(ExitStatus::Success)
+            }
+        },
         #[cfg(feature = "self-update")]
         Command::Self_(SelfNamespace {
             command:
@@ -377,22 +430,23 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }) => cli::self_update(target_version, token, printer).await,
         #[cfg(not(feature = "self-update"))]
         Command::Self_(_) => {
-            anyhow::bail!(
-                "prek was installed through an external package manager, and self-update \
-                is not available. Please use your package manager to update prek."
-            );
-        }
+            use crate::install_source::InstallSource;
 
-        Command::GenerateShellCompletion(args) => {
-            show_settings!(args);
+            let msg = InstallSource::detect()
+                .map(|s| {
+                    format!(
+                        "prek was installed via {} and cannot self-update. To update, run `{}`",
+                        s.description(),
+                        s.update_instructions()
+                    )
+                })
+                .unwrap_or_else(|| {
+                    "prek was installed via an external package manager and cannot self-update. \
+                     Please use your package manager to update prek."
+                        .into()
+                });
 
-            let mut command = Cli::command();
-            let bin_name = command
-                .get_bin_name()
-                .unwrap_or_else(|| command.get_name())
-                .to_owned();
-            clap_complete::generate(args.shell, &mut command, bin_name, &mut std::io::stdout());
-            Ok(ExitStatus::Success)
+            anyhow::bail!("{msg}");
         }
         Command::InitTemplateDir(args) => {
             show_settings!(args);
@@ -407,10 +461,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 printer,
             )
             .await
-        }
-        _ => {
-            writeln!(printer.stderr(), "Command not implemented yet")?;
-            Ok(ExitStatus::Failure)
         }
     }
 }

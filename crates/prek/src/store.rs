@@ -6,6 +6,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use etcetera::BaseStrategy;
 use futures::StreamExt;
+use rustc_hash::FxHashSet;
 use thiserror::Error;
 use tracing::{debug, warn};
 
@@ -16,7 +17,7 @@ use crate::fs::LockedFile;
 use crate::git::clone_repo;
 use crate::hook::InstallInfo;
 use crate::run::CONCURRENCY;
-use crate::workspace::HookInitReporter;
+use crate::workspace::{HookInitReporter, WorkspaceCache};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -29,6 +30,18 @@ pub enum Error {
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
 }
+
+/// Expand a path starting with `~` to the user's home directory.
+fn expand_tilde(path: PathBuf) -> PathBuf {
+    if let Ok(stripped) = path.strip_prefix("~") {
+        if let Some(home) = std::env::home_dir() {
+            return home.join(stripped);
+        }
+    }
+    path
+}
+
+pub(crate) const REPO_MARKER: &str = ".prek-repo.json";
 
 /// A store for managing repos.
 #[derive(Debug)]
@@ -44,7 +57,7 @@ impl Store {
     /// Create a store from environment variables or default paths.
     pub(crate) fn from_settings() -> Result<Self, Error> {
         let path = if let Some(path) = EnvVars::var_os(EnvVars::PREK_HOME) {
-            Some(path.into())
+            Some(expand_tilde(PathBuf::from(path)))
         } else {
             etcetera::choose_base_strategy()
                 .map(|path| path.cache_dir().join("prek"))
@@ -89,7 +102,7 @@ impl Store {
     ) -> Result<PathBuf, Error> {
         // Check if the repo is already cloned.
         let target = self.repo_path(repo);
-        if target.join(".prek-repo.json").try_exists()? {
+        if target.join(REPO_MARKER).try_exists()? {
             return Ok(target);
         }
 
@@ -111,7 +124,7 @@ impl Store {
         fs_err::tokio::rename(temp, &target).await?;
 
         let content = serde_json::to_string_pretty(&repo)?;
-        fs_err::tokio::write(target.join(".prek-repo.json"), content).await?;
+        fs_err::tokio::write(target.join(REPO_MARKER), content).await?;
 
         if let Some((reporter, progress)) = progress {
             reporter.on_clone_complete(progress);
@@ -160,12 +173,16 @@ impl Store {
         LockedFile::acquire(self.path.join(".lock"), "store").await
     }
 
-    /// Returns the path to the cloned repo.
-    fn repo_path(&self, repo: &RemoteRepo) -> PathBuf {
+    /// Returns the path to where a remote repo would be stored.
+    pub(crate) fn repo_path(&self, repo: &RemoteRepo) -> PathBuf {
+        self.repos_dir().join(Self::repo_key(repo))
+    }
+
+    /// Returns the store key (directory name) for a remote repo.
+    pub(crate) fn repo_key(repo: &RemoteRepo) -> String {
         let mut hasher = DefaultHasher::new();
         repo.hash(&mut hasher);
-        let digest = to_hex(hasher.finish());
-        self.repos_dir().join(digest)
+        to_hex(hasher.finish())
     }
 
     pub(crate) fn repos_dir(&self) -> PathBuf {
@@ -180,13 +197,21 @@ impl Store {
         self.path.join("patches")
     }
 
+    pub(crate) fn tools_dir(&self) -> PathBuf {
+        self.path.join("tools")
+    }
+
+    pub(crate) fn cache_dir(&self) -> PathBuf {
+        self.path.join("cache")
+    }
+
     /// The path to the tool directory in the store.
     pub(crate) fn tools_path(&self, tool: ToolBucket) -> PathBuf {
-        self.path.join("tools").join(tool.as_str())
+        self.tools_dir().join(tool.as_ref())
     }
 
     pub(crate) fn cache_path(&self, tool: CacheBucket) -> PathBuf {
-        self.path.join("cache").join(tool.as_str())
+        self.cache_dir().join(tool.as_ref())
     }
 
     /// Scratch path for temporary files.
@@ -197,9 +222,72 @@ impl Store {
     pub(crate) fn log_file(&self) -> PathBuf {
         self.path.join("prek.log")
     }
+
+    pub(crate) fn config_tracking_file(&self) -> PathBuf {
+        self.path.join("config-tracking.json")
+    }
+
+    /// Get all tracked config files.
+    ///
+    /// Seed `config-tracking.json` from the workspace discovery cache if it doesn't exist.
+    /// This is a one-time upgrade helper: it only does work when tracking is empty.
+    pub(crate) fn tracked_configs(&self) -> Result<FxHashSet<PathBuf>, Error> {
+        let tracking_file = self.config_tracking_file();
+        match fs_err::read_to_string(&tracking_file) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+            Ok(content) => {
+                let tracked = serde_json::from_str(&content).unwrap_or_else(|e| {
+                    warn!("Failed to parse config tracking file: {e}, resetting");
+                    FxHashSet::default()
+                });
+                return Ok(tracked);
+            }
+        }
+
+        let cached = WorkspaceCache::cached_config_paths(self);
+        if cached.is_empty() {
+            return Ok(FxHashSet::default());
+        }
+
+        debug!(
+            count = cached.len(),
+            "Bootstrapping config tracking from workspace cache"
+        );
+        self.update_tracked_configs(&cached)?;
+
+        Ok(cached)
+    }
+
+    /// Track new config files for GC.
+    pub(crate) fn track_configs<'a>(
+        &self,
+        config_paths: impl Iterator<Item = &'a Path>,
+    ) -> Result<(), Error> {
+        let mut tracked = self.tracked_configs()?;
+        for config_path in config_paths {
+            tracked.insert(config_path.to_path_buf());
+        }
+
+        let tracking_file = self.config_tracking_file();
+        let content = serde_json::to_string_pretty(&tracked)?;
+        fs_err::write(&tracking_file, content)?;
+
+        Ok(())
+    }
+
+    /// Update the tracked configs file.
+    pub(crate) fn update_tracked_configs(&self, configs: &FxHashSet<PathBuf>) -> Result<(), Error> {
+        let tracking_file = self.config_tracking_file();
+        let content = serde_json::to_string_pretty(configs)?;
+        fs_err::write(&tracking_file, content)?;
+
+        Ok(())
+    }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, Hash, PartialEq, strum::EnumIter, strum::AsRefStr, strum::Display)]
+#[strum(serialize_all = "lowercase")]
 pub(crate) enum ToolBucket {
     Uv,
     Python,
@@ -207,40 +295,17 @@ pub(crate) enum ToolBucket {
     Go,
     Ruby,
     Rustup,
+    Bun,
 }
 
-impl ToolBucket {
-    pub(crate) fn as_str(&self) -> &str {
-        match self {
-            ToolBucket::Go => "go",
-            ToolBucket::Node => "node",
-            ToolBucket::Python => "python",
-            ToolBucket::Ruby => "ruby",
-            ToolBucket::Rustup => "rustup",
-            ToolBucket::Uv => "uv",
-        }
-    }
-}
-
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, Hash, PartialEq, strum::AsRefStr, strum::Display)]
+#[strum(serialize_all = "lowercase")]
 pub(crate) enum CacheBucket {
     Uv,
     Go,
     Python,
     Cargo,
     Prek,
-}
-
-impl CacheBucket {
-    pub(crate) fn as_str(&self) -> &str {
-        match self {
-            CacheBucket::Go => "go",
-            CacheBucket::Prek => "prek",
-            CacheBucket::Python => "python",
-            CacheBucket::Cargo => "cargo",
-            CacheBucket::Uv => "uv",
-        }
-    }
 }
 
 /// Convert a u64 to a hex string.

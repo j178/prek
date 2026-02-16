@@ -262,6 +262,7 @@ pub async fn untar_gz<R: AsyncRead + Unpin>(
     let mut archive = ArchiveBuilder::new(reader)
         .set_preserve_mtime(true)
         .set_preserve_permissions(true)
+        .set_allow_external_symlinks(false)
         .build();
 
     archive.unpack(target.as_ref()).await?;
@@ -281,6 +282,7 @@ pub async fn untar_xz<R: AsyncRead + Unpin>(
     let mut archive = ArchiveBuilder::new(reader)
         .set_preserve_mtime(true)
         .set_preserve_permissions(true)
+        .set_allow_external_symlinks(false)
         .build();
 
     archive.unpack(target.as_ref()).await?;
@@ -296,6 +298,7 @@ pub async fn untar<R: AsyncRead + Unpin>(reader: R, target: impl AsRef<Path>) ->
     let mut archive = ArchiveBuilder::new(reader)
         .set_preserve_mtime(true)
         .set_preserve_permissions(true)
+        .set_allow_external_symlinks(false)
         .build();
 
     archive.unpack(target.as_ref()).await?;

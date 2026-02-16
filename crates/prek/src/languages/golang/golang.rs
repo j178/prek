@@ -4,8 +4,8 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::Context;
-
 use prek_consts::env_vars::EnvVars;
+use prek_consts::prepend_paths;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::{Hook, InstallInfo, InstalledHook};
@@ -14,7 +14,7 @@ use crate::languages::golang::GoRequest;
 use crate::languages::golang::installer::GoInstaller;
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
-use crate::run::{prepend_paths, run_by_batch};
+use crate::run::run_by_batch;
 use crate::store::{CacheBucket, Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone)]
@@ -127,11 +127,10 @@ impl LanguageImpl for Golang {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let env_dir = hook.env_path().expect("Node hook must have env path");
-        let info = hook.install_info().expect("Node hook must be installed");
 
         let go_bin = bin_dir(env_dir);
         let go_tools = store.tools_path(ToolBucket::Go);
-        let go_root_bin = info.toolchain.parent().expect("Go root should exist");
+        let go_root_bin = hook.toolchain_dir().expect("Go root should exist");
         let go_root = go_root_bin.parent().expect("Go root should exist");
         let go_cache = store.cache_path(CacheBucket::Go);
 

@@ -1,27 +1,37 @@
 name: Performance
 
 on:
-  pull_request:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: true
+  workflow_call:
+    inputs:
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
 
 permissions: {}
+
+env:
+  # Cargo env vars
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
 
 jobs:
   bloat-check:
     runs-on: ubuntu-latest
-    name: "cargo | bloat check"
+    name: "bloat check"
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 0
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
-      - uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+      - uses: taiki-e/install-action@f176c07a0a40cbfdd08ee9aa8bf1655701d11e69 # v2.67.25
         with:
           tool: cargo-bloat
 
@@ -85,14 +95,10 @@ jobs:
 
           Path("bloat-comparison.txt").write_text(comparison)
 
-      - name: Save bloat check results
-        run: |
-          mkdir -p /tmp/bloat-check
-          echo ${{ github.event.pull_request.number }} > /tmp/bloat-check/pr-number.txt
-          mv bloat-comparison.txt /tmp/bloat-check/bloat-comparison.txt
-
       - name: Upload bloat results
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
+          # NOTE: prek-ci-bot uses this artifact name to post comments on PRs.
+          # Make sure to update the bot if you rename the artifact.
           name: bloat-check-results
-          path: /tmp/bloat-check
+          path: bloat-comparison.txt

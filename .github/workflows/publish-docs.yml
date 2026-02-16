@@ -19,28 +19,32 @@ concurrency:
 
 permissions: {}
 
+env:
+  UV_VERSION: "0.10.2"
+  # Match version used to compile `docs/requirements.txt`
+  PYTHON_VERSION: "3.14"
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Setup Python
-        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
         with:
-          python-version: '3.14'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r docs/requirements.txt
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache-dependency-glob: |
+            **/docs/requirements.txt
 
       - name: Build documentation
-        run: mkdocs build
+        run: |
+          uvx --with-requirements docs/requirements.txt zensical build
+          uvx --with-requirements docs/requirements.txt llmstxt-standalone build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4

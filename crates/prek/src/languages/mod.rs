@@ -15,13 +15,16 @@ use crate::config::Language;
 use crate::fs::{CWD, Simplified};
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::identify::parse_shebang;
-use crate::store::Store;
+use crate::store::{CacheBucket, Store, ToolBucket};
 use crate::{archive, hooks, warn_user_once};
 
+mod bun;
 mod docker;
 mod docker_image;
 mod fail;
 mod golang;
+mod haskell;
+mod julia;
 mod lua;
 mod node;
 mod pygrep;
@@ -29,13 +32,17 @@ mod python;
 mod ruby;
 mod rust;
 mod script;
+mod swift;
 mod system;
 pub mod version;
 
+static BUN: bun::Bun = bun::Bun;
 static DOCKER: docker::Docker = docker::Docker;
 static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
 static FAIL: fail::Fail = fail::Fail;
 static GOLANG: golang::Golang = golang::Golang;
+static HASKELL: haskell::Haskell = haskell::Haskell;
+static JULIA: julia::Julia = julia::Julia;
 static LUA: lua::Lua = lua::Lua;
 static NODE: node::Node = node::Node;
 static PYGREP: pygrep::Pygrep = pygrep::Pygrep;
@@ -43,6 +50,7 @@ static PYTHON: python::Python = python::Python;
 static RUBY: ruby::Ruby = ruby::Ruby;
 static RUST: rust::Rust = rust::Rust;
 static SCRIPT: script::Script = script::Script;
+static SWIFT: swift::Swift = swift::Swift;
 static SYSTEM: system::System = system::System;
 static UNIMPLEMENTED: Unimplemented = Unimplemented;
 
@@ -97,6 +105,7 @@ impl LanguageImpl for Unimplemented {
 }
 
 // `pre-commit` language support:
+// bun: install requested version, support env, support additional deps
 // conda: only system version, support env, support additional deps
 // coursier: only system version, support env, support additional deps
 // dart: only system version, support env, support additional deps
@@ -122,10 +131,13 @@ impl Language {
     pub fn supported(lang: Language) -> bool {
         matches!(
             lang,
-            Self::Golang
+            Self::Bun
                 | Self::Docker
                 | Self::DockerImage
                 | Self::Fail
+                | Self::Golang
+                | Self::Haskell
+                | Self::Julia
                 | Self::Lua
                 | Self::Node
                 | Self::Pygrep
@@ -133,6 +145,7 @@ impl Language {
                 | Self::Ruby
                 | Self::Rust
                 | Self::Script
+                | Self::Swift
                 | Self::System
         )
     }
@@ -140,8 +153,29 @@ impl Language {
     pub fn supports_install_env(self) -> bool {
         !matches!(
             self,
-            Self::DockerImage | Self::Fail | Self::Pygrep | Self::Script | Self::System
+            Self::DockerImage | Self::Fail | Self::Script | Self::System
         )
+    }
+
+    pub fn tool_buckets(self) -> &'static [ToolBucket] {
+        match self {
+            Self::Bun => &[ToolBucket::Bun],
+            Self::Golang => &[ToolBucket::Go],
+            Self::Node => &[ToolBucket::Node],
+            Self::Python | Self::Pygrep => &[ToolBucket::Uv, ToolBucket::Python],
+            Self::Ruby => &[ToolBucket::Ruby],
+            Self::Rust => &[ToolBucket::Rustup],
+            _ => &[],
+        }
+    }
+
+    pub fn cache_buckets(self) -> &'static [CacheBucket] {
+        match self {
+            Self::Golang => &[CacheBucket::Go],
+            Self::Python | Self::Pygrep => &[CacheBucket::Uv, CacheBucket::Python],
+            Self::Rust => &[CacheBucket::Cargo],
+            _ => &[],
+        }
     }
 
     /// Return whether the language allows specifying the version, e.g. we can install a specific
@@ -150,7 +184,7 @@ impl Language {
     pub fn supports_language_version(self) -> bool {
         matches!(
             self,
-            Self::Python | Self::Node | Self::Golang | Self::Ruby | Self::Rust
+            Self::Bun | Self::Golang | Self::Node | Self::Python | Self::Ruby | Self::Rust
         )
     }
 
@@ -179,10 +213,13 @@ impl Language {
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         match self {
+            Self::Bun => BUN.install(hook, store, reporter).await,
             Self::Docker => DOCKER.install(hook, store, reporter).await,
             Self::DockerImage => DOCKER_IMAGE.install(hook, store, reporter).await,
             Self::Fail => FAIL.install(hook, store, reporter).await,
             Self::Golang => GOLANG.install(hook, store, reporter).await,
+            Self::Haskell => HASKELL.install(hook, store, reporter).await,
+            Self::Julia => JULIA.install(hook, store, reporter).await,
             Self::Lua => LUA.install(hook, store, reporter).await,
             Self::Node => NODE.install(hook, store, reporter).await,
             Self::Pygrep => PYGREP.install(hook, store, reporter).await,
@@ -190,6 +227,7 @@ impl Language {
             Self::Ruby => RUBY.install(hook, store, reporter).await,
             Self::Rust => RUST.install(hook, store, reporter).await,
             Self::Script => SCRIPT.install(hook, store, reporter).await,
+            Self::Swift => SWIFT.install(hook, store, reporter).await,
             Self::System => SYSTEM.install(hook, store, reporter).await,
             _ => UNIMPLEMENTED.install(hook, store, reporter).await,
         }
@@ -197,10 +235,13 @@ impl Language {
 
     pub async fn check_health(&self, info: &InstallInfo) -> Result<()> {
         match self {
+            Self::Bun => BUN.check_health(info).await,
             Self::Docker => DOCKER.check_health(info).await,
             Self::DockerImage => DOCKER_IMAGE.check_health(info).await,
             Self::Fail => FAIL.check_health(info).await,
             Self::Golang => GOLANG.check_health(info).await,
+            Self::Haskell => HASKELL.check_health(info).await,
+            Self::Julia => JULIA.check_health(info).await,
             Self::Lua => LUA.check_health(info).await,
             Self::Node => NODE.check_health(info).await,
             Self::Pygrep => PYGREP.check_health(info).await,
@@ -208,6 +249,7 @@ impl Language {
             Self::Ruby => RUBY.check_health(info).await,
             Self::Rust => RUST.check_health(info).await,
             Self::Script => SCRIPT.check_health(info).await,
+            Self::Swift => SWIFT.check_health(info).await,
             Self::System => SYSTEM.check_health(info).await,
             _ => UNIMPLEMENTED.check_health(info).await,
         }
@@ -225,29 +267,32 @@ impl Language {
             Repo::Meta { .. } => {
                 return hooks::MetaHooks::from_str(&hook.id)
                     .unwrap()
-                    .run(store, hook, filenames)
+                    .run(store, hook, filenames, reporter)
                     .await;
             }
             Repo::Builtin { .. } => {
                 return hooks::BuiltinHooks::from_str(&hook.id)
                     .unwrap()
-                    .run(store, hook, filenames)
+                    .run(store, hook, filenames, reporter)
                     .await;
             }
             Repo::Remote { .. } => {
                 // Fast path for hooks implemented in Rust
                 if hooks::check_fast_path(hook) {
-                    return hooks::run_fast_path(store, hook, filenames).await;
+                    return hooks::run_fast_path(store, hook, filenames, reporter).await;
                 }
             }
             Repo::Local { .. } => {}
         }
 
         match self {
+            Self::Bun => BUN.run(hook, filenames, store, reporter).await,
             Self::Docker => DOCKER.run(hook, filenames, store, reporter).await,
             Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, store, reporter).await,
             Self::Fail => FAIL.run(hook, filenames, store, reporter).await,
             Self::Golang => GOLANG.run(hook, filenames, store, reporter).await,
+            Self::Haskell => HASKELL.run(hook, filenames, store, reporter).await,
+            Self::Julia => JULIA.run(hook, filenames, store, reporter).await,
             Self::Lua => LUA.run(hook, filenames, store, reporter).await,
             Self::Node => NODE.run(hook, filenames, store, reporter).await,
             Self::Pygrep => PYGREP.run(hook, filenames, store, reporter).await,
@@ -255,16 +300,17 @@ impl Language {
             Self::Ruby => RUBY.run(hook, filenames, store, reporter).await,
             Self::Rust => RUST.run(hook, filenames, store, reporter).await,
             Self::Script => SCRIPT.run(hook, filenames, store, reporter).await,
+            Self::Swift => SWIFT.run(hook, filenames, store, reporter).await,
             Self::System => SYSTEM.run(hook, filenames, store, reporter).await,
             _ => UNIMPLEMENTED.run(hook, filenames, store, reporter).await,
         }
     }
 }
 
-/// Try to extract metadata from the given hook entry if possible.
-pub(crate) async fn extract_metadata_from_entry(hook: &mut Hook) -> Result<()> {
+/// Try to extract metadata from the given hook.
+pub(crate) async fn extract_metadata(hook: &mut Hook) -> Result<()> {
     match hook.language {
-        Language::Python => python::extract_pep723_metadata(hook).await,
+        Language::Python => python::extract_metadata(hook).await,
         Language::Golang => golang::extract_go_mod_metadata(hook).await,
         _ => Ok(()),
     }
@@ -272,6 +318,13 @@ pub(crate) async fn extract_metadata_from_entry(hook: &mut Hook) -> Result<()> {
 
 /// Resolve the actual process invocation, honoring shebangs and PATH lookups.
 pub(crate) fn resolve_command(mut cmds: Vec<String>, paths: Option<&OsStr>) -> Vec<String> {
+    let env_path = if paths.is_none() {
+        EnvVars::var_os(EnvVars::PATH)
+    } else {
+        None
+    };
+    let paths = paths.or(env_path.as_deref());
+
     let candidate = &cmds[0];
     let resolved_binary = match which::which_in(candidate, paths, &*CWD) {
         Ok(p) => p,

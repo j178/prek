@@ -3,7 +3,7 @@ mod common;
 use crate::common::{TestContext, cmd_snapshot};
 
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-use prek_consts::CONFIG_FILE;
+use prek_consts::PRE_COMMIT_CONFIG_YAML;
 
 #[test]
 fn meta_hooks() -> anyhow::Result<()> {
@@ -51,7 +51,7 @@ fn meta_hooks() -> anyhow::Result<()> {
     - hook id: check-useless-excludes
     - exit code: 1
 
-      The exclude pattern `$nonexistent^` for `useless-exclude` does not match any files
+      The exclude pattern `regex: $nonexistent^` for `useless-exclude` does not match any files
     identity.................................................................Passed
     - hook id: identity
     - duration: [TIME]
@@ -68,6 +68,36 @@ fn meta_hooks() -> anyhow::Result<()> {
     ");
 
     Ok(())
+}
+
+#[test]
+fn meta_hooks_unknown_hook() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: meta
+            hooks:
+              - id: this-hook-does-not-exist
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: error: line 4 column 9: unknown meta hook id `this-hook-does-not-exist`
+     --> <input>:4:9
+      |
+    2 |   - repo: meta
+    3 |     hooks:
+    4 |       - id: this-hook-does-not-exist
+      |         ^ unknown meta hook id `this-hook-does-not-exist`
+    ");
 }
 
 #[test]
@@ -114,7 +144,7 @@ fn check_useless_excludes_remote() -> anyhow::Result<()> {
     - hook id: check-useless-excludes
     - exit code: 1
 
-      The exclude pattern `^useless/$` for `echo` does not match any files
+      The exclude pattern `regex: ^useless/$` for `echo` does not match any files
 
     ----- stderr -----
     ");
@@ -129,7 +159,8 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
 
     let app = context.work_dir().child("app");
     app.create_dir_all()?;
-    app.child(CONFIG_FILE).write_str(indoc::indoc! {r"
+    app.child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
         repos:
           - repo: meta
             hooks:
@@ -172,7 +203,7 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
     - hook id: check-useless-excludes
     - exit code: 1
 
-      The exclude pattern `$nonexistent^` for `useless-exclude` does not match any files
+      The exclude pattern `regex: $nonexistent^` for `useless-exclude` does not match any files
     identity.................................................................Passed
     - hook id: identity
     - duration: [TIME]
@@ -184,6 +215,56 @@ fn meta_hooks_workspace() -> anyhow::Result<()> {
       main.py
     match no files.......................................(no files to check)Skipped
     useless exclude..........................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_useless_excludes_workspace_paths_are_project_relative() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Workspace layout:
+    // - Root project has no hooks.
+    // - Nested project `app/` runs `check-useless-excludes`.
+    //
+    // Regression: in workspace mode, `files`/`exclude` matching must use paths *relative to the
+    // nested project root* (so anchored patterns like `^...$` work as expected).
+    let app = context.work_dir().child("app");
+    app.create_dir_all()?;
+    app.child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
+        exclude: '^global_excluded$'
+        repos:
+          - repo: meta
+            hooks:
+              - id: check-useless-excludes
+          - repo: local
+            hooks:
+              - id: ok
+                name: ok
+                language: system
+                entry: python3 -c 'import sys; sys.exit(0)'
+                exclude: '^hook_excluded$'
+        "})?;
+
+    // These files exist specifically so the anchored patterns above are NOT useless.
+    // If the meta hook mistakenly matches against `app/<name>` instead of `<name>`, it will fail.
+    app.child("global_excluded").write_str("ignored\n")?;
+    app.child("hook_excluded").write_str("ignored\n")?;
+
+    context.write_pre_commit_config("repos: []");
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("check-useless-excludes"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `app`:
+    Check useless excludes...................................................Passed
 
     ----- stderr -----
     ");

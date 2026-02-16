@@ -5,9 +5,9 @@ use std::str::FromStr;
 use anyhow::Result;
 use bstr::ByteSlice;
 use clap::Parser;
-use futures::StreamExt;
 
 use crate::hook::Hook;
+use crate::hooks::run_concurrent_file_checks;
 use crate::run::CONCURRENCY;
 
 const MARKDOWN_LINE_BREAK: &[u8] = b"  ";
@@ -74,7 +74,7 @@ pub(crate) async fn fix_trailing_whitespace(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
+    let args = Args::try_parse_from(hook.entry.split()?.iter().chain(&hook.args))?;
 
     let force_markdown = args.force_markdown();
     let markdown_exts = args.markdown_exts()?;
@@ -84,29 +84,16 @@ pub(crate) async fn fix_trailing_whitespace(
         Vec::new()
     };
 
-    let mut tasks = futures::stream::iter(filenames)
-        .map(async |filename| {
-            fix_file(
-                hook.project().relative_path(),
-                filename,
-                &chars,
-                force_markdown,
-                &markdown_exts,
-            )
-            .await
-        })
-        .buffered(*CONCURRENCY);
-
-    let mut code = 0;
-    let mut output = Vec::new();
-
-    while let Some(result) = tasks.next().await {
-        let (c, o) = result?;
-        code |= c;
-        output.extend(o);
-    }
-
-    Ok((code, output))
+    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
+        fix_file(
+            hook.project().relative_path(),
+            filename,
+            &chars,
+            force_markdown,
+            &markdown_exts,
+        )
+    })
+    .await
 }
 
 async fn fix_file(

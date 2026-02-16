@@ -14,9 +14,13 @@ build-local-artifacts = false
 # Whether CI should trigger releases with dispatches instead of tag pushes
 dispatch-releases = true
 # Which actions to run on pull requests
-pr-run-mode = "plan"
+pr-run-mode = "skip"
 # Which phase dist should use to create the GitHub release
 github-release = "announce"
+# Whether to enable GitHub Attestations
+github-attestations = true
+# When to generate GitHub Attestations
+github-attestations-phase = "announce"
 # Whether to publish prereleases to package managers
 publish-prereleases = true
 # The installers to generate for each app
@@ -25,24 +29,22 @@ installers = ["shell", "powershell", "npm", "homebrew"]
 npm-scope = "@j178"
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = [
-    "aarch64-apple-darwin",
-    "aarch64-unknown-linux-gnu",
-    "aarch64-unknown-linux-musl",
-    "aarch64-pc-windows-msvc",
-    "arm-unknown-linux-musleabihf",
-    "armv7-unknown-linux-gnueabihf",
-    "armv7-unknown-linux-musleabihf",
-    "x86_64-apple-darwin",
-    "powerpc64-unknown-linux-gnu",
-    "powerpc64le-unknown-linux-gnu",
-    "riscv64gc-unknown-linux-gnu",
-    "s390x-unknown-linux-gnu",
-    "x86_64-unknown-linux-gnu",
-    "x86_64-unknown-linux-musl",
-    "x86_64-pc-windows-msvc",
-    "i686-unknown-linux-gnu",
-    "i686-unknown-linux-musl",
-    "i686-pc-windows-msvc"
+  "aarch64-apple-darwin",
+  "aarch64-unknown-linux-gnu",
+  "aarch64-unknown-linux-musl",
+  "aarch64-pc-windows-msvc",
+  "arm-unknown-linux-musleabihf",
+  "armv7-unknown-linux-gnueabihf",
+  "armv7-unknown-linux-musleabihf",
+  "x86_64-apple-darwin",
+  "riscv64gc-unknown-linux-gnu",
+  "s390x-unknown-linux-gnu",
+  "x86_64-unknown-linux-gnu",
+  "x86_64-unknown-linux-musl",
+  "x86_64-pc-windows-msvc",
+  "i686-unknown-linux-gnu",
+  "i686-unknown-linux-musl",
+  "i686-pc-windows-msvc",
 ]
 # Local artifacts jobs to run in CI
 local-artifacts-jobs = ["./build-binaries", "./build-docker"]
@@ -50,7 +52,7 @@ local-artifacts-jobs = ["./build-binaries", "./build-docker"]
 publish-jobs = ["./publish", "homebrew"]
 # Post-announce jobs to run in CI
 post-announce-jobs = ["./publish-docs"]
-github-custom-job-permissions = { "publish-docs" = { contents = "read", pages = "write", id-token = "write" }, "build-docker" = { packages = "write", contents = "read" } }
+github-custom-job-permissions = { "publish-docs" = { contents = "read", pages = "write", id-token = "write" }, "build-docker" = { packages = "write", contents = "read", attestations = "write", id-token = "write" } }
 # A GitHub repo to push Homebrew formulas to
 tap = "j178/homebrew-tap"
 # Customize the Homebrew formula name
@@ -67,3 +69,4 @@ global = "ubuntu-latest"
 "actions/checkout" = "8e8c483db84b4bee98b60c0593521ed34d9990e8" # v6.0.1
 "actions/upload-artifact" = "b7c566a772e6b6bfb58ed0dc250532a479d7789f" # v6.0.0
 "actions/download-artifact" = "37930b1c2abaa49bbe596cd826c3c89aef350131" # v7.0.0
+"actions/attest-build-provenance" = "00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8" # v3.1.0

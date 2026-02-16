@@ -2,6 +2,11 @@
   $schema: 'https://docs.renovatebot.com/renovate-schema.json',
   extends: [
     'config:recommended',
+    // https://docs.renovatebot.com/presets-default/#configmigration
+    ':configMigration',
+    // https://docs.renovatebot.com/presets-customManagers/#custommanagersgithubactionsversions
+    // Update _VERSION environment variables in GitHub Action files.
+    'customManagers:githubActionsVersions',
   ],
   schedule: [
     '* * 1,15 * *'
@@ -26,18 +31,33 @@
     'custom.regex',
   ],
   customManagers: [
-    // Custom manager to update the bundled uv version with the latest uv version from PyPI.
+    // Update `uv` version in `crates/prek/src/languages/python/uv.rs` and CI workflows.
     {
       customType: 'regex',
       managerFilePatterns: [
-        '/src/languages/python/uv.rs$/'
+        '/src/languages/python/uv.rs$/',
+        '/.github/workflows/.*\\.yml$/',
       ],
       datasourceTemplate: 'pypi',
       packageNameTemplate: 'uv',
       matchStrings: [
-        'const\\s+CUR_UV_VERSION\\s*:\\s*&str\\s*=\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"'
+        'const\\s+CUR_UV_VERSION\\s*:\\s*&str\\s*=\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
+        'UV_VERSION:\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
       ]
-    }
+    },
+    // Update major GitHub actions references in documentation.
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/README\\.md$/',
+        '/^docs/.*\\.md$/'
+      ],
+      matchStrings: [
+        '\\suses: (?<depName>[\\w-]+/[\\w-]+)(?<path>/.*)?@(?<currentValue>.+?)\\s',
+      ],
+      datasourceTemplate: 'github-tags',
+      versioningTemplate: 'regex:^v(?<major>\\d+)$',
+    },
   ],
   packageRules: [
     // Group all GitHub Actions updates together
@@ -51,7 +71,7 @@
     {
       groupName: 'pre-commit',
       matchManagers: ['pre-commit'],
-      matchPaths: ['.pre-commit-config.yaml']
+      matchFileNames: ['.pre-commit-config.yaml']
     },
     // Annotate GitHub Actions SHAs with a SemVer version.
     {
@@ -89,7 +109,7 @@
     },
     {
       matchManagers: [ 'cargo', 'pre-commit', 'github-actions', 'custom.regex' ],
-      minimumReleaseAge: '14 days'
+      minimumReleaseAge: '7 days'
     }
   ]
 }

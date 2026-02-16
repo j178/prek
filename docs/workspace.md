@@ -29,9 +29,15 @@ When you run `prek run` without the `--config` option, `prek` automatically disc
 
 - Directories beginning with a dot (e.g. `.hidden`) are ignored during project discovery.
 
+- Cookiecutter template directories (names like `{{cookiecutter.project_slug}}`) are ignored during project discovery.
+
 - By default, `prek` respects `.gitignore` files during workspace discovery. This means any directories or files excluded by `.gitignore`, `.git/info/exclude`, or your global gitignore configuration will automatically be excluded from project discovery. This prevents `prek` from discovering workspaces in ignored directories like `node_modules`, `target`, or `.venv`.
 
 - For additional control, `prek` also supports reading `.prekignore` files (following the same syntax rules as `.gitignore`) to exclude specific directories from workspace discovery beyond what's in `.gitignore`. Like `.gitignore`, `.prekignore` files can be placed anywhere in the workspace and apply to their directory and all subdirectories. This works similarly to the `--skip` option but is configured via files.
+
+!!! tip
+
+    After updating `.prekignore`, run with `--refresh` to force a fresh project discovery so the changes are picked up.
 
 ## Project Organization
 
@@ -111,6 +117,7 @@ repos:
 ```
 
 With this option:
+
 - Files in `src/backend/` are processed **only** by hooks in `src/backend/`
 - Files in `src/` (but not in `src/backend/`) are processed by hooks in `src/` and the workspace root
 - Files in the root (but not in subdirectories with configs) are processed by hooks in the root
@@ -232,6 +239,10 @@ You can skip specific projects or hooks using the `--skip` option, with the same
 
 **Alternative**: You can also create `.prekignore` files (using `.gitignore` syntax) anywhere in the workspace to permanently exclude directories from project discovery during workspace setup. Note that `.gitignore` files are already respected by default, so `.prekignore` is only needed for excluding additional directories beyond what's in `.gitignore`.
 
+!!! tip
+
+    After updating `.prekignore`, run with `--refresh` to force a fresh project discovery so the changes are picked up.
+
 ```bash
 # Skip all hooks from a specific project
 prek run --skip <project-path>/
@@ -313,7 +324,7 @@ prek run -c docs/.pre-commit-config.yaml
 ### Key Differences: Workspace vs Single Config
 
 | Feature | Workspace Mode | Single Config Mode |
-|---------|----------------|-------------------|
+| -- | -- | -- |
 | **Discovery** | Auto-discovers all `.pre-commit-config.yaml` files | Uses single specified config file |
 | **Working Directory** | Uses workspace root | Uses git repository root |
 | **File Scope** | All files in workspace | All files in git repo |

@@ -1,6 +1,6 @@
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild};
-use prek_consts::MANIFEST_FILE;
+use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot};
@@ -116,6 +116,10 @@ fn language_version() -> anyhow::Result<()> {
         .read_dir()?
         .flatten()
         .filter_map(|d| {
+            if d.file_type().ok()?.is_symlink() {
+                // Skip symlinks, which may point to other versions.
+                return None;
+            }
             let filename = d.file_name().to_string_lossy().to_string();
             if filename.starts_with('.') {
                 None
@@ -263,7 +267,9 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
     repo.init_project();
 
     let repo_path = repo.work_dir();
-    repo_path.child(MANIFEST_FILE).write_str(indoc::indoc! {r#"
+    repo_path
+        .child(PRE_COMMIT_HOOKS_YAML)
+        .write_str(indoc::indoc! {r#"
         - id: hello
           name: hello
           language: python
@@ -287,8 +293,6 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
         )
     "#})?;
     repo.git_add(".");
-    repo.configure_git_author();
-    repo.disable_auto_crlf();
     repo.git_commit("Add manifest");
     repo.git_tag("v0.1.0");
 
@@ -417,6 +421,135 @@ fn pep723_script() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
+
+    Ok(())
+}
+
+/// Test that GIT environment variables do not leak into uv pip install subprocess.
+/// When prek runs in a git worktree, git sets `GIT_DIR` which should not propagate to
+/// pip install where it breaks packages using `setuptools_scm` for file discovery.
+///
+/// Regression test for <https://github.com/j178/prek/issues/1354>
+#[test]
+fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // setup.py that fails if GIT_DIR leaks into pip install
+    context
+        .work_dir()
+        .child("setup.py")
+        .write_str(indoc::indoc! {r#"
+        import os, sys
+        from setuptools import setup
+        if os.environ.get("GIT_DIR"):
+            sys.exit("ERROR: GIT_DIR should not leak into pip install")
+        setup(name="test", version="0.1.0", extras_require={"test": []})
+    "#})?;
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: check-no-git-dir
+                name: check-no-git-dir
+                language: python
+                entry: python -c "print('ok')"
+                additional_dependencies: [".[test]"]
+                always_run: true
+    "#});
+
+    context.git_add(".");
+
+    // Simulate worktree environment by setting GIT_DIR (like git does in worktrees)
+    cmd_snapshot!(context.filters(), context.run()
+        .env("GIT_DIR", context.work_dir().join(".git")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check-no-git-dir.........................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Test that health check passes when Python toolchain path involves symlinks.
+/// The stored toolchain path and the queried path should be canonicalized before comparison.
+///
+/// Regression test for symlink-related "Python executable mismatch" errors.
+#[test]
+#[cfg(unix)]
+fn health_check_with_symlinked_toolchain() -> anyhow::Result<()> {
+    use prek_consts::prepend_paths;
+    use std::os::unix::fs::symlink;
+
+    let context = TestContext::new();
+    context.init_project();
+
+    // Find a Python executable, create a symlinked directory to its parent,
+    // and prepend that to PATH so that prek picks up the symlinked path.
+    let python_executable = which::which("python3")?;
+    let symlinked_bin = context.work_dir().child("symlinked-bin");
+    symlink(python_executable.parent().unwrap(), &symlinked_bin)?;
+    let new_path = prepend_paths(&[&*symlinked_bin])?;
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: python
+                entry: python -c 'print("hello")'
+                always_run: true
+                pass_filenames: false
+    "#});
+    context.git_add(".");
+
+    // First run installs the hook
+    cmd_snapshot!(context.filters(), context.run().env(EnvVars::PATH, new_path), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local....................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    let hooks_dir = context.home_dir().child("hooks");
+    let hook_envs = hooks_dir
+        .read_dir()?
+        .flatten()
+        .filter(|d| d.file_name().to_string_lossy().starts_with("python-"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        hook_envs.len(),
+        1,
+        "Expected one installed hook env, found: {hook_envs:?}",
+    );
+
+    // Second run triggers health check with a symlinked toolchain path
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local....................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    let hook_envs = hooks_dir
+        .read_dir()?
+        .flatten()
+        .filter(|d| d.file_name().to_string_lossy().starts_with("python-"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        hook_envs.len(),
+        1,
+        "Expected one installed hook env, found: {hook_envs:?}",
+    );
 
     Ok(())
 }

@@ -1,79 +1,139 @@
-#[cfg(feature = "schemars")]
-use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::error::Error as _;
 use std::fmt::Display;
-use std::ops::{Deref, RangeInclusive};
+use std::ops::RangeInclusive;
 use std::path::Path;
-use std::sync::LazyLock;
 
 use anyhow::Result;
 use fancy_regex::Regex;
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use itertools::Itertools;
-use prek_consts::{ALT_CONFIG_FILE, CONFIG_FILE};
 use rustc_hash::FxHashMap;
+use serde::de::{Error as DeError, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
-use tracing::instrument;
 
 use crate::fs::Simplified;
+use crate::identify;
+use crate::install_source::InstallSource;
+#[cfg(feature = "schemars")]
+use crate::schema::{schema_repo_builtin, schema_repo_local, schema_repo_meta, schema_repo_remote};
 use crate::version;
 use crate::warn_user;
-use crate::{identify, yaml};
+use crate::warn_user_once;
 
 #[derive(Clone)]
-pub(crate) struct SerdeRegex(Regex);
+pub(crate) struct GlobPatterns {
+    patterns: Vec<String>,
+    set: GlobSet,
+}
 
-impl Deref for SerdeRegex {
-    type Target = Regex;
-    fn deref(&self) -> &Self::Target {
-        &self.0
+impl GlobPatterns {
+    pub(crate) fn new(patterns: Vec<String>) -> Result<Self, globset::Error> {
+        let mut builder = GlobSetBuilder::new();
+        for pattern in &patterns {
+            builder.add(Glob::new(pattern)?);
+        }
+        let set = builder.build()?;
+        Ok(Self { patterns, set })
+    }
+
+    fn is_match(&self, value: &str) -> bool {
+        self.set.is_match(Path::new(value))
     }
 }
 
-#[cfg(feature = "schemars")]
-impl schemars::JsonSchema for SerdeRegex {
-    fn schema_name() -> Cow<'static, str> {
-        Cow::Borrowed("SerdeRegex")
-    }
-
-    fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
-        schemars::json_schema!({
-            "type": "string",
-            "description": "A regular expression string",
-        })
-    }
-}
-
-impl std::fmt::Debug for SerdeRegex {
+impl std::fmt::Debug for GlobPatterns {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("SerdeRegex").field(&self.0.as_str()).finish()
+        f.debug_struct("GlobPatterns")
+            .field("patterns", &self.patterns)
+            .finish_non_exhaustive()
     }
 }
 
-impl<'de> Deserialize<'de> for SerdeRegex {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        Regex::new(&s)
-            .map(SerdeRegex)
-            .map_err(serde::de::Error::custom)
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum FilePatternWire {
+    Glob { glob: String },
+    GlobList { glob: Vec<String> },
+    Regex(String),
+}
+
+#[derive(Debug, thiserror::Error)]
+enum FilePatternWireError {
+    #[error(transparent)]
+    Glob(#[from] globset::Error),
+
+    #[error(transparent)]
+    Regex(#[from] fancy_regex::Error),
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(try_from = "FilePatternWire")]
+pub(crate) enum FilePattern {
+    Regex(Regex),
+    Glob(GlobPatterns),
+}
+
+impl FilePattern {
+    pub(crate) fn new_glob(patterns: Vec<String>) -> Result<Self, globset::Error> {
+        Ok(Self::Glob(GlobPatterns::new(patterns)?))
+    }
+
+    pub(crate) fn new_regex(pattern: &str) -> Result<Self, fancy_regex::Error> {
+        Ok(Self::Regex(Regex::new(pattern)?))
+    }
+
+    pub(crate) fn is_match(&self, str: &str) -> bool {
+        match self {
+            FilePattern::Regex(regex) => regex.is_match(str).unwrap_or(false),
+            FilePattern::Glob(globs) => globs.is_match(str),
+        }
     }
 }
 
-pub(crate) static CONFIG_FILE_REGEX: LazyLock<SerdeRegex> = LazyLock::new(|| {
-    let pattern = format!(
-        "^{}|{}$",
-        fancy_regex::escape(CONFIG_FILE),
-        fancy_regex::escape(ALT_CONFIG_FILE)
-    );
-    SerdeRegex(Regex::new(&pattern).expect("config regex must compile"))
-});
+impl Display for FilePattern {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FilePattern::Regex(regex) => write!(f, "regex: {}", regex.as_str()),
+            FilePattern::Glob(globs) => {
+                let patterns = globs.patterns.iter().join(", ");
+                write!(f, "glob: [{patterns}]")
+            }
+        }
+    }
+}
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, clap::ValueEnum)]
+impl TryFrom<FilePatternWire> for FilePattern {
+    type Error = FilePatternWireError;
+
+    fn try_from(value: FilePatternWire) -> Result<Self, Self::Error> {
+        match value {
+            FilePatternWire::Glob { glob } => Ok(Self::Glob(GlobPatterns::new(vec![glob])?)),
+            FilePatternWire::GlobList { glob } => Ok(Self::Glob(GlobPatterns::new(glob)?)),
+            FilePatternWire::Regex(pattern) => Ok(Self::Regex(Regex::new(&pattern)?)),
+        }
+    }
+}
+
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Deserialize,
+    Serialize,
+    clap::ValueEnum,
+    strum::AsRefStr,
+    strum::Display,
+)]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[non_exhaustive]
 pub enum Language {
+    Bun,
     Conda,
     Coursier,
     Dart,
@@ -83,56 +143,27 @@ pub enum Language {
     Fail,
     Golang,
     Haskell,
+    Julia,
     Lua,
     Node,
     Perl,
+    Pygrep,
     Python,
     R,
     Ruby,
     Rust,
-    Swift,
-    Pygrep,
     #[serde(alias = "unsupported_script")]
     Script,
+    Swift,
     #[serde(alias = "unsupported")]
     System,
 }
 
-impl Language {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Conda => "conda",
-            Self::Coursier => "coursier",
-            Self::Dart => "dart",
-            Self::Docker => "docker",
-            Self::DockerImage => "docker_image",
-            Self::Dotnet => "dotnet",
-            Self::Fail => "fail",
-            Self::Golang => "golang",
-            Self::Haskell => "haskell",
-            Self::Lua => "lua",
-            Self::Node => "node",
-            Self::Perl => "perl",
-            Self::Python => "python",
-            Self::R => "r",
-            Self::Ruby => "ruby",
-            Self::Rust => "rust",
-            Self::Swift => "swift",
-            Self::Pygrep => "pygrep",
-            Self::Script => "script",
-            Self::System => "system",
-        }
-    }
-}
-
-impl Display for Language {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, Deserialize, clap::ValueEnum)]
+#[derive(
+    Debug, Clone, Copy, Default, Deserialize, clap::ValueEnum, strum::AsRefStr, strum::Display,
+)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) enum HookType {
     CommitMsg,
@@ -149,21 +180,6 @@ pub(crate) enum HookType {
 }
 
 impl HookType {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::CommitMsg => "commit-msg",
-            Self::PostCheckout => "post-checkout",
-            Self::PostCommit => "post-commit",
-            Self::PostMerge => "post-merge",
-            Self::PostRewrite => "post-rewrite",
-            Self::PreCommit => "pre-commit",
-            Self::PreMergeCommit => "pre-merge-commit",
-            Self::PrePush => "pre-push",
-            Self::PreRebase => "pre-rebase",
-            Self::PrepareCommitMsg => "prepare-commit-msg",
-        }
-    }
-
     /// Return the number of arguments this hook type expects.
     pub fn num_args(self) -> RangeInclusive<usize> {
         match self {
@@ -181,16 +197,24 @@ impl HookType {
     }
 }
 
-impl Display for HookType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Default, Hash, Deserialize, Serialize, clap::ValueEnum,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Default,
+    Hash,
+    Deserialize,
+    Serialize,
+    clap::ValueEnum,
+    strum::AsRefStr,
+    strum::Display,
 )]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) enum Stage {
     Manual,
@@ -228,30 +252,6 @@ impl From<HookType> for Stage {
 }
 
 impl Stage {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Manual => "manual",
-            Self::CommitMsg => "commit-msg",
-            Self::PostCheckout => "post-checkout",
-            Self::PostCommit => "post-commit",
-            Self::PostMerge => "post-merge",
-            Self::PostRewrite => "post-rewrite",
-            Self::PreCommit => "pre-commit",
-            Self::PreMergeCommit => "pre-merge-commit",
-            Self::PrePush => "pre-push",
-            Self::PreRebase => "pre-rebase",
-            Self::PrepareCommitMsg => "prepare-commit-msg",
-        }
-    }
-}
-
-impl Display for Stage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl Stage {
     pub fn operate_on_files(self) -> bool {
         matches!(
             self,
@@ -272,10 +272,10 @@ pub(crate) struct HookOptions {
     /// Not documented in the official docs.
     pub alias: Option<String>,
     /// The pattern of files to run on.
-    pub files: Option<SerdeRegex>,
+    pub files: Option<FilePattern>,
     /// Exclude files that were matched by `files`.
     /// Default is `$^`, which matches nothing.
-    pub exclude: Option<SerdeRegex>,
+    pub exclude: Option<FilePattern>,
     /// List of file types to run on (AND).
     /// Default is `[file]`, which matches all files.
     #[serde(deserialize_with = "deserialize_and_validate_tags", default)]
@@ -314,9 +314,6 @@ pub(crate) struct HookOptions {
     /// This hook will execute using a single process instead of in parallel.
     /// Default is false.
     pub require_serial: Option<bool>,
-    /// Priority used by the scheduler to determine ordering and concurrency.
-    /// Hooks with the same priority can run in parallel.
-    pub priority: Option<u32>,
     /// Select which git hook(s) to run for.
     /// Default all stages are selected.
     /// See <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.
@@ -327,8 +324,8 @@ pub(crate) struct HookOptions {
     /// The minimum version of prek required to run this hook.
     #[serde(deserialize_with = "deserialize_and_validate_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
-    #[serde(skip_serializing)]
-    #[serde(flatten)]
+
+    #[serde(skip_serializing, flatten)]
     pub _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
@@ -360,7 +357,6 @@ impl HookOptions {
             language_version,
             log_file,
             require_serial,
-            priority,
             stages,
             verbose,
             minimum_prek_version,
@@ -415,109 +411,187 @@ pub(crate) struct RemoteHook {
     pub entry: Option<String>,
     /// Override the language. Not documented in the official docs but works.
     pub language: Option<Language>,
+    /// Priority used by the scheduler to determine ordering and concurrency.
+    /// Hooks with the same priority can run in parallel.
+    ///
+    /// This is only allowed in project config files (e.g. `.pre-commit-config.yaml`).
+    /// It is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).
+    pub priority: Option<u32>,
     #[serde(flatten)]
     pub options: HookOptions,
 }
 
 /// A local hook in the configuration file.
 ///
-/// It's the same as the manifest hook definition.
-pub(crate) type LocalHook = ManifestHook;
+/// This is similar to `ManifestHook`, but includes config-only fields (like `priority`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub(crate) struct LocalHook {
+    /// The id of the hook.
+    pub id: String,
+    /// The name of the hook.
+    pub name: String,
+    /// The command to run. It can contain arguments that will not be overridden.
+    pub entry: String,
+    /// The language of the hook. Tells prek how to install and run the hook.
+    pub language: Language,
+    /// Priority used by the scheduler to determine ordering and concurrency.
+    /// Hooks with the same priority can run in parallel.
+    pub priority: Option<u32>,
+    #[serde(flatten)]
+    pub options: HookOptions,
+}
 
 /// A meta hook predefined in pre-commit.
 ///
 /// It's the same as the manifest hook definition but with only a few predefined id allowed.
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub(crate) struct MetaHook(pub(crate) ManifestHook);
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(try_from = "RemoteHook")]
+pub(crate) struct MetaHook {
+    /// The id of the hook.
+    pub id: String,
+    /// The name of the hook.
+    pub name: String,
+    /// Priority used by the scheduler to determine ordering and concurrency.
+    /// Hooks with the same priority can run in parallel.
+    pub priority: Option<u32>,
+    #[serde(flatten)]
+    pub options: HookOptions,
+}
 
-impl<'de> Deserialize<'de> for MetaHook {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let hook_options = RemoteHook::deserialize(deserializer)?;
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum PredefinedHookWireError {
+    #[error("unknown {kind} hook id `{id}`")]
+    UnknownId {
+        kind: PredefinedHookKind,
+        id: String,
+    },
+
+    #[error("language must be `system` for {kind} hooks")]
+    InvalidLanguage { kind: PredefinedHookKind },
+
+    #[error("`entry` is not allowed for {kind} hooks")]
+    EntryNotAllowed { kind: PredefinedHookKind },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PredefinedHookKind {
+    Meta,
+    Builtin,
+}
+
+impl Display for PredefinedHookKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Meta => f.write_str("meta"),
+            Self::Builtin => f.write_str("builtin"),
+        }
+    }
+}
+
+impl TryFrom<RemoteHook> for MetaHook {
+    type Error = PredefinedHookWireError;
+
+    fn try_from(hook_options: RemoteHook) -> Result<Self, Self::Error> {
         let mut meta_hook = MetaHook::from_id(&hook_options.id).map_err(|()| {
-            serde::de::Error::custom(format!("unknown meta hook id `{}`", &hook_options.id))
+            PredefinedHookWireError::UnknownId {
+                kind: PredefinedHookKind::Meta,
+                id: hook_options.id.clone(),
+            }
         })?;
 
         if hook_options.language.is_some_and(|l| l != Language::System) {
-            return Err(serde::de::Error::custom(
-                "language must be `system` for meta hooks",
-            ));
+            return Err(PredefinedHookWireError::InvalidLanguage {
+                kind: PredefinedHookKind::Meta,
+            });
         }
         if hook_options.entry.is_some() {
-            return Err(serde::de::Error::custom(
-                "entry is not allowed for meta hooks",
-            ));
+            return Err(PredefinedHookWireError::EntryNotAllowed {
+                kind: PredefinedHookKind::Meta,
+            });
         }
 
         if let Some(name) = &hook_options.name {
-            meta_hook.0.name.clone_from(name);
+            meta_hook.name.clone_from(name);
         }
-        meta_hook.0.options.update(&hook_options.options);
+        if hook_options.priority.is_some() {
+            meta_hook.priority = hook_options.priority;
+        }
+        meta_hook.options.update(&hook_options.options);
 
         Ok(meta_hook)
     }
 }
 
-impl From<MetaHook> for ManifestHook {
-    fn from(hook: MetaHook) -> Self {
-        hook.0
-    }
-}
-
 /// A builtin hook predefined in prek.
 /// Basically the same as meta hooks, but defined under `builtin` repo, and do other non-meta checks.
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub(crate) struct BuiltinHook(pub(crate) ManifestHook);
+#[derive(Debug, Clone, Deserialize)]
+#[serde(try_from = "RemoteHook")]
+pub(crate) struct BuiltinHook {
+    /// The id of the hook.
+    pub id: String,
+    /// The name of the hook.
+    ///
+    /// This is populated from the predefined builtin hook definition.
+    pub name: String,
+    /// The command to run. It can contain arguments that will not be overridden.
+    pub entry: String,
+    /// Priority used by the scheduler to determine ordering and concurrency.
+    /// Hooks with the same priority can run in parallel.
+    pub priority: Option<u32>,
+    /// Common hook options.
+    ///
+    /// Builtin hooks allow the same set of options overrides as other hooks.
+    #[serde(flatten)]
+    pub options: HookOptions,
+}
 
-impl<'de> Deserialize<'de> for BuiltinHook {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let hook_options = RemoteHook::deserialize(deserializer)?;
+impl TryFrom<RemoteHook> for BuiltinHook {
+    type Error = PredefinedHookWireError;
+
+    fn try_from(hook_options: RemoteHook) -> Result<Self, Self::Error> {
         let mut builtin_hook = BuiltinHook::from_id(&hook_options.id).map_err(|()| {
-            serde::de::Error::custom(format!("unknown builtin hook id `{}`", &hook_options.id))
+            PredefinedHookWireError::UnknownId {
+                kind: PredefinedHookKind::Builtin,
+                id: hook_options.id.clone(),
+            }
         })?;
 
         if hook_options.language.is_some_and(|l| l != Language::System) {
-            return Err(serde::de::Error::custom(
-                "language must be `system` for builtin hooks",
-            ));
+            return Err(PredefinedHookWireError::InvalidLanguage {
+                kind: PredefinedHookKind::Builtin,
+            });
         }
         if hook_options.entry.is_some() {
-            return Err(serde::de::Error::custom(
-                "entry is not allowed for builtin hooks",
-            ));
+            return Err(PredefinedHookWireError::EntryNotAllowed {
+                kind: PredefinedHookKind::Builtin,
+            });
         }
 
         if let Some(name) = &hook_options.name {
-            builtin_hook.0.name.clone_from(name);
+            builtin_hook.name.clone_from(name);
         }
-        builtin_hook.0.options.update(&hook_options.options);
+        if hook_options.priority.is_some() {
+            builtin_hook.priority = hook_options.priority;
+        }
+        builtin_hook.options.update(&hook_options.options);
 
         Ok(builtin_hook)
-    }
-}
-
-impl From<BuiltinHook> for ManifestHook {
-    fn from(hook: BuiltinHook) -> Self {
-        hook.0
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct RemoteRepo {
+    #[cfg_attr(feature = "schemars", schemars(schema_with = "schema_repo_remote"))]
     pub repo: String,
     pub rev: String,
     #[serde(skip_serializing)]
     pub hooks: Vec<RemoteHook>,
-    #[serde(skip_serializing)]
-    #[serde(flatten)]
+
+    #[serde(skip_serializing, flatten)]
     _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
@@ -532,7 +606,6 @@ impl RemoteRepo {
     }
 }
 
-// TODO: resolve if `repo` is a local relative path before comparing
 impl PartialEq for RemoteRepo {
     fn eq(&self, other: &Self) -> bool {
         self.repo == other.repo && self.rev == other.rev
@@ -557,10 +630,11 @@ impl Display for RemoteRepo {
 #[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct LocalRepo {
+    #[cfg_attr(feature = "schemars", schemars(schema_with = "schema_repo_local"))]
     pub repo: String,
     pub hooks: Vec<LocalHook>,
-    #[serde(skip_serializing)]
-    #[serde(flatten)]
+
+    #[serde(skip_serializing, flatten)]
     _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
@@ -573,10 +647,11 @@ impl Display for LocalRepo {
 #[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct MetaRepo {
+    #[cfg_attr(feature = "schemars", schemars(schema_with = "schema_repo_meta"))]
     pub repo: String,
     pub hooks: Vec<MetaHook>,
-    #[serde(skip_serializing)]
-    #[serde(flatten)]
+
+    #[serde(skip_serializing, flatten)]
     _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
@@ -589,10 +664,11 @@ impl Display for MetaRepo {
 #[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct BuiltinRepo {
+    #[cfg_attr(feature = "schemars", schemars(schema_with = "schema_repo_builtin"))]
     pub repo: String,
     pub hooks: Vec<BuiltinHook>,
-    #[serde(skip_serializing)]
-    #[serde(flatten)]
+
+    #[serde(skip_serializing, flatten)]
     _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
@@ -604,73 +680,171 @@ pub(crate) enum Repo {
     Builtin(BuiltinRepo),
 }
 
-#[cfg(feature = "schemars")]
-impl schemars::JsonSchema for Repo {
-    fn schema_name() -> Cow<'static, str> {
-        Cow::Borrowed("Repo")
-    }
-
-    fn json_schema(r#gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
-        let remote_schema = r#gen.subschema_for::<RemoteRepo>();
-        let local_schema = r#gen.subschema_for::<LocalRepo>();
-        let meta_schema = r#gen.subschema_for::<MetaRepo>();
-        let builtin_schema = r#gen.subschema_for::<BuiltinRepo>();
-
-        schemars::json_schema!({
-            "type": "object",
-            "description": "A repository of hooks, which can be remote, local, meta, or builtin.",
-            "oneOf": [
-                remote_schema,
-                local_schema,
-                meta_schema,
-                builtin_schema,
-            ],
-        })
-    }
-}
-
 impl<'de> Deserialize<'de> for Repo {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let repo_wire = serde_json::Value::deserialize(deserializer)?;
-        let repo_location = repo_wire
-            .get("repo")
-            .ok_or_else(|| serde::de::Error::missing_field("repo"))?
-            .as_str()
-            .ok_or_else(|| serde::de::Error::custom("repo must be a string"))?;
+        struct RepoVisitor;
 
-        match repo_location {
-            "local" => {
-                let repo = LocalRepo::deserialize(repo_wire)
-                    .map_err(|e| serde::de::Error::custom(format!("Invalid local repo: {e}")))?;
-                Ok(Repo::Local(repo))
-            }
-            "meta" => {
-                let repo = MetaRepo::deserialize(repo_wire)
-                    .map_err(|e| serde::de::Error::custom(format!("Invalid meta repo: {e}")))?;
-                Ok(Repo::Meta(repo))
-            }
-            "builtin" => {
-                let repo = BuiltinRepo::deserialize(repo_wire)
-                    .map_err(|e| serde::de::Error::custom(format!("Invalid builtin repo: {e}")))?;
-                Ok(Repo::Builtin(repo))
-            }
-            _ => {
-                let repo = RemoteRepo::deserialize(repo_wire)
-                    .map_err(|e| serde::de::Error::custom(format!("Invalid remote repo: {e}")))?;
+        impl<'de> Visitor<'de> for RepoVisitor {
+            type Value = Repo;
 
-                Ok(Repo::Remote(repo))
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a repo mapping")
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                enum HooksValue {
+                    Remote(Vec<RemoteHook>),
+                    Local(Vec<LocalHook>),
+                    Meta(Vec<MetaHook>),
+                    Builtin(Vec<BuiltinHook>),
+                }
+
+                let mut repo: Option<String> = None;
+                let mut rev: Option<String> = None;
+                let mut hooks: Option<HooksValue> = None;
+                let mut unused = BTreeMap::new();
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "repo" => {
+                            let repo_value: String = map.next_value()?;
+                            repo = Some(repo_value);
+                        }
+                        "rev" => {
+                            rev = Some(map.next_value()?);
+                        }
+                        "hooks" => {
+                            hooks = Some(match repo.as_deref() {
+                                Some("local") => HooksValue::Local(map.next_value()?),
+                                Some("meta") => HooksValue::Meta(map.next_value()?),
+                                Some("builtin") => HooksValue::Builtin(map.next_value()?),
+                                // Not seen `repo` yet, assume remote.
+                                _ => HooksValue::Remote(map.next_value()?),
+                            });
+                        }
+                        _ => {
+                            let value = map.next_value::<serde_json::Value>()?;
+                            unused.insert(key, value);
+                        }
+                    }
+                }
+
+                let repo_value = repo.ok_or_else(|| M::Error::missing_field("repo"))?;
+                match repo_value.as_str() {
+                    "local" => {
+                        if rev.is_some() {
+                            return Err(M::Error::custom("`rev` is not allowed for local repos"));
+                        }
+                        let hooks = match hooks.ok_or_else(|| M::Error::missing_field("hooks"))? {
+                            HooksValue::Local(hooks) => hooks,
+                            HooksValue::Remote(hooks) => hooks
+                                .into_iter()
+                                .map(remote_hook_to_local::<M::Error>)
+                                .collect::<Result<Vec<_>, _>>()?,
+                            HooksValue::Meta(_) | HooksValue::Builtin(_) => {
+                                return Err(M::Error::custom("invalid hooks for local repo"));
+                            }
+                        };
+                        Ok(Repo::Local(LocalRepo {
+                            repo: "local".to_string(),
+                            hooks,
+                            _unused_keys: unused,
+                        }))
+                    }
+                    "meta" => {
+                        if rev.is_some() {
+                            return Err(M::Error::custom("`rev` is not allowed for meta repos"));
+                        }
+                        let hooks = match hooks.ok_or_else(|| M::Error::missing_field("hooks"))? {
+                            HooksValue::Meta(hooks) => hooks,
+                            HooksValue::Remote(hooks) => hooks
+                                .into_iter()
+                                .map(|hook| MetaHook::try_from(hook).map_err(M::Error::custom))
+                                .collect::<Result<Vec<_>, _>>()?,
+                            HooksValue::Local(_) | HooksValue::Builtin(_) => {
+                                return Err(M::Error::custom("invalid hooks for meta repo"));
+                            }
+                        };
+                        Ok(Repo::Meta(MetaRepo {
+                            repo: "meta".to_string(),
+                            hooks,
+                            _unused_keys: unused,
+                        }))
+                    }
+                    "builtin" => {
+                        if rev.is_some() {
+                            return Err(M::Error::custom("`rev` is not allowed for builtin repos"));
+                        }
+                        let hooks = match hooks.ok_or_else(|| M::Error::missing_field("hooks"))? {
+                            HooksValue::Builtin(hooks) => hooks,
+                            HooksValue::Remote(hooks) => hooks
+                                .into_iter()
+                                .map(|hook| BuiltinHook::try_from(hook).map_err(M::Error::custom))
+                                .collect::<Result<Vec<_>, _>>()?,
+                            HooksValue::Local(_) | HooksValue::Meta(_) => {
+                                return Err(M::Error::custom("invalid hooks for builtin repo"));
+                            }
+                        };
+                        Ok(Repo::Builtin(BuiltinRepo {
+                            repo: "builtin".to_string(),
+                            hooks,
+                            _unused_keys: unused,
+                        }))
+                    }
+                    _ => {
+                        let rev = rev.ok_or_else(|| M::Error::missing_field("rev"))?;
+                        let hooks = match hooks.ok_or_else(|| M::Error::missing_field("hooks"))? {
+                            HooksValue::Remote(hooks) => hooks,
+                            HooksValue::Local(_) | HooksValue::Meta(_) | HooksValue::Builtin(_) => {
+                                return Err(M::Error::custom("invalid hooks for remote repo"));
+                            }
+                        };
+                        Ok(Repo::Remote(RemoteRepo {
+                            repo: repo_value,
+                            rev,
+                            hooks,
+                            _unused_keys: unused,
+                        }))
+                    }
+                }
             }
         }
+
+        deserializer.deserialize_map(RepoVisitor)
     }
+}
+
+fn remote_hook_to_local<E>(hook: RemoteHook) -> Result<LocalHook, E>
+where
+    E: DeError,
+{
+    Ok(LocalHook {
+        id: hook.id,
+        name: hook.name.ok_or_else(|| E::missing_field("name"))?,
+        entry: hook.entry.ok_or_else(|| E::missing_field("entry"))?,
+        language: hook.language.ok_or_else(|| E::missing_field("language"))?,
+        priority: hook.priority,
+        options: hook.options,
+    })
 }
 
 // TODO: warn sensible regex
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schemars",
+    derive(schemars::JsonSchema),
+    schemars(title = "prek.toml"),
+    schemars(description = "The configuration file for prek, a git hook manager written in Rust."),
+    schemars(extend("$id" = "https://www.schemastore.org/prek.json")),
+    schemars(extend("x-tombi-toml-version" = "v1.1.0")),
+)]
 pub(crate) struct Config {
     pub repos: Vec<Repo>,
     /// A list of `--hook-types` which will be used by default when running `prek install`.
@@ -682,9 +856,9 @@ pub(crate) struct Config {
     /// Default to all stages.
     pub default_stages: Option<Vec<Stage>>,
     /// Global file include pattern.
-    pub files: Option<SerdeRegex>,
+    pub files: Option<FilePattern>,
     /// Global file exclude pattern.
-    pub exclude: Option<SerdeRegex>,
+    pub exclude: Option<FilePattern>,
     /// Set to true to have prek stop running hooks after the first failure.
     /// Default is false.
     pub fail_fast: Option<bool>,
@@ -698,24 +872,35 @@ pub(crate) struct Config {
     /// any parent projects that contain them.
     pub orphan: Option<bool>,
 
-    #[serde(skip_serializing)]
-    #[serde(flatten)]
+    #[serde(skip_serializing, flatten)]
     _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
-    #[error("Config file not found: {0}")]
-    NotFound(String),
-
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
     #[error("Failed to parse `{0}`")]
-    Yaml(String, #[source] serde_yaml::Error),
+    Yaml(String, #[source] Box<serde_saphyr::Error>),
 
-    #[error("Failed to merge keys in `{0}`")]
-    YamlMerge(String, #[source] yaml::MergeKeyError),
+    #[error("Failed to parse `{0}`")]
+    Toml(String, #[source] Box<toml::de::Error>),
+}
+
+impl Error {
+    /// Warn the user if the config error is a parse error (not "file not found").
+    pub(crate) fn warn_parse_error(&self) {
+        // Skip file not found errors.
+        if matches!(self, Self::Io(e) if e.kind() == std::io::ErrorKind::NotFound) {
+            return;
+        }
+        if let Some(cause) = self.source() {
+            warn_user_once!("{self}: {cause}");
+        } else {
+            warn_user_once!("{self}");
+        }
+    }
 }
 
 /// Keys that prek does not use.
@@ -761,11 +946,11 @@ fn collect_unused_paths(config: &Config) -> Vec<String> {
                 ),
                 Repo::Meta(meta) => (
                     &meta._unused_keys,
-                    Box::new(meta.hooks.iter().map(|h| &h.0.options)),
+                    Box::new(meta.hooks.iter().map(|h| &h.options)),
                 ),
                 Repo::Builtin(builtin) => (
                     &builtin._unused_keys,
-                    Box::new(builtin.hooks.iter().map(|h| &h.0.options)),
+                    Box::new(builtin.hooks.iter().map(|h| &h.options)),
                 ),
             };
 
@@ -815,28 +1000,19 @@ fn warn_unused_paths(path: &Path, entries: &[String]) {
 
 /// Read the configuration file from the given path.
 pub(crate) fn load_config(path: &Path) -> Result<Config, Error> {
-    let content = match fs_err::read_to_string(path) {
-        Ok(content) => content,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(Error::NotFound(path.user_display().to_string()));
-        }
-        Err(e) => return Err(e.into()),
+    let content = fs_err::read_to_string(path)?;
+
+    let config = match path.extension() {
+        Some(ext) if ext.eq_ignore_ascii_case("toml") => toml::from_str(&content)
+            .map_err(|e| Error::Toml(path.user_display().to_string(), Box::new(e)))?,
+        _ => serde_saphyr::from_str(&content)
+            .map_err(|e| Error::Yaml(path.user_display().to_string(), Box::new(e)))?,
     };
-
-    let config: serde_yaml::Value = serde_yaml::from_str(&content)
-        .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
-
-    let config = yaml::merge_keys(config)
-        .map_err(|e| Error::YamlMerge(path.user_display().to_string(), e))?;
-
-    let config: Config = serde_yaml::from_value(config)
-        .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
 
     Ok(config)
 }
 
 /// Read the configuration file from the given path, and warn about certain issues.
-#[instrument(level = "trace")]
 pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
     let config = load_config(path)?;
 
@@ -863,7 +1039,6 @@ pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
         let msg = repos_has_mutable_rev
             .iter()
             .map(|repo| format!("{}: {}", repo.repo.cyan(), repo.rev.yellow()))
-            .collect::<Vec<_>>()
             .join("\n");
 
         warn_user!(
@@ -873,7 +1048,7 @@ pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
             {}
             Mutable references are never updated after first install and are not supported.
             See https://pre-commit.com/#using-the-latest-version-for-a-repository for more details.
-            Hint: `prek autoupdate` often fixes this",
+            hint: `prek auto-update` often fixes this",
             "#,
             msg
             }
@@ -883,13 +1058,12 @@ pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
     Ok(config)
 }
 
-// TODO: disallow `priority` in manifest
-
 /// Read the manifest file from the given path.
 pub(crate) fn read_manifest(path: &Path) -> Result<Manifest, Error> {
     let content = fs_err::read_to_string(path)?;
-    let manifest = serde_yaml::from_str(&content)
-        .map_err(|e| Error::Yaml(path.user_display().to_string(), e))?;
+    let manifest: Manifest = serde_saphyr::from_str(&content)
+        .map_err(|e| Error::Yaml(path.user_display().to_string(), Box::new(e)))?;
+
     Ok(manifest)
 }
 
@@ -917,8 +1091,12 @@ where
         .parse::<semver::Version>()
         .expect("Invalid prek version");
     if version > cur_version {
+        let hint = InstallSource::detect()
+            .map(|s| format!("To update, run `{}`.", s.update_instructions()))
+            .unwrap_or("Please consider updating prek".to_string());
+
         return Err(serde::de::Error::custom(format!(
-            "Required minimum prek version `{version}` is greater than current version `{cur_version}`. Please consider updating prek.",
+            "Required minimum prek version `{version}` is greater than current version `{cur_version}`; {hint}",
         )));
     }
 
@@ -935,7 +1113,9 @@ where
         let all_tags = identify::all_tags();
         for tag in tags {
             if !all_tags.contains(tag.as_str()) {
-                let msg = format!("Type tag \"{tag}\" is not recognized. Try upgrading prek");
+                let msg = format!(
+                    "Type tag `{tag}` is not recognized. Check for typos or upgrade prek to get new tags."
+                );
                 return Err(serde::de::Error::custom(msg));
             }
         }
@@ -948,9 +1128,107 @@ mod tests {
     use super::*;
     use std::io::Write as _;
 
+    /// Filter to replace dynamic version in snapshots
+    const VERSION_FILTER: (&str, &str) = (
+        r"current version `\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?`",
+        "current version `[CURRENT_VERSION]`",
+    );
+
+    #[test]
+    fn parse_file_patterns_regex_and_glob() {
+        #[derive(Debug, Deserialize)]
+        struct Wrapper {
+            files: FilePattern,
+            exclude: FilePattern,
+        }
+
+        let regex_yaml = indoc::indoc! {r"
+            files: ^src/
+            exclude: ^target/
+        "};
+        let parsed: Wrapper =
+            serde_saphyr::from_str(regex_yaml).expect("regex patterns should parse");
+        assert!(
+            matches!(parsed.files, FilePattern::Regex(_)),
+            "expected regex pattern"
+        );
+        assert!(parsed.files.is_match("src/main.rs"));
+        assert!(!parsed.files.is_match("other/main.rs"));
+        assert!(parsed.exclude.is_match("target/debug/app"));
+
+        let glob_yaml = indoc::indoc! {r"
+            files:
+              glob: src/**/*.rs
+            exclude:
+              glob: target/**
+        "};
+        let parsed: Wrapper =
+            serde_saphyr::from_str(glob_yaml).expect("glob patterns should parse");
+        assert!(
+            matches!(parsed.files, FilePattern::Glob(_)),
+            "expected glob pattern"
+        );
+        assert!(parsed.files.is_match("src/lib/main.rs"));
+        assert!(!parsed.files.is_match("src/lib/main.py"));
+        assert!(parsed.exclude.is_match("target/debug/app"));
+        assert!(!parsed.exclude.is_match("src/lib/main.rs"));
+
+        let glob_list_yaml = indoc::indoc! {r"
+            files:
+              glob:
+                - src/**/*.rs
+                - crates/**/src/**/*.rs
+            exclude:
+              glob:
+                - target/**
+                - dist/**
+        "};
+        let parsed: Wrapper =
+            serde_saphyr::from_str(glob_list_yaml).expect("glob list patterns should parse");
+        assert!(parsed.files.is_match("src/lib/main.rs"));
+        assert!(parsed.files.is_match("crates/foo/src/lib.rs"));
+        assert!(!parsed.files.is_match("tests/main.rs"));
+        assert!(parsed.exclude.is_match("target/debug/app"));
+        assert!(parsed.exclude.is_match("dist/app"));
+    }
+
+    #[test]
+    fn file_patterns_expose_sources_and_display() {
+        let pattern: FilePattern = serde_saphyr::from_str(indoc::indoc! {r"
+            glob:
+              - src/**/*.rs
+              - crates/**/src/**/*.rs
+        "})
+        .expect("glob list should parse");
+        assert_eq!(
+            pattern.to_string(),
+            "glob: [src/**/*.rs, crates/**/src/**/*.rs]"
+        );
+        assert!(pattern.is_match("src/main.rs"));
+        assert!(pattern.is_match("crates/foo/src/lib.rs"));
+        assert!(!pattern.is_match("tests/main.rs"));
+    }
+
+    #[test]
+    fn empty_glob_list_matches_nothing() {
+        let pattern = serde_saphyr::from_str::<FilePattern>("glob: []").unwrap();
+        assert!(!pattern.is_match("any/file.rs"));
+        assert!(!pattern.is_match(""));
+    }
+
+    #[test]
+    fn invalid_glob_pattern_errors() {
+        let err = serde_saphyr::from_str::<FilePattern>("glob: \"[\"")
+            .expect_err("invalid glob should fail");
+        let msg = err.to_string().to_lowercase();
+        assert!(
+            msg.contains("glob"),
+            "error should mention glob issues: {msg}"
+        );
+    }
+
     #[test]
     fn parse_repos() {
-        // Local hook should not have `rev`
         let yaml = indoc::indoc! {r"
             repos:
               - repo: local
@@ -960,62 +1238,10 @@ mod tests {
                     entry: cargo fmt --
                     language: system
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r#"
-        Ok(
-            Config {
-                repos: [
-                    Local(
-                        LocalRepo {
-                            repo: "local",
-                            hooks: [
-                                ManifestHook {
-                                    id: "cargo-fmt",
-                                    name: "cargo fmt",
-                                    entry: "cargo fmt --",
-                                    language: System,
-                                    options: HookOptions {
-                                        alias: None,
-                                        files: None,
-                                        exclude: None,
-                                        types: None,
-                                        types_or: None,
-                                        exclude_types: None,
-                                        additional_dependencies: None,
-                                        args: None,
-                                        env: None,
-                                        always_run: None,
-                                        fail_fast: None,
-                                        pass_filenames: None,
-                                        description: None,
-                                        language_version: None,
-                                        log_file: None,
-                                        require_serial: None,
-                                        priority: None,
-                                        stages: None,
-                                        verbose: None,
-                                        minimum_prek_version: None,
-                                        _unused_keys: {},
-                                    },
-                                },
-                            ],
-                            _unused_keys: {},
-                        },
-                    ),
-                ],
-                default_install_hook_types: None,
-                default_language_version: None,
-                default_stages: None,
-                files: None,
-                exclude: None,
-                fail_fast: None,
-                minimum_prek_version: None,
-                orphan: None,
-                _unused_keys: {},
-            },
-        )
-        "#);
+        let result = serde_saphyr::from_str::<Config>(yaml).unwrap();
+        insta::assert_debug_snapshot!(result);
 
+        // Local hook should not have `rev`
         let yaml = indoc::indoc! {r"
             repos:
               - repo: local
@@ -1023,11 +1249,40 @@ mod tests {
                 hooks:
                   - id: cargo-fmt
                     name: cargo fmt
+                    language: system
+                    entry: cargo fmt
                     types:
                       - rust
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid local repo: missing field `entry` at line 2 column 3");
+        // Error on extra `rev` field, but not other fields
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 2 column 5: `rev` is not allowed for local repos
+         --> <input>:2:5
+          |
+        1 | repos:
+        2 |   - repo: local
+          |     ^ `rev` is not allowed for local repos
+        3 |     rev: v1.0.0
+        4 |     hooks:
+          |
+        ");
+
+        // Allow but warn on extra fields (other than `rev`)
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: local
+                unknown_field: some_value
+                hooks:
+                  - id: cargo-fmt
+                    name: cargo fmt
+                    entry: cargo fmt
+                    language: system
+                    types:
+                      - rust
+        "};
+        let result = serde_saphyr::from_str::<Config>(yaml).unwrap();
+        insta::assert_debug_snapshot!(result);
 
         // Remote hook should have `rev`.
         let yaml = indoc::indoc! {r"
@@ -1037,62 +1292,8 @@ mod tests {
                 hooks:
                   - id: typos
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r#"
-        Ok(
-            Config {
-                repos: [
-                    Remote(
-                        RemoteRepo {
-                            repo: "https://github.com/crate-ci/typos",
-                            rev: "v1.0.0",
-                            hooks: [
-                                RemoteHook {
-                                    id: "typos",
-                                    name: None,
-                                    entry: None,
-                                    language: None,
-                                    options: HookOptions {
-                                        alias: None,
-                                        files: None,
-                                        exclude: None,
-                                        types: None,
-                                        types_or: None,
-                                        exclude_types: None,
-                                        additional_dependencies: None,
-                                        args: None,
-                                        env: None,
-                                        always_run: None,
-                                        fail_fast: None,
-                                        pass_filenames: None,
-                                        description: None,
-                                        language_version: None,
-                                        log_file: None,
-                                        require_serial: None,
-                                        priority: None,
-                                        stages: None,
-                                        verbose: None,
-                                        minimum_prek_version: None,
-                                        _unused_keys: {},
-                                    },
-                                },
-                            ],
-                            _unused_keys: {},
-                        },
-                    ),
-                ],
-                default_install_hook_types: None,
-                default_language_version: None,
-                default_stages: None,
-                files: None,
-                exclude: None,
-                fail_fast: None,
-                minimum_prek_version: None,
-                orphan: None,
-                _unused_keys: {},
-            },
-        )
-        "#);
+        let result = serde_saphyr::from_str::<Config>(yaml).unwrap();
+        insta::assert_debug_snapshot!(result);
 
         let yaml = indoc::indoc! {r"
             repos:
@@ -1100,8 +1301,83 @@ mod tests {
                 hooks:
                   - id: typos
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid remote repo: missing field `rev` at line 2 column 3");
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 3 column 5: missing field `rev`
+         --> <input>:3:5
+          |
+        1 | repos:
+        2 |   - repo: https://github.com/crate-ci/typos
+        3 |     hooks:
+          |     ^ missing field `rev`
+        4 |       - id: typos
+          |
+        ");
+
+        // Allow `rev` before `repo`
+        let yaml = indoc::indoc! {r"
+            repos:
+              - rev: v1.0.0
+                repo: https://github.com/crate-ci/typos
+                hooks:
+                  - id: typos
+        "};
+        let result = serde_saphyr::from_str::<Config>(yaml).unwrap();
+        insta::assert_debug_snapshot!(result);
+
+        let yaml = indoc::indoc! {r"
+            repos:
+              - rev: v1.0.0
+                repo: local
+                hooks:
+                  - id: typos
+        "};
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 5 column 9: missing field `name`
+         --> <input>:5:9
+          |
+        3 |     repo: local
+        4 |     hooks:
+        5 |       - id: typos
+          |         ^ missing field `name`
+        ");
+
+        let yaml = indoc::indoc! {r"
+            repos:
+              - rev: v1.0.0
+                repo: meta
+                hooks:
+                  - id: typos
+        "};
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 5 column 9: unknown meta hook id `typos`
+         --> <input>:5:9
+          |
+        3 |     repo: meta
+        4 |     hooks:
+        5 |       - id: typos
+          |         ^ unknown meta hook id `typos`
+        ");
+
+        let yaml = indoc::indoc! {r"
+            repos:
+              - rev: v1.0.0
+                repo: builtin
+                hooks:
+                  - id: typos
+        "};
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 5 column 9: unknown builtin hook id `typos`
+         --> <input>:5:9
+          |
+        3 |     repo: builtin
+        4 |     hooks:
+        5 |       - id: typos
+          |         ^ unknown builtin hook id `typos`
+        ");
     }
 
     #[test]
@@ -1115,8 +1391,16 @@ mod tests {
                   - name: typos
                     alias: typo
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid remote repo: missing field `id` at line 2 column 3");
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 6 column 9: missing field `id`
+         --> <input>:6:9
+          |
+        4 |     hooks:
+        5 |       - name: typos
+        6 |         alias: typo
+          |         ^ missing field `id`
+        ");
 
         // Local hook should have `id`, `name`, and `entry` and `language`.
         let yaml = indoc::indoc! { r"
@@ -1129,8 +1413,18 @@ mod tests {
                     types:
                       - rust
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid local repo: missing field `language` at line 2 column 3");
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 7 column 9: missing field `language`
+         --> <input>:7:9
+          |
+        5 |         name: cargo fmt
+        6 |         entry: cargo fmt
+        7 |         types:
+          |         ^ missing field `language`
+        8 |           - rust
+          |
+        ");
 
         let yaml = indoc::indoc! { r"
             repos:
@@ -1141,61 +1435,8 @@ mod tests {
                     entry: cargo fmt
                     language: rust
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r#"
-        Ok(
-            Config {
-                repos: [
-                    Local(
-                        LocalRepo {
-                            repo: "local",
-                            hooks: [
-                                ManifestHook {
-                                    id: "cargo-fmt",
-                                    name: "cargo fmt",
-                                    entry: "cargo fmt",
-                                    language: Rust,
-                                    options: HookOptions {
-                                        alias: None,
-                                        files: None,
-                                        exclude: None,
-                                        types: None,
-                                        types_or: None,
-                                        exclude_types: None,
-                                        additional_dependencies: None,
-                                        args: None,
-                                        env: None,
-                                        always_run: None,
-                                        fail_fast: None,
-                                        pass_filenames: None,
-                                        description: None,
-                                        language_version: None,
-                                        log_file: None,
-                                        require_serial: None,
-                                        priority: None,
-                                        stages: None,
-                                        verbose: None,
-                                        minimum_prek_version: None,
-                                        _unused_keys: {},
-                                    },
-                                },
-                            ],
-                            _unused_keys: {},
-                        },
-                    ),
-                ],
-                default_install_hook_types: None,
-                default_language_version: None,
-                default_stages: None,
-                files: None,
-                exclude: None,
-                fail_fast: None,
-                minimum_prek_version: None,
-                orphan: None,
-                _unused_keys: {},
-            },
-        )
-        "#);
+        let result = serde_saphyr::from_str::<Config>(yaml).unwrap();
+        insta::assert_debug_snapshot!(result);
     }
 
     #[test]
@@ -1209,8 +1450,16 @@ mod tests {
                   - name: typos
                     alias: typo
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid meta repo: missing field `id` at line 2 column 3");
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 6 column 9: missing field `id`
+         --> <input>:6:9
+          |
+        4 |     hooks:
+        5 |       - name: typos
+        6 |         alias: typo
+          |         ^ missing field `id`
+        ");
 
         // Invalid meta hook id
         let yaml = indoc::indoc! { r"
@@ -1219,8 +1468,16 @@ mod tests {
                 hooks:
                   - id: hello
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid meta repo: unknown meta hook id `hello` at line 2 column 3");
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 4 column 9: unknown meta hook id `hello`
+         --> <input>:4:9
+          |
+        2 |   - repo: meta
+        3 |     hooks:
+        4 |       - id: hello
+          |         ^ unknown meta hook id `hello`
+        ");
 
         // Invalid language
         let yaml = indoc::indoc! { r"
@@ -1230,8 +1487,18 @@ mod tests {
                   - id: check-hooks-apply
                     language: python
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid meta repo: language must be `system` for meta hooks at line 2 column 3");
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 4 column 9: language must be `system` for meta hooks
+         --> <input>:4:9
+          |
+        2 |   - repo: meta
+        3 |     hooks:
+        4 |       - id: check-hooks-apply
+          |         ^ language must be `system` for meta hooks
+        5 |         language: python
+          |
+        ");
 
         // Invalid entry
         let yaml = indoc::indoc! { r"
@@ -1241,8 +1508,18 @@ mod tests {
                   - id: check-hooks-apply
                     entry: echo hell world
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        insta::assert_snapshot!(result.unwrap_err().to_string(), @"repos: Invalid meta repo: entry is not allowed for meta hooks at line 2 column 3");
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 4 column 9: `entry` is not allowed for meta hooks
+         --> <input>:4:9
+          |
+        2 |   - repo: meta
+        3 |     hooks:
+        4 |       - id: check-hooks-apply
+          |         ^ `entry` is not allowed for meta hooks
+        5 |         entry: echo hell world
+          |
+        ");
 
         // Valid meta hook
         let yaml = indoc::indoc! { r"
@@ -1253,135 +1530,8 @@ mod tests {
                   - id: check-useless-excludes
                   - id: identity
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r#"
-        Ok(
-            Config {
-                repos: [
-                    Meta(
-                        MetaRepo {
-                            repo: "meta",
-                            hooks: [
-                                MetaHook(
-                                    ManifestHook {
-                                        id: "check-hooks-apply",
-                                        name: "Check hooks apply",
-                                        entry: "",
-                                        language: System,
-                                        options: HookOptions {
-                                            alias: None,
-                                            files: Some(
-                                                SerdeRegex(
-                                                    "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
-                                                ),
-                                            ),
-                                            exclude: None,
-                                            types: None,
-                                            types_or: None,
-                                            exclude_types: None,
-                                            additional_dependencies: None,
-                                            args: None,
-                                            env: None,
-                                            always_run: None,
-                                            fail_fast: None,
-                                            pass_filenames: None,
-                                            description: None,
-                                            language_version: None,
-                                            log_file: None,
-                                            require_serial: None,
-                                            priority: None,
-                                            stages: None,
-                                            verbose: None,
-                                            minimum_prek_version: None,
-                                            _unused_keys: {},
-                                        },
-                                    },
-                                ),
-                                MetaHook(
-                                    ManifestHook {
-                                        id: "check-useless-excludes",
-                                        name: "Check useless excludes",
-                                        entry: "",
-                                        language: System,
-                                        options: HookOptions {
-                                            alias: None,
-                                            files: Some(
-                                                SerdeRegex(
-                                                    "^\\.pre-commit-config\\.yaml|\\.pre-commit-config\\.yml$",
-                                                ),
-                                            ),
-                                            exclude: None,
-                                            types: None,
-                                            types_or: None,
-                                            exclude_types: None,
-                                            additional_dependencies: None,
-                                            args: None,
-                                            env: None,
-                                            always_run: None,
-                                            fail_fast: None,
-                                            pass_filenames: None,
-                                            description: None,
-                                            language_version: None,
-                                            log_file: None,
-                                            require_serial: None,
-                                            priority: None,
-                                            stages: None,
-                                            verbose: None,
-                                            minimum_prek_version: None,
-                                            _unused_keys: {},
-                                        },
-                                    },
-                                ),
-                                MetaHook(
-                                    ManifestHook {
-                                        id: "identity",
-                                        name: "identity",
-                                        entry: "",
-                                        language: System,
-                                        options: HookOptions {
-                                            alias: None,
-                                            files: None,
-                                            exclude: None,
-                                            types: None,
-                                            types_or: None,
-                                            exclude_types: None,
-                                            additional_dependencies: None,
-                                            args: None,
-                                            env: None,
-                                            always_run: None,
-                                            fail_fast: None,
-                                            pass_filenames: None,
-                                            description: None,
-                                            language_version: None,
-                                            log_file: None,
-                                            require_serial: None,
-                                            priority: None,
-                                            stages: None,
-                                            verbose: Some(
-                                                true,
-                                            ),
-                                            minimum_prek_version: None,
-                                            _unused_keys: {},
-                                        },
-                                    },
-                                ),
-                            ],
-                            _unused_keys: {},
-                        },
-                    ),
-                ],
-                default_install_hook_types: None,
-                default_language_version: None,
-                default_stages: None,
-                files: None,
-                exclude: None,
-                fail_fast: None,
-                minimum_prek_version: None,
-                orphan: None,
-                _unused_keys: {},
-            },
-        )
-        "#);
+        let result = serde_saphyr::from_str::<Config>(yaml).unwrap();
+        insta::assert_debug_snapshot!(result);
     }
 
     #[test]
@@ -1406,132 +1556,121 @@ mod tests {
                     language: system
                     language_version: '3.8'
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        insta::assert_debug_snapshot!(result, @r#"
-        Ok(
-            Config {
-                repos: [
-                    Local(
-                        LocalRepo {
-                            repo: "local",
-                            hooks: [
-                                ManifestHook {
-                                    id: "hook-1",
-                                    name: "hook 1",
-                                    entry: "echo hello world",
-                                    language: System,
-                                    options: HookOptions {
-                                        alias: None,
-                                        files: None,
-                                        exclude: None,
-                                        types: None,
-                                        types_or: None,
-                                        exclude_types: None,
-                                        additional_dependencies: None,
-                                        args: None,
-                                        env: None,
-                                        always_run: None,
-                                        fail_fast: None,
-                                        pass_filenames: None,
-                                        description: None,
-                                        language_version: Some(
-                                            "default",
-                                        ),
-                                        log_file: None,
-                                        require_serial: None,
-                                        priority: None,
-                                        stages: None,
-                                        verbose: None,
-                                        minimum_prek_version: None,
-                                        _unused_keys: {},
-                                    },
-                                },
-                                ManifestHook {
-                                    id: "hook-2",
-                                    name: "hook 2",
-                                    entry: "echo hello world",
-                                    language: System,
-                                    options: HookOptions {
-                                        alias: None,
-                                        files: None,
-                                        exclude: None,
-                                        types: None,
-                                        types_or: None,
-                                        exclude_types: None,
-                                        additional_dependencies: None,
-                                        args: None,
-                                        env: None,
-                                        always_run: None,
-                                        fail_fast: None,
-                                        pass_filenames: None,
-                                        description: None,
-                                        language_version: Some(
-                                            "system",
-                                        ),
-                                        log_file: None,
-                                        require_serial: None,
-                                        priority: None,
-                                        stages: None,
-                                        verbose: None,
-                                        minimum_prek_version: None,
-                                        _unused_keys: {},
-                                    },
-                                },
-                                ManifestHook {
-                                    id: "hook-3",
-                                    name: "hook 3",
-                                    entry: "echo hello world",
-                                    language: System,
-                                    options: HookOptions {
-                                        alias: None,
-                                        files: None,
-                                        exclude: None,
-                                        types: None,
-                                        types_or: None,
-                                        exclude_types: None,
-                                        additional_dependencies: None,
-                                        args: None,
-                                        env: None,
-                                        always_run: None,
-                                        fail_fast: None,
-                                        pass_filenames: None,
-                                        description: None,
-                                        language_version: Some(
-                                            "3.8",
-                                        ),
-                                        log_file: None,
-                                        require_serial: None,
-                                        priority: None,
-                                        stages: None,
-                                        verbose: None,
-                                        minimum_prek_version: None,
-                                        _unused_keys: {},
-                                    },
-                                },
-                            ],
-                            _unused_keys: {},
-                        },
-                    ),
-                ],
-                default_install_hook_types: None,
-                default_language_version: None,
-                default_stages: None,
-                files: None,
-                exclude: None,
-                fail_fast: None,
-                minimum_prek_version: None,
-                orphan: None,
-                _unused_keys: {},
-            },
-        )
-        "#);
+        let result = serde_saphyr::from_str::<Config>(yaml);
+        insta::assert_debug_snapshot!(result);
     }
 
     #[test]
-    fn test_read_config() -> Result<()> {
+    fn test_read_yaml_config() -> Result<()> {
         let config = read_config(Path::new("tests/fixtures/uv-pre-commit-config.yaml"))?;
         insta::assert_debug_snapshot!(config);
         Ok(())
+    }
+
+    #[test]
+    fn test_read_toml_config() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let toml_path = dir.path().join("prek.toml");
+        fs_err::write(
+            &toml_path,
+            indoc::indoc! {r#"
+            fail_fast = true
+
+            [[repos]]
+            repo = "local"
+
+            [[repos.hooks]]
+            id = "cargo-fmt"
+            name = "cargo fmt"
+            entry = "cargo fmt --"
+            language = "system"
+
+            [[repos]]
+            repo = "https://github.com/pre-commit/pre-commit-hooks"
+            rev = "v6.0.0"
+            hooks = [
+            { id = "trailing-whitespace" },
+            {
+                id = "end-of-file-fixer",
+                args = ["--fix", "crlf"]
+            }
+            ]
+        "#},
+        )?;
+
+        let config = read_config(&toml_path)?;
+        insta::assert_debug_snapshot!(config);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_invalid_toml_config() {
+        let raw = indoc::indoc! {r#"
+            fail_fast = true
+
+            [[repos]]
+            repo = "local"
+
+            [[repos.hooks]]
+            id = "cargo-fmt"
+            name = "cargo fmt"
+            entry = "cargo fmt --"
+            language = "system"
+
+            [[repos]]
+            repo = "https://github.com/pre-commit/pre-commit-hooks"
+            hooks = [
+            { id = "trailing-whitespace" },
+            {
+                id = "end-of-file-fixer",
+                args = ["--fix", "crlf"]
+            }
+            ]
+        "#};
+
+        let err = toml::from_str::<Config>(raw).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        TOML parse error at line 12, column 1
+           |
+        12 | [[repos]]
+           | ^^^^^^^^^
+        missing field `rev`
+        ");
+
+        let raw = indoc::indoc! {r#"
+            fail_fast = true
+
+            [[repos]]
+            repo = "local"
+            rev = "v1.0.0"
+
+            [[repos.hooks]]
+            id = "cargo-fmt"
+            name = "cargo fmt"
+            entry = "cargo fmt --"
+            language = "system"
+
+            [[repos]]
+            repo = "https://github.com/pre-commit/pre-commit-hooks"
+            rev = "v6.0.0"
+            hooks = [
+            { id = "trailing-whitespace" },
+            {
+                id = "end-of-file-fixer",
+                args = ["--fix", "crlf"]
+            }
+            ]
+        "#};
+
+        let err = toml::from_str::<Config>(raw).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        TOML parse error at line 3, column 1
+          |
+        3 | [[repos]]
+          | ^^^^^^^^^
+        `rev` is not allowed for local repos
+        ");
     }
 
     #[test]
@@ -1553,9 +1692,7 @@ mod tests {
                     entry: echo test
                     language: system
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        assert!(result.is_ok());
-        let config = result.unwrap();
+        let config = serde_saphyr::from_str::<Config>(yaml).unwrap();
         assert!(config.minimum_prek_version.is_none());
 
         // Test that empty minimum_prek_version field is treated as None
@@ -1569,9 +1706,7 @@ mod tests {
                     language: system
             minimum_prek_version: ''
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        assert!(result.is_ok());
-        let config = result.unwrap();
+        let config = serde_saphyr::from_str::<Config>(yaml).unwrap();
         assert!(config.minimum_prek_version.is_none());
 
         // Test that valid minimum_prek_version field works in top-level config
@@ -1585,27 +1720,46 @@ mod tests {
                     language: system
             minimum_prek_version: '10.0.0'
         "};
-        let result = serde_yaml::from_str::<Config>(yaml);
-        assert!(result.is_err());
+        let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
+        insta::with_settings!({ filters => vec![VERSION_FILTER] }, {
+            insta::assert_snapshot!(err, @"
+            error: line 8 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
+             --> <input>:8:23
+              |
+            6 |         entry: echo test
+            7 |         language: system
+            8 | minimum_prek_version: '10.0.0'
+              |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
+            ");
+        });
 
         // Test that valid minimum_prek_version field works in hook config
         let yaml = indoc::indoc! {r"
-          - repo: local
-            hooks:
-              - id: test-hook
-                name: Test Hook
-                entry: echo test
-                language: system
-                minimum_prek_version: '10.0.0'
+          - id: test-hook
+            name: Test Hook
+            entry: echo test
+            language: system
+            minimum_prek_version: '10.0.0'
         "};
-        let result = serde_yaml::from_str::<Manifest>(yaml);
-        assert!(result.is_err());
+        let err = serde_saphyr::from_str::<Manifest>(yaml).unwrap_err();
+        insta::with_settings!({ filters => vec![VERSION_FILTER] }, {
+            insta::assert_snapshot!(err, @"
+            error: line 1 column 3: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
+             --> <input>:1:3
+              |
+            1 | - id: test-hook
+              |   ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
+            2 |   name: Test Hook
+            3 |   entry: echo test
+              |
+            ");
+        });
     }
 
     #[test]
     fn test_validate_type_tags() {
         // Valid tags should parse successfully
-        let yaml_valid = r"
+        let yaml_valid = indoc::indoc! { r"
             repos:
               - repo: local
                 hooks:
@@ -1616,12 +1770,12 @@ mod tests {
                     types: [python, file]
                     types_or: [text, binary]
                     exclude_types: [symlink]
-        ";
-        let result = serde_yaml::from_str::<Config>(yaml_valid);
+        "};
+        let result = serde_saphyr::from_str::<Config>(yaml_valid);
         assert!(result.is_ok(), "Should parse valid tags successfully");
 
         // Empty lists and missing keys should also be fine
-        let yaml_empty = r"
+        let yaml_empty = indoc::indoc! { r"
             repos:
               - repo: local
                 hooks:
@@ -1632,15 +1786,15 @@ mod tests {
                     types: []
                     exclude_types: []
                     # types_or is missing, which is also valid
-        ";
-        let result_empty = serde_yaml::from_str::<Config>(yaml_empty);
+        "};
+        let result_empty = serde_saphyr::from_str::<Config>(yaml_empty);
         assert!(
             result_empty.is_ok(),
             "Should parse empty/missing tags successfully"
         );
 
         // Invalid tag in 'types' should fail
-        let yaml_invalid_types = r"
+        let yaml_invalid_types = indoc::indoc! { r"
             repos:
               - repo: local
                 hooks:
@@ -1649,19 +1803,23 @@ mod tests {
                     entry: echo
                     language: system
                     types: [pythoon] # Deliberate typo
-        ";
-        let result_invalid_types = serde_yaml::from_str::<Config>(yaml_invalid_types);
-        assert!(result_invalid_types.is_err());
-
-        assert!(
-            result_invalid_types
-                .unwrap_err()
-                .to_string()
-                .contains("Type tag \"pythoon\" is not recognized")
-        );
+        "};
+        let err = serde_saphyr::from_str::<Config>(yaml_invalid_types).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 4 column 9: Type tag `pythoon` is not recognized. Check for typos or upgrade prek to get new tags.
+         --> <input>:4:9
+          |
+        2 |   - repo: local
+        3 |     hooks:
+        4 |       - id: my-hook
+          |         ^ Type tag `pythoon` is not recognized. Check for typos or upgrade prek to get new tags.
+        5 |         name: My Hook
+        6 |         entry: echo
+          |
+        ");
 
         // Invalid tag in 'types_or' should fail
-        let yaml_invalid_types_or = r"
+        let yaml_invalid_types_or = indoc::indoc! { r"
             repos:
               - repo: local
                 hooks:
@@ -1670,18 +1828,23 @@ mod tests {
                     entry: echo
                     language: system
                     types_or: [invalidtag]
-        ";
-        let result_invalid_types_or = serde_yaml::from_str::<Config>(yaml_invalid_types_or);
-        assert!(result_invalid_types_or.is_err());
-        assert!(
-            result_invalid_types_or
-                .unwrap_err()
-                .to_string()
-                .contains("Type tag \"invalidtag\" is not recognized")
-        );
+        "};
+        let err = serde_saphyr::from_str::<Config>(yaml_invalid_types_or).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 4 column 9: Type tag `invalidtag` is not recognized. Check for typos or upgrade prek to get new tags.
+         --> <input>:4:9
+          |
+        2 |   - repo: local
+        3 |     hooks:
+        4 |       - id: my-hook
+          |         ^ Type tag `invalidtag` is not recognized. Check for typos or upgrade prek to get new tags.
+        5 |         name: My Hook
+        6 |         entry: echo
+          |
+        ");
 
         // Invalid tag in 'exclude_types' should fail
-        let yaml_invalid_exclude_types = r"
+        let yaml_invalid_exclude_types = indoc::indoc! { r"
             repos:
               - repo: local
                 hooks:
@@ -1690,16 +1853,20 @@ mod tests {
                     entry: echo
                     language: system
                     exclude_types: [not-a-real-tag]
-        ";
-        let result_invalid_exclude_types =
-            serde_yaml::from_str::<Config>(yaml_invalid_exclude_types);
-        assert!(result_invalid_exclude_types.is_err());
-        assert!(
-            result_invalid_exclude_types
-                .unwrap_err()
-                .to_string()
-                .contains("Type tag \"not-a-real-tag\" is not recognized")
-        );
+        "};
+        let err = serde_saphyr::from_str::<Config>(yaml_invalid_exclude_types).unwrap_err();
+        insta::assert_snapshot!(err, @"
+        error: line 4 column 9: Type tag `not-a-real-tag` is not recognized. Check for typos or upgrade prek to get new tags.
+         --> <input>:4:9
+          |
+        2 |   - repo: local
+        3 |     hooks:
+        4 |       - id: my-hook
+          |         ^ Type tag `not-a-real-tag` is not recognized. Check for typos or upgrade prek to get new tags.
+        5 |         name: My Hook
+        6 |         entry: echo
+          |
+        ");
     }
 
     #[test]
@@ -1724,97 +1891,7 @@ mod tests {
         file.write_all(yaml.as_bytes())?;
 
         let config = read_config(file.path())?;
-        insta::assert_debug_snapshot!(config, @r#"
-        Config {
-            repos: [
-                Local(
-                    LocalRepo {
-                        repo: "local",
-                        hooks: [
-                            ManifestHook {
-                                id: "mypy-local",
-                                name: "Local mypy",
-                                entry: "python tools/pre_commit/mypy.py 0 \"local\"",
-                                language: Python,
-                                options: HookOptions {
-                                    alias: None,
-                                    files: None,
-                                    exclude: None,
-                                    types: None,
-                                    types_or: Some(
-                                        [
-                                            "python",
-                                            "pyi",
-                                        ],
-                                    ),
-                                    exclude_types: None,
-                                    additional_dependencies: None,
-                                    args: None,
-                                    env: None,
-                                    always_run: None,
-                                    fail_fast: None,
-                                    pass_filenames: None,
-                                    description: None,
-                                    language_version: None,
-                                    log_file: None,
-                                    require_serial: None,
-                                    priority: None,
-                                    stages: None,
-                                    verbose: None,
-                                    minimum_prek_version: None,
-                                    _unused_keys: {},
-                                },
-                            },
-                            ManifestHook {
-                                id: "mypy-3.10",
-                                name: "Mypy 3.10",
-                                entry: "python tools/pre_commit/mypy.py 1 \"3.10\"",
-                                language: Python,
-                                options: HookOptions {
-                                    alias: None,
-                                    files: None,
-                                    exclude: None,
-                                    types: None,
-                                    types_or: Some(
-                                        [
-                                            "python",
-                                            "pyi",
-                                        ],
-                                    ),
-                                    exclude_types: None,
-                                    additional_dependencies: None,
-                                    args: None,
-                                    env: None,
-                                    always_run: None,
-                                    fail_fast: None,
-                                    pass_filenames: None,
-                                    description: None,
-                                    language_version: None,
-                                    log_file: None,
-                                    require_serial: None,
-                                    priority: None,
-                                    stages: None,
-                                    verbose: None,
-                                    minimum_prek_version: None,
-                                    _unused_keys: {},
-                                },
-                            },
-                        ],
-                        _unused_keys: {},
-                    },
-                ),
-            ],
-            default_install_hook_types: None,
-            default_language_version: None,
-            default_stages: None,
-            files: None,
-            exclude: None,
-            fail_fast: None,
-            minimum_prek_version: None,
-            orphan: None,
-            _unused_keys: {},
-        }
-        "#);
+        insta::assert_debug_snapshot!(config);
 
         Ok(())
     }
@@ -1844,80 +1921,7 @@ mod tests {
         file.write_all(yaml.as_bytes())?;
 
         let config = read_config(file.path())?;
-        insta::assert_debug_snapshot!(config, @r#"
-        Config {
-            repos: [
-                Local(
-                    LocalRepo {
-                        repo: "local",
-                        hooks: [
-                            ManifestHook {
-                                id: "test-yaml",
-                                name: "Test YAML compatibility",
-                                entry: "prek --help",
-                                language: System,
-                                options: HookOptions {
-                                    alias: None,
-                                    files: None,
-                                    exclude: None,
-                                    types: None,
-                                    types_or: None,
-                                    exclude_types: None,
-                                    additional_dependencies: None,
-                                    args: None,
-                                    env: None,
-                                    always_run: None,
-                                    fail_fast: None,
-                                    pass_filenames: Some(
-                                        false,
-                                    ),
-                                    description: None,
-                                    language_version: None,
-                                    log_file: None,
-                                    require_serial: Some(
-                                        true,
-                                    ),
-                                    priority: None,
-                                    stages: Some(
-                                        [
-                                            PreCommit,
-                                        ],
-                                    ),
-                                    verbose: None,
-                                    minimum_prek_version: None,
-                                    _unused_keys: {},
-                                },
-                            },
-                        ],
-                        _unused_keys: {},
-                    },
-                ),
-            ],
-            default_install_hook_types: None,
-            default_language_version: None,
-            default_stages: None,
-            files: None,
-            exclude: None,
-            fail_fast: None,
-            minimum_prek_version: None,
-            orphan: None,
-            _unused_keys: {
-                "local": Object {
-                    "language": String("system"),
-                    "pass_filenames": Bool(false),
-                    "require_serial": Bool(true),
-                },
-                "local-commit": Object {
-                    "language": String("system"),
-                    "pass_filenames": Bool(false),
-                    "require_serial": Bool(true),
-                    "stages": Array [
-                        String("pre-commit"),
-                    ],
-                },
-            },
-        }
-        "#);
+        insta::assert_debug_snapshot!(config);
 
         Ok(())
     }
@@ -1943,94 +1947,22 @@ mod tests {
                   'typing-extensions',
                 ]
         "#};
-        let result = serde_yaml::from_str::<Config>(yaml);
+        let result = serde_saphyr::from_str::<Config>(yaml);
         assert!(result.is_ok());
-    }
-}
-
-#[cfg(unix)]
-#[cfg(all(test, feature = "schemars"))]
-mod _gen {
-    use crate::config::Config;
-    use anyhow::bail;
-    use prek_consts::env_vars::EnvVars;
-    use pretty_assertions::StrComparison;
-    use std::path::PathBuf;
-
-    const ROOT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../");
-
-    enum Mode {
-        /// Update the content.
-        Write,
-
-        /// Don't write to the file, check if the file is up-to-date and error if not.
-        Check,
-
-        /// Write the generated help to stdout.
-        DryRun,
-    }
-
-    fn generate() -> String {
-        let settings = schemars::generate::SchemaSettings::draft07();
-        let generator = schemars::SchemaGenerator::new(settings);
-        let schema = generator.into_root_schema_for::<Config>();
-
-        serde_json::to_string_pretty(&schema).unwrap() + "\n"
     }
 
     #[test]
-    fn generate_json_schema() -> anyhow::Result<()> {
-        let mode = if EnvVars::is_set(EnvVars::PREK_GENERATE) {
-            Mode::Write
-        } else {
-            Mode::Check
-        };
-
-        let schema_string = generate();
-        let filename = "prek.schema.json";
-        let schema_path = PathBuf::from(ROOT_DIR).join(filename);
-
-        match mode {
-            Mode::DryRun => {
-                anstream::println!("{schema_string}");
-            }
-            Mode::Check => match fs_err::read_to_string(schema_path) {
-                Ok(current) => {
-                    if current == schema_string {
-                        anstream::println!("Up-to-date: {filename}");
-                    } else {
-                        let comparison = StrComparison::new(&current, &schema_string);
-                        bail!("{filename} changed, please run `mise run generate`:\n{comparison}");
-                    }
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    bail!("{filename} not found, please run `mise run generate`");
-                }
-                Err(err) => {
-                    bail!("{filename} changed, please run `mise run generate`:\n{err}");
-                }
-            },
-            Mode::Write => match fs_err::read_to_string(&schema_path) {
-                Ok(current) => {
-                    if current == schema_string {
-                        anstream::println!("Up-to-date: {filename}");
-                    } else {
-                        anstream::println!("Updating: {filename}");
-                        fs_err::write(schema_path, schema_string.as_bytes())?;
-                    }
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    anstream::println!("Updating: {filename}");
-                    fs_err::write(schema_path, schema_string.as_bytes())?;
-                }
-                Err(err) => {
-                    bail!(
-                        "{filename} changed, please run `cargo dev generate-cli-reference`:\n{err}"
-                    );
-                }
-            },
-        }
-
-        Ok(())
+    fn test_numeric_rev_is_parsed_as_string() {
+        // Because we define `rev` as a String, `serde-saphyr` can automatically parse numeric
+        // revs as strings.
+        let yaml = indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/pre-commit/mirrors-mypy
+            rev: 1.0
+            hooks:
+              - id: mypy
+        "};
+        let config = serde_saphyr::from_str::<Config>(yaml).unwrap();
+        insta::assert_debug_snapshot!(config);
     }
 }

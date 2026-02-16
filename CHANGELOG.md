@@ -1,5 +1,396 @@
 # Changelog
 
+## 0.3.3
+
+Released on 2026-02-15.
+
+### Enhancements
+
+- Read Python version specifier from hook repo `pyproject.toml` ([#1596](https://github.com/j178/prek/pull/1596))
+- Add `#:schema` directives to generated prek.toml ([#1597](https://github.com/j178/prek/pull/1597))
+- Add `prek util list-builtins` command ([#1600](https://github.com/j178/prek/pull/1600))
+- Expand install source detection to `mise`, `uv tool`, `pipx`, and `asdf` ([#1605](https://github.com/j178/prek/pull/1605), [#1607](https://github.com/j178/prek/pull/1607))
+- Add progress bar to `cache clean` and show removal summary ([#1616](https://github.com/j178/prek/pull/1616))
+- Make `yaml-to-toml` CONFIG argument optional ([#1593](https://github.com/j178/prek/pull/1593))
+- `prek uninstall` removes legacy scripts too ([#1622](https://github.com/j178/prek/pull/1622))
+
+### Bug fixes
+
+- Fix underflow when formatting summary output ([#1626](https://github.com/j178/prek/pull/1626))
+- Match `files/exclude` filter against relative path of nested project ([#1624](https://github.com/j178/prek/pull/1624))
+- Select `musllinux` wheel tag for uv on musl-based distros ([#1628](https://github.com/j178/prek/pull/1628))
+
+### Documentation
+
+- Clarify `prek list` description ([#1604](https://github.com/j178/prek/pull/1604))
+
+### Contributors
+
+- @ichoosetoaccept
+- @shaanmajid
+- @soraxas
+- @9999years
+- @j178
+
+## 0.3.2
+
+Released on 2026-02-06.
+
+### Highlights
+
+- **`prek.toml` is here!**
+
+    You can now use `prek.toml` as an alternative to `.pre-commit-config.yaml` for configuring prek. `prek.toml` mirrors the structure of `.pre-commit-config.yaml`, but TOML is less error-prone. Your existing `.pre-commit-config.yaml` will continue to work, but for new users and new projects, `prek.toml` may make more sense. If you want to switch, run `prek util yaml-to-toml` to convert YAML configs to `prek.toml`. See [configuration docs](configuration.md) for details.
+
+    For example, this config:
+
+    ```yaml
+    repos:
+      - repo: https://github.com/pre-commit/pre-commit-hooks
+        rev: v6.0.0
+        hooks:
+          - id: check-yaml
+    ```
+
+    Can be written as `prek.toml` like this:
+
+    ```toml
+    [[repos]]
+    repo = "https://github.com/pre-commit/pre-commit-hooks"
+    rev = "v6.0.0"
+    hooks = [ { id = "check-yaml" } ]
+    ```
+
+- **`serde-yaml` has been replaced with `serde-saphyr`**
+
+    We replaced the long-deprecated `serde-yaml` crate with [`serde-saphyr`](https://crates.io/crates/serde-saphyr) for YAML parsing. It is written in safe Rust and has better error messages, performance, and security. This lets us provide precise location information for configuration parsing errors, which should make it easier to fix config issues.
+
+    For example, this invalid config:
+
+    ```yaml
+    repos:
+      - repo: https://github.com/crate-ci/typos
+        hooks:
+          - id: typos
+    ```
+
+    Before:
+
+    ```console
+    $ prek run
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: Invalid remote repo: missing field `rev`
+    ```
+
+    Now:
+
+    ```console
+    $ prek run
+    error: Failed to parse `.pre-commit-config.yaml`
+    caused by: error: line 2 column 5: missing field `rev` at line 2, column 5
+    --> <input>:2:5
+      |
+    1 | repos:
+    2 |   - repo: https://github.com/crate-ci/typos
+      |     ^ missing field `rev` at line 2, column 5
+    3 |     hooks:
+    4 |       - id: typos
+      |
+    ```
+
+- **`prek util` subcommands**
+
+    We added a new `prek util` top-level command for miscellaneous utilities that don't fit into other categories. The first two utilities are:
+
+    - `prek util identify`: shows the identification tags of files that prek uses for file filtering, which can be useful for debugging and writing `types/types_or/exclude_types` filters.
+    - `prek util yaml-to-toml`: converts `.pre-commit-config.yaml` to `prek.toml`.
+
+    We also moved `prek init-template-dir` under `prek util` for better organization. The old `prek init-template-dir` command is still available (hidden) as an alias for backward compatibility.
+
+### Enhancements
+
+- Add `prek util identify` subcommand ([#1554](https://github.com/j178/prek/pull/1554))
+- Add `prek util yaml-to-toml` to convert `.pre-commit-config.yaml` to `prek.toml` ([#1584](https://github.com/j178/prek/pull/1584))
+- Detect install source for actionable upgrade hints ([#1540](https://github.com/j178/prek/pull/1540))
+- Detect prek installed by the standalone installer ([#1545](https://github.com/j178/prek/pull/1545))
+- Implement `serialize_yaml_scalar` using `serde-saphyr` ([#1534](https://github.com/j178/prek/pull/1534))
+- Improve max cli arguments length calculation ([#1518](https://github.com/j178/prek/pull/1518))
+- Move `identify` and `init-template-dir` under the `prek util` top-level command ([#1574](https://github.com/j178/prek/pull/1574))
+- Replace serde-yaml with serde-saphyr (again) ([#1520](https://github.com/j178/prek/pull/1520))
+- Show precise location for config parsing error ([#1530](https://github.com/j178/prek/pull/1530))
+- Support `Julia` language ([#1519](https://github.com/j178/prek/pull/1519))
+- Support `prek.toml` ([#1271](https://github.com/j178/prek/pull/1271))
+- Added `PREK_QUIET` environment variable support ([#1513](https://github.com/j178/prek/pull/1513))
+- Remove upper bound constraint of uv version ([#1588](https://github.com/j178/prek/pull/1588))
+
+### Bug fixes
+
+- Do not make the child a session leader ([#1586](https://github.com/j178/prek/pull/1586))
+- Fix FilePattern schema to accept plain strings ([#1564](https://github.com/j178/prek/pull/1564))
+- Use semver fallback sort when tag timestamps are equal ([#1579](https://github.com/j178/prek/pull/1579))
+
+### Documentation
+
+- Add `OpenClaw` to the list of users ([#1517](https://github.com/j178/prek/pull/1517))
+- Add `cachix/devenv`, `apache/lucene`, `copper-project/copper-rs` as projects using prek ([#1531](https://github.com/j178/prek/pull/1531), [#1514](https://github.com/j178/prek/pull/1514), [#1569](https://github.com/j178/prek/pull/1569))
+- Add document about authoring remote hooks ([#1571](https://github.com/j178/prek/pull/1571))
+- Add `llms.txt` generation for LLM-friendly documentation ([#1553](https://github.com/j178/prek/pull/1553))
+- Document using `--refresh` to pick up `.prekignore` changes ([#1575](https://github.com/j178/prek/pull/1575))
+- Fix PowerShell completion instruction syntax ([#1568](https://github.com/j178/prek/pull/1568))
+- Update quick start to use `prek.toml` ([#1576](https://github.com/j178/prek/pull/1576))
+
+### Other changes
+
+- Include `prek.toml` in run hint for config filename ([#1578](https://github.com/j178/prek/pull/1578))
+
+### Contributors
+
+- @fatelei
+- @domenkozar
+- @makeecat
+- @fllesser
+- @j178
+- @copilot-swe-agent
+- @oopscompiled
+- @rmuir
+- @shaanmajid
+
+## 0.3.1
+
+Released on 2026-01-31.
+
+### Enhancements
+
+- Add `language: swift` support ([#1463](https://github.com/j178/prek/pull/1463))
+- Add `language: haskell` support ([#1484](https://github.com/j178/prek/pull/1484))
+- Extract go version constraint from `go.mod` ([#1457](https://github.com/j178/prek/pull/1457))
+- Warn when config file exists but fails to parse ([#1487](https://github.com/j178/prek/pull/1487))
+- Add GitHub artifact attestations to release and build-docker workflow ([#1494](https://github.com/j178/prek/pull/1494), [#1497](https://github.com/j178/prek/pull/1497))
+- Allow `GIT_CONFIG_PARAMETERS` for private repository authentication ([#1472](https://github.com/j178/prek/pull/1472))
+- Show progress bar when running builtin hooks ([#1504](https://github.com/j178/prek/pull/1504))
+
+### Bug fixes
+
+- Cap ARG_MAX at `1<<19` for safety ([#1506](https://github.com/j178/prek/pull/1506))
+- Don't check Python executable path in health check ([#1496](https://github.com/j178/prek/pull/1496))
+
+### Documentation
+
+- Include `CocoIndex` as a project using prek ([#1477](https://github.com/j178/prek/pull/1477))
+- Add commands for artifact verification using GitHub Attestations ([#1500](https://github.com/j178/prek/pull/1500))
+
+### Contributors
+
+- @halms
+- @Haleshot
+- @simono
+- @tisonkun
+- @fllesser
+- @j178
+- @shaanmajid
+
+## 0.3.0
+
+Released on 2026-01-22.
+
+### Highlights
+
+- `prek cache gc` (also available via `prek gc` for pre-commit compatibility) is finally here! You can now run `prek cache gc` to clean up unused repos, hook envs and tool versions from prek cache.
+- `language: bun` is now supported, making it possible to write and run hooks with [Bun](https://bun.sh/).
+
+### Enhancements
+
+- Implement `prek cache gc` ([#1410](https://github.com/j178/prek/pull/1410))
+
+    - Bootstrap tracking configs from workspace cache ([#1417](https://github.com/j178/prek/pull/1417))
+    - Show total size `prek cache gc` removed ([#1418](https://github.com/j178/prek/pull/1418))
+    - Show accurate repo and hook details in `prek cache gc -v` ([#1420](https://github.com/j178/prek/pull/1420))
+    - `prek cache gc` remove specific unused tool versions ([#1422](https://github.com/j178/prek/pull/1422))
+    - Fix unused tool versions not removed in `prek cache gc` ([#1436](https://github.com/j178/prek/pull/1436))
+
+- Add `language: bun` support ([#1411](https://github.com/j178/prek/pull/1411))
+
+    - Use `git ls-remote --tags` to list bun versions ([#1439](https://github.com/j178/prek/pull/1439))
+
+- Accept `--stage` as an alias for `--hook-stage` in `prek run` ([#1398](https://github.com/j178/prek/pull/1398))
+
+- Expand `~` tilde in `PREK_HOME` ([#1431](https://github.com/j178/prek/pull/1431))
+
+- Support refs to trees ([#1449](https://github.com/j178/prek/pull/1449))
+
+### Bug fixes
+
+- Avoid file lock warning for in-process contention ([#1406](https://github.com/j178/prek/pull/1406))
+- Resolve relative repo paths from config file directory ([#1443](https://github.com/j178/prek/pull/1443))
+- fix: use `split()` instead of `resolve(None)` for builtin hook argument parsing ([#1415](https://github.com/j178/prek/pull/1415))
+
+### Documentation
+
+- Add `simple-icons` and `ast-grep` to the users of prek ([#1403](https://github.com/j178/prek/pull/1403))
+- Improve JSON schema for `repo` field ([#1432](https://github.com/j178/prek/pull/1432))
+- Improve JSON schema for builtin and meta hooks ([#1427](https://github.com/j178/prek/pull/1427))
+- Add pronunciation entry to FAQ ([#1442](https://github.com/j178/prek/pull/1442))
+- Add commitizen to the list of projects using prek ([#1413](https://github.com/j178/prek/pull/1413))
+- Move docs to zensical ([#1421](https://github.com/j178/prek/pull/1421))
+
+### Other Changes
+
+- Refactor config layout ([#1407](https://github.com/j178/prek/pull/1407))
+
+### Contributors
+
+- @shaanmajid
+- @KevinGimbel
+- @jtamagnan
+- @jmeickle-theaiinstitute
+- @YazdanRa
+- @j178
+- @mschoettle
+- @tisonkun
+
+## 0.2.30
+
+Released on 2026-01-18.
+
+### Enhancements
+
+- Build binaries using minimal-size profile ([#1376](https://github.com/j178/prek/pull/1376))
+- Check for duplicate keys in `check-json5` builtin hook ([#1387](https://github.com/j178/prek/pull/1387))
+- Preserve quoting style in `auto-update` ([#1379](https://github.com/j178/prek/pull/1379))
+- Show warning if file lock acquiring blocks for long time ([#1353](https://github.com/j178/prek/pull/1353))
+- Singleflight Python health checks with cached interpreter info ([#1381](https://github.com/j178/prek/pull/1381))
+
+### Bug fixes
+
+- Do not resolve entry for docker_image ([#1386](https://github.com/j178/prek/pull/1386))
+- Fix command lookup on Windows ([#1383](https://github.com/j178/prek/pull/1383))
+
+### Documentation
+
+- Document language support details ([#1380](https://github.com/j178/prek/pull/1380))
+- Document that `check-json5` now rejects duplicate keys ([#1391](https://github.com/j178/prek/pull/1391))
+
+### Contributors
+
+- @j178
+
+## 0.2.29
+
+Released on 2026-01-16.
+
+### Highlights
+
+`files` / `exclude` now support globs (including glob lists), making config filters much easier to read and maintain than heavily-escaped regex.
+
+Before (regex):
+
+```yaml
+files: "^(src/.*\\.rs$|crates/[^/]+/src/.*\\.rs$)"
+```
+
+After (glob list):
+
+```yaml
+files:
+  glob:
+    - src/**/*.rs
+    - crates/**/src/**/*.rs
+```
+
+### Enhancements
+
+- Add `check-json5` as builtin hooks ([#1367](https://github.com/j178/prek/pull/1367))
+- Add glob list support for file patterns (`files` and `exclude`) ([#1197](https://github.com/j178/prek/pull/1197))
+
+### Bug fixes
+
+- Fix missing commit hash from version info ([#1352](https://github.com/j178/prek/pull/1352))
+- Remove git env vars from `uv pip install` subprocess ([#1355](https://github.com/j178/prek/pull/1355))
+- Set `TERM=dumb` under PTY to prevent capability-probe hangs ([#1363](https://github.com/j178/prek/pull/1363))
+
+### Documentation
+
+- Add `home-assistant/core` to the users of prek ([#1350](https://github.com/j178/prek/pull/1350))
+- Document builtin hooks ([#1370](https://github.com/j178/prek/pull/1370))
+- Explain project configuration scope ([#1373](https://github.com/j178/prek/pull/1373))
+
+### Contributors
+
+- @Goldziher
+- @yihong0618
+- @j178
+- @shaanmajid
+- @ulgens
+
+## 0.2.28
+
+Released on 2026-01-13.
+
+### Enhancements
+
+- Avoid running `git diff` for skipped hooks ([#1335](https://github.com/j178/prek/pull/1335))
+- More accurate command line length limit calculation ([#1348](https://github.com/j178/prek/pull/1348))
+- Raise platform command line length upper limit ([#1347](https://github.com/j178/prek/pull/1347))
+- Use `/bin/sh` in generated git hook scripts ([#1333](https://github.com/j178/prek/pull/1333))
+
+### Bug fixes
+
+- Avoid rewriting if config is up-to-date ([#1346](https://github.com/j178/prek/pull/1346))
+
+### Documentation
+
+- Add `ty` to the users of prek ([#1342](https://github.com/j178/prek/pull/1342))
+- Add `ruff` to the users of prek ([#1334](https://github.com/j178/prek/pull/1334))
+- Complete configuration document ([#1338](https://github.com/j178/prek/pull/1338))
+- Document UV environment variable inheritance in prek ([#1339](https://github.com/j178/prek/pull/1339))
+
+### Contributors
+
+- @copilot-swe-agent
+- @MatthewMckee4
+- @yihong0618
+- @j178
+
+## 0.2.27
+
+Released on 2026-01-07.
+
+### Highlights
+
+`python/cpython` is now [using](https://github.com/j178/prek/pull/1308) prek. That’s the highlight of this release!
+
+### Enhancements
+
+- Add hook-level `env` option to set environment variables for hooks (#1279) ([#1285](https://github.com/j178/prek/pull/1285))
+- Support apple's `container` for docker language ([#1306](https://github.com/j178/prek/pull/1306))
+- Skip cookiecutter template directories like `{{cookiecutter.project_slug}}` during project discovery ([#1316](https://github.com/j178/prek/pull/1316))
+- Use global `CONCURRENCY` for repo clone ([#1292](https://github.com/j178/prek/pull/1292))
+- untar: disallow external symlinks ([#1314](https://github.com/j178/prek/pull/1314))
+
+### Bug fixes
+
+- Exit with success if no hooks match the hook stage ([#1317](https://github.com/j178/prek/pull/1317))
+- Fix Go template string to detect rootless podman ([#1302](https://github.com/j178/prek/pull/1302))
+- Panic on overly long filenames instead of silently dropping files ([#1287](https://github.com/j178/prek/pull/1287))
+
+### Other changes
+
+- Add `python/cpython` to users ([#1308](https://github.com/j178/prek/pull/1308))
+- Add `MoonshotAI/kimi-cli` to users ([#1286](https://github.com/j178/prek/pull/1286))
+- Drop powerpc64 wheels ([#1319](https://github.com/j178/prek/pull/1319))
+
+### Contributors
+
+- @ulgens
+- @loganaden
+- @danielparks
+- @branchv
+- @j178
+- @yihong0618
+- @mocknen
+- @copilot-swe-agent
+- @ZhuoZhuoCrayon
+
 ## 0.2.25
 
 Released on 2025-12-27.
@@ -91,7 +482,7 @@ Big thanks to @lmmx for driving this feature!
 ### Enhancements
 
 - Support`--cooldown-days` in `prek auto-update` ([#1172](https://github.com/j178/prek/pull/1172))
-  - Prefer tag creation timestamp in `--cooldown-days` ([#1221](https://github.com/j178/prek/pull/1221))
+    - Prefer tag creation timestamp in `--cooldown-days` ([#1221](https://github.com/j178/prek/pull/1221))
 - Use `cargo install` for packages in workspace ([#1207](https://github.com/j178/prek/pull/1207))
 
 ### Bug fixes
@@ -134,8 +525,8 @@ Want to show your project runs on prek? Add our README badge to your docs or rep
 ### Enhancements
 
 - Support Rust language ([#989](https://github.com/j178/prek/pull/989))
-  - Refactor Rust toolchain management ([#1198](https://github.com/j178/prek/pull/1198))
-  - Add support for finding packages in virtual workspaces ([#1180](https://github.com/j178/prek/pull/1180))
+    - Refactor Rust toolchain management ([#1198](https://github.com/j178/prek/pull/1198))
+    - Add support for finding packages in virtual workspaces ([#1180](https://github.com/j178/prek/pull/1180))
 - Add `prek cache size` command ([#1183](https://github.com/j178/prek/pull/1183))
 - Support orphan projects ([#1129](https://github.com/j178/prek/pull/1129))
 - Fallback to `manual` stage for hooks specified directly in command line ([#1185](https://github.com/j178/prek/pull/1185))
@@ -1012,6 +1403,7 @@ Then uninstall the old `prefligit` and install the new `prek` from scratch.
 - Set `GOROOT` when installing golang hook ([#381](https://github.com/j178/prefligit/pull/381))
 
 ### Other changes
+
 - Add devcontainer config ([#379](https://github.com/j178/prefligit/pull/379))
 - Bump rust toolchain to 1.89 ([#386](https://github.com/j178/prefligit/pull/386))
 
