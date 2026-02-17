@@ -25,7 +25,7 @@ while also providing some additional long-requested features.
 <!-- --8<-- [end: description] -->
 
 > [!NOTE]
-> Although prek is pretty new, it’s already powering real‑world projects like [CPython](https://github.com/python/cpython), [Apache Airflow](https://github.com/apache/airflow), [FastAPI](https://github.com/fastapi/fastapi), and more projects are picking it up—see [Who is using prek?](#who-is-using-prek). If you’re looking for an alternative to `pre-commit`, please give it a try—we’d love your feedback!
+> Although prek is pretty new, it’s already powering real‑world projects like [OpenClaw](https://github.com/openclaw/openclaw/blob/81c5c02e5318407f81df27b6a9c8118fcf52a2dd/.pre-commit-config.yaml#L4), [CPython](https://github.com/python/cpython), [Apache Airflow](https://github.com/apache/airflow), [FastAPI](https://github.com/fastapi/fastapi), and more projects are picking it up—see [Who is using prek?](#who-is-using-prek). If you’re looking for an alternative to `pre-commit`, please give it a try—we’d love your feedback!
 >
 > Please note that some languages are not yet supported for full drop‑in parity with `pre-commit`. See [Language Support](https://prek.j178.dev/languages/) for current status.
 
