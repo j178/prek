@@ -219,7 +219,7 @@ async fn install_local_project(
         Cmd::new(cargo, "install local")
             .args(["install", "--bins", "--root"])
             .arg(&info.env_path)
-            .args(["--path", "."])
+            .args(["--path", ".", "--locked"])
             .current_dir(&package_dir)
             .env(EnvVars::PATH, new_path)
             .env(EnvVars::CARGO_HOME, cargo_home)
@@ -397,7 +397,8 @@ impl LanguageImpl for Rust {
             let mut cmd = Cmd::new(&cargo, "install cli dep");
             cmd.args(["install", "--bins", "--root"])
                 .arg(&info.env_path)
-                .args(format_cargo_cli_dependency(cli_dep));
+                .args(format_cargo_cli_dependency(cli_dep))
+                .arg("--locked");
             cmd.env(EnvVars::PATH, &new_path)
                 .env(EnvVars::CARGO_HOME, &cargo_home)
                 .remove_git_envs()
