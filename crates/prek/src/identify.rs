@@ -139,6 +139,7 @@ fn by_extension() -> &'static TagMap {
         map.insert("asciidoc", TagSet::from([tags::TEXT, "asciidoc"]));
         map.insert("apinotes", TagSet::from([tags::TEXT, "apinotes"]));
         map.insert("asar", TagSet::from([tags::BINARY, "asar"]));
+        map.insert("asm", TagSet::from([tags::TEXT, "asm"]));
         map.insert("astro", TagSet::from([tags::TEXT, "astro"]));
         map.insert("avif", TagSet::from([tags::BINARY, "image", "avif"]));
         map.insert("avsc", TagSet::from([tags::TEXT, "avro-schema"]));
@@ -146,10 +147,14 @@ fn by_extension() -> &'static TagMap {
         map.insert("bat", TagSet::from([tags::TEXT, "batch"]));
         map.insert("bats", TagSet::from([tags::TEXT, "shell", "bash", "bats"]));
         map.insert("bazel", TagSet::from([tags::TEXT, "bazel"]));
+        map.insert("bb", TagSet::from([tags::TEXT, "bitbake"]));
+        map.insert("bbappend", TagSet::from([tags::TEXT, "bitbake"]));
+        map.insert("bbclass", TagSet::from([tags::TEXT, "bitbake"]));
         map.insert("beancount", TagSet::from([tags::TEXT, "beancount"]));
         map.insert("bib", TagSet::from([tags::TEXT, "bib"]));
         map.insert("bmp", TagSet::from([tags::BINARY, "image", "bitmap"]));
         map.insert("bz2", TagSet::from([tags::BINARY, "bzip2"]));
+        map.insert("bz3", TagSet::from([tags::BINARY, "bzip3"]));
         map.insert("bzl", TagSet::from([tags::TEXT, "bazel"]));
         map.insert("c", TagSet::from([tags::TEXT, "c"]));
         map.insert("c++", TagSet::from([tags::TEXT, "c++"]));
@@ -174,11 +179,15 @@ fn by_extension() -> &'static TagMap {
         map.insert("cr", TagSet::from([tags::TEXT, "crystal"]));
         map.insert("crt", TagSet::from([tags::TEXT, "pem"]));
         map.insert("cs", TagSet::from([tags::TEXT, "c#"]));
-        map.insert("csproj", TagSet::from([tags::TEXT, "xml", "csproj"]));
+        map.insert(
+            "csproj",
+            TagSet::from([tags::TEXT, "xml", "csproj", "msbuild"]),
+        );
         map.insert("csh", TagSet::from([tags::TEXT, "shell", "csh"]));
         map.insert("cson", TagSet::from([tags::TEXT, "cson"]));
         map.insert("css", TagSet::from([tags::TEXT, "css"]));
         map.insert("csv", TagSet::from([tags::TEXT, "csv"]));
+        map.insert("csx", TagSet::from([tags::TEXT, "c#", "c#script"]));
         map.insert("cu", TagSet::from([tags::TEXT, "cuda"]));
         map.insert("cue", TagSet::from([tags::TEXT, "cue"]));
         map.insert("cuh", TagSet::from([tags::TEXT, "cuda"]));
@@ -194,6 +203,7 @@ fn by_extension() -> &'static TagMap {
         map.insert("edn", TagSet::from([tags::TEXT, "clojure", "edn"]));
         map.insert("ejs", TagSet::from([tags::TEXT, "ejs"]));
         map.insert("ejson", TagSet::from([tags::TEXT, "json", "ejson"]));
+        map.insert("elm", TagSet::from([tags::TEXT, "elm"]));
         map.insert("env", TagSet::from([tags::TEXT, "dotenv"]));
         map.insert("eot", TagSet::from([tags::BINARY, "eot"]));
         map.insert("eps", TagSet::from([tags::BINARY, "eps"]));
@@ -210,11 +220,18 @@ fn by_extension() -> &'static TagMap {
         map.insert("feature", TagSet::from([tags::TEXT, "gherkin"]));
         map.insert("fish", TagSet::from([tags::TEXT, "fish"]));
         map.insert("fits", TagSet::from([tags::BINARY, "fits"]));
+        map.insert("fs", TagSet::from([tags::TEXT, "f#"]));
+        map.insert(
+            "fsproj",
+            TagSet::from([tags::TEXT, "xml", "fsproj", "msbuild"]),
+        );
+        map.insert("fsx", TagSet::from([tags::TEXT, "f#", "f#script"]));
         map.insert("gd", TagSet::from([tags::TEXT, "gdscript"]));
         map.insert("gemspec", TagSet::from([tags::TEXT, "ruby"]));
         map.insert("geojson", TagSet::from([tags::TEXT, "geojson", "json"]));
         map.insert("ggb", TagSet::from([tags::BINARY, "zip", "ggb"]));
         map.insert("gif", TagSet::from([tags::BINARY, "image", "gif"]));
+        map.insert("gleam", TagSet::from([tags::TEXT, "gleam"]));
         map.insert("go", TagSet::from([tags::TEXT, "go"]));
         map.insert("gotmpl", TagSet::from([tags::TEXT, "gotmpl"]));
         map.insert("gpx", TagSet::from([tags::TEXT, "gpx", "xml"]));
@@ -246,6 +263,8 @@ fn by_extension() -> &'static TagMap {
         map.insert("ino", TagSet::from([tags::TEXT, "ino", "c++"]));
         map.insert("inx", TagSet::from([tags::TEXT, "xml", "inx"]));
         map.insert("ipynb", TagSet::from([tags::TEXT, "jupyter", "json"]));
+        map.insert("ipp", TagSet::from([tags::TEXT, "c++"]));
+        map.insert("ipxe", TagSet::from([tags::TEXT, "ipxe"]));
         map.insert("ixx", TagSet::from([tags::TEXT, "c++"]));
         map.insert("j2", TagSet::from([tags::TEXT, "jinja"]));
         map.insert("jade", TagSet::from([tags::TEXT, "jade"]));
@@ -288,6 +307,7 @@ fn by_extension() -> &'static TagMap {
         map.insert("lua", TagSet::from([tags::TEXT, "lua"]));
         map.insert("m", TagSet::from([tags::TEXT, "objective-c"]));
         map.insert("m4", TagSet::from([tags::TEXT, "m4"]));
+        map.insert("magik", TagSet::from([tags::TEXT, "magik"]));
         map.insert("make", TagSet::from([tags::TEXT, "makefile"]));
         map.insert("manifest", TagSet::from([tags::TEXT, "manifest"]));
         map.insert("map", TagSet::from([tags::TEXT, "map"]));
@@ -323,6 +343,7 @@ fn by_extension() -> &'static TagMap {
         map.insert("php4", TagSet::from([tags::TEXT, "php"]));
         map.insert("php5", TagSet::from([tags::TEXT, "php"]));
         map.insert("phtml", TagSet::from([tags::TEXT, "php"]));
+        map.insert("piskel", TagSet::from([tags::TEXT, "piskel", "json"]));
         map.insert("pl", TagSet::from([tags::TEXT, "perl"]));
         map.insert("plantuml", TagSet::from([tags::TEXT, "plantuml"]));
         map.insert("pm", TagSet::from([tags::TEXT, "perl"]));
@@ -330,10 +351,13 @@ fn by_extension() -> &'static TagMap {
         map.insert("po", TagSet::from([tags::TEXT, "pofile"]));
         map.insert("pom", TagSet::from(["pom", tags::TEXT, "xml"]));
         map.insert("pp", TagSet::from([tags::TEXT, "puppet"]));
+        map.insert("props", TagSet::from([tags::TEXT, "xml", "msbuild"]));
         map.insert("prisma", TagSet::from([tags::TEXT, "prisma"]));
         map.insert("properties", TagSet::from([tags::TEXT, "java-properties"]));
         map.insert("proto", TagSet::from([tags::TEXT, "proto"]));
         map.insert("ps1", TagSet::from([tags::TEXT, "powershell"]));
+        map.insert("psd1", TagSet::from([tags::TEXT, "powershell"]));
+        map.insert("psm1", TagSet::from([tags::TEXT, "powershell"]));
         map.insert("pug", TagSet::from([tags::TEXT, "pug"]));
         map.insert("puml", TagSet::from([tags::TEXT, "plantuml"]));
         map.insert("purs", TagSet::from([tags::TEXT, "purescript"]));
@@ -341,7 +365,10 @@ fn by_extension() -> &'static TagMap {
         map.insert("pxi", TagSet::from([tags::TEXT, "cython"]));
         map.insert("py", TagSet::from([tags::TEXT, "python"]));
         map.insert("pyi", TagSet::from([tags::TEXT, "pyi"]));
-        map.insert("pyproj", TagSet::from([tags::TEXT, "xml", "pyproj"]));
+        map.insert(
+            "pyproj",
+            TagSet::from([tags::TEXT, "xml", "pyproj", "msbuild"]),
+        );
         map.insert("pyt", TagSet::from([tags::TEXT, "python"]));
         map.insert("pyx", TagSet::from([tags::TEXT, "cython"]));
         map.insert("pyz", TagSet::from([tags::BINARY, "pyz"]));
@@ -351,10 +378,12 @@ fn by_extension() -> &'static TagMap {
         map.insert("rake", TagSet::from([tags::TEXT, "ruby"]));
         map.insert("rb", TagSet::from([tags::TEXT, "ruby"]));
         map.insert("resx", TagSet::from([tags::TEXT, "resx", "xml"]));
+        map.insert("robot", TagSet::from([tags::TEXT, "robot"]));
         map.insert("rng", TagSet::from([tags::TEXT, "xml", "relax-ng"]));
         map.insert("rs", TagSet::from([tags::TEXT, "rust"]));
         map.insert("rst", TagSet::from([tags::TEXT, "rst"]));
         map.insert("s", TagSet::from([tags::TEXT, "asm"]));
+        map.insert("sas", TagSet::from([tags::TEXT, "sas"]));
         map.insert("sass", TagSet::from([tags::TEXT, "sass"]));
         map.insert("sbt", TagSet::from([tags::TEXT, "sbt", "scala"]));
         map.insert("sc", TagSet::from([tags::TEXT, "scala"]));
@@ -380,6 +409,8 @@ fn by_extension() -> &'static TagMap {
         map.insert("swiftdeps", TagSet::from([tags::TEXT, "swiftdeps"]));
         map.insert("tac", TagSet::from([tags::TEXT, "twisted", "python"]));
         map.insert("tar", TagSet::from([tags::BINARY, "tar"]));
+        map.insert("targets", TagSet::from([tags::TEXT, "xml", "msbuild"]));
+        map.insert("templ", TagSet::from([tags::TEXT, "templ"]));
         map.insert("tex", TagSet::from([tags::TEXT, "tex"]));
         map.insert("textproto", TagSet::from([tags::TEXT, "textproto"]));
         map.insert("tf", TagSet::from([tags::TEXT, "terraform"]));
@@ -388,6 +419,7 @@ fn by_extension() -> &'static TagMap {
         map.insert("thrift", TagSet::from([tags::TEXT, "thrift"]));
         map.insert("tiff", TagSet::from([tags::BINARY, "image", "tiff"]));
         map.insert("toml", TagSet::from([tags::TEXT, "toml"]));
+        map.insert("tpp", TagSet::from([tags::TEXT, "c++"]));
         map.insert("ts", TagSet::from([tags::TEXT, "ts"]));
         map.insert("tsv", TagSet::from([tags::TEXT, "tsv"]));
         map.insert("tsx", TagSet::from([tags::TEXT, "tsx"]));
@@ -402,8 +434,14 @@ fn by_extension() -> &'static TagMap {
         map.insert("urdf", TagSet::from([tags::TEXT, "xml", "urdf"]));
         map.insert("v", TagSet::from([tags::TEXT, "verilog"]));
         map.insert("vb", TagSet::from([tags::TEXT, "vb"]));
-        map.insert("vbproj", TagSet::from([tags::TEXT, "xml", "vbproj"]));
-        map.insert("vcxproj", TagSet::from([tags::TEXT, "xml", "vcxproj"]));
+        map.insert(
+            "vbproj",
+            TagSet::from([tags::TEXT, "xml", "vbproj", "msbuild"]),
+        );
+        map.insert(
+            "vcxproj",
+            TagSet::from([tags::TEXT, "xml", "vcxproj", "msbuild"]),
+        );
         map.insert("vdx", TagSet::from([tags::TEXT, "vdx"]));
         map.insert("vh", TagSet::from([tags::TEXT, "verilog"]));
         map.insert("vhd", TagSet::from([tags::TEXT, "vhdl"]));
@@ -417,10 +455,13 @@ fn by_extension() -> &'static TagMap {
         map.insert("wkt", TagSet::from([tags::TEXT, "wkt"]));
         map.insert("woff", TagSet::from([tags::BINARY, "woff"]));
         map.insert("woff2", TagSet::from([tags::BINARY, "woff2"]));
+        map.insert("wsdl", TagSet::from([tags::TEXT, "xml", "wsdl"]));
         map.insert("wsgi", TagSet::from([tags::TEXT, "wsgi", "python"]));
         map.insert("xacro", TagSet::from([tags::TEXT, "xml", "urdf", "xacro"]));
         map.insert("xctestplan", TagSet::from([tags::TEXT, "json"]));
         map.insert("xhtml", TagSet::from([tags::TEXT, "xml", "html", "xhtml"]));
+        map.insert("xlf", TagSet::from([tags::TEXT, "xml", "xliff"]));
+        map.insert("xliff", TagSet::from([tags::TEXT, "xml", "xliff"]));
         map.insert("xml", TagSet::from([tags::TEXT, "xml"]));
         map.insert("xq", TagSet::from([tags::TEXT, "xquery"]));
         map.insert("xql", TagSet::from([tags::TEXT, "xquery"]));
@@ -430,6 +471,7 @@ fn by_extension() -> &'static TagMap {
         map.insert("xqy", TagSet::from([tags::TEXT, "xquery"]));
         map.insert("xsd", TagSet::from([tags::TEXT, "xml", "xsd"]));
         map.insert("xsl", TagSet::from([tags::TEXT, "xml", "xsl"]));
+        map.insert("xslt", TagSet::from([tags::TEXT, "xml", "xsl"]));
         map.insert("yaml", TagSet::from([tags::TEXT, "yaml"]));
         map.insert("yamlld", TagSet::from([tags::TEXT, "yaml", "yamlld"]));
         map.insert("yang", TagSet::from([tags::TEXT, "yang"]));
@@ -487,6 +529,7 @@ fn by_filename() -> &'static TagMap {
         );
         map.insert(".dockerignore", TagSet::from([tags::TEXT, "dockerignore"]));
         map.insert(".editorconfig", TagSet::from([tags::TEXT, "editorconfig"]));
+        map.insert(".envrc", extensions.clone_key("bash"));
         map.insert(
             ".flake8",
             extensions.clone_key("ini").with_added(&["flake8"]),
@@ -534,6 +577,7 @@ fn by_filename() -> &'static TagMap {
             ".salt-lint",
             extensions.clone_key("yaml").with_added(&["salt-lint"]),
         );
+        map.insert(".sqlfluff", extensions.clone_key("ini"));
         map.insert(
             ".yamllint",
             extensions.clone_key("yaml").with_added(&["yamllint"]),
@@ -545,6 +589,8 @@ fn by_filename() -> &'static TagMap {
         map.insert(".zshenv", extensions.clone_key("zsh"));
 
         map.insert("AUTHORS", extensions.clone_key("txt"));
+        map.insert("bblayers.conf", extensions.clone_key("bb"));
+        map.insert("bitbake.conf", extensions.clone_key("bb"));
         map.insert("BUILD", extensions.clone_key("bzl"));
         map.insert(
             "Cargo.toml",
@@ -562,6 +608,7 @@ fn by_filename() -> &'static TagMap {
         map.insert("copy.bara.sky", extensions.clone_key("bzl"));
         map.insert("COPYING", extensions.clone_key("txt"));
         map.insert("Dockerfile", TagSet::from([tags::TEXT, "dockerfile"]));
+        map.insert("direnvrc", extensions.clone_key("bash"));
         map.insert("Gemfile", extensions.clone_key("rb"));
         map.insert("Gemfile.lock", TagSet::from([tags::TEXT]));
         map.insert("GNUmakefile", extensions.clone_key("mk"));
@@ -572,7 +619,14 @@ fn by_filename() -> &'static TagMap {
         map.insert("MAINTAINERS", extensions.clone_key("txt"));
         map.insert("Makefile", extensions.clone_key("mk"));
         map.insert("meson.build", extensions.clone_key("meson"));
-        map.insert("meson_options.txt", extensions.clone_key("meson"));
+        map.insert(
+            "meson.options",
+            extensions.clone_key("meson").with_added(&["meson-options"]),
+        );
+        map.insert(
+            "meson_options.txt",
+            extensions.clone_key("meson").with_added(&["meson-options"]),
+        );
         map.insert("makefile", extensions.clone_key("mk"));
         map.insert("NEWS", extensions.clone_key("txt"));
         map.insert("NOTICE", extensions.clone_key("txt"));
@@ -595,6 +649,7 @@ fn by_filename() -> &'static TagMap {
         map.insert("setup.cfg", extensions.clone_key("ini"));
         map.insert("sys.config", extensions.clone_key("erl"));
         map.insert("sys.config.src", extensions.clone_key("erl"));
+        map.insert("Tiltfile", TagSet::from([tags::TEXT, "tiltfile"]));
         map.insert("Vagrantfile", extensions.clone_key("rb"));
         map.insert("WORKSPACE", extensions.clone_key("bzl"));
         map.insert("wscript", extensions.clone_key("py"));
@@ -1015,8 +1070,23 @@ mod tests {
         let tags = super::tags_from_filename(Path::new("test.py"));
         assert_tagset(&tags, &["python", "text"]);
 
+        let tags = super::tags_from_filename(Path::new("bitbake.bbappend"));
+        assert_tagset(&tags, &["bitbake", "text"]);
+
+        let tags = super::tags_from_filename(Path::new("project.fsproj"));
+        assert_tagset(&tags, &["fsproj", "msbuild", "text", "xml"]);
+
         let tags = super::tags_from_filename(Path::new("data.json"));
         assert_tagset(&tags, &["json", "text"]);
+
+        let tags = super::tags_from_filename(Path::new("build.props"));
+        assert_tagset(&tags, &["msbuild", "text", "xml"]);
+
+        let tags = super::tags_from_filename(Path::new("profile.psd1"));
+        assert_tagset(&tags, &["powershell", "text"]);
+
+        let tags = super::tags_from_filename(Path::new("style.xslt"));
+        assert_tagset(&tags, &["text", "xml", "xsl"]);
 
         let tags = super::tags_from_filename(Path::new("Pipfile"));
         assert_tagset(&tags, &["toml", "text"]);
@@ -1029,6 +1099,18 @@ mod tests {
 
         let tags = super::tags_from_filename(Path::new("FILE.PDF"));
         assert_tagset(&tags, &["pdf", "binary"]);
+
+        let tags = super::tags_from_filename(Path::new(".envrc"));
+        assert_tagset(&tags, &["bash", "shell", "text"]);
+
+        let tags = super::tags_from_filename(Path::new("meson.options"));
+        assert_tagset(&tags, &["meson", "meson-options", "text"]);
+
+        let tags = super::tags_from_filename(Path::new("Tiltfile"));
+        assert_tagset(&tags, &["text", "tiltfile"]);
+
+        let tags = super::tags_from_filename(Path::new("Tiltfile.dev"));
+        assert_tagset(&tags, &["text", "tiltfile"]);
     }
 
     #[test]
