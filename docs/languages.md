@@ -322,7 +322,11 @@ Gems specified in hook gemspec files and `additional_dependencies` are installed
 
 **Status in prek:** ✅ Supported.
 
-prek installs binaries via `cargo install --bins` and runs the specified executable. The repository should contain a `Cargo.toml` that produces the binary referenced by `entry`. `additional_dependencies` and `language_version` are supported.
+prek installs binaries via `cargo install --bins --locked` and runs the specified executable. The repository should contain a `Cargo.toml` that produces the binary referenced by `entry`. `additional_dependencies` and `language_version` are supported.
+
+!!! note "Using `--locked` flag"
+
+    prek uses the `--locked` flag when installing Rust packages to ensure exact dependency versions from `Cargo.lock` are used. This prevents breaking changes from new dependency releases.
 
 #### `language_version`
 
