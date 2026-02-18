@@ -894,9 +894,9 @@ fn parse_nix_shebang<R: BufRead>(reader: &mut R, mut cmd: Vec<String>) -> Vec<St
     cmd
 }
 
-pub(crate) fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
-    let file = std::fs::File::open(path)?;
-    let mut reader = std::io::BufReader::new(file);
+pub(crate) fn parse_shebang_from_reader<R: BufRead>(
+    reader: &mut R,
+) -> Result<Vec<String>, ShebangError> {
     let mut line = String::new();
     reader.read_line(&mut line)?;
     if !line.starts_with("#!") {
@@ -926,13 +926,19 @@ pub(crate) fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
         return Err(ShebangError::NoCommand);
     }
     if cmd[0] == "nix-shell" {
-        cmd = parse_nix_shebang(&mut reader, cmd);
+        cmd = parse_nix_shebang(reader, cmd);
     }
     if cmd.is_empty() {
         return Err(ShebangError::NoCommand);
     }
 
     Ok(cmd)
+}
+
+pub(crate) fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
+    let file = std::fs::File::open(path)?;
+    let mut reader = std::io::BufReader::new(file);
+    parse_shebang_from_reader(&mut reader)
 }
 
 // Lookup table for text character detection.
