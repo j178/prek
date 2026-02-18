@@ -36,7 +36,6 @@ mod fs;
 mod git;
 mod hook;
 mod hooks;
-mod identify;
 mod install_source;
 mod languages;
 mod printer;

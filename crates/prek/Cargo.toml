@@ -23,6 +23,7 @@ schemars = ["dep:schemars"]
 
 [dependencies]
 prek-consts = { workspace = true }
+prek-identify = { workspace = true }
 
 anstream = { workspace = true }
 anstyle-query = { workspace = true }
@@ -78,7 +79,6 @@ serde_json = { workspace = true, features = ["unbounded_depth"] }
 serde_stacker = { workspace = true }
 serde-saphyr = { workspace = true, default-features = false }
 shlex = { workspace = true }
-smallvec = { workspace = true }
 strum = { workspace = true }
 target-lexicon = { workspace = true }
 tempfile = { workspace = true }

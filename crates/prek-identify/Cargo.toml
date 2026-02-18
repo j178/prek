@@ -1,0 +1,22 @@
+[package]
+name = "prek-identify"
+description = "File identification for prek"
+version = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+anyhow = { workspace = true }
+fs-err = { workspace = true }
+phf = { workspace = true, default-features = false, features = ["macros"] }
+shlex = { workspace = true }
+smallvec = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+indoc = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

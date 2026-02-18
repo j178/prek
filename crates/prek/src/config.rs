@@ -13,7 +13,6 @@ use serde::de::{Error as DeError, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::fs::Simplified;
-use crate::identify;
 use crate::install_source::InstallSource;
 #[cfg(feature = "schemars")]
 use crate::schema::{schema_repo_builtin, schema_repo_local, schema_repo_meta, schema_repo_remote};
@@ -1110,9 +1109,8 @@ where
 {
     let tags_opt: Option<Vec<String>> = Option::deserialize(deserializer)?;
     if let Some(tags) = &tags_opt {
-        let all_tags = identify::all_tags();
         for tag in tags {
-            if !all_tags.contains(tag.as_str()) {
+            if !prek_identify::ALL_TAGS.contains(tag.as_str()) {
                 let msg = format!(
                     "Type tag `{tag}` is not recognized. Check for typos or upgrade prek to get new tags."
                 );
