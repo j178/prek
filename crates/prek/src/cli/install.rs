@@ -35,7 +35,13 @@ pub(crate) async fn install(
     printer: Printer,
     git_dir: Option<&Path>,
 ) -> Result<ExitStatus> {
-    if git_dir.is_none() && git::has_hooks_path_set().await? {
+    let has_repo_hooks_path = if git_dir.is_none() {
+        git::has_repo_hooks_path_set().await?
+    } else {
+        false
+    };
+
+    if git_dir.is_none() && git::has_hooks_path_set().await? && !has_repo_hooks_path {
         anyhow::bail!(
             "Cowardly refusing to install hooks with `core.hooksPath` set.\nhint: Run these commands to remove core.hooksPath:\nhint:   {}\nhint:   {}",
             "git config --unset-all --local core.hooksPath".cyan(),
@@ -56,6 +62,8 @@ pub(crate) async fn install(
 
     let hooks_path = if let Some(dir) = git_dir {
         dir.join("hooks")
+    } else if has_repo_hooks_path {
+        git::get_git_hooks_dir().await?
     } else {
         git::get_git_common_dir().await?.join("hooks")
     };
