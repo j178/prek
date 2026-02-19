@@ -26,15 +26,13 @@ use std::path::Path;
 #[cfg(feature = "serde")]
 use serde::de::{Error as DeError, SeqAccess, Visitor};
 
-pub use tags::ALL_TAGS;
-
 pub mod tags;
 
-const TAG_WORDS: usize = tags::ALL_TAGS_BY_ID.len().div_ceil(64);
+const TAG_WORDS: usize = tags::ALL_TAGS.len().div_ceil(64);
 
 /// A compact set of file tags represented as a fixed-size bitset.
 ///
-/// Each bit corresponds to an index in [`tags::ALL_TAGS_BY_ID`].
+/// Each bit corresponds to an index in [`tags::ALL_TAGS`].
 /// This keeps membership / set operations fast and allocation-free.
 #[derive(Clone, Copy, Default)]
 pub struct TagSet {
@@ -48,7 +46,7 @@ impl std::fmt::Debug for TagSet {
 }
 
 fn tag_id(tag: &str) -> Option<usize> {
-    tags::ALL_TAGS_BY_ID.binary_search(&tag).ok()
+    tags::ALL_TAGS.binary_search(&tag).ok()
 }
 
 pub struct TagSetIter<'a> {
@@ -71,7 +69,7 @@ impl Iterator for TagSetIter<'_> {
                 // `word_idx` is already incremented when `cur_word` was loaded,
                 // so we use `word_idx - 1` here to compute the global tag index.
                 let idx = (self.word_idx.saturating_sub(1) * 64) + tz;
-                return tags::ALL_TAGS_BY_ID.get(idx).copied();
+                return tags::ALL_TAGS.get(idx).copied();
             }
 
             if self.word_idx >= TAG_WORDS {
@@ -94,7 +92,7 @@ impl TagSet {
         let mut idx = 0;
         while idx < tag_ids.len() {
             let tag_id = tag_ids[idx] as usize;
-            assert!(tag_id < tags::ALL_TAGS_BY_ID.len(), "tag id out of range");
+            assert!(tag_id < tags::ALL_TAGS.len(), "tag id out of range");
             bits[tag_id / 64] |= 1u64 << (tag_id % 64);
             idx += 1;
         }
@@ -129,7 +127,7 @@ impl TagSet {
 
     pub const fn insert(&mut self, tag_id: u16) {
         let tag_id = tag_id as usize;
-        assert!(tag_id < tags::ALL_TAGS_BY_ID.len(), "tag id out of range");
+        assert!(tag_id < tags::ALL_TAGS.len(), "tag id out of range");
         self.bits[tag_id / 64] |= 1u64 << (tag_id % 64);
     }
 
@@ -662,7 +660,7 @@ mod tests {
 
     #[test]
     fn tagset_new_panics_on_out_of_range_id() {
-        let out_of_range = u16::try_from(tags::ALL_TAGS_BY_ID.len()).unwrap();
+        let out_of_range = u16::try_from(tags::ALL_TAGS.len()).unwrap();
         let result = std::panic::catch_unwind(|| TagSet::new(&[out_of_range]));
         assert!(result.is_err());
     }
