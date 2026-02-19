@@ -218,21 +218,24 @@
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "uniqueItems": true
         },
         "types_or": {
           "description": "List of file types to run on (OR).\nDefault is `[]`.",
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "uniqueItems": true
         },
         "exclude_types": {
           "description": "List of file types to exclude.\nDefault is `[]`.",
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "uniqueItems": true
         },
         "additional_dependencies": {
           "description": "Not documented in the official docs.",
@@ -442,21 +445,24 @@
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "uniqueItems": true
         },
         "types_or": {
           "description": "List of file types to run on (OR).\nDefault is `[]`.",
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "uniqueItems": true
         },
         "exclude_types": {
           "description": "List of file types to exclude.\nDefault is `[]`.",
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "uniqueItems": true
         },
         "additional_dependencies": {
           "description": "Not documented in the official docs.",
@@ -596,21 +602,24 @@
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "uniqueItems": true
         },
         "types_or": {
           "description": "List of file types to run on (OR).\nDefault is `[]`.",
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "uniqueItems": true
         },
         "exclude_types": {
           "description": "List of file types to exclude.\nDefault is `[]`.",
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "uniqueItems": true
         },
         "additional_dependencies": {
           "description": "Not documented in the official docs.",
@@ -755,21 +764,24 @@
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "uniqueItems": true
         },
         "types_or": {
           "description": "List of file types to run on (OR).\nDefault is `[]`.",
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "uniqueItems": true
         },
         "exclude_types": {
           "description": "List of file types to exclude.\nDefault is `[]`.",
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "uniqueItems": true
         },
         "additional_dependencies": {
           "description": "Not documented in the official docs.",

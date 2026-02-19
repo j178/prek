@@ -323,9 +323,9 @@ impl HookBuilder {
         let alias = options.alias.unwrap_or_default();
         let args = options.args.unwrap_or_default();
         let env = options.env.unwrap_or_default();
-        let types = options.types.map_or(TAG_FILE, TagSet::from_tags);
-        let types_or = TagSet::from_tags(options.types_or.unwrap_or_default());
-        let exclude_types = TagSet::from_tags(options.exclude_types.unwrap_or_default());
+        let types = options.types.unwrap_or(TAG_FILE);
+        let types_or = options.types_or.unwrap_or_default();
+        let exclude_types = options.exclude_types.unwrap_or_default();
         let always_run = options.always_run.unwrap_or_default();
         let fail_fast = options.fail_fast.unwrap_or_default();
         let pass_filenames = options.pass_filenames.unwrap_or(true);
@@ -881,6 +881,7 @@ mod tests {
 
     use anyhow::Result;
     use prek_consts::PRE_COMMIT_CONFIG_YAML;
+    use prek_identify::tags;
     use rustc_hash::FxHashMap;
 
     use crate::config::{HookOptions, Language, RemoteHook};
@@ -940,7 +941,7 @@ mod tests {
             priority: Some(42),
             options: HookOptions {
                 alias: Some("alias-1".to_string()),
-                types: Some(vec!["text".to_string()]),
+                types: Some(tags::TAG_TEXT),
                 args: Some(vec!["--flag".to_string()]),
                 env: Some(override_env),
                 always_run: Some(true),

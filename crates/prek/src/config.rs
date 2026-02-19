@@ -12,6 +12,8 @@ use rustc_hash::FxHashMap;
 use serde::de::{Error as DeError, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 
+use prek_identify::TagSet;
+
 use crate::fs::Simplified;
 use crate::install_source::InstallSource;
 #[cfg(feature = "schemars")]
@@ -277,16 +279,13 @@ pub(crate) struct HookOptions {
     pub exclude: Option<FilePattern>,
     /// List of file types to run on (AND).
     /// Default is `[file]`, which matches all files.
-    #[serde(deserialize_with = "deserialize_and_validate_tags", default)]
-    pub types: Option<Vec<String>>,
+    pub types: Option<TagSet>,
     /// List of file types to run on (OR).
     /// Default is `[]`.
-    #[serde(deserialize_with = "deserialize_and_validate_tags", default)]
-    pub types_or: Option<Vec<String>>,
+    pub types_or: Option<TagSet>,
     /// List of file types to exclude.
     /// Default is `[]`.
-    #[serde(deserialize_with = "deserialize_and_validate_tags", default)]
-    pub exclude_types: Option<Vec<String>>,
+    pub exclude_types: Option<TagSet>,
     /// Not documented in the official docs.
     pub additional_dependencies: Option<Vec<String>>,
     /// Additional arguments to pass to the hook.
@@ -1100,25 +1099,6 @@ where
     }
 
     Ok(Some(s))
-}
-
-/// Deserializes a vector of strings and validates that each is a known file type tag.
-fn deserialize_and_validate_tags<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let tags_opt: Option<Vec<String>> = Option::deserialize(deserializer)?;
-    if let Some(tags) = &tags_opt {
-        for tag in tags {
-            if !prek_identify::ALL_TAGS.contains(tag.as_str()) {
-                let msg = format!(
-                    "Type tag `{tag}` is not recognized. Check for typos or upgrade prek to get new tags."
-                );
-                return Err(serde::de::Error::custom(msg));
-            }
-        }
-    }
-    Ok(tags_opt)
 }
 
 #[cfg(test)]

@@ -18,9 +18,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+use std::borrow::Cow;
 use std::io::{BufRead, Read};
 use std::ops::BitOrAssign;
 use std::path::Path;
+
+#[cfg(feature = "serde")]
+use serde::de::{Error as DeError, SeqAccess, Visitor};
 
 pub use tags::ALL_TAGS;
 
@@ -123,6 +127,12 @@ impl TagSet {
         Self { bits }
     }
 
+    pub const fn insert(&mut self, tag_id: u16) {
+        let tag_id = tag_id as usize;
+        assert!(tag_id < tags::ALL_TAGS_BY_ID.len(), "tag id out of range");
+        self.bits[tag_id / 64] |= 1u64 << (tag_id % 64);
+    }
+
     /// Returns `true` if the two sets do not share any tag.
     pub fn is_disjoint(&self, other: &TagSet) -> bool {
         for idx in 0..TAG_WORDS {
@@ -163,6 +173,66 @@ impl BitOrAssign<&TagSet> for TagSet {
         for idx in 0..TAG_WORDS {
             self.bits[idx] |= rhs.bits[idx];
         }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for TagSet {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct TagSetVisitor;
+
+        impl<'de> Visitor<'de> for TagSetVisitor {
+            type Value = TagSet;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a sequence of tag strings")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let mut tags = TagSet::default();
+                while let Some(tag) = seq.next_element::<Cow<str>>()? {
+                    let Some(tag_id) = tag_id(&tag) else {
+                        let msg = format!(
+                            "Type tag `{tag}` is not recognized. Check for typos or upgrade prek to get new tags."
+                        );
+                        return Err(A::Error::custom(msg));
+                    };
+                    let tag_id = u16::try_from(tag_id)
+                        .map_err(|_| A::Error::custom("tag id out of range"))?;
+                    tags.insert(tag_id);
+                }
+                Ok(tags)
+            }
+        }
+
+        deserializer.deserialize_seq(TagSetVisitor)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for TagSet {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("TagSet")
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "array",
+            "items": {
+                "type": "string",
+            },
+            "uniqueItems": true,
+        })
     }
 }
 
@@ -445,7 +515,7 @@ fn is_text_file(path: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{TagSet, tags};
     use std::io::Write;
     use std::path::Path;
 
@@ -595,6 +665,25 @@ mod tests {
         let out_of_range = u16::try_from(tags::ALL_TAGS_BY_ID.len()).unwrap();
         let result = std::panic::catch_unwind(|| TagSet::new(&[out_of_range]));
         assert!(result.is_err());
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn tagset_deserialize_from_string_slice() {
+        let parsed: TagSet =
+            serde_json::from_str(r#"["python","text"]"#).expect("should parse tags");
+        assert_tagset(&parsed, &["python", "text"]);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn tagset_deserialize_unknown_tag_errors() {
+        let err = serde_json::from_str::<TagSet>(r#"["not-a-real-tag"]"#).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Type tag `not-a-real-tag` is not recognized"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
