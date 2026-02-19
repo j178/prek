@@ -19,81 +19,153 @@
 // THE SOFTWARE.
 
 use std::io::{BufRead, Read};
-use std::iter::FromIterator;
+use std::ops::BitOrAssign;
 use std::path::Path;
-
-use smallvec::SmallVec;
 
 pub use tags::ALL_TAGS;
 
-mod tags;
+pub mod tags;
 
-#[derive(Clone, Default)]
-pub struct TagSet(SmallVec<[&'static str; 8]>);
+const TAG_WORDS: usize = tags::ALL_TAGS_BY_ID.len().div_ceil(64);
+
+/// A compact set of file tags represented as a fixed-size bitset.
+///
+/// Each bit corresponds to an index in [`tags::ALL_TAGS_BY_ID`].
+/// This keeps membership / set operations fast and allocation-free.
+#[derive(Clone, Copy, Default)]
+pub struct TagSet {
+    bits: [u64; TAG_WORDS],
+}
+
+impl std::fmt::Debug for TagSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
+fn tag_id(tag: &str) -> Option<usize> {
+    tags::ALL_TAGS_BY_ID.binary_search(&tag).ok()
+}
+
+pub struct TagSetIter<'a> {
+    bits: &'a [u64; TAG_WORDS],
+    word_idx: usize,
+    cur_word: u64,
+}
+
+impl Iterator for TagSetIter<'_> {
+    type Item = &'static str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.cur_word != 0 {
+                let tz = self.cur_word.trailing_zeros() as usize;
+                self.cur_word &= self.cur_word - 1;
+
+                let idx = (self.word_idx.saturating_sub(1) * 64) + tz;
+                return tags::ALL_TAGS_BY_ID.get(idx).copied();
+            }
+
+            if self.word_idx >= TAG_WORDS {
+                return None;
+            }
+
+            self.cur_word = self.bits[self.word_idx];
+            self.word_idx += 1;
+        }
+    }
+}
 
 impl TagSet {
-    fn new() -> Self {
+    /// Constructs a [`TagSet`] from tag ids.
+    ///
+    /// `tag_ids` must reference valid indexes in [`tags::ALL_TAGS_BY_ID`].
+    /// Duplicate ids are allowed and are automatically coalesced.
+    pub const fn new(tag_ids: &[u16]) -> Self {
+        let mut bits = [0u64; TAG_WORDS];
+        let mut idx = 0;
+        while idx < tag_ids.len() {
+            let tag_id = tag_ids[idx] as usize;
+            assert!(tag_id < tags::ALL_TAGS_BY_ID.len(), "tag id out of range");
+            bits[tag_id / 64] |= 1u64 << (tag_id % 64);
+            idx += 1;
+        }
+
+        Self { bits }
+    }
+
+    fn empty() -> Self {
         Self::default()
     }
 
-    fn insert(&mut self, tag: &'static str) -> bool {
-        if self.0.contains(&tag) {
-            false
-        } else {
-            self.0.push(tag);
-            true
-        }
-    }
-
-    fn extend_from_iter<I>(&mut self, iter: I)
+    /// Constructs a [`TagSet`] from tag strings.
+    ///
+    /// Unknown tags are ignored in release builds and debug-asserted in debug builds.
+    pub fn from_tags<I, S>(tags: I) -> Self
     where
-        I: IntoIterator<Item = &'static str>,
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
     {
-        for tag in iter {
-            self.insert(tag);
+        let mut bits = [0u64; TAG_WORDS];
+        for tag in tags {
+            let tag = tag.as_ref();
+            let Some(tag_id) = tag_id(tag) else {
+                debug_assert!(false, "unknown tag: {tag}");
+                continue;
+            };
+            bits[tag_id / 64] |= 1u64 << (tag_id % 64);
+        }
+
+        Self { bits }
+    }
+
+    /// Returns `true` if the two sets share at least one tag.
+    pub fn intersects(&self, other: &TagSet) -> bool {
+        let mut idx = 0;
+        while idx < TAG_WORDS {
+            if (self.bits[idx] & other.bits[idx]) != 0 {
+                return true;
+            }
+            idx += 1;
+        }
+        false
+    }
+
+    /// Returns `true` if all tags in `self` are also present in `other`.
+    pub fn is_subset_of(&self, other: &TagSet) -> bool {
+        let mut idx = 0;
+        while idx < TAG_WORDS {
+            if (self.bits[idx] & !other.bits[idx]) != 0 {
+                return false;
+            }
+            idx += 1;
+        }
+        true
+    }
+
+    /// Iterates tags in deterministic id order.
+    pub fn iter(&self) -> TagSetIter<'_> {
+        TagSetIter {
+            bits: &self.bits,
+            word_idx: 0,
+            cur_word: 0,
         }
     }
 
-    pub fn contains(&self, needle: &str) -> bool {
-        self.0.contains(&needle)
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &'static str> + '_ {
-        self.0.iter().copied()
-    }
-
+    /// Returns `true` if the set contains no tags.
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    fn with_added(mut self, extra: &[&'static str]) -> Self {
-        self.extend_from_iter(extra.iter().copied());
-        self
+        self.bits.iter().all(|&w| w == 0)
     }
 }
 
-impl Extend<&'static str> for TagSet {
-    fn extend<I: IntoIterator<Item = &'static str>>(&mut self, iter: I) {
-        self.extend_from_iter(iter);
+impl BitOrAssign<&TagSet> for TagSet {
+    fn bitor_assign(&mut self, rhs: &TagSet) {
+        let mut idx = 0;
+        while idx < TAG_WORDS {
+            self.bits[idx] |= rhs.bits[idx];
+            idx += 1;
+        }
     }
-}
-
-impl FromIterator<&'static str> for TagSet {
-    fn from_iter<I: IntoIterator<Item = &'static str>>(iter: I) -> Self {
-        let mut set = TagSet::new();
-        set.extend(iter);
-        set
-    }
-}
-
-impl<const N: usize> From<[&'static str; N]> for TagSet {
-    fn from(tags: [&'static str; N]) -> Self {
-        tags.into_iter().collect()
-    }
-}
-
-fn is_encoding_tag(tag: &str) -> bool {
-    matches!(tag, "binary" | "text")
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -109,27 +181,20 @@ pub enum Error {
 pub fn tags_from_path(path: &Path) -> Result<TagSet, Error> {
     let metadata = std::fs::symlink_metadata(path)?;
     if metadata.is_dir() {
-        return Ok(TagSet::from(["directory"]));
+        return Ok(tags::TAG_DIRECTORY);
     } else if metadata.is_symlink() {
-        return Ok(TagSet::from(["symlink"]));
+        return Ok(tags::TAG_SYMLINK);
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::FileTypeExt;
         let file_type = metadata.file_type();
         if file_type.is_socket() {
-            return Ok(TagSet::from(["socket"]));
-        } else if file_type.is_fifo() {
-            return Ok(TagSet::from(["fifo"]));
-        } else if file_type.is_block_device() {
-            return Ok(TagSet::from(["block-device"]));
-        } else if file_type.is_char_device() {
-            return Ok(TagSet::from(["character-device"]));
+            return Ok(tags::TAG_SOCKET);
         }
     };
 
-    let mut tags = TagSet::new();
-    tags.insert("file");
+    let mut tags = tags::TAG_FILE;
 
     let executable;
     #[cfg(unix)]
@@ -146,25 +211,25 @@ pub fn tags_from_path(path: &Path) -> Result<TagSet, Error> {
     }
 
     if executable {
-        tags.insert("executable");
+        tags |= &tags::TAG_EXECUTABLE;
     } else {
-        tags.insert("non-executable");
+        tags |= &tags::TAG_NON_EXECUTABLE;
     }
 
     let filename_tags = tags_from_filename(path);
-    tags.extend(filename_tags.iter());
+    tags |= &filename_tags;
     if executable {
         if let Ok(shebang) = parse_shebang(path) {
             let interpreter_tags = tags_from_interpreter(shebang[0].as_str());
-            tags.extend(interpreter_tags.iter());
+            tags |= &interpreter_tags;
         }
     }
 
-    if !tags.iter().any(is_encoding_tag) {
+    if !tags.intersects(&tags::TAG_TEXT_OR_BINARY) {
         if is_text_file(path) {
-            tags.insert("text");
+            tags |= &tags::TAG_TEXT;
         } else {
-            tags.insert("binary");
+            tags |= &tags::TAG_BINARY;
         }
     }
 
@@ -178,16 +243,16 @@ fn tags_from_filename(filename: &Path) -> TagSet {
         .and_then(|name| name.to_str())
         .expect("Invalid filename");
 
-    let mut result = TagSet::new();
+    let mut result = TagSet::empty();
 
     if let Some(tags) = tags::NAMES.get(filename) {
-        result.extend(tags.iter().copied());
+        result |= tags;
     }
     if result.is_empty() {
         // # Allow e.g. "Dockerfile.xenial" to match "Dockerfile".
         if let Some(name) = filename.split('.').next() {
             if let Some(tags) = tags::NAMES.get(name) {
-                result.extend(tags.iter().copied());
+                result |= tags;
             }
         }
     }
@@ -196,12 +261,12 @@ fn tags_from_filename(filename: &Path) -> TagSet {
         // Check if extension is already lowercase to avoid allocation
         if ext.chars().all(|c| c.is_ascii_lowercase()) {
             if let Some(tags) = tags::EXTENSIONS.get(ext) {
-                result.extend(tags.iter().copied());
+                result |= tags;
             }
         } else {
             let ext_lower = ext.to_ascii_lowercase();
             if let Some(tags) = tags::EXTENSIONS.get(ext_lower.as_str()) {
-                result.extend(tags.iter().copied());
+                result |= tags;
             }
         }
     }
@@ -217,7 +282,7 @@ fn tags_from_interpreter(interpreter: &str) -> TagSet {
 
     while !name.is_empty() {
         if let Some(tags) = tags::INTERPRETERS.get(name) {
-            return tags.iter().copied().collect();
+            return *tags;
         }
 
         // python3.12.3 should match python3.12.3, python3.12, python3, python
@@ -228,7 +293,7 @@ fn tags_from_interpreter(interpreter: &str) -> TagSet {
         }
     }
 
-    TagSet::new()
+    TagSet::empty()
 }
 
 #[derive(thiserror::Error, Debug)]

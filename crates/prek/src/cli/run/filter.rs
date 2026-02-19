@@ -46,13 +46,13 @@ impl<'a> FilenameFilter<'a> {
 
 /// Filter files by tags.
 pub(crate) struct FileTagFilter<'a> {
-    all: &'a [String],
-    any: &'a [String],
-    exclude: &'a [String],
+    all: &'a TagSet,
+    any: &'a TagSet,
+    exclude: &'a TagSet,
 }
 
 impl<'a> FileTagFilter<'a> {
-    fn new(types: &'a [String], types_or: &'a [String], exclude_types: &'a [String]) -> Self {
+    fn new(types: &'a TagSet, types_or: &'a TagSet, exclude_types: &'a TagSet) -> Self {
         Self {
             all: types,
             any: types_or,
@@ -61,13 +61,13 @@ impl<'a> FileTagFilter<'a> {
     }
 
     pub(crate) fn filter(&self, file_types: &TagSet) -> bool {
-        if !self.all.is_empty() && !self.all.iter().all(|t| file_types.contains(t.as_str())) {
+        if !self.all.is_subset_of(file_types) {
             return false;
         }
-        if !self.any.is_empty() && !self.any.iter().any(|t| file_types.contains(t.as_str())) {
+        if !self.any.is_empty() && !self.any.intersects(file_types) {
             return false;
         }
-        if self.exclude.iter().any(|t| file_types.contains(t.as_str())) {
+        if self.exclude.intersects(file_types) {
             return false;
         }
         true
@@ -144,7 +144,10 @@ impl<'a> FileFilter<'a> {
         types_or: &[String],
         exclude_types: &[String],
     ) -> Vec<&Path> {
-        let filter = FileTagFilter::new(types, types_or, exclude_types);
+        let types = TagSet::from_tags(types.iter().map(String::as_str));
+        let types_or = TagSet::from_tags(types_or.iter().map(String::as_str));
+        let exclude_types = TagSet::from_tags(exclude_types.iter().map(String::as_str));
+        let filter = FileTagFilter::new(&types, &types_or, &exclude_types);
         let filenames: Vec<_> = self
             .filenames
             .par_iter()
