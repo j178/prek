@@ -6,6 +6,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use futures::TryStreamExt;
 use prek_consts::env_vars::EnvVars;
+use prek_identify::parse_shebang;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, error, instrument, trace};
 
@@ -14,7 +15,6 @@ use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::config::Language;
 use crate::fs::{CWD, Simplified};
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
-use crate::identify::parse_shebang;
 use crate::store::{CacheBucket, Store, ToolBucket};
 use crate::{archive, hooks, warn_user_once};
 
