@@ -1,4 +1,6 @@
+use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
@@ -244,9 +246,8 @@ fn specific_ruby_unavailable() {
     error: Failed to install hook `ruby-version`
       caused by: Failed to install Ruby
       caused by: No suitable Ruby found for request: 3.1.3
-
-    Ruby language only supports system Ruby on Windows.
-    Please install Ruby from https://rubyinstaller.org/
+    Automatic installation is not supported on this platform.
+    Please install Ruby manually.
     ");
 
     #[cfg(not(target_os = "windows"))]
@@ -259,13 +260,8 @@ fn specific_ruby_unavailable() {
     error: Failed to install hook `ruby-version`
       caused by: Failed to install Ruby
       caused by: No suitable Ruby found for request: 3.1.3
-
-    Detected version manager(s): brew
-
-    You can install the required Ruby version using:
-      brew install ruby  # Installs latest version
-      # Note: Homebrew typically installs the latest Ruby version.
-      # For specific versions, consider using a version manager like rbenv or mise.
+    No rv-ruby release found matching: 3.1.3
+    Please install Ruby manually.
     ");
 }
 
@@ -810,6 +806,151 @@ fn process_files() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
+
+    Ok(())
+}
+
+/// Test that Ruby is auto-downloaded from rv-ruby when a specific version
+/// is requested that isn't available on the system.
+/// Windows doesn't support auto-download, so this test is only for non-Windows platforms.
+/// The Windows-specific message is tested in `specific_ruby_unavailable`.
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn auto_download() -> anyhow::Result<()> {
+    if !EnvVars::is_set(EnvVars::CI) {
+        // Skip when not running in CI: local environments may have
+        // unexpected Ruby versions installed.
+        return Ok(());
+    }
+
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: ruby-downloaded
+                name: ruby-downloaded
+                language: ruby
+                entry: ruby --version
+                language_version: '3.3'
+                pass_filenames: false
+                always_run: true
+              - id: ruby-system
+                name: ruby-system
+                language: ruby
+                entry: ruby --version
+                language_version: '3.4'
+                pass_filenames: false
+                always_run: true
+    "});
+    context.git_add(".");
+
+    let ruby_dir = context.home_dir().child("tools").child("ruby");
+    ruby_dir.assert(predicates::path::missing());
+
+    let filters = [(
+        r"ruby (\d+\.\d+)\.\d+(?:p\d+)? \(\d{4}-\d{2}-\d{2} revision [0-9a-f]{0,10}\).*?\[.+\]",
+        "ruby $1.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]",
+    )]
+    .into_iter()
+    .chain(context.filters())
+    .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, context.run().arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ruby-downloaded..........................................................Passed
+    - hook id: ruby-downloaded
+    - duration: [TIME]
+
+      ruby 3.3.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
+    ruby-system..............................................................Passed
+    - hook id: ruby-system
+    - duration: [TIME]
+
+      ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
+
+    ----- stderr -----
+    ");
+
+    // Verify that only Ruby 3.3 was downloaded (3.4 should use system Ruby)
+    let installed_versions = ruby_dir
+        .read_dir()?
+        .flatten()
+        .filter_map(|d| {
+            let filename = d.file_name().to_string_lossy().to_string();
+            if filename.starts_with('.') {
+                None
+            } else {
+                Some(filename)
+            }
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        installed_versions.len(),
+        1,
+        "Expected only one Ruby version to be downloaded, but found: {installed_versions:?}"
+    );
+    assert!(
+        installed_versions.iter().any(|v| v.starts_with("3.3.")),
+        "Expected Ruby 3.3.x to be downloaded, but found: {installed_versions:?}"
+    );
+
+    // Record the mtime of the downloaded Ruby directory so we can verify
+    // step 2 doesn't re-download it.
+    let ruby_version_dir = ruby_dir
+        .read_dir()?
+        .flatten()
+        .find(|d| d.file_name().to_string_lossy().starts_with("3.3."))
+        .expect("Expected a 3.3.x directory");
+    let mtime_before = ruby_version_dir.metadata()?.modified()?;
+
+    // Step 2: Re-run with a looser version match that should reuse the
+    // already-downloaded 3.3.x without hitting the network again.
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: ruby-reused
+                name: ruby-reused
+                language: ruby
+                entry: ruby --version
+                language_version: '>=3.3, <3.4'
+                pass_filenames: false
+                always_run: true
+    "});
+    context.git_add(".");
+
+    let filters = [(
+        r"ruby (\d+\.\d+)\.\d+(?:p\d+)? \(\d{4}-\d{2}-\d{2} revision [0-9a-f]{0,10}\).*?\[.+\]",
+        "ruby $1.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]",
+    )]
+    .into_iter()
+    .chain(context.filters())
+    .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, context.run().arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ruby-reused..............................................................Passed
+    - hook id: ruby-reused
+    - duration: [TIME]
+
+      ruby 3.3.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
+
+    ----- stderr -----
+    ");
+
+    // Verify the directory wasn't re-downloaded: mtime should be unchanged
+    let mtime_after = ruby_version_dir.metadata()?.modified()?;
+    assert_eq!(
+        mtime_before, mtime_after,
+        "Ruby directory was modified during reuse, suggests it was re-downloaded"
+    );
 
     Ok(())
 }
