@@ -248,6 +248,21 @@ scoop install main/prek
 </details>
 
 <details>
+<summary>Winget (Windows)</summary>
+
+<!-- --8<-- [start: winget-install] -->
+
+prek is available via [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/).
+
+```powershell
+winget install --id j178.Prek
+```
+
+<!-- --8<-- [end: winget-install] -->
+
+</details>
+
+<details>
 <summary>MacPorts</summary>
 
 <!-- --8<-- [start: macports-install] -->
