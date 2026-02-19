@@ -46,13 +46,17 @@ impl<'a> FilenameFilter<'a> {
 
 /// Filter files by tags.
 pub(crate) struct FileTagFilter<'a> {
-    all: &'a TagSet,
-    any: &'a TagSet,
-    exclude: &'a TagSet,
+    all: Option<&'a TagSet>,
+    any: Option<&'a TagSet>,
+    exclude: Option<&'a TagSet>,
 }
 
 impl<'a> FileTagFilter<'a> {
-    fn new(types: &'a TagSet, types_or: &'a TagSet, exclude_types: &'a TagSet) -> Self {
+    fn new(
+        types: Option<&'a TagSet>,
+        types_or: Option<&'a TagSet>,
+        exclude_types: Option<&'a TagSet>,
+    ) -> Self {
         Self {
             all: types,
             any: types_or,
@@ -61,13 +65,16 @@ impl<'a> FileTagFilter<'a> {
     }
 
     pub(crate) fn filter(&self, file_types: &TagSet) -> bool {
-        if !self.all.is_subset(file_types) {
+        if self.all.is_some_and(|s| !s.is_subset(file_types)) {
             return false;
         }
-        if !self.any.is_empty() && self.any.is_disjoint(file_types) {
+        if self
+            .any
+            .is_some_and(|s| !s.is_empty() && s.is_disjoint(file_types))
+        {
             return false;
         }
-        if !self.exclude.is_disjoint(file_types) {
+        if self.exclude.is_some_and(|s| !s.is_disjoint(file_types)) {
             return false;
         }
         true
@@ -140,14 +147,11 @@ impl<'a> FileFilter<'a> {
     /// Filter filenames by type tags for a specific hook.
     pub(crate) fn by_type(
         &self,
-        types: &[String],
-        types_or: &[String],
-        exclude_types: &[String],
+        types: Option<&TagSet>,
+        types_or: Option<&TagSet>,
+        exclude_types: Option<&TagSet>,
     ) -> Vec<&Path> {
-        let types = TagSet::from_tags(types.iter().map(String::as_str));
-        let types_or = TagSet::from_tags(types_or.iter().map(String::as_str));
-        let exclude_types = TagSet::from_tags(exclude_types.iter().map(String::as_str));
-        let filter = FileTagFilter::new(&types, &types_or, &exclude_types);
+        let filter = FileTagFilter::new(types, types_or, exclude_types);
         let filenames: Vec<_> = self
             .filenames
             .par_iter()
@@ -180,7 +184,11 @@ impl<'a> FileFilter<'a> {
         });
 
         // Filter by hook `types`, `types_or` and `exclude_types`.
-        let filter = FileTagFilter::new(&hook.types, &hook.types_or, &hook.exclude_types);
+        let filter = FileTagFilter::new(
+            Some(&hook.types),
+            Some(&hook.types_or),
+            Some(&hook.exclude_types),
+        );
         let filenames = filenames.filter(|filename| match tags_from_path(filename) {
             Ok(tags) => filter.filter(&tags),
             Err(err) => {

@@ -19,11 +19,11 @@ profiler = ["dep:pprof", "pprof/flamegraph"]
 # Enable docker related tests in integration tests
 docker = []
 # Enable generation of JSON schema
-schemars = ["dep:schemars"]
+schemars = ["dep:schemars", "prek-identify/schemars"]
 
 [dependencies]
 prek-consts = { workspace = true }
-prek-identify = { workspace = true }
+prek-identify = { workspace = true, features = ["serde"] }
 
 anstream = { workspace = true }
 anstyle-query = { workspace = true }

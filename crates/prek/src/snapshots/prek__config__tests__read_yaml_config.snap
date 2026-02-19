@@ -190,8 +190,8 @@ Config {
                             types: None,
                             types_or: Some(
                                 [
-                                    "yaml",
                                     "json5",
+                                    "yaml",
                                 ],
                             ),
                             exclude_types: None,
