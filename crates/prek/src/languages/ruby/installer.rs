@@ -273,10 +273,22 @@ impl RubyInstaller {
             .header("Accept", "application/vnd.github+json");
         let req = maybe_add_github_auth(req, is_github);
 
-        let release: GitHubRelease = req
+        let response = req
             .send()
             .await
-            .with_context(|| format!("Failed to fetch rv-ruby releases from {api_url}"))?
+            .with_context(|| format!("Failed to fetch rv-ruby releases from {api_url}"))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let hint = if matches!(status.as_u16(), 403 | 429) {
+                " (this may be a rate limit — try setting GITHUB_TOKEN)"
+            } else {
+                ""
+            };
+            anyhow::bail!("Failed to fetch rv-ruby releases from {api_url}: {status}{hint}");
+        }
+
+        let release: GitHubRelease = response
             .json()
             .await
             .context("Failed to parse rv-ruby release JSON")?;
