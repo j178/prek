@@ -1,5 +1,7 @@
+#[cfg(not(target_os = "windows"))]
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+#[cfg(not(target_os = "windows"))]
 use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
