@@ -48,3 +48,4 @@ jobs:
           release-tag: ${{ steps.tag.outputs.value }}
           installers-regex: 'prek-.*windows.*\.zip$'
           token: ${{ secrets.WINGET_TOKEN }}
+          fork-user: prek-bot
