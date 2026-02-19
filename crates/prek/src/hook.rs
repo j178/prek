@@ -9,6 +9,7 @@ use std::sync::{Arc, OnceLock};
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
+use prek_identify::{TagSet, tags::TAG_FILE};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
@@ -322,9 +323,9 @@ impl HookBuilder {
         let alias = options.alias.unwrap_or_default();
         let args = options.args.unwrap_or_default();
         let env = options.env.unwrap_or_default();
-        let types = options.types.unwrap_or_else(|| vec!["file".to_string()]);
-        let types_or = options.types_or.unwrap_or_default();
-        let exclude_types = options.exclude_types.unwrap_or_default();
+        let types = options.types.map_or(TAG_FILE, TagSet::from_tags);
+        let types_or = TagSet::from_tags(options.types_or.unwrap_or_default());
+        let exclude_types = TagSet::from_tags(options.exclude_types.unwrap_or_default());
         let always_run = options.always_run.unwrap_or_default();
         let fail_fast = options.fail_fast.unwrap_or_default();
         let pass_filenames = options.pass_filenames.unwrap_or(true);
@@ -493,9 +494,9 @@ pub(crate) struct Hook {
     pub alias: String,
     pub files: Option<FilePattern>,
     pub exclude: Option<FilePattern>,
-    pub types: Vec<String>,
-    pub types_or: Vec<String>,
-    pub exclude_types: Vec<String>,
+    pub types: TagSet,
+    pub types_or: TagSet,
+    pub exclude_types: TagSet,
     pub additional_dependencies: FxHashSet<String>,
     pub args: Vec<String>,
     pub env: FxHashMap<String, String>,

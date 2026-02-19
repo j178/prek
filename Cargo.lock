@@ -2036,7 +2036,6 @@ dependencies = [
  "indoc",
  "phf",
  "shlex",
- "smallvec",
  "tempfile",
  "thiserror 2.0.18",
 ]
