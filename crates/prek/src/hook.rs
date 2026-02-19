@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
@@ -7,7 +6,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
 use anyhow::{Context, Result};
-use clap::ValueEnum;
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_identify::{TagSet, tags::TAG_FILE};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
@@ -18,7 +16,7 @@ use tracing::trace;
 
 use crate::config::{
     self, BuiltinHook, Config, FilePattern, HookOptions, Language, LocalHook, ManifestHook,
-    MetaHook, RemoteHook, Stage, read_manifest,
+    MetaHook, RemoteHook, Stages, read_manifest,
 };
 use crate::languages::version::LanguageRequest;
 use crate::languages::{extract_metadata, resolve_command};
@@ -331,6 +329,7 @@ impl HookBuilder {
         let pass_filenames = options.pass_filenames.unwrap_or(true);
         let require_serial = options.require_serial.unwrap_or(false);
         let verbose = options.verbose.unwrap_or(false);
+        let stages = options.stages.unwrap_or_default();
         let additional_dependencies = options
             .additional_dependencies
             .unwrap_or_default()
@@ -344,18 +343,6 @@ impl HookBuilder {
         })?;
 
         let entry = Entry::new(self.hook_spec.id.clone(), self.hook_spec.entry);
-
-        let stages = match options.stages {
-            Some(stages) => {
-                let stages: BTreeSet<_> = stages.into_iter().collect();
-                if stages.is_empty() || stages.len() == Stage::value_variants().len() {
-                    Stages::All
-                } else {
-                    Stages::Some(stages)
-                }
-            }
-            None => Stages::All,
-        };
 
         let priority = self
             .hook_spec
@@ -404,37 +391,6 @@ impl HookBuilder {
         }
 
         Ok(hook)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum Stages {
-    All,
-    Some(BTreeSet<Stage>),
-}
-
-impl Stages {
-    pub(crate) fn contains(&self, stage: Stage) -> bool {
-        match self {
-            Stages::All => true,
-            Stages::Some(stages) => stages.contains(&stage),
-        }
-    }
-}
-
-impl Display for Stages {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Stages::All => write!(f, "all"),
-            Stages::Some(stages) => {
-                let stages_str = stages
-                    .iter()
-                    .map(Stage::as_ref)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                write!(f, "{stages_str}")
-            }
-        }
     }
 }
 
@@ -972,9 +928,11 @@ mod tests {
                         },
                     ),
                     default_stages: Some(
-                        [
-                            Manual,
-                        ],
+                        Some(
+                            {
+                                Manual,
+                            },
+                        ),
                     ),
                     files: None,
                     exclude: None,

@@ -98,7 +98,7 @@ impl BuiltinHook {
                 priority: None,
                 options: HookOptions {
                     description: Some("prevents giant files from being committed.".to_string()),
-                    stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
+                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
             },
@@ -125,7 +125,7 @@ impl BuiltinHook {
                         "ensures that (non-binary) executables have a shebang.".to_string(),
                     ),
                     types: Some(TagSet::from_tags(["executable", "text"])),
-                    stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
+                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
             },
@@ -232,7 +232,7 @@ impl BuiltinHook {
                             .to_string(),
                     ),
                     types: Some(tags::TAG_TEXT),
-                    stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
+                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
             },
@@ -277,7 +277,7 @@ impl BuiltinHook {
                 options: HookOptions {
                     description: Some("trims trailing whitespace.".to_string()),
                     types: Some(tags::TAG_TEXT),
-                    stages: Some(vec![Stage::PreCommit, Stage::PrePush, Stage::Manual]),
+                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
             },

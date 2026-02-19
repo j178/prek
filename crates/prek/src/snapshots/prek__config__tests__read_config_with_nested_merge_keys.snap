@@ -36,9 +36,11 @@ Config {
                                 true,
                             ),
                             stages: Some(
-                                [
-                                    PreCommit,
-                                ],
+                                Some(
+                                    {
+                                        PreCommit,
+                                    },
+                                ),
                             ),
                             verbose: None,
                             minimum_prek_version: None,
