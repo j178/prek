@@ -2,7 +2,6 @@ use std::fmt::Write;
 use std::path::PathBuf;
 
 use anyhow::Context;
-use clap::ValueEnum;
 use owo_colors::OwoColorize;
 use serde::Serialize;
 
@@ -11,7 +10,6 @@ use crate::cli::run::Selectors;
 use crate::cli::{ExitStatus, ListOutputFormat};
 use crate::config::{Language, Stage};
 use crate::fs::CWD;
-use crate::hook;
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::workspace::Workspace;
@@ -118,10 +116,7 @@ pub(crate) async fn list(
                 .map(|h| {
                     let id = h.id.clone();
                     let full_id = h.full_id();
-                    let stages = match h.stages {
-                        hook::Stages::All => Stage::value_variants().to_vec(),
-                        hook::Stages::Some(s) => s.into_iter().collect(),
-                    };
+                    let stages = h.stages.to_vec();
                     SerializableHook {
                         id,
                         full_id,

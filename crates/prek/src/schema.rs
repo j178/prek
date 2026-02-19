@@ -1,6 +1,6 @@
 use crate::config::{
     BuiltinHook, BuiltinRepo, FilePattern, LocalRepo, MetaHook, MetaRepo, RemoteHook, RemoteRepo,
-    Repo,
+    Repo, Stage, Stages,
 };
 use std::borrow::Cow;
 
@@ -117,6 +117,24 @@ fn strip_null_acceptance(schema: &mut schemars::Schema) {
         if !values.is_empty() && values.iter().all(Value::is_null) {
             *schema = schemars::json_schema!(false);
         }
+    }
+}
+
+impl schemars::JsonSchema for Stages {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("Stages")
+    }
+
+    fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        let stage_schema = generator.subschema_for::<Stage>();
+        schemars::json_schema!({
+            "type": "array",
+            "items": stage_schema,
+        })
     }
 }
 
