@@ -59,9 +59,13 @@ impl Iterator for TagSetIter<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if self.cur_word != 0 {
+                // Find index of the least-significant set bit in the current 64-bit word.
                 let tz = self.cur_word.trailing_zeros() as usize;
+                // Clear that least-significant set bit so the next call advances to the next tag.
                 self.cur_word &= self.cur_word - 1;
 
+                // `word_idx` is already incremented when `cur_word` was loaded,
+                // so we use `word_idx - 1` here to compute the global tag index.
                 let idx = (self.word_idx.saturating_sub(1) * 64) + tz;
                 return tags::ALL_TAGS_BY_ID.get(idx).copied();
             }
@@ -119,26 +123,22 @@ impl TagSet {
         Self { bits }
     }
 
-    /// Returns `true` if the two sets share at least one tag.
-    pub fn intersects(&self, other: &TagSet) -> bool {
-        let mut idx = 0;
-        while idx < TAG_WORDS {
+    /// Returns `true` if the two sets do not share any tag.
+    pub fn is_disjoint(&self, other: &TagSet) -> bool {
+        for idx in 0..TAG_WORDS {
             if (self.bits[idx] & other.bits[idx]) != 0 {
-                return true;
+                return false;
             }
-            idx += 1;
         }
-        false
+        true
     }
 
     /// Returns `true` if all tags in `self` are also present in `other`.
-    pub fn is_subset_of(&self, other: &TagSet) -> bool {
-        let mut idx = 0;
-        while idx < TAG_WORDS {
+    pub fn is_subset(&self, other: &TagSet) -> bool {
+        for idx in 0..TAG_WORDS {
             if (self.bits[idx] & !other.bits[idx]) != 0 {
                 return false;
             }
-            idx += 1;
         }
         true
     }
@@ -160,10 +160,8 @@ impl TagSet {
 
 impl BitOrAssign<&TagSet> for TagSet {
     fn bitor_assign(&mut self, rhs: &TagSet) {
-        let mut idx = 0;
-        while idx < TAG_WORDS {
+        for idx in 0..TAG_WORDS {
             self.bits[idx] |= rhs.bits[idx];
-            idx += 1;
         }
     }
 }
@@ -225,7 +223,7 @@ pub fn tags_from_path(path: &Path) -> Result<TagSet, Error> {
         }
     }
 
-    if !tags.intersects(&tags::TAG_TEXT_OR_BINARY) {
+    if tags.is_disjoint(&tags::TAG_TEXT_OR_BINARY) {
         if is_text_file(path) {
             tags |= &tags::TAG_TEXT;
         } else {
@@ -560,6 +558,43 @@ mod tests {
 
         let tags = super::tags_from_interpreter("invalid");
         assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn tagset_new_iter_and_is_empty() {
+        let empty = TagSet::new(&[]);
+        assert!(empty.is_empty());
+        assert_eq!(empty.iter().count(), 0);
+
+        let binary_id = u16::try_from(super::tag_id("binary").expect("binary id")).unwrap();
+        let text_id = u16::try_from(super::tag_id("text").expect("text id")).unwrap();
+        let set = TagSet::new(&[text_id, binary_id, text_id]);
+
+        assert!(!set.is_empty());
+        assert_eq!(set.iter().collect::<Vec<_>>(), vec!["binary", "text"]);
+    }
+
+    #[test]
+    fn tagset_from_tags_intersects_subset_and_bitor_assign() {
+        let a = TagSet::from_tags(["python", "text"]);
+        let b = TagSet::from_tags(["python"]);
+        let c = TagSet::from_tags(["binary"]);
+
+        assert!(b.is_subset(&a));
+        assert!(!a.is_subset(&b));
+        assert!(!a.is_disjoint(&b));
+        assert!(a.is_disjoint(&c));
+
+        let mut merged = b;
+        merged |= &c;
+        assert_tagset(&merged, &["python", "binary"]);
+    }
+
+    #[test]
+    fn tagset_new_panics_on_out_of_range_id() {
+        let out_of_range = u16::try_from(tags::ALL_TAGS_BY_ID.len()).unwrap();
+        let result = std::panic::catch_unwind(|| TagSet::new(&[out_of_range]));
+        assert!(result.is_err());
     }
 
     #[test]

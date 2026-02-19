@@ -61,13 +61,13 @@ impl<'a> FileTagFilter<'a> {
     }
 
     pub(crate) fn filter(&self, file_types: &TagSet) -> bool {
-        if !self.all.is_subset_of(file_types) {
+        if !self.all.is_subset(file_types) {
             return false;
         }
-        if !self.any.is_empty() && !self.any.intersects(file_types) {
+        if !self.any.is_empty() && self.any.is_disjoint(file_types) {
             return false;
         }
-        if self.exclude.intersects(file_types) {
+        if !self.exclude.is_disjoint(file_types) {
             return false;
         }
         true

@@ -323,11 +323,7 @@ impl HookBuilder {
         let alias = options.alias.unwrap_or_default();
         let args = options.args.unwrap_or_default();
         let env = options.env.unwrap_or_default();
-        let types = if let Some(tags) = options.types {
-            TagSet::from_tags(tags)
-        } else {
-            TAG_FILE
-        };
+        let types = options.types.map_or(TAG_FILE, TagSet::from_tags);
         let types_or = TagSet::from_tags(options.types_or.unwrap_or_default());
         let exclude_types = TagSet::from_tags(options.exclude_types.unwrap_or_default());
         let always_run = options.always_run.unwrap_or_default();
