@@ -134,6 +134,7 @@ impl schemars::JsonSchema for Stages {
         schemars::json_schema!({
             "type": "array",
             "items": stage_schema,
+            "uniqueItems": true,
         })
     }
 }

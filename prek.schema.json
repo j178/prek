@@ -96,7 +96,8 @@
       "type": "array",
       "items": {
         "$ref": "#/definitions/Stage"
-      }
+      },
+      "uniqueItems": true
     },
     "files": {
       "description": "Global file include pattern.",
@@ -291,7 +292,8 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Stage"
-          }
+          },
+          "uniqueItems": true
         },
         "verbose": {
           "description": "Print the output of the hook even if it passes.\nDefault is false.",
@@ -518,7 +520,8 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Stage"
-          }
+          },
+          "uniqueItems": true
         },
         "verbose": {
           "description": "Print the output of the hook even if it passes.\nDefault is false.",
@@ -675,7 +678,8 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Stage"
-          }
+          },
+          "uniqueItems": true
         },
         "verbose": {
           "description": "Print the output of the hook even if it passes.\nDefault is false.",
@@ -837,7 +841,8 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Stage"
-          }
+          },
+          "uniqueItems": true
         },
         "verbose": {
           "description": "Print the output of the hook even if it passes.\nDefault is false.",
