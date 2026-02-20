@@ -223,7 +223,8 @@ mod tests {
         // Since detect_jj_git_dir uses std::env::current_dir, we test the
         // resolution logic directly.
         let repo_dir = jj_dir.join("repo");
-        let git_target = std::fs::read_to_string(repo_dir.join("store").join("git_target")).unwrap();
+        let git_target =
+            std::fs::read_to_string(repo_dir.join("store").join("git_target")).unwrap();
         let resolved = repo_dir.join("store").join(git_target.trim());
         let resolved = resolved.canonicalize().unwrap();
         assert_eq!(resolved, git_dir.canonicalize().unwrap());
@@ -257,7 +258,8 @@ mod tests {
         let repo_dir = PathBuf::from(repo_content.trim());
         assert!(repo_dir.is_dir());
 
-        let git_target = std::fs::read_to_string(repo_dir.join("store").join("git_target")).unwrap();
+        let git_target =
+            std::fs::read_to_string(repo_dir.join("store").join("git_target")).unwrap();
         let resolved = repo_dir.join("store").join(git_target.trim());
         let resolved = resolved.canonicalize().unwrap();
         assert_eq!(resolved, main_git.canonicalize().unwrap());
