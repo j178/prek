@@ -11,18 +11,31 @@ from identify.interpreters import INTERPRETERS
 from identify.extensions import EXTENSIONS, EXTENSIONS_NEED_BINARY_CHECK, NAMES
 
 
-DIRECT_TAG_CONSTS = [
-    ("TAG_FILE", ["file"]),
-    ("TAG_DIRECTORY", ["directory"]),
-    ("TAG_SYMLINK", ["symlink"]),
-    ("TAG_SOCKET", ["socket"]),
-    ("TAG_EXECUTABLE", ["executable"]),
-    ("TAG_NON_EXECUTABLE", ["non-executable"]),
-    ("TAG_TEXT", ["text"]),
-    ("TAG_BINARY", ["binary"]),
-    ("TAG_TEXT_OR_BINARY", ["text", "binary"]),
+TAG_ID_CONSTS = [
+    ("TAG_FILE", "file"),
+    ("TAG_DIRECTORY", "directory"),
+    ("TAG_SYMLINK", "symlink"),
+    ("TAG_SOCKET", "socket"),
+    ("TAG_EXECUTABLE", "executable"),
+    ("TAG_NON_EXECUTABLE", "non-executable"),
+    ("TAG_TEXT", "text"),
+    ("TAG_BINARY", "binary"),
 ]
 
+TAG_SET_CONSTS = [
+    ("TAG_SET_FILE", ["file"]),
+    ("TAG_SET_DIRECTORY", ["directory"]),
+    ("TAG_SET_SYMLINK", ["symlink"]),
+    ("TAG_SET_SOCKET", ["socket"]),
+    ("TAG_SET_TEXT", ["text"]),
+    ("TAG_SET_TEXT_OR_BINARY", ["text", "binary"]),
+    ("TAG_SET_EXECUTABLE_TEXT", ["executable", "text"]),
+    ("TAG_SET_JSON", ["json"]),
+    ("TAG_SET_JSON5", ["json5"]),
+    ("TAG_SET_TOML", ["toml"]),
+    ("TAG_SET_XML", ["xml"]),
+    ("TAG_SET_YAML", ["yaml"]),
+]
 
 SELF_DIR = Path(__file__).parent
 TAGS_FILE = SELF_DIR / "src/tags.rs"
@@ -45,7 +58,11 @@ def gen():
             f.write(f'    "{tag}",\n')
         f.write("];\n\n")
 
-        for const_name, const_tags in DIRECT_TAG_CONSTS:
+        for const_name, tag in TAG_ID_CONSTS:
+            f.write(f"pub const {const_name}: u16 = {tag_to_id[tag]};\n")
+        f.write("\n")
+
+        for const_name, const_tags in TAG_SET_CONSTS:
             f.write(f"pub const {const_name}: TagSet = {tagset_expr(const_tags)};\n")
         f.write("\n")
 

@@ -302,15 +302,27 @@ pub const ALL_TAGS: [&str; 297] = [
     "zsh",
 ];
 
-pub const TAG_FILE: TagSet = TagSet::new(&[77]);
-pub const TAG_DIRECTORY: TagSet = TagSet::new(&[58]);
-pub const TAG_SYMLINK: TagSet = TagSet::new(&[242]);
-pub const TAG_SOCKET: TagSet = TagSet::new(&[232]);
-pub const TAG_EXECUTABLE: TagSet = TagSet::new(&[73]);
-pub const TAG_NON_EXECUTABLE: TagSet = TagSet::new(&[173]);
-pub const TAG_TEXT: TagSet = TagSet::new(&[249]);
-pub const TAG_BINARY: TagSet = TagSet::new(&[21]);
-pub const TAG_TEXT_OR_BINARY: TagSet = TagSet::new(&[21, 249]);
+pub const TAG_FILE: u16 = 77;
+pub const TAG_DIRECTORY: u16 = 58;
+pub const TAG_SYMLINK: u16 = 242;
+pub const TAG_SOCKET: u16 = 232;
+pub const TAG_EXECUTABLE: u16 = 73;
+pub const TAG_NON_EXECUTABLE: u16 = 173;
+pub const TAG_TEXT: u16 = 249;
+pub const TAG_BINARY: u16 = 21;
+
+pub const TAG_SET_FILE: TagSet = TagSet::new(&[77]);
+pub const TAG_SET_DIRECTORY: TagSet = TagSet::new(&[58]);
+pub const TAG_SET_SYMLINK: TagSet = TagSet::new(&[242]);
+pub const TAG_SET_SOCKET: TagSet = TagSet::new(&[232]);
+pub const TAG_SET_TEXT: TagSet = TagSet::new(&[249]);
+pub const TAG_SET_TEXT_OR_BINARY: TagSet = TagSet::new(&[21, 249]);
+pub const TAG_SET_EXECUTABLE_TEXT: TagSet = TagSet::new(&[73, 249]);
+pub const TAG_SET_JSON: TagSet = TagSet::new(&[132]);
+pub const TAG_SET_JSON5: TagSet = TagSet::new(&[133]);
+pub const TAG_SET_TOML: TagSet = TagSet::new(&[254]);
+pub const TAG_SET_XML: TagSet = TagSet::new(&[283]);
+pub const TAG_SET_YAML: TagSet = TagSet::new(&[287]);
 
 pub const INTERPRETERS: phf::Map<&str, TagSet> = phf::phf_map! {
     // ["ash", "shell"]

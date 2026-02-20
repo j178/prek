@@ -247,20 +247,20 @@ pub enum Error {
 pub fn tags_from_path(path: &Path) -> Result<TagSet, Error> {
     let metadata = std::fs::symlink_metadata(path)?;
     if metadata.is_dir() {
-        return Ok(tags::TAG_DIRECTORY);
+        return Ok(tags::TAG_SET_DIRECTORY);
     } else if metadata.is_symlink() {
-        return Ok(tags::TAG_SYMLINK);
+        return Ok(tags::TAG_SET_SYMLINK);
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::FileTypeExt;
         let file_type = metadata.file_type();
         if file_type.is_socket() {
-            return Ok(tags::TAG_SOCKET);
+            return Ok(tags::TAG_SET_SOCKET);
         }
     };
 
-    let mut tags = tags::TAG_FILE;
+    let mut tags = tags::TAG_SET_FILE;
 
     let executable;
     #[cfg(unix)]
@@ -277,9 +277,9 @@ pub fn tags_from_path(path: &Path) -> Result<TagSet, Error> {
     }
 
     if executable {
-        tags |= &tags::TAG_EXECUTABLE;
+        tags.insert(tags::TAG_EXECUTABLE);
     } else {
-        tags |= &tags::TAG_NON_EXECUTABLE;
+        tags.insert(tags::TAG_NON_EXECUTABLE);
     }
 
     let filename_tags = tags_from_filename(path);
@@ -291,11 +291,11 @@ pub fn tags_from_path(path: &Path) -> Result<TagSet, Error> {
         }
     }
 
-    if tags.is_disjoint(&tags::TAG_TEXT_OR_BINARY) {
+    if tags.is_disjoint(&tags::TAG_SET_TEXT_OR_BINARY) {
         if is_text_file(path) {
-            tags |= &tags::TAG_TEXT;
+            tags.insert(tags::TAG_TEXT);
         } else {
-            tags |= &tags::TAG_BINARY;
+            tags.insert(tags::TAG_BINARY);
         }
     }
 
