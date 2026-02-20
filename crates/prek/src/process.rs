@@ -30,6 +30,7 @@ use std::fmt::Display;
 use std::path::Path;
 use std::process::Output;
 use std::process::{CommandArgs, CommandEnvs, ExitStatus, Stdio};
+use std::sync::LazyLock;
 
 use owo_colors::OwoColorize;
 use prek_consts::env_vars::EnvVars;
@@ -40,8 +41,15 @@ use crate::git::GIT;
 
 const DEFAULT_COMMAND_LOG_TRUNCATE_LIMIT: usize = 120;
 
+static COMMAND_LOG_TRUNCATE_LIMIT: LazyLock<usize> =
+    LazyLock::new(command_log_truncate_limit_from_env);
+
 fn command_log_truncate_limit() -> usize {
-    EnvVars::var(EnvVars::PREK_COMMAND_LOG_TRUNCATE_LIMIT)
+    *COMMAND_LOG_TRUNCATE_LIMIT
+}
+
+fn command_log_truncate_limit_from_env() -> usize {
+    EnvVars::var(EnvVars::PREK_LOG_TRUNCATE_LIMIT)
         .ok()
         .and_then(|limit| parse_command_log_truncate_limit(&limit))
         .unwrap_or(DEFAULT_COMMAND_LOG_TRUNCATE_LIMIT)
@@ -561,17 +569,19 @@ mod tests {
     #[test]
     fn command_log_truncate_limit_reads_env_var() {
         let _lock = ENV_LOCK.lock().expect("env lock poisoned");
-        let _guard = EnvVarGuard::set(EnvVars::PREK_COMMAND_LOG_TRUNCATE_LIMIT, "42");
-        assert_eq!(command_log_truncate_limit(), 42);
+        let _guard = EnvVarGuard::set(EnvVars::PREK_LOG_TRUNCATE_LIMIT, "42");
+        assert_eq!(command_log_truncate_limit_from_env(), 42);
     }
 
     #[test]
-    fn display_truncates_using_env_limit() {
+    fn command_log_truncate_limit_is_cached() {
         let _lock = ENV_LOCK.lock().expect("env lock poisoned");
-        let _guard = EnvVarGuard::set(EnvVars::PREK_COMMAND_LOG_TRUNCATE_LIMIT, "5");
-        let mut cmd = Cmd::new("echo", "test");
-        cmd.arg("abcdef");
-        assert!(format!("{cmd}").contains("[...]"));
+        let _guard1 = EnvVarGuard::set(EnvVars::PREK_LOG_TRUNCATE_LIMIT, "42");
+        let truncate_limit = LazyLock::new(command_log_truncate_limit_from_env);
+        assert_eq!(*truncate_limit, 42);
+
+        let _guard2 = EnvVarGuard::set(EnvVars::PREK_LOG_TRUNCATE_LIMIT, "5");
+        assert_eq!(*truncate_limit, 42);
     }
 
     #[test]

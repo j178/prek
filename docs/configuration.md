@@ -1355,7 +1355,7 @@ prek supports the following environment variables:
     - `podman`
     - `container` (Apple's Container runtime on macOS, see [container](https://github.com/apple/container))
 
-- `PREK_COMMAND_LOG_TRUNCATE_LIMIT` — Control the truncation limit for command lines shown in trace logs (`Executing ...`). Defaults to `120` characters of arguments; set a larger value to reduce truncation.
+- `PREK_LOG_TRUNCATE_LIMIT` — Control the truncation limit for command lines shown in trace logs (`Executing ...`). Defaults to `120` characters of arguments; set a larger value to reduce truncation.
 
 Compatibility fallbacks:
 
