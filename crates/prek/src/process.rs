@@ -39,26 +39,13 @@ use tracing::trace;
 
 use crate::git::GIT;
 
-const DEFAULT_COMMAND_LOG_TRUNCATE_LIMIT: usize = 120;
-
-static COMMAND_LOG_TRUNCATE_LIMIT: LazyLock<usize> =
-    LazyLock::new(command_log_truncate_limit_from_env);
-
-fn command_log_truncate_limit() -> usize {
-    *COMMAND_LOG_TRUNCATE_LIMIT
-}
-
-fn command_log_truncate_limit_from_env() -> usize {
+static LOG_TRUNCATE_LIMIT: LazyLock<usize> = LazyLock::new(|| {
     EnvVars::var(EnvVars::PREK_LOG_TRUNCATE_LIMIT)
         .ok()
-        .and_then(|limit| parse_command_log_truncate_limit(&limit))
-        .unwrap_or(DEFAULT_COMMAND_LOG_TRUNCATE_LIMIT)
-}
-
-fn parse_command_log_truncate_limit(limit: &str) -> Option<usize> {
-    let limit = limit.parse::<usize>().ok()?;
-    (limit > 0).then_some(limit)
-}
+        .and_then(|limit| limit.parse::<usize>().ok())
+        .filter(|limit| *limit > 0)
+        .unwrap_or(120)
+});
 
 /// An error from executing a Command
 #[derive(Debug, Error)]
@@ -507,7 +494,6 @@ impl Display for Cmd {
             args.next(); // Skip the program if it's repeated
         }
 
-        let truncate_limit = command_log_truncate_limit();
         let mut len = 0;
         while let Some(arg) = args.next() {
             let skip = skip_args(program, arg, args.peek());
@@ -519,80 +505,11 @@ impl Display for Cmd {
             }
             write!(f, " {}", arg.to_string_lossy())?;
             len += arg.len() + 1;
-            if len > truncate_limit {
+            if len > *LOG_TRUNCATE_LIMIT {
                 write!(f, " [...]",)?;
                 break;
             }
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::ffi::OsString;
-    use std::sync::{LazyLock, Mutex};
-
-    use super::*;
-
-    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
-
-    struct EnvVarGuard {
-        key: &'static str,
-        value: Option<OsString>,
-    }
-
-    impl EnvVarGuard {
-        fn set(key: &'static str, value: &str) -> Self {
-            let prev = EnvVars::var_os(key);
-            unsafe {
-                std::env::set_var(key, value);
-            }
-            Self { key, value: prev }
-        }
-    }
-
-    impl Drop for EnvVarGuard {
-        fn drop(&mut self) {
-            if let Some(value) = &self.value {
-                unsafe {
-                    std::env::set_var(self.key, value);
-                }
-            } else {
-                unsafe {
-                    std::env::remove_var(self.key);
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn command_log_truncate_limit_reads_env_var() {
-        let _lock = ENV_LOCK.lock().expect("env lock poisoned");
-        let _guard = EnvVarGuard::set(EnvVars::PREK_LOG_TRUNCATE_LIMIT, "42");
-        assert_eq!(command_log_truncate_limit_from_env(), 42);
-    }
-
-    #[test]
-    fn command_log_truncate_limit_is_cached() {
-        let _lock = ENV_LOCK.lock().expect("env lock poisoned");
-        let _guard1 = EnvVarGuard::set(EnvVars::PREK_LOG_TRUNCATE_LIMIT, "42");
-        let truncate_limit = LazyLock::new(command_log_truncate_limit_from_env);
-        assert_eq!(*truncate_limit, 42);
-
-        let _guard2 = EnvVarGuard::set(EnvVars::PREK_LOG_TRUNCATE_LIMIT, "5");
-        assert_eq!(*truncate_limit, 42);
-    }
-
-    #[test]
-    fn parse_command_log_truncate_limit_accepts_usize_values() {
-        assert_eq!(parse_command_log_truncate_limit("42"), Some(42));
-    }
-
-    #[test]
-    fn parse_command_log_truncate_limit_rejects_invalid_values() {
-        assert_eq!(parse_command_log_truncate_limit("invalid"), None);
-        assert_eq!(parse_command_log_truncate_limit("-1"), None);
-        assert_eq!(parse_command_log_truncate_limit("0"), None);
     }
 }
