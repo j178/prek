@@ -7,7 +7,7 @@ use std::sync::{Arc, OnceLock};
 
 use anyhow::{Context, Result};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
-use prek_identify::{TagSet, tags::TAG_FILE};
+use prek_identify::{TagSet, tags};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
@@ -321,7 +321,7 @@ impl HookBuilder {
         let alias = options.alias.unwrap_or_default();
         let args = options.args.unwrap_or_default();
         let env = options.env.unwrap_or_default();
-        let types = options.types.unwrap_or(TAG_FILE);
+        let types = options.types.unwrap_or(tags::TAG_SET_FILE);
         let types_or = options.types_or.unwrap_or_default();
         let exclude_types = options.exclude_types.unwrap_or_default();
         let always_run = options.always_run.unwrap_or_default();
@@ -897,7 +897,7 @@ mod tests {
             priority: Some(42),
             options: HookOptions {
                 alias: Some("alias-1".to_string()),
-                types: Some(tags::TAG_TEXT),
+                types: Some(tags::TAG_SET_TEXT),
                 args: Some(vec!["--flag".to_string()]),
                 env: Some(override_env),
                 always_run: Some(true),

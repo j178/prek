@@ -2,7 +2,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
-use prek_identify::{TagSet, tags};
+use prek_identify::tags;
 
 use crate::cli::reporter::HookRunReporter;
 use crate::config::{BuiltinHook, HookOptions, Stage};
@@ -124,7 +124,7 @@ impl BuiltinHook {
                     description: Some(
                         "ensures that (non-binary) executables have a shebang.".to_string(),
                     ),
-                    types: Some(TagSet::from_tags(["executable", "text"])),
+                    types: Some(tags::TAG_SET_EXECUTABLE_TEXT),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
@@ -136,7 +136,7 @@ impl BuiltinHook {
                 priority: None,
                 options: HookOptions {
                     description: Some("checks json files for parseable syntax.".to_string()),
-                    types: Some(TagSet::from_tags(["json"])),
+                    types: Some(tags::TAG_SET_JSON),
                     ..Default::default()
                 },
             },
@@ -147,7 +147,7 @@ impl BuiltinHook {
                 priority: None,
                 options: HookOptions {
                     description: Some("checks json5 files for parseable syntax.".to_string()),
-                    types: Some(TagSet::from_tags(["json5"])),
+                    types: Some(tags::TAG_SET_JSON5),
                     ..Default::default()
                 },
             },
@@ -160,7 +160,7 @@ impl BuiltinHook {
                     description: Some(
                         "checks for files that contain merge conflict strings.".to_string(),
                     ),
-                    types: Some(tags::TAG_TEXT),
+                    types: Some(tags::TAG_SET_TEXT),
                     ..Default::default()
                 },
             },
@@ -173,7 +173,7 @@ impl BuiltinHook {
                     description: Some(
                         "checks for symlinks which do not point to anything.".to_string(),
                     ),
-                    types: Some(tags::TAG_SYMLINK),
+                    types: Some(tags::TAG_SET_SYMLINK),
                     ..Default::default()
                 },
             },
@@ -184,7 +184,7 @@ impl BuiltinHook {
                 priority: None,
                 options: HookOptions {
                     description: Some("checks toml files for parseable syntax.".to_string()),
-                    types: Some(TagSet::from_tags(["toml"])),
+                    types: Some(tags::TAG_SET_TOML),
                     ..Default::default()
                 },
             },
@@ -195,7 +195,7 @@ impl BuiltinHook {
                 priority: None,
                 options: HookOptions {
                     description: Some("checks xml files for parseable syntax.".to_string()),
-                    types: Some(TagSet::from_tags(["xml"])),
+                    types: Some(tags::TAG_SET_XML),
                     ..Default::default()
                 },
             },
@@ -206,7 +206,7 @@ impl BuiltinHook {
                 priority: None,
                 options: HookOptions {
                     description: Some("checks yaml files for parseable syntax.".to_string()),
-                    types: Some(TagSet::from_tags(["yaml"])),
+                    types: Some(tags::TAG_SET_YAML),
                     ..Default::default()
                 },
             },
@@ -217,7 +217,7 @@ impl BuiltinHook {
                 priority: None,
                 options: HookOptions {
                     description: Some("detects the presence of private keys.".to_string()),
-                    types: Some(tags::TAG_TEXT),
+                    types: Some(tags::TAG_SET_TEXT),
                     ..Default::default()
                 },
             },
@@ -231,7 +231,7 @@ impl BuiltinHook {
                         "ensures that a file is either empty, or ends with one newline."
                             .to_string(),
                     ),
-                    types: Some(tags::TAG_TEXT),
+                    types: Some(tags::TAG_SET_TEXT),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
@@ -243,7 +243,7 @@ impl BuiltinHook {
                 priority: None,
                 options: HookOptions {
                     description: Some("removes utf-8 byte order marker.".to_string()),
-                    types: Some(tags::TAG_TEXT),
+                    types: Some(tags::TAG_SET_TEXT),
                     ..Default::default()
                 },
             },
@@ -254,7 +254,7 @@ impl BuiltinHook {
                 priority: None,
                 options: HookOptions {
                     description: Some("replaces or checks mixed line ending.".to_string()),
-                    types: Some(tags::TAG_TEXT),
+                    types: Some(tags::TAG_SET_TEXT),
                     ..Default::default()
                 },
             },
@@ -276,7 +276,7 @@ impl BuiltinHook {
                 priority: None,
                 options: HookOptions {
                     description: Some("trims trailing whitespace.".to_string()),
-                    types: Some(tags::TAG_TEXT),
+                    types: Some(tags::TAG_SET_TEXT),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
