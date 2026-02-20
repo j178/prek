@@ -32,10 +32,24 @@ use std::process::Output;
 use std::process::{CommandArgs, CommandEnvs, ExitStatus, Stdio};
 
 use owo_colors::OwoColorize;
+use prek_consts::env_vars::EnvVars;
 use thiserror::Error;
 use tracing::trace;
 
 use crate::git::GIT;
+
+const DEFAULT_COMMAND_LOG_TRUNCATE_LIMIT: usize = 120;
+
+fn command_log_truncate_limit() -> usize {
+    EnvVars::var(EnvVars::PREK_COMMAND_LOG_TRUNCATE_LIMIT)
+        .ok()
+        .and_then(|limit| parse_command_log_truncate_limit(&limit))
+        .unwrap_or(DEFAULT_COMMAND_LOG_TRUNCATE_LIMIT)
+}
+
+fn parse_command_log_truncate_limit(limit: &str) -> Option<usize> {
+    limit.parse::<usize>().ok()
+}
 
 /// An error from executing a Command
 #[derive(Debug, Error)]
@@ -484,6 +498,7 @@ impl Display for Cmd {
             args.next(); // Skip the program if it's repeated
         }
 
+        let truncate_limit = command_log_truncate_limit();
         let mut len = 0;
         while let Some(arg) = args.next() {
             let skip = skip_args(program, arg, args.peek());
@@ -495,11 +510,58 @@ impl Display for Cmd {
             }
             write!(f, " {}", arg.to_string_lossy())?;
             len += arg.len() + 1;
-            if len > 120 {
+            if len > truncate_limit {
                 write!(f, " [...]",)?;
                 break;
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{LazyLock, Mutex};
+
+    use super::*;
+
+    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    #[test]
+    fn command_log_truncate_limit_reads_env_var() {
+        let _lock = ENV_LOCK.lock().expect("env lock poisoned");
+        unsafe {
+            std::env::set_var(EnvVars::PREK_COMMAND_LOG_TRUNCATE_LIMIT, "42");
+        }
+        assert_eq!(command_log_truncate_limit(), 42);
+        unsafe {
+            std::env::remove_var(EnvVars::PREK_COMMAND_LOG_TRUNCATE_LIMIT);
+        }
+    }
+
+    #[test]
+    fn display_truncates_using_env_limit() {
+        let _lock = ENV_LOCK.lock().expect("env lock poisoned");
+        unsafe {
+            std::env::set_var(EnvVars::PREK_COMMAND_LOG_TRUNCATE_LIMIT, "5");
+        }
+        let mut cmd = Cmd::new("echo", "test");
+        cmd.arg("abcdef");
+        assert!(format!("{cmd}").contains("[...]"));
+        unsafe {
+            std::env::remove_var(EnvVars::PREK_COMMAND_LOG_TRUNCATE_LIMIT);
+        }
+    }
+
+    #[test]
+    fn parse_command_log_truncate_limit_accepts_usize_values() {
+        assert_eq!(parse_command_log_truncate_limit("42"), Some(42));
+        assert_eq!(parse_command_log_truncate_limit("0"), Some(0));
+    }
+
+    #[test]
+    fn parse_command_log_truncate_limit_rejects_invalid_values() {
+        assert_eq!(parse_command_log_truncate_limit("invalid"), None);
+        assert_eq!(parse_command_log_truncate_limit("-1"), None);
     }
 }
