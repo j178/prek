@@ -249,6 +249,9 @@ pub(crate) async fn has_diff(rev: &str, path: &Path) -> Result<bool> {
 }
 
 pub(crate) async fn is_in_merge_conflict() -> Result<bool, Error> {
+    if *crate::jj::IS_JJ_WORKSPACE {
+        return Ok(false); // jj handles conflicts differently
+    }
     let git_dir = get_git_dir().await?;
     Ok(git_dir.join("MERGE_HEAD").try_exists()? && git_dir.join("MERGE_MSG").try_exists()?)
 }

@@ -387,8 +387,17 @@ async fn collect_files_from_args(
         return Ok(files);
     }
 
-    let files = git::get_staged_files(workspace_root).await?;
-    debug!("Staged files: {}", files.len());
+    let files = if *crate::jj::IS_JJ_WORKSPACE {
+        let files = crate::jj::get_changed_files(workspace_root)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+        debug!("jj changed files: {}", files.len());
+        files
+    } else {
+        let files = git::get_staged_files(workspace_root).await?;
+        debug!("Staged files: {}", files.len());
+        files
+    };
 
     Ok(files)
 }
