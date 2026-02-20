@@ -48,7 +48,8 @@ fn command_log_truncate_limit() -> usize {
 }
 
 fn parse_command_log_truncate_limit(limit: &str) -> Option<usize> {
-    limit.parse::<usize>().ok()
+    let limit = limit.parse::<usize>().ok()?;
+    (limit > 0).then_some(limit)
 }
 
 /// An error from executing a Command
@@ -521,47 +522,67 @@ impl Display for Cmd {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
     use std::sync::{LazyLock, Mutex};
 
     use super::*;
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
+    struct EnvVarGuard {
+        key: &'static str,
+        value: Option<OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let prev = EnvVars::var_os(key);
+            unsafe {
+                std::env::set_var(key, value);
+            }
+            Self { key, value: prev }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            if let Some(value) = &self.value {
+                unsafe {
+                    std::env::set_var(self.key, value);
+                }
+            } else {
+                unsafe {
+                    std::env::remove_var(self.key);
+                }
+            }
+        }
+    }
+
     #[test]
     fn command_log_truncate_limit_reads_env_var() {
         let _lock = ENV_LOCK.lock().expect("env lock poisoned");
-        unsafe {
-            std::env::set_var(EnvVars::PREK_COMMAND_LOG_TRUNCATE_LIMIT, "42");
-        }
+        let _guard = EnvVarGuard::set(EnvVars::PREK_COMMAND_LOG_TRUNCATE_LIMIT, "42");
         assert_eq!(command_log_truncate_limit(), 42);
-        unsafe {
-            std::env::remove_var(EnvVars::PREK_COMMAND_LOG_TRUNCATE_LIMIT);
-        }
     }
 
     #[test]
     fn display_truncates_using_env_limit() {
         let _lock = ENV_LOCK.lock().expect("env lock poisoned");
-        unsafe {
-            std::env::set_var(EnvVars::PREK_COMMAND_LOG_TRUNCATE_LIMIT, "5");
-        }
+        let _guard = EnvVarGuard::set(EnvVars::PREK_COMMAND_LOG_TRUNCATE_LIMIT, "5");
         let mut cmd = Cmd::new("echo", "test");
         cmd.arg("abcdef");
         assert!(format!("{cmd}").contains("[...]"));
-        unsafe {
-            std::env::remove_var(EnvVars::PREK_COMMAND_LOG_TRUNCATE_LIMIT);
-        }
     }
 
     #[test]
     fn parse_command_log_truncate_limit_accepts_usize_values() {
         assert_eq!(parse_command_log_truncate_limit("42"), Some(42));
-        assert_eq!(parse_command_log_truncate_limit("0"), Some(0));
     }
 
     #[test]
     fn parse_command_log_truncate_limit_rejects_invalid_values() {
         assert_eq!(parse_command_log_truncate_limit("invalid"), None);
         assert_eq!(parse_command_log_truncate_limit("-1"), None);
+        assert_eq!(parse_command_log_truncate_limit("0"), None);
     }
 }
