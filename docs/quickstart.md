@@ -59,7 +59,7 @@ Once you’re happy with your setup, you can stage the config file with `git add
 
 ### 2. Run hooks on demand
 
-Use `prek run` to execute all configured hooks on the files in your current git staging area:
+Use `prek run` to execute all configured hooks on the files in your current git staging area (or jj working copy, if you use [Jujutsu](https://jj-vcs.github.io/jj/)):
 
 ```bash
 prek run
