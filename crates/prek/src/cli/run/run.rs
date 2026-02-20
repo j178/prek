@@ -69,7 +69,8 @@ pub(crate) async fn run(
     // Ensure we are in a git repository.
     LazyLock::force(&GIT_ROOT).as_ref()?;
 
-    let should_stash = !all_files && files.is_empty() && directories.is_empty();
+    let should_stash =
+        !all_files && files.is_empty() && directories.is_empty() && !*crate::jj::IS_JJ_WORKSPACE;
 
     // Check if we have unresolved merge conflict files and fail fast.
     if should_stash && git::has_unmerged_paths().await? {
