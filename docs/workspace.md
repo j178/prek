@@ -19,7 +19,7 @@ When you run `prek run` without the `--config` option, `prek` automatically disc
 
 2. **Discover all projects**: From the workspace root, `prek` recursively searches all subdirectories for additional `.pre-commit-config.yaml` files. Each one becomes a separate project.
 
-3. **Git repository boundary**: The search stops at the git repository root (`.git` directory) to avoid including unrelated projects.
+3. **Repository boundary**: The search stops at the repository root (`.git` or `.jj` directory) to avoid including unrelated projects.
 
 **Note**:
 

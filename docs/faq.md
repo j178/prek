@@ -23,6 +23,18 @@ It's a little confusing because it refers to two different kinds of hooks:
 
 Running `prek install` installs the first type: it writes the Git hook so that Git knows to call prek. Adding `--install-hooks` tells prek to do that **and** proactively create the environments and caches required by the hooks that prek manages. That way, the next time the Git hook fires, the managed hooks are ready to run without additional setup.
 
+## Does prek work with Jujutsu (jj)?
+
+Yes. prek detects [Jujutsu](https://jj-vcs.github.io/jj/) workspaces automatically, including secondary workspaces created with `jj workspace add`. No extra configuration is needed.
+
+When running inside a jj workspace, prek:
+
+- Resolves the backing Git directory from `.jj/repo/store/git_target`, so all internal git commands work even when there is no `.git` directory.
+- Uses `jj diff --name-only` instead of `git diff --staged` to collect changed files, since jj does not use Git's staging area.
+- Disables git-index stashing, which is not applicable to jj.
+
+The `--all-files`, `--files`, and `--from-ref`/`--to-ref` modes work the same way as in a regular git repository.
+
 ## How do I use hooks from private repositories?
 
 prek supports cloning hooks from private repositories that require authentication.
