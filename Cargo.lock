@@ -2550,9 +2550,9 @@ dependencies = [
 
 [[package]]
 name = "serde-saphyr"
-version = "0.0.18"
+version = "0.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "191a4f997fef5e095212c5790898516e9567d2d8502c4159317603ff0321e394"
+checksum = "bfcaa44cda9e21eaf5fefc86175d544a359d4de9bcd1f3a90be7bbf77dfc3492"
 dependencies = [
  "ahash",
  "annotate-snippets",
@@ -2564,7 +2564,6 @@ dependencies = [
  "regex",
  "saphyr-parser-bw",
  "serde",
- "serde_json",
  "smallvec",
  "zmij",
 ]
@@ -2606,7 +2605,6 @@ version = "1.0.149"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
 dependencies = [
- "indexmap",
  "itoa",
  "memchr",
  "serde",
