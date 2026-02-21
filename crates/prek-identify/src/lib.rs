@@ -100,10 +100,6 @@ impl TagSet {
         Self { bits }
     }
 
-    fn empty() -> Self {
-        Self::default()
-    }
-
     /// Constructs a [`TagSet`] from tag strings.
     ///
     /// Unknown tags are ignored in release builds and debug-asserted in debug builds.
@@ -309,19 +305,17 @@ fn tags_from_filename(filename: &Path) -> TagSet {
         .and_then(|name| name.to_str())
         .expect("Invalid filename");
 
-    let mut result = TagSet::empty();
-
-    if let Some(tags) = tags::NAMES.get(filename) {
-        result |= tags;
-    }
-    if result.is_empty() {
-        // # Allow e.g. "Dockerfile.xenial" to match "Dockerfile".
-        if let Some(name) = filename.split('.').next() {
-            if let Some(tags) = tags::NAMES.get(name) {
-                result |= tags;
-            }
-        }
-    }
+    let mut result = tags::NAMES
+        .get(filename)
+        .or_else(|| {
+            // Allow e.g. "Dockerfile.xenial" to match "Dockerfile".
+            filename
+                .split('.')
+                .next()
+                .and_then(|name| tags::NAMES.get(name))
+        })
+        .copied()
+        .unwrap_or_default();
 
     if let Some(ext) = ext {
         // Check if extension is already lowercase to avoid allocation
@@ -359,7 +353,7 @@ fn tags_from_interpreter(interpreter: &str) -> TagSet {
         }
     }
 
-    TagSet::empty()
+    TagSet::default()
 }
 
 #[derive(thiserror::Error, Debug)]
