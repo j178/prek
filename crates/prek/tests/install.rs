@@ -1,4 +1,4 @@
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
@@ -160,6 +160,118 @@ fn install() -> anyhow::Result<()> {
             exec "$PREK" hook-impl --hook-dir "$HERE" --script-version 4 --hook-type=post-commit -- "$@"
             "#);
         }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn install_with_core_hooks_path_set() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    git_cmd(context.work_dir())
+        .arg("config")
+        .arg("--local")
+        .arg("core.hooksPath")
+        .arg(".custom-hooks")
+        .assert()
+        .success();
+
+    cmd_snapshot!(context.filters(), context.install(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.custom-hooks/pre-commit`
+
+    ----- stderr -----
+    "#);
+
+    context
+        .work_dir()
+        .child(".custom-hooks/pre-commit")
+        .assert(predicates::path::exists());
+    context
+        .work_dir()
+        .child(".git/hooks/pre-commit")
+        .assert(predicates::path::missing());
+
+    Ok(())
+}
+
+#[test]
+fn install_in_worktree_uses_worktree_hooks_path() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.work_dir().child("README.md").write_str("seed\n")?;
+    context.git_add("README.md");
+    context.git_commit("seed");
+
+    git_cmd(context.work_dir())
+        .arg("worktree")
+        .arg("add")
+        .arg("worktree")
+        .arg("HEAD")
+        .assert()
+        .success();
+
+    let worktree = context.work_dir().child("worktree");
+
+    git_cmd(&worktree)
+        .arg("config")
+        .arg("--local")
+        .arg("core.hooksPath")
+        .arg(".shared-hooks")
+        .assert()
+        .success();
+    git_cmd(&worktree)
+        .arg("config")
+        .arg("--local")
+        .arg("extensions.worktreeConfig")
+        .arg("true")
+        .assert()
+        .success();
+    git_cmd(&worktree)
+        .arg("config")
+        .arg("--worktree")
+        .arg("core.hooksPath")
+        .arg(".worktree-hooks")
+        .assert()
+        .success();
+
+    cmd_snapshot!(context.filters(), context.install().current_dir(&worktree), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.worktree-hooks/pre-commit`
+
+    ----- stderr -----
+    "#);
+
+    worktree
+        .child(".worktree-hooks/pre-commit")
+        .assert(predicates::path::exists());
+
+    let shared = git_cmd(&worktree)
+        .arg("config")
+        .arg("--local")
+        .arg("--get")
+        .arg("core.hooksPath")
+        .output()?
+        .stdout;
+    assert_eq!(String::from_utf8_lossy(&shared).trim(), ".shared-hooks");
+
+    let worktree_value = git_cmd(&worktree)
+        .arg("config")
+        .arg("--worktree")
+        .arg("--get")
+        .arg("core.hooksPath")
+        .output()?
+        .stdout;
+    assert_eq!(
+        String::from_utf8_lossy(&worktree_value).trim(),
+        ".worktree-hooks"
     );
 
     Ok(())
