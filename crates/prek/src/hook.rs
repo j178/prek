@@ -310,8 +310,6 @@ impl HookBuilder {
 
     /// Build the hook.
     pub(crate) async fn build(mut self) -> Result<Hook, Error> {
-        // Ensure project-level defaults are applied in one place.
-        // This makes call sites simpler and avoids accidental divergence.
         self.hook_spec.apply_project_defaults(self.project.config());
 
         self.check()?;
@@ -324,8 +322,8 @@ impl HookBuilder {
         let types = options.types.unwrap_or(tags::TAG_SET_FILE);
         let types_or = options.types_or.unwrap_or_default();
         let exclude_types = options.exclude_types.unwrap_or_default();
-        let always_run = options.always_run.unwrap_or_default();
-        let fail_fast = options.fail_fast.unwrap_or_default();
+        let always_run = options.always_run.unwrap_or(false);
+        let fail_fast = options.fail_fast.unwrap_or(false);
         let pass_filenames = options.pass_filenames.unwrap_or(true);
         let require_serial = options.require_serial.unwrap_or(false);
         let verbose = options.verbose.unwrap_or(false);
