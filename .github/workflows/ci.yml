@@ -527,6 +527,10 @@ jobs:
 
       - name: "Run language tests"
         if: ${{ matrix.os != 'windows-latest' }}
+        env:
+          # Ruby auto_download test queries the GitHub Releases API; without a
+          # token, shared runners quickly hit the 60 req/hour rate limit.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cargo llvm-cov nextest \
             --lcov \
@@ -539,6 +543,8 @@ jobs:
       - name: "Run language tests (windows)"
         if: ${{ matrix.os == 'windows-latest' }}
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Remove msys64 from PATH for Rust compilation
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\msys64\\' }) -join ';'

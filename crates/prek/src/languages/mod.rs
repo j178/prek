@@ -354,8 +354,20 @@ async fn download_and_extract(
     store: &Store,
     callback: impl AsyncFn(&Path) -> Result<()>,
 ) -> Result<()> {
-    let response = REQWEST_CLIENT
-        .get(url)
+    download_and_extract_with(url, filename, store, |req| req, callback).await
+}
+
+/// Like [`download_and_extract`], but accepts a `customize_request` closure
+/// that can modify the [`reqwest::RequestBuilder`] before it is sent (e.g. to
+/// add authentication headers).
+async fn download_and_extract_with(
+    url: &str,
+    filename: &str,
+    store: &Store,
+    customize_request: impl FnOnce(reqwest::RequestBuilder) -> reqwest::RequestBuilder,
+    callback: impl AsyncFn(&Path) -> Result<()>,
+) -> Result<()> {
+    let response = customize_request(REQWEST_CLIENT.get(url))
         .send()
         .await
         .with_context(|| format!("Failed to download file from {url}"))?;
