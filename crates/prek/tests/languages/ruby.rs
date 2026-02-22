@@ -938,13 +938,13 @@ fn prebuilt_vs_compiled_gems() -> anyhow::Result<()> {
     // Pre-built gems include a platform suffix (e.g. sqlite3-X.Y.Z-x86_64-linux-gnu),
     // while compiled-from-source gems do not (e.g. msgpack-X.Y.Z).
     let hooks_dir = context.home_dir().join("hooks");
-    let gems_dir = std::fs::read_dir(&hooks_dir)?
+    let gems_dir = fs_err::read_dir(&hooks_dir)?
         .filter_map(Result::ok)
         .find(|e| e.file_name().to_string_lossy().starts_with("ruby-"))
         .map(|e| e.path().join("gems").join("gems"))
         .expect("No ruby hook directory found");
 
-    let gem_dirs: Vec<String> = std::fs::read_dir(&gems_dir)?
+    let gem_dirs: Vec<String> = fs_err::read_dir(&gems_dir)?
         .filter_map(Result::ok)
         .map(|e| e.file_name().to_string_lossy().to_string())
         .collect();
