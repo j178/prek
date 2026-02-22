@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use itertools::Itertools;
 use prek_consts::env_vars::EnvVars;
 use serde::Deserialize;
+use target_lexicon::{Architecture, Environment, HOST, OperatingSystem, Triple};
 use tracing::{debug, trace, warn};
 
 use crate::fs::LockedFile;
@@ -94,33 +95,30 @@ struct GitHubAsset {
 /// which would suggest a 'sequoia' tag, but their packaging script currently renames the
 /// output to 'ventura'. If this ever changes, this mapping will need to be updated
 /// accordingly.
-fn rv_platform_string() -> Option<&'static str> {
-    match (cfg!(target_os = "macos"), cfg!(target_os = "linux")) {
+fn rv_platform_string(triple: &Triple) -> Option<&'static str> {
+    match (
+        triple.operating_system,
+        triple.architecture,
+        triple.environment,
+    ) {
         // macOS
-        (true, _) => match (cfg!(target_arch = "x86_64"), cfg!(target_arch = "aarch64")) {
-            (true, _) => Some("ventura"),      // x86_64
-            (_, true) => Some("arm64_sonoma"), // ARM64
-            _ => None,                         // unsupported CPU
-        },
+        (OperatingSystem::Darwin(_), Architecture::X86_64, _) => Some("ventura"),
+        (OperatingSystem::Darwin(_), Architecture::Aarch64(_), _) => Some("arm64_sonoma"),
 
-        // Linux
-        (_, true) => match (
-            cfg!(target_arch = "x86_64"),
-            cfg!(target_arch = "aarch64"),
-            cfg!(target_env = "gnu"),
-            cfg!(target_env = "musl"),
-        ) {
-            // Linux glibc
-            (true, _, true, _) => Some("x86_64_linux"),
-            (_, true, true, _) => Some("arm64_linux"),
+        // Linux glibc
+        (OperatingSystem::Linux, Architecture::X86_64, Environment::Gnu) => Some("x86_64_linux"),
+        (OperatingSystem::Linux, Architecture::Aarch64(_), Environment::Gnu) => Some("arm64_linux"),
 
-            // Linux musl (Alpine)
-            (true, _, _, true) => Some("x86_64_linux_musl"),
-            (_, true, _, true) => Some("arm64_linux_musl"),
+        // Linux musl (Alpine)
+        (OperatingSystem::Linux, Architecture::X86_64, Environment::Musl) => {
+            Some("x86_64_linux_musl")
+        }
+        (OperatingSystem::Linux, Architecture::Aarch64(_), Environment::Musl) => {
+            Some("arm64_linux_musl")
+        }
 
-            _ => None, // unsupported CPU/libc combination
-        },
-        _ => None, // unsupported OS/CPU combination
+        // unsupported OS/CPU/libc combination
+        _ => None,
     }
 }
 
@@ -201,7 +199,7 @@ impl RubyInstaller {
             ));
         }
 
-        let Some(platform) = rv_platform_string() else {
+        let Some(platform) = rv_platform_string(&HOST) else {
             anyhow::bail!(ruby_not_found_error(
                 request,
                 // Windows, unknown CPU, etc. that doesn't have a matching rv-ruby
@@ -556,6 +554,8 @@ async fn query_ruby_info(ruby_path: &Path) -> Result<(semver::Version, String)> 
 mod tests {
     use super::*;
     use std::fs;
+    use std::str::FromStr;
+    use target_lexicon::Triple;
     use tempfile::TempDir;
 
     /// Mutex to serialize tests that mutate `PREK_RUBY_MIRROR`.
@@ -810,6 +810,39 @@ mod tests {
             parse_version_from_asset("something-else.tar.gz", suffix),
             None
         );
+    }
+
+    #[test]
+    fn test_rv_platform_string_for_macos() {
+        let intel = Triple::from_str("x86_64-apple-darwin").unwrap();
+        assert_eq!(rv_platform_string(&intel), Some("ventura"));
+
+        let arm = Triple::from_str("aarch64-apple-darwin").unwrap();
+        assert_eq!(rv_platform_string(&arm), Some("arm64_sonoma"));
+    }
+
+    #[test]
+    fn test_rv_platform_string_for_linux() {
+        let gnu = Triple::from_str("x86_64-unknown-linux-gnu").unwrap();
+        assert_eq!(rv_platform_string(&gnu), Some("x86_64_linux"));
+
+        let arm_gnu = Triple::from_str("aarch64-unknown-linux-gnu").unwrap();
+        assert_eq!(rv_platform_string(&arm_gnu), Some("arm64_linux"));
+
+        let musl = Triple::from_str("x86_64-unknown-linux-musl").unwrap();
+        assert_eq!(rv_platform_string(&musl), Some("x86_64_linux_musl"));
+
+        let arm_musl = Triple::from_str("aarch64-unknown-linux-musl").unwrap();
+        assert_eq!(rv_platform_string(&arm_musl,), Some("arm64_linux_musl"));
+    }
+
+    #[test]
+    fn test_rv_platform_string_unsupported() {
+        let windows = Triple::from_str("x86_64-pc-windows-msvc").unwrap();
+        assert_eq!(rv_platform_string(&windows), None);
+
+        let linux_unknown_libc = Triple::from_str("x86_64-unknown-linux-gnux32").unwrap();
+        assert_eq!(rv_platform_string(&linux_unknown_libc), None);
     }
 
     #[test]

@@ -1,8 +1,4 @@
-#[cfg(not(target_os = "windows"))]
-use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
-#[cfg(not(target_os = "windows"))]
-use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
@@ -819,6 +815,9 @@ fn process_files() -> anyhow::Result<()> {
 #[test]
 #[cfg(not(target_os = "windows"))]
 fn auto_download() -> anyhow::Result<()> {
+    use assert_fs::assert::PathAssert;
+    use prek_consts::env_vars::EnvVars;
+
     if !EnvVars::is_set(EnvVars::CI) {
         // Skip when not running in CI: local environments may have
         // unexpected Ruby versions installed.
