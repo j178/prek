@@ -32,7 +32,7 @@ fn format_cargo_dependency(dep: &str) -> String {
     }
 }
 
-fn format_cargo_cli_dependency(dep: &str) -> Vec<&str> {
+fn format_cargo_cli_dependency<'a>(dep: &'a str, git_bin: Option<&'a str>) -> Vec<&'a str> {
     let is_url = dep.starts_with("http://") || dep.starts_with("https://");
     let (package, version) = if is_url && dep.matches(':').count() == 1 {
         (dep, "") // We have a url without version
@@ -45,6 +45,9 @@ fn format_cargo_cli_dependency(dep: &str) -> Vec<&str> {
         args.extend(["--git", package]);
         if !version.is_empty() {
             args.extend(["--tag", version]);
+        }
+        if let Some(bin) = git_bin {
+            args.extend(["--bin", bin]);
         }
     } else {
         args.push(package);
@@ -393,11 +396,16 @@ impl LanguageImpl for Rust {
         }
 
         // Install CLI dependencies
+        let hook_entry = hook.entry.split()?;
+        let hook_bin = hook_entry
+            .first()
+            .map(String::as_str)
+            .context("Rust hook entry must contain executable name")?;
         for cli_dep in cli_deps {
             let mut cmd = Cmd::new(&cargo, "install cli dep");
             cmd.args(["install", "--bins", "--root"])
                 .arg(&info.env_path)
-                .args(format_cargo_cli_dependency(cli_dep))
+                .args(format_cargo_cli_dependency(cli_dep, Some(hook_bin)))
                 .arg("--locked");
             cmd.env(EnvVars::PATH, &new_path)
                 .env(EnvVars::CARGO_HOME, &cargo_home)
@@ -787,22 +795,38 @@ edition = "2021"
 
     #[test]
     fn test_format_cargo_cli_dependency() {
-        assert_eq!(format_cargo_cli_dependency("typos-cli"), ["typos-cli"]);
         assert_eq!(
-            format_cargo_cli_dependency("typos-cli:1.0"),
+            format_cargo_cli_dependency("typos-cli", Some("typos-cli")),
+            ["typos-cli"]
+        );
+        assert_eq!(
+            format_cargo_cli_dependency("typos-cli:1.0", Some("typos-cli")),
             ["typos-cli", "--version", "1.0"]
         );
         assert_eq!(
-            format_cargo_cli_dependency("https://github.com/fish-shell/fish-shell"),
-            ["--git", "https://github.com/fish-shell/fish-shell"]
+            format_cargo_cli_dependency(
+                "https://github.com/fish-shell/fish-shell",
+                Some("fish_indent")
+            ),
+            [
+                "--git",
+                "https://github.com/fish-shell/fish-shell",
+                "--bin",
+                "fish_indent"
+            ]
         );
         assert_eq!(
-            format_cargo_cli_dependency("https://github.com/fish-shell/fish-shell:4.0"),
+            format_cargo_cli_dependency(
+                "https://github.com/fish-shell/fish-shell:4.0",
+                Some("fish_indent")
+            ),
             [
                 "--git",
                 "https://github.com/fish-shell/fish-shell",
                 "--tag",
-                "4.0"
+                "4.0",
+                "--bin",
+                "fish_indent"
             ]
         );
     }
