@@ -421,9 +421,9 @@ async fn search_version_managers(request: &RubyRequest) -> Option<RubyResult> {
     let search_dirs = [
         // rvm: ~/.rvm/rubies/ruby-3.4.6/bin/ruby
         home_path.join(".rvm/rubies"),
-        // rv: ~/.config/share/rv/rubies/3.4.6/bin/ruby
-        home_path.join(".config/share/rv/rubies"),
-        // rv: ~/.data/rv/rubies/3.4.6/bin/ruby
+        // rv: ~/.local/share/rv/rubies/3.4.6/bin/ruby
+        home_path.join(".local/share/rv/rubies"),
+        // rv legacy path: ~/.data/rv/rubies/3.4.6/bin/ruby
         home_path.join(".data/rv/rubies"),
         // mise: ~/.local/share/mise/installs/ruby/3.4.6/bin/ruby
         home_path.join(".local/share/mise/installs/ruby"),
