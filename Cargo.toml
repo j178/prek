@@ -66,6 +66,8 @@ reqwest = { version = "0.13.2", default-features = false, features = [
   "http2",
   "stream",
   "json",
+  "rustls",
+  "native-tls-vendored",
 ] }
 rustc-hash = { version = "2.1.1" }
 rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
