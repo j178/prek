@@ -31,6 +31,7 @@ build-backend = "maturin"
 bindings = "bin"
 manifest-path = "crates/prek/Cargo.toml"
 strip = true
+python-source = "python"
 include = [{ path = "licenses/*", format = ["wheel", "sdist"] }]
 
 [tool.rooster]
