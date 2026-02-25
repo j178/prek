@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use bstr::ByteSlice;
+use faccess::PathExt;
 use owo_colors::OwoColorize;
 use prek_consts::CONFIG_FILENAMES;
 use same_file::is_same_file;
@@ -35,14 +36,6 @@ pub(crate) async fn install(
     printer: Printer,
     git_dir: Option<&Path>,
 ) -> Result<ExitStatus> {
-    if git_dir.is_none() && git::has_hooks_path_set().await? {
-        anyhow::bail!(
-            "Cowardly refusing to install hooks with `core.hooksPath` set.\nhint: Run these commands to remove core.hooksPath:\nhint:   {}\nhint:   {}",
-            "git config --unset-all --local core.hooksPath".cyan(),
-            "git config --unset-all --global core.hooksPath".cyan()
-        );
-    }
-
     let project = match Project::discover(config.as_deref(), &CWD) {
         Ok(project) => Some(project),
         Err(err) => {
@@ -57,7 +50,39 @@ pub(crate) async fn install(
     let hooks_path = if let Some(dir) = git_dir {
         dir.join("hooks")
     } else {
-        git::get_git_common_dir().await?.join("hooks")
+        // Ensure we are inside a git repository before proceeding.
+        let git_common_dir = git::get_git_common_dir().await?;
+        if let Some(hooks_path) = git::get_hooks_path().await? {
+            // Resolve relative paths against the git common dir, matching git's behavior.
+            let hooks_path = if hooks_path.is_relative() {
+                git_common_dir.join(&hooks_path)
+            } else {
+                hooks_path
+            };
+            // Walk up to the first existing ancestor and check writability.
+            let mut check_dir = if hooks_path.is_dir() {
+                Some(hooks_path.as_path())
+            } else {
+                hooks_path.parent()
+            };
+            while let Some(dir) = check_dir {
+                if dir.exists() {
+                    if !dir.writable() {
+                        anyhow::bail!(
+                            "Cannot install hooks: `core.hooksPath` is set to `{}` which is not writable.\n\
+                             hint: Make sure this directory is writable, or change `{}` to point to a writable directory.",
+                            hooks_path.display().cyan(),
+                            "core.hooksPath".cyan()
+                        );
+                    }
+                    break;
+                }
+                check_dir = dir.parent();
+            }
+            hooks_path
+        } else {
+            git_common_dir.join("hooks")
+        }
     };
     fs_err::create_dir_all(&hooks_path)?;
 

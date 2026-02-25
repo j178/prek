@@ -5,7 +5,7 @@ use std::process::Stdio;
 use std::str::Utf8Error;
 use std::sync::LazyLock;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use path_clean::PathClean;
 use prek_consts::env_vars::EnvVars;
 use rustc_hash::FxHashSet;
@@ -483,7 +483,7 @@ pub(crate) async fn clone_repo(url: &str, rev: &str, path: &Path) -> Result<(), 
     }
 }
 
-pub(crate) async fn has_hooks_path_set() -> Result<bool> {
+pub(crate) async fn get_hooks_path() -> Result<Option<PathBuf>> {
     let output = git_cmd("get git hooks path")?
         .arg("config")
         .arg("--get")
@@ -492,9 +492,16 @@ pub(crate) async fn has_hooks_path_set() -> Result<bool> {
         .output()
         .await?;
     if output.status.success() {
-        Ok(!output.stdout.trim_ascii().is_empty())
+        let path = output.stdout.trim_ascii();
+        if path.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(PathBuf::from(
+                std::str::from_utf8(path).context("core.hooksPath is not valid UTF-8")?,
+            )))
+        }
     } else {
-        Ok(false)
+        Ok(None)
     }
 }
 

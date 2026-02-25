@@ -40,6 +40,7 @@ clap_complete = { workspace = true, features = ["unstable-dynamic"] }
 ctrlc = { workspace = true }
 dunce = { workspace = true }
 etcetera = { workspace = true }
+faccess = { workspace = true }
 fancy-regex = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }

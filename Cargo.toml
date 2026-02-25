@@ -37,6 +37,7 @@ clap_complete = { version = "4.5.37", features = ["unstable-dynamic"] }
 ctrlc = { version = "3.4.5" }
 dunce = { version = "1.0.5" }
 etcetera = { version = "0.11.0" }
+faccess = { version = "0.2" }
 fancy-regex = { version = "0.17.0" }
 fs-err = { version = "3.1.0", features = ["tokio"] }
 futures = { version = "0.3.31" }
