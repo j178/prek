@@ -385,6 +385,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [python-attrs/attrs](https://github.com/python-attrs/attrs/commit/c95b177682e76a63478d29d040f9cb36a8d31915)
 - [jlowin/fastmcp](https://github.com/jlowin/fastmcp/pull/2309)
 - [apache/iceberg-python](https://github.com/apache/iceberg-python/pull/2533)
+- [apache/iggy](https://github.com/apache/iggy/pull/2383)
 - [apache/lucene](https://github.com/apache/lucene/pull/15629)
 - [jcrist/msgspec](https://github.com/jcrist/msgspec/pull/918)
 - [python-humanize/humanize](https://github.com/python-humanize/humanize/pull/276)
