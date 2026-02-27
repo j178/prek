@@ -12,6 +12,7 @@ use prek_consts::prepend_paths;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
+use crate::git::clone_repo;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::rust::RustRequest;
@@ -32,7 +33,7 @@ fn format_cargo_dependency(dep: &str) -> String {
     }
 }
 
-fn format_cargo_cli_dependency<'a>(dep: &'a str, git_bin: Option<&'a str>) -> Vec<&'a str> {
+fn format_cargo_cli_dependency(dep: &str, git_package: Option<&str>) -> Vec<String> {
     let is_url = dep.starts_with("http://") || dep.starts_with("https://");
     let (package, version) = if is_url && dep.matches(':').count() == 1 {
         (dep, "") // We have a url without version
@@ -42,20 +43,59 @@ fn format_cargo_cli_dependency<'a>(dep: &'a str, git_bin: Option<&'a str>) -> Ve
 
     let mut args = Vec::new();
     if is_url {
-        args.extend(["--git", package]);
+        args.push("--git".to_string());
+        args.push(package.to_string());
         if !version.is_empty() {
-            args.extend(["--tag", version]);
+            args.push("--tag".to_string());
+            args.push(version.to_string());
         }
-        if let Some(bin) = git_bin {
-            args.extend(["--bin", bin]);
+        if let Some(package) = git_package {
+            args.push(package.to_string());
         }
     } else {
-        args.push(package);
+        args.push(package.to_string());
         if !version.is_empty() {
-            args.extend(["--version", version]);
+            args.push("--version".to_string());
+            args.push(version.to_string());
         }
     }
     args
+}
+
+async fn find_git_package_name(
+    dep: &str,
+    binary_name: &str,
+    cargo: &Path,
+    cargo_home: &Path,
+    new_path: &OsStr,
+) -> anyhow::Result<Option<String>> {
+    let is_url = dep.starts_with("http://") || dep.starts_with("https://");
+    if !is_url {
+        return Ok(None);
+    }
+
+    let (repo, rev) = if dep.matches(':').count() == 1 {
+        (dep, "HEAD")
+    } else {
+        dep.rsplit_once(':').unwrap_or((dep, "HEAD"))
+    };
+
+    let temp = tempfile::tempdir()?;
+    clone_repo(repo, rev, temp.path())
+        .await
+        .with_context(|| format!("Failed to clone `{repo}` at `{rev}`"))?;
+
+    let (_, package_name, _) = find_package_dir(
+        temp.path(),
+        binary_name,
+        Some(cargo),
+        Some(cargo_home),
+        Some(new_path),
+    )
+    .await?
+    .with_context(|| format!("Binary `{binary_name}` not found in `{repo}`"))?;
+
+    Ok(Some(package_name))
 }
 
 /// Find the package directory that produces the given binary.
@@ -402,10 +442,15 @@ impl LanguageImpl for Rust {
             .map(String::as_str)
             .context("Rust hook entry must contain executable name")?;
         for cli_dep in cli_deps {
+            let package_name =
+                find_git_package_name(cli_dep, hook_bin, &cargo, &cargo_home, &new_path).await?;
             let mut cmd = Cmd::new(&cargo, "install cli dep");
             cmd.args(["install", "--bins", "--root"])
                 .arg(&info.env_path)
-                .args(format_cargo_cli_dependency(cli_dep, Some(hook_bin)))
+                .args(format_cargo_cli_dependency(
+                    cli_dep,
+                    package_name.as_deref(),
+                ))
                 .arg("--locked");
             cmd.env(EnvVars::PATH, &new_path)
                 .env(EnvVars::CARGO_HOME, &cargo_home)
@@ -806,27 +851,21 @@ edition = "2021"
         assert_eq!(
             format_cargo_cli_dependency(
                 "https://github.com/fish-shell/fish-shell",
-                Some("fish_indent")
+                Some("fish")
             ),
-            [
-                "--git",
-                "https://github.com/fish-shell/fish-shell",
-                "--bin",
-                "fish_indent"
-            ]
+            ["--git", "https://github.com/fish-shell/fish-shell", "fish"]
         );
         assert_eq!(
             format_cargo_cli_dependency(
                 "https://github.com/fish-shell/fish-shell:4.0",
-                Some("fish_indent")
+                Some("fish")
             ),
             [
                 "--git",
                 "https://github.com/fish-shell/fish-shell",
                 "--tag",
                 "4.0",
-                "--bin",
-                "fish_indent"
+                "fish"
             ]
         );
     }
