@@ -1332,6 +1332,8 @@ prek supports the following environment variables:
 
 - `PREK_NO_CONCURRENCY` — Disable parallelism for installs and runs (If set, force concurrency to 1).
 
+- `PREK_MAX_CONCURRENCY` — Set the maximum number of concurrent hooks (minimum 1). Defaults to the number of CPU cores when unset. Ignored when `PREK_NO_CONCURRENCY` is set. If you encounter "Too many open files" errors, lowering this value or raising the file descriptor limit with `ulimit -n` can help.
+
 - `PREK_NO_FAST_PATH` — Disable Rust-native built-in hooks; always use the original hook implementation. See [Built-in Fast Hooks](builtin.md) for details.
 
 - `PREK_UV_SOURCE` — Control how uv (Python package installer) is installed. Options:
