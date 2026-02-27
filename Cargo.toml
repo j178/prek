@@ -22,7 +22,7 @@ async_zip = { version = "0.0.17", package = "astral_async_zip", features = [
   "deflate",
   "tokio",
 ] }
-axoupdater = { version = "0.9.0", default-features = false, features = [
+axoupdater = { version = "0.10.0", default-features = false, features = [
   "github_releases",
 ] }
 bstr = { version = "1.11.0" }
