@@ -3109,7 +3109,7 @@ fn run_with_tree_object_as_ref() -> Result<()> {
 /// `pass_filenames: n` limits each invocation to at most n files.
 /// With n=1, each matched file gets its own invocation.
 #[test]
-fn pass_filenames_integer_limits_batch_size() -> Result<()> {
+fn pass_filenames_1_limits_batch_size() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -3139,6 +3139,49 @@ fn pass_filenames_integer_limits_batch_size() -> Result<()> {
     ----- stdout -----
     one at a time............................................................Passed
     - hook id: one-at-a-time
+    - duration: [TIME]
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// `pass_filenames: n` limits each invocation to at most n files.
+/// With n=2 and more than 2 matching files, multiple batches are spawned.
+#[test]
+fn pass_filenames_2_limits_batch_size() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    // Use a script that errors if it receives more than two filename arguments.
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: two-at-a-time
+                name: two at a time
+                entry: python -c "import sys; args = sys.argv[1:]; sys.exit(0 if len(args) <= 2 else 1)"
+                language: system
+                pass_filenames: 2
+                require_serial: true
+                verbose: true
+    "#});
+
+    cwd.child("a.txt").write_str("a")?;
+    cwd.child("b.txt").write_str("b")?;
+    cwd.child("c.txt").write_str("c")?;
+    cwd.child("d.txt").write_str("d")?;
+    cwd.child("e.txt").write_str("e")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    two at a time............................................................Passed
+    - hook id: two-at-a-time
     - duration: [TIME]
 
     ----- stderr -----

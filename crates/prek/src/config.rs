@@ -2095,4 +2095,52 @@ mod tests {
         let config = serde_saphyr::from_str::<Config>(yaml).unwrap();
         insta::assert_debug_snapshot!(config);
     }
+
+    #[test]
+    fn pass_filenames_zero_is_rejected() {
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: invalid-pass-filenames-zero
+                    name: invalid pass_filenames zero
+                    entry: echo
+                    language: system
+                    pass_filenames: 0
+        "};
+        let result = serde_saphyr::from_str::<Config>(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn pass_filenames_negative_is_rejected() {
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: invalid-pass-filenames-negative
+                    name: invalid pass_filenames negative
+                    entry: echo
+                    language: system
+                    pass_filenames: -1
+        "};
+        let result = serde_saphyr::from_str::<Config>(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn pass_filenames_string_is_rejected() {
+        let yaml = indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: invalid-pass-filenames-string
+                    name: invalid pass_filenames string
+                    entry: echo
+                    language: system
+                    pass_filenames: "foo"
+        "#};
+        let result = serde_saphyr::from_str::<Config>(yaml);
+        assert!(result.is_err());
+    }
 }
