@@ -33,19 +33,24 @@ fn format_cargo_dependency(dep: &str) -> String {
     }
 }
 
-fn format_cargo_cli_dependency(dep: &str, git_package: Option<&str>) -> Vec<String> {
+fn parse_cargo_cli_dependency(dep: &str) -> (&str, Option<&str>, bool) {
     let is_url = dep.starts_with("http://") || dep.starts_with("https://");
     let (package, version) = if is_url && dep.matches(':').count() == 1 {
-        (dep, "") // We have a url without version
+        (dep, "")
     } else {
         dep.rsplit_once(':').unwrap_or((dep, ""))
     };
+    (package, (!version.is_empty()).then_some(version), is_url)
+}
+
+fn format_cargo_cli_dependency(dep: &str, git_package: Option<&str>) -> Vec<String> {
+    let (package, version, is_url) = parse_cargo_cli_dependency(dep);
 
     let mut args = Vec::new();
     if is_url {
         args.push("--git".to_string());
         args.push(package.to_string());
-        if !version.is_empty() {
+        if let Some(version) = version {
             args.push("--tag".to_string());
             args.push(version.to_string());
         }
@@ -54,7 +59,7 @@ fn format_cargo_cli_dependency(dep: &str, git_package: Option<&str>) -> Vec<Stri
         }
     } else {
         args.push(package.to_string());
-        if !version.is_empty() {
+        if let Some(version) = version {
             args.push("--version".to_string());
             args.push(version.to_string());
         }
@@ -69,16 +74,11 @@ async fn find_git_package_name(
     cargo_home: &Path,
     new_path: &OsStr,
 ) -> anyhow::Result<Option<String>> {
-    let is_url = dep.starts_with("http://") || dep.starts_with("https://");
+    let (repo, rev, is_url) = parse_cargo_cli_dependency(dep);
     if !is_url {
         return Ok(None);
     }
-
-    let (repo, rev) = if dep.matches(':').count() == 1 {
-        (dep, "HEAD")
-    } else {
-        dep.rsplit_once(':').unwrap_or((dep, "HEAD"))
-    };
+    let rev = rev.unwrap_or("HEAD");
 
     let temp = tempfile::tempdir()?;
     clone_repo(repo, rev, temp.path())
@@ -93,7 +93,7 @@ async fn find_git_package_name(
         Some(new_path),
     )
     .await?
-    .with_context(|| format!("Binary `{binary_name}` not found in `{repo}`"))?;
+    .with_context(|| format!("Failed to locate package for binary `{binary_name}` in `{repo}`"))?;
 
     Ok(Some(package_name))
 }
@@ -839,20 +839,37 @@ edition = "2021"
     }
 
     #[test]
+    fn test_parse_cargo_cli_dependency() {
+        assert_eq!(
+            parse_cargo_cli_dependency("https://github.com/fish-shell/fish-shell"),
+            ("https://github.com/fish-shell/fish-shell", None, true)
+        );
+        assert_eq!(
+            parse_cargo_cli_dependency("https://github.com/fish-shell/fish-shell:4.0"),
+            (
+                "https://github.com/fish-shell/fish-shell",
+                Some("4.0"),
+                true
+            )
+        );
+        assert_eq!(
+            parse_cargo_cli_dependency("typos-cli:1.0"),
+            ("typos-cli", Some("1.0"), false)
+        );
+    }
+
+    #[test]
     fn test_format_cargo_cli_dependency() {
         assert_eq!(
-            format_cargo_cli_dependency("typos-cli", Some("typos-cli")),
+            format_cargo_cli_dependency("typos-cli", None),
             ["typos-cli"]
         );
         assert_eq!(
-            format_cargo_cli_dependency("typos-cli:1.0", Some("typos-cli")),
+            format_cargo_cli_dependency("typos-cli:1.0", None),
             ["typos-cli", "--version", "1.0"]
         );
         assert_eq!(
-            format_cargo_cli_dependency(
-                "https://github.com/fish-shell/fish-shell",
-                Some("fish")
-            ),
+            format_cargo_cli_dependency("https://github.com/fish-shell/fish-shell", Some("fish")),
             ["--git", "https://github.com/fish-shell/fish-shell", "fish"]
         );
         assert_eq!(
@@ -868,5 +885,19 @@ edition = "2021"
                 "fish"
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn test_find_git_package_name_non_url() {
+        let result = find_git_package_name(
+            "typos-cli",
+            "typos-cli",
+            Path::new("cargo"),
+            Path::new(""),
+            OsStr::new(""),
+        )
+        .await
+        .unwrap();
+        assert!(result.is_none());
     }
 }
