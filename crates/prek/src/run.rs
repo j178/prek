@@ -9,6 +9,7 @@ use prek_consts::env_vars::EnvVars;
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
+use crate::config::PassFilenames;
 use crate::hook::Hook;
 
 pub(crate) static USE_COLOR: LazyLock<bool> =
@@ -143,7 +144,10 @@ impl<'a> Partitions<'a> {
         filenames: &'a [&'a Path],
         concurrency: usize,
     ) -> anyhow::Result<Self> {
-        let max_per_batch = max(4, filenames.len().div_ceil(concurrency));
+        let max_per_batch = match hook.pass_filenames {
+            PassFilenames::Limited(n) => n.get(),
+            _ => max(4, filenames.len().div_ceil(concurrency)),
+        };
         let mut arg_max = platform_max_cli_length();
 
         let cmd = Path::new(&entry[0]);
