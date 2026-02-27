@@ -10,6 +10,7 @@ use rustc_hash::FxHashMap;
 use tracing::trace;
 
 use crate::hook::Hook;
+use crate::warn_user;
 
 pub(crate) static USE_COLOR: LazyLock<bool> =
     LazyLock::new(|| match anstream::Stderr::choice(&std::io::stderr()) {
@@ -19,14 +20,34 @@ pub(crate) static USE_COLOR: LazyLock<bool> =
         ColorChoice::Auto => unreachable!(),
     });
 
-pub(crate) static CONCURRENCY: LazyLock<usize> = LazyLock::new(|| {
-    if EnvVars::is_set(EnvVars::PREK_NO_CONCURRENCY) {
-        1
-    } else {
-        std::thread::available_parallelism()
-            .map(std::num::NonZero::get)
-            .unwrap_or(1)
+fn resolve_concurrency(no_concurrency: bool, max_concurrency: Option<&str>, cpu: usize) -> usize {
+    if no_concurrency {
+        return 1;
     }
+
+    if let Some(v) = max_concurrency {
+        if let Ok(cap) = v.parse::<usize>() {
+            return cap.max(1);
+        }
+        warn_user!(
+            "Invalid value for {}: {v:?}, using default ({cpu})",
+            EnvVars::PREK_MAX_CONCURRENCY,
+        );
+    }
+
+    cpu
+}
+
+pub(crate) static CONCURRENCY: LazyLock<usize> = LazyLock::new(|| {
+    let cpu = std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(1);
+
+    resolve_concurrency(
+        EnvVars::is_set(EnvVars::PREK_NO_CONCURRENCY),
+        EnvVars::var(EnvVars::PREK_MAX_CONCURRENCY).ok().as_deref(),
+        cpu,
+    )
 });
 
 fn target_concurrency(serial: bool) -> usize {
@@ -350,6 +371,46 @@ mod tests {
         // All files should have been processed
         let total_files: usize = all_batches.iter().sum();
         assert_eq!(total_files, 100);
+    }
+
+    #[test]
+    fn test_resolve_concurrency_defaults_to_cpu() {
+        assert_eq!(resolve_concurrency(false, None, 16), 16);
+    }
+
+    #[test]
+    fn test_resolve_concurrency_max_caps_value() {
+        assert_eq!(resolve_concurrency(false, Some("4"), 16), 4);
+    }
+
+    #[test]
+    fn test_resolve_concurrency_max_above_cpu() {
+        assert_eq!(resolve_concurrency(false, Some("32"), 8), 32);
+    }
+
+    #[test]
+    fn test_resolve_concurrency_max_zero_floors_to_one() {
+        assert_eq!(resolve_concurrency(false, Some("0"), 16), 1);
+    }
+
+    #[test]
+    fn test_resolve_concurrency_max_invalid_falls_back() {
+        assert_eq!(resolve_concurrency(false, Some("abc"), 16), 16);
+    }
+
+    #[test]
+    fn test_resolve_concurrency_max_empty_falls_back() {
+        assert_eq!(resolve_concurrency(false, Some(""), 16), 16);
+    }
+
+    #[test]
+    fn test_resolve_concurrency_no_concurrency() {
+        assert_eq!(resolve_concurrency(true, None, 16), 1);
+    }
+
+    #[test]
+    fn test_resolve_concurrency_no_concurrency_overrides_max() {
+        assert_eq!(resolve_concurrency(true, Some("8"), 16), 1);
     }
 
     #[test]
