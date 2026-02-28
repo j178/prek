@@ -1,13 +1,14 @@
 use std::ffi::OsString;
 use std::fmt::Write;
-use std::io::Read;
 use std::ops::RangeInclusive;
 use std::path::PathBuf;
+use std::process::Stdio;
 
 use anstream::eprintln;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use prek_consts::env_vars::EnvVars;
 
@@ -15,7 +16,9 @@ use crate::cli::{self, ExitStatus, RunArgs};
 use crate::config::HookType;
 use crate::fs::CWD;
 use crate::git::GIT_ROOT;
+use crate::languages::resolve_command;
 use crate::printer::Printer;
+use crate::process::Cmd;
 use crate::store::Store;
 use crate::workspace;
 use crate::workspace::Project;
@@ -27,13 +30,14 @@ pub(crate) async fn hook_impl(
     includes: Vec<String>,
     skips: Vec<String>,
     hook_type: HookType,
-    _hook_dir: PathBuf,
+    hook_dir: PathBuf,
     skip_on_missing_config: bool,
     script_version: Option<usize>,
     args: Vec<OsString>,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    // TODO: run in legacy mode
+    let stdin = read_hook_stdin(hook_type).await?;
+    let legacy_code = run_legacy(hook_type, &hook_dir, &args, &stdin).await?;
 
     if script_version != Some(cli::install::CUR_SCRIPT_VERSION) {
         warn_user!(
@@ -61,7 +65,7 @@ pub(crate) async fn hook_impl(
     if let Some(ref config) = config {
         if !config.try_exists()? {
             return if allow_missing_config {
-                Ok(ExitStatus::Success)
+                Ok(legacy_code.into())
             } else {
                 eprintln!(
                     "{}: config file not found: `{}`",
@@ -79,7 +83,7 @@ pub(crate) async fn hook_impl(
         match Project::discover(config.as_deref(), &CWD) {
             Err(e @ workspace::Error::MissingConfigFile) => {
                 return if allow_missing_config {
-                    Ok(ExitStatus::Success)
+                    Ok(legacy_code.into())
                 } else {
                     eprintln!("{}: {e}", "error".red().bold());
                     warn_for_no_config();
@@ -110,11 +114,11 @@ pub(crate) async fn hook_impl(
         );
     }
 
-    let Some(run_args) = to_run_args(hook_type, &args).await else {
-        return Ok(ExitStatus::Success);
+    let Some(run_args) = to_run_args(hook_type, &args, &stdin).await else {
+        return Ok(legacy_code.into());
     };
 
-    cli::run(
+    let status = cli::run(
         store,
         config,
         includes,
@@ -134,10 +138,85 @@ pub(crate) async fn hook_impl(
         false,
         printer,
     )
-    .await
+    .await?;
+
+    Ok(if !matches!(status, ExitStatus::Success) {
+        status
+    } else {
+        legacy_code.into()
+    })
 }
 
-async fn to_run_args(hook_type: HookType, args: &[OsString]) -> Option<RunArgs> {
+async fn read_hook_stdin(hook_type: HookType) -> Result<Vec<u8>> {
+    if !matches!(hook_type, HookType::PrePush) {
+        return Ok(vec![]);
+    }
+
+    let mut stdin = tokio::io::stdin();
+    let mut buffer = vec![];
+    stdin.read_to_end(&mut buffer).await?;
+    Ok(buffer)
+}
+
+async fn run_legacy(
+    hook_type: HookType,
+    hook_dir: &std::path::Path,
+    args: &[OsString],
+    stdin: &[u8],
+) -> Result<u8> {
+    if EnvVars::is_set(EnvVars::PREK_RUNNING_LEGACY) {
+        anyhow::bail!(
+            "prek's hook script is installed in migration mode\nrun `prek install -f --hook-type {hook_type}` to reinstall the hook"
+        );
+    }
+
+    let legacy_hook = hook_dir.join(format!("{hook_type}.legacy"));
+    let metadata = match fs_err::tokio::metadata(&legacy_hook).await {
+        Ok(metadata) => metadata,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // No legacy hook, so skip running it.
+            return Ok(0);
+        }
+        Err(e) => return Err(e.into()),
+    };
+    let executable;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        executable = metadata.permissions().mode() & 0o111 != 0;
+    }
+    #[cfg(not(unix))]
+    {
+        executable = true;
+        _ = metadata;
+    }
+    if !executable {
+        return Ok(0);
+    }
+
+    let entry = resolve_command(vec![legacy_hook.to_string_lossy().into_owned()], None);
+    let mut cmd = Cmd::new(&entry[0], format!("legacy hook `{}`", hook_type.as_ref()));
+    cmd.check(false).args(&entry[1..]).args(args);
+    cmd.env(EnvVars::PREK_RUNNING_LEGACY, "1");
+
+    let status = if stdin.is_empty() {
+        cmd.status().await?
+    } else {
+        cmd.stdin(Stdio::piped());
+        let mut child = cmd.spawn()?;
+        if let Some(mut child_stdin) = child.stdin.take() {
+            child_stdin.write_all(stdin).await?;
+        }
+        child.wait().await?
+    };
+
+    Ok(status
+        .code()
+        .and_then(|code| u8::try_from(code).ok())
+        .unwrap_or(1))
+}
+
+async fn to_run_args(hook_type: HookType, args: &[OsString], stdin: &[u8]) -> Option<RunArgs> {
     let mut run_args = RunArgs::default();
 
     match hook_type {
@@ -146,7 +225,7 @@ async fn to_run_args(hook_type: HookType, args: &[OsString]) -> Option<RunArgs> 
             run_args.extra.remote_name = Some(args[0].to_string_lossy().into_owned());
             run_args.extra.remote_url = Some(args[1].to_string_lossy().into_owned());
 
-            if let Some(push_info) = parse_pre_push_info(&args[0].to_string_lossy()).await {
+            if let Some(push_info) = parse_pre_push_info(&args[0].to_string_lossy(), stdin).await {
                 run_args.from_ref = push_info.from_ref;
                 run_args.to_ref = push_info.to_ref;
                 run_args.all_files = push_info.all_files;
@@ -200,14 +279,8 @@ struct PushInfo {
     local_branch: Option<String>,
 }
 
-async fn parse_pre_push_info(remote_name: &str) -> Option<PushInfo> {
-    // Read from stdin
-    let mut stdin = std::io::stdin();
-    let mut buffer = String::new();
-
-    if stdin.read_to_string(&mut buffer).is_err() {
-        return None;
-    }
+async fn parse_pre_push_info(remote_name: &str, stdin: &[u8]) -> Option<PushInfo> {
+    let buffer = String::from_utf8_lossy(stdin);
 
     for line in buffer.lines() {
         let parts: Vec<&str> = line.rsplitn(4, ' ').collect();

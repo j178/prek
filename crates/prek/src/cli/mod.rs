@@ -78,6 +78,15 @@ impl From<ExitStatus> for ExitCode {
     }
 }
 
+impl From<u8> for ExitStatus {
+    fn from(code: u8) -> Self {
+        match code {
+            0 => Self::Success,
+            other => Self::External(other),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, clap::ValueEnum)]
 pub enum ColorChoice {
     /// Enables colored output only when the output is going to a terminal or TTY with support.
