@@ -274,8 +274,7 @@ impl HookBuilder {
     /// Check the hook configuration.
     fn check(&self) -> Result<(), Error> {
         // Validate that priority and group/after are mutually exclusive.
-        let has_dag_fields =
-            self.hook_spec.group.is_some() || !self.hook_spec.after.is_empty();
+        let has_dag_fields = self.hook_spec.group.is_some() || !self.hook_spec.after.is_empty();
         if self.hook_spec.priority.is_some() && has_dag_fields {
             return Err(Error::Hook {
                 hook: self.hook_spec.id.clone(),

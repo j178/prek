@@ -620,7 +620,9 @@ async fn run_hooks(
         );
 
         // Determine if any hooks use DAG scheduling (group/after fields).
-        let has_dag_hooks = hooks.iter().any(|h| h.group.is_some() || !h.after.is_empty());
+        let has_dag_hooks = hooks
+            .iter()
+            .any(|h| h.group.is_some() || !h.after.is_empty());
 
         if has_dag_hooks {
             // When any hook uses group/after, all hooks in this project are scheduled
@@ -1026,11 +1028,7 @@ async fn run_dag_hooks(
     let num_hooks = hooks.len();
     let mut completed = vec![false; num_hooks];
     // remaining_deps[i] = number of unfinished dependencies for hook i.
-    let mut remaining_deps: Vec<usize> = dag
-        .deps
-        .iter()
-        .map(|dep_set| dep_set.len())
-        .collect();
+    let mut remaining_deps: Vec<usize> = dag.deps.iter().map(|dep_set| dep_set.len()).collect();
 
     loop {
         // Collect all hooks that are ready to run (deps satisfied, not yet completed).
