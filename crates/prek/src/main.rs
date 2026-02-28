@@ -37,6 +37,7 @@ mod git;
 mod hook;
 mod hooks;
 mod install_source;
+mod jj;
 mod languages;
 mod printer;
 mod process;
@@ -181,6 +182,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     }
 
     debug!("prek: {}", version::version());
+
+    // Detect jj workspace and set GIT_DIR/GIT_WORK_TREE if needed.
+    jj::setup_git_env_for_jj();
 
     // If `GIT_DIR` is set, prek may be running from a git hook.
     // Git exports `GIT_DIR` but *not* `GIT_WORK_TREE`. Without `GIT_WORK_TREE`, git
