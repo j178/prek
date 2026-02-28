@@ -3238,7 +3238,7 @@ fn dag_cycle_detection_error() {
     let context = TestContext::new();
     context.init_project();
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -3254,7 +3254,7 @@ fn dag_cycle_detection_error() {
                 entry: echo b
                 always_run: true
                 after: [hook-a]
-    "#});
+    "});
 
     context.git_add(".");
 
@@ -3273,7 +3273,7 @@ fn dag_priority_and_after_mutually_exclusive() {
     let context = TestContext::new();
     context.init_project();
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -3289,7 +3289,7 @@ fn dag_priority_and_after_mutually_exclusive() {
                 language: system
                 entry: echo b
                 always_run: true
-    "#});
+    "});
 
     context.git_add(".");
 
@@ -3310,7 +3310,7 @@ fn dag_after_nonexistent_hook_error() {
     let context = TestContext::new();
     context.init_project();
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -3320,7 +3320,7 @@ fn dag_after_nonexistent_hook_error() {
                 entry: echo a
                 always_run: true
                 after: [nonexistent]
-    "#});
+    "});
 
     context.git_add(".");
 

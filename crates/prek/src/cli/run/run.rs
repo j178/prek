@@ -1028,7 +1028,7 @@ async fn run_dag_hooks(
     let num_hooks = hooks.len();
     let mut completed = vec![false; num_hooks];
     // remaining_deps[i] = number of unfinished dependencies for hook i.
-    let mut remaining_deps: Vec<usize> = dag.deps.iter().map(|dep_set| dep_set.len()).collect();
+    let mut remaining_deps: Vec<usize> = dag.deps.iter().map(Vec::len).collect();
 
     loop {
         // Collect all hooks that are ready to run (deps satisfied, not yet completed).
@@ -1140,7 +1140,7 @@ fn build_dag(hooks: &[InstalledHook]) -> Result<DagSchedule> {
     }
 
     // Detect cycles using Kahn's algorithm.
-    let mut in_degree: Vec<usize> = deps.iter().map(|d| d.len()).collect();
+    let mut in_degree: Vec<usize> = deps.iter().map(Vec::len).collect();
     let mut queue: Vec<usize> = in_degree
         .iter()
         .enumerate()
