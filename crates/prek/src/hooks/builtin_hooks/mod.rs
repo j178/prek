@@ -5,7 +5,7 @@ use anyhow::Result;
 use prek_identify::tags;
 
 use crate::cli::reporter::HookRunReporter;
-use crate::config::{BuiltinHook, HookOptions, Stage};
+use crate::config::{BuiltinHook, HookOptions, PassFilenames, Stage};
 use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks;
 use crate::store::Store;
@@ -264,7 +264,7 @@ impl BuiltinHook {
                 entry: "no-commit-to-branch".to_string(),
                 priority: None,
                 options: HookOptions {
-                    pass_filenames: Some(false),
+                    pass_filenames: Some(PassFilenames::None),
                     always_run: Some(true),
                     ..Default::default()
                 },
