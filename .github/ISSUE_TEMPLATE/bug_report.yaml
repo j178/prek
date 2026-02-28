@@ -39,6 +39,10 @@ body:
       label: .pre-commit-config.yaml
       description: |
         Please attach or paste the contents of your `.pre-commit-config.yaml` file if relevant.
+      value: |
+        ```yaml
+
+        ```
     validations:
       required: true
 
@@ -52,6 +56,10 @@ body:
         If the log file doesn't exist or is empty, please run your command with increased verbosity:
         ```bash
         prek -vvv [your command]
+        ```
+      value: |
+        ```
+
         ```
     validations:
       required: true
