@@ -22,7 +22,7 @@ async_zip = { version = "0.0.17", package = "astral_async_zip", features = [
   "deflate",
   "tokio",
 ] }
-axoupdater = { version = "0.9.0", default-features = false, features = [
+axoupdater = { version = "0.10.0", default-features = false, features = [
   "github_releases",
 ] }
 bstr = { version = "1.11.0" }
@@ -62,12 +62,12 @@ pprof = { version = "0.15.0" }
 quick-xml = { version = "0.39" }
 rand = { version = "0.9.0" }
 rayon = { version = "1.10.0" }
-reqwest = { version = "0.12.9", default-features = false, features = [
+reqwest = { version = "0.13.2", default-features = false, features = [
   "http2",
   "stream",
   "json",
-  "rustls-tls-native-roots",
-  "rustls-tls-webpki-roots",
+  "rustls",
+  "native-tls-vendored",
 ] }
 rustc-hash = { version = "2.1.1" }
 rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }

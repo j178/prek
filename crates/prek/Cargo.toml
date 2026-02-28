@@ -67,8 +67,6 @@ reqwest = { workspace = true, default-features = false, features = [
   "http2",
   "stream",
   "json",
-  "rustls-tls-native-roots",
-  "rustls-tls-webpki-roots",
 ] }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }

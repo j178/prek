@@ -401,13 +401,12 @@ pub(crate) static REQWEST_CLIENT: std::sync::LazyLock<reqwest::Client> =
 
 fn create_reqwest_client(native_tls: bool) -> reqwest::Client {
     let builder = reqwest::ClientBuilder::new()
-        .user_agent(format!("prek/{}", crate::version::version()))
-        .tls_built_in_root_certs(false);
+        .user_agent(format!("prek/{}", crate::version::version()));
     let builder = if native_tls {
         debug!("Using native TLS for reqwest client");
-        builder.tls_built_in_native_certs(true)
+        builder.tls_backend_native()
     } else {
-        builder.tls_built_in_webpki_certs(true)
+        builder.tls_backend_rustls()
     };
     builder.build().unwrap_or_else(|e| {
         error!(
