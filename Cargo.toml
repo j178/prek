@@ -88,6 +88,7 @@ tempfile = { version = "3.25.0" }
 thiserror = { version = "2.0.11" }
 tokio = { version = "1.47.1", features = [
   "fs",
+  "io-std",
   "process",
   "rt",
   "sync",

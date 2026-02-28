@@ -42,6 +42,7 @@ impl EnvVars {
     pub const PREK_INTERNAL__NODE_BINARY_NAME: &'static str = "PREK_INTERNAL__NODE_BINARY_NAME";
     pub const PREK_INTERNAL__RUSTUP_BINARY_NAME: &'static str = "PREK_INTERNAL__RUSTUP_BINARY_NAME";
     pub const PREK_INTERNAL__SKIP_CABAL_UPDATE: &'static str = "PREK_INTERNAL__SKIP_CABAL_UPDATE";
+    pub const PREK_RUNNING_LEGACY: &'static str = "PREK_RUNNING_LEGACY";
     pub const PREK_GENERATE: &'static str = "PREK_GENERATE";
 
     // Python & uv related
