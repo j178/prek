@@ -55,10 +55,12 @@ An optional list of hook IDs or `group:<name>` references. The hook waits for al
 ### Scheduling
 
 The scheduler maintains:
+
 - A set of "ready" hooks (all deps satisfied, not yet completed).
 - A set of completed hooks.
 
 Each iteration:
+
 1. Collect all ready hooks.
 2. Run them concurrently (respecting the global concurrency limit).
 3. As hooks complete, decrement dependency counts for their dependents.
@@ -114,6 +116,7 @@ repos:
 ```
 
 In this configuration:
+
 - All three formatters run in parallel (no dependencies).
 - `ruff-lint` waits only for `ruff-format`; `clippy` waits only for `cargo-fmt`.
 - `integration-tests` waits for all formatters to complete.
@@ -122,7 +125,7 @@ In this configuration:
 ## Error Cases
 
 | Condition | Error |
-|---|---|
+| -- | -- |
 | `priority` and `group`/`after` on same hook | "`priority` and `group`/`after` are mutually exclusive on the same hook" |
 | `after: [nonexistent-id]` | "Hook `X` has `after: [nonexistent-id]` but no hook with id `nonexistent-id` exists" |
 | `after: [group:missing]` | "Hook `X` has `after: [group:missing]` but no hook belongs to group `missing`" |
