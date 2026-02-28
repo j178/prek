@@ -1,0 +1,416 @@
+name: hyperfine
+on:
+  pull_request:
+    branches: ["master"]
+    # paths:
+    #   - ".github/workflows/hyperfine.yml"
+    #   - "Cargo.toml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+permissions: {}
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        with:
+          fetch-depth: 0  # zizmor: ignore[artipacked] - Need full history to checkout and build master branch for comparison
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: false
+      - id: versions
+        run: |
+          echo "main=$(git rev-parse --short origin/master)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: ~/bin/prek-${{ steps.versions.outputs.main }}
+          key: prek-hyperfine-main-${{ steps.versions.outputs.main }}-${{ hashFiles('Cargo.lock') }}-${{ runner.os }}-${{ runner.arch }}
+      - name: Build master
+        env:
+          MAIN_VERSION: ${{ steps.versions.outputs.main }}
+        run: |
+          mkdir -p "$HOME/bin"
+          if [ ! -f "$HOME/bin/prek-$MAIN_VERSION" ]; then
+            CURRENT_COMMIT=$(git rev-parse HEAD)
+            git checkout origin/master
+            cargo build --release && mv target/release/prek "$HOME/bin/prek-$MAIN_VERSION"
+            git checkout "$CURRENT_COMMIT"
+          fi
+      - name: Build current version
+        run: |
+          cargo build --release && mv target/release/prek "$HOME/bin"
+      - name: Install hyperfine
+        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
+        with:
+          tool: hyperfine
+      - name: Setup test environment for builtin hooks
+        run: |
+          # Create a test directory with files to run builtin hooks against
+          mkdir -p /tmp/prek-bench
+          cd /tmp/prek-bench
+          git init || { echo "Failed to init git"; exit 1; }
+          git config user.name "Benchmark"
+          git config user.email "bench@prek.dev"
+
+          # Create test files that will trigger builtin hooks
+          # Files with trailing whitespace and no final newline
+          for i in {1..50}; do
+            printf "line with trailing whitespace   \nanother line  " > "file$i.txt"
+          done
+
+          # JSON files
+          for i in {1..30}; do
+            echo '{"key": "value", "number": '$i'}' > "file$i.json"
+          done
+
+          # YAML files
+          for i in {1..30}; do
+            echo "key: value" > "file$i.yaml"
+            echo "number: $i" >> "file$i.yaml"
+          done
+
+          # TOML files
+          for i in {1..30}; do
+            echo "[section]" > "file$i.toml"
+            echo "key = \"value$i\"" >> "file$i.toml"
+          done
+
+          # XML files
+          for i in {1..30}; do
+            echo '<?xml version="1.0"?><root><item id="'$i'">value</item></root>' > "file$i.xml"
+          done
+
+          # Files with mixed line endings
+          for i in {1..20}; do
+            printf "line1\r\nline2\nline3\r\n" > "mixed$i.txt"
+          done
+
+          # Files with UTF-8 BOM
+          for i in {1..20}; do
+            printf '\xef\xbb\xbfContent with BOM' > "bom$i.txt"
+          done
+
+          # Executable files (for shebang check)
+          for i in {1..10}; do
+            echo "#!/bin/bash" > "script$i.sh"
+            echo "echo hello" >> "script$i.sh"
+            chmod +x "script$i.sh"
+          done
+
+          # Files that might contain private keys (but don't)
+          for i in {1..10}; do
+            echo "# This is not a private key" > "config$i.txt"
+            echo "api_key = fake_key_$i" >> "config$i.txt"
+          done
+
+          # Create symlinks for check-symlinks
+          for i in {1..10}; do
+            ln -s "file$i.txt" "link$i.txt"
+          done
+
+          # Create a config that uses all builtin hooks
+          cat > .pre-commit-config.yaml << 'EOF'
+          repos:
+            - repo: builtin
+              hooks:
+                - id: trailing-whitespace
+                - id: end-of-file-fixer
+                - id: check-json
+                - id: check-yaml
+                - id: check-toml
+                - id: check-xml
+                - id: mixed-line-ending
+                - id: fix-byte-order-marker
+                - id: check-executables-have-shebangs
+                - id: detect-private-key
+                - id: check-case-conflict
+                - id: check-merge-conflict
+                - id: check-symlinks
+          EOF
+
+          git add -A
+          git commit -m "Initial commit" || { echo "Failed to commit"; exit 1; }
+      - name: Run benchmarks
+        env:
+          MAIN_VERSION: ${{ steps.versions.outputs.main }}
+        run: |
+          set -euo pipefail
+          set -x
+          failed=false
+
+          # Add prek binaries to PATH
+          export PATH="$HOME/bin:/home/runner/bin:$PATH"
+
+          # Helper function to run hyperfine with consistent options
+          run_hyperfine() {
+            local cmd="$1"
+            local warmup="${2:-3}"
+            local runs="${3:-30}"
+            local setup="${4:-}"
+            local prepare="${5:-}"
+
+            # -i flag: ignore non-zero exit codes (hooks return 1 when they modify files)
+            local -a hyperfine_args=(-i -N -w "$warmup" -r "$runs" --export-markdown out.md --export-json out.json --show-output)
+
+            if [ -n "$setup" ]; then
+              hyperfine_args+=(--setup "$setup")
+            fi
+
+            if [ -n "$prepare" ]; then
+              hyperfine_args+=(--prepare "$prepare")
+            fi
+
+            if [ -n "${PREK_ALT:-}" ]; then
+              if ! hyperfine "${hyperfine_args[@]}" --reference "$PREK_ALT $cmd" "prek $cmd"; then
+                echo "⚠️ Benchmark failed for: $cmd" >> "$GITHUB_WORKSPACE/comment.md"
+                return 1
+              fi
+            elif [ -f "$HOME/bin/prek-$MAIN_VERSION" ]; then
+              if ! hyperfine "${hyperfine_args[@]}" --reference "prek-$MAIN_VERSION $cmd" "prek $cmd"; then
+                echo "⚠️ Benchmark failed for: $cmd" >> "$GITHUB_WORKSPACE/comment.md"
+                return 1
+              fi
+            else
+              if ! hyperfine "${hyperfine_args[@]}" "prek $cmd"; then
+                echo "⚠️ Benchmark failed for: $cmd" >> "$GITHUB_WORKSPACE/comment.md"
+                return 1
+              fi
+            fi
+          }
+
+          # Helper function to output results
+          output_results() {
+            cat out.md >> "$GITHUB_WORKSPACE/comment.md"
+            cat out.md
+          }
+
+          # Helper function to check variance
+          check_variance() {
+            local cmd="$1"
+            if grep -q "±.*±" out.md; then
+              local variance
+              variance=$(grep "±.*±" out.md | awk '{print $(NF-3)}' | sed 's/%//' | head -1)
+              if [ -n "$variance" ]; then
+                # Calculate percentage difference (variance is already a ratio like 1.05 for 5% slower)
+                local diff
+                diff=$(echo "scale=2; ($variance - 1) * 100" | bc)
+
+                if (( $(echo "${diff#-} > 10" | bc -l) )); then
+                  if grep -q "prek-$MAIN_VERSION.*±.*±" out.md; then
+                    echo "✅  Performance improvement for \`$cmd\` is ${diff#-}%" >> "$GITHUB_WORKSPACE/comment.md"
+                  else
+                    echo "⚠️  Warning: Performance regression for \`$cmd\` is ${diff#-}%" >> "$GITHUB_WORKSPACE/comment.md"
+                    failed=true
+                  fi
+                fi
+              fi
+            fi
+          }
+
+          # Add environment metadata
+          echo "## Hyperfine Performance" > "$GITHUB_WORKSPACE/comment.md"
+          echo "" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "**Environment:**" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "- OS: $(uname -s) $(uname -r)" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "- CPU: $(nproc) cores" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "- prek version: $(prek --version)" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "- Rust version: $(rustc --version)" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "- Hyperfine version: $(hyperfine --version)" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "" >> "$GITHUB_WORKSPACE/comment.md"
+
+          # Benchmark in the main repo
+          CMDS=(
+            "--version"
+            "list"
+            "validate-config .pre-commit-config.yaml"
+            "sample-config"
+          )
+          for cmd in "${CMDS[@]}"; do
+            # Skip validate-config if config file doesn't exist
+            if [[ "$cmd" == "validate-config"* ]] && [ ! -f ".pre-commit-config.yaml" ]; then
+              echo "### \`prek $cmd\`" >> "$GITHUB_WORKSPACE/comment.md"
+              echo "⏭️  Skipped: .pre-commit-config.yaml not found" >> "$GITHUB_WORKSPACE/comment.md"
+              continue
+            fi
+
+            echo "### \`prek $cmd\`" >> "$GITHUB_WORKSPACE/comment.md"
+            # Fast commands don't need 500 runs
+            if [[ "$cmd" == "--version" ]] || [[ "$cmd" == "list" ]]; then
+              run_hyperfine "$cmd" 5 100
+            else
+              run_hyperfine "$cmd" 3 50
+            fi
+            output_results
+            check_variance "$cmd"
+          done
+
+          # Benchmark builtin hooks in test directory
+          cd /tmp/prek-bench
+
+          # First, run cold vs warm benchmarks before polluting cache
+          echo "" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "## Cold vs Warm Runs" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "Comparing first run (cold) vs subsequent runs (warm cache):" >> "$GITHUB_WORKSPACE/comment.md"
+
+          # Run cold first to avoid cache pollution
+          echo "### \`prek run --all-files\` (cold - no cache)" >> "$GITHUB_WORKSPACE/comment.md"
+          run_hyperfine "run --all-files" 0 10 "rm -rf ~/.cache/prek" "git checkout -- ."
+          output_results
+
+          echo "### \`prek run --all-files\` (warm - with cache)" >> "$GITHUB_WORKSPACE/comment.md"
+          run_hyperfine "run --all-files" 3 20 "" "git checkout -- ."
+          output_results
+
+          # Now run the full benchmark suite with cache warmed up
+          echo "" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "## Full Hook Suite" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "Running all 13 builtin hooks on 260 test files:" >> "$GITHUB_WORKSPACE/comment.md"
+
+          echo "### \`prek run --all-files\` (13 builtin hooks on 260 files)" >> $GITHUB_WORKSPACE/comment.md
+          run_hyperfine "run --all-files" 3 50 "" "git checkout -- ."
+          output_results
+          check_variance "run --all-files"
+
+          cd "$GITHUB_WORKSPACE"
+
+          # 1. Individual hook performance
+          echo "" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "## Individual Hook Performance" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "Benchmarking each hook individually on the test repo:" >> "$GITHUB_WORKSPACE/comment.md"
+
+          cd /tmp/prek-bench
+          INDIVIDUAL_HOOKS=(
+            "trailing-whitespace"
+            "end-of-file-fixer"
+            "check-json"
+            "check-yaml"
+            "check-toml"
+            "check-xml"
+          )
+
+          for hook in "${INDIVIDUAL_HOOKS[@]}"; do
+            echo "### \`prek run $hook --all-files\`" >> $GITHUB_WORKSPACE/comment.md
+            run_hyperfine "run $hook --all-files" 3 30 "" "git checkout -- ."
+            output_results
+          done
+
+          # 3. Installation performance
+          echo "" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "## Installation Performance" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "Benchmarking hook installation (fast path hooks skip Python setup):" >> "$GITHUB_WORKSPACE/comment.md"
+
+          # Cold installation (no cache)
+          echo "### \`prek install-hooks\` (cold - no cache)" >> "$GITHUB_WORKSPACE/comment.md"
+          run_hyperfine "install-hooks" 1 5 "rm -rf ~/.cache/prek/hooks ~/.cache/prek/repos"
+          output_results
+
+          # Warm installation (with cache)
+          echo "### \`prek install-hooks\` (warm - with cache)" >> "$GITHUB_WORKSPACE/comment.md"
+          run_hyperfine "install-hooks" 1 5
+          output_results
+
+          # 4. File filtering/scoping performance
+          echo "" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "## File Filtering/Scoping Performance" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "Testing different file selection modes:" >> "$GITHUB_WORKSPACE/comment.md"
+
+          cd /tmp/prek-bench
+
+          # Staged files only (most common)
+          git add -A
+          echo "### \`prek run\` (staged files only)" >> "$GITHUB_WORKSPACE/comment.md"
+          run_hyperfine "run" 3 20 "" "sh -c 'git checkout -- . && git add -A'"
+          output_results
+
+          # Specific files (all files benchmark is in Cold vs Warm section)
+          echo "### \`prek run --files '*.json'\` (specific file type)" >> "$GITHUB_WORKSPACE/comment.md"
+          run_hyperfine "run --files '*.json'" 3 20
+          output_results
+
+          # 6. Workspace discovery & initialization
+          echo "" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "## Workspace Discovery & Initialization" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "Benchmarking hook discovery and initialization overhead:" >> "$GITHUB_WORKSPACE/comment.md"
+
+          cd /tmp/prek-bench
+          echo "### \`prek run --dry-run --all-files\` (measures init overhead)" >> "$GITHUB_WORKSPACE/comment.md"
+          run_hyperfine "run --dry-run --all-files" 3 20
+          output_results
+
+          # Meta hooks performance
+          echo "" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "## Meta Hooks Performance" >> "$GITHUB_WORKSPACE/comment.md"
+          echo "Benchmarking meta hooks separately:" >> "$GITHUB_WORKSPACE/comment.md"
+
+          # Create a separate directory for meta hooks to avoid overwriting config
+          mkdir -p /tmp/prek-bench-meta
+          cd /tmp/prek-bench-meta
+          git init || { echo "Failed to init git for meta hooks"; exit 1; }
+          git config user.name "Benchmark"
+          git config user.email "bench@prek.dev"
+
+          # Copy some test files
+          cp /tmp/prek-bench/*.txt /tmp/prek-bench/*.json . 2>/dev/null || true
+
+          # Create config with meta hooks
+          cat > .pre-commit-config.yaml << 'EOF'
+          repos:
+            - repo: meta
+              hooks:
+                - id: check-hooks-apply
+                - id: check-useless-excludes
+                - id: identity
+            - repo: builtin
+              hooks:
+                - id: trailing-whitespace
+                - id: end-of-file-fixer
+          EOF
+
+          git add -A
+          git commit -m "Meta hooks test" || { echo "Failed to commit meta hooks test"; exit 1; }
+          prek install-hooks
+
+          META_HOOKS=(
+            "check-hooks-apply"
+            "check-useless-excludes"
+            "identity"
+          )
+
+          for hook in "${META_HOOKS[@]}"; do
+            echo "### \`prek run $hook --all-files\`" >> "$GITHUB_WORKSPACE/comment.md"
+            run_hyperfine "run $hook --all-files" 3 15 "" "git checkout -- ."
+            output_results
+          done
+
+          cd "$GITHUB_WORKSPACE"
+
+          if [ "$failed" = true ]; then
+            exit 1
+          fi
+      - name: Post to job summary
+        run: cat comment.md >> "$GITHUB_STEP_SUMMARY"
+        if: always()
+
+      - name: Save benchmark results
+        if: always() && github.event_name == 'pull_request'
+        run: |
+          mkdir -p /tmp/hyperfine-results
+          echo ${{ github.event.pull_request.number }} > /tmp/hyperfine-results/pr-number.txt
+          cp comment.md /tmp/hyperfine-results/benchmark-results.md
+
+      - name: Upload benchmark results
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@0b2256b8c012f0828dc542b3febcab082c67f72b # v4.3.4
+        with:
+          name: hyperfine-results
+          path: /tmp/hyperfine-results
