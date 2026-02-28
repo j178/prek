@@ -96,6 +96,8 @@ impl BuiltinHook {
                 name: "check for added large files".to_string(),
                 entry: "check-added-large-files".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     description: Some("prevents giant files from being committed.".to_string()),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
@@ -107,6 +109,8 @@ impl BuiltinHook {
                 name: "check for case conflicts".to_string(),
                 entry: "check-case-conflict".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     description: Some(
                         "checks for files that would conflict in case-insensitive filesystems"
@@ -120,6 +124,8 @@ impl BuiltinHook {
                 name: "check that executables have shebangs".to_string(),
                 entry: "check-executables-have-shebangs".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     description: Some(
                         "ensures that (non-binary) executables have a shebang.".to_string(),
@@ -134,6 +140,8 @@ impl BuiltinHook {
                 name: "check json".to_string(),
                 entry: "check-json".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     description: Some("checks json files for parseable syntax.".to_string()),
                     types: Some(tags::TAG_SET_JSON),
@@ -145,6 +153,8 @@ impl BuiltinHook {
                 name: "check json5".to_string(),
                 entry: "check-json5".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     description: Some("checks json5 files for parseable syntax.".to_string()),
                     types: Some(tags::TAG_SET_JSON5),
@@ -156,6 +166,8 @@ impl BuiltinHook {
                 name: "check for merge conflicts".to_string(),
                 entry: "check-merge-conflict".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     description: Some(
                         "checks for files that contain merge conflict strings.".to_string(),
@@ -169,6 +181,8 @@ impl BuiltinHook {
                 name: "check for broken symlinks".to_string(),
                 entry: "check-symlinks".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     description: Some(
                         "checks for symlinks which do not point to anything.".to_string(),
@@ -182,6 +196,8 @@ impl BuiltinHook {
                 name: "check toml".to_string(),
                 entry: "check-toml".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     description: Some("checks toml files for parseable syntax.".to_string()),
                     types: Some(tags::TAG_SET_TOML),
@@ -193,6 +209,8 @@ impl BuiltinHook {
                 name: "check xml".to_string(),
                 entry: "check-xml".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     description: Some("checks xml files for parseable syntax.".to_string()),
                     types: Some(tags::TAG_SET_XML),
@@ -204,6 +222,8 @@ impl BuiltinHook {
                 name: "check yaml".to_string(),
                 entry: "check-yaml".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     description: Some("checks yaml files for parseable syntax.".to_string()),
                     types: Some(tags::TAG_SET_YAML),
@@ -215,6 +235,8 @@ impl BuiltinHook {
                 name: "detect private key".to_string(),
                 entry: "detect-private-key".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     description: Some("detects the presence of private keys.".to_string()),
                     types: Some(tags::TAG_SET_TEXT),
@@ -226,6 +248,8 @@ impl BuiltinHook {
                 name: "fix end of files".to_string(),
                 entry: "end-of-file-fixer".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     description: Some(
                         "ensures that a file is either empty, or ends with one newline."
@@ -241,6 +265,8 @@ impl BuiltinHook {
                 name: "fix utf-8 byte order marker".to_string(),
                 entry: "fix-byte-order-marker".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     description: Some("removes utf-8 byte order marker.".to_string()),
                     types: Some(tags::TAG_SET_TEXT),
@@ -252,6 +278,8 @@ impl BuiltinHook {
                 name: "mixed line ending".to_string(),
                 entry: "mixed-line-ending".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     description: Some("replaces or checks mixed line ending.".to_string()),
                     types: Some(tags::TAG_SET_TEXT),
@@ -263,6 +291,8 @@ impl BuiltinHook {
                 name: "don't commit to branch".to_string(),
                 entry: "no-commit-to-branch".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     pass_filenames: Some(false),
                     always_run: Some(true),
@@ -274,6 +304,8 @@ impl BuiltinHook {
                 name: "trim trailing whitespace".to_string(),
                 entry: "trailing-whitespace-fixer".to_string(),
                 priority: None,
+                group: None,
+                after: None,
                 options: HookOptions {
                     description: Some("trims trailing whitespace.".to_string()),
                     types: Some(tags::TAG_SET_TEXT),
