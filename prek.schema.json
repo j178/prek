@@ -202,6 +202,17 @@
           "type": "integer",
           "minimum": 0
         },
+        "group": {
+          "description": "An optional group label for this hook. Other hooks can depend on all hooks\nin a group completing via `after: [group:<name>]`.",
+          "type": "string"
+        },
+        "after": {
+          "description": "An optional list of dependencies. The hook waits for all listed dependencies\nto complete before running. Supports hook IDs (`after: [ruff-lint]`) and\ngroup references (`after: [group:setup]`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "alias": {
           "description": "Not documented in the official docs.",
           "type": "string"
@@ -442,6 +453,17 @@
           "type": "integer",
           "minimum": 0
         },
+        "group": {
+          "description": "An optional group label for this hook.",
+          "type": "string"
+        },
+        "after": {
+          "description": "An optional list of dependencies for DAG-based scheduling.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "alias": {
           "description": "Not documented in the official docs.",
           "type": "string"
@@ -599,6 +621,17 @@
           "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
           "type": "integer",
           "minimum": 0
+        },
+        "group": {
+          "description": "An optional group label for this hook. Other hooks can depend on all hooks\nin a group completing via `after: [group:<name>]`.",
+          "type": "string"
+        },
+        "after": {
+          "description": "An optional list of dependencies. The hook waits for all listed dependencies\nto complete before running. Supports hook IDs (`after: [ruff-lint]`) and\ngroup references (`after: [group:setup]`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "alias": {
           "description": "Not documented in the official docs.",
@@ -762,6 +795,17 @@
           "description": "Priority used by the scheduler to determine ordering and concurrency.\nHooks with the same priority can run in parallel.\n\nThis is only allowed in project config files (e.g. `.pre-commit-config.yaml`).\nIt is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).",
           "type": "integer",
           "minimum": 0
+        },
+        "group": {
+          "description": "An optional group label for this hook. Other hooks can depend on all hooks\nin a group completing via `after: [group:<name>]`.",
+          "type": "string"
+        },
+        "after": {
+          "description": "An optional list of dependencies. The hook waits for all listed dependencies\nto complete before running. Supports hook IDs (`after: [ruff-lint]`) and\ngroup references (`after: [group:setup]`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "alias": {
           "description": "Not documented in the official docs.",

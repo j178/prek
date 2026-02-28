@@ -54,6 +54,8 @@ pub(crate) struct HookSpec {
     pub entry: String,
     pub language: Language,
     pub priority: Option<u32>,
+    pub group: Option<String>,
+    pub after: Vec<String>,
     pub options: HookOptions,
 }
 
@@ -70,6 +72,12 @@ impl HookSpec {
         }
         if let Some(priority) = config.priority {
             self.priority = Some(priority);
+        }
+        if config.group.is_some() {
+            self.group.clone_from(&config.group);
+        }
+        if let Some(after) = &config.after {
+            self.after.clone_from(after);
         }
 
         self.options.update(&config.options);
@@ -98,6 +106,8 @@ impl From<ManifestHook> for HookSpec {
             entry: hook.entry,
             language: hook.language,
             priority: None,
+            group: None,
+            after: Vec::new(),
             options: hook.options,
         }
     }
@@ -111,6 +121,8 @@ impl From<LocalHook> for HookSpec {
             entry: hook.entry,
             language: hook.language,
             priority: hook.priority,
+            group: hook.group,
+            after: hook.after.unwrap_or_default(),
             options: hook.options,
         }
     }
@@ -124,6 +136,8 @@ impl From<MetaHook> for HookSpec {
             entry: String::new(),
             language: Language::System,
             priority: hook.priority,
+            group: hook.group,
+            after: hook.after.unwrap_or_default(),
             options: hook.options,
         }
     }
@@ -137,6 +151,8 @@ impl From<BuiltinHook> for HookSpec {
             entry: hook.entry,
             language: Language::System,
             priority: hook.priority,
+            group: hook.group,
+            after: hook.after.unwrap_or_default(),
             options: hook.options,
         }
     }
@@ -257,6 +273,17 @@ impl HookBuilder {
 
     /// Check the hook configuration.
     fn check(&self) -> Result<(), Error> {
+        // Validate that priority and group/after are mutually exclusive.
+        let has_dag_fields = self.hook_spec.group.is_some() || !self.hook_spec.after.is_empty();
+        if self.hook_spec.priority.is_some() && has_dag_fields {
+            return Err(Error::Hook {
+                hook: self.hook_spec.id.clone(),
+                error: anyhow::anyhow!(
+                    "`priority` and `group`/`after` are mutually exclusive on the same hook"
+                ),
+            });
+        }
+
         let language = self.hook_spec.language;
         let HookOptions {
             language_version,
@@ -347,6 +374,9 @@ impl HookBuilder {
             .priority
             .unwrap_or(u32::try_from(self.idx).expect("idx too large"));
 
+        let group = self.hook_spec.group;
+        let after = self.hook_spec.after;
+
         let mut hook = Hook {
             dependencies: OnceLock::new(),
             project: self.project,
@@ -357,6 +387,8 @@ impl HookBuilder {
             language: self.hook_spec.language,
 
             priority,
+            group,
+            after,
             entry,
             stages,
             language_request,
@@ -465,6 +497,8 @@ pub(crate) struct Hook {
     pub verbose: bool,
     pub minimum_prek_version: Option<String>,
     pub priority: u32,
+    pub group: Option<String>,
+    pub after: Vec<String>,
 }
 
 impl Display for Hook {
@@ -877,6 +911,8 @@ mod tests {
             entry: "python3 -c 'print(1)'".to_string(),
             language: Language::Python,
             priority: None,
+            group: None,
+            after: Vec::new(),
             options: HookOptions {
                 env: Some(base_env),
                 ..Default::default()
@@ -893,6 +929,8 @@ mod tests {
             entry: Some("python3 -c 'print(2)'".to_string()),
             language: None,
             priority: Some(42),
+            group: None,
+            after: None,
             options: HookOptions {
                 alias: Some("alias-1".to_string()),
                 types: Some(tags::TAG_SET_TEXT),
@@ -994,6 +1032,8 @@ mod tests {
             verbose: true,
             minimum_prek_version: None,
             priority: 42,
+            group: None,
+            after: [],
         }
         "#);
 
@@ -1037,6 +1077,8 @@ mod tests {
             entry: "./hook.py".to_string(),
             language: Language::Python,
             priority: None,
+            group: None,
+            after: Vec::new(),
             options: HookOptions {
                 language_version: language_version.map(str::to_string),
                 ..Default::default()

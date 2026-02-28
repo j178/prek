@@ -14,6 +14,8 @@ Config {
                         entry: "cargo fmt --",
                         language: System,
                         priority: None,
+                        group: None,
+                        after: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
@@ -52,6 +54,8 @@ Config {
                         entry: None,
                         language: None,
                         priority: None,
+                        group: None,
+                        after: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
@@ -81,6 +85,8 @@ Config {
                         entry: None,
                         language: None,
                         priority: None,
+                        group: None,
+                        after: None,
                         options: HookOptions {
                             alias: None,
                             files: None,
