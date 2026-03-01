@@ -12,6 +12,7 @@ use prek_consts::prepend_paths;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
+use crate::git::clone_repo;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::rust::RustRequest;
@@ -32,27 +33,69 @@ fn format_cargo_dependency(dep: &str) -> String {
     }
 }
 
-fn format_cargo_cli_dependency(dep: &str) -> Vec<&str> {
+fn parse_cargo_cli_dependency(dep: &str) -> (&str, Option<&str>, bool) {
     let is_url = dep.starts_with("http://") || dep.starts_with("https://");
     let (package, version) = if is_url && dep.matches(':').count() == 1 {
-        (dep, "") // We have a url without version
+        (dep, "")
     } else {
         dep.rsplit_once(':').unwrap_or((dep, ""))
     };
+    (package, (!version.is_empty()).then_some(version), is_url)
+}
+
+fn format_cargo_cli_dependency(dep: &str, git_package: Option<&str>) -> Vec<String> {
+    let (package, version, is_url) = parse_cargo_cli_dependency(dep);
 
     let mut args = Vec::new();
     if is_url {
-        args.extend(["--git", package]);
-        if !version.is_empty() {
-            args.extend(["--tag", version]);
+        args.push("--git".to_string());
+        args.push(package.to_string());
+        if let Some(version) = version {
+            args.push("--tag".to_string());
+            args.push(version.to_string());
+        }
+        if let Some(package) = git_package {
+            args.push(package.to_string());
         }
     } else {
-        args.push(package);
-        if !version.is_empty() {
-            args.extend(["--version", version]);
+        args.push(package.to_string());
+        if let Some(version) = version {
+            args.push("--version".to_string());
+            args.push(version.to_string());
         }
     }
     args
+}
+
+async fn find_git_package_name(
+    dep: &str,
+    binary_name: &str,
+    cargo: &Path,
+    cargo_home: &Path,
+    new_path: &OsStr,
+) -> anyhow::Result<Option<String>> {
+    let (repo, rev, is_url) = parse_cargo_cli_dependency(dep);
+    if !is_url {
+        return Ok(None);
+    }
+    let rev = rev.unwrap_or("HEAD");
+
+    let temp = tempfile::tempdir()?;
+    clone_repo(repo, rev, temp.path())
+        .await
+        .with_context(|| format!("Failed to clone `{repo}` at `{rev}`"))?;
+
+    let (_, package_name, _) = find_package_dir(
+        temp.path(),
+        binary_name,
+        Some(cargo),
+        Some(cargo_home),
+        Some(new_path),
+    )
+    .await?
+    .with_context(|| format!("Failed to locate package for binary `{binary_name}` in `{repo}`"))?;
+
+    Ok(Some(package_name))
 }
 
 /// Find the package directory that produces the given binary.
@@ -393,11 +436,21 @@ impl LanguageImpl for Rust {
         }
 
         // Install CLI dependencies
+        let hook_entry = hook.entry.split()?;
+        let hook_bin = hook_entry
+            .first()
+            .map(String::as_str)
+            .context("Rust hook entry must contain executable name")?;
         for cli_dep in cli_deps {
+            let package_name =
+                find_git_package_name(cli_dep, hook_bin, &cargo, &cargo_home, &new_path).await?;
             let mut cmd = Cmd::new(&cargo, "install cli dep");
             cmd.args(["install", "--bins", "--root"])
                 .arg(&info.env_path)
-                .args(format_cargo_cli_dependency(cli_dep))
+                .args(format_cargo_cli_dependency(
+                    cli_dep,
+                    package_name.as_deref(),
+                ))
                 .arg("--locked");
             cmd.env(EnvVars::PATH, &new_path)
                 .env(EnvVars::CARGO_HOME, &cargo_home)
@@ -786,24 +839,65 @@ edition = "2021"
     }
 
     #[test]
-    fn test_format_cargo_cli_dependency() {
-        assert_eq!(format_cargo_cli_dependency("typos-cli"), ["typos-cli"]);
+    fn test_parse_cargo_cli_dependency() {
         assert_eq!(
-            format_cargo_cli_dependency("typos-cli:1.0"),
+            parse_cargo_cli_dependency("https://github.com/fish-shell/fish-shell"),
+            ("https://github.com/fish-shell/fish-shell", None, true)
+        );
+        assert_eq!(
+            parse_cargo_cli_dependency("https://github.com/fish-shell/fish-shell:4.0"),
+            (
+                "https://github.com/fish-shell/fish-shell",
+                Some("4.0"),
+                true
+            )
+        );
+        assert_eq!(
+            parse_cargo_cli_dependency("typos-cli:1.0"),
+            ("typos-cli", Some("1.0"), false)
+        );
+    }
+
+    #[test]
+    fn test_format_cargo_cli_dependency() {
+        assert_eq!(
+            format_cargo_cli_dependency("typos-cli", None),
+            ["typos-cli"]
+        );
+        assert_eq!(
+            format_cargo_cli_dependency("typos-cli:1.0", None),
             ["typos-cli", "--version", "1.0"]
         );
         assert_eq!(
-            format_cargo_cli_dependency("https://github.com/fish-shell/fish-shell"),
-            ["--git", "https://github.com/fish-shell/fish-shell"]
+            format_cargo_cli_dependency("https://github.com/fish-shell/fish-shell", Some("fish")),
+            ["--git", "https://github.com/fish-shell/fish-shell", "fish"]
         );
         assert_eq!(
-            format_cargo_cli_dependency("https://github.com/fish-shell/fish-shell:4.0"),
+            format_cargo_cli_dependency(
+                "https://github.com/fish-shell/fish-shell:4.0",
+                Some("fish")
+            ),
             [
                 "--git",
                 "https://github.com/fish-shell/fish-shell",
                 "--tag",
-                "4.0"
+                "4.0",
+                "fish"
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn test_find_git_package_name_non_url() {
+        let result = find_git_package_name(
+            "typos-cli",
+            "typos-cli",
+            Path::new("cargo"),
+            Path::new(""),
+            OsStr::new(""),
+        )
+        .await
+        .unwrap();
+        assert!(result.is_none());
     }
 }
