@@ -308,6 +308,16 @@ pub(crate) struct InstallArgs {
     /// Allow a missing configuration file.
     #[arg(long)]
     pub(crate) allow_missing_config: bool,
+
+    /// Install hooks into the `hooks` subdirectory of the given git directory (`<GIT_DIR>/hooks/`).
+    ///
+    /// When this flag is used, `prek install` bypasses the safety check that normally
+    /// refuses to install hooks while `core.hooksPath` is set. Git itself will still
+    /// ignore `.git/hooks` while `core.hooksPath` is configured, so ensure your Git
+    /// configuration points to the directory where the hook is installed if you want
+    /// it to be executed.
+    #[arg(long, value_name = "GIT_DIR", value_hint = ValueHint::DirPath)]
+    pub(crate) git_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
