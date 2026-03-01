@@ -38,7 +38,9 @@ fn rv_ruby_api_url() -> (String, bool) {
     let (base, is_github) = rv_ruby_mirror();
     let url = if is_github {
         // Rewrite github.com web URL to API URL.
-        let path = base.strip_prefix("https://github.com").unwrap();
+        let path = base
+            .strip_prefix("https://github.com")
+            .expect("is_github_https should ensure this");
         format!("https://api.github.com/repos{path}/releases/latest")
     } else {
         format!("{base}/releases/latest")
@@ -67,7 +69,7 @@ fn rv_ruby_download_base() -> (String, bool) {
 fn maybe_add_github_auth(req: reqwest::RequestBuilder, is_github: bool) -> reqwest::RequestBuilder {
     if is_github {
         if let Ok(token) = EnvVars::var(EnvVars::GITHUB_TOKEN) {
-            return req.header("Authorization", format!("Bearer {token}"));
+            return req.header(http::header::AUTHORIZATION, format!("Bearer {token}"));
         }
     }
     req

@@ -1351,9 +1351,14 @@ prek supports the following environment variables:
 - `PREK_CONTAINER_RUNTIME` — Specify the container runtime to use for container-based hooks (e.g., `docker`, `docker_image`). Options:
 
     - `auto` (default, auto-detect available runtime)
+
     - `docker`
+
     - `podman`
+
     - `container` (Apple's Container runtime on macOS, see [container](https://github.com/apple/container))
+
+- `PREK_RUBY_MIRROR` — Override the Ruby installer base URL used for downloaded Ruby toolchains (for example, when using mirrors or air-gapped CI environments). See [Ruby language support](languages.md#ruby) for details.
 
 Compatibility fallbacks:
 
