@@ -1,16 +1,128 @@
 use std::env::consts::EXE_EXTENSION;
-#[cfg(not(target_os = "windows"))]
-use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-#[cfg(not(target_os = "windows"))]
+use itertools::Itertools;
 use prek_consts::env_vars::EnvVars;
-use tracing::{trace, warn};
+use serde::Deserialize;
+use target_lexicon::{Architecture, Environment, HOST, OperatingSystem, Triple};
+use tracing::{debug, trace, warn};
 
+use crate::fs::LockedFile;
 use crate::languages::ruby::RubyRequest;
+use crate::languages::{REQWEST_CLIENT, download_and_extract_with};
 use crate::process::Cmd;
 use crate::store::Store;
+
+const RV_RUBY_DEFAULT_URL: &str = "https://github.com/spinel-coop/rv-ruby";
+
+/// Resolve the rv-ruby mirror base URL and whether it targets github.com.
+fn rv_ruby_mirror() -> (String, bool) {
+    match EnvVars::var(EnvVars::PREK_RUBY_MIRROR) {
+        Ok(mirror) => {
+            let is_github = is_github_https(&mirror);
+            (mirror, is_github)
+        }
+        Err(_) => (RV_RUBY_DEFAULT_URL.to_string(), true),
+    }
+}
+
+/// Returns a URL compatible with the GitHub Releases API for listing rv-ruby
+/// versions, and whether the target host is github.com (for auth token
+/// decisions).
+///
+/// When the mirror is a `github.com` URL, the path is rewritten to use the
+/// `api.github.com` host (e.g. `https://github.com/org/repo` becomes
+/// `https://api.github.com/repos/org/repo/releases/latest`).
+fn rv_ruby_api_url() -> (String, bool) {
+    let (base, is_github) = rv_ruby_mirror();
+    let url = if is_github {
+        // Rewrite github.com web URL to API URL.
+        let path = base
+            .strip_prefix("https://github.com")
+            .expect("is_github_https should ensure this");
+        format!("https://api.github.com/repos{path}/releases/latest")
+    } else {
+        format!("{base}/releases/latest")
+    };
+    (url, is_github)
+}
+
+/// Check whether a URL is an HTTPS URL pointing to github.com.
+/// Only matches the exact host `github.com` over HTTPS, so won't send
+/// tokens to other hosts, subdomains, path-injection attempts,
+/// userinfo-based redirects, or plaintext HTTP.
+fn is_github_https(url: &str) -> bool {
+    (url.starts_with("https://github.com/") || url.starts_with("https://github.com:"))
+        && !url.contains('@')
+}
+
+/// Returns the base URL for downloading rv-ruby release assets, and whether
+/// the target host is github.com (for auth token decisions).
+fn rv_ruby_download_base() -> (String, bool) {
+    let (base, is_github) = rv_ruby_mirror();
+    (format!("{base}/releases/latest/download"), is_github)
+}
+
+/// Conditionally add a GitHub auth token to a request builder.
+/// Only sends `GITHUB_TOKEN` when `is_github` is true.
+fn maybe_add_github_auth(req: reqwest::RequestBuilder, is_github: bool) -> reqwest::RequestBuilder {
+    if is_github {
+        if let Ok(token) = EnvVars::var(EnvVars::GITHUB_TOKEN) {
+            return req.header(http::header::AUTHORIZATION, format!("Bearer {token}"));
+        }
+    }
+    req
+}
+
+#[derive(Deserialize)]
+struct GitHubRelease {
+    assets: Vec<GitHubAsset>,
+}
+
+#[derive(Deserialize)]
+struct GitHubAsset {
+    name: String,
+}
+
+/// Returns the rv-ruby release asset platform suffix for the current target.
+///
+/// These strings must match the asset filenames published by rv-ruby
+/// (e.g. `ruby-3.4.8.arm64_linux_musl.tar.gz`). The canonical source is
+/// `HostPlatform::ruby_arch_str()` in rv's `rv-platform` crate:
+/// <https://github.com/spinel-coop/rv/blob/main/crates/rv-platform/src/lib.rs>
+///
+/// The macOS names (`ventura`, `arm64_sonoma`) are Homebrew bottle tags currently
+/// pinned by rv-ruby's packaging script. rv currently build using macOS 15 on Intel
+/// which would suggest a 'sequoia' tag, but their packaging script currently renames the
+/// output to 'ventura'. If this ever changes, this mapping will need to be updated
+/// accordingly.
+fn rv_platform_string(triple: &Triple) -> Option<&'static str> {
+    match (
+        triple.operating_system,
+        triple.architecture,
+        triple.environment,
+    ) {
+        // macOS
+        (OperatingSystem::Darwin(_), Architecture::X86_64, _) => Some("ventura"),
+        (OperatingSystem::Darwin(_), Architecture::Aarch64(_), _) => Some("arm64_sonoma"),
+
+        // Linux glibc
+        (OperatingSystem::Linux, Architecture::X86_64, Environment::Gnu) => Some("x86_64_linux"),
+        (OperatingSystem::Linux, Architecture::Aarch64(_), Environment::Gnu) => Some("arm64_linux"),
+
+        // Linux musl (Alpine)
+        (OperatingSystem::Linux, Architecture::X86_64, Environment::Musl) => {
+            Some("x86_64_linux_musl")
+        }
+        (OperatingSystem::Linux, Architecture::Aarch64(_), Environment::Musl) => {
+            Some("arm64_linux_musl")
+        }
+
+        // unsupported OS/CPU/libc combination
+        _ => None,
+    }
+}
 
 /// Result of finding/installing a Ruby interpreter
 #[derive(Debug)]
@@ -40,36 +152,214 @@ impl RubyResult {
 }
 
 /// Ruby installer that finds or installs Ruby interpreters
-pub(crate) struct RubyInstaller;
+pub(crate) struct RubyInstaller {
+    root: PathBuf,
+}
 
 impl RubyInstaller {
-    pub(crate) fn new() -> Self {
-        Self {}
+    pub(crate) fn new(root: PathBuf) -> Self {
+        Self { root }
     }
 
     /// Main installation entry point
     pub(crate) async fn install(
         &self,
-        _store: &Store,
+        store: &Store,
         request: &RubyRequest,
+        allows_download: bool,
     ) -> Result<RubyResult> {
-        // For now, we only support system Ruby
-        // TODO: If supporting installing new rubies, add locked file acquisition for concurrency safety
-        // let _lock = LockedFile::acquire(self.root.join(".lock"), "ruby").await?;
+        fs_err::tokio::create_dir_all(&self.root).await?;
+        let _lock = LockedFile::acquire(self.root.join(".lock"), "ruby").await?;
 
-        // Check system Ruby
-        if let Some(ruby) = self.find_system_ruby(request).await? {
+        // 1. Check previously downloaded rubies
+        if let Some(ruby) = self.find_installed(request) {
             trace!(
-                "Using Ruby: {} at {}",
+                "Using managed Ruby: {} at {}",
                 ruby.version(),
                 ruby.ruby_bin().display()
             );
             return Ok(ruby);
         }
 
-        // No suitable Ruby found
-        // TODO: On non-Windows, could implement rv/rbenv/etc integration for managed Ruby installations
-        anyhow::bail!(ruby_not_found_error(request));
+        // 2. Check system Ruby (PATH + version managers)
+        if let Some(ruby) = self.find_system_ruby(request).await? {
+            trace!(
+                "Using system Ruby: {} at {}",
+                ruby.version(),
+                ruby.ruby_bin().display()
+            );
+            return Ok(ruby);
+        }
+
+        // 3. Download if allowed and platform is supported
+        if !allows_download {
+            anyhow::bail!(ruby_not_found_error(
+                request,
+                // allows_download can only be false if the original request was
+                // for any version of ruby, but system-only.
+                "Automatic installation is disabled (language_version: system)."
+            ));
+        }
+
+        let Some(platform) = rv_platform_string(&HOST) else {
+            anyhow::bail!(ruby_not_found_error(
+                request,
+                // Windows, unknown CPU, etc. that doesn't have a matching rv-ruby
+                // release asset (that we know about).
+                "Automatic installation is not supported on this platform."
+            ));
+        };
+
+        let versions = match self.list_remote_versions(platform).await {
+            Ok(v) => v,
+            Err(e) => {
+                anyhow::bail!(
+                    "{}\n\nCaused by:\n  {e}",
+                    ruby_not_found_error(
+                        request,
+                        "Failed to fetch available Ruby versions from rv-ruby."
+                    )
+                );
+            }
+        };
+
+        let Some(version) = versions.into_iter().find(|v| request.matches(v, None)) else {
+            anyhow::bail!(ruby_not_found_error(
+                request,
+                &format!("No rv-ruby release found matching: {request}")
+            ));
+        };
+        self.download(store, &version, platform).await
+    }
+
+    /// Scan `self.root` for previously downloaded Ruby versions.
+    fn find_installed(&self, request: &RubyRequest) -> Option<RubyResult> {
+        fs_err::read_dir(&self.root)
+            .ok()?
+            .flatten()
+            .filter(|entry| entry.file_type().is_ok_and(|f| f.is_dir()))
+            .filter_map(|entry| {
+                let version = semver::Version::parse(&entry.file_name().to_string_lossy()).ok()?;
+                let bin_dir = entry.path().join("bin");
+                let ruby_bin = bin_dir.join("ruby");
+                let gem_bin = bin_dir.join("gem");
+                if ruby_bin.exists() && gem_bin.exists() {
+                    Some((version, ruby_bin))
+                } else {
+                    None
+                }
+            })
+            .sorted_unstable_by(|(a, _), (b, _)| b.cmp(a)) // descending
+            .find_map(|(version, ruby_bin)| {
+                if request.matches(&version, Some(&ruby_bin)) {
+                    Some(RubyResult {
+                        ruby_bin,
+                        version,
+                        engine: "ruby".to_string(),
+                    })
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Fetch available Ruby versions from the rv-ruby GitHub release.
+    async fn list_remote_versions(&self, platform: &str) -> Result<Vec<semver::Version>> {
+        let (api_url, is_github) = rv_ruby_api_url();
+        let suffix = format!(".{platform}.tar.gz");
+
+        let req = REQWEST_CLIENT
+            .get(&api_url)
+            .header("Accept", "application/vnd.github+json");
+        let req = maybe_add_github_auth(req, is_github);
+
+        let response = req
+            .send()
+            .await
+            .with_context(|| format!("Failed to fetch rv-ruby releases from {api_url}"))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let hint = if matches!(status.as_u16(), 403 | 429) {
+                " (this may be a rate limit — try setting GITHUB_TOKEN)"
+            } else {
+                ""
+            };
+            anyhow::bail!("Failed to fetch rv-ruby releases from {api_url}: {status}{hint}");
+        }
+
+        let release: GitHubRelease = response
+            .json()
+            .await
+            .context("Failed to parse rv-ruby release JSON")?;
+
+        let versions = release
+            .assets
+            .iter()
+            .filter_map(|asset| parse_version_from_asset(&asset.name, &suffix))
+            .sorted_unstable()
+            .rev()
+            .collect();
+
+        Ok(versions)
+    }
+
+    /// Download and extract a specific Ruby version from rv-ruby.
+    ///
+    /// Uses `download_and_extract_with` to inject a `GITHUB_TOKEN` auth header
+    /// for GitHub-hosted mirrors (including private partial mirrors of rv-ruby).
+    async fn download(
+        &self,
+        store: &Store,
+        version: &semver::Version,
+        platform: &str,
+    ) -> Result<RubyResult> {
+        let filename = format!("ruby-{version}.{platform}.tar.gz");
+        let (base_url, is_github) = rv_ruby_download_base();
+        let url = format!("{base_url}/{filename}");
+        let version_str = version.to_string();
+        let target = self.root.join(&version_str);
+
+        debug!(url = %url, target = %target.display(), "Downloading Ruby {version}");
+
+        download_and_extract_with(
+            &url,
+            &filename,
+            store,
+            |req| maybe_add_github_auth(req, is_github),
+            async |extracted| {
+                // rv-ruby tarballs contain: rv-ruby@{version}/{version}/bin/ruby
+                // After strip_component, `extracted` is the rv-ruby@{version}/ directory.
+                // Move the inner {version}/ directory to our target.
+                let inner = extracted.join(&version_str);
+                if !inner.exists() {
+                    anyhow::bail!(
+                        "Expected directory '{}' inside rv-ruby archive, found: {:?}",
+                        version_str,
+                        fs_err::read_dir(extracted)?
+                            .flatten()
+                            .map(|e| e.file_name())
+                            .collect::<Vec<_>>()
+                    );
+                }
+
+                if target.exists() {
+                    debug!(target = %target.display(), "Removing existing Ruby");
+                    fs_err::tokio::remove_dir_all(&target).await?;
+                }
+
+                fs_err::tokio::rename(&inner, &target).await?;
+                Ok(())
+            },
+        )
+        .await
+        .with_context(|| format!("Failed to download Ruby {version} from {url}"))?;
+
+        Ok(RubyResult {
+            ruby_bin: target.join("bin").join("ruby"),
+            version: version.clone(),
+            engine: "ruby".to_string(),
+        })
     }
 
     /// Find Ruby in the system PATH
@@ -133,7 +423,9 @@ async fn search_version_managers(request: &RubyRequest) -> Option<RubyResult> {
     let search_dirs = [
         // rvm: ~/.rvm/rubies/ruby-3.4.6/bin/ruby
         home_path.join(".rvm/rubies"),
-        // rv: ~/.data/rv/rubies/3.4.6/bin/ruby
+        // rv: ~/.local/share/rv/rubies/3.4.6/bin/ruby
+        home_path.join(".local/share/rv/rubies"),
+        // rv legacy path: ~/.data/rv/rubies/3.4.6/bin/ruby
         home_path.join(".data/rv/rubies"),
         // mise: ~/.local/share/mise/installs/ruby/3.4.6/bin/ruby
         home_path.join(".local/share/mise/installs/ruby"),
@@ -190,138 +482,27 @@ async fn search_ruby_installations(dir: &Path, request: &RubyRequest) -> Option<
     None
 }
 
-/// Detect which Ruby version managers are installed
-#[cfg(not(target_os = "windows"))]
-fn detect_version_managers() -> Vec<&'static str> {
-    let home = match EnvVars::var(EnvVars::HOME) {
-        Ok(h) => PathBuf::from(h),
-        Err(_) => return vec![],
-    };
-
-    let mut managers = Vec::new();
-
-    // Check for Homebrew first (most common on macOS)
-    if which::which("brew").is_ok()
-        || Path::new("/opt/homebrew").exists()
-        || Path::new("/usr/local/Homebrew").exists()
-        || Path::new("/home/linuxbrew/.linuxbrew").exists()
-        || home.join(".linuxbrew").exists()
-    {
-        managers.push("brew");
+/// Extract a Ruby version from an rv-ruby release asset name.
+///
+/// Given suffix `.x86_64_linux.tar.gz` and asset `ruby-3.4.8.x86_64_linux.tar.gz`,
+/// returns `Some(Version(3.4.8))`. Returns `None` for non-matching platforms,
+/// non-semver versions (e.g. `0.49`), and pre-release versions.
+fn parse_version_from_asset(name: &str, platform_suffix: &str) -> Option<semver::Version> {
+    let name = name.strip_prefix("ruby-")?;
+    let version_str = name.strip_suffix(platform_suffix)?;
+    let version = semver::Version::parse(version_str).ok()?;
+    // Skip pre-release versions (e.g. 3.5.0-preview1) unless explicitly requested
+    if !version.pre.is_empty() {
+        return None;
     }
-
-    // Check for various version managers
-    if home.join(".rvm").exists() || which::which("rvm").is_ok() {
-        managers.push("rvm");
-    }
-    if home.join(".data/rv").exists() || which::which("rv").is_ok() {
-        managers.push("rv");
-    }
-    if home.join(".local/share/mise").exists() || which::which("mise").is_ok() {
-        managers.push("mise");
-    }
-    if home.join(".rbenv").exists() || which::which("rbenv").is_ok() {
-        managers.push("rbenv");
-    }
-    if home.join(".asdf").exists() || which::which("asdf").is_ok() {
-        managers.push("asdf");
-    }
-    if home.join(".rubies").exists() || PathBuf::from("/opt/rubies").exists() {
-        managers.push("chruby");
-    }
-
-    managers
+    Some(version)
 }
 
-/// Generate helpful error message with version manager suggestions
-fn ruby_not_found_error(request: &RubyRequest) -> String {
-    let mut msg = format!(
-        "No suitable Ruby found for request: {}\n",
-        format_request(request)
-    );
-
-    // Windows-specific guidance
-    #[cfg(target_os = "windows")]
-    {
-        msg.push_str("\nRuby language only supports system Ruby on Windows.\n");
-        msg.push_str("Please install Ruby from https://rubyinstaller.org/\n");
-        msg
-    }
-
-    // Unix-like systems
-    #[cfg(not(target_os = "windows"))]
-    {
-        let managers = detect_version_managers();
-
-        if managers.is_empty() {
-            msg.push_str("\nNo Ruby version manager detected. Install Ruby via:\n");
-            msg.push_str("  System package manager:\n");
-            msg.push_str("    Ubuntu/Debian: sudo apt install ruby\n");
-            msg.push_str("    macOS: brew install ruby\n");
-            msg.push_str("  Or install a version manager:\n");
-            msg.push_str("    rvm: https://rvm.io/\n");
-            msg.push_str("    mise: https://mise.jdx.dev/\n");
-            msg.push_str("    rbenv: https://github.com/rbenv/rbenv\n");
-        } else {
-            writeln!(
-                msg,
-                "\nDetected version manager(s): {}",
-                managers.join(", ")
-            )
-            .unwrap();
-            msg.push_str("\nYou can install the required Ruby version using:\n");
-
-            for manager in &managers {
-                match *manager {
-                    "chruby" => msg.push_str("  chruby: Install Ruby manually to ~/.rubies/\n"),
-                    "brew" => {
-                        msg.push_str("  brew install ruby  # Installs latest version\n");
-                        if !request.is_any() {
-                            msg.push_str(
-                                "  # Note: Homebrew typically installs the latest Ruby version.\n",
-                            );
-                            msg.push_str("  # For specific versions, consider using a version manager like rbenv or mise.\n");
-                        }
-                    }
-                    _ => {
-                        let version = format_request_for_install(request);
-                        let install_arg = match *manager {
-                            "mise" => format!("ruby@{version}"),
-                            "asdf" => format!("ruby {version}"),
-                            _ => version,
-                        };
-                        writeln!(msg, "  {manager} install {install_arg}").unwrap();
-                    }
-                }
-            }
-        }
-
-        msg
-    }
-}
-
-/// Format request for display
-fn format_request(request: &RubyRequest) -> String {
-    match request {
-        RubyRequest::Any => "any".to_string(),
-        RubyRequest::Exact(maj, min, patch) => format!("{maj}.{min}.{patch}"),
-        RubyRequest::MajorMinor(maj, min) => format!("{maj}.{min}"),
-        RubyRequest::Major(maj) => format!("{maj}"),
-        RubyRequest::Path(p) => p.display().to_string(),
-        RubyRequest::Range(_, s) => s.clone(),
-    }
-}
-
-/// Format request for version manager install command
-#[cfg(not(target_os = "windows"))]
-fn format_request_for_install(request: &RubyRequest) -> String {
-    match request {
-        RubyRequest::Exact(maj, min, patch) => format!("{maj}.{min}.{patch}"),
-        RubyRequest::MajorMinor(maj, min) => format!("{maj}.{min}"),
-        RubyRequest::Major(maj) => format!("{maj}"),
-        RubyRequest::Range(_, s) => s.clone(),
-        _ => "<any version>".to_string(), // fallback
-    }
+/// Generate a consistent error message for all "can't get Ruby" scenarios.
+fn ruby_not_found_error(request: &RubyRequest, reason: &str) -> String {
+    format!(
+        "No suitable Ruby found for request: {request}\n{reason}\nPlease install Ruby manually."
+    )
 }
 
 /// Find gem executable alongside Ruby
@@ -375,56 +556,57 @@ async fn query_ruby_info(ruby_path: &Path) -> Result<(semver::Version, String)> 
 mod tests {
     use super::*;
     use std::fs;
+    use std::str::FromStr;
+    use target_lexicon::Triple;
     use tempfile::TempDir;
 
-    #[test]
-    fn test_format_request() {
-        assert_eq!(format_request(&RubyRequest::Any), "any");
-        assert_eq!(format_request(&RubyRequest::Exact(3, 4, 6)), "3.4.6");
-        assert_eq!(format_request(&RubyRequest::MajorMinor(3, 4)), "3.4");
-        assert_eq!(format_request(&RubyRequest::Major(3)), "3");
+    /// Mutex to serialize tests that mutate `PREK_RUBY_MIRROR`.
+    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-        let range = semver::VersionReq::parse(">=3.2").unwrap();
-        assert_eq!(
-            format_request(&RubyRequest::Range(range, ">=3.2".to_string())),
-            ">=3.2"
-        );
+    /// RAII guard that serializes env var access and restores the original value on drop.
+    /// Holds the `ENV_MUTEX` lock for its lifetime, so tests using this guard run
+    /// sequentially. Ensures cleanup even if a test panics.
+    struct EnvVarGuard {
+        key: &'static str,
+        saved: Option<String>,
+        _lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl EnvVarGuard {
+        fn new(key: &'static str) -> Self {
+            let lock = ENV_MUTEX
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let saved = EnvVars::var(key).ok();
+            Self {
+                key,
+                saved,
+                _lock: lock,
+            }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.saved {
+                Some(v) => unsafe { std::env::set_var(self.key, v) },
+                None => unsafe { std::env::remove_var(self.key) },
+            }
+        }
     }
 
     #[test]
-    #[cfg(not(target_os = "windows"))]
-    fn test_format_request_for_install() {
-        assert_eq!(
-            format_request_for_install(&RubyRequest::Exact(3, 4, 6)),
-            "3.4.6"
-        );
-        assert_eq!(
-            format_request_for_install(&RubyRequest::MajorMinor(3, 4)),
-            "3.4"
-        );
-        assert_eq!(format_request_for_install(&RubyRequest::Major(3)), "3");
+    fn test_ruby_request_display() {
+        assert_eq!(RubyRequest::Any.to_string(), "any");
+        assert_eq!(RubyRequest::Exact(3, 4, 6).to_string(), "3.4.6");
+        assert_eq!(RubyRequest::MajorMinor(3, 4).to_string(), "3.4");
+        assert_eq!(RubyRequest::Major(3).to_string(), "3");
 
         let range = semver::VersionReq::parse(">=3.2").unwrap();
         assert_eq!(
-            format_request_for_install(&RubyRequest::Range(range, ">=3.2".to_string())),
+            RubyRequest::Range(range, ">=3.2".to_string()).to_string(),
             ">=3.2"
         );
-
-        // Fallback for Any and Path
-        assert_eq!(
-            format_request_for_install(&RubyRequest::Any),
-            "<any version>"
-        );
-    }
-
-    #[test]
-    #[cfg(not(target_os = "windows"))]
-    fn test_detect_version_managers_empty() {
-        // This test assumes the test environment doesn't have version managers
-        // in specific test temp directories - just ensures function doesn't panic
-        let managers = detect_version_managers();
-        // Result depends on actual system, so we just check it returns a vec
-        assert!(managers.is_empty() || !managers.is_empty());
     }
 
     #[tokio::test]
@@ -471,45 +653,88 @@ mod tests {
     }
 
     #[test]
-    fn test_ruby_not_found_error_format() {
-        let request = RubyRequest::Exact(3, 4, 6);
-        let error = ruby_not_found_error(&request);
-
+    fn test_ruby_not_found_error() {
+        let error = ruby_not_found_error(&RubyRequest::Exact(3, 4, 6), "Some reason.");
         assert!(error.contains("3.4.6"));
         assert!(error.contains("No suitable Ruby found"));
-    }
+        assert!(error.contains("Some reason."));
+        assert!(error.contains("Please install Ruby manually."));
 
-    #[test]
-    fn test_ruby_not_found_error_any() {
-        let request = RubyRequest::Any;
-        let error = ruby_not_found_error(&request);
-
+        let error = ruby_not_found_error(&RubyRequest::Any, "Another reason.");
         assert!(error.contains("any"));
-        assert!(error.contains("No suitable Ruby found"));
+        assert!(error.contains("Another reason."));
     }
 
-    #[cfg(not(target_os = "windows"))]
     #[test]
-    fn test_ruby_not_found_error_includes_suggestions() {
-        let request = RubyRequest::Exact(3, 4, 6);
-        let error = ruby_not_found_error(&request);
+    fn test_rv_ruby_urls_default() {
+        let _guard = EnvVarGuard::new(EnvVars::PREK_RUBY_MIRROR);
+        unsafe { std::env::remove_var(EnvVars::PREK_RUBY_MIRROR) };
 
-        // Should contain either version manager suggestions or system install instructions
-        assert!(
-            error.contains("version manager")
-                || error.contains("System package manager")
-                || error.contains("Ubuntu/Debian")
+        let (api_url, api_is_github) = rv_ruby_api_url();
+        assert_eq!(
+            api_url,
+            "https://api.github.com/repos/spinel-coop/rv-ruby/releases/latest"
         );
+        assert!(api_is_github);
+
+        let (dl_url, dl_is_github) = rv_ruby_download_base();
+        assert_eq!(
+            dl_url,
+            format!("{RV_RUBY_DEFAULT_URL}/releases/latest/download")
+        );
+        assert!(dl_is_github);
     }
 
-    #[cfg(target_os = "windows")]
     #[test]
-    fn test_ruby_not_found_error_windows() {
-        let request = RubyRequest::Exact(3, 4, 6);
-        let error = ruby_not_found_error(&request);
+    fn test_rv_ruby_urls_github_mirror() {
+        // A github.com mirror: API URL is rewritten, download URL uses web URL.
+        let _guard = EnvVarGuard::new(EnvVars::PREK_RUBY_MIRROR);
+        unsafe {
+            std::env::set_var(
+                EnvVars::PREK_RUBY_MIRROR,
+                "https://github.com/myorg/vetted-rubies",
+            );
+        }
 
-        assert!(error.contains("rubyinstaller.org"));
-        assert!(error.contains("Windows"));
+        let (api_url, api_is_github) = rv_ruby_api_url();
+        assert_eq!(
+            api_url,
+            "https://api.github.com/repos/myorg/vetted-rubies/releases/latest"
+        );
+        assert!(api_is_github);
+
+        let (dl_url, dl_is_github) = rv_ruby_download_base();
+        assert_eq!(
+            dl_url,
+            "https://github.com/myorg/vetted-rubies/releases/latest/download"
+        );
+        assert!(dl_is_github);
+    }
+
+    #[test]
+    fn test_rv_ruby_urls_non_github_mirror() {
+        // A non-github mirror: both URLs use the mirror as-is, is_github is false.
+        let _guard = EnvVarGuard::new(EnvVars::PREK_RUBY_MIRROR);
+        unsafe {
+            std::env::set_var(
+                EnvVars::PREK_RUBY_MIRROR,
+                "https://my-mirror.example.com/rv-ruby",
+            );
+        }
+
+        let (api_url, api_is_github) = rv_ruby_api_url();
+        assert_eq!(
+            api_url,
+            "https://my-mirror.example.com/rv-ruby/releases/latest"
+        );
+        assert!(!api_is_github);
+
+        let (dl_url, dl_is_github) = rv_ruby_download_base();
+        assert_eq!(
+            dl_url,
+            "https://my-mirror.example.com/rv-ruby/releases/latest/download"
+        );
+        assert!(!dl_is_github);
     }
 
     #[test]
@@ -546,5 +771,169 @@ mod tests {
         let result = find_gem_for_ruby(&ruby_path);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), gem_path);
+    }
+
+    #[test]
+    fn test_parse_version_from_asset() {
+        let suffix = ".x86_64_linux.tar.gz";
+
+        // Standard version
+        assert_eq!(
+            parse_version_from_asset("ruby-3.4.8.x86_64_linux.tar.gz", suffix),
+            Some(semver::Version::new(3, 4, 8))
+        );
+
+        // Different version
+        assert_eq!(
+            parse_version_from_asset("ruby-3.3.0.x86_64_linux.tar.gz", suffix),
+            Some(semver::Version::new(3, 3, 0))
+        );
+
+        // Wrong platform: should not match
+        assert_eq!(
+            parse_version_from_asset("ruby-3.4.8.arm64_linux.tar.gz", suffix),
+            None
+        );
+
+        // Pre-release: filtered out
+        assert_eq!(
+            parse_version_from_asset("ruby-3.5.0-preview1.x86_64_linux.tar.gz", suffix),
+            None
+        );
+
+        // Non-semver (two components): filtered out
+        assert_eq!(
+            parse_version_from_asset("ruby-0.49.x86_64_linux.tar.gz", suffix),
+            None
+        );
+
+        // Not a ruby asset
+        assert_eq!(
+            parse_version_from_asset("something-else.tar.gz", suffix),
+            None
+        );
+    }
+
+    #[test]
+    fn test_rv_platform_string_for_macos() {
+        let intel = Triple::from_str("x86_64-apple-darwin").unwrap();
+        assert_eq!(rv_platform_string(&intel), Some("ventura"));
+
+        let arm = Triple::from_str("aarch64-apple-darwin").unwrap();
+        assert_eq!(rv_platform_string(&arm), Some("arm64_sonoma"));
+    }
+
+    #[test]
+    fn test_rv_platform_string_for_linux() {
+        let gnu = Triple::from_str("x86_64-unknown-linux-gnu").unwrap();
+        assert_eq!(rv_platform_string(&gnu), Some("x86_64_linux"));
+
+        let arm_gnu = Triple::from_str("aarch64-unknown-linux-gnu").unwrap();
+        assert_eq!(rv_platform_string(&arm_gnu), Some("arm64_linux"));
+
+        let musl = Triple::from_str("x86_64-unknown-linux-musl").unwrap();
+        assert_eq!(rv_platform_string(&musl), Some("x86_64_linux_musl"));
+
+        let arm_musl = Triple::from_str("aarch64-unknown-linux-musl").unwrap();
+        assert_eq!(rv_platform_string(&arm_musl,), Some("arm64_linux_musl"));
+    }
+
+    #[test]
+    fn test_rv_platform_string_unsupported() {
+        let windows = Triple::from_str("x86_64-pc-windows-msvc").unwrap();
+        assert_eq!(rv_platform_string(&windows), None);
+
+        let linux_unknown_libc = Triple::from_str("x86_64-unknown-linux-gnux32").unwrap();
+        assert_eq!(rv_platform_string(&linux_unknown_libc), None);
+    }
+
+    #[test]
+    fn test_find_installed_empty_dir() {
+        let temp_dir = TempDir::new().unwrap();
+        let installer = RubyInstaller::new(temp_dir.path().to_path_buf());
+
+        assert!(installer.find_installed(&RubyRequest::Any).is_none());
+    }
+
+    #[test]
+    fn test_find_installed_with_versions() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create fake Ruby installations
+        for version in ["3.3.5", "3.4.8", "3.2.1"] {
+            let bin_dir = temp_dir.path().join(version).join("bin");
+            fs::create_dir_all(&bin_dir).unwrap();
+            fs::write(bin_dir.join("ruby"), "fake").unwrap();
+            fs::write(bin_dir.join("gem"), "fake").unwrap();
+        }
+
+        let installer = RubyInstaller::new(temp_dir.path().to_path_buf());
+
+        // Any: should return highest version
+        let result = installer.find_installed(&RubyRequest::Any).unwrap();
+        assert_eq!(*result.version(), semver::Version::new(3, 4, 8));
+
+        // MajorMinor(3, 3): should return 3.3.5
+        let result = installer
+            .find_installed(&RubyRequest::MajorMinor(3, 3))
+            .unwrap();
+        assert_eq!(*result.version(), semver::Version::new(3, 3, 5));
+
+        // Exact match
+        let result = installer
+            .find_installed(&RubyRequest::Exact(3, 2, 1))
+            .unwrap();
+        assert_eq!(*result.version(), semver::Version::new(3, 2, 1));
+
+        // No match
+        assert!(
+            installer
+                .find_installed(&RubyRequest::MajorMinor(2, 7))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn test_is_github_https() {
+        // Exact match over HTTPS
+        assert!(is_github_https("https://github.com/spinel-coop/rv-ruby"));
+        assert!(is_github_https("https://github.com:443/org/repo"));
+
+        // Plaintext HTTP — don't leak tokens
+        assert!(!is_github_https("http://github.com/org/repo"));
+        // Not github.com
+        assert!(!is_github_https("https://gitlab.com/org/repo"));
+        assert!(!is_github_https("https://my-mirror.example.com/rv-ruby"));
+        // Path injection — github.com in path, not host
+        assert!(!is_github_https("https://evil.com/github.com/rv"));
+        // Subdomain — not the same host
+        assert!(!is_github_https("https://api.github.com/repos/org/repo"));
+        // Userinfo-based redirect
+        assert!(!is_github_https("https://github.com@evil.com/org/repo"));
+        assert!(!is_github_https(
+            "https://github.com:password@evil.com/org/repo"
+        ));
+        assert!(!is_github_https("https://evil.com@github.com/org/repo"));
+        // Other schemes
+        assert!(!is_github_https("ftp://github.com/org/repo"));
+    }
+
+    #[test]
+    fn test_find_installed_skips_incomplete_dirs() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Version dir with ruby but no gem
+        let bin_dir = temp_dir.path().join("3.4.8").join("bin");
+        fs::create_dir_all(&bin_dir).unwrap();
+        fs::write(bin_dir.join("ruby"), "fake").unwrap();
+
+        // Version dir with no bin at all
+        fs::create_dir_all(temp_dir.path().join("3.3.0")).unwrap();
+
+        // Non-version directory
+        fs::create_dir_all(temp_dir.path().join("not-a-version").join("bin")).unwrap();
+
+        let installer = RubyInstaller::new(temp_dir.path().to_path_buf());
+        assert!(installer.find_installed(&RubyRequest::Any).is_none());
     }
 }

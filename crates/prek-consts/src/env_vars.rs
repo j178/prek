@@ -76,6 +76,7 @@ impl EnvVars {
     pub const LUA_CPATH: &'static str = "LUA_CPATH";
 
     // Ruby related
+    pub const PREK_RUBY_MIRROR: &'static str = "PREK_RUBY_MIRROR";
     pub const GEM_HOME: &'static str = "GEM_HOME";
     pub const GEM_PATH: &'static str = "GEM_PATH";
     pub const BUNDLE_IGNORE_CONFIG: &'static str = "BUNDLE_IGNORE_CONFIG";
