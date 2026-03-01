@@ -1990,7 +1990,7 @@ dependencies = [
  "prek-identify",
  "prek-pty",
  "pretty_assertions",
- "quick-xml 0.39.0",
+ "quick-xml 0.39.2",
  "rand",
  "rayon",
  "regex",
@@ -2101,9 +2101,9 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
-version = "0.39.0"
+version = "0.39.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2e3bf4aa9d243beeb01a7b3bc30b77cfe2c44e24ec02d751a7104a53c2c49a1"
+checksum = "958f21e8e7ceb5a1aa7fa87fab28e7c75976e0bfe7e23ff069e0a260f894067d"
 dependencies = [
  "memchr",
 ]
