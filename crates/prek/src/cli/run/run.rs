@@ -21,7 +21,7 @@ use crate::cli::reporter::{HookInitReporter, HookInstallReporter, HookRunReporte
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{CollectOptions, FileFilter, Selectors, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
-use crate::config::{Language, Stage};
+use crate::config::{Language, PassFilenames, Stage};
 use crate::fs::CWD;
 use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
@@ -1019,11 +1019,12 @@ async fn run_hook(
     }
     let start = std::time::Instant::now();
 
-    let filenames = if hook.pass_filenames {
-        shuffle(&mut filenames);
-        filenames
-    } else {
-        vec![]
+    let filenames = match hook.pass_filenames {
+        PassFilenames::All | PassFilenames::Limited(_) => {
+            shuffle(&mut filenames);
+            filenames
+        }
+        PassFilenames::None => vec![],
     };
 
     let (exit_status, hook_output) = if dry_run {

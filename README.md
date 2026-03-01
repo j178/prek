@@ -63,7 +63,7 @@ On Linux and macOS:
 <!-- --8<-- [start: linux-standalone-install] -->
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.3.3/prek-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.3.4/prek-installer.sh | sh
 ```
 
 <!-- --8<-- [end: linux-standalone-install] -->
@@ -73,7 +73,7 @@ On Windows:
 <!-- --8<-- [start: windows-standalone-install] -->
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.3.3/prek-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.3.4/prek-installer.ps1 | iex"
 ```
 
 <!-- --8<-- [end: windows-standalone-install] -->
@@ -248,6 +248,21 @@ scoop install main/prek
 </details>
 
 <details>
+<summary>Winget (Windows)</summary>
+
+<!-- --8<-- [start: winget-install] -->
+
+prek is available via [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/).
+
+```powershell
+winget install --id j178.Prek
+```
+
+<!-- --8<-- [end: winget-install] -->
+
+</details>
+
+<details>
 <summary>MacPorts</summary>
 
 <!-- --8<-- [start: macports-install] -->
@@ -370,6 +385,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [python-attrs/attrs](https://github.com/python-attrs/attrs/commit/c95b177682e76a63478d29d040f9cb36a8d31915)
 - [jlowin/fastmcp](https://github.com/jlowin/fastmcp/pull/2309)
 - [apache/iceberg-python](https://github.com/apache/iceberg-python/pull/2533)
+- [apache/iggy](https://github.com/apache/iggy/pull/2383)
 - [apache/lucene](https://github.com/apache/lucene/pull/15629)
 - [jcrist/msgspec](https://github.com/jcrist/msgspec/pull/918)
 - [python-humanize/humanize](https://github.com/python-humanize/humanize/pull/276)

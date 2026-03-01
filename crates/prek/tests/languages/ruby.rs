@@ -748,6 +748,229 @@ fn native_gem_dependency() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Test that multiple gemspecs in a hook repo are built and installed together,
+/// with all dependencies resolved in a single pass.
+#[test]
+fn multiple_gemspecs() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let hook_repo = context.work_dir().child("multi-gem-repo");
+    hook_repo.create_dir_all()?;
+
+    // First gemspec: depends on `rainbow`
+    hook_repo
+        .child("gem_one.gemspec")
+        .write_str(indoc::indoc! {r#"
+            Gem::Specification.new do |spec|
+              spec.name          = "gem_one"
+              spec.version       = "0.1.0"
+              spec.authors       = ["Test"]
+              spec.summary       = "First gem"
+              spec.files         = ["bin/gem-one"]
+              spec.executables   = ["gem-one"]
+              spec.bindir        = "bin"
+              spec.add_dependency "rainbow", "~> 3.0"
+            end
+        "#})?;
+
+    // Second gemspec: also depends on `rainbow` (overlapping) plus `unicode-display_width`.
+    // This tests that --explain de-duplicates shared dependencies across gemspecs.
+    hook_repo.child("lib").create_dir_all()?;
+    hook_repo
+        .child("lib/gem_two.rb")
+        .write_str("module GemTwo; end\n")?;
+    hook_repo
+        .child("gem_two.gemspec")
+        .write_str(indoc::indoc! {r#"
+            Gem::Specification.new do |spec|
+              spec.name          = "gem_two"
+              spec.version       = "0.1.0"
+              spec.authors       = ["Test"]
+              spec.summary       = "Second gem"
+              spec.files         = ["lib/gem_two.rb"]
+              spec.add_dependency "rainbow", "~> 3.0"
+              spec.add_dependency "unicode-display_width", "~> 3.0"
+            end
+        "#})?;
+
+    // Executable that requires both gems' dependencies
+    hook_repo.child("bin").create_dir_all()?;
+    hook_repo.child("bin/gem-one").write_str(indoc::indoc! {r#"
+        #!/usr/bin/env ruby
+        require 'rainbow'
+        require 'unicode/display_width'
+        puts "rainbow=#{Gem.loaded_specs['rainbow'].version}"
+        puts "udw=#{Gem.loaded_specs['unicode-display_width'].version}"
+    "#})?;
+
+    hook_repo
+        .child(".pre-commit-hooks.yaml")
+        .write_str(indoc::indoc! {r"
+            - id: multi-gem
+              name: Multi Gem
+              entry: gem-one
+              language: ruby
+              pass_filenames: false
+        "})?;
+
+    let output = git_cmd(&hook_repo).args(["init"]).output()?;
+    assert!(output.status.success(), "git init failed: {output:?}");
+    git_cmd(&hook_repo)
+        .args(["config", "user.name", "Test User"])
+        .output()?;
+    git_cmd(&hook_repo)
+        .args(["config", "user.email", "test@example.com"])
+        .output()?;
+    let output = git_cmd(&hook_repo).args(["add", "."]).output()?;
+    assert!(output.status.success(), "git add failed: {output:?}");
+    let output = git_cmd(&hook_repo)
+        .args(["commit", "-m", "Initial commit"])
+        .output()?;
+    assert!(output.status.success(), "git commit failed: {output:?}");
+
+    let rev_output = git_cmd(&hook_repo).args(["rev-parse", "HEAD"]).output()?;
+    let rev = String::from_utf8_lossy(&rev_output.stdout)
+        .trim()
+        .to_string();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+            repos:
+              - repo: {}
+                rev: {}
+                hooks:
+                  - id: multi-gem
+                    always_run: true
+        ",
+        hook_repo.to_path_buf().display(),
+        rev
+    });
+    context.git_add(".pre-commit-config.yaml");
+
+    let filters = [
+        (r"rainbow=\d+\.\d+\.\d+", "rainbow=X.Y.Z"),
+        (r"udw=\d+\.\d+\.\d+", "udw=X.Y.Z"),
+    ]
+    .into_iter()
+    .chain(context.filters())
+    .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, context.run().arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Multi Gem................................................................Passed
+    - hook id: multi-gem
+    - duration: [TIME]
+
+      rainbow=X.Y.Z
+      udw=X.Y.Z
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Test that pre-built platform-specific gems skip compilation while source gems
+/// compile natively. Installs `sqlite3` (publishes precompiled platform gems) and
+/// `msgpack` (source-only, requires C compilation) side by side.
+#[test]
+fn prebuilt_vs_compiled_gems() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context
+        .work_dir()
+        .child("check_gems.rb")
+        .write_str(indoc::indoc! {r#"
+            require 'sqlite3'
+            require 'msgpack'
+
+            db = SQLite3::Database.new(":memory:")
+            db.execute("CREATE TABLE t (v TEXT)")
+            db.execute("INSERT INTO t VALUES (?)", [MessagePack.pack("ok")])
+            puts "sqlite3=#{SQLite3::VERSION} msgpack=#{MessagePack::VERSION}"
+        "#})?;
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: test-native-gems
+                name: test-native-gems
+                language: ruby
+                entry: ruby check_gems.rb
+                additional_dependencies: ['sqlite3', 'msgpack']
+                pass_filenames: false
+                always_run: true
+    "});
+    context.git_add(".");
+
+    let filters = [
+        (r"sqlite3=\d+\.\d+\.\d+", "sqlite3=X.Y.Z"),
+        (r"msgpack=\d+\.\d+\.\d+", "msgpack=X.Y.Z"),
+    ]
+    .into_iter()
+    .chain(context.filters())
+    .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, context.run().arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    test-native-gems.........................................................Passed
+    - hook id: test-native-gems
+    - duration: [TIME]
+
+      sqlite3=X.Y.Z msgpack=X.Y.Z
+
+    ----- stderr -----
+    ");
+
+    // Verify installation methods by inspecting the gem directories.
+    // Pre-built gems include a platform suffix (e.g. sqlite3-X.Y.Z-x86_64-linux-gnu),
+    // while compiled-from-source gems do not (e.g. msgpack-X.Y.Z).
+    let hooks_dir = context.home_dir().join("hooks");
+    let gems_dir = fs_err::read_dir(&hooks_dir)?
+        .filter_map(Result::ok)
+        .find(|e| e.file_name().to_string_lossy().starts_with("ruby-"))
+        .map(|e| e.path().join("gems").join("gems"))
+        .expect("No ruby hook directory found");
+
+    let gem_dirs: Vec<String> = fs_err::read_dir(&gems_dir)?
+        .filter_map(Result::ok)
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
+
+    // sqlite3 should have a platform suffix (precompiled)
+    let sqlite3_dir = gem_dirs
+        .iter()
+        .find(|d| d.starts_with("sqlite3-"))
+        .expect("sqlite3 gem not found");
+    assert!(
+        sqlite3_dir.contains("x86_64-linux")
+            || sqlite3_dir.contains("aarch64-linux")
+            || sqlite3_dir.contains("arm64-darwin")
+            || sqlite3_dir.contains("x64-mingw"),
+        "sqlite3 should be a prebuilt platform gem, got: {sqlite3_dir}"
+    );
+
+    // msgpack should NOT have a platform suffix (compiled from source)
+    let msgpack_dir = gem_dirs
+        .iter()
+        .find(|d| d.starts_with("msgpack-"))
+        .expect("msgpack gem not found");
+    assert!(
+        !msgpack_dir.contains("linux")
+            && !msgpack_dir.contains("darwin")
+            && !msgpack_dir.contains("mingw"),
+        "msgpack should be compiled from source (no platform suffix), got: {msgpack_dir}"
+    );
+
+    Ok(())
+}
+
 /// Test Ruby hook that processes files
 #[test]
 fn process_files() -> anyhow::Result<()> {

@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
-use futures::{StreamExt, TryStreamExt};
+use futures::StreamExt;
 use prek_consts::env_vars::EnvVars;
 use semver::Version;
 use target_lexicon::HOST;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use crate::fs::LockedFile;
 use crate::languages::REQWEST_CLIENT;
@@ -182,8 +182,15 @@ impl Rustup {
         let infos: Vec<ToolchainInfo> = futures::stream::iter(entries)
             .map(async move |(name, path)| toolchain_info(name, path).await)
             .buffer_unordered(8)
-            .try_collect()
-            .await?;
+            .filter_map(async move |result| match result {
+                Ok(info) => Some(info),
+                Err(e) => {
+                    warn!("Skipping invalid toolchain: {e:#}");
+                    None
+                }
+            })
+            .collect()
+            .await;
 
         Ok(infos)
     }
@@ -208,8 +215,15 @@ impl Rustup {
         let infos: Vec<ToolchainInfo> = futures::stream::iter(entries)
             .map(async move |(name, path)| toolchain_info(name, path).await)
             .buffer_unordered(8)
-            .try_collect()
-            .await?;
+            .filter_map(async move |result| match result {
+                Ok(info) => Some(info),
+                Err(e) => {
+                    warn!("Skipping invalid toolchain: {e:#}");
+                    None
+                }
+            })
+            .collect()
+            .await;
 
         Ok(infos)
     }

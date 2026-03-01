@@ -104,6 +104,7 @@ prek-pty = { workspace = true }
 
 libc = { workspace = true }
 pprof = { workspace = true, optional = true }
+rustix = { workspace = true }
 
 [build-dependencies]
 fs-err = { workspace = true }

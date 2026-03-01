@@ -1078,10 +1078,14 @@ This is commonly used for hooks that check repository-wide state (for example, r
 
 Controls whether `prek` appends the matching filenames to the command line.
 
-- Type: boolean
-- Default: `true`
+- Type: boolean or positive integer
+- Default: `true` which passes all matching filenames
 
 Set `pass_filenames: false` for hooks that don’t accept file arguments (or that discover files themselves).
+
+Set `pass_filenames: n` (a positive integer) to limit each invocation to at most `n` filenames. When there are more matching files than `n`, `prek` spawns multiple invocations and runs them in parallel. This is useful for tools that can only process a limited number of files at once.
+
+Prek will automatically limit the number of filenames to ensure command lines don’t exceed the OS limit, even when `pass_filenames: true`.
 
 #### `stages`
 
@@ -1332,6 +1336,8 @@ prek supports the following environment variables:
 
 - `PREK_NO_CONCURRENCY` — Disable parallelism for installs and runs (If set, force concurrency to 1).
 
+- `PREK_MAX_CONCURRENCY` — Set the maximum number of concurrent hooks (minimum 1). Defaults to the number of CPU cores when unset. Ignored when `PREK_NO_CONCURRENCY` is set. If you encounter "Too many open files" errors, lowering this value or raising the file descriptor limit with `ulimit -n` can help.
+
 - `PREK_NO_FAST_PATH` — Disable Rust-native built-in hooks; always use the original hook implementation. See [Built-in Fast Hooks](builtin.md) for details.
 
 - `PREK_UV_SOURCE` — Control how uv (Python package installer) is installed. Options:
@@ -1357,6 +1363,8 @@ prek supports the following environment variables:
     - `podman`
 
     - `container` (Apple's Container runtime on macOS, see [container](https://github.com/apple/container))
+
+- `PREK_LOG_TRUNCATE_LIMIT` — Control the truncation limit for command lines shown in trace logs (`Executing ...`). Defaults to `120` characters of arguments; set a larger value to reduce truncation.
 
 - `PREK_RUBY_MIRROR` — Override the Ruby installer base URL used for downloaded Ruby toolchains (for example, when using mirrors or air-gapped CI environments). See [Ruby language support](languages.md#ruby) for details.
 

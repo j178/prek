@@ -329,6 +329,68 @@ impl<'de> Deserialize<'de> for Stages {
     }
 }
 
+/// Controls whether filenames are appended to a hook's command line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PassFilenames {
+    /// Pass all matching filenames (default). Corresponds to `pass_filenames:
+    /// true`.
+    All,
+    /// Pass no filenames. Corresponds to `pass_filenames: false`.
+    None,
+    /// Pass at most `n` filenames per invocation. Corresponds to
+    /// `pass_filenames: n`.
+    Limited(std::num::NonZeroUsize),
+}
+
+impl<'de> Deserialize<'de> for PassFilenames {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct PassFilenamesVisitor;
+
+        impl serde::de::Visitor<'_> for PassFilenamesVisitor {
+            type Value = PassFilenames;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a boolean or a positive integer")
+            }
+
+            fn visit_bool<E: DeError>(self, v: bool) -> Result<PassFilenames, E> {
+                Ok(if v {
+                    PassFilenames::All
+                } else {
+                    PassFilenames::None
+                })
+            }
+
+            fn visit_u64<E: DeError>(self, v: u64) -> Result<PassFilenames, E> {
+                let n = usize::try_from(v)
+                    .ok()
+                    .and_then(std::num::NonZeroUsize::new)
+                    .ok_or_else(|| {
+                        E::custom(
+                            "pass_filenames must be a positive integer; use `false` to pass no filenames",
+                        )
+                    })?;
+                Ok(PassFilenames::Limited(n))
+            }
+
+            fn visit_i64<E: DeError>(self, v: i64) -> Result<PassFilenames, E> {
+                if v <= 0 {
+                    return Err(E::custom(
+                        "pass_filenames must be a positive integer; use `false` to pass no filenames",
+                    ));
+                }
+                #[allow(clippy::cast_sign_loss)]
+                self.visit_u64(v as u64)
+            }
+        }
+
+        deserializer.deserialize_any(PassFilenamesVisitor)
+    }
+}
+
 /// Common hook options.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -363,7 +425,7 @@ pub(crate) struct HookOptions {
     pub fail_fast: Option<bool>,
     /// Append filenames that would be checked to the hook entry as arguments.
     /// Default is true.
-    pub pass_filenames: Option<bool>,
+    pub pass_filenames: Option<PassFilenames>,
     /// A description of the hook. For metadata only.
     pub description: Option<String>,
     /// Run the hook on a specific version of the language.
@@ -2032,5 +2094,53 @@ mod tests {
         "};
         let config = serde_saphyr::from_str::<Config>(yaml).unwrap();
         insta::assert_debug_snapshot!(config);
+    }
+
+    #[test]
+    fn pass_filenames_zero_is_rejected() {
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: invalid-pass-filenames-zero
+                    name: invalid pass_filenames zero
+                    entry: echo
+                    language: system
+                    pass_filenames: 0
+        "};
+        let result = serde_saphyr::from_str::<Config>(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn pass_filenames_negative_is_rejected() {
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: invalid-pass-filenames-negative
+                    name: invalid pass_filenames negative
+                    entry: echo
+                    language: system
+                    pass_filenames: -1
+        "};
+        let result = serde_saphyr::from_str::<Config>(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn pass_filenames_string_is_rejected() {
+        let yaml = indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: invalid-pass-filenames-string
+                    name: invalid pass_filenames string
+                    entry: echo
+                    language: system
+                    pass_filenames: "foo"
+        "#};
+        let result = serde_saphyr::from_str::<Config>(yaml);
+        assert!(result.is_err());
     }
 }

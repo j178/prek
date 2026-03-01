@@ -96,7 +96,8 @@
       "type": "array",
       "items": {
         "$ref": "#/definitions/Stage"
-      }
+      },
+      "uniqueItems": true
     },
     "files": {
       "description": "Global file include pattern.",
@@ -268,7 +269,7 @@
         },
         "pass_filenames": {
           "description": "Append filenames that would be checked to the hook entry as arguments.\nDefault is true.",
-          "type": "boolean"
+          "$ref": "#/definitions/PassFilenames"
         },
         "description": {
           "description": "A description of the hook. For metadata only.",
@@ -291,7 +292,8 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Stage"
-          }
+          },
+          "uniqueItems": true
         },
         "verbose": {
           "description": "Print the output of the hook even if it passes.\nDefault is false.",
@@ -363,6 +365,18 @@
           "required": [
             "glob"
           ]
+        }
+      ]
+    },
+    "PassFilenames": {
+      "description": "Whether to pass filenames to the hook. `true` passes all matching filenames (default), `false` passes none, and a positive integer limits each invocation to at most that many filenames.",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer",
+          "exclusiveMinimum": 0
         }
       ]
     },
@@ -495,7 +509,7 @@
         },
         "pass_filenames": {
           "description": "Append filenames that would be checked to the hook entry as arguments.\nDefault is true.",
-          "type": "boolean"
+          "$ref": "#/definitions/PassFilenames"
         },
         "description": {
           "description": "A description of the hook. For metadata only.",
@@ -518,7 +532,8 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Stage"
-          }
+          },
+          "uniqueItems": true
         },
         "verbose": {
           "description": "Print the output of the hook even if it passes.\nDefault is false.",
@@ -652,7 +667,7 @@
         },
         "pass_filenames": {
           "description": "Append filenames that would be checked to the hook entry as arguments.\nDefault is true.",
-          "type": "boolean"
+          "$ref": "#/definitions/PassFilenames"
         },
         "description": {
           "description": "A description of the hook. For metadata only.",
@@ -675,7 +690,8 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Stage"
-          }
+          },
+          "uniqueItems": true
         },
         "verbose": {
           "description": "Print the output of the hook even if it passes.\nDefault is false.",
@@ -814,7 +830,7 @@
         },
         "pass_filenames": {
           "description": "Append filenames that would be checked to the hook entry as arguments.\nDefault is true.",
-          "type": "boolean"
+          "$ref": "#/definitions/PassFilenames"
         },
         "description": {
           "description": "A description of the hook. For metadata only.",
@@ -837,7 +853,8 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Stage"
-          }
+          },
+          "uniqueItems": true
         },
         "verbose": {
           "description": "Print the output of the hook even if it passes.\nDefault is false.",
