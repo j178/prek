@@ -308,6 +308,10 @@ pub(crate) struct InstallArgs {
     /// Allow a missing configuration file.
     #[arg(long)]
     pub(crate) allow_missing_config: bool,
+
+    /// Install hooks to the specified git directory.
+    #[arg(long, value_name = "GIT_DIR", value_hint = ValueHint::DirPath)]
+    pub(crate) git_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]

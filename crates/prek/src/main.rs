@@ -248,7 +248,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.allow_missing_config,
                 cli.globals.refresh,
                 printer,
-                None,
+                args.git_dir.as_deref(),
             )
             .await
         }
