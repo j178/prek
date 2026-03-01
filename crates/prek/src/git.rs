@@ -192,6 +192,24 @@ pub(crate) async fn get_git_common_dir() -> Result<PathBuf, Error> {
     }
 }
 
+pub(crate) async fn get_git_hooks_dir() -> Result<PathBuf, Error> {
+    let output = git_cmd("get git hooks dir")?
+        .arg("rev-parse")
+        .arg("--path-format=absolute")
+        .arg("--git-path")
+        .arg("hooks")
+        .check(true)
+        .output()
+        .await?;
+    if output.stdout.trim_ascii().is_empty() {
+        Ok(get_git_common_dir().await?.join("hooks"))
+    } else {
+        Ok(PathBuf::from(
+            String::from_utf8_lossy(&output.stdout).trim_ascii(),
+        ))
+    }
+}
+
 pub(crate) async fn get_staged_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
     let output = git_cmd("get staged files")?
         .current_dir(root)
@@ -496,6 +514,30 @@ pub(crate) async fn has_hooks_path_set() -> Result<bool> {
     } else {
         Ok(false)
     }
+}
+
+pub(crate) async fn has_repo_hooks_path_set() -> Result<bool> {
+    let local = git_cmd("get local git hooks path")?
+        .arg("config")
+        .arg("--local")
+        .arg("--get")
+        .arg("core.hooksPath")
+        .check(false)
+        .output()
+        .await?;
+    if local.status.success() && !local.stdout.trim_ascii().is_empty() {
+        return Ok(true);
+    }
+
+    let worktree = git_cmd("get worktree git hooks path")?
+        .arg("config")
+        .arg("--worktree")
+        .arg("--get")
+        .arg("core.hooksPath")
+        .check(false)
+        .output()
+        .await?;
+    Ok(worktree.status.success() && !worktree.stdout.trim_ascii().is_empty())
 }
 
 pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<FxHashSet<PathBuf>, Error> {
