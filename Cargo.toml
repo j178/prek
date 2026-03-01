@@ -14,7 +14,7 @@ prek-consts = { path = "crates/prek-consts", version = "0.3.4" }
 prek-identify = { path = "crates/prek-identify", version = "0.3.4" }
 prek-pty = { path = "crates/prek-pty", version = "0.3.4" }
 
-anstream = { version = "0.6.15" }
+anstream = { version = "1.0.0" }
 anstyle-query = { version = "1.1.5" }
 anyhow = { version = "1.0.86" }
 async-compression = { version = "0.4.18", features = ["gzip", "xz", "tokio"] }
