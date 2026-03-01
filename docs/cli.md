@@ -245,7 +245,7 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </ul>
 <p>Can be specified multiple times. Also accepts <code>PREK_SKIP</code> or <code>SKIP</code> environment variables (comma-delimited).</p>
 </dd><dt id="prek-run--stage"><a href="#prek-run--stage"><code>--stage</code></a>, <code>--hook-stage</code> <i>stage</i></dt><dd><p>The stage during which the hook is fired.</p>
-<p>When specified, only hooks configured for that stage (for example <code>manual</code>, <code>pre-commit</code>, or <code>pre-commit</code>) will run. Defaults to <code>pre-commit</code> if not specified. For hooks specified directly in the command line, fallback to <code>manual</code> stage if no hooks found for <code>pre-commit</code> stage.</p>
+<p>When specified, only hooks configured for that stage (for example <code>manual</code>, <code>pre-commit</code>, or <code>pre-push</code>) will run. Defaults to <code>pre-commit</code> if not specified. For hooks specified directly in the command line, fallback to <code>manual</code> stage if no hooks found for <code>pre-commit</code> stage.</p>
 <p>Possible values:</p>
 <ul>
 <li><code>manual</code></li>
