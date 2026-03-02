@@ -2,7 +2,7 @@
 
 use crate::TagSet;
 
-pub const ALL_TAGS: [&str; 297] = [
+pub const ALL_TAGS: [&str; 310] = [
     "adobe-illustrator",
     "alpm",
     "apinotes",
@@ -72,6 +72,7 @@ pub const ALL_TAGS: [&str; 297] = [
     "ejson",
     "elixir",
     "elm",
+    "entitlements",
     "eot",
     "eps",
     "erb",
@@ -112,6 +113,7 @@ pub const ALL_TAGS: [&str; 297] = [
     "hcl",
     "header",
     "hgrc",
+    "hlsl",
     "html",
     "icalendar",
     "icns",
@@ -131,6 +133,7 @@ pub const ALL_TAGS: [&str; 297] = [
     "java",
     "java-properties",
     "javascript",
+    "jbuilder",
     "jenkins",
     "jinja",
     "jpeg",
@@ -231,10 +234,12 @@ pub const ALL_TAGS: [&str; 297] = [
     "sbt",
     "scala",
     "scheme",
+    "scons",
     "scss",
     "sh",
     "shell",
     "sln",
+    "slnx",
     "socket",
     "solidity",
     "spec",
@@ -284,6 +289,14 @@ pub const ALL_TAGS: [&str; 297] = [
     "wsdl",
     "wsgi",
     "xacro",
+    "xaml",
+    "xcconfig",
+    "xcodebuild",
+    "xcprivacy",
+    "xcscheme",
+    "xcsettings",
+    "xctestplan",
+    "xcworkspacedata",
     "xhtml",
     "xliff",
     "xml",
@@ -302,901 +315,945 @@ pub const ALL_TAGS: [&str; 297] = [
     "zsh",
 ];
 
-pub const TAG_FILE: u16 = 77;
+pub const TAG_FILE: u16 = 78;
 pub const TAG_DIRECTORY: u16 = 58;
-pub const TAG_SYMLINK: u16 = 242;
-pub const TAG_SOCKET: u16 = 232;
-pub const TAG_EXECUTABLE: u16 = 73;
-pub const TAG_NON_EXECUTABLE: u16 = 173;
-pub const TAG_TEXT: u16 = 249;
+pub const TAG_SYMLINK: u16 = 247;
+pub const TAG_SOCKET: u16 = 237;
+pub const TAG_EXECUTABLE: u16 = 74;
+pub const TAG_NON_EXECUTABLE: u16 = 176;
+pub const TAG_TEXT: u16 = 254;
 pub const TAG_BINARY: u16 = 21;
 
-pub const TAG_SET_FILE: TagSet = TagSet::new(&[77]);
+pub const TAG_SET_FILE: TagSet = TagSet::new(&[78]);
 pub const TAG_SET_DIRECTORY: TagSet = TagSet::new(&[58]);
-pub const TAG_SET_SYMLINK: TagSet = TagSet::new(&[242]);
-pub const TAG_SET_SOCKET: TagSet = TagSet::new(&[232]);
-pub const TAG_SET_TEXT: TagSet = TagSet::new(&[249]);
-pub const TAG_SET_TEXT_OR_BINARY: TagSet = TagSet::new(&[21, 249]);
-pub const TAG_SET_EXECUTABLE_TEXT: TagSet = TagSet::new(&[73, 249]);
-pub const TAG_SET_JSON: TagSet = TagSet::new(&[132]);
-pub const TAG_SET_JSON5: TagSet = TagSet::new(&[133]);
-pub const TAG_SET_TOML: TagSet = TagSet::new(&[254]);
-pub const TAG_SET_XML: TagSet = TagSet::new(&[283]);
-pub const TAG_SET_YAML: TagSet = TagSet::new(&[287]);
+pub const TAG_SET_SYMLINK: TagSet = TagSet::new(&[247]);
+pub const TAG_SET_SOCKET: TagSet = TagSet::new(&[237]);
+pub const TAG_SET_TEXT: TagSet = TagSet::new(&[254]);
+pub const TAG_SET_TEXT_OR_BINARY: TagSet = TagSet::new(&[21, 254]);
+pub const TAG_SET_EXECUTABLE_TEXT: TagSet = TagSet::new(&[74, 254]);
+pub const TAG_SET_JSON: TagSet = TagSet::new(&[135]);
+pub const TAG_SET_JSON5: TagSet = TagSet::new(&[136]);
+pub const TAG_SET_TOML: TagSet = TagSet::new(&[259]);
+pub const TAG_SET_XML: TagSet = TagSet::new(&[296]);
+pub const TAG_SET_YAML: TagSet = TagSet::new(&[300]);
 
 pub const INTERPRETERS: phf::Map<&str, TagSet> = phf::phf_map! {
     // ["ash", "shell"]
-    "ash" => TagSet::new(&[5, 230]),
+    "ash" => TagSet::new(&[5, 234]),
     // ["awk"]
     "awk" => TagSet::new(&[12]),
     // ["bash", "shell"]
-    "bash" => TagSet::new(&[14, 230]),
+    "bash" => TagSet::new(&[14, 234]),
     // ["bash", "bats", "shell"]
-    "bats" => TagSet::new(&[14, 16, 230]),
+    "bats" => TagSet::new(&[14, 16, 234]),
     // ["cbsd", "shell"]
-    "cbsd" => TagSet::new(&[35, 230]),
+    "cbsd" => TagSet::new(&[35, 234]),
     // ["csh", "shell"]
-    "csh" => TagSet::new(&[43, 230]),
+    "csh" => TagSet::new(&[43, 234]),
     // ["dash", "shell"]
-    "dash" => TagSet::new(&[54, 230]),
+    "dash" => TagSet::new(&[54, 234]),
+    // ["erlang"]
+    "escript" => TagSet::new(&[73]),
     // ["expect"]
-    "expect" => TagSet::new(&[74]),
+    "expect" => TagSet::new(&[75]),
     // ["ksh", "shell"]
-    "ksh" => TagSet::new(&[141, 230]),
+    "ksh" => TagSet::new(&[144, 234]),
     // ["javascript"]
-    "node" => TagSet::new(&[127]),
+    "node" => TagSet::new(&[129]),
     // ["javascript"]
-    "nodejs" => TagSet::new(&[127]),
+    "nodejs" => TagSet::new(&[129]),
     // ["perl"]
-    "perl" => TagSet::new(&[185]),
+    "perl" => TagSet::new(&[188]),
     // ["php"]
-    "php" => TagSet::new(&[186]),
+    "php" => TagSet::new(&[189]),
     // ["php", "php7"]
-    "php7" => TagSet::new(&[186, 187]),
+    "php7" => TagSet::new(&[189, 190]),
     // ["php", "php8"]
-    "php8" => TagSet::new(&[186, 188]),
+    "php8" => TagSet::new(&[189, 191]),
     // ["python"]
-    "python" => TagSet::new(&[209]),
+    "python" => TagSet::new(&[212]),
     // ["python", "python2"]
-    "python2" => TagSet::new(&[209, 210]),
+    "python2" => TagSet::new(&[212, 213]),
     // ["python", "python3"]
-    "python3" => TagSet::new(&[209, 211]),
+    "python3" => TagSet::new(&[212, 214]),
     // ["ruby"]
-    "ruby" => TagSet::new(&[219]),
+    "ruby" => TagSet::new(&[222]),
     // ["sh", "shell"]
-    "sh" => TagSet::new(&[229, 230]),
+    "sh" => TagSet::new(&[233, 234]),
     // ["shell", "tcsh"]
-    "tcsh" => TagSet::new(&[230, 245]),
+    "tcsh" => TagSet::new(&[234, 250]),
     // ["shell", "zsh"]
-    "zsh" => TagSet::new(&[230, 296]),
+    "zsh" => TagSet::new(&[234, 309]),
 };
 
 pub const EXTENSIONS: phf::Map<&str, TagSet> = phf::phf_map! {
     // ["asciidoc", "text"]
-    "adoc" => TagSet::new(&[4, 249]),
+    "adoc" => TagSet::new(&[4, 254]),
     // ["adobe-illustrator", "binary"]
     "ai" => TagSet::new(&[0, 21]),
     // ["aspectj", "text"]
-    "aj" => TagSet::new(&[7, 249]),
+    "aj" => TagSet::new(&[7, 254]),
     // ["apinotes", "text"]
-    "apinotes" => TagSet::new(&[2, 249]),
+    "apinotes" => TagSet::new(&[2, 254]),
     // ["asar", "binary"]
     "asar" => TagSet::new(&[3, 21]),
     // ["asciidoc", "text"]
-    "asciidoc" => TagSet::new(&[4, 249]),
+    "asciidoc" => TagSet::new(&[4, 254]),
     // ["asm", "text"]
-    "asm" => TagSet::new(&[6, 249]),
+    "asm" => TagSet::new(&[6, 254]),
     // ["astro", "text"]
-    "astro" => TagSet::new(&[8, 249]),
+    "astro" => TagSet::new(&[8, 254]),
     // ["avif", "binary", "image"]
-    "avif" => TagSet::new(&[10, 21, 115]),
+    "avif" => TagSet::new(&[10, 21, 117]),
     // ["avro-schema", "text"]
-    "avsc" => TagSet::new(&[11, 249]),
+    "avsc" => TagSet::new(&[11, 254]),
     // ["bash", "shell", "text"]
-    "bash" => TagSet::new(&[14, 230, 249]),
+    "bash" => TagSet::new(&[14, 234, 254]),
     // ["batch", "text"]
-    "bat" => TagSet::new(&[15, 249]),
+    "bat" => TagSet::new(&[15, 254]),
     // ["bash", "bats", "shell", "text"]
-    "bats" => TagSet::new(&[14, 16, 230, 249]),
+    "bats" => TagSet::new(&[14, 16, 234, 254]),
     // ["bazel", "text"]
-    "bazel" => TagSet::new(&[17, 249]),
+    "bazel" => TagSet::new(&[17, 254]),
     // ["bitbake", "text"]
-    "bb" => TagSet::new(&[22, 249]),
+    "bb" => TagSet::new(&[22, 254]),
     // ["bitbake", "text"]
-    "bbappend" => TagSet::new(&[22, 249]),
+    "bbappend" => TagSet::new(&[22, 254]),
     // ["bitbake", "text"]
-    "bbclass" => TagSet::new(&[22, 249]),
+    "bbclass" => TagSet::new(&[22, 254]),
     // ["beancount", "text"]
-    "beancount" => TagSet::new(&[19, 249]),
+    "beancount" => TagSet::new(&[19, 254]),
     // ["bib", "text"]
-    "bib" => TagSet::new(&[20, 249]),
+    "bib" => TagSet::new(&[20, 254]),
     // ["binary", "bitmap", "image"]
-    "bmp" => TagSet::new(&[21, 23, 115]),
+    "bmp" => TagSet::new(&[21, 23, 117]),
     // ["binary", "bzip2"]
     "bz2" => TagSet::new(&[21, 26]),
     // ["binary", "bzip3"]
     "bz3" => TagSet::new(&[21, 27]),
     // ["bazel", "text"]
-    "bzl" => TagSet::new(&[17, 249]),
+    "bzl" => TagSet::new(&[17, 254]),
     // ["c", "text"]
-    "c" => TagSet::new(&[28, 249]),
+    "c" => TagSet::new(&[28, 254]),
     // ["c++", "text"]
-    "c++" => TagSet::new(&[31, 249]),
+    "c++" => TagSet::new(&[31, 254]),
     // ["c++", "text"]
-    "c++m" => TagSet::new(&[31, 249]),
+    "c++m" => TagSet::new(&[31, 254]),
     // ["c++", "text"]
-    "cc" => TagSet::new(&[31, 249]),
+    "cc" => TagSet::new(&[31, 254]),
     // ["c++", "text"]
-    "ccm" => TagSet::new(&[31, 249]),
+    "ccm" => TagSet::new(&[31, 254]),
     // ["text"]
-    "cfg" => TagSet::new(&[249]),
+    "cfg" => TagSet::new(&[254]),
     // ["c2hs", "text"]
-    "chs" => TagSet::new(&[32, 249]),
+    "chs" => TagSet::new(&[32, 254]),
     // ["javascript", "text"]
-    "cjs" => TagSet::new(&[127, 249]),
+    "cjs" => TagSet::new(&[129, 254]),
     // ["clojure", "text"]
-    "clj" => TagSet::new(&[36, 249]),
+    "clj" => TagSet::new(&[36, 254]),
     // ["clojure", "text"]
-    "cljc" => TagSet::new(&[36, 249]),
+    "cljc" => TagSet::new(&[36, 254]),
     // ["clojure", "clojurescript", "text"]
-    "cljs" => TagSet::new(&[36, 37, 249]),
+    "cljs" => TagSet::new(&[36, 37, 254]),
     // ["cmake", "text"]
-    "cmake" => TagSet::new(&[38, 249]),
+    "cmake" => TagSet::new(&[38, 254]),
+    // ["batch", "text"]
+    "cmd" => TagSet::new(&[15, 254]),
     // ["text"]
-    "cnf" => TagSet::new(&[249]),
+    "cnf" => TagSet::new(&[254]),
     // ["coffee", "text"]
-    "coffee" => TagSet::new(&[40, 249]),
+    "coffee" => TagSet::new(&[40, 254]),
     // ["text"]
-    "conf" => TagSet::new(&[249]),
+    "conf" => TagSet::new(&[254]),
     // ["c++", "text"]
-    "cpp" => TagSet::new(&[31, 249]),
+    "cpp" => TagSet::new(&[31, 254]),
     // ["c++", "text"]
-    "cppm" => TagSet::new(&[31, 249]),
+    "cppm" => TagSet::new(&[31, 254]),
     // ["crystal", "text"]
-    "cr" => TagSet::new(&[42, 249]),
+    "cr" => TagSet::new(&[42, 254]),
     // ["pem", "text"]
-    "crt" => TagSet::new(&[184, 249]),
+    "crt" => TagSet::new(&[187, 254]),
     // ["c#", "text"]
-    "cs" => TagSet::new(&[29, 249]),
+    "cs" => TagSet::new(&[29, 254]),
     // ["csh", "shell", "text"]
-    "csh" => TagSet::new(&[43, 230, 249]),
+    "csh" => TagSet::new(&[43, 234, 254]),
     // ["cson", "text"]
-    "cson" => TagSet::new(&[44, 249]),
+    "cson" => TagSet::new(&[44, 254]),
     // ["csproj", "msbuild", "text", "xml"]
-    "csproj" => TagSet::new(&[45, 165, 249, 283]),
+    "csproj" => TagSet::new(&[45, 168, 254, 296]),
     // ["css", "text"]
-    "css" => TagSet::new(&[46, 249]),
+    "css" => TagSet::new(&[46, 254]),
     // ["csv", "text"]
-    "csv" => TagSet::new(&[48, 249]),
+    "csv" => TagSet::new(&[48, 254]),
     // ["c#", "c#script", "text"]
-    "csx" => TagSet::new(&[29, 30, 249]),
+    "csx" => TagSet::new(&[29, 30, 254]),
     // ["cuda", "text"]
-    "cu" => TagSet::new(&[49, 249]),
+    "cu" => TagSet::new(&[49, 254]),
     // ["cue", "text"]
-    "cue" => TagSet::new(&[50, 249]),
+    "cue" => TagSet::new(&[50, 254]),
     // ["cuda", "text"]
-    "cuh" => TagSet::new(&[49, 249]),
+    "cuh" => TagSet::new(&[49, 254]),
     // ["c++", "text"]
-    "cxx" => TagSet::new(&[31, 249]),
+    "cxx" => TagSet::new(&[31, 254]),
     // ["c++", "text"]
-    "cxxm" => TagSet::new(&[31, 249]),
+    "cxxm" => TagSet::new(&[31, 254]),
     // ["cylc", "text"]
-    "cylc" => TagSet::new(&[51, 249]),
+    "cylc" => TagSet::new(&[51, 254]),
     // ["dart", "text"]
-    "dart" => TagSet::new(&[53, 249]),
+    "dart" => TagSet::new(&[53, 254]),
     // ["dbc", "text"]
-    "dbc" => TagSet::new(&[55, 249]),
+    "dbc" => TagSet::new(&[55, 254]),
     // ["def", "text"]
-    "def" => TagSet::new(&[56, 249]),
+    "def" => TagSet::new(&[56, 254]),
+    // ["diff", "text"]
+    "diff" => TagSet::new(&[57, 254]),
     // ["binary"]
     "dll" => TagSet::new(&[21]),
     // ["dtd", "text"]
-    "dtd" => TagSet::new(&[62, 249]),
+    "dtd" => TagSet::new(&[62, 254]),
     // ["binary", "jar", "zip"]
-    "ear" => TagSet::new(&[21, 124, 294]),
+    "ear" => TagSet::new(&[21, 126, 307]),
     // ["clojure", "edn", "text"]
-    "edn" => TagSet::new(&[36, 64, 249]),
+    "edn" => TagSet::new(&[36, 64, 254]),
     // ["ejs", "text"]
-    "ejs" => TagSet::new(&[65, 249]),
+    "ejs" => TagSet::new(&[65, 254]),
     // ["ejson", "json", "text"]
-    "ejson" => TagSet::new(&[66, 132, 249]),
+    "ejson" => TagSet::new(&[66, 135, 254]),
     // ["elm", "text"]
-    "elm" => TagSet::new(&[68, 249]),
+    "elm" => TagSet::new(&[68, 254]),
+    // ["entitlements", "plist"]
+    "entitlements" => TagSet::new(&[69, 196]),
     // ["dotenv", "text"]
-    "env" => TagSet::new(&[61, 249]),
+    "env" => TagSet::new(&[61, 254]),
     // ["binary", "eot"]
-    "eot" => TagSet::new(&[21, 69]),
+    "eot" => TagSet::new(&[21, 70]),
     // ["binary", "eps"]
-    "eps" => TagSet::new(&[21, 70]),
+    "eps" => TagSet::new(&[21, 71]),
     // ["erb", "text"]
-    "erb" => TagSet::new(&[71, 249]),
+    "erb" => TagSet::new(&[72, 254]),
     // ["erlang", "text"]
-    "erl" => TagSet::new(&[72, 249]),
+    "erl" => TagSet::new(&[73, 254]),
+    // ["erlang", "text"]
+    "escript" => TagSet::new(&[73, 254]),
     // ["elixir", "text"]
-    "ex" => TagSet::new(&[67, 249]),
+    "ex" => TagSet::new(&[67, 254]),
     // ["binary"]
     "exe" => TagSet::new(&[21]),
     // ["elixir", "text"]
-    "exs" => TagSet::new(&[67, 249]),
+    "exs" => TagSet::new(&[67, 254]),
     // ["text", "yaml"]
-    "eyaml" => TagSet::new(&[249, 287]),
+    "eyaml" => TagSet::new(&[254, 300]),
     // ["fortran", "text"]
-    "f03" => TagSet::new(&[81, 249]),
+    "f03" => TagSet::new(&[82, 254]),
     // ["fortran", "text"]
-    "f08" => TagSet::new(&[81, 249]),
+    "f08" => TagSet::new(&[82, 254]),
     // ["fortran", "text"]
-    "f90" => TagSet::new(&[81, 249]),
+    "f90" => TagSet::new(&[82, 254]),
     // ["fortran", "text"]
-    "f95" => TagSet::new(&[81, 249]),
+    "f95" => TagSet::new(&[82, 254]),
     // ["gherkin", "text"]
-    "feature" => TagSet::new(&[86, 249]),
+    "feature" => TagSet::new(&[87, 254]),
     // ["fish", "text"]
-    "fish" => TagSet::new(&[78, 249]),
+    "fish" => TagSet::new(&[79, 254]),
     // ["binary", "fits"]
-    "fits" => TagSet::new(&[21, 79]),
+    "fits" => TagSet::new(&[21, 80]),
     // ["f#", "text"]
-    "fs" => TagSet::new(&[75, 249]),
+    "fs" => TagSet::new(&[76, 254]),
     // ["fsproj", "msbuild", "text", "xml"]
-    "fsproj" => TagSet::new(&[82, 165, 249, 283]),
+    "fsproj" => TagSet::new(&[83, 168, 254, 296]),
     // ["f#", "f#script", "text"]
-    "fsx" => TagSet::new(&[75, 76, 249]),
+    "fsx" => TagSet::new(&[76, 77, 254]),
     // ["gdscript", "text"]
-    "gd" => TagSet::new(&[83, 249]),
+    "gd" => TagSet::new(&[84, 254]),
     // ["ruby", "text"]
-    "gemspec" => TagSet::new(&[219, 249]),
+    "gemspec" => TagSet::new(&[222, 254]),
     // ["geojson", "json", "text"]
-    "geojson" => TagSet::new(&[84, 132, 249]),
+    "geojson" => TagSet::new(&[85, 135, 254]),
     // ["binary", "ggb", "zip"]
-    "ggb" => TagSet::new(&[21, 85, 294]),
+    "ggb" => TagSet::new(&[21, 86, 307]),
     // ["binary", "gif", "image"]
-    "gif" => TagSet::new(&[21, 87, 115]),
+    "gif" => TagSet::new(&[21, 88, 117]),
     // ["gleam", "text"]
-    "gleam" => TagSet::new(&[93, 249]),
+    "gleam" => TagSet::new(&[94, 254]),
     // ["go", "text"]
-    "go" => TagSet::new(&[94, 249]),
+    "go" => TagSet::new(&[95, 254]),
     // ["gotmpl", "text"]
-    "gotmpl" => TagSet::new(&[97, 249]),
+    "gotmpl" => TagSet::new(&[98, 254]),
     // ["gpx", "text", "xml"]
-    "gpx" => TagSet::new(&[98, 249, 283]),
+    "gpx" => TagSet::new(&[99, 254, 296]),
     // ["groovy", "text"]
-    "gradle" => TagSet::new(&[100, 249]),
+    "gradle" => TagSet::new(&[101, 254]),
     // ["graphql", "text"]
-    "graphql" => TagSet::new(&[99, 249]),
+    "graphql" => TagSet::new(&[100, 254]),
     // ["groovy", "text"]
-    "groovy" => TagSet::new(&[100, 249]),
+    "groovy" => TagSet::new(&[101, 254]),
     // ["gyb", "text"]
-    "gyb" => TagSet::new(&[101, 249]),
+    "gyb" => TagSet::new(&[102, 254]),
     // ["gyp", "python", "text"]
-    "gyp" => TagSet::new(&[102, 209, 249]),
+    "gyp" => TagSet::new(&[103, 212, 254]),
     // ["gyp", "python", "text"]
-    "gypi" => TagSet::new(&[102, 209, 249]),
+    "gypi" => TagSet::new(&[103, 212, 254]),
     // ["binary", "gzip"]
-    "gz" => TagSet::new(&[21, 103]),
+    "gz" => TagSet::new(&[21, 104]),
     // ["c", "c++", "header", "text"]
-    "h" => TagSet::new(&[28, 31, 107, 249]),
+    "h" => TagSet::new(&[28, 31, 108, 254]),
     // ["handlebars", "text"]
-    "hbs" => TagSet::new(&[104, 249]),
+    "hbs" => TagSet::new(&[105, 254]),
     // ["hcl", "text"]
-    "hcl" => TagSet::new(&[106, 249]),
+    "hcl" => TagSet::new(&[107, 254]),
     // ["c++", "header", "text"]
-    "hh" => TagSet::new(&[31, 107, 249]),
+    "hh" => TagSet::new(&[31, 108, 254]),
+    // ["hlsl", "text"]
+    "hlsl" => TagSet::new(&[110, 254]),
+    // ["hlsl", "text"]
+    "hlsli" => TagSet::new(&[110, 254]),
     // ["c++", "header", "text"]
-    "hpp" => TagSet::new(&[31, 107, 249]),
+    "hpp" => TagSet::new(&[31, 108, 254]),
     // ["erlang", "text"]
-    "hrl" => TagSet::new(&[72, 249]),
+    "hrl" => TagSet::new(&[73, 254]),
     // ["haskell", "text"]
-    "hs" => TagSet::new(&[105, 249]),
+    "hs" => TagSet::new(&[106, 254]),
     // ["html", "text"]
-    "htm" => TagSet::new(&[109, 249]),
+    "htm" => TagSet::new(&[111, 254]),
     // ["html", "text"]
-    "html" => TagSet::new(&[109, 249]),
+    "html" => TagSet::new(&[111, 254]),
     // ["c++", "header", "text"]
-    "hxx" => TagSet::new(&[31, 107, 249]),
+    "hxx" => TagSet::new(&[31, 108, 254]),
     // ["binary", "icns"]
-    "icns" => TagSet::new(&[21, 111]),
+    "icns" => TagSet::new(&[21, 113]),
     // ["binary", "icon"]
-    "ico" => TagSet::new(&[21, 112]),
+    "ico" => TagSet::new(&[21, 114]),
     // ["icalendar", "text"]
-    "ics" => TagSet::new(&[110, 249]),
+    "ics" => TagSet::new(&[112, 254]),
     // ["idl", "text"]
-    "idl" => TagSet::new(&[113, 249]),
+    "idl" => TagSet::new(&[115, 254]),
     // ["idris", "text"]
-    "idr" => TagSet::new(&[114, 249]),
+    "idr" => TagSet::new(&[116, 254]),
     // ["inc", "text"]
-    "inc" => TagSet::new(&[116, 249]),
+    "inc" => TagSet::new(&[118, 254]),
     // ["ini", "text"]
-    "ini" => TagSet::new(&[117, 249]),
+    "ini" => TagSet::new(&[119, 254]),
     // ["c++", "inl", "text"]
-    "inl" => TagSet::new(&[31, 118, 249]),
+    "inl" => TagSet::new(&[31, 120, 254]),
     // ["c++", "ino", "text"]
-    "ino" => TagSet::new(&[31, 119, 249]),
+    "ino" => TagSet::new(&[31, 121, 254]),
     // ["inx", "text", "xml"]
-    "inx" => TagSet::new(&[120, 249, 283]),
+    "inx" => TagSet::new(&[122, 254, 296]),
     // ["c++", "text"]
-    "ipp" => TagSet::new(&[31, 249]),
+    "ipp" => TagSet::new(&[31, 254]),
     // ["ipxe", "text"]
-    "ipxe" => TagSet::new(&[121, 249]),
+    "ipxe" => TagSet::new(&[123, 254]),
     // ["json", "jupyter", "text"]
-    "ipynb" => TagSet::new(&[132, 138, 249]),
+    "ipynb" => TagSet::new(&[135, 141, 254]),
     // ["c++", "text"]
-    "ixx" => TagSet::new(&[31, 249]),
+    "ixx" => TagSet::new(&[31, 254]),
     // ["jinja", "text"]
-    "j2" => TagSet::new(&[129, 249]),
+    "j2" => TagSet::new(&[132, 254]),
     // ["jade", "text"]
-    "jade" => TagSet::new(&[123, 249]),
+    "jade" => TagSet::new(&[125, 254]),
     // ["binary", "jar", "zip"]
-    "jar" => TagSet::new(&[21, 124, 294]),
+    "jar" => TagSet::new(&[21, 126, 307]),
     // ["java", "text"]
-    "java" => TagSet::new(&[125, 249]),
+    "java" => TagSet::new(&[127, 254]),
+    // ["jbuilder", "ruby", "text"]
+    "jbuilder" => TagSet::new(&[130, 222, 254]),
     // ["groovy", "jenkins", "text"]
-    "jenkins" => TagSet::new(&[100, 128, 249]),
+    "jenkins" => TagSet::new(&[101, 131, 254]),
     // ["groovy", "jenkins", "text"]
-    "jenkinsfile" => TagSet::new(&[100, 128, 249]),
+    "jenkinsfile" => TagSet::new(&[101, 131, 254]),
     // ["jinja", "text"]
-    "jinja" => TagSet::new(&[129, 249]),
+    "jinja" => TagSet::new(&[132, 254]),
     // ["jinja", "text"]
-    "jinja2" => TagSet::new(&[129, 249]),
+    "jinja2" => TagSet::new(&[132, 254]),
     // ["julia", "text"]
-    "jl" => TagSet::new(&[137, 249]),
+    "jl" => TagSet::new(&[140, 254]),
     // ["binary", "image", "jpeg"]
-    "jpeg" => TagSet::new(&[21, 115, 130]),
+    "jpeg" => TagSet::new(&[21, 117, 133]),
     // ["binary", "image", "jpeg"]
-    "jpg" => TagSet::new(&[21, 115, 130]),
+    "jpg" => TagSet::new(&[21, 117, 133]),
     // ["javascript", "text"]
-    "js" => TagSet::new(&[127, 249]),
+    "js" => TagSet::new(&[129, 254]),
     // ["json", "text"]
-    "json" => TagSet::new(&[132, 249]),
+    "json" => TagSet::new(&[135, 254]),
     // ["json5", "text"]
-    "json5" => TagSet::new(&[133, 249]),
+    "json5" => TagSet::new(&[136, 254]),
     // ["json", "jsonld", "text"]
-    "jsonld" => TagSet::new(&[132, 134, 249]),
+    "jsonld" => TagSet::new(&[135, 137, 254]),
     // ["jsonnet", "text"]
-    "jsonnet" => TagSet::new(&[135, 249]),
+    "jsonnet" => TagSet::new(&[138, 254]),
     // ["jsx", "text"]
-    "jsx" => TagSet::new(&[136, 249]),
+    "jsx" => TagSet::new(&[139, 254]),
     // ["pem", "text"]
-    "key" => TagSet::new(&[184, 249]),
+    "key" => TagSet::new(&[187, 254]),
     // ["kml", "text", "xml"]
-    "kml" => TagSet::new(&[139, 249, 283]),
+    "kml" => TagSet::new(&[142, 254, 296]),
     // ["kotlin", "text"]
-    "kt" => TagSet::new(&[140, 249]),
+    "kt" => TagSet::new(&[143, 254]),
     // ["kotlin", "text"]
-    "kts" => TagSet::new(&[140, 249]),
+    "kts" => TagSet::new(&[143, 254]),
     // ["lean", "text"]
-    "lean" => TagSet::new(&[144, 249]),
+    "lean" => TagSet::new(&[147, 254]),
     // ["ini", "lektorproject", "text"]
-    "lektorproject" => TagSet::new(&[117, 146, 249]),
+    "lektorproject" => TagSet::new(&[119, 149, 254]),
     // ["less", "text"]
-    "less" => TagSet::new(&[147, 249]),
+    "less" => TagSet::new(&[150, 254]),
     // ["lazarus", "lazarus-form", "text"]
-    "lfm" => TagSet::new(&[142, 143, 249]),
+    "lfm" => TagSet::new(&[145, 146, 254]),
     // ["literate-haskell", "text"]
-    "lhs" => TagSet::new(&[149, 249]),
+    "lhs" => TagSet::new(&[152, 254]),
     // ["jsonnet", "text"]
-    "libsonnet" => TagSet::new(&[135, 249]),
+    "libsonnet" => TagSet::new(&[138, 254]),
     // ["idris", "text"]
-    "lidr" => TagSet::new(&[114, 249]),
+    "lidr" => TagSet::new(&[116, 254]),
     // ["liquid", "text"]
-    "liquid" => TagSet::new(&[148, 249]),
+    "liquid" => TagSet::new(&[151, 254]),
     // ["lazarus", "text", "xml"]
-    "lpi" => TagSet::new(&[142, 249, 283]),
+    "lpi" => TagSet::new(&[145, 254, 296]),
     // ["lazarus", "pascal", "text"]
-    "lpr" => TagSet::new(&[142, 181, 249]),
+    "lpr" => TagSet::new(&[145, 184, 254]),
     // ["lektor", "text"]
-    "lr" => TagSet::new(&[145, 249]),
+    "lr" => TagSet::new(&[148, 254]),
     // ["lua", "text"]
-    "lua" => TagSet::new(&[150, 249]),
+    "lua" => TagSet::new(&[153, 254]),
     // ["objective-c", "text"]
-    "m" => TagSet::new(&[176, 249]),
+    "m" => TagSet::new(&[179, 254]),
     // ["m4", "text"]
-    "m4" => TagSet::new(&[151, 249]),
+    "m4" => TagSet::new(&[154, 254]),
     // ["magik", "text"]
-    "magik" => TagSet::new(&[152, 249]),
+    "magik" => TagSet::new(&[155, 254]),
     // ["makefile", "text"]
-    "make" => TagSet::new(&[154, 249]),
+    "make" => TagSet::new(&[157, 254]),
     // ["manifest", "text"]
-    "manifest" => TagSet::new(&[155, 249]),
+    "manifest" => TagSet::new(&[158, 254]),
     // ["map", "text"]
-    "map" => TagSet::new(&[156, 249]),
+    "map" => TagSet::new(&[159, 254]),
     // ["markdown", "text"]
-    "markdown" => TagSet::new(&[157, 249]),
+    "markdown" => TagSet::new(&[160, 254]),
     // ["markdown", "text"]
-    "md" => TagSet::new(&[157, 249]),
+    "md" => TagSet::new(&[160, 254]),
     // ["mdx", "text"]
-    "mdx" => TagSet::new(&[158, 249]),
+    "mdx" => TagSet::new(&[161, 254]),
     // ["meson", "text"]
-    "meson" => TagSet::new(&[160, 249]),
+    "meson" => TagSet::new(&[163, 254]),
     // ["metal", "text"]
-    "metal" => TagSet::new(&[162, 249]),
+    "metal" => TagSet::new(&[165, 254]),
     // ["mib", "text"]
-    "mib" => TagSet::new(&[163, 249]),
+    "mib" => TagSet::new(&[166, 254]),
     // ["javascript", "text"]
-    "mjs" => TagSet::new(&[127, 249]),
+    "mjs" => TagSet::new(&[129, 254]),
     // ["makefile", "text"]
-    "mk" => TagSet::new(&[154, 249]),
+    "mk" => TagSet::new(&[157, 254]),
     // ["ocaml", "text"]
-    "ml" => TagSet::new(&[178, 249]),
+    "ml" => TagSet::new(&[181, 254]),
     // ["ocaml", "text"]
-    "mli" => TagSet::new(&[178, 249]),
+    "mli" => TagSet::new(&[181, 254]),
     // ["c++", "objective-c++", "text"]
-    "mm" => TagSet::new(&[31, 177, 249]),
+    "mm" => TagSet::new(&[31, 180, 254]),
     // ["modulemap", "text"]
-    "modulemap" => TagSet::new(&[164, 249]),
+    "modulemap" => TagSet::new(&[167, 254]),
     // ["musescore", "text", "xml"]
-    "mscx" => TagSet::new(&[166, 249, 283]),
+    "mscx" => TagSet::new(&[169, 254, 296]),
     // ["binary", "musescore", "zip"]
-    "mscz" => TagSet::new(&[21, 166, 294]),
+    "mscz" => TagSet::new(&[21, 169, 307]),
     // ["mustache", "text"]
-    "mustache" => TagSet::new(&[167, 249]),
+    "mustache" => TagSet::new(&[170, 254]),
     // ["myst", "text"]
-    "myst" => TagSet::new(&[168, 249]),
+    "myst" => TagSet::new(&[171, 254]),
     // ["ngdoc", "text"]
-    "ngdoc" => TagSet::new(&[169, 249]),
+    "ngdoc" => TagSet::new(&[172, 254]),
     // ["nim", "text"]
-    "nim" => TagSet::new(&[170, 249]),
+    "nim" => TagSet::new(&[173, 254]),
     // ["nimble", "text"]
-    "nimble" => TagSet::new(&[171, 249]),
+    "nimble" => TagSet::new(&[174, 254]),
     // ["nim", "text"]
-    "nims" => TagSet::new(&[170, 249]),
+    "nims" => TagSet::new(&[173, 254]),
     // ["nix", "text"]
-    "nix" => TagSet::new(&[172, 249]),
+    "nix" => TagSet::new(&[175, 254]),
     // ["nunjucks", "text"]
-    "njk" => TagSet::new(&[175, 249]),
+    "njk" => TagSet::new(&[178, 254]),
     // ["binary", "otf"]
-    "otf" => TagSet::new(&[21, 179]),
+    "otf" => TagSet::new(&[21, 182]),
     // ["binary", "p12"]
-    "p12" => TagSet::new(&[21, 180]),
+    "p12" => TagSet::new(&[21, 183]),
     // ["pascal", "text"]
-    "pas" => TagSet::new(&[181, 249]),
+    "pas" => TagSet::new(&[184, 254]),
     // ["diff", "text"]
-    "patch" => TagSet::new(&[57, 249]),
+    "patch" => TagSet::new(&[57, 254]),
     // ["binary", "pdf"]
-    "pdf" => TagSet::new(&[21, 183]),
+    "pdf" => TagSet::new(&[21, 186]),
     // ["pem", "text"]
-    "pem" => TagSet::new(&[184, 249]),
+    "pem" => TagSet::new(&[187, 254]),
     // ["php", "text"]
-    "php" => TagSet::new(&[186, 249]),
+    "php" => TagSet::new(&[189, 254]),
     // ["php", "text"]
-    "php4" => TagSet::new(&[186, 249]),
+    "php4" => TagSet::new(&[189, 254]),
     // ["php", "text"]
-    "php5" => TagSet::new(&[186, 249]),
+    "php5" => TagSet::new(&[189, 254]),
     // ["php", "text"]
-    "phtml" => TagSet::new(&[186, 249]),
+    "phtml" => TagSet::new(&[189, 254]),
     // ["json", "piskel", "text"]
-    "piskel" => TagSet::new(&[132, 189, 249]),
+    "piskel" => TagSet::new(&[135, 192, 254]),
     // ["perl", "text"]
-    "pl" => TagSet::new(&[185, 249]),
+    "pl" => TagSet::new(&[188, 254]),
     // ["plantuml", "text"]
-    "plantuml" => TagSet::new(&[192, 249]),
+    "plantuml" => TagSet::new(&[195, 254]),
     // ["plist"]
-    "plist" => TagSet::new(&[193]),
+    "plist" => TagSet::new(&[196]),
     // ["perl", "text"]
-    "pm" => TagSet::new(&[185, 249]),
+    "pm" => TagSet::new(&[188, 254]),
     // ["binary", "image", "png"]
-    "png" => TagSet::new(&[21, 115, 194]),
+    "png" => TagSet::new(&[21, 117, 197]),
     // ["pofile", "text"]
-    "po" => TagSet::new(&[195, 249]),
+    "po" => TagSet::new(&[198, 254]),
     // ["pom", "text", "xml"]
-    "pom" => TagSet::new(&[196, 249, 283]),
+    "pom" => TagSet::new(&[199, 254, 296]),
     // ["puppet", "text"]
-    "pp" => TagSet::new(&[203, 249]),
+    "pp" => TagSet::new(&[206, 254]),
     // ["image", "ppm"]
-    "ppm" => TagSet::new(&[115, 198]),
+    "ppm" => TagSet::new(&[117, 201]),
     // ["prisma", "text"]
-    "prisma" => TagSet::new(&[200, 249]),
+    "prisma" => TagSet::new(&[203, 254]),
     // ["java-properties", "text"]
-    "properties" => TagSet::new(&[126, 249]),
+    "properties" => TagSet::new(&[128, 254]),
     // ["msbuild", "text", "xml"]
-    "props" => TagSet::new(&[165, 249, 283]),
+    "props" => TagSet::new(&[168, 254, 296]),
     // ["proto", "text"]
-    "proto" => TagSet::new(&[201, 249]),
+    "proto" => TagSet::new(&[204, 254]),
     // ["powershell", "text"]
-    "ps1" => TagSet::new(&[197, 249]),
+    "ps1" => TagSet::new(&[200, 254]),
     // ["powershell", "text"]
-    "psd1" => TagSet::new(&[197, 249]),
+    "psd1" => TagSet::new(&[200, 254]),
     // ["powershell", "text"]
-    "psm1" => TagSet::new(&[197, 249]),
+    "psm1" => TagSet::new(&[200, 254]),
     // ["pug", "text"]
-    "pug" => TagSet::new(&[202, 249]),
+    "pug" => TagSet::new(&[205, 254]),
     // ["plantuml", "text"]
-    "puml" => TagSet::new(&[192, 249]),
+    "puml" => TagSet::new(&[195, 254]),
     // ["purescript", "text"]
-    "purs" => TagSet::new(&[204, 249]),
+    "purs" => TagSet::new(&[207, 254]),
     // ["cython", "text"]
-    "pxd" => TagSet::new(&[52, 249]),
+    "pxd" => TagSet::new(&[52, 254]),
     // ["cython", "text"]
-    "pxi" => TagSet::new(&[52, 249]),
+    "pxi" => TagSet::new(&[52, 254]),
     // ["python", "text"]
-    "py" => TagSet::new(&[209, 249]),
+    "py" => TagSet::new(&[212, 254]),
     // ["pyi", "text"]
-    "pyi" => TagSet::new(&[205, 249]),
+    "pyi" => TagSet::new(&[208, 254]),
     // ["msbuild", "pyproj", "text", "xml"]
-    "pyproj" => TagSet::new(&[165, 208, 249, 283]),
+    "pyproj" => TagSet::new(&[168, 211, 254, 296]),
     // ["python", "text"]
-    "pyt" => TagSet::new(&[209, 249]),
+    "pyt" => TagSet::new(&[212, 254]),
+    // ["python", "text"]
+    "pyw" => TagSet::new(&[212, 254]),
     // ["cython", "text"]
-    "pyx" => TagSet::new(&[52, 249]),
+    "pyx" => TagSet::new(&[52, 254]),
     // ["binary", "pyz"]
-    "pyz" => TagSet::new(&[21, 212]),
+    "pyz" => TagSet::new(&[21, 215]),
     // ["binary", "pyz"]
-    "pyzw" => TagSet::new(&[21, 212]),
+    "pyzw" => TagSet::new(&[21, 215]),
     // ["qml", "text"]
-    "qml" => TagSet::new(&[213, 249]),
+    "qml" => TagSet::new(&[216, 254]),
     // ["r", "text"]
-    "r" => TagSet::new(&[214, 249]),
+    "r" => TagSet::new(&[217, 254]),
     // ["ruby", "text"]
-    "rake" => TagSet::new(&[219, 249]),
+    "rake" => TagSet::new(&[222, 254]),
     // ["ruby", "text"]
-    "rb" => TagSet::new(&[219, 249]),
+    "rb" => TagSet::new(&[222, 254]),
     // ["resx", "text", "xml"]
-    "resx" => TagSet::new(&[216, 249, 283]),
+    "resx" => TagSet::new(&[219, 254, 296]),
     // ["relax-ng", "text", "xml"]
-    "rng" => TagSet::new(&[215, 249, 283]),
+    "rng" => TagSet::new(&[218, 254, 296]),
     // ["robot", "text"]
-    "robot" => TagSet::new(&[217, 249]),
+    "robot" => TagSet::new(&[220, 254]),
     // ["rust", "text"]
-    "rs" => TagSet::new(&[220, 249]),
+    "rs" => TagSet::new(&[223, 254]),
     // ["rst", "text"]
-    "rst" => TagSet::new(&[218, 249]),
+    "rst" => TagSet::new(&[221, 254]),
     // ["asm", "text"]
-    "s" => TagSet::new(&[6, 249]),
+    "s" => TagSet::new(&[6, 254]),
     // ["sas", "text"]
-    "sas" => TagSet::new(&[223, 249]),
+    "sas" => TagSet::new(&[226, 254]),
     // ["sass", "text"]
-    "sass" => TagSet::new(&[224, 249]),
+    "sass" => TagSet::new(&[227, 254]),
     // ["sbt", "scala", "text"]
-    "sbt" => TagSet::new(&[225, 226, 249]),
+    "sbt" => TagSet::new(&[228, 229, 254]),
     // ["scala", "text"]
-    "sc" => TagSet::new(&[226, 249]),
+    "sc" => TagSet::new(&[229, 254]),
     // ["scala", "text"]
-    "scala" => TagSet::new(&[226, 249]),
+    "scala" => TagSet::new(&[229, 254]),
     // ["scheme", "text"]
-    "scm" => TagSet::new(&[227, 249]),
+    "scm" => TagSet::new(&[230, 254]),
     // ["scss", "text"]
-    "scss" => TagSet::new(&[228, 249]),
+    "scss" => TagSet::new(&[232, 254]),
     // ["shell", "text"]
-    "sh" => TagSet::new(&[230, 249]),
+    "sh" => TagSet::new(&[234, 254]),
     // ["sln", "text"]
-    "sln" => TagSet::new(&[231, 249]),
+    "sln" => TagSet::new(&[235, 254]),
+    // ["msbuild", "slnx", "text", "xml"]
+    "slnx" => TagSet::new(&[168, 236, 254, 296]),
     // ["salt", "text"]
-    "sls" => TagSet::new(&[221, 249]),
+    "sls" => TagSet::new(&[224, 254]),
     // ["binary"]
     "so" => TagSet::new(&[21]),
     // ["solidity", "text"]
-    "sol" => TagSet::new(&[233, 249]),
+    "sol" => TagSet::new(&[238, 254]),
     // ["spec", "text"]
-    "spec" => TagSet::new(&[234, 249]),
+    "spec" => TagSet::new(&[239, 254]),
     // ["sql", "text"]
-    "sql" => TagSet::new(&[235, 249]),
+    "sql" => TagSet::new(&[240, 254]),
     // ["scheme", "text"]
-    "ss" => TagSet::new(&[227, 249]),
+    "ss" => TagSet::new(&[230, 254]),
     // ["tex", "text"]
-    "sty" => TagSet::new(&[248, 249]),
+    "sty" => TagSet::new(&[253, 254]),
     // ["stylus", "text"]
-    "styl" => TagSet::new(&[236, 249]),
+    "styl" => TagSet::new(&[241, 254]),
     // ["system-verilog", "text"]
-    "sv" => TagSet::new(&[243, 249]),
+    "sv" => TagSet::new(&[248, 254]),
     // ["svelte", "text"]
-    "svelte" => TagSet::new(&[237, 249]),
+    "svelte" => TagSet::new(&[242, 254]),
     // ["image", "svg", "text", "xml"]
-    "svg" => TagSet::new(&[115, 238, 249, 283]),
+    "svg" => TagSet::new(&[117, 243, 254, 296]),
     // ["system-verilog", "text"]
-    "svh" => TagSet::new(&[243, 249]),
+    "svh" => TagSet::new(&[248, 254]),
     // ["binary", "swf"]
-    "swf" => TagSet::new(&[21, 239]),
+    "swf" => TagSet::new(&[21, 244]),
     // ["swift", "text"]
-    "swift" => TagSet::new(&[240, 249]),
+    "swift" => TagSet::new(&[245, 254]),
     // ["swiftdeps", "text"]
-    "swiftdeps" => TagSet::new(&[241, 249]),
+    "swiftdeps" => TagSet::new(&[246, 254]),
     // ["python", "text", "twisted"]
-    "tac" => TagSet::new(&[209, 249, 260]),
+    "tac" => TagSet::new(&[212, 254, 265]),
     // ["binary", "tar"]
-    "tar" => TagSet::new(&[21, 244]),
+    "tar" => TagSet::new(&[21, 249]),
     // ["msbuild", "text", "xml"]
-    "targets" => TagSet::new(&[165, 249, 283]),
+    "targets" => TagSet::new(&[168, 254, 296]),
     // ["templ", "text"]
-    "templ" => TagSet::new(&[246, 249]),
+    "templ" => TagSet::new(&[251, 254]),
     // ["tex", "text"]
-    "tex" => TagSet::new(&[248, 249]),
+    "tex" => TagSet::new(&[253, 254]),
     // ["text", "textproto"]
-    "textproto" => TagSet::new(&[249, 250]),
+    "textproto" => TagSet::new(&[254, 255]),
     // ["terraform", "text"]
-    "tf" => TagSet::new(&[247, 249]),
+    "tf" => TagSet::new(&[252, 254]),
     // ["terraform", "text"]
-    "tfvars" => TagSet::new(&[247, 249]),
+    "tfvars" => TagSet::new(&[252, 254]),
     // ["binary", "gzip"]
-    "tgz" => TagSet::new(&[21, 103]),
+    "tgz" => TagSet::new(&[21, 104]),
     // ["text", "thrift"]
-    "thrift" => TagSet::new(&[249, 251]),
+    "thrift" => TagSet::new(&[254, 256]),
     // ["binary", "image", "tiff"]
-    "tiff" => TagSet::new(&[21, 115, 252]),
+    "tiff" => TagSet::new(&[21, 117, 257]),
     // ["text", "toml"]
-    "toml" => TagSet::new(&[249, 254]),
+    "toml" => TagSet::new(&[254, 259]),
     // ["c++", "text"]
-    "tpp" => TagSet::new(&[31, 249]),
+    "tpp" => TagSet::new(&[31, 254]),
     // ["text", "ts"]
-    "ts" => TagSet::new(&[249, 255]),
+    "ts" => TagSet::new(&[254, 260]),
     // ["text", "tsv"]
-    "tsv" => TagSet::new(&[249, 256]),
+    "tsv" => TagSet::new(&[254, 261]),
     // ["text", "tsx"]
-    "tsx" => TagSet::new(&[249, 257]),
+    "tsx" => TagSet::new(&[254, 262]),
     // ["binary", "ttf"]
-    "ttf" => TagSet::new(&[21, 258]),
+    "ttf" => TagSet::new(&[21, 263]),
     // ["text", "twig"]
-    "twig" => TagSet::new(&[249, 259]),
+    "twig" => TagSet::new(&[254, 264]),
     // ["ini", "text", "txsprofile"]
-    "txsprofile" => TagSet::new(&[117, 249, 261]),
+    "txsprofile" => TagSet::new(&[119, 254, 266]),
     // ["plain-text", "text"]
-    "txt" => TagSet::new(&[191, 249]),
+    "txt" => TagSet::new(&[194, 254]),
     // ["text", "textproto"]
-    "txtpb" => TagSet::new(&[249, 250]),
+    "txtpb" => TagSet::new(&[254, 255]),
     // ["text", "urdf", "xml"]
-    "urdf" => TagSet::new(&[249, 262, 283]),
+    "urdf" => TagSet::new(&[254, 267, 296]),
     // ["text", "verilog"]
-    "v" => TagSet::new(&[249, 267]),
+    "v" => TagSet::new(&[254, 272]),
     // ["text", "vb"]
-    "vb" => TagSet::new(&[249, 263]),
+    "vb" => TagSet::new(&[254, 268]),
     // ["msbuild", "text", "vbproj", "xml"]
-    "vbproj" => TagSet::new(&[165, 249, 264, 283]),
+    "vbproj" => TagSet::new(&[168, 254, 269, 296]),
     // ["msbuild", "text", "vcxproj", "xml"]
-    "vcxproj" => TagSet::new(&[165, 249, 265, 283]),
+    "vcxproj" => TagSet::new(&[168, 254, 270, 296]),
     // ["text", "vdx"]
-    "vdx" => TagSet::new(&[249, 266]),
+    "vdx" => TagSet::new(&[254, 271]),
     // ["text", "verilog"]
-    "vh" => TagSet::new(&[249, 267]),
+    "vh" => TagSet::new(&[254, 272]),
     // ["text", "vhdl"]
-    "vhd" => TagSet::new(&[249, 268]),
+    "vhd" => TagSet::new(&[254, 273]),
     // ["text", "vim"]
-    "vim" => TagSet::new(&[249, 269]),
+    "vim" => TagSet::new(&[254, 274]),
     // ["text", "vtl"]
-    "vtl" => TagSet::new(&[249, 270]),
+    "vtl" => TagSet::new(&[254, 275]),
     // ["text", "vue"]
-    "vue" => TagSet::new(&[249, 271]),
+    "vue" => TagSet::new(&[254, 276]),
     // ["binary", "jar", "zip"]
-    "war" => TagSet::new(&[21, 124, 294]),
+    "war" => TagSet::new(&[21, 126, 307]),
     // ["audio", "binary", "wav"]
-    "wav" => TagSet::new(&[9, 21, 272]),
+    "wav" => TagSet::new(&[9, 21, 277]),
     // ["binary", "image", "webp"]
-    "webp" => TagSet::new(&[21, 115, 273]),
+    "webp" => TagSet::new(&[21, 117, 278]),
     // ["binary", "wheel", "zip"]
-    "whl" => TagSet::new(&[21, 274, 294]),
+    "whl" => TagSet::new(&[21, 279, 307]),
     // ["text", "wkt"]
-    "wkt" => TagSet::new(&[249, 275]),
+    "wkt" => TagSet::new(&[254, 280]),
     // ["binary", "woff"]
-    "woff" => TagSet::new(&[21, 276]),
+    "woff" => TagSet::new(&[21, 281]),
     // ["binary", "woff2"]
-    "woff2" => TagSet::new(&[21, 277]),
+    "woff2" => TagSet::new(&[21, 282]),
     // ["text", "wsdl", "xml"]
-    "wsdl" => TagSet::new(&[249, 278, 283]),
+    "wsdl" => TagSet::new(&[254, 283, 296]),
     // ["python", "text", "wsgi"]
-    "wsgi" => TagSet::new(&[209, 249, 279]),
+    "wsgi" => TagSet::new(&[212, 254, 284]),
     // ["text", "urdf", "xacro", "xml"]
-    "xacro" => TagSet::new(&[249, 262, 280, 283]),
-    // ["json", "text"]
-    "xctestplan" => TagSet::new(&[132, 249]),
+    "xacro" => TagSet::new(&[254, 267, 285, 296]),
+    // ["text", "xaml", "xml"]
+    "xaml" => TagSet::new(&[254, 286, 296]),
+    // ["text", "xcconfig", "xcodebuild"]
+    "xcconfig" => TagSet::new(&[254, 287, 288]),
+    // ["plist", "xcodebuild", "xcprivacy"]
+    "xcprivacy" => TagSet::new(&[196, 288, 289]),
+    // ["text", "xcodebuild", "xcscheme", "xml"]
+    "xcscheme" => TagSet::new(&[254, 288, 290, 296]),
+    // ["plist", "xcodebuild", "xcsettings"]
+    "xcsettings" => TagSet::new(&[196, 288, 291]),
+    // ["json", "text", "xcodebuild", "xctestplan"]
+    "xctestplan" => TagSet::new(&[135, 254, 288, 292]),
+    // ["text", "xcodebuild", "xcworkspacedata", "xml"]
+    "xcworkspacedata" => TagSet::new(&[254, 288, 293, 296]),
     // ["html", "text", "xhtml", "xml"]
-    "xhtml" => TagSet::new(&[109, 249, 281, 283]),
+    "xhtml" => TagSet::new(&[111, 254, 294, 296]),
     // ["text", "xliff", "xml"]
-    "xlf" => TagSet::new(&[249, 282, 283]),
+    "xlf" => TagSet::new(&[254, 295, 296]),
     // ["text", "xliff", "xml"]
-    "xliff" => TagSet::new(&[249, 282, 283]),
+    "xliff" => TagSet::new(&[254, 295, 296]),
     // ["text", "xml"]
-    "xml" => TagSet::new(&[249, 283]),
+    "xml" => TagSet::new(&[254, 296]),
     // ["text", "xquery"]
-    "xq" => TagSet::new(&[249, 284]),
+    "xq" => TagSet::new(&[254, 297]),
     // ["text", "xquery"]
-    "xql" => TagSet::new(&[249, 284]),
+    "xql" => TagSet::new(&[254, 297]),
     // ["text", "xquery"]
-    "xqm" => TagSet::new(&[249, 284]),
+    "xqm" => TagSet::new(&[254, 297]),
     // ["text", "xquery"]
-    "xqu" => TagSet::new(&[249, 284]),
+    "xqu" => TagSet::new(&[254, 297]),
     // ["text", "xquery"]
-    "xquery" => TagSet::new(&[249, 284]),
+    "xquery" => TagSet::new(&[254, 297]),
     // ["text", "xquery"]
-    "xqy" => TagSet::new(&[249, 284]),
+    "xqy" => TagSet::new(&[254, 297]),
     // ["text", "xml", "xsd"]
-    "xsd" => TagSet::new(&[249, 283, 285]),
+    "xsd" => TagSet::new(&[254, 296, 298]),
     // ["text", "xml", "xsl"]
-    "xsl" => TagSet::new(&[249, 283, 286]),
+    "xsl" => TagSet::new(&[254, 296, 299]),
     // ["text", "xml", "xsl"]
-    "xslt" => TagSet::new(&[249, 283, 286]),
+    "xslt" => TagSet::new(&[254, 296, 299]),
     // ["text", "yaml"]
-    "yaml" => TagSet::new(&[249, 287]),
+    "yaml" => TagSet::new(&[254, 300]),
     // ["text", "yaml", "yamlld"]
-    "yamlld" => TagSet::new(&[249, 287, 288]),
+    "yamlld" => TagSet::new(&[254, 300, 301]),
     // ["text", "yang"]
-    "yang" => TagSet::new(&[249, 290]),
+    "yang" => TagSet::new(&[254, 303]),
     // ["text", "xml", "yin"]
-    "yin" => TagSet::new(&[249, 283, 291]),
+    "yin" => TagSet::new(&[254, 296, 304]),
     // ["text", "yaml"]
-    "yml" => TagSet::new(&[249, 287]),
+    "yml" => TagSet::new(&[254, 300]),
     // ["text", "xml", "zcml"]
-    "zcml" => TagSet::new(&[249, 283, 292]),
+    "zcml" => TagSet::new(&[254, 296, 305]),
     // ["text", "zig"]
-    "zig" => TagSet::new(&[249, 293]),
+    "zig" => TagSet::new(&[254, 306]),
     // ["binary", "zip"]
-    "zip" => TagSet::new(&[21, 294]),
+    "zip" => TagSet::new(&[21, 307]),
     // ["text", "zpt"]
-    "zpt" => TagSet::new(&[249, 295]),
+    "zpt" => TagSet::new(&[254, 308]),
     // ["shell", "text", "zsh"]
-    "zsh" => TagSet::new(&[230, 249, 296]),
+    "zsh" => TagSet::new(&[234, 254, 309]),
 };
 
 pub const NAMES: phf::Map<&str, TagSet> = phf::phf_map! {
     // ["text", "yaml"]
-    ".ansible-lint" => TagSet::new(&[249, 287]),
+    ".ansible-lint" => TagSet::new(&[254, 300]),
     // ["babelrc", "json", "text"]
-    ".babelrc" => TagSet::new(&[13, 132, 249]),
+    ".babelrc" => TagSet::new(&[13, 135, 254]),
     // ["bash", "shell", "text"]
-    ".bash_aliases" => TagSet::new(&[14, 230, 249]),
+    ".bash_aliases" => TagSet::new(&[14, 234, 254]),
     // ["bash", "shell", "text"]
-    ".bash_profile" => TagSet::new(&[14, 230, 249]),
+    ".bash_profile" => TagSet::new(&[14, 234, 254]),
     // ["bash", "shell", "text"]
-    ".bashrc" => TagSet::new(&[14, 230, 249]),
+    ".bashrc" => TagSet::new(&[14, 234, 254]),
     // ["bazelrc", "text"]
-    ".bazelrc" => TagSet::new(&[18, 249]),
+    ".bazelrc" => TagSet::new(&[18, 254]),
     // ["bowerrc", "json", "text"]
-    ".bowerrc" => TagSet::new(&[24, 132, 249]),
+    ".bowerrc" => TagSet::new(&[24, 135, 254]),
     // ["browserslistrc", "text"]
-    ".browserslistrc" => TagSet::new(&[25, 249]),
+    ".browserslistrc" => TagSet::new(&[25, 254]),
     // ["text", "yaml"]
-    ".clang-format" => TagSet::new(&[249, 287]),
+    ".clang-format" => TagSet::new(&[254, 300]),
     // ["text", "yaml"]
-    ".clang-tidy" => TagSet::new(&[249, 287]),
+    ".clang-tidy" => TagSet::new(&[254, 300]),
     // ["codespellrc", "ini", "text"]
-    ".codespellrc" => TagSet::new(&[39, 117, 249]),
+    ".codespellrc" => TagSet::new(&[39, 119, 254]),
     // ["coveragerc", "ini", "text"]
-    ".coveragerc" => TagSet::new(&[41, 117, 249]),
+    ".coveragerc" => TagSet::new(&[41, 119, 254]),
     // ["csh", "shell", "text"]
-    ".cshrc" => TagSet::new(&[43, 230, 249]),
+    ".cshrc" => TagSet::new(&[43, 234, 254]),
     // ["csslintrc", "json", "text"]
-    ".csslintrc" => TagSet::new(&[47, 132, 249]),
+    ".csslintrc" => TagSet::new(&[47, 135, 254]),
     // ["dockerignore", "text"]
-    ".dockerignore" => TagSet::new(&[60, 249]),
+    ".dockerignore" => TagSet::new(&[60, 254]),
     // ["editorconfig", "text"]
-    ".editorconfig" => TagSet::new(&[63, 249]),
+    ".editorconfig" => TagSet::new(&[63, 254]),
     // ["bash", "shell", "text"]
-    ".envrc" => TagSet::new(&[14, 230, 249]),
+    ".envrc" => TagSet::new(&[14, 234, 254]),
     // ["flake8", "ini", "text"]
-    ".flake8" => TagSet::new(&[80, 117, 249]),
+    ".flake8" => TagSet::new(&[81, 119, 254]),
     // ["gitattributes", "text"]
-    ".gitattributes" => TagSet::new(&[88, 249]),
+    ".gitattributes" => TagSet::new(&[89, 254]),
     // ["gitconfig", "ini", "text"]
-    ".gitconfig" => TagSet::new(&[89, 117, 249]),
+    ".gitconfig" => TagSet::new(&[90, 119, 254]),
     // ["gitignore", "text"]
-    ".gitignore" => TagSet::new(&[90, 249]),
+    ".gitignore" => TagSet::new(&[91, 254]),
     // ["gitlint", "ini", "text"]
-    ".gitlint" => TagSet::new(&[91, 117, 249]),
+    ".gitlint" => TagSet::new(&[92, 119, 254]),
     // ["gitmodules", "text"]
-    ".gitmodules" => TagSet::new(&[92, 249]),
+    ".gitmodules" => TagSet::new(&[93, 254]),
     // ["hgrc", "ini", "text"]
-    ".hgrc" => TagSet::new(&[108, 117, 249]),
+    ".hgrc" => TagSet::new(&[109, 119, 254]),
     // ["ini", "isort", "text"]
-    ".isort.cfg" => TagSet::new(&[117, 122, 249]),
+    ".isort.cfg" => TagSet::new(&[119, 124, 254]),
     // ["jshintrc", "json", "text"]
-    ".jshintrc" => TagSet::new(&[131, 132, 249]),
+    ".jshintrc" => TagSet::new(&[134, 135, 254]),
     // ["mailmap", "text"]
-    ".mailmap" => TagSet::new(&[153, 249]),
+    ".mailmap" => TagSet::new(&[156, 254]),
     // ["json", "mention-bot", "text"]
-    ".mention-bot" => TagSet::new(&[132, 159, 249]),
+    ".mention-bot" => TagSet::new(&[135, 162, 254]),
     // ["npmignore", "text"]
-    ".npmignore" => TagSet::new(&[174, 249]),
+    ".npmignore" => TagSet::new(&[177, 254]),
     // ["pdbrc", "python", "text"]
-    ".pdbrc" => TagSet::new(&[182, 209, 249]),
+    ".pdbrc" => TagSet::new(&[185, 212, 254]),
     // ["gitignore", "prettierignore", "text"]
-    ".prettierignore" => TagSet::new(&[90, 199, 249]),
+    ".prettierignore" => TagSet::new(&[91, 202, 254]),
     // ["ini", "pypirc", "text"]
-    ".pypirc" => TagSet::new(&[117, 207, 249]),
+    ".pypirc" => TagSet::new(&[119, 210, 254]),
     // ["ini", "text"]
-    ".rstcheck.cfg" => TagSet::new(&[117, 249]),
+    ".rstcheck.cfg" => TagSet::new(&[119, 254]),
     // ["salt-lint", "text", "yaml"]
-    ".salt-lint" => TagSet::new(&[222, 249, 287]),
+    ".salt-lint" => TagSet::new(&[225, 254, 300]),
     // ["ini", "text"]
-    ".sqlfluff" => TagSet::new(&[117, 249]),
+    ".sqlfluff" => TagSet::new(&[119, 254]),
     // ["text", "yaml", "yamllint"]
-    ".yamllint" => TagSet::new(&[249, 287, 289]),
+    ".yamllint" => TagSet::new(&[254, 300, 302]),
     // ["shell", "text", "zsh"]
-    ".zlogin" => TagSet::new(&[230, 249, 296]),
+    ".zlogin" => TagSet::new(&[234, 254, 309]),
     // ["shell", "text", "zsh"]
-    ".zlogout" => TagSet::new(&[230, 249, 296]),
+    ".zlogout" => TagSet::new(&[234, 254, 309]),
     // ["shell", "text", "zsh"]
-    ".zprofile" => TagSet::new(&[230, 249, 296]),
+    ".zprofile" => TagSet::new(&[234, 254, 309]),
     // ["shell", "text", "zsh"]
-    ".zshenv" => TagSet::new(&[230, 249, 296]),
+    ".zshenv" => TagSet::new(&[234, 254, 309]),
     // ["shell", "text", "zsh"]
-    ".zshrc" => TagSet::new(&[230, 249, 296]),
+    ".zshrc" => TagSet::new(&[234, 254, 309]),
     // ["plain-text", "text"]
-    "AUTHORS" => TagSet::new(&[191, 249]),
+    "AUTHORS" => TagSet::new(&[194, 254]),
     // ["bazel", "text"]
-    "BUILD" => TagSet::new(&[17, 249]),
+    "BUILD" => TagSet::new(&[17, 254]),
+    // ["ruby", "text"]
+    "Brewfile" => TagSet::new(&[222, 254]),
     // ["plain-text", "text"]
-    "CHANGELOG" => TagSet::new(&[191, 249]),
+    "CHANGELOG" => TagSet::new(&[194, 254]),
     // ["cmake", "text"]
-    "CMakeLists.txt" => TagSet::new(&[38, 249]),
+    "CMakeLists.txt" => TagSet::new(&[38, 254]),
     // ["plain-text", "text"]
-    "CONTRIBUTING" => TagSet::new(&[191, 249]),
+    "CONTRIBUTING" => TagSet::new(&[194, 254]),
     // ["plain-text", "text"]
-    "COPYING" => TagSet::new(&[191, 249]),
+    "COPYING" => TagSet::new(&[194, 254]),
     // ["cargo-lock", "text", "toml"]
-    "Cargo.lock" => TagSet::new(&[34, 249, 254]),
+    "Cargo.lock" => TagSet::new(&[34, 254, 259]),
     // ["cargo", "text", "toml"]
-    "Cargo.toml" => TagSet::new(&[33, 249, 254]),
+    "Cargo.toml" => TagSet::new(&[33, 254, 259]),
     // ["dockerfile", "text"]
-    "Containerfile" => TagSet::new(&[59, 249]),
+    "Containerfile" => TagSet::new(&[59, 254]),
     // ["dockerfile", "text"]
-    "Dockerfile" => TagSet::new(&[59, 249]),
-    // ["makefile", "text"]
-    "GNUmakefile" => TagSet::new(&[154, 249]),
+    "Dockerfile" => TagSet::new(&[59, 254]),
     // ["ruby", "text"]
-    "Gemfile" => TagSet::new(&[219, 249]),
+    "Fastfile" => TagSet::new(&[222, 254]),
+    // ["makefile", "text"]
+    "GNUmakefile" => TagSet::new(&[157, 254]),
+    // ["ruby", "text"]
+    "Gemfile" => TagSet::new(&[222, 254]),
     // ["text"]
-    "Gemfile.lock" => TagSet::new(&[249]),
+    "Gemfile.lock" => TagSet::new(&[254]),
     // ["groovy", "jenkins", "text"]
-    "Jenkinsfile" => TagSet::new(&[100, 128, 249]),
+    "Jenkinsfile" => TagSet::new(&[101, 131, 254]),
     // ["plain-text", "text"]
-    "LICENSE" => TagSet::new(&[191, 249]),
+    "LICENSE" => TagSet::new(&[194, 254]),
     // ["plain-text", "text"]
-    "MAINTAINERS" => TagSet::new(&[191, 249]),
+    "MAINTAINERS" => TagSet::new(&[194, 254]),
     // ["makefile", "text"]
-    "Makefile" => TagSet::new(&[154, 249]),
+    "Makefile" => TagSet::new(&[157, 254]),
     // ["plain-text", "text"]
-    "NEWS" => TagSet::new(&[191, 249]),
+    "NEWS" => TagSet::new(&[194, 254]),
     // ["plain-text", "text"]
-    "NOTICE" => TagSet::new(&[191, 249]),
+    "NOTICE" => TagSet::new(&[194, 254]),
     // ["plain-text", "text"]
-    "PATENTS" => TagSet::new(&[191, 249]),
+    "PATENTS" => TagSet::new(&[194, 254]),
     // ["alpm", "bash", "pkgbuild", "shell", "text"]
-    "PKGBUILD" => TagSet::new(&[1, 14, 190, 230, 249]),
+    "PKGBUILD" => TagSet::new(&[1, 14, 193, 234, 254]),
     // ["text", "toml"]
-    "Pipfile" => TagSet::new(&[249, 254]),
+    "Pipfile" => TagSet::new(&[254, 259]),
     // ["json", "text"]
-    "Pipfile.lock" => TagSet::new(&[132, 249]),
+    "Pipfile.lock" => TagSet::new(&[135, 254]),
     // ["plain-text", "text"]
-    "README" => TagSet::new(&[191, 249]),
+    "README" => TagSet::new(&[194, 254]),
     // ["ruby", "text"]
-    "Rakefile" => TagSet::new(&[219, 249]),
+    "Rakefile" => TagSet::new(&[222, 254]),
+    // ["scons", "text"]
+    "SConscript" => TagSet::new(&[231, 254]),
+    // ["scons", "text"]
+    "SConstruct" => TagSet::new(&[231, 254]),
+    // ["scons", "text"]
+    "SCsub" => TagSet::new(&[231, 254]),
     // ["text", "tiltfile"]
-    "Tiltfile" => TagSet::new(&[249, 253]),
+    "Tiltfile" => TagSet::new(&[254, 258]),
     // ["ruby", "text"]
-    "Vagrantfile" => TagSet::new(&[219, 249]),
+    "Vagrantfile" => TagSet::new(&[222, 254]),
     // ["bazel", "text"]
-    "WORKSPACE" => TagSet::new(&[17, 249]),
+    "WORKSPACE" => TagSet::new(&[17, 254]),
     // ["bitbake", "text"]
-    "bblayers.conf" => TagSet::new(&[22, 249]),
+    "bblayers.conf" => TagSet::new(&[22, 254]),
     // ["bitbake", "text"]
-    "bitbake.conf" => TagSet::new(&[22, 249]),
+    "bitbake.conf" => TagSet::new(&[22, 254]),
     // ["ruby", "text"]
-    "config.ru" => TagSet::new(&[219, 249]),
+    "config.ru" => TagSet::new(&[222, 254]),
     // ["bazel", "text"]
-    "copy.bara.sky" => TagSet::new(&[17, 249]),
+    "copy.bara.sky" => TagSet::new(&[17, 254]),
     // ["bash", "shell", "text"]
-    "direnvrc" => TagSet::new(&[14, 230, 249]),
+    "direnvrc" => TagSet::new(&[14, 234, 254]),
     // ["go-mod", "text"]
-    "go.mod" => TagSet::new(&[95, 249]),
+    "go.mod" => TagSet::new(&[96, 254]),
     // ["go-sum", "text"]
-    "go.sum" => TagSet::new(&[96, 249]),
+    "go.sum" => TagSet::new(&[97, 254]),
     // ["makefile", "text"]
-    "makefile" => TagSet::new(&[154, 249]),
+    "makefile" => TagSet::new(&[157, 254]),
     // ["meson", "text"]
-    "meson.build" => TagSet::new(&[160, 249]),
+    "meson.build" => TagSet::new(&[163, 254]),
     // ["meson", "meson-options", "text"]
-    "meson.options" => TagSet::new(&[160, 161, 249]),
+    "meson.options" => TagSet::new(&[163, 164, 254]),
     // ["meson", "meson-options", "text"]
-    "meson_options.txt" => TagSet::new(&[160, 161, 249]),
+    "meson_options.txt" => TagSet::new(&[163, 164, 254]),
     // ["text", "toml"]
-    "poetry.lock" => TagSet::new(&[249, 254]),
+    "poetry.lock" => TagSet::new(&[254, 259]),
     // ["pom", "text", "xml"]
-    "pom.xml" => TagSet::new(&[196, 249, 283]),
+    "pom.xml" => TagSet::new(&[199, 254, 296]),
     // ["ini", "pylintrc", "text"]
-    "pylintrc" => TagSet::new(&[117, 206, 249]),
+    "pylintrc" => TagSet::new(&[119, 209, 254]),
     // ["erlang", "text"]
-    "rebar.config" => TagSet::new(&[72, 249]),
+    "rebar.config" => TagSet::new(&[73, 254]),
     // ["ini", "text"]
-    "setup.cfg" => TagSet::new(&[117, 249]),
+    "setup.cfg" => TagSet::new(&[119, 254]),
     // ["erlang", "text"]
-    "sys.config" => TagSet::new(&[72, 249]),
+    "sys.config" => TagSet::new(&[73, 254]),
     // ["erlang", "text"]
-    "sys.config.src" => TagSet::new(&[72, 249]),
+    "sys.config.src" => TagSet::new(&[73, 254]),
+    // ["text", "toml"]
+    "uv.lock" => TagSet::new(&[254, 259]),
     // ["python", "text"]
-    "wscript" => TagSet::new(&[209, 249]),
+    "wscript" => TagSet::new(&[212, 254]),
 };
