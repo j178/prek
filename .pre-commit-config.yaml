@@ -29,6 +29,16 @@ repos:
           - mdformat-mkdocs==5.1.4
           - mdformat-simple-breaks==0.1.0
 
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.37.0
+    hooks:
+      - id: check-metaschema
+        files:
+          glob: prek.schema.json
+      - id: check-github-workflows
+      - id: check-renovate
+        additional_dependencies: ['json5']
+
   - repo: local
     hooks:
       - id: taplo-fmt
