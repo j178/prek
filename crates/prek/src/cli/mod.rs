@@ -479,7 +479,7 @@ pub(crate) struct RunArgs {
     /// The stage during which the hook is fired.
     ///
     /// When specified, only hooks configured for that stage (for example `manual`,
-    /// `pre-commit`, or `pre-commit`) will run.
+    /// `pre-commit`, or `pre-push`) will run.
     /// Defaults to `pre-commit` if not specified.
     /// For hooks specified directly in the command line, fallback to `manual` stage if no hooks found for `pre-commit` stage.
     #[arg(long, value_enum, alias = "hook-stage")]
