@@ -14,7 +14,7 @@ use tracing::{debug, trace, warn};
 use prek_consts::env_vars::EnvVars;
 
 use crate::fs::LockedFile;
-use crate::languages::{REQWEST_CLIENT, download_and_extract};
+use crate::http::{REQWEST_CLIENT, download_and_extract};
 use crate::process::Cmd;
 use crate::store::{CacheBucket, Store};
 use crate::version;

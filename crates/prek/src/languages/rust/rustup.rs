@@ -10,7 +10,7 @@ use target_lexicon::HOST;
 use tracing::{debug, trace};
 
 use crate::fs::LockedFile;
-use crate::languages::REQWEST_CLIENT;
+use crate::http::REQWEST_CLIENT;
 use crate::languages::rust::version::RustVersion;
 use crate::process::Cmd;
 use crate::store::Store;

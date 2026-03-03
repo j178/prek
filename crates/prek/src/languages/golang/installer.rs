@@ -12,7 +12,7 @@ use tracing::{debug, trace, warn};
 
 use crate::fs::LockedFile;
 use crate::git;
-use crate::languages::download_and_extract;
+use crate::http::download_and_extract;
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::golang::bin_dir;
 use crate::languages::golang::version::GoVersion;
