@@ -1,6 +1,6 @@
 use crate::config::{
-    BuiltinHook, BuiltinRepo, FilePattern, LocalRepo, MetaHook, MetaRepo, RemoteHook, RemoteRepo,
-    Repo, Stage, Stages,
+    BuiltinHook, BuiltinRepo, FilePattern, LocalRepo, MetaHook, MetaRepo, PassFilenames,
+    RemoteHook, RemoteRepo, Repo, Stage, Stages,
 };
 use std::borrow::Cow;
 
@@ -174,6 +174,25 @@ impl schemars::JsonSchema for FilePattern {
                     "required": ["glob"],
                 }
             ],
+        })
+    }
+}
+
+impl schemars::JsonSchema for PassFilenames {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("PassFilenames")
+    }
+
+    fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "Whether to pass filenames to the hook. \
+            `true` passes all matching filenames (default), \
+            `false` passes none, and \
+            a positive integer limits each invocation to at most that many filenames.",
+            "oneOf": [
+                {"type": "boolean"},
+                {"type": "integer", "exclusiveMinimum": 0}
+            ]
         })
     }
 }

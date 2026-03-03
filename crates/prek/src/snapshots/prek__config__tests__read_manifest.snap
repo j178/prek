@@ -30,7 +30,7 @@ Manifest {
                 always_run: None,
                 fail_fast: None,
                 pass_filenames: Some(
-                    false,
+                    None,
                 ),
                 description: Some(
                     "Automatically run 'uv pip compile' on your requirements",
@@ -72,7 +72,7 @@ Manifest {
                 always_run: None,
                 fail_fast: None,
                 pass_filenames: Some(
-                    false,
+                    None,
                 ),
                 description: Some(
                     "Automatically run 'uv lock' on your project dependencies",
@@ -117,7 +117,7 @@ Manifest {
                 always_run: None,
                 fail_fast: None,
                 pass_filenames: Some(
-                    false,
+                    None,
                 ),
                 description: Some(
                     "Automatically run 'uv export' on your project dependencies",

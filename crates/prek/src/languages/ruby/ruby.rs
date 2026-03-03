@@ -16,7 +16,7 @@ use crate::languages::ruby::installer::RubyInstaller;
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
-use crate::store::Store;
+use crate::store::{Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Ruby;
@@ -31,16 +31,17 @@ impl LanguageImpl for Ruby {
         let progress = reporter.on_install_start(&hook);
 
         // 1. Install Ruby
-        let installer = RubyInstaller::new();
+        let ruby_dir = store.tools_path(ToolBucket::Ruby);
+        let installer = RubyInstaller::new(ruby_dir);
 
-        let request = match &hook.language_request {
-            LanguageRequest::Any { system_only: _ } => &RubyRequest::Any,
-            LanguageRequest::Ruby(req) => req,
+        let (request, allows_download) = match &hook.language_request {
+            LanguageRequest::Any { system_only } => (&RubyRequest::Any, !system_only),
+            LanguageRequest::Ruby(req) => (req, true),
             _ => unreachable!(),
         };
 
         let ruby = installer
-            .install(store, request)
+            .install(store, request, allows_download)
             .await
             .context("Failed to install Ruby")?;
 

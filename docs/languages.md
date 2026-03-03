@@ -31,6 +31,7 @@ Languages with managed toolchain downloads in prek today:
 - [Bun](#bun)
 - [Golang](#golang)
 - [Rust](#rust)
+- [Ruby](#ruby)
 
 Other supported languages rely on system installations and will fail if a matching toolchain is not available.
 
@@ -296,7 +297,7 @@ Tracking: [#42](https://github.com/j178/prek/issues/42)
 
 ### ruby
 
-**Status in prek:** ✅ Supported (with limitations).
+**Status in prek:** ✅ Supported.
 
 prek installs gems from a `*.gemspec` and runs executables declared in the gemspec. `additional_dependencies` are installed into the same isolated gemset.
 
@@ -312,9 +313,11 @@ Supported formats:
 
 !!! note "prek-only"
 
-    prek does not automatically download Ruby toolchains. It uses system-installed Rubies, including common version managers, and fails if no suitable version matches `language_version`.
+    prek can use system-installed Rubies, including a variety of common version managers. On some platforms, if the system search fails to find a suitable version matching `language_version`, it can then attempt to download one.
 
-Tracking for Ruby toolchain download support: [#43](https://github.com/j178/prek/issues/43)
+    Ruby interpreters are downloaded from those built by the `rv` project, and as such are limited in supported platform versions (currently limited to MacOS and Linux on x86_64 and ARM64). Older versions are also not available, with the oldest being 3.2.1. Unsupported platforms or versions will require a compatible system Ruby installation.
+
+    The `PREK_RUBY_MIRROR` environment variable can be used to point to a different source for installers, for example to support mirrors or air-gapped CI environments. Mirrors need to follow the GitHub URL patterns, but note that although the GitHub hostname changes between `api.github.com` and `github.com` as needed, any non-GitHub mirror server will not be remapped in this manner. Where Ruby is being downloaded from GitHub (either from the upstream `rv` or a mirror), this remapping does occur, and any `GITHUB_TOKEN` will be sent with the requests. This both limits impact of rate limiting, and also allows a private GitHub repository to be used (e.g. for a vetted subset of `rv` rubies to be mirrored). Note that GitHub tokens will only be sent to mirrors which are hosted on GitHub.
 
 Gems specified in hook gemspec files and `additional_dependencies` are installed into an isolated gemset shared across hooks with the same Ruby version and dependencies.
 

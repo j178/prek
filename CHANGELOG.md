@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.3.4
+
+Released on 2026-02-28.
+
+### Enhancements
+
+- Allow `pass_filenames` to accept a positive integer ([#1698](https://github.com/j178/prek/pull/1698))
+- Install and compile gems in parallel ([#1674](https://github.com/j178/prek/pull/1674))
+- Sync identify file-type mappings with pre-commit identify ([#1660](https://github.com/j178/prek/pull/1660))
+- Use `--locked` for Rust `cargo install` commands ([#1661](https://github.com/j178/prek/pull/1661))
+- Add `PREK_MAX_CONCURRENCY` environment variable for configuring maximum concurrency ([#1697](https://github.com/j178/prek/pull/1697))
+- Add `PREK_LOG_TRUNCATE_LIMIT` environment variable for configuring log truncation ([#1679](https://github.com/j178/prek/pull/1679))
+- Add support for `python -m prek` ([#1686](https://github.com/j178/prek/pull/1686))
+
+### Bug fixes
+
+- Skip invalid Rust toolchains instead of failing ([#1699](https://github.com/j178/prek/pull/1699))
+
+### Performance
+
+- Bitset-based TagSet refactor: precompute tag masks and speed up hook type filtering ([#1665](https://github.com/j178/prek/pull/1665))
+
+### Documentation
+
+- Document `winget install j178.Prek` ([#1670](https://github.com/j178/prek/pull/1670))
+
+### Contributors
+
+- @uplsh580
+- @Svecco
+- @dbast
+- @drichardson
+- @JP-Ellis
+- @j178
+- @is-alnilam
+- @copilot-swe-agent
+
 ## 0.3.3
 
 Released on 2026-02-15.

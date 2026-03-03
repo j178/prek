@@ -43,6 +43,8 @@ mod printer;
 mod process;
 #[cfg(all(unix, feature = "profiler"))]
 mod profiler;
+#[cfg(unix)]
+mod resource_limit;
 mod run;
 #[cfg(feature = "schemars")]
 mod schema;
@@ -183,6 +185,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
     debug!("prek: {}", version::version());
 
+    #[cfg(unix)]
+    match resource_limit::adjust_open_file_limit() {
+        Ok(_) | Err(resource_limit::OpenFileLimitError::AlreadySufficient { .. }) => {}
+        Err(err) => {
+            tracing::warn!("Failed to adjust open file limit: {err}");
+        }
+    }
+
     // If `GIT_DIR` is set, prek may be running from a git hook.
     // Git exports `GIT_DIR` but *not* `GIT_WORK_TREE`. Without `GIT_WORK_TREE`, git
     // treats the current working directory as the working tree. If prek changes the current
@@ -239,7 +249,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.allow_missing_config,
                 cli.globals.refresh,
                 printer,
-                None,
+                args.git_dir.as_deref(),
             )
             .await
         }
