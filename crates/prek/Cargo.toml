@@ -95,6 +95,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 unicode-width = { workspace = true }
 walkdir = { workspace = true }
+webpki-root-certs = { workspace = true }
 which = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]

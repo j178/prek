@@ -2,11 +2,13 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use futures::TryStreamExt;
 use prek_consts::env_vars::EnvVars;
 use prek_identify::parse_shebang;
+use reqwest::Certificate;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, error, instrument, trace};
 
@@ -16,7 +18,7 @@ use crate::config::Language;
 use crate::fs::{CWD, Simplified};
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::store::{CacheBucket, Store, ToolBucket};
-use crate::{archive, hooks, warn_user_once};
+use crate::{archive, hooks, warn_user};
 
 mod bun;
 mod docker;
@@ -393,21 +395,107 @@ async fn download_and_extract(
     Ok(())
 }
 
-pub(crate) static REQWEST_CLIENT: std::sync::LazyLock<reqwest::Client> =
-    std::sync::LazyLock::new(|| {
-        let native_tls = use_native_tls();
-        create_reqwest_client(native_tls)
-    });
+pub(crate) static REQWEST_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    let native_tls = EnvVars::var_as_bool(EnvVars::PREK_NATIVE_TLS).unwrap_or(false);
 
-fn create_reqwest_client(native_tls: bool) -> reqwest::Client {
+    let cert_file = EnvVars::var_os(EnvVars::SSL_CERT_FILE);
+    let cert_dirs: Vec<_> = if let Some(cert_dirs) = EnvVars::var_os(EnvVars::SSL_CERT_DIR) {
+        std::env::split_paths(&cert_dirs).collect()
+    } else {
+        Vec::new()
+    };
+
+    let certs = load_certs_from_paths(cert_file.as_deref().map(Path::new), &cert_dirs);
+    create_reqwest_client(native_tls, certs)
+});
+
+fn load_pem_certs_from_file(path: &Path) -> Result<Vec<Certificate>> {
+    let cert_data = fs_err::read(path)?;
+    let certs = Certificate::from_pem_bundle(&cert_data)
+        .or_else(|_| Certificate::from_pem(&cert_data).map(|cert| vec![cert]))?;
+    Ok(certs)
+}
+
+/// Load certificate from certificate directory.
+fn load_pem_certs_from_dir(dir: &Path) -> Result<Vec<Certificate>> {
+    let mut certs = Vec::new();
+
+    for entry in fs_err::read_dir(dir)?.flatten() {
+        let path = entry.path();
+
+        // `openssl rehash` used to create this directory uses symlinks. So,
+        // make sure we resolve them.
+        let metadata = match fs_err::metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                // Dangling symlink
+                continue;
+            }
+            Err(_) => {
+                continue;
+            }
+        };
+
+        if metadata.is_file() {
+            if let Ok(mut loaded) = load_pem_certs_from_file(&path) {
+                certs.append(&mut loaded);
+            }
+        }
+    }
+
+    Ok(certs)
+}
+
+fn load_certs_from_paths(file: Option<&Path>, dirs: &[impl AsRef<Path>]) -> Vec<Certificate> {
+    let mut certs = Vec::new();
+
+    if let Some(file) = file {
+        match load_pem_certs_from_file(file) {
+            Ok(mut loaded) => certs.append(&mut loaded),
+            Err(e) => {
+                warn_user!(
+                    "Failed to load certificates from {}: {e}",
+                    file.simplified_display().cyan(),
+                );
+            }
+        }
+    }
+
+    for dir in dirs {
+        match load_pem_certs_from_dir(dir.as_ref()) {
+            Ok(mut loaded) => certs.append(&mut loaded),
+            Err(e) => {
+                warn_user!(
+                    "Failed to load certificates from {}: {}",
+                    dir.as_ref().simplified_display().cyan(),
+                    e
+                );
+            }
+        }
+    }
+
+    certs
+}
+
+fn create_reqwest_client(native_tls: bool, custom_certs: Vec<Certificate>) -> reqwest::Client {
     let builder =
         reqwest::ClientBuilder::new().user_agent(format!("prek/{}", crate::version::version()));
+
+    let root_certs = webpki_root_certs::TLS_SERVER_ROOT_CERTS
+        .iter()
+        .filter_map(|cert_der| Certificate::from_der(cert_der).ok());
+
     let builder = if native_tls {
         debug!("Using native TLS for reqwest client");
-        builder.tls_backend_native()
+        builder.tls_backend_native().tls_certs_merge(custom_certs)
     } else {
-        builder.tls_backend_rustls()
+        // Merge custom certificates on top of webpki-root-certs
+        builder
+            .tls_backend_rustls()
+            .tls_certs_only(custom_certs)
+            .tls_certs_merge(root_certs)
     };
+
     builder.build().unwrap_or_else(|e| {
         error!(
             "Unable to create reqwest client, falling back to default {:?}",
@@ -417,29 +505,13 @@ fn create_reqwest_client(native_tls: bool) -> reqwest::Client {
     })
 }
 
-fn use_native_tls() -> bool {
-    if let Some(val) = EnvVars::var_as_bool(EnvVars::PREK_NATIVE_TLS) {
-        return val;
-    }
-
-    // SSL_CERT_FILE is only respected when using native TLS
-    EnvVars::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
-        let path_exists = Path::new(&path).exists();
-        if !path_exists {
-            warn_user_once!(
-                "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
-                path.simplified_display().cyan()
-            );
-        }
-        path_exists
-    })
-}
-
 #[cfg(test)]
 mod tests {
+    use std::vec;
+
     #[tokio::test]
     async fn test_native_tls() {
-        let client = super::create_reqwest_client(true);
+        let client = super::create_reqwest_client(true, vec![]);
         let resp = client.get("https://github.com").send().await;
         assert!(resp.is_ok(), "Failed to send request with native TLS");
     }
