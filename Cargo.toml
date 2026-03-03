@@ -156,6 +156,11 @@ rc_buffer = "warn"
 rc_mutex = "warn"
 rest_pat_in_fully_bound_structs = "warn"
 
+[workspace.metadata.typos.default]
+extend-ignore-re = [
+  '(?s)-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----',
+]
+
 [workspace.metadata.typos.default.extend-words]
 edn = "edn"
 styl = "styl"

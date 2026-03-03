@@ -156,14 +156,14 @@ fn create_reqwest_client(native_tls: bool, custom_certs: Vec<Certificate>) -> re
     let builder =
         reqwest::ClientBuilder::new().user_agent(format!("prek/{}", crate::version::version()));
 
-    let root_certs = webpki_root_certs::TLS_SERVER_ROOT_CERTS
-        .iter()
-        .filter_map(|cert_der| Certificate::from_der(cert_der).ok());
-
     let builder = if native_tls {
         debug!("Using native TLS for reqwest client");
         builder.tls_backend_native().tls_certs_merge(custom_certs)
     } else {
+        let root_certs = webpki_root_certs::TLS_SERVER_ROOT_CERTS
+            .iter()
+            .filter_map(|cert_der| Certificate::from_der(cert_der).ok());
+
         // Merge custom certificates on top of webpki-root-certs
         builder
             .tls_backend_rustls()
@@ -176,6 +176,70 @@ fn create_reqwest_client(native_tls: bool, custom_certs: Vec<Certificate>) -> re
 
 #[cfg(test)]
 mod tests {
+    use anyhow::Result;
+    use std::path::Path;
+
+    const TEST_CERT_PEM: &str = "-----BEGIN CERTIFICATE-----
+MIIBtjCCAVugAwIBAgITBmyf1XSXNmY/Owua2eiedgPySjAKBggqhkjOPQQDAjA5
+MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6b24g
+Um9vdCBDQSAzMB4XDTE1MDUyNjAwMDAwMFoXDTQwMDUyNjAwMDAwMFowOTELMAkG
+A1UEBhMCVVMxDzANBgNVBAoTBkFtYXpvbjEZMBcGA1UEAxMQQW1hem9uIFJvb3Qg
+Q0EgMzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABCmXp8ZBf8ANm+gBG1bG8lKl
+ui2yEujSLtf6ycXYqm0fc4E7O5hrOXwzpcVOho6AF2hiRVd9RFgdszflZwjrZt6j
+QjBAMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgGGMB0GA1UdDgQWBBSr
+ttvXBp43rDCGB5Fwx5zEGbF4wDAKBggqhkjOPQQDAgNJADBGAiEA4IWSoxe3jfkr
+BqWTrBqYaGFy+uGh0PsceGCmQ5nFuMQCIQCcAu/xlJyzlvnrxir4tiz+OpAUFteM
+YyRIHN8wfdVoOw==
+-----END CERTIFICATE-----\n";
+
+    fn write_cert(path: &Path) {
+        fs_err::write(path, TEST_CERT_PEM).expect("failed to write test certificate");
+    }
+
+    #[test]
+    fn test_load_pem_certs_from_file() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let cert_path = temp_dir.path().join("cert.pem");
+        write_cert(&cert_path);
+
+        let certs = super::load_pem_certs_from_file(&cert_path)?;
+        assert_eq!(certs.len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_pem_certs_from_dir_skips_invalid_files() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let cert_dir = temp_dir.path().join("certs");
+        fs_err::create_dir(&cert_dir)?;
+
+        write_cert(&cert_dir.join("valid.pem"));
+        fs_err::write(cert_dir.join("invalid.pem"), "not a certificate")?;
+
+        let certs = super::load_pem_certs_from_dir(&cert_dir)?;
+        assert_eq!(certs.len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_certs_from_paths_combines_sources() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let cert_file = temp_dir.path().join("cert-file.pem");
+        write_cert(&cert_file);
+
+        let cert_dir = temp_dir.path().join("cert-dir");
+        fs_err::create_dir(&cert_dir)?;
+        write_cert(&cert_dir.join("cert-in-dir.pem"));
+        fs_err::write(cert_dir.join("garbage.txt"), "invalid")?;
+
+        let certs = super::load_certs_from_paths(Some(&cert_file), &[&cert_dir]);
+        assert_eq!(certs.len(), 2);
+
+        Ok(())
+    }
+
     #[tokio::test]
     async fn test_native_tls() {
         let client = super::create_reqwest_client(true, vec![]);
