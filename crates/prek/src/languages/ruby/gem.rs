@@ -1,9 +1,11 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use futures::{StreamExt, TryStreamExt};
 use prek_consts::env_vars::EnvVars;
+use rand::Rng;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::debug;
 
@@ -301,17 +303,51 @@ pub(crate) async fn install_gems(
         Ok(gems) if !gems.is_empty() => {
             debug!("Installing {} gems in parallel", gems.len());
 
-            futures::stream::iter(gems)
+            let result = futures::stream::iter(gems)
                 .map(|gem| {
                     let key = gem.key();
                     let local_path = local_gem_map.get(key.as_str()).copied();
-                    async move { install_single_gem(ruby, gem_home, &gem, local_path).await }
+                    async move {
+                        match install_single_gem(ruby, gem_home, &gem, local_path).await {
+                            Ok(()) => Ok(()),
+                            Err(first_err) => {
+                                // Parallel `gem install` processes can race when reading
+                                // each other's partially-written gemspec files, causing
+                                // transient failures (especially on Windows/NTFS). Retry
+                                // once after a random delay to let the other process finish.
+                                let delay = rand::rng().random_range(50..=500);
+                                debug!(
+                                    "gem install {} failed, retrying in {delay}ms: {first_err:#}",
+                                    gem.name
+                                );
+                                tokio::time::sleep(Duration::from_millis(delay)).await;
+                                install_single_gem(ruby, gem_home, &gem, local_path)
+                                    .await
+                                    .with_context(|| {
+                                        format!("retry also failed (first error: {first_err:#})")
+                                    })
+                            }
+                        }
+                    }
                 })
                 .buffer_unordered(*CONCURRENCY)
                 .try_collect::<Vec<()>>()
-                .await?;
+                .await;
 
-            Ok(())
+            match result {
+                Ok(_) => Ok(()),
+                Err(err) => {
+                    // Parallel installs may have partially succeeded (installed
+                    // gems remain in GEM_HOME). Fall back to sequential install
+                    // which will skip already-installed gems and retry the rest.
+                    debug!(
+                        "Parallel gem install failed after retry ({err:#}), \
+                         falling back to sequential install"
+                    );
+                    install_gems_sequential(ruby, gem_home, &gem_files, additional_dependencies)
+                        .await
+                }
+            }
         }
         Ok(_) => {
             debug!("gem install --explain returned no gems, falling back to sequential install");

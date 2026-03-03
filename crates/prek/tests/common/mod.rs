@@ -415,6 +415,8 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
     // Time seconds
     (r"\b(\d+\.)?\d+(ms|s)\b", "[TIME]"),
+    // Strip non-deterministic lock contention warnings from parallel test execution
+    (r"(?m)^warning: Waiting to acquire lock.*\n", ""),
 ];
 
 #[allow(unused_macros)]
