@@ -28,20 +28,18 @@ prek-identify = { workspace = true, features = ["serde"] }
 anstream = { workspace = true }
 anstyle-query = { workspace = true }
 anyhow = { workspace = true }
-async-compression = { workspace = true, features = ["gzip", "xz", "tokio"] }
-async_zip = { workspace = true, features = ["deflate", "tokio"] }
-axoupdater = { workspace = true, default-features = false, features = [
-  "github_releases",
-], optional = true }
+async-compression = { workspace = true }
+async_zip = { workspace = true }
+axoupdater = { workspace = true, optional = true }
 bstr = { workspace = true }
 cargo_metadata = { workspace = true }
-clap = { workspace = true, features = ["derive", "env", "string", "wrap_help"] }
-clap_complete = { workspace = true, features = ["unstable-dynamic"] }
+clap = { workspace = true }
+clap_complete = { workspace = true }
 ctrlc = { workspace = true }
 dunce = { workspace = true }
 etcetera = { workspace = true }
 fancy-regex = { workspace = true }
-fs-err = { workspace = true, features = ["tokio"] }
+fs-err = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
@@ -55,7 +53,7 @@ levenshtein = { workspace = true }
 globset = { workspace = true }
 # Enable static linking for liblzma
 # This is required for the `xz` feature in `async-compression`
-liblzma = { workspace = true, features = ["static"] }
+liblzma = { workspace = true }
 mea = { workspace = true }
 memchr = { workspace = true }
 owo-colors = { workspace = true }
@@ -63,19 +61,15 @@ path-clean = { workspace = true }
 quick-xml = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
-reqwest = { workspace = true, default-features = false, features = [
-  "http2",
-  "stream",
-  "json",
-] }
+reqwest = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
-semver = { workspace = true, features = ["serde"] }
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true, features = ["unbounded_depth"] }
+semver = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 serde_stacker = { workspace = true }
-serde-saphyr = { workspace = true, default-features = false }
+serde-saphyr = { workspace = true }
 shlex = { workspace = true }
 strum = { workspace = true }
 target-lexicon = { workspace = true }
@@ -84,15 +78,10 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-tar = { workspace = true }
 tokio-util = { workspace = true }
-toml = { workspace = true, default-features = false, features = [
-  "fast_hash",
-  "parse",
-  "preserve_order",
-  "serde",
-] }
+toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-subscriber = { workspace = true }
 unicode-width = { workspace = true }
 walkdir = { workspace = true }
 webpki-root-certs = { workspace = true }
@@ -109,10 +98,10 @@ rustix = { workspace = true }
 fs-err = { workspace = true }
 
 [dev-dependencies]
-assert_cmd = { workspace = true, features = ["color"] }
+assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
 etcetera = { workspace = true }
-insta = { workspace = true, features = ["filters"] }
+insta = { workspace = true }
 insta-cmd = { workspace = true }
 markdown = { workspace = true }
 predicates = { workspace = true }
