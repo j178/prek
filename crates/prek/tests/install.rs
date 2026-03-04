@@ -51,16 +51,17 @@ fn install() -> anyhow::Result<()> {
         .child(".git/hooks/pre-commit")
         .write_str("#!/bin/sh\necho 'pre-commit'\n")?;
 
-    cmd_snapshot!(context.filters(), context.install().arg("--hook-type").arg("pre-commit").arg("--hook-type").arg("post-commit"), @r#"
+    cmd_snapshot!(context.filters(), context.install().arg("--hook-type").arg("pre-commit").arg("--hook-type").arg("post-commit"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     Hook already exists at `.git/hooks/pre-commit`, moved it to `.git/hooks/pre-commit.legacy`
+    Migration mode: prek will also run legacy hook `.git/hooks/pre-commit.legacy`. Use `--overwrite` to remove legacy hooks.
     prek installed at `.git/hooks/pre-commit`
     prek installed at `.git/hooks/post-commit`
 
     ----- stderr -----
-    "#);
+    ");
     insta::with_settings!(
         { filters => context.filters() },
         {
@@ -301,6 +302,53 @@ fn install_with_hooks() -> anyhow::Result<()> {
             "#);
         }
     );
+
+    Ok(())
+}
+
+#[test]
+fn install_with_existing_legacy_hook() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Install our hook script first.
+    context.install().assert().success();
+
+    // Simulate an existing migrated legacy hook.
+    context
+        .work_dir()
+        .child(".git/hooks/pre-commit.legacy")
+        .write_str("#!/bin/sh\necho 'legacy'\n")?;
+
+    // Without --overwrite, we should stay in migration mode.
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Migration mode: prek will also run legacy hook `.git/hooks/pre-commit.legacy`. Use `--overwrite` to remove legacy hooks.
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    ");
+    context
+        .work_dir()
+        .child(".git/hooks/pre-commit.legacy")
+        .assert(predicates::path::exists());
+
+    // With --overwrite, the legacy script should be removed.
+    cmd_snapshot!(context.filters(), context.install().arg("--overwrite"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Overwriting existing hook at `.git/hooks/pre-commit`
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    "#);
+    context
+        .work_dir()
+        .child(".git/hooks/pre-commit.legacy")
+        .assert(predicates::path::missing());
 
     Ok(())
 }

@@ -171,6 +171,7 @@ fn install_hook_script(
     printer: Printer,
 ) -> Result<()> {
     let hook_path = hooks_path.join(hook_type.as_ref());
+    let legacy_path = hook_path.with_added_extension("legacy");
 
     if hook_path.try_exists()? {
         if overwrite {
@@ -181,7 +182,6 @@ fn install_hook_script(
             )?;
         } else {
             if !is_our_script(&hook_path)? {
-                let legacy_path = format!("{}.legacy", hook_path.display());
                 fs_err::rename(&hook_path, &legacy_path)?;
                 writeln!(
                     printer.stdout(),
@@ -190,6 +190,19 @@ fn install_hook_script(
                     legacy_path.user_display().yellow()
                 )?;
             }
+        }
+    }
+
+    if legacy_path.try_exists()? {
+        if overwrite {
+            // Remove existing legacy script too if we're overwriting.
+            fs_err::remove_file(&legacy_path)?;
+        } else {
+            writeln!(
+                printer.stdout(),
+                "Migration mode: prek will also run legacy hook `{}`. Use `--overwrite` to remove legacy hooks.",
+                legacy_path.user_display().yellow()
+            )?;
         }
     }
 

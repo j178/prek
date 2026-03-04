@@ -331,10 +331,28 @@ pub(crate) fn resolve_command(mut cmds: Vec<String>, paths: Option<&OsStr>) -> V
 
     if let Ok(mut shebang_argv) = parse_shebang(&resolved_binary) {
         trace!("Found shebang: {:?}", shebang_argv);
+        #[allow(unused_mut)]
+        let mut interpreter = shebang_argv[0].as_str();
+        #[cfg(windows)]
+        {
+            let interpreter_path = Path::new(interpreter);
+            // Git for Windows behavior: if a shebang points to a Unix-style absolute
+            // interpreter path (e.g. `/bin/sh`) that does not exist on Windows,
+            // fall back to PATH lookup of its basename (`sh`).
+            if !interpreter_path.exists()
+                // Restrict this fallback to path-like interpreter values so plain
+                // commands (like `python`) keep their normal resolution path below.
+                && (interpreter_path.has_root() || interpreter.contains(['/', '\\']))
+                // Extract basename from shebang path (`/bin/sh` -> `sh`) and resolve it.
+                && let Some(file_name) = interpreter_path.file_name().and_then(OsStr::to_str)
+            {
+                interpreter = file_name;
+            }
+        }
         // Resolve the interpreter path, convert "python3" to "python3.exe" on Windows
-        if let Ok(p) = which::which_in(&shebang_argv[0], paths, &*CWD) {
+        if let Ok(p) = which::which_in(interpreter, paths, &*CWD) {
             shebang_argv[0] = p.to_string_lossy().to_string();
-            trace!("Resolved interpreter: {}", &shebang_argv[0]);
+            trace!("Resolved interpreter: {}", shebang_argv[0]);
         }
         shebang_argv.push(resolved_binary.to_string_lossy().to_string());
         shebang_argv.extend_from_slice(&cmds[1..]);
@@ -342,5 +360,114 @@ pub(crate) fn resolve_command(mut cmds: Vec<String>, paths: Option<&OsStr>) -> V
     } else {
         cmds[0] = resolved_binary.to_string_lossy().to_string();
         cmds
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsString;
+    use std::path::Path;
+
+    use tempfile::tempdir;
+
+    use super::resolve_command;
+
+    fn write_file(path: &Path, contents: &str) {
+        fs_err::write(path, contents).expect("write test file");
+    }
+
+    #[cfg(unix)]
+    fn make_executable(path: &Path) {
+        use std::os::unix::fs::PermissionsExt;
+
+        let metadata = fs_err::metadata(path).expect("stat test file");
+        let mut perms = metadata.permissions();
+        perms.set_mode(perms.mode() | 0o111);
+        fs_err::set_permissions(path, perms).expect("set executable bit");
+    }
+
+    #[cfg(windows)]
+    fn make_executable(_path: &Path) {}
+
+    #[test]
+    fn resolve_command_passthrough_when_not_found() {
+        let cmd = "__prek_nonexistent_command__".to_string();
+        let resolved = resolve_command(vec![cmd.clone()], None);
+        assert_eq!(resolved, vec![cmd]);
+    }
+
+    #[test]
+    fn resolve_command_resolves_shebang_interpreter_from_path() {
+        let dir = tempdir().expect("create temp dir");
+        let script_path = dir.path().join("hook-script");
+        write_file(
+            &script_path,
+            "#!/usr/bin/env prek-test-interpreter\necho hi\n",
+        );
+
+        #[cfg(windows)]
+        let interpreter_path = dir.path().join("prek-test-interpreter.exe");
+        #[cfg(not(windows))]
+        let interpreter_path = dir.path().join("prek-test-interpreter");
+
+        write_file(&interpreter_path, "");
+        make_executable(&interpreter_path);
+
+        let paths = OsString::from(dir.path().as_os_str());
+        let resolved = resolve_command(
+            vec![script_path.to_string_lossy().into_owned()],
+            Some(paths.as_os_str()),
+        );
+
+        assert_eq!(resolved[0], interpreter_path.to_string_lossy());
+        assert_eq!(resolved[1], script_path.to_string_lossy());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolve_command_windows_rewrites_bin_sh_to_path_sh() {
+        let dir = tempdir().expect("create temp dir");
+        let script_path = dir.path().join("legacy-hook");
+        write_file(&script_path, "#!/bin/sh\necho legacy\n");
+
+        let sh_path = dir.path().join("sh.exe");
+        write_file(&sh_path, "");
+
+        let paths = OsString::from(dir.path().as_os_str());
+        let resolved = resolve_command(
+            vec![script_path.to_string_lossy().into_owned()],
+            Some(paths.as_os_str()),
+        );
+
+        assert_eq!(resolved[0], sh_path.to_string_lossy());
+        assert_eq!(resolved[1], script_path.to_string_lossy());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolve_command_windows_keeps_existing_absolute_interpreter_path() {
+        let dir = tempdir().expect("create temp dir");
+
+        let interp_dir = dir.path().join("bin");
+        fs_err::create_dir_all(&interp_dir).expect("create interpreter dir");
+        let interp_path = interp_dir.join("sh.exe");
+        write_file(&interp_path, "");
+        let shebang_interpreter = interp_path.to_string_lossy().replace('\\', "/");
+
+        let script_path = dir.path().join("legacy-hook");
+        write_file(
+            &script_path,
+            &format!("#!{shebang_interpreter}\necho legacy\n"),
+        );
+
+        let paths = OsString::from(dir.path().as_os_str());
+        let resolved = resolve_command(
+            vec![script_path.to_string_lossy().into_owned()],
+            Some(paths.as_os_str()),
+        );
+
+        let resolved_interp = Path::new(&resolved[0]);
+        assert_eq!(resolved_interp, interp_path.as_path());
+        assert_eq!(resolved[1], script_path.to_string_lossy());
     }
 }

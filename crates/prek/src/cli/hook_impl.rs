@@ -166,7 +166,8 @@ async fn run_legacy(
 ) -> Result<u8> {
     if EnvVars::is_set(EnvVars::PREK_RUNNING_LEGACY) {
         anyhow::bail!(
-            "prek's hook script is installed in migration mode\nrun `prek install -f --hook-type {hook_type}` to reinstall the hook"
+            "prek's hook script is installed in migration mode\n\
+            run `prek install -f --hook-type {hook_type}` to reinstall the hook"
         );
     }
 
