@@ -5,7 +5,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use futures::{StreamExt, TryStreamExt};
 use prek_consts::env_vars::EnvVars;
-use rand::Rng;
+use rand::RngExt;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::debug;
 
