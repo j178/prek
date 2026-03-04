@@ -600,6 +600,35 @@ jobs:
         working-directory: cpython
         run: cargo run -p prek -- --all-files
 
+  build-binary-msrv:
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
+    name: "msrv"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: "Read MSRV from Cargo.toml"
+        id: msrv
+        run: |
+          MSRV=$(grep -m1 'rust-version' Cargo.toml | sed 's/.*"\([^"]*\)".*/\1/')
+          echo "value=$MSRV" >> "$GITHUB_OUTPUT"
+      - name: "Install Rust toolchain"
+        run: rustup default ${MSRV}
+        env:
+          MSRV: ${{ steps.msrv.outputs.value }}
+      - name: "Install mold"
+        uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
+      - run: cargo +${MSRV} build --profile no-debug --bin prek
+        env:
+          MSRV: ${{ steps.msrv.outputs.value }}
+      - run: ./target/no-debug/prek --version
+
   build-binary-linux-libc:
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}

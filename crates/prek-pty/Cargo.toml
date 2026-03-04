@@ -2,8 +2,9 @@
 name = "prek-pty"
 description = "pty utilities for prek"
 version = { workspace = true }
-repository = { workspace = true }
 edition = { workspace = true }
+rust-version = { workspace = true }
+repository = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
