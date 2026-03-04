@@ -12,9 +12,9 @@ use target_lexicon::{Architecture, HOST, OperatingSystem};
 use tracing::{debug, trace, warn};
 
 use crate::fs::LockedFile;
+use crate::http::{REQWEST_CLIENT, download_and_extract};
 use crate::languages::node::NodeRequest;
 use crate::languages::node::version::NodeVersion;
-use crate::languages::{REQWEST_CLIENT, download_and_extract};
 use crate::process::Cmd;
 use crate::store::Store;
 

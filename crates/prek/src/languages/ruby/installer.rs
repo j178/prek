@@ -9,8 +9,8 @@ use target_lexicon::{Architecture, Environment, HOST, OperatingSystem, Triple};
 use tracing::{debug, trace, warn};
 
 use crate::fs::LockedFile;
+use crate::http::{REQWEST_CLIENT, download_and_extract_with};
 use crate::languages::ruby::RubyRequest;
-use crate::languages::{REQWEST_CLIENT, download_and_extract_with};
 use crate::process::Cmd;
 use crate::store::Store;
 

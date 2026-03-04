@@ -12,9 +12,9 @@ use tracing::{debug, trace, warn};
 
 use crate::fs::LockedFile;
 use crate::git;
+use crate::http::download_and_extract;
 use crate::languages::bun::BunRequest;
 use crate::languages::bun::version::BunVersion;
-use crate::languages::download_and_extract;
 use crate::process::Cmd;
 use crate::store::Store;
 

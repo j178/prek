@@ -3,20 +3,17 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
-use futures::TryStreamExt;
+use anyhow::Result;
 use prek_consts::env_vars::EnvVars;
 use prek_identify::parse_shebang;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, error, instrument, trace};
+use tracing::{instrument, trace};
 
-use crate::archive::ArchiveExtension;
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::config::Language;
-use crate::fs::{CWD, Simplified};
+use crate::fs::CWD;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
+use crate::hooks;
 use crate::store::{CacheBucket, Store, ToolBucket};
-use crate::{archive, hooks, warn_user_once};
 
 mod bun;
 mod docker;
@@ -345,115 +342,5 @@ pub(crate) fn resolve_command(mut cmds: Vec<String>, paths: Option<&OsStr>) -> V
     } else {
         cmds[0] = resolved_binary.to_string_lossy().to_string();
         cmds
-    }
-}
-
-async fn download_and_extract(
-    url: &str,
-    filename: &str,
-    store: &Store,
-    callback: impl AsyncFn(&Path) -> Result<()>,
-) -> Result<()> {
-    download_and_extract_with(url, filename, store, |req| req, callback).await
-}
-
-/// Like [`download_and_extract`], but accepts a `customize_request` closure
-/// that can modify the [`reqwest::RequestBuilder`] before it is sent (e.g. to
-/// add authentication headers).
-async fn download_and_extract_with(
-    url: &str,
-    filename: &str,
-    store: &Store,
-    customize_request: impl FnOnce(reqwest::RequestBuilder) -> reqwest::RequestBuilder,
-    callback: impl AsyncFn(&Path) -> Result<()>,
-) -> Result<()> {
-    let response = customize_request(REQWEST_CLIENT.get(url))
-        .send()
-        .await
-        .with_context(|| format!("Failed to download file from {url}"))?;
-    if !response.status().is_success() {
-        anyhow::bail!(
-            "Failed to download file from {}: {}",
-            url,
-            response.status()
-        );
-    }
-
-    let tarball = response
-        .bytes_stream()
-        .map_err(std::io::Error::other)
-        .into_async_read()
-        .compat();
-
-    let scratch_dir = store.scratch_path();
-    let temp_dir = tempfile::tempdir_in(&scratch_dir)?;
-    debug!(url = %url, temp_dir = ?temp_dir.path(), "Downloading");
-
-    let ext = ArchiveExtension::from_path(filename)?;
-    archive::unpack(tarball, ext, temp_dir.path()).await?;
-
-    let extracted = match archive::strip_component(temp_dir.path()) {
-        Ok(top_level) => top_level,
-        Err(archive::Error::NonSingularArchive(_)) => temp_dir.path().to_path_buf(),
-        Err(err) => return Err(err.into()),
-    };
-
-    callback(&extracted).await?;
-
-    drop(temp_dir);
-
-    Ok(())
-}
-
-pub(crate) static REQWEST_CLIENT: std::sync::LazyLock<reqwest::Client> =
-    std::sync::LazyLock::new(|| {
-        let native_tls = use_native_tls();
-        create_reqwest_client(native_tls)
-    });
-
-fn create_reqwest_client(native_tls: bool) -> reqwest::Client {
-    let builder = reqwest::ClientBuilder::new()
-        .user_agent(format!("prek/{}", crate::version::version()))
-        .tls_built_in_root_certs(false);
-    let builder = if native_tls {
-        debug!("Using native TLS for reqwest client");
-        builder.tls_built_in_native_certs(true)
-    } else {
-        builder.tls_built_in_webpki_certs(true)
-    };
-    builder.build().unwrap_or_else(|e| {
-        error!(
-            "Unable to create reqwest client, falling back to default {:?}",
-            e
-        );
-        reqwest::Client::new()
-    })
-}
-
-fn use_native_tls() -> bool {
-    if let Some(val) = EnvVars::var_as_bool(EnvVars::PREK_NATIVE_TLS) {
-        return val;
-    }
-
-    // SSL_CERT_FILE is only respected when using native TLS
-    EnvVars::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
-        let path_exists = Path::new(&path).exists();
-        if !path_exists {
-            warn_user_once!(
-                "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
-                path.simplified_display().cyan()
-            );
-        }
-        path_exists
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    #[tokio::test]
-    async fn test_native_tls() {
-        let client = super::create_reqwest_client(true);
-        let resp = client.get("https://github.com").send().await;
-        assert!(resp.is_ok(), "Failed to send request with native TLS");
     }
 }
