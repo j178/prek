@@ -1,6 +1,4 @@
 import os
-import shutil
-import subprocess
 import sys
 
 from ._find_prek import find_prek_bin
@@ -13,7 +11,7 @@ def _run() -> None:
 
         # Avoid emitting a traceback on interrupt
         try:
-            completed_process = subprocess.run([prek, *sys.argv[1:]], env=env)
+            completed_process = subprocess.run([prek, *sys.argv[1:]])
         except KeyboardInterrupt:
             sys.exit(2)
 
