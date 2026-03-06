@@ -345,7 +345,17 @@ Supported formats:
     - prek supports installing packages from virtual workspaces. See [#1180](https://github.com/j178/prek/pull/1180).
     - `additional_dependencies` supports:
         - Library dependencies using `name` or `name:version` (applied via `cargo add`).
-        - CLI dependencies using `cli:`. These can be crates.io packages (`cli:rg:13.0.0`) or git URLs (`cli:https://github.com/BurntSushi/ripgrep:13.0.0`).
+        - CLI dependencies using `cli:`.
+            - crates.io form: `cli:<crate>` or `cli:<crate>:<version>` (for example `cli:rg:13.0.0`).
+            - git form (required base + optional trailing segments): `cli:<url>[:<tag>[:<package>]]`.
+            - trailing optional segments can be omitted entirely:
+                - `cli:https://github.com/fish-shell/fish-shell`
+                - `cli:https://github.com/fish-shell/fish-shell:v4.5.0`
+            - intermediate optional segments may be empty when a later segment is provided:
+                - `cli:https://github.com/fish-shell/fish-shell::fish` (no tag, explicit package)
+            - full form:
+                - `cli:https://github.com/fish-shell/fish-shell:v4.5.0:fish`
+            - empty package is invalid (for example `...:v4.5.0:` or `...::`).
 
 ### swift
 
