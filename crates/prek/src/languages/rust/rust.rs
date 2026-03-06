@@ -3,6 +3,7 @@ use std::ffi::OsStr;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -12,7 +13,6 @@ use prek_consts::prepend_paths;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
-use crate::git::clone_repo;
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::rust::RustRequest;
@@ -33,69 +33,139 @@ fn format_cargo_dependency(dep: &str) -> String {
     }
 }
 
-fn parse_cargo_cli_dependency(dep: &str) -> (&str, Option<&str>, bool) {
-    let is_url = dep.starts_with("http://") || dep.starts_with("https://");
-    let (package, version) = if is_url && dep.matches(':').count() == 1 {
-        (dep, "")
-    } else {
-        dep.rsplit_once(':').unwrap_or((dep, ""))
-    };
-    (package, (!version.is_empty()).then_some(version), is_url)
+#[derive(Debug, Eq, PartialEq)]
+enum CargoCliDependency {
+    Crate {
+        name: String,
+        version: Option<String>,
+    },
+    Git {
+        url: String,
+        tag: Option<String>,
+    },
 }
 
-fn format_cargo_cli_dependency(dep: &str, git_package: Option<&str>) -> Vec<String> {
-    let (package, version, is_url) = parse_cargo_cli_dependency(dep);
+impl FromStr for CargoCliDependency {
+    type Err = anyhow::Error;
 
-    let mut args = Vec::new();
-    if is_url {
-        args.push("--git".to_string());
-        args.push(package.to_string());
-        if let Some(version) = version {
-            args.push("--tag".to_string());
-            args.push(version.to_string());
-        }
-        if let Some(package) = git_package {
-            args.push(package.to_string());
-        }
-    } else {
-        args.push(package.to_string());
-        if let Some(version) = version {
-            args.push("--version".to_string());
-            args.push(version.to_string());
-        }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let is_url = s.starts_with("http://") || s.starts_with("https://");
+        let (package, version) = if is_url && s.matches(':').count() == 1 {
+            (s, None)
+        } else {
+            if let Some((pkg, ver)) = s.rsplit_once(':') {
+                (pkg, Some(ver))
+            } else {
+                (s, None)
+            }
+        };
+
+        Ok(if is_url {
+            CargoCliDependency::Git {
+                url: package.to_string(),
+                tag: version.map(ToString::to_string),
+            }
+        } else {
+            CargoCliDependency::Crate {
+                name: package.to_string(),
+                version: version.map(ToString::to_string),
+            }
+        })
     }
-    args
 }
 
-async fn find_git_package_name(
-    dep: &str,
+impl CargoCliDependency {
+    fn to_cargo_args(&self, cargo_package: Option<&str>) -> Vec<String> {
+        let mut args = Vec::new();
+        match self {
+            CargoCliDependency::Crate { name, version } => {
+                args.push(name.clone());
+                if let Some(version) = version {
+                    args.push("--version".to_string());
+                    args.push(version.clone());
+                }
+            }
+            CargoCliDependency::Git {
+                url: repo,
+                tag: rev,
+            } => {
+                args.push("--git".to_string());
+                args.push(repo.clone());
+                if let Some(rev) = rev {
+                    args.push("--tag".to_string());
+                    args.push(rev.clone());
+                }
+                if let Some(cargo_package) = cargo_package {
+                    args.push(cargo_package.to_string());
+                }
+            }
+        }
+
+        args
+    }
+}
+
+fn git_repo_name(url: &str) -> &str {
+    url.rsplit('/')
+        .next()
+        .unwrap_or(url)
+        .trim_end_matches(".git")
+}
+
+async fn find_package_name_in_git_checkouts(
+    dep: &CargoCliDependency,
     binary_name: &str,
     cargo: &Path,
     cargo_home: &Path,
     new_path: &OsStr,
 ) -> anyhow::Result<Option<String>> {
-    let (repo, rev, is_url) = parse_cargo_cli_dependency(dep);
-    if !is_url {
+    let CargoCliDependency::Git { url, .. } = dep else {
+        return Ok(None);
+    };
+
+    let cache_root = cargo_home.join("git/checkouts");
+    if !cache_root.exists() {
         return Ok(None);
     }
-    let rev = rev.unwrap_or("HEAD");
 
-    let temp = tempfile::tempdir()?;
-    clone_repo(repo, rev, temp.path())
-        .await
-        .with_context(|| format!("Failed to clone `{repo}` at `{rev}`"))?;
+    let repo_name = git_repo_name(url);
+    let mut checkout_dirs = fs_err::tokio::read_dir(cache_root).await?;
+    while let Some(checkout_dir) = checkout_dirs.next_entry().await? {
+        if !checkout_dir.file_type().await?.is_dir() {
+            continue;
+        }
 
-    let (_, package_name, _) = find_package_dir(
-        temp.path(),
-        binary_name,
-        Some(cargo),
-        Some(cargo_home),
-        Some(new_path),
-    )
-    .await?
-    .with_context(|| format!("Failed to locate package for binary `{binary_name}` in `{repo}`"))?;
+        let checkout_dir_name = checkout_dir.file_name();
+        let checkout_dir_name = checkout_dir_name.to_string_lossy();
+        if !checkout_dir_name.starts_with(repo_name) {
+            continue;
+        }
 
-    Ok(Some(package_name))
+        let mut rev_dirs = fs_err::tokio::read_dir(checkout_dir.path()).await?;
+        while let Some(rev_dir) = rev_dirs.next_entry().await? {
+            if !rev_dir.file_type().await?.is_dir() {
+                continue;
+            }
+
+            let rev_path = rev_dir.path();
+            if let Some((_, package_name, _)) = find_package_dir(
+                &rev_path,
+                binary_name,
+                Some(cargo),
+                Some(cargo_home),
+                Some(new_path),
+            )
+            .await?
+            {
+                debug!(
+                    "Found package `{package_name}` for binary `{binary_name}` in cargo git cache for `{url}`"
+                );
+                return Ok(Some(package_name));
+            }
+        }
+    }
+
+    Ok(None)
 }
 
 /// Find the package directory that produces the given binary.
@@ -212,7 +282,7 @@ async fn copy_binaries(release_dir: &Path, dest_bin_dir: &Path) -> anyhow::Resul
 }
 
 async fn install_local_project(
-    hook: &Hook,
+    hook_binary: &str,
     repo_path: &Path,
     info: &InstallInfo,
     lib_deps: &[&String],
@@ -220,14 +290,10 @@ async fn install_local_project(
     cargo_home: &Path,
     new_path: &OsStr,
 ) -> anyhow::Result<()> {
-    // Get the binary name from the hook entry
-    let entry_parts = hook.entry.split()?;
-    let binary_name = &entry_parts[0];
-
     // Find the specific package directory for this hook's binary
     let (package_dir, package_name, is_workspace) = match find_package_dir(
         repo_path,
-        binary_name,
+        hook_binary,
         Some(cargo),
         Some(cargo_home),
         Some(new_path),
@@ -241,7 +307,7 @@ async fn install_local_project(
             debug!(
                 "Found package `{}` for binary `{}` in repo `{}` at `{}`",
                 package_name,
-                binary_name,
+                hook_binary,
                 repo_path.display(),
                 package_dir.display(),
             );
@@ -250,7 +316,7 @@ async fn install_local_project(
         Ok(None) => {
             debug!(
                 "Binary `{}` not found in cargo metadata for repo `{}`, falling back to repo root",
-                binary_name,
+                hook_binary,
                 repo_path.display(),
             );
             (repo_path.to_path_buf(), String::new(), false)
@@ -354,6 +420,65 @@ async fn install_local_project(
     Ok(())
 }
 
+async fn install_cli_dependency(
+    cli_dep: &str,
+    hook_bin: &str,
+    info: &InstallInfo,
+    cargo: &Path,
+    cargo_home: &Path,
+    new_path: &OsStr,
+) -> anyhow::Result<()> {
+    let dep = CargoCliDependency::from_str(cli_dep)?;
+
+    let mut cmd = Cmd::new(cargo, "install cli dep");
+    cmd.args(["install", "--bins", "--root"])
+        .arg(&info.env_path)
+        .args(dep.to_cargo_args(None))
+        .arg("--locked");
+
+    cmd.env(EnvVars::PATH, new_path)
+        .env(EnvVars::CARGO_HOME, cargo_home)
+        .remove_git_envs()
+        .check(false);
+
+    let output = cmd.output().await?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !matches!(&dep, CargoCliDependency::Git { .. })
+        || !stderr.contains("multiple packages with binaries found")
+    {
+        cmd.check_output(&output)?;
+    }
+
+    debug!(
+        "Failed to install CLI dependency `{cli_dep}`. Try resolving package name from cargo git checkouts",
+    );
+    let package_name =
+        find_package_name_in_git_checkouts(&dep, hook_bin, cargo, cargo_home, new_path).await?;
+    let package_name = package_name.with_context(|| {
+        format!(
+            "Failed to resolve package for binary `{hook_bin}` from cargo git checkouts for `{cli_dep}`"
+        )
+    })?;
+
+    let mut cmd = Cmd::new(cargo, "install cli dep (retry with package)");
+    cmd.args(["install", "--bins", "--root"])
+        .arg(&info.env_path)
+        .args(dep.to_cargo_args(Some(&package_name)))
+        .arg("--locked");
+    cmd.env(EnvVars::PATH, new_path)
+        .env(EnvVars::CARGO_HOME, cargo_home)
+        .remove_git_envs()
+        .check(true)
+        .output()
+        .await?;
+
+    Ok(())
+}
+
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Rust;
 
@@ -421,10 +546,14 @@ impl LanguageImpl for Rust {
                 }
             });
 
+        // Use the hook entry as the binary name to find the package, this could be improved by allowing an explicit binary name in the hook config.
+        let hook_entry = hook.entry.split()?;
+        let hook_bin = &hook_entry[0];
+
         // Install library dependencies and local project
         if let Some(repo) = hook.repo_path() {
             install_local_project(
-                &hook,
+                hook_bin,
                 repo,
                 &info,
                 &lib_deps,
@@ -436,27 +565,8 @@ impl LanguageImpl for Rust {
         }
 
         // Install CLI dependencies
-        let hook_entry = hook.entry.split()?;
-        let hook_bin = hook_entry
-            .first()
-            .map(String::as_str)
-            .context("Rust hook entry must contain executable name")?;
         for cli_dep in cli_deps {
-            let package_name =
-                find_git_package_name(cli_dep, hook_bin, &cargo, &cargo_home, &new_path).await?;
-            let mut cmd = Cmd::new(&cargo, "install cli dep");
-            cmd.args(["install", "--bins", "--root"])
-                .arg(&info.env_path)
-                .args(format_cargo_cli_dependency(
-                    cli_dep,
-                    package_name.as_deref(),
-                ))
-                .arg("--locked");
-            cmd.env(EnvVars::PATH, &new_path)
-                .env(EnvVars::CARGO_HOME, &cargo_home)
-                .remove_git_envs()
-                .check(true)
-                .output()
+            install_cli_dependency(cli_dep, hook_bin, &info, &cargo, &cargo_home, &new_path)
                 .await?;
         }
 
@@ -841,42 +951,46 @@ edition = "2021"
     #[test]
     fn test_parse_cargo_cli_dependency() {
         assert_eq!(
-            parse_cargo_cli_dependency("https://github.com/fish-shell/fish-shell"),
-            ("https://github.com/fish-shell/fish-shell", None, true)
+            CargoCliDependency::from_str("https://github.com/fish-shell/fish-shell").unwrap(),
+            CargoCliDependency::Git {
+                url: "https://github.com/fish-shell/fish-shell".to_string(),
+                tag: None
+            }
         );
         assert_eq!(
-            parse_cargo_cli_dependency("https://github.com/fish-shell/fish-shell:4.0"),
-            (
-                "https://github.com/fish-shell/fish-shell",
-                Some("4.0"),
-                true
-            )
+            CargoCliDependency::from_str("https://github.com/fish-shell/fish-shell:4.0").unwrap(),
+            CargoCliDependency::Git {
+                url: "https://github.com/fish-shell/fish-shell".to_string(),
+                tag: Some("4.0".to_string())
+            }
         );
         assert_eq!(
-            parse_cargo_cli_dependency("typos-cli:1.0"),
-            ("typos-cli", Some("1.0"), false)
+            CargoCliDependency::from_str("typos-cli:1.0").unwrap(),
+            CargoCliDependency::Crate {
+                name: "typos-cli".to_string(),
+                version: Some("1.0".to_string())
+            }
         );
     }
 
     #[test]
     fn test_format_cargo_cli_dependency() {
+        let dep = CargoCliDependency::from_str("typos-cli").unwrap();
+        assert_eq!(dep.to_cargo_args(None), ["typos-cli"]);
+
+        let dep = CargoCliDependency::from_str("typos-cli:1.0").unwrap();
+        assert_eq!(dep.to_cargo_args(None), ["typos-cli", "--version", "1.0"]);
+
+        let dep = CargoCliDependency::from_str("https://github.com/fish-shell/fish-shell").unwrap();
         assert_eq!(
-            format_cargo_cli_dependency("typos-cli", None),
-            ["typos-cli"]
-        );
-        assert_eq!(
-            format_cargo_cli_dependency("typos-cli:1.0", None),
-            ["typos-cli", "--version", "1.0"]
-        );
-        assert_eq!(
-            format_cargo_cli_dependency("https://github.com/fish-shell/fish-shell", Some("fish")),
+            dep.to_cargo_args(Some("fish")),
             ["--git", "https://github.com/fish-shell/fish-shell", "fish"]
         );
+
+        let dep =
+            CargoCliDependency::from_str("https://github.com/fish-shell/fish-shell:4.0").unwrap();
         assert_eq!(
-            format_cargo_cli_dependency(
-                "https://github.com/fish-shell/fish-shell:4.0",
-                Some("fish")
-            ),
+            dep.to_cargo_args(Some("fish")),
             [
                 "--git",
                 "https://github.com/fish-shell/fish-shell",
@@ -887,17 +1001,16 @@ edition = "2021"
         );
     }
 
-    #[tokio::test]
-    async fn test_find_git_package_name_non_url() {
-        let result = find_git_package_name(
-            "typos-cli",
-            "typos-cli",
-            Path::new("cargo"),
-            Path::new(""),
-            OsStr::new(""),
-        )
-        .await
-        .unwrap();
-        assert!(result.is_none());
+    #[test]
+    fn test_git_repo_name() {
+        assert_eq!(
+            git_repo_name("https://github.com/fish-shell/fish-shell"),
+            "fish-shell"
+        );
+        assert_eq!(
+            git_repo_name("https://github.com/fish-shell/fish-shell.git"),
+            "fish-shell"
+        );
+        assert_eq!(git_repo_name("fish-shell"), "fish-shell");
     }
 }
