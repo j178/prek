@@ -6,7 +6,7 @@ use std::process::Stdio;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 use itertools::{Either, Itertools};
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
@@ -42,6 +42,7 @@ enum CargoCliDependency {
     Git {
         url: String,
         tag: Option<String>,
+        package: Option<String>,
     },
 }
 
@@ -50,122 +51,80 @@ impl FromStr for CargoCliDependency {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let is_url = s.starts_with("http://") || s.starts_with("https://");
-        let (package, version) = if is_url && s.matches(':').count() == 1 {
-            (s, None)
-        } else {
-            if let Some((pkg, ver)) = s.rsplit_once(':') {
-                (pkg, Some(ver))
-            } else {
-                (s, None)
-            }
-        };
+        if is_url {
+            let scheme_end = s
+                .find("://")
+                .map(|idx| idx + 3)
+                .ok_or_else(|| anyhow::anyhow!("Invalid git URL `{s}`"))?;
+            let rest = &s[scheme_end..];
 
-        Ok(if is_url {
-            CargoCliDependency::Git {
-                url: package.to_string(),
-                tag: version.map(ToString::to_string),
-            }
+            let parts: Vec<&str> = rest.rsplitn(3, ':').collect();
+            let (url_without_scheme, tag, package) = match parts.as_slice() {
+                [url] => (*url, None, None),
+                [tag, url] => {
+                    if tag.is_empty() {
+                        bail!(
+                            "Git CLI dependency `{s}` contains an empty tag; use `cli:<url>`, `cli:<url>:<tag>`, or `cli:<url>:<tag>:<package>`"
+                        );
+                    }
+                    (*url, Some(*tag), None)
+                }
+                [package, tag, url] => {
+                    if package.is_empty() {
+                        bail!(
+                            "Git CLI dependency `{s}` must specify a non-empty package when using `cli:<url>:<tag>:<package>`"
+                        );
+                    }
+                    let tag = if tag.is_empty() { None } else { Some(*tag) };
+                    (*url, tag, Some(*package))
+                }
+                _ => unreachable!(),
+            };
+
+            let url = format!("{}{}", &s[..scheme_end], url_without_scheme);
+            Ok(CargoCliDependency::Git {
+                url,
+                tag: tag.map(ToString::to_string),
+                package: package.map(ToString::to_string),
+            })
         } else {
-            CargoCliDependency::Crate {
-                name: package.to_string(),
-                version: version.map(ToString::to_string),
-            }
-        })
+            let (name, version) = if let Some((pkg, ver)) = s.rsplit_once(':') {
+                (pkg.to_string(), Some(ver.to_string()))
+            } else {
+                (s.to_string(), None)
+            };
+
+            Ok(CargoCliDependency::Crate { name, version })
+        }
     }
 }
 
 impl CargoCliDependency {
-    fn to_cargo_args(&self, cargo_package: Option<&str>) -> Vec<String> {
-        let mut args = Vec::new();
+    fn to_cargo_args(&self) -> Vec<&str> {
+        let mut args: Vec<&str> = Vec::with_capacity(2);
         match self {
             CargoCliDependency::Crate { name, version } => {
-                args.push(name.clone());
+                args.push(name);
                 if let Some(version) = version {
-                    args.push("--version".to_string());
-                    args.push(version.clone());
+                    args.push("--version");
+                    args.push(version);
                 }
             }
-            CargoCliDependency::Git {
-                url: repo,
-                tag: rev,
-            } => {
-                args.push("--git".to_string());
-                args.push(repo.clone());
-                if let Some(rev) = rev {
-                    args.push("--tag".to_string());
-                    args.push(rev.clone());
+            CargoCliDependency::Git { url, tag, package } => {
+                args.push("--git");
+                args.push(url);
+                if let Some(tag) = tag {
+                    args.push("--tag");
+                    args.push(tag);
                 }
-                if let Some(cargo_package) = cargo_package {
-                    args.push(cargo_package.to_string());
+                if let Some(package) = package {
+                    args.push(package);
                 }
             }
         }
 
         args
     }
-}
-
-fn git_repo_name(url: &str) -> &str {
-    url.rsplit('/')
-        .next()
-        .unwrap_or(url)
-        .trim_end_matches(".git")
-}
-
-async fn find_package_name_in_git_checkouts(
-    dep: &CargoCliDependency,
-    binary_name: &str,
-    cargo: &Path,
-    cargo_home: &Path,
-    new_path: &OsStr,
-) -> anyhow::Result<Option<String>> {
-    let CargoCliDependency::Git { url, .. } = dep else {
-        return Ok(None);
-    };
-
-    let cache_root = cargo_home.join("git/checkouts");
-    if !cache_root.exists() {
-        return Ok(None);
-    }
-
-    let repo_name = git_repo_name(url);
-    let mut checkout_dirs = fs_err::tokio::read_dir(cache_root).await?;
-    while let Some(checkout_dir) = checkout_dirs.next_entry().await? {
-        if !checkout_dir.file_type().await?.is_dir() {
-            continue;
-        }
-
-        let checkout_dir_name = checkout_dir.file_name();
-        let checkout_dir_name = checkout_dir_name.to_string_lossy();
-        if !checkout_dir_name.starts_with(repo_name) {
-            continue;
-        }
-
-        let mut rev_dirs = fs_err::tokio::read_dir(checkout_dir.path()).await?;
-        while let Some(rev_dir) = rev_dirs.next_entry().await? {
-            if !rev_dir.file_type().await?.is_dir() {
-                continue;
-            }
-
-            let rev_path = rev_dir.path();
-            if let Some((_, package_name, _)) = find_package_dir(
-                &rev_path,
-                binary_name,
-                Some(cargo),
-                Some(cargo_home),
-                Some(new_path),
-            )
-            .await?
-            {
-                debug!(
-                    "Found package `{package_name}` for binary `{binary_name}` in cargo git cache for `{url}`"
-                );
-                return Ok(Some(package_name));
-            }
-        }
-    }
-
-    Ok(None)
 }
 
 /// Find the package directory that produces the given binary.
@@ -422,7 +381,6 @@ async fn install_local_project(
 
 async fn install_cli_dependency(
     cli_dep: &str,
-    hook_bin: &str,
     info: &InstallInfo,
     cargo: &Path,
     cargo_home: &Path,
@@ -433,42 +391,9 @@ async fn install_cli_dependency(
     let mut cmd = Cmd::new(cargo, "install cli dep");
     cmd.args(["install", "--bins", "--root"])
         .arg(&info.env_path)
-        .args(dep.to_cargo_args(None))
+        .args(dep.to_cargo_args())
         .arg("--locked");
 
-    cmd.env(EnvVars::PATH, new_path)
-        .env(EnvVars::CARGO_HOME, cargo_home)
-        .remove_git_envs()
-        .check(false);
-
-    let output = cmd.output().await?;
-    if output.status.success() {
-        return Ok(());
-    }
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if !matches!(&dep, CargoCliDependency::Git { .. })
-        || !stderr.contains("multiple packages with binaries found")
-    {
-        cmd.check_output(&output)?;
-    }
-
-    debug!(
-        "Failed to install CLI dependency `{cli_dep}`. Try resolving package name from cargo git checkouts",
-    );
-    let package_name =
-        find_package_name_in_git_checkouts(&dep, hook_bin, cargo, cargo_home, new_path).await?;
-    let package_name = package_name.with_context(|| {
-        format!(
-            "Failed to resolve package for binary `{hook_bin}` from cargo git checkouts for `{cli_dep}`"
-        )
-    })?;
-
-    let mut cmd = Cmd::new(cargo, "install cli dep (retry with package)");
-    cmd.args(["install", "--bins", "--root"])
-        .arg(&info.env_path)
-        .args(dep.to_cargo_args(Some(&package_name)))
-        .arg("--locked");
     cmd.env(EnvVars::PATH, new_path)
         .env(EnvVars::CARGO_HOME, cargo_home)
         .remove_git_envs()
@@ -566,8 +491,7 @@ impl LanguageImpl for Rust {
 
         // Install CLI dependencies
         for cli_dep in cli_deps {
-            install_cli_dependency(cli_dep, hook_bin, &info, &cargo, &cargo_home, &new_path)
-                .await?;
+            install_cli_dependency(cli_dep, &info, &cargo, &cargo_home, &new_path).await?;
         }
 
         info.persist_env_path();
@@ -949,19 +873,12 @@ edition = "2021"
     }
 
     #[test]
-    fn test_parse_cargo_cli_dependency() {
+    fn test_parse_cargo_cli_dependency_crate_forms() {
         assert_eq!(
-            CargoCliDependency::from_str("https://github.com/fish-shell/fish-shell").unwrap(),
-            CargoCliDependency::Git {
-                url: "https://github.com/fish-shell/fish-shell".to_string(),
-                tag: None
-            }
-        );
-        assert_eq!(
-            CargoCliDependency::from_str("https://github.com/fish-shell/fish-shell:4.0").unwrap(),
-            CargoCliDependency::Git {
-                url: "https://github.com/fish-shell/fish-shell".to_string(),
-                tag: Some("4.0".to_string())
+            CargoCliDependency::from_str("typos-cli").unwrap(),
+            CargoCliDependency::Crate {
+                name: "typos-cli".to_string(),
+                version: None,
             }
         );
         assert_eq!(
@@ -974,43 +891,100 @@ edition = "2021"
     }
 
     #[test]
-    fn test_format_cargo_cli_dependency() {
-        let dep = CargoCliDependency::from_str("typos-cli").unwrap();
-        assert_eq!(dep.to_cargo_args(None), ["typos-cli"]);
-
-        let dep = CargoCliDependency::from_str("typos-cli:1.0").unwrap();
-        assert_eq!(dep.to_cargo_args(None), ["typos-cli", "--version", "1.0"]);
-
-        let dep = CargoCliDependency::from_str("https://github.com/fish-shell/fish-shell").unwrap();
-        assert_eq!(
-            dep.to_cargo_args(Some("fish")),
-            ["--git", "https://github.com/fish-shell/fish-shell", "fish"]
-        );
-
-        let dep =
-            CargoCliDependency::from_str("https://github.com/fish-shell/fish-shell:4.0").unwrap();
-        assert_eq!(
-            dep.to_cargo_args(Some("fish")),
-            [
-                "--git",
+    fn test_parse_cargo_cli_dependency_git_valid_forms() {
+        let cases = [
+            (
                 "https://github.com/fish-shell/fish-shell",
-                "--tag",
-                "4.0",
-                "fish"
-            ]
-        );
+                CargoCliDependency::Git {
+                    url: "https://github.com/fish-shell/fish-shell".to_string(),
+                    tag: None,
+                    package: None,
+                },
+            ),
+            (
+                "https://github.com/fish-shell/fish-shell:v4.5.0",
+                CargoCliDependency::Git {
+                    url: "https://github.com/fish-shell/fish-shell".to_string(),
+                    tag: Some("v4.5.0".to_string()),
+                    package: None,
+                },
+            ),
+            (
+                "https://github.com/fish-shell/fish-shell::fish",
+                CargoCliDependency::Git {
+                    url: "https://github.com/fish-shell/fish-shell".to_string(),
+                    tag: None,
+                    package: Some("fish".to_string()),
+                },
+            ),
+            (
+                "https://github.com/fish-shell/fish-shell:v4.5.0:fish",
+                CargoCliDependency::Git {
+                    url: "https://github.com/fish-shell/fish-shell".to_string(),
+                    tag: Some("v4.5.0".to_string()),
+                    package: Some("fish".to_string()),
+                },
+            ),
+        ];
+
+        for (input, expected) in cases {
+            assert_eq!(CargoCliDependency::from_str(input).unwrap(), expected);
+        }
     }
 
     #[test]
-    fn test_git_repo_name() {
-        assert_eq!(
-            git_repo_name("https://github.com/fish-shell/fish-shell"),
-            "fish-shell"
-        );
-        assert_eq!(
-            git_repo_name("https://github.com/fish-shell/fish-shell.git"),
-            "fish-shell"
-        );
-        assert_eq!(git_repo_name("fish-shell"), "fish-shell");
+    fn test_parse_cargo_cli_dependency_git_invalid_forms() {
+        let invalid_cases = [
+            "https://github.com/fish-shell/fish-shell:",
+            "https://github.com/fish-shell/fish-shell:v4.5.0:",
+            "https://github.com/fish-shell/fish-shell::",
+        ];
+
+        for input in invalid_cases {
+            assert!(
+                CargoCliDependency::from_str(input).is_err(),
+                "input: {input}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_format_cargo_cli_dependency() {
+        let cases = [
+            ("typos-cli", vec!["typos-cli"]),
+            ("typos-cli:1.0", vec!["typos-cli", "--version", "1.0"]),
+            (
+                "https://github.com/fish-shell/fish-shell",
+                vec!["--git", "https://github.com/fish-shell/fish-shell"],
+            ),
+            (
+                "https://github.com/fish-shell/fish-shell:v4.5.0",
+                vec![
+                    "--git",
+                    "https://github.com/fish-shell/fish-shell",
+                    "--tag",
+                    "v4.5.0",
+                ],
+            ),
+            (
+                "https://github.com/fish-shell/fish-shell::fish",
+                vec!["--git", "https://github.com/fish-shell/fish-shell", "fish"],
+            ),
+            (
+                "https://github.com/fish-shell/fish-shell:v4.5.0:fish",
+                vec![
+                    "--git",
+                    "https://github.com/fish-shell/fish-shell",
+                    "--tag",
+                    "v4.5.0",
+                    "fish",
+                ],
+            ),
+        ];
+
+        for (input, expected) in cases {
+            let dep = CargoCliDependency::from_str(input).unwrap();
+            assert_eq!(dep.to_cargo_args(), expected, "input: {input}");
+        }
     }
 }
