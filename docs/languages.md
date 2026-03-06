@@ -346,16 +346,24 @@ Supported formats:
     - `additional_dependencies` supports:
         - Library dependencies using `name` or `name:version` (applied via `cargo add`).
         - CLI dependencies using `cli:`.
-            - crates.io form: `cli:<crate>` or `cli:<crate>:<version>` (for example `cli:rg:13.0.0`).
-            - git form (required base + optional trailing segments): `cli:<url>[:<tag>[:<package>]]`.
-            - trailing optional segments can be omitted entirely:
-                - `cli:https://github.com/fish-shell/fish-shell`
-                - `cli:https://github.com/fish-shell/fish-shell:v4.5.0`
-            - intermediate optional segments may be empty when a later segment is provided:
-                - `cli:https://github.com/fish-shell/fish-shell::fish` (no tag, explicit package)
-            - full form:
-                - `cli:https://github.com/fish-shell/fish-shell:v4.5.0:fish`
-            - empty package is invalid (for example `...:v4.5.0:` or `...::`).
+            - There are two forms:
+                - crates.io: `cli:<crate>[:<version>]`
+                - git: `cli:<url>[:<tag>[:<package>]]`
+            - For git dependencies:
+                - `<url>` is the git repository URL.
+                - `<tag>` is optional and selects a specific git tag.
+                - `<package>` is optional and selects which Cargo package to install binaries from.
+                - Use `<package>` when the git repository is a workspace or multi-crate repository and Cargo needs you to choose one package.
+                - This matches the package argument in `cargo install --git <url> <package>`.
+            - Examples:
+                - crates.io package: `cli:rg`
+                - crates.io package with version: `cli:rg:13.0.0`
+                - git repository default ref: `cli:https://github.com/fish-shell/fish-shell`
+                - git repository with tag: `cli:https://github.com/fish-shell/fish-shell:v4.5.0`
+                - git repository with package but no tag: `cli:https://github.com/fish-shell/fish-shell::fish`
+                - git repository with tag and package: `cli:https://github.com/fish-shell/fish-shell:v4.5.0:fish`
+            - Invalid forms:
+                - empty package is invalid, for example `...:v4.5.0:` or `...::`.
 
 ### swift
 
