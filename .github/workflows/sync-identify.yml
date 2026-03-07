@@ -31,6 +31,7 @@ jobs:
           commit-message: "Sync latest identify tags"
           add-paths: |
             crates/prek-identify/src/tags.rs
+            crates/prek-identify/gen.py.lock
           branch: "sync-identify-tags"
           title: "Sync latest identify tags"
           body: "Automated update for identify tags."
