@@ -158,7 +158,8 @@ fn create_reqwest_client(native_tls: bool, custom_certs: Vec<Certificate>) -> re
 
     let builder = if native_tls {
         debug!("Using native TLS for reqwest client");
-        builder.tls_backend_native().tls_certs_merge(custom_certs)
+        // Use rustls with rustls-platform-verifier which uses the platform's native certificate facilities.
+        builder.tls_backend_rustls().tls_certs_merge(custom_certs)
     } else {
         let root_certs = webpki_root_certs::TLS_SERVER_ROOT_CERTS
             .iter()
