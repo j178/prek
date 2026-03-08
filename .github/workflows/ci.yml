@@ -603,7 +603,7 @@ jobs:
   build-binary-msrv:
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
-    name: "msrv"
+    name: "build binary | msrv"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
