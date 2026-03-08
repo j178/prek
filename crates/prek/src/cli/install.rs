@@ -32,6 +32,9 @@ pub(crate) async fn install(
     overwrite: bool,
     allow_missing_config: bool,
     refresh: bool,
+    quiet: u8,
+    verbose: u8,
+    no_progress: bool,
     printer: Printer,
     git_dir: Option<&Path>,
 ) -> Result<ExitStatus> {
@@ -78,6 +81,9 @@ pub(crate) async fn install(
             &hooks_path,
             overwrite,
             allow_missing_config,
+            quiet,
+            verbose,
+            no_progress,
             printer,
         )?;
     }
@@ -168,6 +174,9 @@ fn install_hook_script(
     hooks_path: &Path,
     overwrite: bool,
     skip_on_missing_config: bool,
+    quiet: u8,
+    verbose: u8,
+    no_progress: bool,
     printer: Printer,
 ) -> Result<()> {
     let hook_path = hooks_path.join(hook_type.as_ref());
@@ -274,9 +283,14 @@ fn install_hook_script(
 
     let prek = std::env::current_exe()?;
     let prek = prek.simplified_display().to_string();
+    let mut prek_global_args = render_global_args(quiet, verbose, no_progress);
+    if !prek_global_args.is_empty() {
+        prek_global_args.push(' ');
+    }
     let hook_script = HOOK_TMPL
         .replace("[CUR_SCRIPT_VERSION]", &CUR_SCRIPT_VERSION.to_string())
         .replace("[PREK_PATH]", &format!(r#""{prek}""#))
+        .replace("[PREK_GLOBAL_ARGS]", &prek_global_args)
         .replace("[PREK_ARGS]", &args.join(" "));
 
     fs_err::OpenOptions::new()
@@ -300,6 +314,28 @@ fn install_hook_script(
     Ok(())
 }
 
+fn render_global_args(quiet: u8, verbose: u8, no_progress: bool) -> String {
+    let mut args = Vec::with_capacity(3);
+
+    if quiet > 0 {
+        args.push(format!("-{}", "q".repeat(quiet.into())));
+    }
+
+    if verbose > 0 {
+        args.push(format!("-{}", "v".repeat(verbose.into())));
+    }
+
+    if no_progress {
+        args.push("--no-progress".to_string());
+    }
+
+    if args.is_empty() {
+        String::new()
+    } else {
+        args.join(" ")
+    }
+}
+
 /// The version of the hook script. Increment this when the script changes in a way that
 /// requires re-installation.
 pub(crate) static CUR_SCRIPT_VERSION: usize = 4;
@@ -316,7 +352,7 @@ if [ ! -x "$PREK" ]; then
     PREK="prek"
 fi
 
-exec "$PREK" hook-impl --hook-dir "$HERE" --script-version [CUR_SCRIPT_VERSION] [PREK_ARGS] -- "$@"
+exec "$PREK" [PREK_GLOBAL_ARGS]hook-impl --hook-dir "$HERE" --script-version [CUR_SCRIPT_VERSION] [PREK_ARGS] -- "$@"
 
 "#;
 
@@ -404,6 +440,9 @@ pub(crate) async fn init_template_dir(
     hook_types: Vec<HookType>,
     requires_config: bool,
     refresh: bool,
+    quiet: u8,
+    verbose: u8,
+    no_progress: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     install(
@@ -416,6 +455,9 @@ pub(crate) async fn init_template_dir(
         true,
         !requires_config,
         refresh,
+        quiet,
+        verbose,
+        no_progress,
         printer,
         Some(&directory),
     )
