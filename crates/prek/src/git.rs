@@ -498,6 +498,29 @@ pub(crate) async fn has_hooks_path_set() -> Result<bool> {
     }
 }
 
+/// Check if the repository is configured for shared access.
+/// Returns true if `core.sharedRepository` is set to a value that enables group permissions.
+pub(crate) async fn is_shared_repository() -> Result<bool> {
+    let output = git_cmd("get shared repository config")?
+        .arg("config")
+        .arg("--get")
+        .arg("core.sharedRepository")
+        .check(false)
+        .output()
+        .await?;
+    if output.status.success() {
+        let val = String::from_utf8_lossy(&output.stdout);
+        let trimmed = val.trim().to_lowercase();
+        // git accepts: "group", "true", "1", "all", "world", "everybody", or octal modes
+        Ok(matches!(
+            trimmed.as_str(),
+            "group" | "true" | "1" | "all" | "world" | "everybody"
+        ) || trimmed.starts_with('0'))
+    } else {
+        Ok(false)
+    }
+}
+
 pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<FxHashSet<PathBuf>, Error> {
     if paths.is_empty() {
         return Ok(FxHashSet::default());

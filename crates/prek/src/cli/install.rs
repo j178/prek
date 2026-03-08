@@ -46,6 +46,8 @@ pub(crate) async fn install(
         );
     }
 
+    let shared_repo = git::is_shared_repository().await.unwrap_or(false);
+
     let project = match Project::discover(config.as_deref(), &CWD) {
         Ok(project) => Some(project),
         Err(err) => {
@@ -81,6 +83,7 @@ pub(crate) async fn install(
             &hooks_path,
             overwrite,
             allow_missing_config,
+            shared_repo,
             quiet,
             verbose,
             no_progress,
@@ -166,6 +169,7 @@ fn get_hook_types(
     hook_types
 }
 
+#[allow(clippy::fn_params_excessive_bools)]
 fn install_hook_script(
     project: Option<&Project>,
     config: Option<PathBuf>,
@@ -174,6 +178,7 @@ fn install_hook_script(
     hooks_path: &Path,
     overwrite: bool,
     skip_on_missing_config: bool,
+    shared_repo: bool,
     quiet: u8,
     verbose: u8,
     no_progress: bool,
@@ -305,9 +310,15 @@ fn install_hook_script(
         use std::os::unix::fs::PermissionsExt;
 
         let mut perms = hook_path.metadata()?.permissions();
-        perms.set_mode(0o755);
+        // Use group-writable permissions for shared repositories
+        let mode = if shared_repo { 0o775 } else { 0o755 };
+        perms.set_mode(mode);
         fs_err::set_permissions(&hook_path, perms)?;
     }
+
+    // Unused on non-Unix platforms
+    #[cfg(not(unix))]
+    let _ = shared_repo;
 
     writeln!(printer.stdout(), "{hint}")?;
 
