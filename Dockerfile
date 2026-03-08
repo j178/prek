@@ -6,6 +6,8 @@ RUN apt update \
   && apt install -y --no-install-recommends \
   build-essential \
   curl \
+  libssl-dev \
+  pkg-config \
   python3-venv \
   && apt clean \
   && rm -rf /var/lib/apt/lists/*
