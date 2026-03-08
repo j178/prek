@@ -50,6 +50,7 @@ impl EnvVars {
     pub const VIRTUAL_ENV: &'static str = "VIRTUAL_ENV";
     pub const PYTHONHOME: &'static str = "PYTHONHOME";
     pub const UV_PYTHON: &'static str = "UV_PYTHON";
+    pub const UV_SYSTEM_PYTHON: &'static str = "UV_SYSTEM_PYTHON";
     pub const UV_CACHE_DIR: &'static str = "UV_CACHE_DIR";
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
     pub const UV_MANAGED_PYTHON: &'static str = "UV_MANAGED_PYTHON";
