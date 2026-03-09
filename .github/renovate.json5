@@ -58,6 +58,28 @@
       datasourceTemplate: 'github-tags',
       versioningTemplate: 'regex:^v(?<major>\\d+)$',
     },
+    // Minimum supported Rust toolchain version
+    {
+      customType: "regex",
+      managerFilePatterns: ["/(^|/)Cargo\\.toml$/"],
+      matchStrings: [
+        'rust-version\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
+      ],
+      depNameTemplate: "msrv",
+      packageNameTemplate: "rust-lang/rust",
+      datasourceTemplate: "github-releases",
+    },
+    // Rust toolchain version
+    {
+      customType: "regex",
+      managerFilePatterns: ["/(^|/)rust-toolchain\\.toml$/"],
+      matchStrings: [
+        'channel\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
+      ],
+      depNameTemplate: "rust",
+      packageNameTemplate: "rust-lang/rust",
+      datasourceTemplate: "github-releases",
+    }
   ],
   packageRules: [
     // Group all GitHub Actions updates together
@@ -106,6 +128,21 @@
         "ilammy/msvc-dev-cmd"
       ],
       enabled: false
+    },
+    {
+      commitMessageTopic: "MSRV",
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["msrv"],
+      // We have a rolling support policy for the MSRV
+      // 2 releases back * 6 weeks per release * 7 days per week + 1
+      minimumReleaseAge: "85 days",
+      internalChecksFilter: "strict",
+      groupName: "MSRV",
+    },
+    {
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["rust"],
+      commitMessageTopic: "Rust",
     },
     {
       matchManagers: [ 'cargo', 'pre-commit', 'github-actions', 'custom.regex' ],
