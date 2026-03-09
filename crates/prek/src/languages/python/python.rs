@@ -121,14 +121,14 @@ impl LanguageImpl for Python {
             .context("Failed to create Python virtual environment")?;
 
         // Install dependencies
-        let pip_install = || Self::pip_install_command(&uv, store, &info.env_path);
+        let mut pip_install = Self::pip_install_command(&uv, store, &info.env_path);
 
         if let Some(repo_path) = hook.repo_path() {
             trace!(
                 "Installing dependencies from repo path: {}",
                 repo_path.display()
             );
-            pip_install()
+            pip_install
                 .arg("--directory")
                 .arg(repo_path)
                 .arg(".")
@@ -140,7 +140,7 @@ impl LanguageImpl for Python {
                 "Installing additional dependencies: {:?}",
                 hook.additional_dependencies
             );
-            pip_install()
+            pip_install
                 .args(&hook.additional_dependencies)
                 .output()
                 .await?;
