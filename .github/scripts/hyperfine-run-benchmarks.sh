@@ -10,6 +10,7 @@ OUT_DIR=$(dirname "$COMMENT")
 META_WORKSPACE="${TARGET_WORKSPACE}-meta"
 
 failed=false
+section_open=false
 
 mkdir -p "$OUT_DIR"
 OUT_MD="$OUT_DIR/out.md"
@@ -31,10 +32,23 @@ write_section() {
   local title="$1"
   local description="${2:-}"
 
+  close_section
   write_blank_line
-  write_line "## $title"
+  write_line "<details>"
+  write_line "<summary>$title</summary>"
+  write_blank_line
   if [ -n "$description" ]; then
     write_line "$description"
+    write_blank_line
+  fi
+  section_open=true
+}
+
+close_section() {
+  if [ "$section_open" = true ]; then
+    write_blank_line
+    write_line "</details>"
+    section_open=false
   fi
 }
 
@@ -66,15 +80,6 @@ check_variance() {
   fi
 }
 
-write_benchmark_details() {
-  write_line "<details>"
-  write_line "<summary>Benchmark details</summary>"
-  write_blank_line
-  cat "$OUT_MD" >> "$COMMENT"
-  write_blank_line
-  write_line "</details>"
-}
-
 benchmark() {
   local cmd="$1"
   local warmup="${2:-3}"
@@ -98,12 +103,14 @@ benchmark() {
     hyperfine_args+=(--prepare "$prepare")
   fi
 
+  write_blank_line
   write_line "### \`$label\`"
   if ! hyperfine "${hyperfine_args[@]}" --reference "$BASE_BINARY $cmd" "$HEAD_BINARY $cmd"; then
     write_line "⚠️ Benchmark failed for: $cmd"
     return 1
   fi
-  write_benchmark_details
+  cat "$OUT_MD" >> "$COMMENT"
+  write_blank_line
   if [ "$check_change" = "true" ]; then
     check_variance "$cmd"
   fi
@@ -138,16 +145,22 @@ EOF
 }
 
 # Add environment metadata
-write_line "## Hyperfine Performance"
+write_line "## ⚡️ Hyperfine Performance"
 write_blank_line
-write_line "**Environment:**"
+write_line "<details>"
+write_line "<summary>Environment</summary>"
+write_blank_line
 write_line "- OS: $(uname -s) $(uname -r)"
 write_line "- CPU: $(nproc) cores"
 write_line "- prek version: $CURRENT_PREK_VERSION"
 write_line "- Rust version: $(rustc --version)"
 write_line "- Hyperfine version: $(hyperfine --version)"
+write_blank_line
+write_line "</details>"
 
 # Benchmark in the main repo
+write_section "CLI Commands" "Benchmarking basic commands in the main repo:"
+
 CMDS=(
   "--version"
   "list"
@@ -226,6 +239,8 @@ META_HOOKS=(
 for hook in "${META_HOOKS[@]}"; do
   benchmark "run $hook --all-files" 3 15 "" "git checkout -- ."
 done
+
+close_section
 
 if [ "$failed" = true ]; then
   exit 1
