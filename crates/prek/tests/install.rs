@@ -433,6 +433,31 @@ fn install_uses_group_permissions_for_shared_repository() {
     );
 }
 
+/// Hook permissions should respect explicit octal `core.sharedRepository` values.
+#[test]
+#[cfg(unix)]
+fn install_uses_explicit_shared_repository_mode() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = TestContext::new();
+    context.init_project();
+
+    git_cmd(context.work_dir())
+        .args(["config", "core.sharedRepository", "0640"])
+        .assert()
+        .success();
+
+    context.install().assert().success();
+
+    let hook_path = context.work_dir().join(".git/hooks/pre-commit");
+    let metadata = std::fs::metadata(&hook_path).unwrap();
+    let mode = metadata.permissions().mode() & 0o777;
+    assert_eq!(
+        mode, 0o750,
+        "Hook should respect explicit shared mode (0o750), got {mode:o}"
+    );
+}
+
 /// Run `prek install --install-hooks` to install the git hook and create prek hook environments.
 #[test]
 fn install_with_hooks() -> anyhow::Result<()> {

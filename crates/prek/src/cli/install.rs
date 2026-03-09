@@ -46,7 +46,9 @@ pub(crate) async fn install(
         );
     }
 
-    let shared_repo = git::is_shared_repository().await.unwrap_or(false);
+    let hook_mode = git::get_shared_repository_file_mode(0o755)
+        .await
+        .unwrap_or(0o755);
 
     let project = match Project::discover(config.as_deref(), &CWD) {
         Ok(project) => Some(project),
@@ -83,7 +85,7 @@ pub(crate) async fn install(
             &hooks_path,
             overwrite,
             allow_missing_config,
-            shared_repo,
+            hook_mode,
             quiet,
             verbose,
             no_progress,
@@ -178,7 +180,7 @@ fn install_hook_script(
     hooks_path: &Path,
     overwrite: bool,
     skip_on_missing_config: bool,
-    shared_repo: bool,
+    hook_mode: u32,
     quiet: u8,
     verbose: u8,
     no_progress: bool,
@@ -310,15 +312,13 @@ fn install_hook_script(
         use std::os::unix::fs::PermissionsExt;
 
         let mut perms = hook_path.metadata()?.permissions();
-        // Use group-writable permissions for shared repositories
-        let mode = if shared_repo { 0o775 } else { 0o755 };
-        perms.set_mode(mode);
+        perms.set_mode(hook_mode);
         fs_err::set_permissions(&hook_path, perms)?;
     }
 
     // Unused on non-Unix platforms
     #[cfg(not(unix))]
-    let _ = shared_repo;
+    let _ = hook_mode;
 
     writeln!(printer.stdout(), "{hint}")?;
 
