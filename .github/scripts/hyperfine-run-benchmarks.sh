@@ -10,6 +10,7 @@ OUT_DIR=$(dirname "$COMMENT")
 META_WORKSPACE="${TARGET_WORKSPACE}-meta"
 
 failed=false
+section_open=false
 
 mkdir -p "$OUT_DIR"
 OUT_MD="$OUT_DIR/out.md"
@@ -31,10 +32,23 @@ write_section() {
   local title="$1"
   local description="${2:-}"
 
+  close_section
   write_blank_line
-  write_line "## $title"
+  write_line "<details>"
+  write_line "<summary>$title</summary>"
+  write_blank_line
   if [ -n "$description" ]; then
     write_line "$description"
+    write_blank_line
+  fi
+  section_open=true
+}
+
+close_section() {
+  if [ "$section_open" = true ]; then
+    write_blank_line
+    write_line "</details>"
+    section_open=false
   fi
 }
 
@@ -66,24 +80,20 @@ check_variance() {
   fi
 }
 
-write_benchmark_details() {
-  write_line "<details>"
-  write_line "<summary>Benchmark details</summary>"
-  write_blank_line
-  cat "$OUT_MD" >> "$COMMENT"
-  write_blank_line
-  write_line "</details>"
-}
-
 benchmark() {
-  local label="$1"
-  local cmd="$2"
-  local warmup="${3:-3}"
-  local runs="${4:-30}"
-  local setup="${5:-}"
-  local prepare="${6:-}"
-  local check_change="${7:-false}"
-  local -a hyperfine_args=(-i -N -w "$warmup" -r "$runs" --export-markdown "$OUT_MD" --export-json "$OUT_JSON" --show-output)
+  local cmd="$1"
+  local warmup="${2:-3}"
+  local runs="${3:-30}"
+  local setup="${4:-}"
+  local prepare="${5:-}"
+  local check_change="${6:-false}"
+  local label_suffix="${7:-}"
+  local label="prek $cmd"
+  local -a hyperfine_args=(-i -N -w "$warmup" -r "$runs" --export-markdown "$OUT_MD" --export-json "$OUT_JSON")
+
+  if [ -n "$label_suffix" ]; then
+    label="$label $label_suffix"
+  fi
 
   if [ -n "$setup" ]; then
     hyperfine_args+=(--setup "$setup")
@@ -93,12 +103,14 @@ benchmark() {
     hyperfine_args+=(--prepare "$prepare")
   fi
 
+  write_blank_line
   write_line "### \`$label\`"
   if ! hyperfine "${hyperfine_args[@]}" --reference "$BASE_BINARY $cmd" "$HEAD_BINARY $cmd"; then
     write_line "⚠️ Benchmark failed for: $cmd"
     return 1
   fi
-  write_benchmark_details
+  cat "$OUT_MD" >> "$COMMENT"
+  write_blank_line
   if [ "$check_change" = "true" ]; then
     check_variance "$cmd"
   fi
@@ -129,20 +141,26 @@ EOF
 
   git add -A
   git commit -m "Meta hooks test" || { echo "Failed to commit meta hooks test"; exit 1; }
-  prek install-hooks
+  $HEAD_BINARY install-hooks
 }
 
 # Add environment metadata
-write_line "## Hyperfine Performance"
+write_line "## ⚡️ Hyperfine Performance"
 write_blank_line
-write_line "**Environment:**"
+write_line "<details>"
+write_line "<summary>Environment</summary>"
+write_blank_line
 write_line "- OS: $(uname -s) $(uname -r)"
 write_line "- CPU: $(nproc) cores"
 write_line "- prek version: $CURRENT_PREK_VERSION"
 write_line "- Rust version: $(rustc --version)"
 write_line "- Hyperfine version: $(hyperfine --version)"
+write_blank_line
+write_line "</details>"
 
 # Benchmark in the main repo
+write_section "CLI Commands" "Benchmarking basic commands in the main repo:"
+
 CMDS=(
   "--version"
   "list"
@@ -157,9 +175,9 @@ for cmd in "${CMDS[@]}"; do
   fi
 
   if [[ "$cmd" == "--version" ]] || [[ "$cmd" == "list" ]]; then
-    benchmark "prek $cmd" "$cmd" 5 100
+    benchmark "$cmd" 5 100
   else
-    benchmark "prek $cmd" "$cmd" 3 50
+    benchmark "$cmd" 3 50
   fi
   check_variance "$cmd"
 done
@@ -169,12 +187,12 @@ cd "$TARGET_WORKSPACE"
 
 # Cold vs warm benchmarks before polluting cache
 write_section "Cold vs Warm Runs" "Comparing first run (cold) vs subsequent runs (warm cache):"
-benchmark "prek run --all-files (cold - no cache)" "run --all-files" 0 10 "rm -rf ~/.cache/prek" "git checkout -- ."
-benchmark "prek run --all-files (warm - with cache)" "run --all-files" 3 20 "" "git checkout -- ."
+benchmark "run --all-files" 0 10 "rm -rf ~/.cache/prek" "git checkout -- ." false "(cold - no cache)"
+benchmark "run --all-files" 3 20 "" "git checkout -- ." false "(warm - with cache)"
 
 # Full benchmark suite with cache warmed up
 write_section "Full Hook Suite" "Running the builtin hook suite on the benchmark workspace:"
-benchmark "prek run --all-files (full builtin hook suite)" "run --all-files" 3 50 "" "git checkout -- ." true
+benchmark "run --all-files" 3 50 "" "git checkout -- ." true "(full builtin hook suite)"
 
 # Individual hook performance
 write_section "Individual Hook Performance" "Benchmarking each hook individually on the test repo:"
@@ -189,24 +207,24 @@ INDIVIDUAL_HOOKS=(
 )
 
 for hook in "${INDIVIDUAL_HOOKS[@]}"; do
-  benchmark "prek run $hook --all-files" "run $hook --all-files" 3 30 "" "git checkout -- ."
+  benchmark "run $hook --all-files" 3 30 "" "git checkout -- ."
 done
 
 # Installation performance
 write_section "Installation Performance" "Benchmarking hook installation (fast path hooks skip Python setup):"
-benchmark "prek install-hooks (cold - no cache)" "install-hooks" 1 5 "rm -rf ~/.cache/prek/hooks ~/.cache/prek/repos"
-benchmark "prek install-hooks (warm - with cache)" "install-hooks" 1 5
+benchmark "install-hooks" 1 5 "rm -rf ~/.cache/prek/hooks ~/.cache/prek/repos" "" false "(cold - no cache)"
+benchmark "install-hooks" 1 5 "" "" false "(warm - with cache)"
 
 # File filtering/scoping performance
 write_section "File Filtering/Scoping Performance" "Testing different file selection modes:"
 
 git add -A
-benchmark "prek run (staged files only)" "run" 3 20 "" "sh -c 'git checkout -- . && git add -A'"
-benchmark "prek run --files '*.json' (specific file type)" "run --files '*.json'" 3 20
+benchmark "run" 3 20 "" "sh -c 'git checkout -- . && git add -A'" false "(staged files only)"
+benchmark "run --files '*.json'" 3 20 "" "" false "(specific file type)"
 
 # Workspace discovery & initialization
 write_section "Workspace Discovery & Initialization" "Benchmarking hook discovery and initialization overhead:"
-benchmark "prek run --dry-run --all-files (measures init overhead)" "run --dry-run --all-files" 3 20
+benchmark "run --dry-run --all-files" 3 20 "" "" false "(measures init overhead)"
 
 # Meta hooks performance
 write_section "Meta Hooks Performance" "Benchmarking meta hooks separately:"
@@ -219,8 +237,10 @@ META_HOOKS=(
 )
 
 for hook in "${META_HOOKS[@]}"; do
-  benchmark "prek run $hook --all-files" "run $hook --all-files" 3 15 "" "git checkout -- ."
+  benchmark "run $hook --all-files" 3 15 "" "git checkout -- ."
 done
+
+close_section
 
 if [ "$failed" = true ]; then
   exit 1

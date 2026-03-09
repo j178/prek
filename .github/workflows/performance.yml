@@ -110,17 +110,23 @@ jobs:
   hyperfine-benchmark:
     runs-on: ubuntu-latest
     name: "hyperfine benchmark"
-    timeout-minutes: 30
+    timeout-minutes: 10
     env:
       HYPERFINE_BENCHMARK_WORKSPACE: /tmp/prek-bench
+      HYPERFINE_BIN_DIR: ${{ github.workspace }}/.hyperfine-bin
       HYPERFINE_RESULTS_FILE: ${{ github.workspace }}/hyperfine-benchmark.md
-      HYPERFINE_HEAD_BINARY: ${{ github.workspace }}/target/profiling/prek
-      HYPERFINE_BASE_BINARY: ${{ github.workspace }}/../bin/prek-${{ github.event.pull_request.base.sha }}
+      HYPERFINE_HEAD_BINARY: prek-head
+      HYPERFINE_BASE_BINARY: prek-base
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Add hyperfine bin dir to PATH
+        run: |
+          mkdir -p "$HYPERFINE_BIN_DIR"
+          echo "$HYPERFINE_BIN_DIR" >> "$GITHUB_PATH"
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
@@ -129,7 +135,7 @@ jobs:
       - id: base-binary-cache
         uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
         with:
-          path: ${{ env.HYPERFINE_BASE_BINARY }}
+          path: ${{ env.HYPERFINE_BIN_DIR }}/${{ env.HYPERFINE_BASE_BINARY }}
           key: prek-hyperfine-base-${{ github.event.pull_request.base.sha }}-${{ hashFiles('Cargo.lock') }}-${{ runner.os }}-${{ runner.arch }}
 
       - name: Build base version
@@ -137,14 +143,13 @@ jobs:
         env:
           BASE_VERSION: ${{ github.event.pull_request.base.sha }}
         run: |
-          mkdir -p "$(dirname "$HYPERFINE_BASE_BINARY")"
           git checkout ${{ github.event.pull_request.base.sha }}
-          cargo build --profile profiling && mv target/profiling/prek "$HYPERFINE_BASE_BINARY"
+          cargo build --profile profiling && mv target/profiling/prek "$HYPERFINE_BIN_DIR/$HYPERFINE_BASE_BINARY"
           git checkout ${{ github.sha }}
 
       - name: Build head version
         run: |
-          cargo build --profile profiling
+          cargo build --profile profiling && mv target/profiling/prek "$HYPERFINE_BIN_DIR/$HYPERFINE_HEAD_BINARY"
 
       - name: Install hyperfine
         uses: taiki-e/install-action@f92912fad184299a31e22ad070a5059fd07d4f59 # v2.68.7

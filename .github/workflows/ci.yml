@@ -39,8 +39,8 @@ jobs:
     outputs:
       test-code: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.any_code_changed == 'true' || github.ref == 'refs/heads/master') }}
       save-rust-cache: ${{ github.ref == 'refs/heads/master' || steps.changed.outputs.cache_changed == 'true' }}
-      # Run benchmarks only if Rust code changed
-      run-bench: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.rust_code_changed == 'true' || github.ref == 'refs/heads/master') }}
+      # Run benchmarks if Rust code or benchmark-related files changed
+      run-bench: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.rust_code_changed == 'true' || steps.changed.outputs.bench_related_changed == 'true' || github.ref == 'refs/heads/master') }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -56,6 +56,7 @@ jobs:
           ANY_CODE_CHANGED=false
           CACHE_CHANGED=false
           RUST_CODE_CHANGED=false
+          BENCH_RELATED_CHANGED=false
 
           while IFS= read -r file; do
             # Check if cache-relevant files changed (Cargo files, toolchain, workflows)
@@ -68,6 +69,11 @@ jobs:
             if [[ "${file}" =~ \.rs$ ]] || [[ "${file}" =~ Cargo\.toml$ ]] || [[ "${file}" == "Cargo.lock" ]] || [[ "${file}" == "rust-toolchain.toml" ]] || [[ "${file}" =~ ^\.cargo/ ]]; then
               echo "Detected Rust code change: ${file}"
               RUST_CODE_CHANGED=true
+            fi
+
+            if [[ "${file}" == ".github/workflows/performance.yml" ]] || [[ "${file}" =~ ^\.github/scripts/hyperfine-.*\.sh$ ]]; then
+              echo "Detected benchmark-related change: ${file}"
+              BENCH_RELATED_CHANGED=true
             fi
 
             if [[ "${file}" =~ ^docs/ ]]; then
@@ -90,6 +96,7 @@ jobs:
           echo "any_code_changed=${ANY_CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
           echo "cache_changed=${CACHE_CHANGED}" >> "${GITHUB_OUTPUT}"
           echo "rust_code_changed=${RUST_CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
+          echo "bench_related_changed=${BENCH_RELATED_CHANGED}" >> "${GITHUB_OUTPUT}"
 
   lint:
     name: "lint"
