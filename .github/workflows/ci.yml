@@ -23,7 +23,7 @@ env:
   RUBY_VERSION: "3.4"
   LUA_VERSION: "5.4"
   LUAROCKS_VERSION: "3.12.2"
-  GHC_VERSION: "9.8.2" # Don't upgrade, because higher version is very slow to build
+  GHC_VERSION: "9.14.1" # Preinstalled in ubuntu-24.04 runner image
   CABAL_VERSION: "3.16.1.0"
   JULIA_VERSION: "1.12.4"
 
@@ -399,7 +399,7 @@ jobs:
     name: "language tests | ${{ matrix.language }} | ${{ matrix.os }}"
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -515,7 +515,13 @@ jobs:
         id: cache-haskell
         uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
-          path: ~/.ghcup
+          path: |
+            ~/.ghcup
+            ~/.cabal/store
+            C:/ghcup
+            C:/tools/ghc-${{ env.GHC_VERSION }}
+            C:/tools/cabal-${{ env.CABAL_VERSION }}
+            C:/sr
           key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
           restore-keys: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
 
