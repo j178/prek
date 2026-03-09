@@ -2,9 +2,6 @@ name: hyperfine
 on:
   pull_request:
     branches: ["master"]
-    # paths:
-    #   - ".github/workflows/hyperfine.yml"
-    #   - "Cargo.toml"
   workflow_dispatch:
 
 concurrency:
