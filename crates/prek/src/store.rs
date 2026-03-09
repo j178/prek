@@ -271,6 +271,20 @@ impl Store {
         Ok(cloned)
     }
 
+    /// Clone a single remote repository into the store.
+    pub(crate) async fn clone_repo(
+        &self,
+        repo: &RemoteRepo,
+        reporter: Option<&dyn HookInitReporter>,
+    ) -> Result<PathBuf, Error> {
+        #[expect(clippy::mutable_key_type)]
+        let cloned = self.clone_repos(std::iter::once(repo), reporter).await?;
+        cloned.get(repo).cloned().ok_or_else(|| Error::CloneRepo {
+            repo: repo.repo.clone(),
+            error: git::Error::Io(std::io::Error::other("repo was not cloned")),
+        })
+    }
+
     /// Returns installed hooks in the store.
     pub(crate) async fn installed_hooks(&self) -> Vec<Arc<InstallInfo>> {
         let Ok(dirs) = fs_err::read_dir(self.hooks_dir()) else {

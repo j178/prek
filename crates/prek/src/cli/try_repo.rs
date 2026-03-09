@@ -183,11 +183,7 @@ pub(crate) async fn try_repo(
 
     let store = Store::from_path(tmp_dir.path()).init()?;
     let repo_config = config::RemoteRepo::new(repo_path.to_string(), rev.clone(), vec![]);
-    let repo_clone_path = store
-        .clone_repos(std::iter::once(&repo_config), None)
-        .await?
-        .remove(&repo_config)
-        .ok_or_else(|| anyhow::anyhow!("repo was not cloned"))?;
+    let repo_clone_path = store.clone_repo(&repo_config, None).await?;
 
     let selectors = Selectors::load(&run_args.includes, &run_args.skips, GIT_ROOT.as_ref()?)?;
 
