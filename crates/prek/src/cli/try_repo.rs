@@ -182,12 +182,12 @@ pub(crate) async fn try_repo(
         .context("Failed to determine repository and revision")?;
 
     let store = Store::from_path(tmp_dir.path()).init()?;
+    let repo_config = config::RemoteRepo::new(repo_path.to_string(), rev.clone(), vec![]);
     let repo_clone_path = store
-        .clone_repo(
-            &config::RemoteRepo::new(repo_path.to_string(), rev.clone(), vec![]),
-            None,
-        )
-        .await?;
+        .clone_repos(std::iter::once(&repo_config), None)
+        .await?
+        .remove(&repo_config)
+        .ok_or_else(|| anyhow::anyhow!("repo was not cloned"))?;
 
     let selectors = Selectors::load(&run_args.includes, &run_args.skips, GIT_ROOT.as_ref()?)?;
 

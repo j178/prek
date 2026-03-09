@@ -694,7 +694,7 @@ async fn run_hooks(
     }
 
     if !success && show_diff_on_failure && file_modified {
-        if EnvVars::is_set(EnvVars::CI) {
+        if EnvVars::is_under_ci() {
             writeln!(
                 printer.stdout(),
                 "{}",

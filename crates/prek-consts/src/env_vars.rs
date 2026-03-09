@@ -8,6 +8,7 @@ impl EnvVars {
     pub const PATH: &'static str = "PATH";
     pub const HOME: &'static str = "HOME";
     pub const CI: &'static str = "CI";
+    pub const LC_ALL: &'static str = "LC_ALL";
 
     // Git related
     pub const GIT_DIR: &'static str = "GIT_DIR";
@@ -113,6 +114,11 @@ impl EnvVars {
 
     pub fn is_set(name: &str) -> bool {
         Self::var_os(name).is_some()
+    }
+
+    /// Return whether the current process is running under CI.
+    pub fn is_under_ci() -> bool {
+        Self::is_set(Self::CI)
     }
 
     /// Read an environment variable, falling back to pre-commit corresponding variable if not found.
