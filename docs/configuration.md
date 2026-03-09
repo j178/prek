@@ -168,10 +168,10 @@ You may want to use the longer form if your editor/IDE complains about it.
 
     ```toml
     default_language_version.python = "3.12"
-    
+
     [[repos]]
     repo = "local"
-    
+
     [[repos.hooks]]
     id = "ruff"
     name = "ruff"
