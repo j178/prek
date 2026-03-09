@@ -7,15 +7,20 @@ BODY="${MARKER}
 ${RESULTS}"
 PR_NUMBER=$(cat /tmp/hyperfine-results/pr-number.txt)
 
+if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+  echo "Error: Invalid PR number: '$PR_NUMBER'"
+  exit 1
+fi
+
 EXISTING_COMMENT_ID=$(
   gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
     --paginate --jq ".[] | select(.body | contains(\"${MARKER}\")) | .id"
 )
 
 if [ -n "$EXISTING_COMMENT_ID" ]; then
-  gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${EXISTING_COMMENT_ID}" \
-    --method PATCH --field body="$BODY"
+  echo "$BODY" | gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${EXISTING_COMMENT_ID}" \
+    --method PATCH --field body=@-
 else
-  gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
-    --method POST --field body="$BODY"
+  echo "$BODY" | gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+    --method POST --field body=@-
 fi

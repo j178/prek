@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Create a test directory with files to run builtin hooks against
+# Create a clean test directory with files to run builtin hooks against
+rm -rf /tmp/prek-bench
 mkdir -p /tmp/prek-bench
 cd /tmp/prek-bench
 git init || { echo "Failed to init git"; exit 1; }
