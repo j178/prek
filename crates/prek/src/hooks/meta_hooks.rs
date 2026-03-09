@@ -214,9 +214,9 @@ pub(crate) async fn check_useless_excludes(
 
             for (hook_id, opts) in hooks_iter {
                 let filtered_files = filter.by_type(
-                    opts.types.as_deref().unwrap_or(&[]),
-                    opts.types_or.as_deref().unwrap_or(&[]),
-                    opts.exclude_types.as_deref().unwrap_or(&[]),
+                    opts.types.as_ref(),
+                    opts.types_or.as_ref(),
+                    opts.exclude_types.as_ref(),
                 );
 
                 // `filtered_files` is workspace-relative (it includes the project prefix).

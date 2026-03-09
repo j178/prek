@@ -1,6 +1,6 @@
 use crate::config::{
-    BuiltinHook, BuiltinRepo, FilePattern, LocalRepo, MetaHook, MetaRepo, RemoteHook, RemoteRepo,
-    Repo,
+    BuiltinHook, BuiltinRepo, FilePattern, LocalRepo, MetaHook, MetaRepo, PassFilenames,
+    RemoteHook, RemoteRepo, Repo, Stage, Stages,
 };
 use std::borrow::Cow;
 
@@ -120,6 +120,25 @@ fn strip_null_acceptance(schema: &mut schemars::Schema) {
     }
 }
 
+impl schemars::JsonSchema for Stages {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("Stages")
+    }
+
+    fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        let stage_schema = generator.subschema_for::<Stage>();
+        schemars::json_schema!({
+            "type": "array",
+            "items": stage_schema,
+            "uniqueItems": true,
+        })
+    }
+}
+
 impl schemars::JsonSchema for FilePattern {
     fn schema_name() -> Cow<'static, str> {
         Cow::Borrowed("FilePattern")
@@ -155,6 +174,25 @@ impl schemars::JsonSchema for FilePattern {
                     "required": ["glob"],
                 }
             ],
+        })
+    }
+}
+
+impl schemars::JsonSchema for PassFilenames {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("PassFilenames")
+    }
+
+    fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "Whether to pass filenames to the hook. \
+            `true` passes all matching filenames (default), \
+            `false` passes none, and \
+            a positive integer limits each invocation to at most that many filenames.",
+            "oneOf": [
+                {"type": "boolean"},
+                {"type": "integer", "exclusiveMinimum": 0}
+            ]
         })
     }
 }

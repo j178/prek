@@ -1,3 +1,4 @@
+use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -24,6 +25,19 @@ pub(crate) enum RubyRequest {
 
     /// Semver range (e.g., ">=3.2, <4.0")
     Range(semver::VersionReq, String),
+}
+
+impl fmt::Display for RubyRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Any => f.write_str("any"),
+            Self::Exact(maj, min, patch) => write!(f, "{maj}.{min}.{patch}"),
+            Self::MajorMinor(maj, min) => write!(f, "{maj}.{min}"),
+            Self::Major(maj) => write!(f, "{maj}"),
+            Self::Path(p) => write!(f, "{}", p.display()),
+            Self::Range(_, s) => f.write_str(s),
+        }
+    }
 }
 
 impl FromStr for RubyRequest {

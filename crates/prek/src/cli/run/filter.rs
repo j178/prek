@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use itertools::{Either, Itertools};
 use path_clean::PathClean;
 use prek_consts::env_vars::EnvVars;
+use prek_identify::{TagSet, tags_from_path};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::FxHashSet;
 use tracing::{debug, error, instrument};
@@ -11,7 +12,6 @@ use tracing::{debug, error, instrument};
 use crate::config::{FilePattern, Stage};
 use crate::git::GIT_ROOT;
 use crate::hook::Hook;
-use crate::identify::{TagSet, tags_from_path};
 use crate::workspace::Project;
 use crate::{fs, git, warn_user};
 
@@ -46,13 +46,17 @@ impl<'a> FilenameFilter<'a> {
 
 /// Filter files by tags.
 pub(crate) struct FileTagFilter<'a> {
-    all: &'a [String],
-    any: &'a [String],
-    exclude: &'a [String],
+    all: Option<&'a TagSet>,
+    any: Option<&'a TagSet>,
+    exclude: Option<&'a TagSet>,
 }
 
 impl<'a> FileTagFilter<'a> {
-    fn new(types: &'a [String], types_or: &'a [String], exclude_types: &'a [String]) -> Self {
+    fn new(
+        types: Option<&'a TagSet>,
+        types_or: Option<&'a TagSet>,
+        exclude_types: Option<&'a TagSet>,
+    ) -> Self {
         Self {
             all: types,
             any: types_or,
@@ -61,13 +65,16 @@ impl<'a> FileTagFilter<'a> {
     }
 
     pub(crate) fn filter(&self, file_types: &TagSet) -> bool {
-        if !self.all.is_empty() && !self.all.iter().all(|t| file_types.contains(t.as_str())) {
+        if self.all.is_some_and(|s| !s.is_subset(file_types)) {
             return false;
         }
-        if !self.any.is_empty() && !self.any.iter().any(|t| file_types.contains(t.as_str())) {
+        if self
+            .any
+            .is_some_and(|s| !s.is_empty() && s.is_disjoint(file_types))
+        {
             return false;
         }
-        if self.exclude.iter().any(|t| file_types.contains(t.as_str())) {
+        if self.exclude.is_some_and(|s| !s.is_disjoint(file_types)) {
             return false;
         }
         true
@@ -140,9 +147,9 @@ impl<'a> FileFilter<'a> {
     /// Filter filenames by type tags for a specific hook.
     pub(crate) fn by_type(
         &self,
-        types: &[String],
-        types_or: &[String],
-        exclude_types: &[String],
+        types: Option<&TagSet>,
+        types_or: Option<&TagSet>,
+        exclude_types: Option<&TagSet>,
     ) -> Vec<&Path> {
         let filter = FileTagFilter::new(types, types_or, exclude_types);
         let filenames: Vec<_> = self
@@ -177,7 +184,11 @@ impl<'a> FileFilter<'a> {
         });
 
         // Filter by hook `types`, `types_or` and `exclude_types`.
-        let filter = FileTagFilter::new(&hook.types, &hook.types_or, &hook.exclude_types);
+        let filter = FileTagFilter::new(
+            Some(&hook.types),
+            Some(&hook.types_or),
+            Some(&hook.exclude_types),
+        );
         let filenames = filenames.filter(|filename| match tags_from_path(filename) {
             Ok(tags) => filter.filter(&tags),
             Err(err) => {

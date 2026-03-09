@@ -22,12 +22,15 @@ impl EnvVars {
     pub const PREK_SKIP: &'static str = "PREK_SKIP";
     pub const PREK_ALLOW_NO_CONFIG: &'static str = "PREK_ALLOW_NO_CONFIG";
     pub const PREK_NO_CONCURRENCY: &'static str = "PREK_NO_CONCURRENCY";
+    pub const PREK_MAX_CONCURRENCY: &'static str = "PREK_MAX_CONCURRENCY";
     pub const PREK_NO_FAST_PATH: &'static str = "PREK_NO_FAST_PATH";
     pub const PREK_UV_SOURCE: &'static str = "PREK_UV_SOURCE";
     pub const PREK_NATIVE_TLS: &'static str = "PREK_NATIVE_TLS";
     pub const SSL_CERT_FILE: &'static str = "SSL_CERT_FILE";
+    pub const SSL_CERT_DIR: &'static str = "SSL_CERT_DIR";
     pub const PREK_CONTAINER_RUNTIME: &'static str = "PREK_CONTAINER_RUNTIME";
     pub const PREK_QUIET: &'static str = "PREK_QUIET";
+    pub const PREK_LOG_TRUNCATE_LIMIT: &'static str = "PREK_LOG_TRUNCATE_LIMIT";
 
     // PREK internal environment variables
     pub const PREK_INTERNAL__TEST_DIR: &'static str = "PREK_INTERNAL__TEST_DIR";
@@ -40,12 +43,14 @@ impl EnvVars {
     pub const PREK_INTERNAL__NODE_BINARY_NAME: &'static str = "PREK_INTERNAL__NODE_BINARY_NAME";
     pub const PREK_INTERNAL__RUSTUP_BINARY_NAME: &'static str = "PREK_INTERNAL__RUSTUP_BINARY_NAME";
     pub const PREK_INTERNAL__SKIP_CABAL_UPDATE: &'static str = "PREK_INTERNAL__SKIP_CABAL_UPDATE";
+    pub const PREK_RUNNING_LEGACY: &'static str = "PREK_RUNNING_LEGACY";
     pub const PREK_GENERATE: &'static str = "PREK_GENERATE";
 
     // Python & uv related
     pub const VIRTUAL_ENV: &'static str = "VIRTUAL_ENV";
     pub const PYTHONHOME: &'static str = "PYTHONHOME";
     pub const UV_PYTHON: &'static str = "UV_PYTHON";
+    pub const UV_SYSTEM_PYTHON: &'static str = "UV_SYSTEM_PYTHON";
     pub const UV_CACHE_DIR: &'static str = "UV_CACHE_DIR";
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
     pub const UV_MANAGED_PYTHON: &'static str = "UV_MANAGED_PYTHON";
@@ -74,6 +79,7 @@ impl EnvVars {
     pub const LUA_CPATH: &'static str = "LUA_CPATH";
 
     // Ruby related
+    pub const PREK_RUBY_MIRROR: &'static str = "PREK_RUBY_MIRROR";
     pub const GEM_HOME: &'static str = "GEM_HOME";
     pub const GEM_PATH: &'static str = "GEM_PATH";
     pub const BUNDLE_IGNORE_CONFIG: &'static str = "BUNDLE_IGNORE_CONFIG";

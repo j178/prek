@@ -31,6 +31,7 @@ Languages with managed toolchain downloads in prek today:
 - [Bun](#bun)
 - [Golang](#golang)
 - [Rust](#rust)
+- [Ruby](#ruby)
 
 Other supported languages rely on system installations and will fail if a matching toolchain is not available.
 
@@ -296,7 +297,7 @@ Tracking: [#42](https://github.com/j178/prek/issues/42)
 
 ### ruby
 
-**Status in prek:** ✅ Supported (with limitations).
+**Status in prek:** ✅ Supported.
 
 prek installs gems from a `*.gemspec` and runs executables declared in the gemspec. `additional_dependencies` are installed into the same isolated gemset.
 
@@ -312,9 +313,11 @@ Supported formats:
 
 !!! note "prek-only"
 
-    prek does not automatically download Ruby toolchains. It uses system-installed Rubies, including common version managers, and fails if no suitable version matches `language_version`.
+    prek can use system-installed Rubies, including a variety of common version managers. On some platforms, if the system search fails to find a suitable version matching `language_version`, it can then attempt to download one.
 
-Tracking for Ruby toolchain download support: [#43](https://github.com/j178/prek/issues/43)
+    Ruby interpreters are downloaded from those built by the `rv` project, and as such are limited in supported platform versions (currently limited to MacOS and Linux on x86_64 and ARM64). Older versions are also not available, with the oldest being 3.2.1. Unsupported platforms or versions will require a compatible system Ruby installation.
+
+    The `PREK_RUBY_MIRROR` environment variable can be used to point to a different source for installers, for example to support mirrors or air-gapped CI environments. Mirrors need to follow the GitHub URL patterns, but note that although the GitHub hostname changes between `api.github.com` and `github.com` as needed, any non-GitHub mirror server will not be remapped in this manner. Where Ruby is being downloaded from GitHub (either from the upstream `rv` or a mirror), this remapping does occur, and any `GITHUB_TOKEN` will be sent with the requests. This both limits impact of rate limiting, and also allows a private GitHub repository to be used (e.g. for a vetted subset of `rv` rubies to be mirrored). Note that GitHub tokens will only be sent to mirrors which are hosted on GitHub.
 
 Gems specified in hook gemspec files and `additional_dependencies` are installed into an isolated gemset shared across hooks with the same Ruby version and dependencies.
 
@@ -322,7 +325,11 @@ Gems specified in hook gemspec files and `additional_dependencies` are installed
 
 **Status in prek:** ✅ Supported.
 
-prek installs binaries via `cargo install --bins` and runs the specified executable. The repository should contain a `Cargo.toml` that produces the binary referenced by `entry`. `additional_dependencies` and `language_version` are supported.
+prek installs binaries via `cargo install --bins --locked` and runs the specified executable. The repository should contain a `Cargo.toml` that produces the binary referenced by `entry`. `additional_dependencies` and `language_version` are supported.
+
+!!! note "Using `--locked` flag"
+
+    prek uses the `--locked` flag when installing Rust packages to ensure exact dependency versions from `Cargo.lock` are used. This prevents breaking changes from new dependency releases.
 
 #### `language_version`
 
@@ -338,7 +345,25 @@ Supported formats:
     - prek supports installing packages from virtual workspaces. See [#1180](https://github.com/j178/prek/pull/1180).
     - `additional_dependencies` supports:
         - Library dependencies using `name` or `name:version` (applied via `cargo add`).
-        - CLI dependencies using `cli:`. These can be crates.io packages (`cli:rg:13.0.0`) or git URLs (`cli:https://github.com/BurntSushi/ripgrep:13.0.0`).
+        - CLI dependencies using `cli:`.
+            - There are two forms:
+                - crates.io: `cli:<crate>[:<version>]`
+                - git: `cli:<url>[:<tag>[:<package>]]`
+            - For git dependencies:
+                - `<url>` is the git repository URL.
+                - `<tag>` is optional and selects a specific git tag.
+                - `<package>` is optional and selects which Cargo package to install binaries from.
+                - Use `<package>` when the git repository is a workspace or multi-crate repository and Cargo needs you to choose one package.
+                - This matches the package argument in `cargo install --git <url> <package>`.
+            - Examples:
+                - crates.io package: `cli:rg`
+                - crates.io package with version: `cli:rg:13.0.0`
+                - git repository default ref: `cli:https://github.com/fish-shell/fish-shell`
+                - git repository with tag: `cli:https://github.com/fish-shell/fish-shell:v4.5.0`
+                - git repository with package but no tag: `cli:https://github.com/fish-shell/fish-shell::fish`
+                - git repository with tag and package: `cli:https://github.com/fish-shell/fish-shell:v4.5.0:fish`
+            - Invalid forms:
+                - empty package is invalid, for example `...:v4.5.0:` or `...::`.
 
 ### swift
 

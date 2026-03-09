@@ -121,31 +121,14 @@ impl LanguageImpl for Python {
             .context("Failed to create Python virtual environment")?;
 
         // Install dependencies
-        let pip_install = || {
-            let mut cmd = uv.cmd("uv pip", store);
-            cmd.arg("pip")
-                .arg("install")
-                // Explicitly set project to root to avoid uv searching for project-level configs
-                // `--project` has no other effect on `uv pip` subcommands.
-                .args(["--project", "/"])
-                .env(EnvVars::VIRTUAL_ENV, &info.env_path)
-                // Make sure uv uses the venv's python
-                .env_remove(EnvVars::UV_PYTHON)
-                .env_remove(EnvVars::UV_MANAGED_PYTHON)
-                .env_remove(EnvVars::UV_NO_MANAGED_PYTHON)
-                // Remove GIT environment variables that may leak from git hooks (e.g., in worktrees).
-                // These can break packages using setuptools_scm for file discovery.
-                .remove_git_envs()
-                .check(true);
-            cmd
-        };
+        let mut pip_install = Self::pip_install_command(&uv, store, &info.env_path);
 
         if let Some(repo_path) = hook.repo_path() {
             trace!(
                 "Installing dependencies from repo path: {}",
                 repo_path.display()
             );
-            pip_install()
+            pip_install
                 .arg("--directory")
                 .arg(repo_path)
                 .arg(".")
@@ -157,7 +140,7 @@ impl LanguageImpl for Python {
                 "Installing additional dependencies: {:?}",
                 hook.additional_dependencies
             );
-            pip_install()
+            pip_install
                 .args(&hook.additional_dependencies)
                 .output()
                 .await?;
@@ -270,6 +253,31 @@ fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
 }
 
 impl Python {
+    fn remove_uv_python_override_envs(cmd: &mut Cmd) -> &mut Cmd {
+        // Ensure uv selects the hook virtualenv interpreter.
+        cmd.env_remove(EnvVars::UV_PYTHON)
+            .env_remove(EnvVars::UV_SYSTEM_PYTHON)
+            // `--managed-python` and `--no-managed-python` conflict with our explicit preference.
+            .env_remove(EnvVars::UV_MANAGED_PYTHON)
+            .env_remove(EnvVars::UV_NO_MANAGED_PYTHON)
+    }
+
+    fn pip_install_command(uv: &Uv, store: &Store, env_path: &Path) -> Cmd {
+        let mut cmd = uv.cmd("uv pip", store);
+        cmd.arg("pip")
+            .arg("install")
+            // Explicitly set project to root to avoid uv searching for project-level configs.
+            // `--project` has no other effect on `uv pip` subcommands.
+            .args(["--project", "/"])
+            .env(EnvVars::VIRTUAL_ENV, env_path);
+        Self::remove_uv_python_override_envs(&mut cmd)
+            // Remove GIT environment variables that may leak from git hooks (e.g., in worktrees).
+            // These can break packages using setuptools_scm for file discovery.
+            .remove_git_envs()
+            .check(true);
+        cmd
+    }
+
     async fn create_venv(
         uv: &Uv,
         store: &Store,
@@ -333,12 +341,8 @@ impl Python {
             // Avoid discovering a project or workspace
             .arg("--no-project")
             // Explicitly set project to root to avoid uv searching for project-level configs
-            .args(["--project", "/"])
-            .env_remove(EnvVars::UV_PYTHON)
-            // `--managed_python` conflicts with `--python-preference`, ignore any user setting
-            .env_remove(EnvVars::UV_MANAGED_PYTHON)
-            .env_remove(EnvVars::UV_NO_MANAGED_PYTHON);
-
+            .args(["--project", "/"]);
+        Self::remove_uv_python_override_envs(&mut cmd);
         if set_install_dir {
             cmd.env(
                 EnvVars::UV_PYTHON_INSTALL_DIR,
@@ -386,4 +390,69 @@ fn bin_dir(venv: &Path) -> PathBuf {
 
 pub(crate) fn python_exec(venv: &Path) -> PathBuf {
     bin_dir(venv).join("python").with_extension(EXE_EXTENSION)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    use prek_consts::env_vars::EnvVars;
+    use rustc_hash::FxHashSet;
+
+    use super::Python;
+    use crate::config::Language;
+    use crate::hook::InstallInfo;
+    use crate::languages::python::uv::Uv;
+    use crate::languages::version::LanguageRequest;
+    use crate::store::Store;
+
+    fn setup_test_install() -> (tempfile::TempDir, Uv, Store, InstallInfo) {
+        let temp = tempfile::tempdir().expect("create tempdir");
+        let hooks_dir = temp.path().join("hooks");
+        fs_err::create_dir_all(&hooks_dir).expect("create hooks dir");
+
+        let info = InstallInfo::new(Language::Python, FxHashSet::default(), &hooks_dir)
+            .expect("create install info");
+        let store = Store::from_path(temp.path().join("store"));
+        let uv = Uv::new(PathBuf::from("uv"));
+
+        (temp, uv, store, info)
+    }
+
+    fn env_map(cmd: &crate::process::Cmd) -> HashMap<String, Option<String>> {
+        cmd.get_envs()
+            .map(|(key, val)| {
+                (
+                    key.to_string_lossy().into_owned(),
+                    val.map(|v| v.to_string_lossy().into_owned()),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn create_venv_command_removes_uv_system_python_override() {
+        let (_temp, uv, store, info) = setup_test_install();
+        let request = LanguageRequest::Any { system_only: false };
+        let cmd = Python::create_venv_command(&uv, &store, &info, &request, false, false);
+        let envs = env_map(&cmd);
+
+        assert_eq!(envs.get(EnvVars::UV_SYSTEM_PYTHON), Some(&None));
+        assert_eq!(envs.get(EnvVars::UV_PYTHON), Some(&None));
+        assert_eq!(envs.get(EnvVars::UV_MANAGED_PYTHON), Some(&None));
+        assert_eq!(envs.get(EnvVars::UV_NO_MANAGED_PYTHON), Some(&None));
+    }
+
+    #[test]
+    fn pip_install_command_removes_uv_system_python_override() {
+        let (_temp, uv, store, info) = setup_test_install();
+        let cmd = Python::pip_install_command(&uv, &store, &info.env_path);
+        let envs = env_map(&cmd);
+
+        assert_eq!(envs.get(EnvVars::UV_SYSTEM_PYTHON), Some(&None));
+        assert_eq!(envs.get(EnvVars::UV_PYTHON), Some(&None));
+        assert_eq!(envs.get(EnvVars::UV_MANAGED_PYTHON), Some(&None));
+        assert_eq!(envs.get(EnvVars::UV_NO_MANAGED_PYTHON), Some(&None));
+    }
 }

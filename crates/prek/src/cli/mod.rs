@@ -78,6 +78,15 @@ impl From<ExitStatus> for ExitCode {
     }
 }
 
+impl From<u8> for ExitStatus {
+    fn from(code: u8) -> Self {
+        match code {
+            0 => Self::Success,
+            other => Self::External(other),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, clap::ValueEnum)]
 pub enum ColorChoice {
     /// Enables colored output only when the output is going to a terminal or TTY with support.
@@ -308,6 +317,16 @@ pub(crate) struct InstallArgs {
     /// Allow a missing configuration file.
     #[arg(long)]
     pub(crate) allow_missing_config: bool,
+
+    /// Install hooks into the `hooks` subdirectory of the given git directory (`<GIT_DIR>/hooks/`).
+    ///
+    /// When this flag is used, `prek install` bypasses the safety check that normally
+    /// refuses to install hooks while `core.hooksPath` is set. Git itself will still
+    /// ignore `.git/hooks` while `core.hooksPath` is configured, so ensure your Git
+    /// configuration points to the directory where the hook is installed if you want
+    /// it to be executed.
+    #[arg(long, value_name = "GIT_DIR", value_hint = ValueHint::DirPath)]
+    pub(crate) git_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -469,7 +488,7 @@ pub(crate) struct RunArgs {
     /// The stage during which the hook is fired.
     ///
     /// When specified, only hooks configured for that stage (for example `manual`,
-    /// `pre-commit`, or `pre-commit`) will run.
+    /// `pre-commit`, or `pre-push`) will run.
     /// Defaults to `pre-commit` if not specified.
     /// For hooks specified directly in the command line, fallback to `manual` stage if no hooks found for `pre-commit` stage.
     #[arg(long, value_enum, alias = "hook-stage")]

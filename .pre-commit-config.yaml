@@ -15,7 +15,7 @@ repos:
       - id: end-of-file-fixer
 
   - repo: https://github.com/crate-ci/typos
-    rev: v1.43.3
+    rev: v1.43.5
     hooks:
       - id: typos
 
@@ -28,6 +28,16 @@ repos:
         additional_dependencies:
           - mdformat-mkdocs==5.1.4
           - mdformat-simple-breaks==0.1.0
+
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.37.0
+    hooks:
+      - id: check-metaschema
+        files:
+          glob: prek.schema.json
+      - id: check-github-workflows
+      - id: check-renovate
+        additional_dependencies: ['json5']
 
   - repo: local
     hooks:

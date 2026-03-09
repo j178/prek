@@ -21,8 +21,8 @@ Config {
                             types: None,
                             types_or: Some(
                                 [
-                                    "python",
                                     "pyi",
+                                    "python",
                                 ],
                             ),
                             exclude_types: None,
@@ -55,8 +55,8 @@ Config {
                             types: None,
                             types_or: Some(
                                 [
-                                    "python",
                                     "pyi",
+                                    "python",
                                 ],
                             ),
                             exclude_types: None,

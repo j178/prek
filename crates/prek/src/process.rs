@@ -30,12 +30,22 @@ use std::fmt::Display;
 use std::path::Path;
 use std::process::Output;
 use std::process::{CommandArgs, CommandEnvs, ExitStatus, Stdio};
+use std::sync::LazyLock;
 
 use owo_colors::OwoColorize;
+use prek_consts::env_vars::EnvVars;
 use thiserror::Error;
 use tracing::trace;
 
 use crate::git::GIT;
+
+static LOG_TRUNCATE_LIMIT: LazyLock<usize> = LazyLock::new(|| {
+    EnvVars::var(EnvVars::PREK_LOG_TRUNCATE_LIMIT)
+        .ok()
+        .and_then(|limit| limit.parse::<usize>().ok())
+        .filter(|limit| *limit > 0)
+        .unwrap_or(120)
+});
 
 /// An error from executing a Command
 #[derive(Debug, Error)]
@@ -495,7 +505,7 @@ impl Display for Cmd {
             }
             write!(f, " {}", arg.to_string_lossy())?;
             len += arg.len() + 1;
-            if len > 120 {
+            if len > *LOG_TRUNCATE_LIMIT {
                 write!(f, " [...]",)?;
                 break;
             }
