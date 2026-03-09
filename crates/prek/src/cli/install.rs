@@ -46,6 +46,10 @@ pub(crate) async fn install(
         );
     }
 
+    let hook_mode = git::get_shared_repository_file_mode(0o755)
+        .await
+        .unwrap_or(0o755);
+
     let project = match Project::discover(config.as_deref(), &CWD) {
         Ok(project) => Some(project),
         Err(err) => {
@@ -81,6 +85,7 @@ pub(crate) async fn install(
             &hooks_path,
             overwrite,
             allow_missing_config,
+            hook_mode,
             quiet,
             verbose,
             no_progress,
@@ -166,6 +171,7 @@ fn get_hook_types(
     hook_types
 }
 
+#[allow(clippy::fn_params_excessive_bools)]
 fn install_hook_script(
     project: Option<&Project>,
     config: Option<PathBuf>,
@@ -174,6 +180,7 @@ fn install_hook_script(
     hooks_path: &Path,
     overwrite: bool,
     skip_on_missing_config: bool,
+    hook_mode: u32,
     quiet: u8,
     verbose: u8,
     no_progress: bool,
@@ -305,9 +312,13 @@ fn install_hook_script(
         use std::os::unix::fs::PermissionsExt;
 
         let mut perms = hook_path.metadata()?.permissions();
-        perms.set_mode(0o755);
+        perms.set_mode(hook_mode);
         fs_err::set_permissions(&hook_path, perms)?;
     }
+
+    // Unused on non-Unix platforms
+    #[cfg(not(unix))]
+    let _ = hook_mode;
 
     writeln!(printer.stdout(), "{hint}")?;
 

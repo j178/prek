@@ -498,6 +498,71 @@ pub(crate) async fn has_hooks_path_set() -> Result<bool> {
     }
 }
 
+/// Compute the file mode for a newly created file based on `core.sharedRepository`.
+///
+/// This mirrors the relevant parts of Git's `git_config_perm` in `setup.c`
+/// and `calc_shared_perm` in `path.c`.
+fn shared_repository_file_mode(value: &str, mode: u32) -> Option<u32> {
+    const PERM_GROUP: u32 = 0o660;
+    const PERM_EVERYBODY: u32 = 0o664;
+
+    fn apply(mode: u32, mut tweak: u32, replace: bool) -> u32 {
+        // From Git's `calc_shared_perm`: if the original file is not
+        // user-writable, do not introduce any write bits via the shared
+        // repository permission tweak.
+        if mode & 0o200 == 0 {
+            tweak &= !0o222;
+        }
+        // Also from `calc_shared_perm`: for executable files, mirror read bits
+        // into execute bits so an explicit mode like 0640 becomes 0750 when
+        // applied to a 0755 file.
+        if mode & 0o100 != 0 {
+            tweak |= (tweak & 0o444) >> 2;
+        }
+        // Named values like `group` and `all` add permissions on top of the
+        // existing mode, while octal values replace the low permission bits.
+        if replace {
+            (mode & !0o777) | tweak
+        } else {
+            mode | tweak
+        }
+    }
+
+    let value = value.trim().to_ascii_lowercase();
+    let (tweak, replace) = match value.as_str() {
+        "" | "umask" | "false" | "no" | "off" | "0" => return None,
+        "group" | "true" | "yes" | "on" | "1" => (PERM_GROUP, false),
+        "all" | "world" | "everybody" | "2" => (PERM_EVERYBODY, false),
+        // Parsed like Git's `git_config_perm`, which also accepts explicit
+        // octal modes such as `0640`.
+        _ => (u32::from_str_radix(&value, 8).ok()?, true),
+    };
+
+    // `git_config_perm` rejects explicit modes that do not grant user read/write.
+    if replace && tweak & 0o600 != 0o600 {
+        return None;
+    }
+
+    Some(apply(mode, tweak, replace))
+}
+
+/// Resolve the file mode implied by `core.sharedRepository` for a newly created file.
+pub(crate) async fn get_shared_repository_file_mode(mode: u32) -> Result<u32> {
+    let output = git_cmd("get shared repository config")?
+        .arg("config")
+        .arg("--get")
+        .arg("core.sharedRepository")
+        .check(false)
+        .output()
+        .await?;
+    if output.status.success() {
+        let value = str::from_utf8(&output.stdout)?;
+        Ok(shared_repository_file_mode(value, mode).unwrap_or(mode))
+    } else {
+        Ok(mode)
+    }
+}
+
 pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<FxHashSet<PathBuf>, Error> {
     if paths.is_empty() {
         return Ok(FxHashSet::default());
@@ -650,4 +715,36 @@ pub(crate) fn list_submodules(git_root: &Path) -> Result<Vec<PathBuf>, Error> {
         .filter_map(|line| line.split_whitespace().nth(1))
         .map(|submodule| git_root.join(submodule))
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::shared_repository_file_mode;
+
+    #[test]
+    fn shared_repository_group_mode_matches_git_behavior() {
+        for value in ["group", "true", "yes", "on", "1"] {
+            assert_eq!(shared_repository_file_mode(value, 0o755), Some(0o775));
+        }
+    }
+
+    #[test]
+    fn shared_repository_everybody_mode_matches_git_behavior() {
+        for value in ["all", "world", "everybody", "2"] {
+            assert_eq!(shared_repository_file_mode(value, 0o755), Some(0o775));
+        }
+    }
+
+    #[test]
+    fn shared_repository_octal_mode_matches_git_behavior() {
+        assert_eq!(shared_repository_file_mode("0640", 0o644), Some(0o640));
+        assert_eq!(shared_repository_file_mode("0640", 0o755), Some(0o750));
+    }
+
+    #[test]
+    fn shared_repository_umask_or_invalid_values_do_not_override_mode() {
+        for value in ["", "umask", "false", "no", "off", "0", "invalid", "0400"] {
+            assert_eq!(shared_repository_file_mode(value, 0o755), None);
+        }
+    }
 }
