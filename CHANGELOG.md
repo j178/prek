@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.3.5
+
+Released on 2026-03-09.
+
+### Enhancements
+
+- Add automatic Ruby download support using rv binaries ([#1668](https://github.com/j178/prek/pull/1668))
+- Adjust open file limit on process startup ([#1705](https://github.com/j178/prek/pull/1705))
+- Allow parallel gem retry ([#1732](https://github.com/j178/prek/pull/1732))
+- Enable system-proxy feature on reqwest ([#1738](https://github.com/j178/prek/pull/1738))
+- Expose `--git-dir` to force hook installation target ([#1723](https://github.com/j178/prek/pull/1723))
+- Pass `--quiet`, `--verbose`, and `--no-progress` through `prek install` into generated hook scripts ([#1753](https://github.com/j178/prek/pull/1753))
+- Respect `core.sharedRepository` for hook permissions ([#1755](https://github.com/j178/prek/pull/1755))
+- Support legacy mode hook script ([#1706](https://github.com/j178/prek/pull/1706))
+- rust: support `cli:` git dependency 4th segment package disambiguation ([#1747](https://github.com/j178/prek/pull/1747))
+
+### Bug fixes
+
+- Fix Python `__main__.py` entry ([#1741](https://github.com/j178/prek/pull/1741))
+- python: strip `UV_SYSTEM_PYTHON` from `uv venv` and `pip install` commands ([#1756](https://github.com/j178/prek/pull/1756))
+
+### Other changes
+
+- Sync latest identify tags ([#1733](https://github.com/j178/prek/pull/1733))
+
+### Contributors
+
+- @Dev-iL
+- @tennox
+- @shaanmajid
+- @is-alnilam
+- @github-actions
+- @j178
+
 ## 0.3.4
 
 Released on 2026-02-28.
