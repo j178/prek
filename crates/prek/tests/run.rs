@@ -1539,14 +1539,14 @@ fn init_nonexistent_repo() {
         ])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters, context.run(), @r"
+    cmd_snapshot!(filters, context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to init hooks
-      caused by: Failed to initialize repo `https://notexistentatallnevergonnahappen.com/nonexistent/repo`
+      caused by: Failed to clone repo `https://notexistentatallnevergonnahappen.com/nonexistent/repo`
       caused by: Command `git full clone` exited with an error:
 
     [status]

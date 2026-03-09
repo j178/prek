@@ -6,7 +6,6 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use anyhow::Result;
-use futures::StreamExt;
 use ignore::WalkState;
 use itertools::zip_eq;
 use owo_colors::OwoColorize;
@@ -22,7 +21,6 @@ use crate::fs::Simplified;
 use crate::git::GIT_ROOT;
 use crate::hook::HookSpec;
 use crate::hook::{self, Hook, HookBuilder, Repo};
-use crate::run::CONCURRENCY;
 use crate::store::{CacheBucket, Store};
 use crate::{git, store, warn_user};
 
@@ -46,12 +44,8 @@ pub(crate) enum Error {
     #[error("Hook `{hook}` not present in repo `{repo}`")]
     HookNotFound { hook: String, repo: String },
 
-    #[error("Failed to initialize repo `{repo}`")]
-    Store {
-        repo: String,
-        #[source]
-        error: Box<store::Error>,
-    },
+    #[error(transparent)]
+    Store(#[from] store::Error),
 }
 
 pub(crate) trait HookInitReporter {
@@ -282,8 +276,6 @@ impl Project {
         store: &Store,
         reporter: Option<&dyn HookInitReporter>,
     ) -> Result<(), Error> {
-        let remote_repos = Mutex::new(FxHashMap::default());
-
         let mut seen = FxHashSet::default();
 
         // Prepare remote repos in parallel.
@@ -292,38 +284,18 @@ impl Project {
             config::Repo::Remote(repo) if seen.insert(repo) => Some(repo),
             _ => None,
         });
+        let cloned_repos = store.clone_repos(remotes_iter, reporter).await?;
 
-        let mut tasks =
-            futures::stream::iter(remotes_iter)
-                .map(async |repo_config| {
-                    let path = store.clone_repo(repo_config, reporter).await.map_err(|e| {
-                        Error::Store {
-                            repo: repo_config.repo.clone(),
-                            error: Box::new(e),
-                        }
-                    })?;
-
-                    let repo = Arc::new(Repo::remote(
-                        repo_config.repo.clone(),
-                        repo_config.rev.clone(),
-                        path,
-                    )?);
-                    remote_repos
-                        .lock()
-                        .unwrap()
-                        .insert(repo_config, repo.clone());
-
-                    Ok::<(), Error>(())
-                })
-                .buffer_unordered(*CONCURRENCY);
-
-        while let Some(result) = tasks.next().await {
-            result?;
+        let mut remote_repos = FxHashMap::default();
+        for (repo_config, path) in cloned_repos {
+            let repo = Arc::new(Repo::remote(
+                repo_config.repo.clone(),
+                repo_config.rev.clone(),
+                path,
+            )?);
+            remote_repos.insert(repo_config, repo);
         }
 
-        drop(tasks);
-
-        let remote_repos = remote_repos.into_inner().unwrap();
         let mut repos = Vec::with_capacity(self.config.repos.len());
 
         for repo in &self.config.repos {
@@ -922,8 +894,6 @@ impl Workspace {
     ) -> Result<(), Error> {
         #[allow(clippy::mutable_key_type)]
         let remote_repos = {
-            let remote_repos = Mutex::new(FxHashMap::default());
-
             let mut seen = FxHashSet::default();
 
             // Prepare remote repos in parallel.
@@ -935,40 +905,21 @@ impl Workspace {
                     // Deduplicate remote repos.
                     config::Repo::Remote(repo) if seen.insert(repo) => Some(repo),
                     _ => None,
-                })
-                .cloned(); // TODO: avoid clone
+                });
 
-            let mut tasks = futures::stream::iter(remotes_iter)
-                .map(async |repo_config| {
-                    let path = store
-                        .clone_repo(&repo_config, reporter)
-                        .await
-                        .map_err(|e| Error::Store {
-                            repo: repo_config.repo.clone(),
-                            error: Box::new(e),
-                        })?;
+            let cloned_repos = store.clone_repos(remotes_iter, reporter).await?;
 
-                    let repo = Arc::new(Repo::remote(
-                        repo_config.repo.clone(),
-                        repo_config.rev.clone(),
-                        path,
-                    )?);
-                    remote_repos
-                        .lock()
-                        .unwrap()
-                        .insert(repo_config, repo.clone());
-
-                    Ok::<(), Error>(())
-                })
-                .buffer_unordered(*CONCURRENCY);
-
-            while let Some(result) = tasks.next().await {
-                result?;
+            let mut remote_repos = FxHashMap::default();
+            for (repo_config, path) in cloned_repos {
+                let repo = Arc::new(Repo::remote(
+                    repo_config.repo.clone(),
+                    repo_config.rev.clone(),
+                    path,
+                )?);
+                remote_repos.insert(repo_config, repo);
             }
 
-            drop(tasks);
-
-            remote_repos.into_inner().unwrap()
+            remote_repos
         };
 
         for project in &mut self.projects {

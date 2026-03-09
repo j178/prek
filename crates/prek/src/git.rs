@@ -390,7 +390,54 @@ pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum TerminalPrompt {
+    Disabled,
+    Enabled,
+}
+
+impl TerminalPrompt {
+    fn env_value(self) -> &'static str {
+        match self {
+            Self::Disabled => "0",
+            Self::Enabled => "1",
+        }
+    }
+}
+
+/// Return whether a git clone failure looks like an authentication error.
+pub(crate) fn is_auth_error(err: &Error) -> bool {
+    let Error::Command(process::Error::Status {
+        error: StatusError {
+            output: Some(output),
+            ..
+        },
+        ..
+    }) = err
+    else {
+        return false;
+    };
+
+    let error = String::from_utf8_lossy(&output.stderr).to_lowercase();
+
+    [
+        "terminal prompts disabled",
+        "could not read username",
+        "could not read password",
+        "authentication failed",
+        "http basic: access denied",
+        "missing or invalid credentials",
+        "could not authenticate to server",
+    ]
+    .iter()
+    .any(|needle| error.contains(needle))
+}
+
+async fn shallow_clone(
+    rev: &str,
+    path: &Path,
+    terminal_prompt: TerminalPrompt,
+) -> Result<(), Error> {
     git_cmd("git shallow clone")?
         .current_dir(path)
         .arg("-c")
@@ -399,10 +446,9 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .arg("origin")
         .arg(rev)
         .arg("--depth=1")
-        // Disable interactive prompts in the terminal, as they'll be erased by the progress bar
-        // animation and the process will "hang".
-        .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
         .remove_git_envs()
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
         .output()
         .await?;
@@ -413,6 +459,8 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .arg("FETCH_HEAD")
         .remove_git_envs()
         .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
         .output()
         .await?;
@@ -426,8 +474,9 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .arg("--init")
         .arg("--recursive")
         .arg("--depth=1")
-        .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
         .remove_git_envs()
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
         .output()
         .await?;
@@ -435,14 +484,15 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
+async fn full_clone(rev: &str, path: &Path, terminal_prompt: TerminalPrompt) -> Result<(), Error> {
     git_cmd("git full clone")?
         .current_dir(path)
         .arg("fetch")
         .arg("origin")
         .arg("--tags")
-        .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
         .remove_git_envs()
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
         .output()
         .await?;
@@ -451,8 +501,10 @@ async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .current_dir(path)
         .arg("checkout")
         .arg(rev)
-        .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
         .remove_git_envs()
+        .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
         .output()
         .await?;
@@ -463,8 +515,9 @@ async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .arg("update")
         .arg("--init")
         .arg("--recursive")
-        .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
         .remove_git_envs()
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
         .output()
         .await?;
@@ -472,15 +525,33 @@ async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-pub(crate) async fn clone_repo(url: &str, rev: &str, path: &Path) -> Result<(), Error> {
-    init_repo(url, path).await?;
+async fn clone_repo_attempt(
+    rev: &str,
+    path: &Path,
+    terminal_prompt: TerminalPrompt,
+) -> Result<(), Error> {
+    if let Err(err) = shallow_clone(rev, path, terminal_prompt).await {
+        if is_auth_error(&err) {
+            warn!(?err, "Failed to shallow clone due to authentication error");
+            return Err(err);
+        }
 
-    if let Err(err) = shallow_clone(rev, path).await {
         warn!(?err, "Failed to shallow clone, falling back to full clone");
-        full_clone(rev, path).await
-    } else {
-        Ok(())
+        return full_clone(rev, path, terminal_prompt).await;
     }
+
+    Ok(())
+}
+
+/// Clone a repository into an initialized destination with the requested terminal prompt mode.
+pub(crate) async fn clone_repo(
+    url: &str,
+    rev: &str,
+    path: &Path,
+    terminal_prompt: TerminalPrompt,
+) -> Result<(), Error> {
+    init_repo(url, path).await?;
+    clone_repo_attempt(rev, path, terminal_prompt).await
 }
 
 pub(crate) async fn has_hooks_path_set() -> Result<bool> {

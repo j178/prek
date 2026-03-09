@@ -26,8 +26,11 @@ Running `prek install` installs the first type: it writes the Git hook so that G
 ## How do I use hooks from private repositories?
 
 prek supports cloning hooks from private repositories that require authentication.
-Since prek disables interactive terminal prompts (to prevent CI hangs), you'll need
-to configure credentials via credential helpers, environment variables, or SSH.
+prek first clones with interactive terminal prompts disabled so non-interactive runs do
+not hang. If a clone fails with an authentication error and prek is not running in CI,
+it retries with terminal prompts enabled so Git can ask for credentials. In CI,
+interactive prompts remain disabled, so you still need to configure credentials via
+credential helpers, environment variables, or SSH.
 
 ### Option 1: Credential helpers (recommended)
 
