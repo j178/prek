@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+TARGET_WORKSPACE=${HYPERFINE_BENCHMARK_WORKSPACE:?HYPERFINE_BENCHMARK_WORKSPACE is required}
+
 # Create a clean test directory with files to run builtin hooks against
-rm -rf /tmp/prek-bench
-mkdir -p /tmp/prek-bench
-cd /tmp/prek-bench
+rm -rf "$TARGET_WORKSPACE"
+mkdir -p "$TARGET_WORKSPACE"
+cd "$TARGET_WORKSPACE"
 git init || { echo "Failed to init git"; exit 1; }
 git config user.name "Benchmark"
 git config user.email "bench@prek.dev"
