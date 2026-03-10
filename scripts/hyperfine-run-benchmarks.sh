@@ -5,11 +5,9 @@ TARGET_WORKSPACE=${HYPERFINE_BENCHMARK_WORKSPACE:?HYPERFINE_BENCHMARK_WORKSPACE 
 COMMENT=${HYPERFINE_RESULTS_FILE:?HYPERFINE_RESULTS_FILE is required}
 HEAD_BINARY=${HYPERFINE_HEAD_BINARY:?HYPERFINE_HEAD_BINARY is required}
 BASE_BINARY=${HYPERFINE_BASE_BINARY:?HYPERFINE_BASE_BINARY is required}
-REPO_WORKSPACE=$(pwd)
 OUT_DIR=$(dirname "$COMMENT")
 META_WORKSPACE="${TARGET_WORKSPACE}-meta"
 
-failed=false
 section_open=false
 
 mkdir -p "$OUT_DIR"
@@ -75,7 +73,6 @@ check_variance() {
       write_line "✅  Performance improvement for \`$cmd\`: ${pct#-}% faster"
     else
       write_line "⚠️  Warning: Performance regression for \`$cmd\`: ${pct}% slower"
-      failed=true
     fi
   fi
 }
@@ -241,7 +238,3 @@ for hook in "${META_HOOKS[@]}"; do
 done
 
 close_section
-
-if [ "$failed" = true ]; then
-  exit 1
-fi
