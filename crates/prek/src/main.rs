@@ -244,7 +244,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.includes,
                 args.skips,
                 args.hook_types,
-                args.install_hooks,
+                args.prepare_hooks,
                 args.overwrite,
                 args.allow_missing_config,
                 cli.globals.refresh,
@@ -256,8 +256,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             )
             .await
         }
-        Command::InstallHooks(args) => {
-            cli::install_hooks(
+        Command::PrepareHooks(args) => {
+            cli::prepare_hooks(
                 &store,
                 cli.globals.config,
                 args.includes,

@@ -458,7 +458,7 @@ fn install_uses_explicit_shared_repository_mode() {
     );
 }
 
-/// Run `prek install --install-hooks` to install the git hook and create prek hook environments.
+/// Run `prek install --prepare-hooks` to install the git hook and prepare prek hook environments.
 #[test]
 fn install_with_hooks() -> anyhow::Result<()> {
     let context = TestContext::new();
@@ -484,7 +484,7 @@ fn install_with_hooks() -> anyhow::Result<()> {
         .child("hooks")
         .assert(predicates::path::missing());
 
-    cmd_snapshot!(context.filters(), context.install().arg("--install-hooks"), @r#"
+    cmd_snapshot!(context.filters(), context.install().arg("--prepare-hooks"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -517,6 +517,39 @@ fn install_with_hooks() -> anyhow::Result<()> {
             "#);
         }
     );
+
+    Ok(())
+}
+
+#[test]
+fn install_with_legacy_install_hooks_flag_alias() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: test-hook
+                name: Test Hook
+                language: python
+                entry: python -c 'print("test")'
+    "#});
+
+    context
+        .home_dir()
+        .child("hooks")
+        .assert(predicates::path::missing());
+
+    cmd_snapshot!(context.filters(), context.install().arg("--install-hooks"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    "#);
+
+    assert_eq!(context.home_dir().child("hooks").read_dir()?.count(), 1);
 
     Ok(())
 }
@@ -568,7 +601,7 @@ fn install_with_existing_legacy_hook() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Run `prek install-hooks` to create prek hook environments without installing the git hook.
+/// Run `prek prepare-hooks` to prepare prek hook environments without installing the git hook.
 #[test]
 fn install_hooks_only() -> anyhow::Result<()> {
     let context = TestContext::new();
@@ -594,7 +627,7 @@ fn install_hooks_only() -> anyhow::Result<()> {
         .child("hooks")
         .assert(predicates::path::missing());
 
-    cmd_snapshot!(context.filters(), context.install_hooks(), @r#"
+    cmd_snapshot!(context.filters(), context.prepare_hooks(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -611,6 +644,41 @@ fn install_hooks_only() -> anyhow::Result<()> {
         .work_dir()
         .child(".git/hooks/pre-commit")
         .assert(predicates::path::missing());
+
+    Ok(())
+}
+
+#[test]
+fn install_with_legacy_install_hooks_subcommand_alias() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: test-hook
+                name: Test Hook
+                language: python
+                entry: python -c 'print("test")'
+        "#});
+
+    context
+        .home_dir()
+        .child("hooks")
+        .assert(predicates::path::missing());
+
+    cmd_snapshot!(
+        context.filters(),
+        context.command().arg("install-hooks"),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "#);
+
+    assert_eq!(context.home_dir().child("hooks").read_dir()?.count(), 1);
 
     Ok(())
 }
@@ -1127,7 +1195,7 @@ fn workspace_install_hooks() -> anyhow::Result<()> {
     context.git_add(".");
 
     // Install by selectors
-    cmd_snapshot!(context.filters(), context.install_hooks().arg("project3").arg("--skip").arg("project3/project5/"), @r"
+    cmd_snapshot!(context.filters(), context.prepare_hooks().arg("project3").arg("--skip").arg("project3/project5/"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1136,7 +1204,7 @@ fn workspace_install_hooks() -> anyhow::Result<()> {
     ");
 
     // Install all hooks
-    cmd_snapshot!(context.filters(), context.install_hooks(), @r"
+    cmd_snapshot!(context.filters(), context.prepare_hooks(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
