@@ -9,11 +9,10 @@ use clap::ValueEnum;
 use fancy_regex::Regex;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use itertools::Itertools;
+use prek_identify::TagSet;
 use rustc_hash::FxHashMap;
 use serde::de::{Error as DeError, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
-
-use prek_identify::TagSet;
 
 use crate::fs::Simplified;
 use crate::install_source::InstallSource;
