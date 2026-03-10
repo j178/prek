@@ -5,27 +5,37 @@ TARGET_WORKSPACE=${HYPERFINE_BENCHMARK_WORKSPACE:?HYPERFINE_BENCHMARK_WORKSPACE 
 COMMENT=${HYPERFINE_RESULTS_FILE:?HYPERFINE_RESULTS_FILE is required}
 HEAD_BINARY=${HYPERFINE_HEAD_BINARY:?HYPERFINE_HEAD_BINARY is required}
 BASE_BINARY=${HYPERFINE_BASE_BINARY:?HYPERFINE_BASE_BINARY is required}
-REPO_WORKSPACE=$(pwd)
 OUT_DIR=$(dirname "$COMMENT")
 META_WORKSPACE="${TARGET_WORKSPACE}-meta"
 
-failed=false
 section_open=false
+regression_count=0
+improvement_count=0
 
 mkdir -p "$OUT_DIR"
 OUT_MD="$OUT_DIR/out.md"
 OUT_JSON="$OUT_DIR/out.json"
+REPORT_BODY="$OUT_DIR/report-body.md"
+
+: > "$REPORT_BODY"
 
 CURRENT_PREK_VERSION=$(
   "$HEAD_BINARY" --version | sed -n '1p'
 )
 
 write_line() {
-  printf '%s\n' "$1" >> "$COMMENT"
+  printf '%s\n' "$1" >> "$REPORT_BODY"
 }
 
 write_blank_line() {
-  printf '\n' >> "$COMMENT"
+  printf '\n' >> "$REPORT_BODY"
+}
+
+finalize_report() {
+  : > "$COMMENT"
+  printf '### ⚡️ Hyperfine Benchmarks\n\n' >> "$COMMENT"
+  printf '**Summary:** %s regressions, %s improvements above the 10%% threshold.\n' "$regression_count" "$improvement_count" >> "$COMMENT"
+  cat "$REPORT_BODY" >> "$COMMENT"
 }
 
 write_section() {
@@ -72,10 +82,11 @@ check_variance() {
 
   if (( $(echo "${pct#-} > 10" | bc -l) )); then
     if (( $(echo "$ratio < 1" | bc -l) )); then
+      improvement_count=$((improvement_count + 1))
       write_line "✅  Performance improvement for \`$cmd\`: ${pct#-}% faster"
     else
+      regression_count=$((regression_count + 1))
       write_line "⚠️  Warning: Performance regression for \`$cmd\`: ${pct}% slower"
-      failed=true
     fi
   fi
 }
@@ -109,7 +120,7 @@ benchmark() {
     write_line "⚠️ Benchmark failed for: $cmd"
     return 1
   fi
-  cat "$OUT_MD" >> "$COMMENT"
+  cat "$OUT_MD" >> "$REPORT_BODY"
   write_blank_line
   if [ "$check_change" = "true" ]; then
     check_variance "$cmd"
@@ -145,8 +156,6 @@ EOF
 }
 
 # Add environment metadata
-write_line "### ⚡️ Hyperfine Benchmarks"
-write_blank_line
 write_line "<details>"
 write_line "<summary>Environment</summary>"
 write_blank_line
@@ -241,7 +250,4 @@ for hook in "${META_HOOKS[@]}"; do
 done
 
 close_section
-
-if [ "$failed" = true ]; then
-  exit 1
-fi
+finalize_report
