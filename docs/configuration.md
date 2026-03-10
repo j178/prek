@@ -160,6 +160,26 @@ Example:
     ]
     ```
 
+The previous example uses multiline inline tables, a feature that was introduced in
+[TOML 1.1](https://toml.io/en/v1.1.0), not all parsers have support for it yet.
+You may want to use the longer form if your editor/IDE complains about it.
+
+=== "prek.toml"
+
+    ```toml
+    default_language_version.python = "3.12"
+
+    [[repos]]
+    repo = "local"
+
+    [[repos.hooks]]
+    id = "ruff"
+    name = "ruff"
+    language = "system"
+    entry = "python3 -m ruff check"
+    files = "\\.py$"
+    ```
+
 #### YAML (`.pre-commit-config.yaml` / `.yml`)
 
 Practical notes:
