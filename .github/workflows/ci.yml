@@ -71,7 +71,7 @@ jobs:
               RUST_CODE_CHANGED=true
             fi
 
-            if [[ "${file}" == ".github/workflows/performance.yml" ]] || [[ "${file}" =~ ^\.github/scripts/hyperfine-.*\.sh$ ]]; then
+            if [[ "${file}" == ".github/workflows/performance.yml" ]] || [[ "${file}" =~ ^scripts/hyperfine-.*\.sh$ ]]; then
               echo "Detected benchmark-related change: ${file}"
               BENCH_RELATED_CHANGED=true
             fi

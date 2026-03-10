@@ -157,10 +157,10 @@ jobs:
           tool: hyperfine
 
       - name: Setup test environment for builtin hooks
-        run: .github/scripts/hyperfine-setup-test-env.sh
+        run: scripts/hyperfine-setup-test-env.sh
 
       - name: Run benchmarks
-        run: .github/scripts/hyperfine-run-benchmarks.sh
+        run: scripts/hyperfine-run-benchmarks.sh
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
