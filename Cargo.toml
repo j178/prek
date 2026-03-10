@@ -170,7 +170,7 @@ styl = "styl"
 jod = "jod"
 
 [workspace.metadata.typos.files]
-extend-exclude = [".github/scripts/macports"]
+extend-exclude = ["scripts/macports"]
 
 [workspace.metadata.cargo-shear]
 ignored = ["liblzma"]

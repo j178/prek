@@ -69,7 +69,7 @@ run = "uv pip compile docs/requirements.in --universal -o docs/requirements.txt 
 
 [tasks.update-macports]
 description = "Update MacPorts portfile"
-run = "uv run .github/scripts/update-macports-portfile.py"
+run = "uv run scripts/update-macports-portfile.py"
 
 [tasks.release]
 description = "Prepare for a release"

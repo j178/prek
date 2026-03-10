@@ -145,7 +145,7 @@ EOF
 }
 
 # Add environment metadata
-write_line "### ⚡️ Hyperfine Performance"
+write_line "### ⚡️ Hyperfine Benchmarks"
 write_blank_line
 write_line "<details>"
 write_line "<summary>Environment</summary>"

@@ -130,7 +130,7 @@ def replace_cargo_crates_block(portfile_text: str, crates_block: str) -> str:
 
 def main() -> None:
     root = repo_root()
-    default_portfile = root / ".github" / "scripts" / "macports" / "Portfile"
+    default_portfile = root / "scripts" / "macports" / "Portfile"
     portfile = Path(os.environ.get("PORTFILE", str(default_portfile)))
 
     if not portfile.is_file():
