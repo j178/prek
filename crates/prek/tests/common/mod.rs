@@ -201,9 +201,9 @@ impl TestContext {
         command
     }
 
-    pub fn install_hooks(&self) -> Command {
+    pub fn prepare_hooks(&self) -> Command {
         let mut command = self.command();
-        command.arg("install-hooks");
+        command.arg("prepare-hooks");
         command
     }
 

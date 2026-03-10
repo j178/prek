@@ -28,7 +28,7 @@ pub(crate) async fn install(
     includes: Vec<String>,
     skips: Vec<String>,
     hook_types: Vec<HookType>,
-    install_hook_environments: bool,
+    prepare_hooks: bool,
     overwrite: bool,
     allow_missing_config: bool,
     refresh: bool,
@@ -93,14 +93,14 @@ pub(crate) async fn install(
         )?;
     }
 
-    if install_hook_environments {
-        install_hooks(store, config, includes, skips, refresh, printer).await?;
+    if prepare_hooks {
+        self::prepare_hooks(store, config, includes, skips, refresh, printer).await?;
     }
 
     Ok(ExitStatus::Success)
 }
 
-pub(crate) async fn install_hooks(
+pub(crate) async fn prepare_hooks(
     store: &Store,
     config: Option<PathBuf>,
     includes: Vec<String>,

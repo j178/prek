@@ -37,7 +37,7 @@ pub(crate) use cache_size::cache_size;
 use completion::selector_completer;
 pub(crate) use hook_impl::hook_impl;
 pub(crate) use identify::identify;
-pub(crate) use install::{init_template_dir, install, install_hooks, uninstall};
+pub(crate) use install::{init_template_dir, install, prepare_hooks, uninstall};
 pub(crate) use list::list;
 pub(crate) use list_builtins::list_builtins;
 pub(crate) use run::run;
@@ -215,12 +215,22 @@ pub(crate) struct GlobalArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Install prek as a git hook under the `.git/hooks/` directory.
-    Install(InstallArgs),
-    /// Create environments for all hooks used in the config file.
+    /// Install prek Git hook scripts under the `.git/hooks/` directory.
     ///
-    /// This command does not install the git hook. To install the git hook along with the hook environments in one command, use `prek install --install-hooks`.
-    InstallHooks(InstallHooksArgs),
+    /// The hook types installed by this command are determined by `--hook-type`
+    /// or `default_install_hook_types` in the config file, falling back to
+    /// `pre-commit` when neither is set.
+    ///
+    /// A hook's `stages` field does not affect which Git hook scripts this
+    /// command installs.
+    Install(InstallArgs),
+    /// Prepare environments for all hooks used in the config file.
+    ///
+    /// This command does not install the Git hook. To install the Git hook
+    /// along with the hook environments in one command, use
+    /// `prek install --prepare-hooks`.
+    #[command(alias = "install-hooks")]
+    PrepareHooks(PrepareHooksArgs),
     /// Run hooks.
     Run(Box<RunArgs>),
     /// List hooks configured in the current workspace.
@@ -297,9 +307,9 @@ pub(crate) struct InstallArgs {
     #[arg(short = 'f', long)]
     pub(crate) overwrite: bool,
 
-    /// Create environments for all hooks used in the config file.
-    #[arg(long)]
-    pub(crate) install_hooks: bool,
+    /// Also prepare environments for all hooks used in the config file.
+    #[arg(long, alias = "install-hooks")]
+    pub(crate) prepare_hooks: bool,
 
     /// Which hook type(s) to install.
     ///
@@ -330,7 +340,7 @@ pub(crate) struct InstallArgs {
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct InstallHooksArgs {
+pub(crate) struct PrepareHooksArgs {
     /// Include the specified hooks or projects.
     ///
     /// Supports flexible selector syntax:

@@ -12,8 +12,8 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="#prek-install"><code>prek install</code></a></dt><dd><p>Install prek as a git hook under the <code>.git/hooks/</code> directory</p></dd>
-<dt><a href="#prek-install-hooks"><code>prek install-hooks</code></a></dt><dd><p>Create environments for all hooks used in the config file</p></dd>
+<dl class="cli-reference"><dt><a href="#prek-install"><code>prek install</code></a></dt><dd><p>Install prek Git hook scripts under the <code>.git/hooks/</code> directory</p></dd>
+<dt><a href="#prek-prepare-hooks"><code>prek prepare-hooks</code></a></dt><dd><p>Prepare environments for all hooks used in the config file</p></dd>
 <dt><a href="#prek-run"><code>prek run</code></a></dt><dd><p>Run hooks</p></dd>
 <dt><a href="#prek-list"><code>prek list</code></a></dt><dd><p>List hooks configured in the current workspace</p></dd>
 <dt><a href="#prek-uninstall"><code>prek uninstall</code></a></dt><dd><p>Uninstall prek from git hooks</p></dd>
@@ -29,7 +29,11 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 
 ## prek install
 
-Install prek as a git hook under the `.git/hooks/` directory
+Install prek Git hook scripts under the `.git/hooks/` directory.
+
+The hook types installed by this command are determined by `--hook-type` or `default_install_hook_types` in the config file, falling back to `pre-commit` when neither is set.
+
+A hook's `stages` field does not affect which Git hook scripts this command installs.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -85,11 +89,11 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 <li><code>pre-push</code></li>
 <li><code>pre-rebase</code></li>
 <li><code>prepare-commit-msg</code></li>
-</ul></dd><dt id="prek-install--install-hooks"><a href="#prek-install--install-hooks"><code>--install-hooks</code></a></dt><dd><p>Create environments for all hooks used in the config file</p>
-</dd><dt id="prek-install--log-file"><a href="#prek-install--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
+</ul></dd><dt id="prek-install--log-file"><a href="#prek-install--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
 </dd><dt id="prek-install--no-progress"><a href="#prek-install--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
 </dd><dt id="prek-install--overwrite"><a href="#prek-install--overwrite"><code>--overwrite</code></a>, <code>-f</code></dt><dd><p>Overwrite existing hooks</p>
+</dd><dt id="prek-install--prepare-hooks"><a href="#prek-install--prepare-hooks"><code>--prepare-hooks</code></a>, <code>--install-hooks</code></dt><dd><p>Also prepare environments for all hooks used in the config file</p>
 </dd><dt id="prek-install--quiet"><a href="#prek-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-install--refresh"><a href="#prek-install--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
@@ -111,21 +115,21 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-install--version"><a href="#prek-install--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
-## prek install-hooks
+## prek prepare-hooks
 
-Create environments for all hooks used in the config file.
+Prepare environments for all hooks used in the config file.
 
-This command does not install the git hook. To install the git hook along with the hook environments in one command, use `prek install --install-hooks`.
+This command does not install the Git hook. To install the Git hook along with the hook environments in one command, use `prek install --prepare-hooks`.
 
 <h3 class="cli-reference">Usage</h3>
 
 ```
-prek install-hooks [OPTIONS] [HOOK|PROJECT]...
+prek prepare-hooks [OPTIONS] [HOOK|PROJECT]...
 ```
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="prek-install-hooks--includes"><a href="#prek-install-hooks--includes"><code>HOOK|PROJECT</code></a></dt><dd><p>Include the specified hooks or projects.</p>
+<dl class="cli-reference"><dt id="prek-prepare-hooks--includes"><a href="#prek-prepare-hooks--includes"><code>HOOK|PROJECT</code></a></dt><dd><p>Include the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
 <li>
@@ -143,22 +147,22 @@ prek install-hooks [OPTIONS] [HOOK|PROJECT]...
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt id="prek-install-hooks--cd"><a href="#prek-install-hooks--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
-</dd><dt id="prek-install-hooks--color"><a href="#prek-install-hooks--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
+<dl class="cli-reference"><dt id="prek-prepare-hooks--cd"><a href="#prek-prepare-hooks--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
+</dd><dt id="prek-prepare-hooks--color"><a href="#prek-prepare-hooks--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
 <p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
 <ul>
 <li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
 <li><code>always</code>:  Enables colored output regardless of the detected environment</li>
 <li><code>never</code>:  Disables colored output</li>
-</ul></dd><dt id="prek-install-hooks--config"><a href="#prek-install-hooks--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
-</dd><dt id="prek-install-hooks--help"><a href="#prek-install-hooks--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="prek-install-hooks--log-file"><a href="#prek-install-hooks--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
-</dd><dt id="prek-install-hooks--no-progress"><a href="#prek-install-hooks--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+</ul></dd><dt id="prek-prepare-hooks--config"><a href="#prek-prepare-hooks--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
+</dd><dt id="prek-prepare-hooks--help"><a href="#prek-prepare-hooks--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="prek-prepare-hooks--log-file"><a href="#prek-prepare-hooks--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
+</dd><dt id="prek-prepare-hooks--no-progress"><a href="#prek-prepare-hooks--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
-</dd><dt id="prek-install-hooks--quiet"><a href="#prek-install-hooks--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+</dd><dt id="prek-prepare-hooks--quiet"><a href="#prek-prepare-hooks--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
-<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-install-hooks--refresh"><a href="#prek-install-hooks--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-install-hooks--skip"><a href="#prek-install-hooks--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
+<p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-prepare-hooks--refresh"><a href="#prek-prepare-hooks--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+</dd><dt id="prek-prepare-hooks--skip"><a href="#prek-prepare-hooks--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
 <li>
@@ -172,8 +176,8 @@ prek install-hooks [OPTIONS] [HOOK|PROJECT]...
 </li>
 </ul>
 <p>Can be specified multiple times. Also accepts <code>PREK_SKIP</code> or <code>SKIP</code> environment variables (comma-delimited).</p>
-</dd><dt id="prek-install-hooks--verbose"><a href="#prek-install-hooks--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
-</dd><dt id="prek-install-hooks--version"><a href="#prek-install-hooks--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
+</dd><dt id="prek-prepare-hooks--verbose"><a href="#prek-prepare-hooks--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
+</dd><dt id="prek-prepare-hooks--version"><a href="#prek-prepare-hooks--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>
 
 ## prek run
