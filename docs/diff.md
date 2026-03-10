@@ -22,6 +22,8 @@ See the dedicated [Language Support](languages.md) page for a complete list of s
 
 ## Command line interface
 
+For a compatibility-focused command mapping, see [Compatibility with pre-commit](compatibility.md).
+
 ### `prek run`
 
 - `prek run [HOOK|PROJECT]...` supports selecting or skipping multiple projects or hooks in workspace mode. See [Running Specific Hooks or Projects](workspace.md#running-specific-hooks-or-projects) for details.
@@ -50,8 +52,7 @@ See the dedicated [Language Support](languages.md) page for a complete list of s
 - `prek cache clean` to remove all cached data.
 - `prek cache gc` to remove unused cached repositories, environments and toolchains.
 - `prek cache dir` to show the cache directory.
-
-`prek clean` and `prek gc` are also available but hidden, as `prek cache` is preferred.
+- `prek cache size` to show the total size of the cache.
 
 ## Not implemented
 

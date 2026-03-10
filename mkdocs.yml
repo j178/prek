@@ -77,6 +77,7 @@ plugins:
           - index.md
           - installation.md
           - quickstart.md
+          - compatibility.md
         Usage:
           - configuration.md
           - languages.md
@@ -98,6 +99,7 @@ nav:
     - Introduction: index.md
     - Installation: installation.md
     - Quickstart: quickstart.md
+    - Compatibility: compatibility.md
   - Usage:
     - Configuration: configuration.md
     - Language Support: languages.md
