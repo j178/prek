@@ -54,11 +54,9 @@ async fn is_in_merge() -> Result<bool> {
     }
 
     // Check if any of the merge state files exist
-    let merge_head_exists = git_dir.join("MERGE_HEAD").exists();
-    let rebase_apply_exists = git_dir.join("rebase-apply").exists();
-    let rebase_merge_exists = git_dir.join("rebase-merge").exists();
-
-    Ok(merge_head_exists || rebase_apply_exists || rebase_merge_exists)
+    Ok(git_dir.join("MERGE_HEAD").exists()
+        || git_dir.join("rebase-apply").exists()
+        || git_dir.join("rebase-merge").exists())
 }
 
 async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
@@ -83,12 +81,11 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
                 } else {
                     pattern
                 };
-                let pattern_str = String::from_utf8_lossy(pattern_display);
+                let pattern_str = str::from_utf8(pattern_display)
+                    .expect("conflict pattern should be valid UTF-8");
                 let error_message = format!(
-                    "{}:{}: Merge conflict string {:?} found\n",
+                    "{}:{line_number}: Merge conflict string {pattern_str:?} found\n",
                     filename.display(),
-                    line_number,
-                    pattern_str.as_ref()
                 );
                 output.extend(error_message.into_bytes());
                 code = 1;
