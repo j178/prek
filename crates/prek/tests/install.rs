@@ -522,6 +522,39 @@ fn install_with_hooks() -> anyhow::Result<()> {
 }
 
 #[test]
+fn install_with_legacy_install_hooks_flag_alias() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: test-hook
+                name: Test Hook
+                language: python
+                entry: python -c 'print("test")'
+    "#});
+
+    context
+        .home_dir()
+        .child("hooks")
+        .assert(predicates::path::missing());
+
+    cmd_snapshot!(context.filters(), context.install().arg("--install-hooks"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    "#);
+
+    assert_eq!(context.home_dir().child("hooks").read_dir()?.count(), 1);
+
+    Ok(())
+}
+
+#[test]
 fn install_with_existing_legacy_hook() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
@@ -611,6 +644,41 @@ fn install_hooks_only() -> anyhow::Result<()> {
         .work_dir()
         .child(".git/hooks/pre-commit")
         .assert(predicates::path::missing());
+
+    Ok(())
+}
+
+#[test]
+fn install_with_legacy_install_hooks_subcommand_alias() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: test-hook
+                name: Test Hook
+                language: python
+                entry: python -c 'print("test")'
+        "#});
+
+    context
+        .home_dir()
+        .child("hooks")
+        .assert(predicates::path::missing());
+
+    cmd_snapshot!(
+        context.filters(),
+        context.command().arg("install-hooks"),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "#);
+
+    assert_eq!(context.home_dir().child("hooks").read_dir()?.count(), 1);
 
     Ok(())
 }
