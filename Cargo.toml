@@ -56,6 +56,7 @@ libc = { version = "0.2.182" }
 liblzma = { version = "0.4.5", features = ["static"] }
 mea = { version = "0.6.3" }
 memchr = { version = "2.7.5" }
+mimalloc = { version = "0.1.48" }
 owo-colors = { version = "4.1.0" }
 path-clean = { version = "1.0.1" }
 phf = { version = "0.13.1", default-features = false, features = ["macros"] }
@@ -88,6 +89,7 @@ strum = { version = "0.28.0", features = ["derive"] }
 target-lexicon = { version = "0.13.0" }
 tempfile = { version = "3.25.0" }
 thiserror = { version = "2.0.11" }
+tikv-jemallocator = { version = "0.6.1" }
 tokio = { version = "1.47.1", features = [
   "fs",
   "io-std",
