@@ -169,6 +169,9 @@ edn = "edn"
 styl = "styl"
 jod = "jod"
 
+[workspace.metadata.typos.files]
+extend-exclude = [".github/scripts/macports"]
+
 [workspace.metadata.cargo-shear]
 ignored = ["liblzma"]
 
