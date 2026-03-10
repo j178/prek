@@ -197,12 +197,17 @@ impl Cmd {
 
     #[cfg(not(windows))]
     pub async fn pty_output(&mut self) -> Result<Output, Error> {
-        use tokio::io::AsyncReadExt;
-
         // If color is not used, fallback to piped output.
         if !*crate::run::USE_COLOR {
             return self.output().await;
         }
+
+        self.pty_output_inner().await
+    }
+
+    #[cfg(not(windows))]
+    async fn pty_output_inner(&mut self) -> Result<Output, Error> {
+        use tokio::io::AsyncReadExt;
 
         let (mut pty, pts) = prek_pty::open()?;
         let (_, stdout, stderr) = pts.setup_subprocess()?;
@@ -253,18 +258,7 @@ impl Cmd {
                 }
                 status = child.wait() => {
                     let status = status?;
-                    // On linux, after child exited, the pty `AsyncFd.poll_read_ready` will hang immediately.
-                    // Don't know why, so commenting this out for now.
-
-                    // Child finished, do one final read to get any remaining output
-                    // loop {
-                    //     match pty.read(&mut buffer).await {
-                    //         Ok(0) => break, // EOF
-                    //         Ok(n) => stdout.extend_from_slice(&buffer[..n]),
-                    //         Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
-                    //         Err(_) => break, // Other errors, stop reading
-                    //     }
-                    // }
+                    drain_ready_pty(&mut pty, &mut stdout, &mut buffer).await?;
                     break status;
                 }
             }
@@ -294,6 +288,26 @@ impl Cmd {
         })?;
         self.maybe_check_status(status)?;
         Ok(status)
+    }
+}
+
+#[cfg(not(windows))]
+async fn drain_ready_pty(
+    pty: &mut prek_pty::Pty,
+    stdout: &mut Vec<u8>,
+    buffer: &mut [u8; 4096],
+) -> Result<(), Error> {
+    use tokio::io::AsyncReadExt;
+    use tokio::time::{Duration, timeout};
+
+    loop {
+        match timeout(Duration::from_millis(20), pty.read(buffer)).await {
+            Ok(Ok(0)) => return Ok(()),
+            Ok(Ok(n)) => stdout.extend_from_slice(&buffer[..n]),
+            Err(_) => return Ok(()),
+            Ok(Err(err)) if err.kind() == std::io::ErrorKind::WouldBlock => return Ok(()),
+            Ok(Err(err)) => return Err(Error::PtySetup(err)),
+        }
     }
 }
 
@@ -511,5 +525,28 @@ impl Display for Cmd {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(all(test, not(windows)))]
+mod tests {
+    use super::Cmd;
+
+    #[tokio::test]
+    async fn pty_output_captures_trailing_output_after_fast_exit() {
+        for _ in 0..20 {
+            let output = Cmd::new("/bin/sh", "pty trailing output test")
+                .arg("-c")
+                .arg("printf 'FINAL\\n'")
+                .check(false)
+                .pty_output_inner()
+                .await
+                .expect("pty command should succeed");
+
+            assert!(output.status.success());
+            let stdout = String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n");
+            assert_eq!(stdout, "FINAL\n");
+            assert!(output.stderr.is_empty());
+        }
     }
 }
