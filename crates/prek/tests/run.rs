@@ -2169,11 +2169,11 @@ fn selectors_completion() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    install	Install prek Git hook scripts under the `.git/hooks/` directory
+    install	Install prek Git shims under the `.git/hooks/` directory
     prepare-hooks	Prepare environments for all hooks used in the config file
     run	Run hooks
     list	List hooks configured in the current workspace
-    uninstall	Uninstall prek from git hooks
+    uninstall	Uninstall prek Git shims
     validate-config	Validate configuration files (prek.toml or .pre-commit-config.yaml)
     validate-manifest	Validate `.pre-commit-hooks.yaml` files
     sample-config	Produce a sample configuration file (prek.toml or .pre-commit-config.yaml)
@@ -2553,7 +2553,7 @@ fn show_diff_on_failure() -> Result<()> {
     filters.push((r"index \w{7}\.\.\w{7} \d{6}", "index [OLD]..[NEW] 100644"));
 
     // When failed in CI environment
-    cmd_snapshot!(filters.clone(), context.run().env(EnvVars::CI, "1").arg("--show-diff-on-failure").arg("-v"), @r"
+    cmd_snapshot!(filters.clone(), context.run().env(EnvVars::CI, "1").arg("--show-diff-on-failure").arg("-v"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2564,7 +2564,7 @@ fn show_diff_on_failure() -> Result<()> {
 
     hint: Some hooks made changes to the files.
     If you are seeing this message in CI, reproduce locally with: `prek run --all-files`
-    To run prek as part of git workflow, use `prek install` to set up git hooks.
+    To run prek as part of Git workflow, use `prek install` to set up Git shims.
 
     All changes made by hooks:
     diff --git a/file.txt b/file.txt

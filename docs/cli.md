@@ -12,11 +12,11 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="#prek-install"><code>prek install</code></a></dt><dd><p>Install prek Git hook scripts under the <code>.git/hooks/</code> directory</p></dd>
+<dl class="cli-reference"><dt><a href="#prek-install"><code>prek install</code></a></dt><dd><p>Install prek Git shims under the <code>.git/hooks/</code> directory</p></dd>
 <dt><a href="#prek-prepare-hooks"><code>prek prepare-hooks</code></a></dt><dd><p>Prepare environments for all hooks used in the config file</p></dd>
 <dt><a href="#prek-run"><code>prek run</code></a></dt><dd><p>Run hooks</p></dd>
 <dt><a href="#prek-list"><code>prek list</code></a></dt><dd><p>List hooks configured in the current workspace</p></dd>
-<dt><a href="#prek-uninstall"><code>prek uninstall</code></a></dt><dd><p>Uninstall prek from git hooks</p></dd>
+<dt><a href="#prek-uninstall"><code>prek uninstall</code></a></dt><dd><p>Uninstall prek Git shims</p></dd>
 <dt><a href="#prek-validate-config"><code>prek validate-config</code></a></dt><dd><p>Validate configuration files (prek.toml or .pre-commit-config.yaml)</p></dd>
 <dt><a href="#prek-validate-manifest"><code>prek validate-manifest</code></a></dt><dd><p>Validate <code>.pre-commit-hooks.yaml</code> files</p></dd>
 <dt><a href="#prek-sample-config"><code>prek sample-config</code></a></dt><dd><p>Produce a sample configuration file (prek.toml or .pre-commit-config.yaml)</p></dd>
@@ -29,11 +29,11 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 
 ## prek install
 
-Install prek Git hook scripts under the `.git/hooks/` directory.
+Install prek Git shims under the `.git/hooks/` directory.
 
-The hook types installed by this command are determined by `--hook-type` or `default_install_hook_types` in the config file, falling back to `pre-commit` when neither is set.
+The Git shims installed by this command are determined by `--hook-type` or `default_install_hook_types` in the config file, falling back to `pre-commit` when neither is set.
 
-A hook's `stages` field does not affect which Git hook scripts this command installs.
+A hook's `stages` field does not affect which Git shims this command installs.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -70,11 +70,11 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 <li><code>always</code>:  Enables colored output regardless of the detected environment</li>
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-install--config"><a href="#prek-install--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
-</dd><dt id="prek-install--git-dir"><a href="#prek-install--git-dir"><code>--git-dir</code></a> <i>git-dir</i></dt><dd><p>Install hooks into the <code>hooks</code> subdirectory of the given git directory (<code>&lt;GIT_DIR&gt;/hooks/</code>).</p>
-<p>When this flag is used, <code>prek install</code> bypasses the safety check that normally refuses to install hooks while <code>core.hooksPath</code> is set. Git itself will still ignore <code>.git/hooks</code> while <code>core.hooksPath</code> is configured, so ensure your Git configuration points to the directory where the hook is installed if you want it to be executed.</p>
+</dd><dt id="prek-install--git-dir"><a href="#prek-install--git-dir"><code>--git-dir</code></a> <i>git-dir</i></dt><dd><p>Install Git shims into the <code>hooks</code> subdirectory of the given git directory (<code>&lt;GIT_DIR&gt;/hooks/</code>).</p>
+<p>When this flag is used, <code>prek install</code> bypasses the safety check that normally refuses to install shims while <code>core.hooksPath</code> is set. Git itself will still ignore <code>.git/hooks</code> while <code>core.hooksPath</code> is configured, so ensure your Git configuration points to the directory where the shim is installed if you want it to be executed.</p>
 </dd><dt id="prek-install--help"><a href="#prek-install--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="prek-install--hook-type"><a href="#prek-install--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which hook type(s) to install.</p>
-<p>Specifies which git hook stage(s) you want to install the hook script for. Can be specified multiple times to install hooks for multiple stages.</p>
+</dd><dt id="prek-install--hook-type"><a href="#prek-install--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which Git shim(s) to install.</p>
+<p>Specifies which Git hook type(s) you want to install shims for. Can be specified multiple times to install shims for multiple hook types.</p>
 <p>If not specified, uses <code>default_install_hook_types</code> from the config file, or defaults to <code>pre-commit</code> if that is also not set.</p>
 <p>Note: This is different from a hook's <code>stages</code> parameter in the config file, which declares which stages a hook <em>can</em> run in.</p>
 <p>Possible values:</p>
@@ -92,7 +92,7 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 </ul></dd><dt id="prek-install--log-file"><a href="#prek-install--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
 </dd><dt id="prek-install--no-progress"><a href="#prek-install--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 <p>For example, spinners or progress bars.</p>
-</dd><dt id="prek-install--overwrite"><a href="#prek-install--overwrite"><code>--overwrite</code></a>, <code>-f</code></dt><dd><p>Overwrite existing hooks</p>
+</dd><dt id="prek-install--overwrite"><a href="#prek-install--overwrite"><code>--overwrite</code></a>, <code>-f</code></dt><dd><p>Overwrite existing Git shims</p>
 </dd><dt id="prek-install--prepare-hooks"><a href="#prek-install--prepare-hooks"><code>--prepare-hooks</code></a>, <code>--install-hooks</code></dt><dd><p>Also prepare environments for all hooks used in the config file</p>
 </dd><dt id="prek-install--quiet"><a href="#prek-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
@@ -119,7 +119,7 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 
 Prepare environments for all hooks used in the config file.
 
-This command does not install the Git hook. To install the Git hook along with the hook environments in one command, use `prek install --prepare-hooks`.
+This command does not install Git shims. To install the Git shims along with the hook environments in one command, use `prek install --prepare-hooks`.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -377,7 +377,7 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 
 ## prek uninstall
 
-Uninstall prek from git hooks
+Uninstall prek Git shims
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -396,8 +396,8 @@ prek uninstall [OPTIONS]
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-uninstall--config"><a href="#prek-uninstall--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
 </dd><dt id="prek-uninstall--help"><a href="#prek-uninstall--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="prek-uninstall--hook-type"><a href="#prek-uninstall--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which hook type(s) to uninstall.</p>
-<p>Specifies which git hook stage(s) you want to uninstall. Can be specified multiple times to uninstall hooks for multiple stages.</p>
+</dd><dt id="prek-uninstall--hook-type"><a href="#prek-uninstall--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which Git shim(s) to uninstall.</p>
+<p>Specifies which Git hook type(s) you want to uninstall shims for. Can be specified multiple times to uninstall shims for multiple hook types.</p>
 <p>If not specified, uses <code>default_install_hook_types</code> from the config file, or defaults to <code>pre-commit</code> if that is also not set.</p>
 <p>Possible values:</p>
 <ul>
@@ -817,7 +817,7 @@ prek util [OPTIONS] <COMMAND>
 
 <dl class="cli-reference"><dt><a href="#prek-util-identify"><code>prek util identify</code></a></dt><dd><p>Show file identification tags</p></dd>
 <dt><a href="#prek-util-list-builtins"><code>prek util list-builtins</code></a></dt><dd><p>List all built-in hooks bundled with prek</p></dd>
-<dt><a href="#prek-util-init-template-dir"><code>prek util init-template-dir</code></a></dt><dd><p>Install hook script in a directory intended for use with <code>git config init.templateDir</code></p></dd>
+<dt><a href="#prek-util-init-template-dir"><code>prek util init-template-dir</code></a></dt><dd><p>Install Git shims in a directory intended for use with <code>git config init.templateDir</code></p></dd>
 <dt><a href="#prek-util-yaml-to-toml"><code>prek util yaml-to-toml</code></a></dt><dd><p>Convert a YAML configuration file to prek.toml</p></dd>
 </dl>
 
@@ -900,7 +900,7 @@ prek util list-builtins [OPTIONS]
 
 ### prek util init-template-dir
 
-Install hook script in a directory intended for use with `git config init.templateDir`
+Install Git shims in a directory intended for use with `git config init.templateDir`
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -910,7 +910,7 @@ prek util init-template-dir [OPTIONS] <DIRECTORY>
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt id="prek-util-init-template-dir--directory"><a href="#prek-util-init-template-dir--directory"><code>DIRECTORY</code></a></dt><dd><p>The directory in which to write the hook script</p>
+<dl class="cli-reference"><dt id="prek-util-init-template-dir--directory"><a href="#prek-util-init-template-dir--directory"><code>DIRECTORY</code></a></dt><dd><p>The directory in which to write the Git shim</p>
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
@@ -924,8 +924,8 @@ prek util init-template-dir [OPTIONS] <DIRECTORY>
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-util-init-template-dir--config"><a href="#prek-util-init-template-dir--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
 </dd><dt id="prek-util-init-template-dir--help"><a href="#prek-util-init-template-dir--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="prek-util-init-template-dir--hook-type"><a href="#prek-util-init-template-dir--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which hook type(s) to install.</p>
-<p>Specifies which git hook stage(s) you want to install the hook script for. Can be specified multiple times to install hooks for multiple stages.</p>
+</dd><dt id="prek-util-init-template-dir--hook-type"><a href="#prek-util-init-template-dir--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which Git shim(s) to install.</p>
+<p>Specifies which Git hook type(s) you want to install shims for. Can be specified multiple times to install shims for multiple hook types.</p>
 <p>If not specified, uses <code>default_install_hook_types</code> from the config file, or defaults to <code>pre-commit</code> if that is also not set.</p>
 <p>Possible values:</p>
 <ul>

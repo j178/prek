@@ -288,7 +288,7 @@
           "type": "boolean"
         },
         "stages": {
-          "description": "Select which git hook(s) to run for.\nDefault all stages are selected.\nSee <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.",
+          "description": "Select which Git hook stages this hook runs for.\nDefault all stages are selected.\nSee <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/Stage"
@@ -528,7 +528,7 @@
           "type": "boolean"
         },
         "stages": {
-          "description": "Select which git hook(s) to run for.\nDefault all stages are selected.\nSee <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.",
+          "description": "Select which Git hook stages this hook runs for.\nDefault all stages are selected.\nSee <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/Stage"
@@ -686,7 +686,7 @@
           "type": "boolean"
         },
         "stages": {
-          "description": "Select which git hook(s) to run for.\nDefault all stages are selected.\nSee <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.",
+          "description": "Select which Git hook stages this hook runs for.\nDefault all stages are selected.\nSee <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/Stage"
@@ -849,7 +849,7 @@
           "type": "boolean"
         },
         "stages": {
-          "description": "Select which git hook(s) to run for.\nDefault all stages are selected.\nSee <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.",
+          "description": "Select which Git hook stages this hook runs for.\nDefault all stages are selected.\nSee <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/Stage"

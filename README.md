@@ -330,7 +330,7 @@ prek self update
 ## Quick start
 
 - **I already use pre-commit:** follow the short migration checklist in the [quickstart guide](https://prek.j178.dev/quickstart/#already-using-pre-commit) to swap in `prek` safely.
-- **I'm new to pre-commit-style tools:** learn the basics—creating a config, running hooks, and installing git hooks—in the [beginner quickstart walkthrough](https://prek.j178.dev/quickstart/#new-to-pre-commit-style-workflows).
+- **I'm new to pre-commit-style tools:** learn the basics—creating a config, running hooks, and installing Git shims—in the [beginner quickstart walkthrough](https://prek.j178.dev/quickstart/#new-to-pre-commit-style-workflows).
 
 <!-- --8<-- [start: why] -->
 

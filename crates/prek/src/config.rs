@@ -436,7 +436,7 @@ pub(crate) struct HookOptions {
     /// This hook will execute using a single process instead of in parallel.
     /// Default is false.
     pub require_serial: Option<bool>,
-    /// Select which git hook(s) to run for.
+    /// Select which Git hook stages this hook runs for.
     /// Default all stages are selected.
     /// See <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.
     pub stages: Option<Stages>,
