@@ -41,7 +41,7 @@ pub(crate) async fn hook_impl(
 
     if script_version != Some(cli::install::CUR_SCRIPT_VERSION) {
         warn_user!(
-            "The installed hook script `{hook_type}` is outdated (version: {:?}, expected: {}). Please reinstall the hooks with `prek install`.",
+            "The installed Git shim `{hook_type}` is outdated (version: {:?}, expected: {}). Please reinstall the Git shims with `prek install`.",
             script_version.unwrap_or(1),
             cli::install::CUR_SCRIPT_VERSION
         );
@@ -166,8 +166,8 @@ async fn run_legacy(
 ) -> Result<u8> {
     if EnvVars::is_set(EnvVars::PREK_RUNNING_LEGACY) {
         anyhow::bail!(
-            "prek's hook script is installed in migration mode\n\
-            run `prek install -f --hook-type {hook_type}` to reinstall the hook"
+            "prek's Git shim is installed in migration mode\n\
+            run `prek install -f --hook-type {hook_type}` to reinstall the shim"
         );
     }
 

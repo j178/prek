@@ -14,16 +14,16 @@ prek run --refresh
 
 ## What does `prek install --prepare-hooks` do?
 
-In short, it installs the Git hooks **and** prepares the environments for the hooks managed by prek. It is inherited from the original Python-based `pre-commit` tool (I'll abbreviate it as **ppc** in this document) to maintain compatibility with existing workflows.
+In short, it installs the Git shims **and** prepares the environments for the hooks managed by prek. It is inherited from the original Python-based `pre-commit` tool (I'll abbreviate it as **ppc** in this document) to maintain compatibility with existing workflows.
 
 It's a little confusing because it refers to two different kinds of hooks:
 
-1. **Git hooks** – Scripts placed inside `.git/hooks/`, such as `.git/hooks/pre-commit`, that Git executes during lifecycle events. Both prek and ppc drop a small shim here so Git automatically runs them on `git commit`.
+1. **Git shims** – Scripts placed inside `.git/hooks/`, such as `.git/hooks/pre-commit`, that Git executes during lifecycle events. Both prek and ppc drop a small shim here so Git automatically runs them on `git commit`.
 2. **prek-managed hooks** – The tools listed in `.pre-commit-config.yaml`. When prek runs, it executes these hooks and prepares whatever runtime they need (for example, creating a Python virtual environment and installing the hook's dependencies before execution).
 
-Running `prek install` installs the first type: it writes the Git hook so that Git knows to call prek. Which Git hook scripts get installed is determined by `--hook-type` or `default_install_hook_types` in the config file, and defaults to `pre-commit` if neither is set. This is not affected by a hook's `stages` field in the config: `stages` controls when a configured hook may run, not which Git hook shims `prek install` writes.
+Running `prek install` installs the first type: it writes the Git shim so that Git knows to call prek. Which Git shims get installed is determined by `--hook-type` or `default_install_hook_types` in the config file, and defaults to `pre-commit` if neither is set. This is not affected by a hook's `stages` field in the config: `stages` controls when a configured hook may run, not which Git shims `prek install` writes.
 
-Adding `--prepare-hooks` tells prek to do that **and** proactively create the environments and caches required by the hooks that prek manages. That way, the next time the Git hook fires, the managed hooks are ready to run without additional setup. The older `--install-hooks` spelling remains as an alias.
+Adding `--prepare-hooks` tells prek to do that **and** proactively create the environments and caches required by the hooks that prek manages. That way, the next time Git invokes prek through the shim, the managed hooks are ready to run without additional setup. The older `--install-hooks` spelling remains as an alias.
 
 ## How do I use hooks from private repositories?
 

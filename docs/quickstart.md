@@ -23,7 +23,7 @@ Great news - prek is designed as a drop-in replacement, you only need two tweaks
     cargo clippy.............................................................Passed
     ```
 
-2. Reinstall the git hooks once via `prek install -f` (run this if you previously executed `pre-commit install`).
+2. Reinstall the Git shims once via `prek install -f` (run this if you previously executed `pre-commit install`).
 
 From here you can explore what prek adds on top of pre-commit:
 
@@ -69,7 +69,7 @@ Need to run a single hook? Pass its ID, for example `prek run check-yaml`. You c
 
 ### 3. Wire hooks into git automatically
 
-To run the hooks every time you commit, install prek’s git hook integration:
+To run the hooks every time you commit, install prek’s Git shim integration:
 
 ```bash
 prek install

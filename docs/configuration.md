@@ -518,12 +518,12 @@ Allowed values:
 
 #### `default_install_hook_types`
 
-Default hook type(s) installed by `prek install` when you don’t pass `--hook-type`.
+Default Git shim name(s) installed by `prek install` when you don’t pass `--hook-type`.
 
-- Type: list of git hook types
+- Type: list of `--hook-type` values
 - Default: `[pre-commit]`
 
-This controls which *git hook scripts* are installed (for example `pre-commit` vs `pre-push`).
+This controls which Git shims are installed (for example `pre-commit` vs `pre-push`).
 It is separate from a hook’s `stages`, which controls when a particular hook is eligible to run.
 
 Allowed values:
