@@ -144,6 +144,24 @@ mod tests {
     }
 
     #[test]
+    fn test_is_any() {
+        assert!(DotnetRequest::Any.is_any());
+        assert!(!DotnetRequest::Major(8).is_any());
+        assert!(!DotnetRequest::MajorMinor(8, 0).is_any());
+        assert!(!DotnetRequest::MajorMinorPatch(8, 0, 100).is_any());
+    }
+
+    #[test]
+    fn test_parse_net_prefix_only() {
+        // "net" alone should return Any
+        assert_eq!(DotnetRequest::from_str("net").unwrap(), DotnetRequest::Any);
+        assert_eq!(
+            DotnetRequest::from_str("dotnet").unwrap(),
+            DotnetRequest::Any
+        );
+    }
+
+    #[test]
     fn test_satisfied_by() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let mut install_info =

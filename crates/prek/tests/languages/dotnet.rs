@@ -1,7 +1,7 @@
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 
-use crate::common::{TestContext, cmd_snapshot, git_cmd};
+use crate::common::{TestContext, cmd_snapshot, git_cmd, remove_bin_from_path};
 
 /// Test that `language_version` can specify a dotnet SDK version.
 #[test]
@@ -230,6 +230,171 @@ fn hook_stderr() -> anyhow::Result<()> {
     ");
 
     Ok(())
+}
+
+/// Test that `language_version: system` fails when no system dotnet is available.
+#[test]
+fn system_only_fails_without_dotnet() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: dotnet
+                entry: dotnet --version
+                language_version: system
+                always_run: true
+                pass_filenames: false
+    "});
+
+    context.git_add(".");
+
+    // Remove dotnet from PATH to simulate missing system dotnet
+    let path_without_dotnet =
+        remove_bin_from_path("dotnet", None).expect("Failed to remove dotnet from PATH");
+
+    cmd_snapshot!(context.filters(), context.run().env("PATH", &path_without_dotnet), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install hook `local`
+      caused by: Failed to install or find dotnet SDK
+      caused by: No system dotnet installation found
+    ");
+}
+
+/// Test that requesting an unavailable dotnet version fails gracefully.
+#[test]
+fn unavailable_version_fails() {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Request a very specific old version that won't exist
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: dotnet
+                entry: dotnet --version
+                language_version: '1.0.0'
+                always_run: true
+                pass_filenames: false
+    "});
+
+    context.git_add(".");
+
+    // Remove dotnet from PATH so it can't find system version
+    let path_without_dotnet =
+        remove_bin_from_path("dotnet", None).expect("Failed to remove dotnet from PATH");
+
+    // This should fail because version 1.0.0 is ancient and won't be downloadable
+    // via the modern install script
+    let output = context
+        .run()
+        .env("PATH", &path_without_dotnet)
+        .output()
+        .unwrap();
+
+    assert!(
+        !output.status.success(),
+        "should fail when requesting unavailable version"
+    );
+}
+
+/// Test that default `language_version` works (uses system or downloads LTS).
+#[test]
+fn default_language_version() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: dotnet
+                entry: dotnet --version
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "});
+
+    context.git_add(".");
+
+    let output = context.run().output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "hook should pass: {stdout}");
+}
+
+/// Test TFM-style version specification (net8.0, net9.0, etc.).
+#[test]
+fn tfm_style_language_version() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: dotnet
+                entry: dotnet --version
+                language_version: 'net8.0'
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "});
+
+    context.git_add(".");
+
+    let output = context.run().output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "hook should pass");
+    assert!(
+        stdout.contains("8.0"),
+        "output should contain version 8.0, got: {stdout}"
+    );
+}
+
+/// Test major-only version specification.
+#[test]
+fn major_only_language_version() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: dotnet
+                entry: dotnet --version
+                language_version: '8'
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "});
+
+    context.git_add(".");
+
+    let output = context.run().output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "hook should pass");
+    assert!(
+        stdout.contains("8."),
+        "output should contain version 8.x, got: {stdout}"
+    );
 }
 
 /// Test that `types: [c#]` filter correctly matches .cs files.
