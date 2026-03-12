@@ -448,6 +448,7 @@ pub(crate) enum ToolBucket {
     Ruby,
     Rustup,
     Bun,
+    Dotnet,
 }
 
 #[derive(Copy, Clone, Eq, Hash, PartialEq, strum::AsRefStr, strum::Display)]
