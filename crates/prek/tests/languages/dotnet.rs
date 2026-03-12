@@ -203,6 +203,7 @@ fn hook_stderr() -> anyhow::Result<()> {
           <PropertyGroup>
             <OutputType>Exe</OutputType>
             <TargetFramework>net10.0</TargetFramework>
+            <ImplicitUsings>disable</ImplicitUsings>
           </PropertyGroup>
         </Project>
     "#})?;
@@ -210,8 +211,10 @@ fn hook_stderr() -> anyhow::Result<()> {
         .work_dir()
         .child("hook/Program.cs")
         .write_str(indoc::indoc! {r#"
-        System.Console.Error.WriteLine("Error from hook");
-        System.Environment.Exit(1);
+        using System;
+        Console.Error.WriteLine("Error from hook");
+        Console.Error.Flush();
+        Environment.Exit(1);
     "#})?;
 
     context.git_add(".");
