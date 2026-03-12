@@ -294,7 +294,8 @@ pub(crate) fn installer_from_store(store: &Store) -> DotnetInstaller {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_dotnet_version;
+    use super::*;
+    use crate::languages::dotnet::DotnetRequest;
 
     #[test]
     fn test_parse_stable_version() {
@@ -332,5 +333,172 @@ mod tests {
     fn test_parse_invalid_version() {
         assert!(parse_dotnet_version("").is_none());
         assert!(parse_dotnet_version("invalid").is_none());
+    }
+
+    #[test]
+    fn test_parse_single_number_version() {
+        // Single number should fail (needs at least major.minor)
+        assert!(parse_dotnet_version("8").is_none());
+    }
+
+    #[test]
+    fn test_dotnet_result_display() {
+        let result = DotnetResult::new(
+            PathBuf::from("/usr/share/dotnet/dotnet"),
+            Version::new(8, 0, 100),
+        );
+        assert_eq!(format!("{result}"), "/usr/share/dotnet/dotnet@8.0.100");
+    }
+
+    #[test]
+    fn test_dotnet_result_accessors() {
+        let result = DotnetResult::new(
+            PathBuf::from("/usr/share/dotnet/dotnet"),
+            Version::new(9, 0, 100),
+        );
+        assert_eq!(result.dotnet(), Path::new("/usr/share/dotnet/dotnet"));
+        assert_eq!(result.version(), &Version::new(9, 0, 100));
+    }
+
+    #[test]
+    fn test_dotnet_executable_unix() {
+        #[cfg(unix)]
+        {
+            let path = dotnet_executable(Path::new("/opt/dotnet"));
+            assert_eq!(path, PathBuf::from("/opt/dotnet/dotnet"));
+        }
+    }
+
+    #[test]
+    fn test_version_satisfies_request_any() {
+        let version = Version::new(8, 0, 100);
+
+        // LanguageRequest::Any should always match
+        assert!(version_satisfies_request(
+            &version,
+            &LanguageRequest::Any { system_only: false }
+        ));
+        assert!(version_satisfies_request(
+            &version,
+            &LanguageRequest::Any { system_only: true }
+        ));
+    }
+
+    #[test]
+    fn test_version_satisfies_request_dotnet_any() {
+        let version = Version::new(8, 0, 100);
+        assert!(version_satisfies_request(
+            &version,
+            &LanguageRequest::Dotnet(DotnetRequest::Any)
+        ));
+    }
+
+    #[test]
+    fn test_version_satisfies_request_major() {
+        let version = Version::new(8, 0, 100);
+
+        assert!(version_satisfies_request(
+            &version,
+            &LanguageRequest::Dotnet(DotnetRequest::Major(8))
+        ));
+        assert!(!version_satisfies_request(
+            &version,
+            &LanguageRequest::Dotnet(DotnetRequest::Major(9))
+        ));
+    }
+
+    #[test]
+    fn test_version_satisfies_request_major_minor() {
+        let version = Version::new(8, 0, 100);
+
+        assert!(version_satisfies_request(
+            &version,
+            &LanguageRequest::Dotnet(DotnetRequest::MajorMinor(8, 0))
+        ));
+        assert!(!version_satisfies_request(
+            &version,
+            &LanguageRequest::Dotnet(DotnetRequest::MajorMinor(8, 1))
+        ));
+        assert!(!version_satisfies_request(
+            &version,
+            &LanguageRequest::Dotnet(DotnetRequest::MajorMinor(9, 0))
+        ));
+    }
+
+    #[test]
+    fn test_version_satisfies_request_major_minor_patch() {
+        let version = Version::new(8, 0, 100);
+
+        assert!(version_satisfies_request(
+            &version,
+            &LanguageRequest::Dotnet(DotnetRequest::MajorMinorPatch(8, 0, 100))
+        ));
+        assert!(!version_satisfies_request(
+            &version,
+            &LanguageRequest::Dotnet(DotnetRequest::MajorMinorPatch(8, 0, 101))
+        ));
+        assert!(!version_satisfies_request(
+            &version,
+            &LanguageRequest::Dotnet(DotnetRequest::MajorMinorPatch(8, 1, 100))
+        ));
+    }
+
+    #[test]
+    fn test_version_satisfies_request_other_language() {
+        // Other language requests should return true (fallback case)
+        let version = Version::new(8, 0, 100);
+        assert!(version_satisfies_request(
+            &version,
+            &LanguageRequest::Python(crate::languages::python::PythonRequest::Any)
+        ));
+    }
+
+    #[test]
+    fn test_to_dotnet_install_version_any() {
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Any { system_only: false }),
+            None
+        );
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Dotnet(DotnetRequest::Any)),
+            None
+        );
+    }
+
+    #[test]
+    fn test_to_dotnet_install_version_major() {
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Dotnet(DotnetRequest::Major(8))),
+            Some("8.0".to_string())
+        );
+    }
+
+    #[test]
+    fn test_to_dotnet_install_version_major_minor() {
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Dotnet(DotnetRequest::MajorMinor(9, 0))),
+            Some("9.0".to_string())
+        );
+    }
+
+    #[test]
+    fn test_to_dotnet_install_version_major_minor_patch() {
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Dotnet(DotnetRequest::MajorMinorPatch(
+                8, 0, 100
+            ))),
+            Some("8.0.100".to_string())
+        );
+    }
+
+    #[test]
+    fn test_to_dotnet_install_version_other_language() {
+        // Other language requests should return None
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Python(
+                crate::languages::python::PythonRequest::Any
+            )),
+            None
+        );
     }
 }
