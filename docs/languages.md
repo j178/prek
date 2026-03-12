@@ -121,9 +121,32 @@ If the image already defines an `ENTRYPOINT`, you can omit `--entrypoint` in `en
 
 ### dotnet
 
-**Status in prek:** Not supported yet.
+**Status in prek:** ✅ Supported.
 
-Tracking: [#48](https://github.com/j178/prek/issues/48)
+prek supports .NET tool-based hooks. Tools specified in `additional_dependencies` are installed using `dotnet tool install --tool-path` and made available on the PATH when the hook runs.
+
+#### `language_version`
+
+You can request a specific .NET SDK version:
+
+- `language_version: "8"` – any .NET 8.x SDK
+- `language_version: "8.0"` – any .NET 8.0.x SDK
+- `language_version: "8.0.100"` – exactly .NET SDK 8.0.100
+
+prek first looks for a matching system-installed `dotnet`, then falls back to downloading the SDK via the official install script if needed.
+
+#### `additional_dependencies`
+
+Tools are specified in `additional_dependencies` using the format `package:version` or `package@version`:
+
+```yaml
+repos:
+  - repo: https://github.com/example/csharpier-hook
+    rev: v1.0.0
+    hooks:
+      - id: csharpier
+        additional_dependencies: ["csharpier:1.2.6"]
+```
 
 ### fail
 
