@@ -113,7 +113,7 @@ fn additional_dependencies_with_version() {
                 name: local
                 language: dotnet
                 entry: dotnet-outdated --version
-                additional_dependencies: ["dotnet-outdated-tool@4.6.0"]
+                additional_dependencies: ["dotnet-outdated-tool:4.6.0"]
                 always_run: true
                 verbose: true
                 pass_filenames: false
@@ -202,7 +202,7 @@ fn hook_stderr() -> anyhow::Result<()> {
         <Project Sdk="Microsoft.NET.Sdk">
           <PropertyGroup>
             <OutputType>Exe</OutputType>
-            <TargetFramework>net8.0</TargetFramework>
+            <TargetFramework>net10.0</TargetFramework>
           </PropertyGroup>
         </Project>
     "#})?;
@@ -210,9 +210,8 @@ fn hook_stderr() -> anyhow::Result<()> {
         .work_dir()
         .child("hook/Program.cs")
         .write_str(indoc::indoc! {r#"
-        using System;
-        Console.Error.WriteLine("Error from hook");
-        Environment.Exit(1);
+        System.Console.Error.WriteLine("Error from hook");
+        System.Environment.Exit(1);
     "#})?;
 
     context.git_add(".");
