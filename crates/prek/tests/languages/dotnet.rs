@@ -1,7 +1,8 @@
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
+use prek_consts::env_vars::EnvVars;
 
-use crate::common::{TestContext, cmd_snapshot, git_cmd, remove_bin_from_path};
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 /// Test that `language_version` can specify a dotnet SDK version.
 #[test]
@@ -256,11 +257,36 @@ fn system_only_fails_without_dotnet() {
 
     context.git_add(".");
 
-    // Remove dotnet from PATH to simulate missing system dotnet
-    let path_without_dotnet =
-        remove_bin_from_path("dotnet", None).expect("Failed to remove dotnet from PATH");
+    // Create a fake dotnet binary that exits with error, prepend it to PATH.
+    // This shadows the real dotnet without removing directories from PATH.
+    let fake_bin_dir = context.home_dir().child("fake_bin");
+    fake_bin_dir.create_dir_all().unwrap();
 
-    cmd_snapshot!(context.filters(), context.run().env("PATH", &path_without_dotnet), @r"
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let fake_dotnet = fake_bin_dir.child("dotnet");
+        fake_dotnet.write_str("#!/bin/sh\nexit 127\n").unwrap();
+        std::fs::set_permissions(fake_dotnet.path(), std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+    }
+
+    #[cfg(windows)]
+    {
+        let fake_dotnet = fake_bin_dir.child("dotnet.cmd");
+        fake_dotnet.write_str("@echo off\nexit /b 127\n").unwrap();
+    }
+
+    // Prepend the fake bin directory to PATH so the fake dotnet is found first.
+    let original_path = EnvVars::var_os(EnvVars::PATH).unwrap_or_default();
+    let mut new_path = std::ffi::OsString::from(fake_bin_dir.path());
+    #[cfg(unix)]
+    new_path.push(":");
+    #[cfg(windows)]
+    new_path.push(";");
+    new_path.push(&original_path);
+
+    cmd_snapshot!(context.filters(), context.run().env("PATH", &new_path), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -294,17 +320,37 @@ fn unavailable_version_fails() {
 
     context.git_add(".");
 
-    // Remove dotnet from PATH so it can't find system version
-    let path_without_dotnet =
-        remove_bin_from_path("dotnet", None).expect("Failed to remove dotnet from PATH");
+    // Create a fake dotnet binary that exits with error, prepend it to PATH.
+    let fake_bin_dir = context.home_dir().child("fake_bin");
+    fake_bin_dir.create_dir_all().unwrap();
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let fake_dotnet = fake_bin_dir.child("dotnet");
+        fake_dotnet.write_str("#!/bin/sh\nexit 127\n").unwrap();
+        std::fs::set_permissions(fake_dotnet.path(), std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+    }
+
+    #[cfg(windows)]
+    {
+        let fake_dotnet = fake_bin_dir.child("dotnet.cmd");
+        fake_dotnet.write_str("@echo off\nexit /b 127\n").unwrap();
+    }
+
+    // Prepend the fake bin directory to PATH so the fake dotnet is found first.
+    let original_path = EnvVars::var_os(EnvVars::PATH).unwrap_or_default();
+    let mut new_path = std::ffi::OsString::from(fake_bin_dir.path());
+    #[cfg(unix)]
+    new_path.push(":");
+    #[cfg(windows)]
+    new_path.push(";");
+    new_path.push(&original_path);
 
     // This should fail because version 1.0.0 is ancient and won't be downloadable
     // via the modern install script
-    let output = context
-        .run()
-        .env("PATH", &path_without_dotnet)
-        .output()
-        .unwrap();
+    let output = context.run().env("PATH", &new_path).output().unwrap();
 
     assert!(
         !output.status.success(),
