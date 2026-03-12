@@ -155,13 +155,11 @@ impl LanguageImpl for Dotnet {
 ///
 /// The dependency can be specified as:
 /// - `package` - installs latest version
-/// - `package@version` - installs specific version
+/// - `package:version` - installs specific version
 async fn install_tool(dotnet: &Path, tool_path: &Path, dependency: &str) -> Result<()> {
-    // Normalize `:` to `@` (`:` is pre-commit convention)
-    let dependency = dependency.replace(':', "@");
     let (package, version) = dependency
-        .split_once('@')
-        .map_or((dependency.as_str(), None), |(pkg, ver)| (pkg, Some(ver)));
+        .split_once(':')
+        .map_or((dependency, None), |(pkg, ver)| (pkg, Some(ver)));
 
     let mut cmd = Cmd::new(dotnet, "dotnet tool install");
     cmd.arg("tool")
