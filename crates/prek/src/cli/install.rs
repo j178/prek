@@ -391,7 +391,7 @@ pub(crate) async fn uninstall(
 
     for hook_type in get_hook_types(hook_types, project.as_ref(), config.as_deref()) {
         let hook_path = hooks_path.join(hook_type.as_ref());
-        let legacy_path = hooks_path.join(format!("{hook_type}.legacy"));
+        let legacy_path = hook_path.with_added_extension("legacy");
 
         if is_our_script(&legacy_path).unwrap_or(false) {
             fs_err::remove_file(&legacy_path)?;
