@@ -28,6 +28,9 @@ pub(crate) enum Error {
 
     #[error(transparent)]
     UTF8(#[from] Utf8Error),
+
+    #[error("git diff failed with exit code {0}")]
+    DiffFailed(i32),
 }
 
 pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
@@ -298,19 +301,56 @@ async fn parse_merge_msg_for_conflicts() -> Result<Vec<PathBuf>, Error> {
     Ok(conflicts)
 }
 
-#[instrument(level = "trace")]
-pub(crate) async fn get_diff(path: &Path) -> Result<Vec<u8>, Error> {
-    let output = git_cmd("git diff")?
-        .arg("diff")
+/// Create a git diff command with common flags for worktree comparison.
+fn diff_cmd(summary: &str) -> Result<Cmd, Error> {
+    let mut cmd = git_cmd(summary)?;
+    cmd.arg("diff")
         .arg("--no-ext-diff") // Disable external diff drivers
         .arg("--no-textconv")
-        .arg("--ignore-submodules")
+        .arg("--ignore-submodules");
+    Ok(cmd)
+}
+
+#[instrument(level = "trace")]
+pub(crate) async fn get_diff(path: &Path) -> Result<Vec<u8>, Error> {
+    let output = diff_cmd("git diff")?
         .arg("--")
         .arg(path)
         .check(true)
         .output()
         .await?;
     Ok(output.stdout)
+}
+
+/// Fast boolean check using `git diff --quiet` (exit 1 = changes).
+#[instrument(level = "trace")]
+pub(crate) async fn has_worktree_changes(path: &Path) -> Result<bool, Error> {
+    let output = diff_cmd("git diff --quiet")?
+        .arg("--quiet")
+        .arg("--")
+        .arg(path)
+        .check(false) // Don't fail on non-zero exit (1 = changes exist)
+        .output()
+        .await?;
+    match output.status.code() {
+        Some(0) => Ok(false), // No changes
+        Some(1) => Ok(true),  // Changes exist
+        Some(code) => {
+            warn!(
+                code,
+                stderr = %String::from_utf8_lossy(&output.stderr),
+                "git diff --quiet failed"
+            );
+            Err(Error::DiffFailed(code))
+        }
+        None => {
+            warn!(
+                stderr = %String::from_utf8_lossy(&output.stderr),
+                "git diff --quiet failed (no exit code)"
+            );
+            Err(Error::DiffFailed(-1)) // Killed by signal
+        }
+    }
 }
 
 /// Create a tree object from the current index.
