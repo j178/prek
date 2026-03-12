@@ -3,7 +3,7 @@
 //! Supports version formats like:
 //! - `8.0` or `8.0.100` - specific version
 //! - `8` - major version only
-//! - `net8.0` or `net9.0` - TFM-style versions
+//! - `net8.0`, `net9.0`, or `net10.0` - TFM-style versions
 use std::str::FromStr;
 
 use crate::hook::InstallInfo;
@@ -25,7 +25,7 @@ impl FromStr for DotnetRequest {
             return Ok(Self::Any);
         }
 
-        // Handle TFM-style versions like "net8.0" or "net9.0"
+        // Handle TFM-style versions like "net8.0", "net9.0", or "net10.0"
         let version_str = request
             .strip_prefix("net")
             .or_else(|| request.strip_prefix("dotnet"))
@@ -125,6 +125,10 @@ mod tests {
         assert_eq!(
             DotnetRequest::from_str("net9.0").unwrap(),
             DotnetRequest::MajorMinor(9, 0)
+        );
+        assert_eq!(
+            DotnetRequest::from_str("net10.0").unwrap(),
+            DotnetRequest::MajorMinor(10, 0)
         );
 
         // dotnet prefix
