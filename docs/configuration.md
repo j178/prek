@@ -840,10 +840,11 @@ The stable identifier of the hook.
 
 !!! note "Hook ids containing `:`"
 
-    In workspace selector syntax, `<project-path>:<hook-id>` selects one hook from
-    one project. If a hook `id` itself contains `:`, prefix the selector with `:`
-    (for example `prek run :lint:ruff` for a hook with id `lint:ruff`) to force
-    `prek` to treat the entire value as the hook id.
+    If your hook id contains `:` (for example `id: lint:ruff`), `prek run lint:ruff`
+    will not select that hook. `prek` interprets `lint:ruff` as the selector
+    `<project-path>:<hook-id>`, with project `lint` and hook `ruff`.
+    To select the hook id `lint:ruff`, add a leading `:` and run
+    `prek run :lint:ruff`.
 
 #### `name`
 
