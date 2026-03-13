@@ -266,14 +266,17 @@ impl Stage {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum Stages {
-    #[default]
     All,
     Some(BTreeSet<Stage>),
 }
 
 impl Stages {
+    pub(crate) fn is_empty(&self) -> bool {
+        matches!(self, Self::Some(stages) if stages.is_empty())
+    }
+
     pub(crate) fn contains(&self, stage: Stage) -> bool {
         match self {
             Self::All => true,
@@ -294,8 +297,12 @@ impl Display for Stages {
         match self {
             Self::All => write!(f, "all"),
             Self::Some(stages) => {
-                let stages_str = stages.iter().map(ToString::to_string).join(", ");
-                write!(f, "{stages_str}")
+                if stages.is_empty() {
+                    write!(f, "none")
+                } else {
+                    let stages_str = stages.iter().map(ToString::to_string).join(", ");
+                    write!(f, "{stages_str}")
+                }
             }
         }
     }
@@ -304,7 +311,7 @@ impl Display for Stages {
 impl From<Vec<Stage>> for Stages {
     fn from(value: Vec<Stage>) -> Self {
         let stages: BTreeSet<_> = value.into_iter().collect();
-        if stages.is_empty() || stages.len() == Stage::value_variants().len() {
+        if stages.len() == Stage::value_variants().len() {
             Self::All
         } else {
             Self::Some(stages)
@@ -1237,16 +1244,31 @@ mod tests {
     );
 
     #[test]
-    fn stages_deserialize_empty_as_all() {
+    fn stages_deserialize_empty_as_empty() {
         #[derive(Debug, Deserialize)]
         struct Wrapper {
             stages: Stages,
         }
 
         let parsed: Wrapper = serde_saphyr::from_str("stages: []\n").expect("stages should parse");
-        assert_eq!(parsed.stages, Stages::default());
-        assert!(parsed.stages.contains(Stage::Manual));
-        assert!(parsed.stages.contains(Stage::PreCommit));
+        assert_eq!(parsed.stages, Stages::Some(BTreeSet::new()));
+        assert!(!parsed.stages.contains(Stage::Manual));
+        assert!(!parsed.stages.contains(Stage::PreCommit));
+    }
+
+    #[test]
+    fn config_default_stages_deserialize_empty_as_empty() {
+        let parsed: Config =
+            serde_saphyr::from_str("repos: []\ndefault_stages: []\n").expect("config should parse");
+
+        assert_eq!(parsed.default_stages, Some(Stages::Some(BTreeSet::new())));
+    }
+
+    #[test]
+    fn config_default_stages_omitted_keeps_none() {
+        let parsed: Config = serde_saphyr::from_str("repos: []\n").expect("config should parse");
+
+        assert_eq!(parsed.default_stages, None);
     }
 
     #[test]

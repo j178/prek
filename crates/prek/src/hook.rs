@@ -84,8 +84,8 @@ impl HookSpec {
                 .and_then(|v| v.get(&language).cloned());
         }
 
-        if self.options.stages.is_none() {
-            self.options.stages.clone_from(&config.default_stages);
+        if self.options.stages.as_ref().is_none_or(Stages::is_empty) {
+            self.options.stages = Some(config.default_stages.clone().unwrap_or(Stages::All));
         }
     }
 }
@@ -327,7 +327,7 @@ impl HookBuilder {
         let pass_filenames = options.pass_filenames.unwrap_or(PassFilenames::All);
         let require_serial = options.require_serial.unwrap_or(false);
         let verbose = options.verbose.unwrap_or(false);
-        let stages = options.stages.unwrap_or_default();
+        let stages = options.stages.unwrap_or(Stages::All);
         let additional_dependencies = options
             .additional_dependencies
             .unwrap_or_default()
@@ -838,7 +838,7 @@ mod tests {
     use prek_identify::tags;
     use rustc_hash::FxHashMap;
 
-    use crate::config::{HookOptions, Language, PassFilenames, RemoteHook};
+    use crate::config::{Config, HookOptions, Language, PassFilenames, RemoteHook, Stage, Stages};
     use crate::hook::HookSpec;
     use crate::languages::version::LanguageRequest;
     use crate::workspace::Project;
@@ -997,6 +997,150 @@ mod tests {
         }
         "#);
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn hook_builder_empty_hook_stages_inherit_default_stages() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join(PRE_COMMIT_CONFIG_YAML);
+        fs_err::write(&config_path, "repos: []\ndefault_stages: [manual]\n")?;
+
+        let project = Arc::new(Project::from_config_file(
+            Cow::Borrowed(&config_path),
+            None,
+        )?);
+        let repo = Arc::new(Repo::Local { hooks: vec![] });
+
+        let hook_spec = HookSpec {
+            id: "test-hook".to_string(),
+            name: "test-hook".to_string(),
+            entry: "python3 -c 'print(1)'".to_string(),
+            language: Language::Python,
+            priority: None,
+            options: HookOptions {
+                stages: Some(Stages::Some(std::collections::BTreeSet::new())),
+                ..Default::default()
+            },
+        };
+
+        let hook = HookBuilder::new(project, repo, hook_spec, 0)
+            .build()
+            .await?;
+
+        assert_eq!(
+            hook.stages,
+            Stages::Some([Stage::Manual].into_iter().collect())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn hook_spec_apply_project_defaults_sets_explicit_all_when_default_stages_missing() {
+        let config: Config = serde_saphyr::from_str("repos: []\n").expect("config should parse");
+
+        let mut hook_spec = HookSpec {
+            id: "test-hook".to_string(),
+            name: "test-hook".to_string(),
+            entry: "python3 -c 'print(1)'".to_string(),
+            language: Language::Python,
+            priority: None,
+            options: HookOptions::default(),
+        };
+
+        hook_spec.apply_project_defaults(&config);
+
+        assert_eq!(hook_spec.options.stages, Some(Stages::All));
+    }
+
+    #[tokio::test]
+    async fn hook_builder_preserves_explicit_empty_default_stages() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join(PRE_COMMIT_CONFIG_YAML);
+        fs_err::write(&config_path, "repos: []\ndefault_stages: []\n")?;
+
+        let project = Arc::new(Project::from_config_file(
+            Cow::Borrowed(&config_path),
+            None,
+        )?);
+        let repo = Arc::new(Repo::Local { hooks: vec![] });
+
+        let hook_spec = HookSpec {
+            id: "test-hook".to_string(),
+            name: "test-hook".to_string(),
+            entry: "python3 -c 'print(1)'".to_string(),
+            language: Language::Python,
+            priority: None,
+            options: HookOptions::default(),
+        };
+
+        let hook = HookBuilder::new(project, repo, hook_spec, 0)
+            .build()
+            .await?;
+
+        assert_eq!(hook.stages, Stages::Some(std::collections::BTreeSet::new()));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn hook_builder_defaults_to_all_when_stages_and_default_stages_missing() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join(PRE_COMMIT_CONFIG_YAML);
+        fs_err::write(&config_path, "repos: []\n")?;
+
+        let project = Arc::new(Project::from_config_file(
+            Cow::Borrowed(&config_path),
+            None,
+        )?);
+        let repo = Arc::new(Repo::Local { hooks: vec![] });
+
+        let hook_spec = HookSpec {
+            id: "test-hook".to_string(),
+            name: "test-hook".to_string(),
+            entry: "python3 -c 'print(1)'".to_string(),
+            language: Language::Python,
+            priority: None,
+            options: HookOptions::default(),
+        };
+
+        let hook = HookBuilder::new(project, repo, hook_spec, 0)
+            .build()
+            .await?;
+
+        assert_eq!(hook.stages, Stages::All);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn hook_builder_empty_hook_stages_default_to_all_when_default_stages_missing()
+    -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join(PRE_COMMIT_CONFIG_YAML);
+        fs_err::write(&config_path, "repos: []\n")?;
+
+        let project = Arc::new(Project::from_config_file(
+            Cow::Borrowed(&config_path),
+            None,
+        )?);
+        let repo = Arc::new(Repo::Local { hooks: vec![] });
+
+        let hook_spec = HookSpec {
+            id: "test-hook".to_string(),
+            name: "test-hook".to_string(),
+            entry: "python3 -c 'print(1)'".to_string(),
+            language: Language::Python,
+            priority: None,
+            options: HookOptions {
+                stages: Some(Stages::Some(std::collections::BTreeSet::new())),
+                ..Default::default()
+            },
+        };
+
+        let hook = HookBuilder::new(project, repo, hook_spec, 0)
+            .build()
+            .await?;
+
+        assert_eq!(hook.stages, Stages::All);
         Ok(())
     }
 
