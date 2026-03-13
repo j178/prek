@@ -2,7 +2,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
 
-use crate::common::{TestContext, cmd_snapshot, git_cmd};
+use crate::common::{TestContext, cmd_snapshot, git_cmd, remove_bin_from_path};
 
 /// Test that `language_version` can specify a dotnet SDK version.
 #[test]
@@ -380,6 +380,36 @@ fn default_language_version() {
     context.git_add(".");
 
     let output = context.run().output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "hook should pass: {stdout}");
+}
+
+/// Test that default `language_version` downloads LTS when no system dotnet is available.
+/// This covers the `--channel LTS` branch in the install script.
+#[test]
+fn default_language_version_downloads_lts() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: dotnet
+                entry: dotnet --version
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "});
+
+    context.git_add(".");
+
+    // Remove dotnet from PATH to force download
+    let new_path = remove_bin_from_path("dotnet", None).unwrap();
+
+    let output = context.run().env("PATH", new_path).output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(output.status.success(), "hook should pass: {stdout}");
 }
