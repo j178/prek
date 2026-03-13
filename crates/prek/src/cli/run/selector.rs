@@ -398,33 +398,19 @@ fn parse_single_selector<FS: FileSystem>(
     source: SelectorSource,
     fs: FS,
 ) -> Result<Selector, Error> {
-    // Handle explicit hook ID with : prefix
-    if let Some(hook_id) = input.strip_prefix(':') {
-        if hook_id.is_empty() {
-            return Err(Error::InvalidSelector {
-                selector: input.to_string(),
-                source: anyhow!("hook ID part is empty"),
-            });
-        }
-        return Ok(Selector {
-            source,
-            original: input.to_string(),
-            expr: SelectorExpr::HookId(hook_id.to_string()),
-        });
-    }
-
     // Handle `project:hook` syntax
     if let Some((project_path, hook_id)) = input.split_once(':') {
-        if project_path.is_empty() {
-            return Err(Error::InvalidSelector {
-                selector: input.to_string(),
-                source: anyhow!("project path part is empty"),
-            });
-        }
         if hook_id.is_empty() {
             return Err(Error::InvalidSelector {
                 selector: input.to_string(),
                 source: anyhow!("hook ID part is empty"),
+            });
+        }
+        if project_path.is_empty() {
+            return Ok(Selector {
+                source,
+                original: input.to_string(),
+                expr: SelectorExpr::HookId(hook_id.to_string()),
             });
         }
 
