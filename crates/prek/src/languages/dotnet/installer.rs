@@ -173,13 +173,7 @@ impl DotnetInstaller {
         // Run the install script
         let mut cmd = Cmd::new("bash", "dotnet-install.sh");
         cmd.arg(&script_path).arg("--install-dir").arg(&self.root);
-
-        if let Some(ver) = version {
-            cmd.arg("--channel").arg(ver);
-        } else {
-            // Default to LTS
-            cmd.arg("--channel").arg("LTS");
-        }
+        add_channel_args_unix(&mut cmd, version);
 
         cmd.check(true)
             .output()
@@ -213,12 +207,7 @@ impl DotnetInstaller {
             .arg("-InstallDir")
             .arg(&self.root);
 
-        if let Some(ver) = version {
-            cmd.arg("-Channel").arg(ver);
-        } else {
-            // Default to LTS
-            cmd.arg("-Channel").arg("LTS");
-        }
+        add_channel_args_windows(&mut cmd, version);
 
         cmd.check(true)
             .output()
@@ -288,6 +277,27 @@ fn to_dotnet_install_version(request: &LanguageRequest) -> Option<String> {
         LanguageRequest::Any { .. } => None,
         LanguageRequest::Dotnet(req) => req.to_install_version(),
         _ => None,
+    }
+}
+
+/// Add channel arguments to the Unix install command.
+fn add_channel_args_unix(cmd: &mut Cmd, version: Option<&str>) {
+    if let Some(ver) = version {
+        cmd.arg("--channel").arg(ver);
+    } else {
+        // Default to LTS
+        cmd.arg("--channel").arg("LTS");
+    }
+}
+
+/// Add channel arguments to the Windows install command.
+#[cfg(any(windows, test))]
+fn add_channel_args_windows(cmd: &mut Cmd, version: Option<&str>) {
+    if let Some(ver) = version {
+        cmd.arg("-Channel").arg(ver);
+    } else {
+        // Default to LTS
+        cmd.arg("-Channel").arg("LTS");
     }
 }
 
@@ -880,6 +890,54 @@ mod tests {
         assert!(parse_dotnet_version("invalid").is_none());
         assert!(parse_dotnet_version("a.b.c").is_none());
         assert!(parse_dotnet_version("8.b.100").is_none());
+    }
+
+    #[test]
+    fn test_add_channel_args_unix_with_version() {
+        let mut cmd = crate::process::Cmd::new("bash", "test");
+        add_channel_args_unix(&mut cmd, Some("8.0"));
+        let args: Vec<_> = cmd
+            .get_args()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect();
+        assert!(args.contains(&"--channel".to_string()));
+        assert!(args.contains(&"8.0".to_string()));
+    }
+
+    #[test]
+    fn test_add_channel_args_unix_without_version() {
+        let mut cmd = crate::process::Cmd::new("bash", "test");
+        add_channel_args_unix(&mut cmd, None);
+        let args: Vec<_> = cmd
+            .get_args()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect();
+        assert!(args.contains(&"--channel".to_string()));
+        assert!(args.contains(&"LTS".to_string()));
+    }
+
+    #[test]
+    fn test_add_channel_args_windows_with_version() {
+        let mut cmd = crate::process::Cmd::new("powershell", "test");
+        add_channel_args_windows(&mut cmd, Some("8.0"));
+        let args: Vec<_> = cmd
+            .get_args()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect();
+        assert!(args.contains(&"-Channel".to_string()));
+        assert!(args.contains(&"8.0".to_string()));
+    }
+
+    #[test]
+    fn test_add_channel_args_windows_without_version() {
+        let mut cmd = crate::process::Cmd::new("powershell", "test");
+        add_channel_args_windows(&mut cmd, None);
+        let args: Vec<_> = cmd
+            .get_args()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect();
+        assert!(args.contains(&"-Channel".to_string()));
+        assert!(args.contains(&"LTS".to_string()));
     }
 
     #[tokio::test]
