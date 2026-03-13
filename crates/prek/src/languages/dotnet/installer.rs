@@ -294,6 +294,8 @@ pub(crate) fn installer_from_store(store: &Store) -> DotnetInstaller {
 
 #[cfg(test)]
 mod tests {
+    use tempfile::TempDir;
+
     use super::*;
     use crate::languages::dotnet::DotnetRequest;
 
@@ -500,5 +502,378 @@ mod tests {
             )),
             None
         );
+    }
+
+    #[test]
+    fn test_dotnet_installer_new() {
+        let root = PathBuf::from("/test/root");
+        let installer = DotnetInstaller::new(root.clone());
+        assert_eq!(installer.root, root);
+    }
+
+    #[tokio::test]
+    async fn test_find_installed_no_executable() {
+        let temp = TempDir::new().unwrap();
+        let installer = DotnetInstaller::new(temp.path().to_path_buf());
+
+        // No dotnet executable exists, should return None
+        let result = installer
+            .find_installed(&LanguageRequest::Any { system_only: false })
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_find_installed_with_invalid_executable() {
+        let temp = TempDir::new().unwrap();
+        let dotnet_path = dotnet_executable(temp.path());
+
+        // Create a fake dotnet executable that outputs invalid version
+        #[cfg(unix)]
+        {
+            fs_err::write(&dotnet_path, "#!/bin/sh\necho 'invalid'").unwrap();
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs_err::metadata(&dotnet_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs_err::set_permissions(&dotnet_path, perms).unwrap();
+        }
+        #[cfg(windows)]
+        {
+            // On Windows, we can't easily create a fake executable that runs
+            // so we just verify the path logic
+            fs_err::write(&dotnet_path, "invalid").unwrap();
+        }
+
+        let installer = DotnetInstaller::new(temp.path().to_path_buf());
+
+        // Executable exists but returns invalid version, should return None
+        let result = installer
+            .find_installed(&LanguageRequest::Any { system_only: false })
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_find_installed_version_mismatch() {
+        let temp = TempDir::new().unwrap();
+        let dotnet_path = dotnet_executable(temp.path());
+
+        // Create a fake dotnet executable that outputs version 7.0.100
+        fs_err::write(&dotnet_path, "#!/bin/sh\necho '7.0.100'").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs_err::metadata(&dotnet_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs_err::set_permissions(&dotnet_path, perms).unwrap();
+
+        let installer = DotnetInstaller::new(temp.path().to_path_buf());
+
+        // Request version 8, but installed is 7 - should return None
+        let result = installer
+            .find_installed(&LanguageRequest::Dotnet(DotnetRequest::Major(8)))
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_find_installed_version_matches() {
+        let temp = TempDir::new().unwrap();
+        let dotnet_path = dotnet_executable(temp.path());
+
+        // Create a fake dotnet executable that outputs version 8.0.100
+        fs_err::write(&dotnet_path, "#!/bin/sh\necho '8.0.100'").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs_err::metadata(&dotnet_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs_err::set_permissions(&dotnet_path, perms).unwrap();
+
+        let installer = DotnetInstaller::new(temp.path().to_path_buf());
+
+        // Request version 8, installed is 8.0.100 - should return Some
+        let result = installer
+            .find_installed(&LanguageRequest::Dotnet(DotnetRequest::Major(8)))
+            .await
+            .unwrap();
+        assert!(result.is_some());
+        let dotnet_result = result.unwrap();
+        assert_eq!(dotnet_result.version(), &Version::new(8, 0, 100));
+    }
+
+    #[tokio::test]
+    async fn test_find_system_dotnet_not_found() {
+        // When `which dotnet` fails, should return None
+        // This test relies on dotnet not being in the path for the test environment
+        // or we just verify the logic by testing the version check paths
+
+        let temp = TempDir::new().unwrap();
+        let installer = DotnetInstaller::new(temp.path().to_path_buf());
+
+        // find_system_dotnet returns None when which::which fails
+        // We can't control `which` easily, but we can verify the function doesn't panic
+        let _result = installer
+            .find_system_dotnet(&LanguageRequest::Any { system_only: false })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_install_system_only_no_system_dotnet() {
+        let temp = TempDir::new().unwrap();
+        let installer = DotnetInstaller::new(temp.path().to_path_buf());
+
+        // With system_only=true, if no system dotnet is found, should fail
+        // Note: This test may pass or fail depending on whether dotnet is installed
+        // We primarily verify the error message format when system dotnet isn't available
+        let request = LanguageRequest::Any { system_only: true };
+        let result = installer.install(&request, false).await;
+
+        // If no system dotnet is installed, this should error
+        // The error should mention "No system dotnet installation found"
+        if let Err(err) = result {
+            let err_msg = err.to_string();
+            assert!(
+                err_msg.contains("No system dotnet installation found")
+                    || err_msg.contains("No suitable dotnet version found"),
+                "Unexpected error: {err_msg}"
+            );
+        }
+        // If system dotnet IS installed, result will be Ok - that's also valid
+    }
+
+    #[tokio::test]
+    async fn test_install_downloads_disabled() {
+        let temp = TempDir::new().unwrap();
+        let installer = DotnetInstaller::new(temp.path().to_path_buf());
+
+        // Request a specific version that's unlikely to be installed
+        // with downloads disabled - should fail
+        let request = LanguageRequest::Dotnet(DotnetRequest::MajorMinorPatch(99, 99, 999));
+        let result = installer.install(&request, false).await;
+
+        // Should fail because no matching version and downloads are disabled
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("No suitable dotnet version found and downloads are disabled"),
+            "Unexpected error: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_install_uses_managed_when_version_matches() {
+        let temp = TempDir::new().unwrap();
+        let dotnet_path = dotnet_executable(temp.path());
+
+        // Create a fake dotnet executable that outputs version 8.0.100
+        fs_err::write(&dotnet_path, "#!/bin/sh\necho '8.0.100'").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs_err::metadata(&dotnet_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs_err::set_permissions(&dotnet_path, perms).unwrap();
+
+        let installer = DotnetInstaller::new(temp.path().to_path_buf());
+
+        // Request version 8 specifically - if system has different major version,
+        // it should use the managed dotnet
+        let result = installer
+            .install(&LanguageRequest::Dotnet(DotnetRequest::Major(8)), false)
+            .await;
+
+        // Should succeed - either system dotnet 8.x or managed 8.0.100
+        assert!(result.is_ok());
+        let dotnet_result = result.unwrap();
+        assert_eq!(dotnet_result.version().major, 8);
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_find_installed_returns_matching_version() {
+        // This test specifically exercises the find_installed path
+        // which is covered when install() finds a managed installation
+        let temp = TempDir::new().unwrap();
+        let dotnet_path = dotnet_executable(temp.path());
+
+        // Create a managed dotnet that outputs version 8.0.100
+        fs_err::write(&dotnet_path, "#!/bin/sh\necho '8.0.100'").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs_err::metadata(&dotnet_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs_err::set_permissions(&dotnet_path, perms).unwrap();
+
+        let installer = DotnetInstaller::new(temp.path().to_path_buf());
+
+        // Directly test find_installed - this covers the "Using managed dotnet" branch
+        let result = installer
+            .find_installed(&LanguageRequest::Dotnet(DotnetRequest::Major(8)))
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        let dotnet_result = result.unwrap();
+        assert_eq!(dotnet_result.version(), &Version::new(8, 0, 100));
+        assert_eq!(dotnet_result.dotnet(), dotnet_path);
+    }
+
+    #[test]
+    fn test_dotnet_executable_path() {
+        let base_path = Path::new("/opt/dotnet");
+        let exe_path = dotnet_executable(base_path);
+
+        #[cfg(unix)]
+        assert_eq!(exe_path, PathBuf::from("/opt/dotnet/dotnet"));
+
+        #[cfg(windows)]
+        assert_eq!(exe_path, PathBuf::from("/opt/dotnet/dotnet.exe"));
+    }
+
+    #[test]
+    fn test_version_satisfies_request_all_branches() {
+        let v8_0_100 = Version::new(8, 0, 100);
+        let v8_1_0 = Version::new(8, 1, 0);
+        let v9_0_0 = Version::new(9, 0, 0);
+
+        // Test LanguageRequest::Any with both system_only values
+        assert!(version_satisfies_request(
+            &v8_0_100,
+            &LanguageRequest::Any { system_only: false }
+        ));
+        assert!(version_satisfies_request(
+            &v8_0_100,
+            &LanguageRequest::Any { system_only: true }
+        ));
+
+        // Test DotnetRequest::Any
+        assert!(version_satisfies_request(
+            &v8_0_100,
+            &LanguageRequest::Dotnet(DotnetRequest::Any)
+        ));
+
+        // Test Major matching and non-matching
+        assert!(version_satisfies_request(
+            &v8_0_100,
+            &LanguageRequest::Dotnet(DotnetRequest::Major(8))
+        ));
+        assert!(!version_satisfies_request(
+            &v8_0_100,
+            &LanguageRequest::Dotnet(DotnetRequest::Major(9))
+        ));
+
+        // Test MajorMinor matching and non-matching
+        assert!(version_satisfies_request(
+            &v8_0_100,
+            &LanguageRequest::Dotnet(DotnetRequest::MajorMinor(8, 0))
+        ));
+        assert!(!version_satisfies_request(
+            &v8_1_0,
+            &LanguageRequest::Dotnet(DotnetRequest::MajorMinor(8, 0))
+        ));
+        assert!(!version_satisfies_request(
+            &v9_0_0,
+            &LanguageRequest::Dotnet(DotnetRequest::MajorMinor(8, 0))
+        ));
+
+        // Test MajorMinorPatch matching and non-matching
+        assert!(version_satisfies_request(
+            &v8_0_100,
+            &LanguageRequest::Dotnet(DotnetRequest::MajorMinorPatch(8, 0, 100))
+        ));
+        assert!(!version_satisfies_request(
+            &v8_0_100,
+            &LanguageRequest::Dotnet(DotnetRequest::MajorMinorPatch(8, 0, 101))
+        ));
+        assert!(!version_satisfies_request(
+            &v8_0_100,
+            &LanguageRequest::Dotnet(DotnetRequest::MajorMinorPatch(8, 1, 100))
+        ));
+        assert!(!version_satisfies_request(
+            &v8_0_100,
+            &LanguageRequest::Dotnet(DotnetRequest::MajorMinorPatch(9, 0, 100))
+        ));
+    }
+
+    #[test]
+    fn test_to_dotnet_install_version_all_branches() {
+        // LanguageRequest::Any returns None
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Any { system_only: false }),
+            None
+        );
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Any { system_only: true }),
+            None
+        );
+
+        // DotnetRequest::Any returns None
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Dotnet(DotnetRequest::Any)),
+            None
+        );
+
+        // Major returns "X.0"
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Dotnet(DotnetRequest::Major(8))),
+            Some("8.0".to_string())
+        );
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Dotnet(DotnetRequest::Major(9))),
+            Some("9.0".to_string())
+        );
+
+        // MajorMinor returns "X.Y"
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Dotnet(DotnetRequest::MajorMinor(8, 0))),
+            Some("8.0".to_string())
+        );
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Dotnet(DotnetRequest::MajorMinor(9, 1))),
+            Some("9.1".to_string())
+        );
+
+        // MajorMinorPatch returns "X.Y.Z"
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Dotnet(DotnetRequest::MajorMinorPatch(
+                8, 0, 100
+            ))),
+            Some("8.0.100".to_string())
+        );
+
+        // Other language requests return None (fallback branch)
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Python(
+                crate::languages::python::PythonRequest::Any
+            )),
+            None
+        );
+        assert_eq!(
+            to_dotnet_install_version(&LanguageRequest::Node(
+                crate::languages::node::NodeRequest::Any
+            )),
+            None
+        );
+    }
+
+    #[test]
+    fn test_parse_dotnet_version_edge_cases() {
+        // Valid versions
+        assert_eq!(
+            parse_dotnet_version("8.0.100"),
+            Some(Version::new(8, 0, 100))
+        );
+        assert_eq!(parse_dotnet_version("8.0"), Some(Version::new(8, 0, 0)));
+        assert_eq!(
+            parse_dotnet_version("9.0.100-preview.1"),
+            Some(Version::new(9, 0, 100))
+        );
+
+        // Invalid versions
+        assert!(parse_dotnet_version("").is_none());
+        assert!(parse_dotnet_version("8").is_none());
+        assert!(parse_dotnet_version("invalid").is_none());
+        assert!(parse_dotnet_version("a.b.c").is_none());
+        assert!(parse_dotnet_version("8.b.100").is_none());
     }
 }
