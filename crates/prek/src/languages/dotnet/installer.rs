@@ -1,11 +1,12 @@
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use semver::Version;
 use tracing::debug;
 
 use crate::fs::LockedFile;
+use crate::http::REQWEST_CLIENT;
 use crate::languages::dotnet::DotnetRequest;
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
@@ -165,13 +166,23 @@ impl DotnetInstaller {
         let script_url = "https://dot.net/v1/dotnet-install.sh";
         let script_path = self.root.join("dotnet-install.sh");
 
-        let response = reqwest::get(script_url)
+        let response = REQWEST_CLIENT
+            .get(script_url)
+            .send()
             .await
-            .context("Failed to download dotnet-install.sh")?;
+            .with_context(|| format!("Failed to download dotnet-install.sh from {script_url}"))?;
+
+        if !response.status().is_success() {
+            bail!(
+                "Failed to download dotnet-install.sh: server returned status {}",
+                response.status()
+            );
+        }
+
         let script_content = response
             .bytes()
             .await
-            .context("Failed to read dotnet-install.sh")?;
+            .context("Failed to read dotnet-install.sh response body")?;
         fs_err::tokio::write(&script_path, &script_content).await?;
 
         // Make script executable
