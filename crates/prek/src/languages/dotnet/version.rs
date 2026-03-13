@@ -191,6 +191,12 @@ mod tests {
         assert!(!DotnetRequest::MajorMinorPatch(8, 0, 101).satisfied_by(&install_info));
         assert!(!DotnetRequest::Major(9).satisfied_by(&install_info));
 
+        // Test through LanguageRequest dispatch
+        let req = LanguageRequest::parse(Language::Dotnet, "8").unwrap();
+        assert!(req.satisfied_by(&install_info));
+        let req = LanguageRequest::parse(Language::Dotnet, "9").unwrap();
+        assert!(!req.satisfied_by(&install_info));
+
         Ok(())
     }
 
