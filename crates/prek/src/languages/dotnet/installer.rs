@@ -101,16 +101,29 @@ impl DotnetInstaller {
     }
 
     async fn find_system_dotnet(&self, request: &LanguageRequest) -> Result<Option<DotnetResult>> {
-        let Ok(system_dotnet) = which::which("dotnet") else {
+        let system_dotnet = which::which("dotnet").ok();
+        self.find_system_dotnet_at(system_dotnet.as_deref(), request)
+            .await
+    }
+
+    async fn find_system_dotnet_at(
+        &self,
+        system_dotnet: Option<&std::path::Path>,
+        request: &LanguageRequest,
+    ) -> Result<Option<DotnetResult>> {
+        let Some(system_dotnet) = system_dotnet else {
             return Ok(None);
         };
 
-        let Ok(version) = query_dotnet_version(&system_dotnet).await else {
+        let Ok(version) = query_dotnet_version(system_dotnet).await else {
             return Ok(None);
         };
 
         if version_satisfies_request(&version, request) {
-            Ok(Some(DotnetResult::new(system_dotnet, version)))
+            Ok(Some(DotnetResult::new(
+                system_dotnet.to_path_buf(),
+                version,
+            )))
         } else {
             Ok(None)
         }
@@ -955,5 +968,18 @@ mod tests {
             err.contains("executable not found"),
             "expected 'executable not found' error, got: {err}"
         );
+    }
+
+    #[tokio::test]
+    async fn test_find_system_dotnet_at_returns_none_when_path_is_none() {
+        let temp = TempDir::new().unwrap();
+        let installer = DotnetInstaller::new(temp.path().to_path_buf());
+
+        let request = LanguageRequest::Any { system_only: false };
+        // Pass None to simulate dotnet not being in PATH
+        let result = installer.find_system_dotnet_at(None, &request).await;
+
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
     }
 }
