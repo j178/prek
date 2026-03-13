@@ -87,6 +87,7 @@ impl DotnetRequest {
 mod tests {
     use super::*;
     use crate::config::Language;
+    use crate::languages::version::LanguageRequest;
     use rustc_hash::FxHashSet;
     use std::path::PathBuf;
 
@@ -149,6 +150,19 @@ mod tests {
         assert!(!DotnetRequest::Major(8).is_any());
         assert!(!DotnetRequest::MajorMinor(8, 0).is_any());
         assert!(!DotnetRequest::MajorMinorPatch(8, 0, 100).is_any());
+
+        // Test through LanguageRequest dispatch
+        let req = LanguageRequest::parse(Language::Dotnet, "net").unwrap();
+        assert!(req.is_any());
+        let req = LanguageRequest::parse(Language::Dotnet, "8").unwrap();
+        assert!(!req.is_any());
+    }
+
+    #[test]
+    fn test_tool_buckets() {
+        let buckets = Language::Dotnet.tool_buckets();
+        assert_eq!(buckets.len(), 1);
+        assert!(buckets.iter().any(|b| b.as_ref() == "dotnet"));
     }
 
     #[test]
