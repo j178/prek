@@ -15,6 +15,10 @@ default-filter = "binary_id(prek::languages) and test(bun::)"
 inherits = "ci-core"
 default-filter = "binary_id(prek::languages) and (test(docker::) or test(docker_image::))"
 
+[profile.lang-dotnet]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages) and test(dotnet::)"
+
 [profile.lang-golang]
 inherits = "ci-core"
 default-filter = "binary_id(prek::languages) and test(golang::)"

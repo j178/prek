@@ -180,8 +180,8 @@ fn invalid_config() {
             hooks:
               - id: trailing-whitespace
                 name: trailing-whitespace
-                language: dotnet
-                additional_dependencies: ["dotnet@6"]
+                language: swift
+                additional_dependencies: ["swift-format@5.0.0"]
                 entry: echo Hello, world!
     "#});
     context.git_add(".");
@@ -194,7 +194,7 @@ fn invalid_config() {
     ----- stderr -----
     error: Failed to init hooks
       caused by: Invalid hook `trailing-whitespace`
-      caused by: Hook specified `additional_dependencies: dotnet@6` but the language `dotnet` does not support installing dependencies for now
+      caused by: Hook specified `additional_dependencies: swift-format@5.0.0` but the language `swift` does not support installing dependencies for now
     ");
 
     context.write_pre_commit_config(indoc::indoc! {r"
