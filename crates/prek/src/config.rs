@@ -304,7 +304,7 @@ impl Display for Stages {
 impl From<Vec<Stage>> for Stages {
     fn from(value: Vec<Stage>) -> Self {
         let stages: BTreeSet<_> = value.into_iter().collect();
-        if stages.is_empty() || stages.len() == Stage::value_variants().len() {
+        if stages.len() == Stage::value_variants().len() {
             Self::All
         } else {
             Self::Some(stages)
@@ -323,8 +323,11 @@ impl<'de> Deserialize<'de> for Stages {
     where
         D: Deserializer<'de>,
     {
-        let stages = Vec::<Stage>::deserialize(deserializer)?;
-        Ok(Self::from(stages))
+        let stages = Option::<Vec<Stage>>::deserialize(deserializer)?;
+        Ok(match stages {
+            Some(stages) => Self::from(stages),
+            None => Self::All,
+        })
     }
 }
 
@@ -1237,13 +1240,26 @@ mod tests {
     );
 
     #[test]
-    fn stages_deserialize_empty_as_all() {
+    fn stages_deserialize_empty_as_none() {
         #[derive(Debug, Deserialize)]
         struct Wrapper {
             stages: Stages,
         }
 
         let parsed: Wrapper = serde_saphyr::from_str("stages: []\n").expect("stages should parse");
+        assert_eq!(parsed.stages, Stages::Some(BTreeSet::new()));
+        assert!(!parsed.stages.contains(Stage::Manual));
+        assert!(!parsed.stages.contains(Stage::PreCommit));
+    }
+
+    #[test]
+    fn stages_deserialize_nil_as_all() {
+        #[derive(Debug, Deserialize)]
+        struct Wrapper {
+            stages: Stages,
+        }
+
+        let parsed: Wrapper = serde_saphyr::from_str("stages: ~\n").expect("stages should parse");
         assert_eq!(parsed.stages, Stages::default());
         assert!(parsed.stages.contains(Stage::Manual));
         assert!(parsed.stages.contains(Stage::PreCommit));
