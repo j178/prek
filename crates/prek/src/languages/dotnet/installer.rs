@@ -83,6 +83,11 @@ impl DotnetInstaller {
         debug!("Installing dotnet SDK");
         self.download(version_request.as_deref()).await?;
 
+        self.verify_and_query_installation().await
+    }
+
+    /// Verify that dotnet was installed and query its version.
+    async fn verify_and_query_installation(&self) -> Result<DotnetResult> {
         let dotnet_exe = dotnet_executable(&self.root);
         if !dotnet_exe.exists() {
             anyhow::bail!(
@@ -875,5 +880,22 @@ mod tests {
         assert!(parse_dotnet_version("invalid").is_none());
         assert!(parse_dotnet_version("a.b.c").is_none());
         assert!(parse_dotnet_version("8.b.100").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_verify_installation_fails_when_executable_not_found() {
+        // Test verify_and_query_installation with missing executable
+        let temp = TempDir::new().unwrap();
+        let installer = DotnetInstaller::new(temp.path().to_path_buf());
+
+        // Call the verification method on an empty directory (no dotnet installed)
+        let result = installer.verify_and_query_installation().await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("executable not found"),
+            "expected 'executable not found' error, got: {err}"
+        );
     }
 }

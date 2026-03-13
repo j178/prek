@@ -191,13 +191,13 @@ mod tests {
 
     use super::Dotnet;
 
+    fn dotnet_path() -> std::path::PathBuf {
+        which::which("dotnet").expect("dotnet must be installed to run this test")
+    }
+
     #[tokio::test]
     async fn test_check_health() -> anyhow::Result<()> {
-        let Ok(dotnet_path) = which::which("dotnet") else {
-            // Skip test if dotnet is not installed
-            return Ok(());
-        };
-
+        let dotnet_path = dotnet_path();
         let version = query_dotnet_version(&dotnet_path).await?;
 
         let temp_dir = tempfile::tempdir()?;
@@ -214,6 +214,30 @@ mod tests {
         // Also test through Language dispatch
         let result = Language::Dotnet.check_health(&install_info).await;
         assert!(result.is_ok());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_check_health_version_mismatch() -> anyhow::Result<()> {
+        let dotnet_path = dotnet_path();
+
+        let temp_dir = tempfile::tempdir()?;
+        let mut install_info =
+            InstallInfo::new(Language::Dotnet, FxHashSet::default(), temp_dir.path())?;
+        // Use a fake version that won't match the actual dotnet version
+        install_info
+            .with_language_version(semver::Version::new(1, 0, 0))
+            .with_toolchain(dotnet_path);
+
+        let result = Dotnet.check_health(&install_info).await;
+        assert!(result.is_err());
+
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("dotnet version mismatch"),
+            "expected version mismatch error, got: {err}"
+        );
 
         Ok(())
     }
