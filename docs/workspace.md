@@ -21,19 +21,22 @@ When you run `prek run` without the `--config` option, `prek` automatically disc
 
 3. **Git repository boundary**: The search stops at the git repository root (`.git` directory) to avoid including unrelated projects.
 
-**Note**:
+!!! note
 
-- The workspace root is not necessarily the same as the git repository root, a workspace can exist within a subdirectory of a git repository.
+    **Workspace root**
 
-- The current working directory determines the workspace root discovery. `prek` starts searching from your current location and stops at the first `.pre-commit-config.yaml` file found while traversing up the directory tree. Running from different directories may discover different workspace roots. Use `prek -C <dir>` to change the working directory before execution.
+    - The workspace root is not necessarily the same as the git repository root, a workspace can exist within a subdirectory of a git repository.
+    - The current working directory determines the workspace root discovery. `prek` starts searching from your current location and stops at the first `.pre-commit-config.yaml` file found while traversing up the directory tree. Running from different directories may discover different workspace roots. Use `prek -C <dir>` to change the working directory before execution.
 
-- Directories beginning with a dot (e.g. `.hidden`) are ignored during project discovery.
+    **Discovery exclusions**
 
-- Cookiecutter template directories (names like `{{cookiecutter.project_slug}}`) are ignored during project discovery.
+    - Directories beginning with a dot (e.g. `.hidden`) are ignored during project discovery.
+    - Cookiecutter template directories (names like `{{cookiecutter.project_slug}}`) are ignored during project discovery.
 
-- By default, `prek` respects `.gitignore` files during workspace discovery. This means any directories or files excluded by `.gitignore`, `.git/info/exclude`, or your global gitignore configuration will automatically be excluded from project discovery. This prevents `prek` from discovering workspaces in ignored directories like `node_modules`, `target`, or `.venv`.
+    **Ignore rules**
 
-- For additional control, `prek` also supports reading `.prekignore` files (following the same syntax rules as `.gitignore`) to exclude specific directories from workspace discovery beyond what's in `.gitignore`. Like `.gitignore`, `.prekignore` files can be placed anywhere in the workspace and apply to their directory and all subdirectories. This works similarly to the `--skip` option but is configured via files.
+    - By default, `prek` respects `.gitignore` files during workspace discovery. This means any directories or files excluded by `.gitignore`, `.git/info/exclude`, or your global gitignore configuration will automatically be excluded from project discovery. This prevents `prek` from discovering workspaces in ignored directories like `node_modules`, `target`, or `.venv`.
+    - For additional control, `prek` also supports reading `.prekignore` files (following the same syntax rules as `.gitignore`) to exclude specific directories from workspace discovery beyond what's in `.gitignore`. Like `.gitignore`, `.prekignore` files can be placed anywhere in the workspace and apply to their directory and all subdirectories. This works similarly to the `--skip` option but is configured via files.
 
 !!! tip
 
@@ -185,7 +188,9 @@ prek run -C src/backend
 
 The `-C <dir>` or `--cd <dir>` option automatically changes to the specified directory before running, allowing you to target specific projects from any location in the workspace.
 
-**Note**: When using `prek install`, only the workspace root configuration's `default_install_hook_types` will be honored. Nested project configurations are not considered during installation.
+!!! note
+
+    When using `prek install`, only the workspace root configuration's `default_install_hook_types` will be honored. Nested project configurations are not considered during installation.
 
 ## Project and Hook Selection
 
@@ -201,8 +206,18 @@ The selector syntax has three different forms:
 
 Selectors can be used to select specific hooks or projects, and combined with `--skip` to exclude certain hooks or projects.
 
-**Note**: `<project-path>` can be a relative path, which is then resolved relative to the current working directory.
-Note that the trailing slash `/` in a `<project-path>` is important, if a selector does not contain a slash, it is interpreted as a hook ID.
+!!! note
+
+    `<project-path>` can be a relative path, which is then resolved relative to the current working directory.
+    The trailing slash `/` in a `<project-path>` is important: if a selector does not contain a slash, it is interpreted as a hook ID.
+
+!!! note "Hook ids containing `:`"
+
+    If your hook id contains `:` (for example `id: lint:ruff`), `prek run lint:ruff`
+    will not select that hook. `prek` interprets `lint:ruff` as the selector
+    `<project-path>:<hook-id>`, with project `lint` and hook `ruff`.
+    To select the hook id `lint:ruff`, add a leading `:` and run
+    `prek run :lint:ruff`.
 
 ### Running Specific Hooks or Projects
 
@@ -270,9 +285,13 @@ prek run frontend/ --skip frontend/docs --skip frontend:lint
 prek run --skip black --skip markdownlint
 ```
 
-**Note**: Selecting a project includes all its subprojects unless explicitly skipped. Skipping a project also skips all its subprojects.
+!!! note
 
-**Note**: The `PREK_SKIP` or `SKIP` environment variable can be used as an alternative to `--skip`. Multiple values should be comma-delimited:
+    Selecting a project includes all its subprojects unless explicitly skipped. Skipping a project also skips all its subprojects.
+
+!!! note
+
+    The `PREK_SKIP` or `SKIP` environment variable can be used as an alternative to `--skip`. Multiple values should be comma-delimited:
 
 ```bash
 # Skip 'frontend' and 'tests' projects

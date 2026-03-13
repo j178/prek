@@ -398,40 +398,19 @@ fn parse_single_selector<FS: FileSystem>(
     source: SelectorSource,
     fs: FS,
 ) -> Result<Selector, Error> {
-    if input.chars().filter(|&c| c == ':').count() > 1 {
-        return Err(Error::InvalidSelector {
-            selector: input.to_string(),
-            source: anyhow!("only one ':' is allowed"),
-        });
-    }
-
-    // Handle explicit hook ID with : prefix
-    if let Some(hook_id) = input.strip_prefix(':') {
-        if hook_id.is_empty() {
-            return Err(Error::InvalidSelector {
-                selector: input.to_string(),
-                source: anyhow!("hook ID part is empty"),
-            });
-        }
-        return Ok(Selector {
-            source,
-            original: input.to_string(),
-            expr: SelectorExpr::HookId(hook_id.to_string()),
-        });
-    }
-
     // Handle `project:hook` syntax
     if let Some((project_path, hook_id)) = input.split_once(':') {
-        if project_path.is_empty() {
-            return Err(Error::InvalidSelector {
-                selector: input.to_string(),
-                source: anyhow!("project path part is empty"),
-            });
-        }
         if hook_id.is_empty() {
             return Err(Error::InvalidSelector {
                 selector: input.to_string(),
                 source: anyhow!("hook ID part is empty"),
+            });
+        }
+        if project_path.is_empty() {
+            return Ok(Selector {
+                source,
+                original: input.to_string(),
+                expr: SelectorExpr::HookId(hook_id.to_string()),
             });
         }
 
@@ -615,6 +594,9 @@ mod tests {
         let selector = parse_single_selector(":black", fs.root(), SelectorSource::CliArg, &fs)?;
         assert!(matches!(selector.expr, SelectorExpr::HookId(ref id) if id == "black"));
 
+        let selector = parse_single_selector(":lint:ruff", fs.root(), SelectorSource::CliArg, &fs)?;
+        assert!(matches!(selector.expr, SelectorExpr::HookId(ref id) if id == "lint:ruff"));
+
         // Test bare hook ID (backward compatibility)
         let selector = parse_single_selector("black", fs.root(), SelectorSource::CliArg, &fs)?;
         assert!(matches!(selector.expr, SelectorExpr::HookId(ref id) if id == "black"));
@@ -661,6 +643,19 @@ mod tests {
             _ => panic!("Expected ProjectHook"),
         }
 
+        let selector =
+            parse_single_selector("src:lint:ruff", fs.root(), SelectorSource::CliArg, &fs)?;
+        match selector.expr {
+            SelectorExpr::ProjectHook {
+                project_path,
+                hook_id,
+            } => {
+                assert_eq!(project_path, PathBuf::from("src"));
+                assert_eq!(hook_id, "lint:ruff");
+            }
+            _ => panic!("Expected ProjectHook"),
+        }
+
         Ok(())
     }
 
@@ -674,11 +669,6 @@ mod tests {
 
         // Test empty hook ID in project:hook
         let result = parse_single_selector("src:", fs.root(), SelectorSource::CliArg, &fs);
-        assert!(result.is_err());
-
-        // Test multiple colons
-        let result =
-            parse_single_selector("src:black:extra", fs.root(), SelectorSource::CliArg, &fs);
         assert!(result.is_err());
 
         // Test empty string
@@ -723,6 +713,9 @@ mod tests {
         let selector = parse_single_selector(":black", fs.root(), SelectorSource::CliArg, &fs)?;
         assert_eq!(selector.to_string(), "black");
 
+        let selector = parse_single_selector(":lint:ruff", fs.root(), SelectorSource::CliArg, &fs)?;
+        assert_eq!(selector.to_string(), "lint:ruff");
+
         let selector = parse_single_selector("src/", fs.root(), SelectorSource::CliArg, &fs)?;
         assert_eq!(selector.to_string(), "src/");
 
@@ -748,6 +741,10 @@ mod tests {
         let selector =
             parse_single_selector("./src/:black", fs.root(), SelectorSource::CliArg, &fs)?;
         assert_eq!(selector.to_string(), "src:black");
+
+        let selector =
+            parse_single_selector("src:lint:ruff", fs.root(), SelectorSource::CliArg, &fs)?;
+        assert_eq!(selector.to_string(), "src:lint:ruff");
 
         Ok(())
     }

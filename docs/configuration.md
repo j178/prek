@@ -838,6 +838,14 @@ The stable identifier of the hook.
 
 `id` is also used for CLI selection (for example `prek run <id>` and `PREK_SKIP`).
 
+!!! note "Hook ids containing `:`"
+
+    If your hook id contains `:` (for example `id: lint:ruff`), `prek run lint:ruff`
+    will not select that hook. `prek` interprets `lint:ruff` as the selector
+    `<project-path>:<hook-id>`, with project `lint` and hook `ruff`.
+    To select the hook id `lint:ruff`, add a leading `:` and run
+    `prek run :lint:ruff`.
+
 #### `name`
 
 Human-friendly label shown in output.
