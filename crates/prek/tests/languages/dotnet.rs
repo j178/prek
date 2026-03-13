@@ -552,3 +552,56 @@ fn tools_isolated_environment() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// Test that install fails gracefully when hooks directory is not writable.
+#[cfg(unix)]
+#[test]
+fn hooks_dir_not_writable() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: local
+                name: local
+                language: dotnet
+                entry: dotnet --version
+                always_run: true
+                pass_filenames: false
+    "});
+
+    context.git_add(".");
+
+    // Create the hooks directory and make it read-only
+    let hooks_dir = context.home_dir().child("hooks");
+    hooks_dir.create_dir_all().unwrap();
+    std::fs::set_permissions(hooks_dir.path(), std::fs::Permissions::from_mode(0o555)).unwrap();
+
+    // Ensure we restore permissions on cleanup
+    struct RestorePerms<'a>(&'a std::path::Path);
+    impl Drop for RestorePerms<'_> {
+        fn drop(&mut self) {
+            let _ = std::fs::set_permissions(self.0, std::fs::Permissions::from_mode(0o755));
+        }
+    }
+    let _restore = RestorePerms(hooks_dir.path());
+
+    // Filter the random suffix in the temp directory name
+    let mut filters = context.filters();
+    filters.push((r"dotnet-[a-zA-Z0-9]+", "[TEMP_DIR]"));
+
+    cmd_snapshot!(filters, context.run(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install hook `local`
+      caused by: Failed to create directory for hook environment
+      caused by: Permission denied (os error 13) at path "[HOME]/hooks/[TEMP_DIR]"
+    "#);
+}

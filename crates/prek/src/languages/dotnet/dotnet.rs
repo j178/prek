@@ -179,3 +179,42 @@ async fn install_tool(dotnet: &Path, tool_path: &Path, dependency: &str) -> Resu
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use rustc_hash::FxHashSet;
+
+    use crate::config::Language;
+    use crate::hook::InstallInfo;
+    use crate::languages::LanguageImpl;
+    use crate::languages::dotnet::installer::query_dotnet_version;
+
+    use super::Dotnet;
+
+    #[tokio::test]
+    async fn test_check_health() -> anyhow::Result<()> {
+        let Ok(dotnet_path) = which::which("dotnet") else {
+            // Skip test if dotnet is not installed
+            return Ok(());
+        };
+
+        let version = query_dotnet_version(&dotnet_path).await?;
+
+        let temp_dir = tempfile::tempdir()?;
+        let mut install_info =
+            InstallInfo::new(Language::Dotnet, FxHashSet::default(), temp_dir.path())?;
+        install_info
+            .with_language_version(version)
+            .with_toolchain(dotnet_path);
+
+        // Test the Dotnet impl directly
+        let result = Dotnet.check_health(&install_info).await;
+        assert!(result.is_ok());
+
+        // Also test through Language dispatch
+        let result = Language::Dotnet.check_health(&install_info).await;
+        assert!(result.is_ok());
+
+        Ok(())
+    }
+}
