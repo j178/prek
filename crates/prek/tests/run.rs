@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
@@ -11,6 +12,13 @@ use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PREK_TOML};
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 mod common;
+
+fn jj_cmd(dir: impl AsRef<Path>) -> Option<Command> {
+    let jj = which::which("jj").ok()?;
+    let mut cmd = Command::new(jj);
+    cmd.current_dir(dir);
+    Some(cmd)
+}
 
 #[test]
 fn run_basic() -> Result<()> {
@@ -69,6 +77,49 @@ fn run_basic() -> Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+#[test]
+fn run_in_non_colocated_jj_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--no-colocate"])
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: echo-files
+                name: echo-files
+                entry: python3 -c "import sys; print('ARGS:' + ' '.join(sys.argv[1:]))"
+                language: system
+                files: \.txt$
+                verbose: true
+    "#});
+
+    context.work_dir().child("file.txt").write_str("hello")?;
+    context.work_dir().child("ignored.md").write_str("nope")?;
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    echo-files...............................................................Passed
+    - hook id: echo-files
+    - duration: [TIME]
+
+      ARGS:file.txt
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }
@@ -142,7 +193,7 @@ fn run_in_non_git_repo() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Command `get git root` exited with an error:
+    error: Not inside a Git or Jujutsu repository: Command `get git root` exited with an error:
 
     [status]
     exit status: 128

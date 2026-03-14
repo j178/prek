@@ -28,16 +28,23 @@ pub(crate) enum Error {
 
     #[error(transparent)]
     UTF8(#[from] Utf8Error),
+
+    #[error("{0}")]
+    Message(String),
 }
 
 pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
     LazyLock::new(|| which::which("git"));
 
-pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| {
-    get_root().inspect(|root| {
-        debug!("Git root: {}", root.display());
-    })
-});
+pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> =
+    LazyLock::new(|| match crate::repo::REPO_CONTEXT.as_ref() {
+        Ok(repo) => {
+            let root = repo.root().to_path_buf();
+            debug!("Repository root: {}", root.display());
+            Ok(root)
+        }
+        Err(err) => Err(Error::Message(err.to_string())),
+    });
 
 /// Remove some `GIT_` environment variables exposed by `git`.
 ///
@@ -72,6 +79,7 @@ pub(crate) static GIT_ENV_TO_REMOVE: LazyLock<Vec<(String, String)>> = LazyLock:
 pub(crate) fn git_cmd(summary: &str) -> Result<Cmd, Error> {
     let mut cmd = Cmd::new(GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?, summary);
     cmd.arg("-c").arg("core.useBuiltinFSMonitor=false");
+    crate::repo::apply_git_env(&mut cmd);
 
     Ok(cmd)
 }

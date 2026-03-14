@@ -2,27 +2,18 @@ use std::path::Path;
 
 use futures::StreamExt;
 use owo_colors::OwoColorize;
-use rustc_hash::FxHashSet;
 use tokio::io::AsyncReadExt;
 
-use crate::git;
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
+use crate::repo;
 use crate::run::CONCURRENCY;
 
 pub(crate) async fn check_executables_have_shebangs(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>), anyhow::Error> {
-    let stdout = git::git_cmd("get file file mode")?
-        .arg("config")
-        .arg("core.fileMode")
-        .check(true)
-        .output()
-        .await?
-        .stdout;
-
-    let tracks_executable_bit = std::str::from_utf8(&stdout)?.trim() != "false";
+    let tracks_executable_bit = repo::tracks_executable_bit().await?;
     let file_base = hook.project().relative_path();
 
     let (code, output) = if tracks_executable_bit {
@@ -77,56 +68,17 @@ async fn git_check_shebangs(
     file_base: &Path,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>), anyhow::Error> {
-    let filenames: FxHashSet<_> = filenames.iter().collect();
+    let executable_files = repo::executable_files(file_base, filenames).await?;
 
-    let output = git::git_cmd("git ls-files")?
-        .arg("ls-files")
-        // Show staged contents' mode bits, object name and stage number in the output.
-        .arg("--stage")
-        .arg("-z")
-        .arg("--")
-        .arg(if file_base.as_os_str().is_empty() {
-            Path::new(".")
-        } else {
-            file_base
-        })
-        .check(true)
-        .output()
-        .await?;
-
-    let entries = output.stdout.split(|&b| b == b'\0').filter_map(|entry| {
-        let entry = str::from_utf8(entry).ok()?;
-        if entry.is_empty() {
-            return None;
-        }
-
-        let mut parts = entry.split('\t');
-        let metadata = parts.next()?;
-        let file_name = parts.next()?;
-        let file_name = Path::new(file_name);
-        if !filenames.contains(&file_name) {
-            return None;
-        }
-
-        let mode_str = metadata.split_whitespace().next()?;
-        let mode_bits = u32::from_str_radix(mode_str, 8).ok()?;
-        let is_executable = (mode_bits & 0o111) != 0;
-        Some((file_name, is_executable))
-    });
-
-    let mut tasks = futures::stream::iter(entries)
-        .map(async |(file_name, is_executable)| {
-            if is_executable {
-                let has_shebang = file_has_shebang(file_name).await?;
-                if has_shebang {
-                    anyhow::Ok((0, Vec::new()))
-                } else {
-                    let stripped = file_name.strip_prefix(file_base).unwrap_or(file_name);
-                    let msg = print_shebang_warning(stripped);
-                    Ok((1, msg.into_bytes()))
-                }
+    let mut tasks = futures::stream::iter(executable_files)
+        .map(async |file_name| {
+            let full_path = file_base.join(&file_name);
+            let has_shebang = file_has_shebang(&full_path).await?;
+            if has_shebang {
+                anyhow::Ok((0, Vec::new()))
             } else {
-                Ok((0, Vec::new()))
+                let msg = print_shebang_warning(&file_name);
+                Ok((1, msg.into_bytes()))
             }
         })
         .buffered(*CONCURRENCY);
