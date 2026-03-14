@@ -15,8 +15,9 @@ use crate::cli::run::{SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
 use crate::config::load_config;
 use crate::fs::{CWD, Simplified};
-use crate::git::{GIT_ROOT, git_cmd};
+use crate::git::git_cmd;
 use crate::printer::Printer;
+use crate::repo;
 use crate::store::Store;
 use crate::workspace::{Error as WorkspaceError, Project, Workspace};
 use crate::{git, warn_user};
@@ -64,14 +65,16 @@ pub(crate) async fn install(
     let hooks_path = if let Some(dir) = git_dir {
         dir.join("hooks")
     } else {
-        git::get_git_common_dir().await?.join("hooks")
+        repo::hooks_dir().await?
     };
     fs_err::create_dir_all(&hooks_path)?;
 
     let selectors = if let Some(project) = &project {
         Some(Selectors::load(&includes, &skips, project.path())?)
     } else if !includes.is_empty() || !skips.is_empty() {
-        anyhow::bail!("Cannot use `--include` or `--skip` outside of a git repository");
+        anyhow::bail!(
+            "Cannot use `--include` or `--skip` outside of a Git or Jujutsu (jj) repository"
+        );
     } else {
         None
     };
@@ -264,7 +267,7 @@ fn install_hook_script(
 
         write!(hint, " with specified config `{}`", config.display().cyan())?;
     } else if let Some(project) = project {
-        let git_root = GIT_ROOT.as_ref()?;
+        let git_root = repo::root()?;
         let project_path = project.path();
         let relative_path = project_path.strip_prefix(git_root).unwrap_or(project_path);
         if !relative_path.as_os_str().is_empty() {
@@ -387,7 +390,7 @@ pub(crate) async fn uninstall(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let project = Project::discover(config.as_deref(), &CWD).ok();
-    let hooks_path = git::get_git_common_dir().await?.join("hooks");
+    let hooks_path = repo::hooks_dir().await?;
 
     for hook_type in get_hook_types(hook_types, project.as_ref(), config.as_deref()) {
         let hook_path = hooks_path.join(hook_type.as_ref());

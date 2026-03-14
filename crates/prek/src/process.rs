@@ -408,6 +408,12 @@ impl Cmd {
 
     /// Remove some git-specific environment variables to make git commands isolated.
     pub fn remove_git_envs(&mut self) -> &mut Self {
+        // `git_cmd()` may have already injected repo-specific Git env vars for the current
+        // repository context. Commands that operate on a temporary repo must clear those
+        // explicit overrides as well, not just inherited process env vars.
+        self.inner.env_remove(EnvVars::GIT_DIR);
+        self.inner.env_remove(EnvVars::GIT_WORK_TREE);
+
         for (key, _) in crate::git::GIT_ENV_TO_REMOVE.iter() {
             self.inner.env_remove(key);
         }
@@ -530,7 +536,32 @@ impl Display for Cmd {
 
 #[cfg(all(test, not(windows)))]
 mod tests {
+    use std::collections::BTreeMap;
+
+    use prek_consts::env_vars::EnvVars;
+
     use super::Cmd;
+
+    #[test]
+    fn remove_git_envs_clears_repo_context_overrides() {
+        let mut cmd = Cmd::new("/bin/sh", "remove git envs test");
+        cmd.env(EnvVars::GIT_DIR, "/tmp/repo/.git")
+            .env(EnvVars::GIT_WORK_TREE, "/tmp/repo")
+            .remove_git_envs();
+
+        let envs = cmd
+            .get_envs()
+            .map(|(key, value)| {
+                (
+                    key.to_string_lossy().into_owned(),
+                    value.map(|v| v.to_string_lossy().into_owned()),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(envs.get(EnvVars::GIT_DIR), Some(&None));
+        assert_eq!(envs.get(EnvVars::GIT_WORK_TREE), Some(&None));
+    }
 
     #[tokio::test]
     async fn pty_output_captures_trailing_output_after_fast_exit() {

@@ -2,8 +2,11 @@
 use prek_consts::env_vars::EnvVars;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
+use std::process::Command;
 
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
@@ -11,6 +14,13 @@ use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use crate::common::{TestContext, cmd_snapshot};
 
 mod common;
+
+fn jj_cmd(dir: impl AsRef<Path>) -> Option<Command> {
+    let jj = which::which("jj").ok()?;
+    let mut cmd = Command::new(jj);
+    cmd.current_dir(dir);
+    Some(cmd)
+}
 
 /// Tests that `repo: builtin` hooks doesn't create hook env.
 #[test]
@@ -2089,6 +2099,51 @@ fn check_case_conflict_directory() -> Result<()> {
 
       Case-insensitivity conflict found: src/UTILS
       Case-insensitivity conflict found: src/utils
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn check_case_conflict_in_non_colocated_jujutsu_workspace() -> Result<()> {
+    let Some(mut init) = jj_cmd(".") else {
+        return Ok(());
+    };
+    let context = TestContext::new();
+
+    if !is_case_sensitive_filesystem(&context)? {
+        return Ok(());
+    }
+
+    init.current_dir(context.work_dir())
+        .args(["git", "init", "--no-colocate"])
+        .assert()
+        .success();
+
+    let cwd = context.work_dir();
+    cwd.child("src/foo.txt").write_str("existing file")?;
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-case-conflict
+    "});
+
+    cwd.child("src/FOO.txt").write_str("conflicting case")?;
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for case conflicts.................................................Failed
+    - hook id: check-case-conflict
+    - exit code: 1
+
+      Case-insensitivity conflict found: src/FOO.txt
+      Case-insensitivity conflict found: src/foo.txt
 
     ----- stderr -----
     "#);

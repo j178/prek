@@ -26,6 +26,7 @@ use crate::fs::CWD;
 use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
 use crate::printer::Printer;
+use crate::repo;
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
@@ -66,11 +67,13 @@ pub(crate) async fn run(
         return Ok(ExitStatus::Success);
     }
 
-    // Ensure we are in a git repository.
+    // Ensure we are in a supported repository.
     LazyLock::force(&GIT_ROOT).as_ref()?;
 
-    let should_stash =
-        !all_files && files.is_empty() && directories.is_empty() && !*crate::jj::IS_JJ_WORKSPACE;
+    let should_stash = !all_files
+        && files.is_empty()
+        && directories.is_empty()
+        && repo::should_stash_by_default_run();
 
     // Check if we have unresolved merge conflict files and fail fast.
     if should_stash && git::has_unmerged_paths().await? {

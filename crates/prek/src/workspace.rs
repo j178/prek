@@ -22,7 +22,7 @@ use crate::git::GIT_ROOT;
 use crate::hook::HookSpec;
 use crate::hook::{self, Hook, HookBuilder, Repo};
 use crate::store::{CacheBucket, Store};
-use crate::{git, store, warn_user};
+use crate::{git, repo, store, warn_user};
 
 #[derive(Error, Debug)]
 pub(crate) enum Error {
@@ -973,6 +973,10 @@ impl Workspace {
 
     /// Check if all configuration files are staged in git.
     pub(crate) async fn check_configs_staged(&self) -> Result<()> {
+        if !repo::requires_staged_configs() {
+            return Ok(());
+        }
+
         let config_files = self
             .projects
             .iter()
