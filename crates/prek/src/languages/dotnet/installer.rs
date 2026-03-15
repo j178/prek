@@ -313,10 +313,14 @@ fn to_dotnet_install_version(request: &LanguageRequest) -> Option<String> {
     }
 }
 
-/// Add channel arguments to the Unix install command.
+/// Add channel/version arguments to the Unix install command.
 fn add_channel_args_unix(cmd: &mut Cmd, version: Option<&str>) {
     if let Some(ver) = version {
-        cmd.arg("--channel").arg(ver);
+        if Version::parse(ver).is_ok() {
+            cmd.arg("--version").arg(ver);
+        } else {
+            cmd.arg("--channel").arg(ver);
+        }
     } else {
         // Default to LTS
         cmd.arg("--channel").arg("LTS");
@@ -327,7 +331,11 @@ fn add_channel_args_unix(cmd: &mut Cmd, version: Option<&str>) {
 #[cfg(any(windows, test))]
 fn add_channel_args_windows(cmd: &mut Cmd, version: Option<&str>) {
     if let Some(ver) = version {
-        cmd.arg("-Channel").arg(ver);
+        if Version::parse(ver).is_ok() {
+            cmd.arg("-Version").arg(ver);
+        } else {
+            cmd.arg("-Channel").arg(ver);
+        }
     } else {
         // Default to LTS
         cmd.arg("-Channel").arg("LTS");
