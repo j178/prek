@@ -215,6 +215,7 @@ impl DotnetInstaller {
 
         let response = REQWEST_CLIENT
             .get(script_url)
+            .send()
             .await
             .context("Failed to download dotnet-install.ps1")?;
 
