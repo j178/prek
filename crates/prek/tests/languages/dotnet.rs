@@ -1,15 +1,42 @@
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_consts::env_vars::EnvVars;
+use std::ffi::OsString;
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
-/// Test that `language_version` can specify a dotnet SDK version.
+/// Helper to create a fake dotnet binary that exits with an error (shadowing the system dotnet).
+/// Returns the new PATH environment variable value.
+fn shadow_dotnet(context: &TestContext) -> OsString {
+    let fake_bin_dir = context.home_dir().child("fake_bin");
+    fake_bin_dir.create_dir_all().unwrap();
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let fake_dotnet = fake_bin_dir.child("dotnet");
+        fake_dotnet.write_str("#!/bin/sh\nexit 127\n").unwrap();
+        std::fs::set_permissions(fake_dotnet.path(), std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+    }
+
+    #[cfg(windows)]
+    {
+        let fake_dotnet = fake_bin_dir.child("dotnet.cmd");
+        fake_dotnet.write_str("@echo off\nexit /b 127\n").unwrap();
+    }
+
+    let original_path = EnvVars::var_os(EnvVars::PATH).unwrap_or_default();
+    let mut new_path = OsString::from(fake_bin_dir.path());
+    let sep = if cfg!(windows) { ";" } else { ":" };
+    new_path.push(sep);
+    new_path.push(&original_path);
+    new_path
+}
+
 #[test]
 fn language_version() {
     if !EnvVars::is_set(EnvVars::CI) {
-        // Skip when not running in CI to avoid downloading large SDKs locally
-        // or relying on specific local system versions.
         return;
     }
 
@@ -51,8 +78,6 @@ fn multiple_sdk_versions() {
     let context = TestContext::new();
     context.init_project();
 
-    // Hook 1: Requests version 8
-    // Hook 2: Requests version 10
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -75,7 +100,10 @@ fn multiple_sdk_versions() {
 
     context.git_add(".");
 
-    let output = context.run().output().unwrap();
+    let shadowed_path = shadow_dotnet(&context);
+
+    // Run with the shadowed path to ensure managed versions are used
+    let output = context.run().env("PATH", &shadowed_path).output().unwrap();
     assert!(output.status.success(), "hooks should pass");
 
     // Verify both versions exist in the tool bucket
@@ -249,10 +277,7 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
     let output = context.run().output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(output.status.success(), "hook should pass");
-    assert!(
-        stdout.contains("dotnet-outdated") || stdout.contains("Nuget"),
-        "output should mention the tool"
-    );
+    assert!(stdout.contains("dotnet-outdated") || stdout.contains("Nuget"));
 
     Ok(())
 }
@@ -340,35 +365,9 @@ fn system_only_fails_without_dotnet() {
 
     context.git_add(".");
 
-    // Create a fake dotnet binary that exits with error, prepend it to PATH.
-    let fake_bin_dir = context.home_dir().child("fake_bin");
-    fake_bin_dir.create_dir_all().unwrap();
+    let shadowed_path = shadow_dotnet(&context);
 
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let fake_dotnet = fake_bin_dir.child("dotnet");
-        fake_dotnet.write_str("#!/bin/sh\nexit 127\n").unwrap();
-        std::fs::set_permissions(fake_dotnet.path(), std::fs::Permissions::from_mode(0o755))
-            .unwrap();
-    }
-
-    #[cfg(windows)]
-    {
-        let fake_dotnet = fake_bin_dir.child("dotnet.cmd");
-        fake_dotnet.write_str("@echo off\nexit /b 127\n").unwrap();
-    }
-
-    // Prepend the fake bin directory to PATH so the fake dotnet is found first.
-    let original_path = EnvVars::var_os(EnvVars::PATH).unwrap_or_default();
-    let mut new_path = std::ffi::OsString::from(fake_bin_dir.path());
-    #[cfg(unix)]
-    new_path.push(":");
-    #[cfg(windows)]
-    new_path.push(";");
-    new_path.push(&original_path);
-
-    cmd_snapshot!(context.filters(), context.run().env("PATH", &new_path), @r"
+    cmd_snapshot!(context.filters(), context.run().env("PATH", &shadowed_path), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -406,35 +405,9 @@ fn unavailable_version_fails() {
 
     context.git_add(".");
 
-    // Create a fake dotnet binary that exits with error to force a download attempt
-    let fake_bin_dir = context.home_dir().child("fake_bin");
-    fake_bin_dir.create_dir_all().unwrap();
+    let shadowed_path = shadow_dotnet(&context);
 
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let fake_dotnet = fake_bin_dir.child("dotnet");
-        fake_dotnet.write_str("#!/bin/sh\nexit 127\n").unwrap();
-        std::fs::set_permissions(fake_dotnet.path(), std::fs::Permissions::from_mode(0o755))
-            .unwrap();
-    }
-
-    #[cfg(windows)]
-    {
-        let fake_dotnet = fake_bin_dir.child("dotnet.cmd");
-        fake_dotnet.write_str("@echo off\nexit /b 127\n").unwrap();
-    }
-
-    let original_path = EnvVars::var_os(EnvVars::PATH).unwrap_or_default();
-    let mut new_path = std::ffi::OsString::from(fake_bin_dir.path());
-    #[cfg(unix)]
-    new_path.push(":");
-    #[cfg(windows)]
-    new_path.push(";");
-    new_path.push(&original_path);
-
-    let output = context.run().env("PATH", &new_path).output().unwrap();
-
+    let output = context.run().env("PATH", &shadowed_path).output().unwrap();
     assert!(
         !output.status.success(),
         "should fail when requesting unavailable version"
@@ -467,8 +440,7 @@ fn default_language_version() {
     context.git_add(".");
 
     let output = context.run().output().unwrap();
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(output.status.success(), "hook should pass: {stdout}");
+    assert!(output.status.success());
 }
 
 /// Test TFM-style version specification (net9.0, net10.0, etc.).
@@ -499,11 +471,8 @@ fn tfm_style_language_version() {
 
     let output = context.run().output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(output.status.success(), "hook should pass");
-    assert!(
-        stdout.contains("10.0"),
-        "output should contain version 10.0, got: {stdout}"
-    );
+    assert!(output.status.success());
+    assert!(stdout.contains("10.0"));
 }
 
 /// Test major-only version specification.
@@ -534,11 +503,8 @@ fn major_only_language_version() {
 
     let output = context.run().output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(output.status.success(), "hook should pass");
-    assert!(
-        stdout.contains("8."),
-        "output should contain version 8.x, got: {stdout}"
-    );
+    assert!(output.status.success());
+    assert!(stdout.contains("8."));
 }
 
 /// Test that `types: [c#]` filter correctly matches .cs files.
@@ -613,7 +579,7 @@ fn tools_isolated_environment() -> anyhow::Result<()> {
     context.git_add(".");
 
     let output = context.run().output().unwrap();
-    assert!(output.status.success(), "hook should pass");
+    assert!(output.status.success());
 
     let hooks_path = context.home_dir().child("hooks");
 
@@ -621,28 +587,17 @@ fn tools_isolated_environment() -> anyhow::Result<()> {
         .flatten()
         .find(|entry| entry.file_name().to_string_lossy().starts_with("dotnet-"));
 
-    assert!(
-        dotnet_env.is_some(),
-        "dotnet environment should exist in prek hooks directory"
-    );
-
-    let env_path = dotnet_env.unwrap().path();
-    let tools_path = env_path.join("tools");
-
-    assert!(
-        tools_path.exists(),
-        "tools directory should exist in isolated environment"
-    );
+    assert!(dotnet_env.is_some(), "dotnet environment should exist");
+    let tools_path = dotnet_env.unwrap().path().join("tools");
+    assert!(tools_path.exists());
 
     let tool_exists = std::fs::read_dir(&tools_path)?.flatten().any(|entry| {
-        let name = entry.file_name().to_string_lossy().to_string();
-        name.starts_with("dotnet-outdated")
+        entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with("dotnet-outdated")
     });
-
-    assert!(
-        tool_exists,
-        "dotnet-outdated should be installed in isolated tools path"
-    );
+    assert!(tool_exists, "dotnet-outdated should be in isolated path");
 
     Ok(())
 }
