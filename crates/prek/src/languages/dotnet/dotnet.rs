@@ -2,9 +2,11 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
+use futures::TryFutureExt;
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
+use tokio::fs;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
@@ -103,15 +105,25 @@ impl LanguageImpl for Dotnet {
 
         let env_dir = hook.env_path().expect("Dotnet must have env path");
         let tool_path = tools_path(env_dir);
-        let dotnet_path = hook
+        let toolchain_path = hook
             .install_info()
             .expect("Dotnet must have install info")
             .toolchain
-            .parent()
-            .expect("dotnet executable must have parent");
+            .clone();
 
-        // Prepend both dotnet and tools to PATH
-        let new_path = prepend_paths(&[&tool_path, dotnet_path]).context("Failed to join PATH")?;
+        // Resolve any symlinks in the dotnet executable path and use its parent
+        // directory as both the PATH entry and DOTNET_ROOT. This avoids setting
+        // DOTNET_ROOT to a shim directory such as /usr/bin.
+        let canonical_path = fs::canonicalize(&toolchain_path)
+            .await
+            .context("Failed to resolve dotnet toolchain path")?;
+
+        let dotnet_root = canonical_path
+            .parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| anyhow::anyhow!("Canonicalized dotnet executable must have parent"))?;
+
+        let new_path = prepend_paths(&[&tool_path, &dotnet_root]).context("Failed to join PATH")?;
         let entry = hook.entry.resolve(Some(&new_path))?;
 
         let run = async |batch: &[&Path]| {
@@ -119,7 +131,7 @@ impl LanguageImpl for Dotnet {
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
-                .env(EnvVars::DOTNET_ROOT, dotnet_path)
+                .env(EnvVars::DOTNET_ROOT, &dotnet_root)
                 .envs(&hook.env)
                 .args(&hook.args)
                 .args(batch)
