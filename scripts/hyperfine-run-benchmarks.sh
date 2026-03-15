@@ -213,6 +213,7 @@ INDIVIDUAL_HOOKS=(
   "check-yaml"
   "check-toml"
   "check-xml"
+  "fix-byte-order-marker"
 )
 
 for hook in "${INDIVIDUAL_HOOKS[@]}"; do
