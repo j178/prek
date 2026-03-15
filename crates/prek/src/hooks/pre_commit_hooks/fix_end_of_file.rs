@@ -23,21 +23,25 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
         .await?;
 
     // If the file is empty, do nothing.
-    let file_size = file.seek(SeekFrom::End(0)).await?;
+    let file_size = file.metadata().await?.len();
     if file_size == 0 {
         return Ok((0, Vec::new()));
     }
 
-    match find_last_non_ending(&mut file, file_size).await? {
+    match find_last_non_ending(&mut file).await? {
         (None, _) => {
             // File contains only line endings, so we can just set it to empty.
             file.set_len(0).await?;
+            file.flush().await?;
+            file.shutdown().await?;
             Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
         }
         (Some(pos), None) => {
             // File has some content, but no line ending at the end.
             file.seek(SeekFrom::Start(pos + 1)).await?;
             file.write_all(b"\n").await?;
+            file.flush().await?;
+            file.shutdown().await?;
             Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
         }
         (Some(pos), Some(line_ending)) => {
@@ -67,22 +71,20 @@ fn determine_line_ending(first: u8, second: u8) -> Option<&'static str> {
 
 /// Searches for the last non-line-ending character in the file.
 /// Returns the position of the last non-line-ending character and the line ending type.
-async fn find_last_non_ending<T>(
-    reader: &mut T,
-    data_len: u64,
-) -> Result<(Option<u64>, Option<&str>)>
+async fn find_last_non_ending<T>(reader: &mut T) -> Result<(Option<u64>, Option<&str>)>
 where
     T: AsyncRead + AsyncSeek + Unpin,
 {
     const MAX_SCAN_SIZE: usize = 4 * 1024; // 4KB
 
+    let data_len = reader.seek(SeekFrom::End(0)).await?;
     if data_len == 0 {
         return Ok((None, None));
     }
 
     let mut read_len = 0;
     let mut next_char = 0;
-    let mut buf = [0u8; MAX_SCAN_SIZE];
+    let mut buf = vec![0u8; MAX_SCAN_SIZE];
     let mut line_ending = None;
 
     while read_len < data_len {
