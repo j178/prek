@@ -415,8 +415,6 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
     // Time seconds
     (r"\b(\d+\.)?\d+(ms|s)\b", "[TIME]"),
-    // .NET SDK version output (e.g., "8.0.100" or "9.0.100-preview.1.24101.2")
-    (r"(?m)^\d+\.\d+\.\d+(-[\w.]+)?\n", "[DOTNET_VERSION]\n"),
     // Strip non-deterministic lock contention warnings from parallel test execution
     (r"(?m)^warning: Waiting to acquire lock.*\n", ""),
 ];
