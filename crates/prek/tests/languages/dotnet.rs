@@ -18,7 +18,7 @@ fn language_version() {
                 name: local
                 language: dotnet
                 entry: dotnet --version
-                language_version: '8.0'
+                language_version: '10.0'
                 always_run: true
                 verbose: true
                 pass_filenames: false
@@ -30,8 +30,8 @@ fn language_version() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(output.status.success(), "hook should pass");
     assert!(
-        stdout.contains("8.0"),
-        "output should contain version 8.0, got: {stdout}"
+        stdout.contains("10.0"),
+        "output should contain version 10.0, got: {stdout}"
     );
 }
 
@@ -384,7 +384,7 @@ fn default_language_version() {
     assert!(output.status.success(), "hook should pass: {stdout}");
 }
 
-/// Test TFM-style version specification (net8.0, net9.0, etc.).
+/// Test TFM-style version specification (net9.0, net10.0, etc.).
 #[test]
 fn tfm_style_language_version() {
     let context = TestContext::new();
@@ -398,7 +398,7 @@ fn tfm_style_language_version() {
                 name: local
                 language: dotnet
                 entry: dotnet --version
-                language_version: 'net8.0'
+                language_version: 'net10.0'
                 always_run: true
                 verbose: true
                 pass_filenames: false
@@ -410,8 +410,8 @@ fn tfm_style_language_version() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(output.status.success(), "hook should pass");
     assert!(
-        stdout.contains("8.0"),
-        "output should contain version 8.0, got: {stdout}"
+        stdout.contains("10.0"),
+        "output should contain version 10.0, got: {stdout}"
     );
 }
 
