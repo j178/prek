@@ -28,15 +28,18 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
         .write(true)
         .open(&file_path)
         .await?;
-    let mut bom_buffer = [0u8; 3];
-
-    let bytes_read = file.read(&mut bom_buffer).await?;
-
-    if bytes_read < 3 || bom_buffer != UTF8_BOM {
+    let file_len = file.seek(SeekFrom::End(0)).await?;
+    if file_len < UTF8_BOM.len() as u64 {
         return Ok((0, Vec::new()));
     }
 
-    let file_len = file.seek(SeekFrom::End(0)).await?;
+    let mut bom_buffer = [0u8; 3];
+    file.seek(SeekFrom::Start(0)).await?;
+    file.read_exact(&mut bom_buffer).await?;
+    if bom_buffer != UTF8_BOM {
+        return Ok((0, Vec::new()));
+    }
+
     if file_len == UTF8_BOM.len() as u64 {
         file.set_len(0).await?;
     } else {
