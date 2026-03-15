@@ -117,6 +117,9 @@ impl DotnetInstaller {
 
     /// Scans the root directory for all subdirectories and finds the first one matching the request.
     async fn find_installed(&self, request: &LanguageRequest) -> Result<Option<DotnetResult>> {
+        if !self.root.exists() {
+            return Ok(None);
+        }
         let mut entries = fs_err::tokio::read_dir(&self.root).await?;
         let mut found_versions = Vec::new();
 
@@ -286,11 +289,22 @@ fn to_dotnet_install_version(request: &LanguageRequest) -> Option<String> {
     }
 }
 
+/// Helper to determine if a string looks like a full semantic version (x.y.z)
+/// or a channel (x.y).
+fn is_full_version(ver: &str) -> bool {
+    // A version is considered "full" if semver can parse it directly
+    // or if it has 3 or more components.
+    // "8.0" has 2 parts -> Channel.
+    // "8.0.100" has 3 parts -> Version.
+    Version::parse(ver).is_ok() || ver.split('.').count() >= 3
+}
+
 fn add_channel_args_unix(cmd: &mut Cmd, version: Option<&str>) {
     if let Some(ver) = version {
-        if Version::parse(ver).is_ok() || ver.split('.').count() >= 2 {
+        if is_full_version(ver) {
             cmd.arg("--version").arg(ver);
         } else {
+            // "8.0" or "LTS" or "STS"
             cmd.arg("--channel").arg(ver);
         }
     } else {
@@ -301,7 +315,7 @@ fn add_channel_args_unix(cmd: &mut Cmd, version: Option<&str>) {
 #[cfg(any(windows, test))]
 fn add_channel_args_windows(cmd: &mut Cmd, version: Option<&str>) {
     if let Some(ver) = version {
-        if Version::parse(ver).is_ok() || ver.split('.').count() >= 2 {
+        if is_full_version(ver) {
             cmd.arg("-Version").arg(ver);
         } else {
             cmd.arg("-Channel").arg(ver);
