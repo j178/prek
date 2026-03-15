@@ -26,6 +26,7 @@ schemars = ["dep:schemars", "prek-identify/schemars"]
 prek-consts = { workspace = true }
 prek-identify = { workspace = true, features = ["serde"] }
 
+aho-corasick = { workspace = true }
 anstream = { workspace = true }
 anstyle-query = { workspace = true }
 anyhow = { workspace = true }

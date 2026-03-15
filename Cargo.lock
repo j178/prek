@@ -2113,6 +2113,7 @@ dependencies = [
 name = "prek"
 version = "0.3.5"
 dependencies = [
+ "aho-corasick",
  "anstream",
  "anstyle-query",
  "anyhow",

@@ -213,6 +213,7 @@ INDIVIDUAL_HOOKS=(
   "check-yaml"
   "check-toml"
   "check-xml"
+  "detect-private-key"
   "fix-byte-order-marker"
 )
 
