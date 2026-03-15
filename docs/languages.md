@@ -137,7 +137,7 @@ prek first looks for a matching system-installed `dotnet`, then falls back to do
 
 #### `additional_dependencies`
 
-Tools are specified in `additional_dependencies` using the format `package:version` or `package@version`:
+Tools are specified in `additional_dependencies` using the format `package:version`:
 
 ```yaml
 repos:
