@@ -5,7 +5,6 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
-use tokio::fs;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
@@ -113,7 +112,7 @@ impl LanguageImpl for Dotnet {
         // Resolve any symlinks in the dotnet executable path and use its parent
         // directory as both the PATH entry and DOTNET_ROOT. This avoids setting
         // DOTNET_ROOT to a shim directory such as /usr/bin.
-        let canonical_path = fs::canonicalize(&toolchain_path)
+        let canonical_path = fs_err::tokio::canonicalize(&toolchain_path)
             .await
             .context("Failed to resolve dotnet toolchain path")?;
 
