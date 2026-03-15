@@ -172,21 +172,42 @@ async fn install_tool(dotnet: &Path, tool_path: &Path, dependency: &str) -> Resu
         .split_once(':')
         .map_or((dependency, None), |(pkg, ver)| (pkg, Some(ver)));
 
-    let mut cmd = Cmd::new(dotnet, "dotnet tool install");
-    cmd.arg("tool")
-        .arg("install")
-        .arg("--tool-path")
-        .arg(tool_path)
-        .arg(package);
+    // Helper to build the command with shared arguments
+    let build_cmd = |action: &str| {
+        let mut c = Cmd::new(dotnet, format!("dotnet tool {action}"));
+        c.arg("tool")
+            .arg(action)
+            .arg("--tool-path")
+            .arg(tool_path)
+            .arg(package);
+        if let Some(ver) = version {
+            c.arg("--version").arg(ver);
+        }
+        c
+    };
 
-    if let Some(ver) = version {
-        cmd.arg("--version").arg(ver);
+    // Attempt dotnet install
+    let install_res = build_cmd("install").check(true).output().await;
+
+    if let Err(err) = install_res {
+        let msg = err.to_string();
+
+        if msg.contains("is already installed") {
+            debug!(
+                "dotnet tool '{package}' already installed at {:?}, attempting update",
+                tool_path
+            );
+
+            // Attempt update instead
+            build_cmd("update")
+                .check(true)
+                .output()
+                .await
+                .with_context(|| format!("Failed to update dotnet tool: {dependency}"))?;
+        } else {
+            return Err(err).with_context(|| format!("Failed to install dotnet tool {dependency}"));
+        }
     }
-
-    cmd.check(true)
-        .output()
-        .await
-        .with_context(|| format!("Failed to install dotnet tool: {dependency}"))?;
 
     Ok(())
 }
