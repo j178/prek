@@ -220,7 +220,7 @@ impl DotnetInstaller {
 
         if !response.status().is_success() {
             bail!(
-                "Failed to download dotnet-install.sh: server returned status {}",
+                "Failed to download dotnet-install.ps1: server returned status {}",
                 response.status()
             );
         }
