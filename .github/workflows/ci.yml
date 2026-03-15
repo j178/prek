@@ -111,7 +111,7 @@ jobs:
       - name: "rustfmt"
         run: cargo fmt --all --check
       - name: Run prek checks
-        uses: j178/prek-action@0bb87d7f00b0c99306c8bcb8b8beba1eb581c037 # v1.1.1
+        uses: j178/prek-action@a8830133d09185f466fc637c948c8463fc2728d4 # v2.0.0-beta.1
         env:
           PREK_SKIP: cargo-fmt,cargo-clippy
 
