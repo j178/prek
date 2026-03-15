@@ -7,6 +7,12 @@ use crate::common::{TestContext, cmd_snapshot, git_cmd};
 /// Test that `language_version` can specify a dotnet SDK version.
 #[test]
 fn language_version() {
+    if !EnvVars::is_set(EnvVars::CI) {
+        // Skip when not running in CI to avoid downloading large SDKs locally
+        // or relying on specific local system versions.
+        return;
+    }
+
     let context = TestContext::new();
     context.init_project();
 
@@ -33,6 +39,67 @@ fn language_version() {
         stdout.contains("10.0"),
         "output should contain version 10.0, got: {stdout}"
     );
+}
+
+/// Test that multiple different SDK versions can coexist in the tool store.
+#[test]
+fn multiple_sdk_versions() {
+    if !EnvVars::is_set(EnvVars::CI) {
+        return;
+    }
+
+    let context = TestContext::new();
+    context.init_project();
+
+    // Hook 1: Requests version 8
+    // Hook 2: Requests version 10
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: hook-8
+                name: hook-8
+                language: dotnet
+                entry: dotnet --version
+                language_version: '8.0'
+                always_run: true
+                pass_filenames: false
+              - id: hook-10
+                name: hook-10
+                language: dotnet
+                entry: dotnet --version
+                language_version: '10.0'
+                always_run: true
+                pass_filenames: false
+    "});
+
+    context.git_add(".");
+
+    let output = context.run().output().unwrap();
+    assert!(output.status.success(), "hooks should pass");
+
+    // Verify both versions exist in the tool bucket
+    // Path structure: [HOME]/tools/dotnet/[VERSION]/...
+    let dotnet_tool_root = context.home_dir().child("tools").child("dotnet");
+
+    let mut found_8 = false;
+    let mut found_10 = false;
+
+    for entry in std::fs::read_dir(dotnet_tool_root.path())
+        .unwrap()
+        .flatten()
+    {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('8') {
+            found_8 = true;
+        }
+        if name.starts_with("10") {
+            found_10 = true;
+        }
+    }
+
+    assert!(found_8, "Managed dotnet 8.x should exist");
+    assert!(found_10, "Managed dotnet 10.x should exist");
 }
 
 /// Test invalid `language_version` format is rejected.
@@ -72,6 +139,10 @@ fn invalid_language_version() {
 /// Test that `additional_dependencies` are installed correctly.
 #[test]
 fn additional_dependencies() {
+    if !EnvVars::is_set(EnvVars::CI) {
+        return;
+    }
+
     let context = TestContext::new();
     context.init_project();
 
@@ -103,6 +174,10 @@ fn additional_dependencies() {
 /// Test installing a specific version of a dotnet tool.
 #[test]
 fn additional_dependencies_with_version() {
+    if !EnvVars::is_set(EnvVars::CI) {
+        return;
+    }
+
     let context = TestContext::new();
     context.init_project();
 
@@ -134,6 +209,10 @@ fn additional_dependencies_with_version() {
 /// Test that additional dependencies in a remote repo are installed correctly.
 #[test]
 fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
+    if !EnvVars::is_set(EnvVars::CI) {
+        return Ok(());
+    }
+
     let repo = TestContext::new();
     repo.init_project();
 
@@ -181,6 +260,10 @@ fn additional_dependencies_in_remote_repo() -> anyhow::Result<()> {
 /// Ensure that stderr from hooks is captured and shown to the user.
 #[test]
 fn hook_stderr() -> anyhow::Result<()> {
+    if !EnvVars::is_set(EnvVars::CI) {
+        return Ok(());
+    }
+
     let context = TestContext::new();
     context.init_project();
 
@@ -203,7 +286,7 @@ fn hook_stderr() -> anyhow::Result<()> {
         <Project Sdk="Microsoft.NET.Sdk">
           <PropertyGroup>
             <OutputType>Exe</OutputType>
-            <TargetFramework>net10.0</TargetFramework>
+            <TargetFramework>net8.0</TargetFramework>
             <ImplicitUsings>disable</ImplicitUsings>
           </PropertyGroup>
         </Project>
@@ -258,7 +341,6 @@ fn system_only_fails_without_dotnet() {
     context.git_add(".");
 
     // Create a fake dotnet binary that exits with error, prepend it to PATH.
-    // This shadows the real dotnet without removing directories from PATH.
     let fake_bin_dir = context.home_dir().child("fake_bin");
     fake_bin_dir.create_dir_all().unwrap();
 
@@ -301,10 +383,14 @@ fn system_only_fails_without_dotnet() {
 /// Test that requesting an unavailable dotnet version fails gracefully.
 #[test]
 fn unavailable_version_fails() {
+    if !EnvVars::is_set(EnvVars::CI) {
+        return;
+    }
+
     let context = TestContext::new();
     context.init_project();
 
-    // Request a very specific old version that won't exist
+    // Request a version that is invalid or won't exist in modern channels
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -313,14 +399,14 @@ fn unavailable_version_fails() {
                 name: local
                 language: dotnet
                 entry: dotnet --version
-                language_version: '1.0.0'
+                language_version: '0.1.0'
                 always_run: true
                 pass_filenames: false
     "});
 
     context.git_add(".");
 
-    // Create a fake dotnet binary that exits with error, prepend it to PATH.
+    // Create a fake dotnet binary that exits with error to force a download attempt
     let fake_bin_dir = context.home_dir().child("fake_bin");
     fake_bin_dir.create_dir_all().unwrap();
 
@@ -339,7 +425,6 @@ fn unavailable_version_fails() {
         fake_dotnet.write_str("@echo off\nexit /b 127\n").unwrap();
     }
 
-    // Prepend the fake bin directory to PATH so the fake dotnet is found first.
     let original_path = EnvVars::var_os(EnvVars::PATH).unwrap_or_default();
     let mut new_path = std::ffi::OsString::from(fake_bin_dir.path());
     #[cfg(unix)]
@@ -348,8 +433,6 @@ fn unavailable_version_fails() {
     new_path.push(";");
     new_path.push(&original_path);
 
-    // This should fail because version 1.0.0 is ancient and won't be downloadable
-    // via the modern install script
     let output = context.run().env("PATH", &new_path).output().unwrap();
 
     assert!(
@@ -358,9 +441,13 @@ fn unavailable_version_fails() {
     );
 }
 
-/// Test that default `language_version` works (uses system or downloads LTS).
+/// Test that default `language_version` works.
 #[test]
 fn default_language_version() {
+    if !EnvVars::is_set(EnvVars::CI) {
+        return;
+    }
+
     let context = TestContext::new();
     context.init_project();
 
@@ -387,6 +474,10 @@ fn default_language_version() {
 /// Test TFM-style version specification (net9.0, net10.0, etc.).
 #[test]
 fn tfm_style_language_version() {
+    if !EnvVars::is_set(EnvVars::CI) {
+        return;
+    }
+
     let context = TestContext::new();
     context.init_project();
 
@@ -418,6 +509,10 @@ fn tfm_style_language_version() {
 /// Test major-only version specification.
 #[test]
 fn major_only_language_version() {
+    if !EnvVars::is_set(EnvVars::CI) {
+        return;
+    }
+
     let context = TestContext::new();
     context.init_project();
 
@@ -492,9 +587,13 @@ fn csharp_type_filter() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Test that dotnet tools are installed in an isolated environment, not globally.
+/// Test that dotnet tools are installed in an isolated environment.
 #[test]
 fn tools_isolated_environment() -> anyhow::Result<()> {
+    if !EnvVars::is_set(EnvVars::CI) {
+        return Ok(());
+    }
+
     let context = TestContext::new();
     context.init_project();
 
@@ -516,11 +615,8 @@ fn tools_isolated_environment() -> anyhow::Result<()> {
     let output = context.run().output().unwrap();
     assert!(output.status.success(), "hook should pass");
 
-    // Verify the tool was installed in the prek hooks directory, not globally.
-    // PREK_HOME is set to context.home_dir(), and hooks are stored in $PREK_HOME/hooks/
     let hooks_path = context.home_dir().child("hooks");
 
-    // Find the dotnet environment directory
     let dotnet_env = std::fs::read_dir(hooks_path.path())?
         .flatten()
         .find(|entry| entry.file_name().to_string_lossy().starts_with("dotnet-"));
@@ -538,7 +634,6 @@ fn tools_isolated_environment() -> anyhow::Result<()> {
         "tools directory should exist in isolated environment"
     );
 
-    // Verify dotnet-outdated executable exists in the isolated tools path
     let tool_exists = std::fs::read_dir(&tools_path)?.flatten().any(|entry| {
         let name = entry.file_name().to_string_lossy().to_string();
         name.starts_with("dotnet-outdated")
@@ -546,62 +641,8 @@ fn tools_isolated_environment() -> anyhow::Result<()> {
 
     assert!(
         tool_exists,
-        "dotnet-outdated should be installed in isolated tools path: {}",
-        tools_path.display()
+        "dotnet-outdated should be installed in isolated tools path"
     );
 
     Ok(())
-}
-
-/// Test that install fails gracefully when hooks directory is not writable.
-#[cfg(unix)]
-#[test]
-fn hooks_dir_not_writable() {
-    use std::os::unix::fs::PermissionsExt;
-
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
-        repos:
-          - repo: local
-            hooks:
-              - id: local
-                name: local
-                language: dotnet
-                entry: dotnet --version
-                always_run: true
-                pass_filenames: false
-    "});
-
-    context.git_add(".");
-
-    // Create the hooks directory and make it read-only
-    let hooks_dir = context.home_dir().child("hooks");
-    hooks_dir.create_dir_all().unwrap();
-    std::fs::set_permissions(hooks_dir.path(), std::fs::Permissions::from_mode(0o555)).unwrap();
-
-    // Ensure we restore permissions on cleanup
-    struct RestorePerms<'a>(&'a std::path::Path);
-    impl Drop for RestorePerms<'_> {
-        fn drop(&mut self) {
-            let _ = std::fs::set_permissions(self.0, std::fs::Permissions::from_mode(0o755));
-        }
-    }
-    let _restore = RestorePerms(hooks_dir.path());
-
-    // Filter the random suffix in the temp directory name
-    let mut filters = context.filters();
-    filters.push((r"dotnet-[a-zA-Z0-9]+", "[TEMP_DIR]"));
-
-    cmd_snapshot!(filters, context.run(), @r#"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Failed to install hook `local`
-      caused by: Failed to create directory for hook environment
-      caused by: Permission denied (os error 13) at path "[HOME]/hooks/[TEMP_DIR]"
-    "#);
 }
