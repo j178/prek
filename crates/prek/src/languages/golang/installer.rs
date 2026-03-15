@@ -80,6 +80,7 @@ impl GoResult {
         let output = self
             .cmd("go version")
             .arg("version")
+            .env(EnvVars::GOTOOLCHAIN, "local")
             .check(true)
             .output()
             .await?;
@@ -281,5 +282,45 @@ impl GoInstaller {
 
         debug!(?go_request, "No system go matches the requested version");
         Ok(None)
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn fill_version_uses_local_gotoolchain() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let fake_go = temp_dir.path().join("go");
+        fs_err::write(
+            &fake_go,
+            indoc::indoc! {r#"#!/bin/sh
+                if [ "$1" = "version" ]; then
+                  if [ "${GOTOOLCHAIN:-}" = "local" ]; then
+                    printf 'go version go1.24.13 linux/amd64\n'
+                  else
+                    printf 'go version go1.26.0 linux/amd64\n'
+                  fi
+                  exit 0
+                fi
+
+                printf 'unexpected args: %s\n' "$*" >&2
+                exit 1
+            "#},
+        )?;
+
+        let mut permissions = fs_err::metadata(&fake_go)?.permissions();
+        permissions.set_mode(0o755);
+        fs_err::set_permissions(&fake_go, permissions)?;
+
+        let go = GoResult::from_executable(fake_go, true)
+            .fill_version()
+            .await?;
+
+        assert_eq!(go.version().to_string(), "1.24.13");
+        Ok(())
     }
 }
