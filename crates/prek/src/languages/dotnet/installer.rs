@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use semver::Version;
 use tracing::debug;
 
@@ -213,9 +213,18 @@ impl DotnetInstaller {
         let script_url = "https://dot.net/v1/dotnet-install.ps1";
         let script_path = self.root.join("dotnet-install.ps1");
 
-        let response = reqwest::get(script_url)
+        let response = REQWEST_CLIENT
+            .get(script_url)
             .await
             .context("Failed to download dotnet-install.ps1")?;
+
+        if !response.status().is_success() {
+            bail!(
+                "Failed to download dotnet-install.sh: server returned status {}",
+                response.status()
+            );
+        }
+
         let script_content = response
             .bytes()
             .await
