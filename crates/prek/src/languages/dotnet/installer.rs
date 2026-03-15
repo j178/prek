@@ -253,12 +253,13 @@ impl DotnetInstaller {
 
 /// Query the version of a dotnet executable.
 pub(crate) async fn query_dotnet_version(dotnet: &Path) -> Result<Version> {
-    let stdout = Cmd::new(dotnet, "get dotnet version")
-        .arg("--version")
-        .check(true)
-        .output()
-        .await?
-        .stdout;
+    let mut cmd = Cmd::new(dotnet, "get dotnet version");
+
+    if let Some(parent) = dotnet.parent() {
+        cmd.current_dir(parent);
+    }
+
+    let stdout = cmd.arg("--version").check(true).output().await?.stdout;
 
     let version_str = String::from_utf8_lossy(&stdout).trim().to_string();
     parse_dotnet_version(&version_str).context("Failed to parse dotnet version")
