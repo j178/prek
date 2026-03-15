@@ -6,7 +6,7 @@ use path_clean::PathClean;
 use prek_consts::env_vars::EnvVars;
 use prek_identify::{TagSet, tags_from_path};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, error, instrument};
 
 use crate::config::{FilePattern, Stage};
@@ -84,6 +84,7 @@ impl<'a> FileTagFilter<'a> {
 pub(crate) struct FileFilter<'a> {
     filenames: Vec<&'a Path>,
     filename_prefix: &'a Path,
+    file_tags: FxHashMap<&'a Path, TagSet>,
 }
 
 impl<'a> FileFilter<'a> {
@@ -133,10 +134,21 @@ impl<'a> FileFilter<'a> {
                 filter.filter(relative)
             })
             .collect::<Vec<_>>();
+        let file_tags = filenames
+            .par_iter()
+            .filter_map(|filename| match tags_from_path(filename) {
+                Ok(tags) => Some((*filename, tags)),
+                Err(err) => {
+                    error!(filename = ?filename.display(), error = %err, "Failed to get tags");
+                    None
+                }
+            })
+            .collect();
 
         Self {
             filenames,
             filename_prefix: project.relative_path(),
+            file_tags,
         }
     }
 
@@ -155,12 +167,10 @@ impl<'a> FileFilter<'a> {
         let filenames: Vec<_> = self
             .filenames
             .par_iter()
-            .filter(|filename| match tags_from_path(filename) {
-                Ok(tags) => filter.filter(&tags),
-                Err(err) => {
-                    error!(filename = ?filename.display(), error = %err, "Failed to get tags");
-                    false
-                }
+            .filter(|filename| {
+                self.file_tags
+                    .get(*filename)
+                    .is_some_and(|tags| filter.filter(tags))
             })
             .copied()
             .collect();
@@ -189,12 +199,10 @@ impl<'a> FileFilter<'a> {
             Some(&hook.types_or),
             Some(&hook.exclude_types),
         );
-        let filenames = filenames.filter(|filename| match tags_from_path(filename) {
-            Ok(tags) => filter.filter(&tags),
-            Err(err) => {
-                error!(filename = ?filename.display(), error = %err, "Failed to get tags");
-                false
-            }
+        let filenames = filenames.filter(|filename| {
+            self.file_tags
+                .get(*filename)
+                .is_some_and(|tags| filter.filter(tags))
         });
 
         // Strip the prefix to get relative paths.
