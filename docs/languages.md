@@ -137,7 +137,7 @@ prek first looks for a matching system-installed `dotnet`, then falls back to do
 
 #### `additional_dependencies`
 
-Tools are specified in `additional_dependencies` using the format `package:version`:
+Tools are specified in `additional_dependencies` as either `package:version` (to pin a specific version) or just `package` (to install the latest available version):
 
 ```yaml
 repos:
@@ -145,7 +145,11 @@ repos:
     rev: v1.0.0
     hooks:
       - id: csharpier
-        additional_dependencies: ["csharpier:1.2.6"]
+        additional_dependencies:
+          # Pin to a specific version
+          - "csharpier:1.2.6"
+          # Or install the latest version available
+          - "dotnet-format"
 ```
 
 ### fail
