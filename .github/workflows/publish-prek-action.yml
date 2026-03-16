@@ -80,12 +80,12 @@ jobs:
             Added releases:
             ${{ steps.refresh.outputs.added_versions_markdown }}
 
-      - name: Wait before merge
-        if: steps.cpr.outputs.pull-request-number != ''
-        run: sleep 10
-
       - name: Merge pull request
         if: steps.cpr.outputs.pull-request-number != ''
         env:
           GH_TOKEN: ${{ secrets.PREK_ACTION_TOKEN }}
-        run: gh pr merge --squash --delete-branch "${{ steps.cpr.outputs.pull-request-number }}" --repo j178/prek-action
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        shell: bash
+        run: |
+          sleep 10
+          gh pr merge --squash --repo j178/prek-action "$PR_NUMBER"
