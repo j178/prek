@@ -9,6 +9,8 @@ repos:
   - repo: builtin
     hooks:
       - id: trailing-whitespace
+        exclude:
+          glob: CHANGELOG.md
       - id: mixed-line-ending
       - id: check-yaml
       - id: check-toml
