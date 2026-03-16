@@ -22,6 +22,8 @@ jobs:
   winget:
     name: Publish to winget
     runs-on: ubuntu-latest
+    environment:
+      name: release
     if: >-
       ${{
         inputs.plan == ''
