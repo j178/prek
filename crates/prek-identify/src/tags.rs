@@ -492,8 +492,8 @@ pub const EXTENSIONS: phf::Map<&str, TagSet> = phf::phf_map! {
     "cu" => TagSet::new(&[49, 255]),
     // ["cue", "text"]
     "cue" => TagSet::new(&[50, 255]),
-    // ["cuda", "text"]
-    "cuh" => TagSet::new(&[49, 255]),
+    // ["cuda", "header", "text"]
+    "cuh" => TagSet::new(&[49, 108, 255]),
     // ["c++", "text"]
     "cxx" => TagSet::new(&[31, 255]),
     // ["c++", "text"]
