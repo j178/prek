@@ -246,6 +246,9 @@ impl DotnetInstaller {
 
         let mut cmd = Cmd::new("powershell", "dotnet-install.ps1");
         cmd.arg("-ExecutionPolicy")
+            .arg("-NoProfile")
+            .arg("-NonInteractive")
+            .arg("-NoLogo")
             .arg("Bypass")
             .arg("-File")
             .arg(&script_path)
