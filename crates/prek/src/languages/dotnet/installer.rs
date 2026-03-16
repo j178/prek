@@ -107,15 +107,14 @@ impl DotnetInstaller {
                     // Existing installation is healthy, remove our new one and use existing
                     fs_err::tokio::remove_dir_all(&install_dir).await?;
                     return Ok(existing_result);
-                } else {
-                    // Existing installation is corrupt, replace it with our new one
-                    debug!(
-                        "Existing installation at {} is corrupt, replacing with new installation",
-                        final_dir.display()
-                    );
-                    fs_err::tokio::remove_dir_all(&final_dir).await?;
-                    fs_err::tokio::rename(&install_dir, &final_dir).await?;
                 }
+                // Existing installation is corrupt, replace it with our new one
+                debug!(
+                    "Existing installation at {} is corrupt, replacing with new installation",
+                    final_dir.display()
+                );
+                fs_err::tokio::remove_dir_all(&final_dir).await?;
+                fs_err::tokio::rename(&install_dir, &final_dir).await?;
             } else {
                 fs_err::tokio::rename(&install_dir, &final_dir).await?;
             }
@@ -593,7 +592,7 @@ mod tests {
         let result = DotnetResult::new(path, version);
 
         // Test the Display implementation more thoroughly
-        let display_str = format!("{}", result);
+        let display_str = format!("{result}");
         assert!(display_str.contains("/usr/bin/dotnet@8.0.100"));
 
         // Test that the write! operation in fmt could potentially fail
@@ -609,7 +608,7 @@ mod tests {
         }
 
         let mut failing_fmt = FailingFormatter;
-        let write_result = write!(failing_fmt, "{}", result);
+        let write_result = write!(failing_fmt, "{result}");
         assert!(write_result.is_err());
     }
 

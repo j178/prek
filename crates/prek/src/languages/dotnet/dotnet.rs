@@ -229,7 +229,7 @@ mod tests {
     #[tokio::test]
     async fn test_check_health() -> anyhow::Result<()> {
         let Some(dotnet_path) = dotnet_path() else {
-            eprintln!("Skipping test_check_health: dotnet not found in PATH");
+            // Skip test if dotnet not found in PATH
             return Ok(());
         };
         let version = query_dotnet_version(&dotnet_path).await?;
@@ -255,7 +255,7 @@ mod tests {
     #[tokio::test]
     async fn test_check_health_version_mismatch() -> anyhow::Result<()> {
         let Some(dotnet_path) = dotnet_path() else {
-            eprintln!("Skipping test_check_health_version_mismatch: dotnet not found in PATH");
+            // Skip test if dotnet not found in PATH
             return Ok(());
         };
 
