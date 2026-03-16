@@ -110,7 +110,7 @@ impl LanguageImpl for Unimplemented {
 // dart: only system version, support env, support additional deps
 // docker_image: only system version, no env, no additional deps
 // docker: only system version, support env, no additional deps
-// dotnet: only system version, support env, support additional deps
+// dotnet: install requested version, support env, support additional deps
 // fail: only system version, no env, no additional deps
 // golang: install requested version, support env, support additional deps
 // haskell: only system version, support env, support additional deps

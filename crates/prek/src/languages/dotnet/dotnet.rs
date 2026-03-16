@@ -41,10 +41,7 @@ impl LanguageImpl for Dotnet {
         debug!(%hook, target = %info.env_path.display(), "Installing dotnet environment");
 
         // Install or find dotnet SDK
-        let allows_download = !matches!(
-            hook.language_request,
-            LanguageRequest::Any { system_only: true }
-        );
+        let allows_download = hook.language_request.allows_download();
         let installer = installer_from_store(store);
         let dotnet_result = installer
             .install(&hook.language_request, allows_download)
