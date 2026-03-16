@@ -58,7 +58,7 @@ post-announce-jobs = [
   "./publish-homebrew",
   "./publish-winget",
 ]
-github-custom-job-permissions = { "publish-docs" = { contents = "read", pages = "write", id-token = "write" }, "build-docker" = { packages = "write", contents = "read", attestations = "write", id-token = "write" }, "publish-winget" = {}, "publish-crates" = { id-token = "write" }, "publish-pypi" = { id-token = "write" }, "publish-npm" = { id-token = "write", packages = "write" }, "publish-homebrew" = {} }
+github-custom-job-permissions = { "publish-docs" = { contents = "read", pages = "write", id-token = "write" }, "build-docker" = { packages = "write", contents = "read", attestations = "write", id-token = "write" }, "publish-winget" = {}, "publish-crates" = { id-token = "write" }, "publish-pypi" = { id-token = "write" }, "publish-npm" = { id-token = "write" }, "publish-homebrew" = {} }
 # Whether to install an updater program
 install-updater = false
 # Path that installers should place binaries in
