@@ -338,7 +338,7 @@ fn add_channel_args_unix(cmd: &mut Cmd, version: Option<&str>) {
     }
 }
 
-#[cfg(any(windows, test))]
+#[cfg(windows)]
 fn add_channel_args_windows(cmd: &mut Cmd, version: Option<&str>) {
     if let Some(ver) = version {
         if is_full_version(ver) {
