@@ -56,6 +56,7 @@ publish-jobs = ["./publish-crates", "./publish-pypi", "./publish-npm"]
 post-announce-jobs = [
   "./publish-docs",
   "./publish-homebrew",
+  "./publish-prek-action",
   "./publish-winget",
 ]
 github-custom-job-permissions = { "publish-docs" = { contents = "read", pages = "write", id-token = "write" }, "build-docker" = { packages = "write", contents = "read", attestations = "write", id-token = "write" }, "publish-winget" = {}, "publish-crates" = { id-token = "write" }, "publish-pypi" = { id-token = "write" }, "publish-npm" = { id-token = "write" }, "publish-homebrew" = {} }
