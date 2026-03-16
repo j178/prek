@@ -102,7 +102,20 @@ impl DotnetInstaller {
         let final_dir = self.root.join(installed.version().to_string());
         if install_dir != final_dir {
             if final_dir.exists() {
-                fs_err::tokio::remove_dir_all(&install_dir).await?;
+                // Verify the existing final_dir is healthy before using it
+                if let Ok(existing_result) = self.query_installation_at(&final_dir).await {
+                    // Existing installation is healthy, remove our new one and use existing
+                    fs_err::tokio::remove_dir_all(&install_dir).await?;
+                    return Ok(existing_result);
+                } else {
+                    // Existing installation is corrupt, replace it with our new one
+                    debug!(
+                        "Existing installation at {} is corrupt, replacing with new installation",
+                        final_dir.display()
+                    );
+                    fs_err::tokio::remove_dir_all(&final_dir).await?;
+                    fs_err::tokio::rename(&install_dir, &final_dir).await?;
+                }
             } else {
                 fs_err::tokio::rename(&install_dir, &final_dir).await?;
             }
