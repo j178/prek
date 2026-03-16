@@ -210,8 +210,6 @@ jobs:
     timeout-minutes: 5
     runs-on: ubuntu-latest
     name: "cargo test | without uv"
-    environment:
-      name: test
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -269,8 +267,6 @@ jobs:
     timeout-minutes: 10
     runs-on: ${{ matrix.os }}
     name: "cargo test | ${{ matrix.os }}"
-    environment:
-      name: test
     strategy:
       fail-fast: false
       matrix:
@@ -332,8 +328,6 @@ jobs:
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     runs-on: windows-latest
     timeout-minutes: 15
-    environment:
-      name: test
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -407,8 +401,6 @@ jobs:
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     timeout-minutes: 15
     runs-on: ${{ matrix.os }}
-    environment:
-      name: test
     strategy:
       fail-fast: false
       matrix:
