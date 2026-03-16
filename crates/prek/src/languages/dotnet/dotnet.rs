@@ -107,7 +107,7 @@ impl LanguageImpl for Dotnet {
             .install_info()
             .ok_or_else(|| {
                 anyhow::anyhow! {
-                    "Dotnet hook missing install info, try re-instaling hook."
+                    "Dotnet hook missing install info, try re-installing hook."
                 }
             })?
             .toolchain
