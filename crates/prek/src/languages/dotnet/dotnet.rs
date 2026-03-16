@@ -97,11 +97,19 @@ impl LanguageImpl for Dotnet {
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());
 
-        let env_dir = hook.env_path().expect("Dotnet must have env path");
+        let env_dir = hook.env_path().ok_or_else(|| {
+            anyhow::anyhow! {
+                "Dotnet hook missing env_path; try re-installing hook."
+            }
+        })?;
         let tool_path = tools_path(env_dir);
         let toolchain_path = hook
             .install_info()
-            .expect("Dotnet must have install info")
+            .ok_or_else(|| {
+                anyhow::anyhow! {
+                    "Dotnet hook missing install info, try re-instaling hook."
+                }
+            })?
             .toolchain
             .clone();
 
