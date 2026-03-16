@@ -320,6 +320,15 @@ jobs:
       plan: ${{ needs.plan.outputs.val }}
     secrets: inherit
 
+  custom-publish-prek-action:
+    needs:
+      - plan
+      - announce
+    uses: ./.github/workflows/publish-prek-action.yml
+    with:
+      plan: ${{ needs.plan.outputs.val }}
+    secrets: inherit
+
   custom-publish-winget:
     needs:
       - plan
