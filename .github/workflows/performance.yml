@@ -35,7 +35,7 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-      - uses: taiki-e/install-action@f92912fad184299a31e22ad070a5059fd07d4f59 # v2.68.7
+      - uses: taiki-e/install-action@a37010ded18ff788be4440302bd6830b1ae50d8b # v2.68.25
         with:
           tool: cargo-bloat
 
@@ -133,7 +133,7 @@ jobs:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - id: base-binary-cache
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ env.HYPERFINE_BIN_DIR }}/${{ env.HYPERFINE_BASE_BINARY }}
           key: prek-hyperfine-base-${{ github.event.pull_request.base.sha }}-${{ hashFiles('Cargo.lock') }}-${{ runner.os }}-${{ runner.arch }}
@@ -152,7 +152,7 @@ jobs:
           cargo build --profile profiling && mv target/profiling/prek "$HYPERFINE_BIN_DIR/$HYPERFINE_HEAD_BINARY"
 
       - name: Install hyperfine
-        uses: taiki-e/install-action@f92912fad184299a31e22ad070a5059fd07d4f59 # v2.68.7
+        uses: taiki-e/install-action@a37010ded18ff788be4440302bd6830b1ae50d8b # v2.68.25
         with:
           tool: hyperfine
 
