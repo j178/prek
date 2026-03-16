@@ -197,7 +197,14 @@ impl DotnetInstaller {
         let script_url = "https://dot.net/v1/dotnet-install.sh";
         let script_path = install_dir.join("dotnet-install.sh");
 
-        let response = REQWEST_CLIENT.get(script_url).send().await?;
+        let response = REQWEST_CLIENT
+            .get(script_url)
+            .send()
+            .await?
+            .error_for_status()
+            .with_context(|| {
+                format!("failed to download dotnet install script from {script_url}")
+            })?;
         let script_content = response.bytes().await?;
         fs_err::tokio::write(&script_path, &script_content).await?;
 
@@ -227,7 +234,14 @@ impl DotnetInstaller {
         let script_url = "https://dot.net/v1/dotnet-install.ps1";
         let script_path = install_dir.join("dotnet-install.ps1");
 
-        let response = REQWEST_CLIENT.get(script_url).send().await?;
+        let response = REQWEST_CLIENT
+            .get(script_url)
+            .send()
+            .await?
+            .error_for_status()
+            .with_context(|| {
+                format!("failed to download dotnet install script from {script_url}")
+            })?;
         let script_content = response.bytes().await?;
         fs_err::tokio::write(&script_path, &script_content).await?;
 
