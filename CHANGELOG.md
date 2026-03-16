@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.3.6
+
+Released on 2026-03-16.
+
+### Enhancements
+
+- Allow selectors for hook ids containing colons ([#1782](https://github.com/j178/prek/pull/1782))
+- Rename `prek install-hooks` to `prek prepare-hooks` and `prek install --install-hooks` to `prek install --prepare-hooks` ([#1766](https://github.com/j178/prek/pull/1766))
+- Retry auth-failed repo clones with terminal prompts enabled ([#1761](https://github.com/j178/prek/pull/1761))
+
+### Performance
+
+- Optimize `detect_private_key` by chunked reading and using aho-corasick ([#1791](https://github.com/j178/prek/pull/1791))
+- Optimize `fix_byte_order_marker` by shifting file contents in place ([#1790](https://github.com/j178/prek/pull/1790))
+
+### Bug fixes
+
+- Align stage defaulting behavior with pre-commit ([#1788](https://github.com/j178/prek/pull/1788))
+- Make sure child output is drained in the PTY subprocess ([#1768](https://github.com/j178/prek/pull/1768))
+- fix(golang): use `GOTOOLCHAIN=local` when probing system go ([#1797](https://github.com/j178/prek/pull/1797))
+
+### Documentation
+
+- Disambiguate “hook” terminology by renaming "Git hooks" to "Git shims" ([#1776](https://github.com/j178/prek/pull/1776))
+- Document compatibility with pre-commit ([#1767](https://github.com/j178/prek/pull/1767))
+- Update configuration.md with TOML 1.1 notes ([#1764](https://github.com/j178/prek/pull/1764))
+
+### Other changes
+
+- Sync latest identify tags ([#1798](https://github.com/j178/prek/pull/1798))
+
+### Contributors
+
+- @github-actions
+- @j178
+- @pcastellazzi
+- @deadnews
+- @copilot-swe-agent
+
 ## 0.3.5
 
 Released on 2026-03-09.
