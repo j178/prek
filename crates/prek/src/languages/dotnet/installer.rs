@@ -244,12 +244,12 @@ impl DotnetInstaller {
         let script_content = response.bytes().await?;
         fs_err::tokio::write(&script_path, &script_content).await?;
 
-        let mut cmd = Cmd::new("powershell", "dotnet-install.ps1");
-        cmd.arg("-ExecutionPolicy")
-            .arg("-NoProfile")
-            .arg("-NonInteractive")
-            .arg("-NoLogo")
+        // PowerShell invocation optimized for Windows execution policy and path handling
+        let mut cmd = Cmd::new("powershell.exe", "dotnet-install.ps1");
+        cmd.arg("-NoProfile")
+            .arg("-ExecutionPolicy")
             .arg("Bypass")
+            .arg("-NonInteractive")
             .arg("-File")
             .arg(&script_path)
             .arg("-InstallDir")
