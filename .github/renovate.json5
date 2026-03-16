@@ -130,6 +130,15 @@
       enabled: false
     },
     {
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["rust"],
+      commitMessageTopic: "Rust",
+    },
+    {
+      matchManagers: [ 'cargo', 'pre-commit', 'github-actions', 'custom.regex' ],
+      minimumReleaseAge: '7 days'
+    },
+    {
       commitMessageTopic: "MSRV",
       matchManagers: ["custom.regex"],
       matchDepNames: ["msrv"],
@@ -138,15 +147,6 @@
       minimumReleaseAge: "85 days",
       internalChecksFilter: "strict",
       groupName: "MSRV",
-    },
-    {
-      matchManagers: ["custom.regex"],
-      matchDepNames: ["rust"],
-      commitMessageTopic: "Rust",
-    },
-    {
-      matchManagers: [ 'cargo', 'pre-commit', 'github-actions', 'custom.regex' ],
-      minimumReleaseAge: '7 days'
     }
   ]
 }
