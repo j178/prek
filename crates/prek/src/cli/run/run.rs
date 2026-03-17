@@ -192,6 +192,21 @@ pub(crate) async fn run(
     .await
     .context("Failed to collect files")?;
 
+    // Remove GIT_INDEX_FILE from the process environment before running hooks.
+    //
+    // When `git commit -a` invokes the pre-commit hook, `GIT_INDEX_FILE` points to
+    // `.git/index.lock`. Prek's own git commands (write-tree, diff-index, collect-files)
+    // have already used it above. But hook subprocesses must NOT inherit it: if a hook
+    // (or a test suite it invokes) runs git commands, those commands would read/write
+    // `.git/index.lock` instead of `.git/index`, corrupting the lock file and causing
+    // prek's subsequent `git diff` to fail with "unable to read <hash>".
+    //
+    // See https://github.com/j178/prek/issues/1786
+    // SAFETY: no other threads are reading GIT_INDEX_FILE at this point.
+    unsafe {
+        std::env::remove_var("GIT_INDEX_FILE");
+    }
+
     // Change to the workspace root directory.
     std::env::set_current_dir(workspace.root()).with_context(|| {
         format!(
