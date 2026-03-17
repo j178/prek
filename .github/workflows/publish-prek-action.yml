@@ -68,8 +68,8 @@ jobs:
           add-paths: |
             version-manifest.json
             src/known-checksums.ts
-            dist/index.js
-            dist/post/index.js
+            dist/index.cjs
+            dist/post/index.cjs
           branch: automation/update-known-versions
           base: main
           commit-message: ${{ steps.refresh.outputs.pr_title }}
