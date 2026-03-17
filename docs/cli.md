@@ -387,7 +387,9 @@ prek uninstall [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt id="prek-uninstall--cd"><a href="#prek-uninstall--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
+<dl class="cli-reference"><dt id="prek-uninstall--all"><a href="#prek-uninstall--all"><code>--all</code></a></dt><dd><p>Uninstall all prek-managed Git shims.</p>
+<p>Scans the hooks directory and removes every hook managed by prek, regardless of hook type.</p>
+</dd><dt id="prek-uninstall--cd"><a href="#prek-uninstall--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
 </dd><dt id="prek-uninstall--color"><a href="#prek-uninstall--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
 <p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
 <ul>
@@ -398,7 +400,7 @@ prek uninstall [OPTIONS]
 </dd><dt id="prek-uninstall--help"><a href="#prek-uninstall--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-uninstall--hook-type"><a href="#prek-uninstall--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which Git shim(s) to uninstall.</p>
 <p>Specifies which Git hook type(s) you want to uninstall shims for. Can be specified multiple times to uninstall shims for multiple hook types.</p>
-<p>If not specified, uses <code>default_install_hook_types</code> from the config file, or defaults to <code>pre-commit</code> if that is also not set.</p>
+<p>If not specified, uses <code>default_install_hook_types</code> from the config file, or defaults to <code>pre-commit</code> if that is also not set. Use <code>--all</code> to remove all prek-managed hooks.</p>
 <p>Possible values:</p>
 <ul>
 <li><code>commit-msg</code></li>

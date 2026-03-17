@@ -765,7 +765,7 @@ fn uninstall() -> anyhow::Result<()> {
 
 /// `prek uninstall --all` should remove all prek-managed hooks.
 #[test]
-fn uninstall_all_managed_hooks() -> anyhow::Result<()> {
+fn uninstall_all_managed_hooks() {
     let context = TestContext::new();
     context.init_project();
 
@@ -794,13 +794,11 @@ fn uninstall_all_managed_hooks() -> anyhow::Result<()> {
 
     assert!(!context.work_dir().join(".git/hooks/pre-commit").exists());
     assert!(!context.work_dir().join(".git/hooks/pre-push").exists());
-
-    Ok(())
 }
 
 /// `prek uninstall --all` with no hooks installed should exit cleanly.
 #[test]
-fn uninstall_all_no_hooks() -> anyhow::Result<()> {
+fn uninstall_all_no_hooks() {
     let context = TestContext::new();
     context.init_project();
 
@@ -811,8 +809,6 @@ fn uninstall_all_no_hooks() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
-
-    Ok(())
 }
 
 #[test]
