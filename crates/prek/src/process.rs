@@ -408,7 +408,7 @@ impl Cmd {
 
     /// Remove some git-specific environment variables to make git commands isolated.
     pub fn remove_git_envs(&mut self) -> &mut Self {
-        for (key, _) in crate::git::GIT_ENV_TO_REMOVE.iter() {
+        for (key, _) in crate::git::GIT_ENVS_TO_REMOVE.iter() {
             self.inner.env_remove(key);
         }
         self

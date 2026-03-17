@@ -45,7 +45,7 @@ pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| 
 /// and set `GIT_INDEX_FILE` to point to it.
 /// We need to keep the `GIT_INDEX_FILE` env var to make sure `git write-tree` works correctly.
 /// <https://stackoverflow.com/questions/65639403/git-pre-commit-hook-how-can-i-get-added-modified-files-when-commit-with-a-flag/65647202#65647202>
-pub(crate) static GIT_ENV_TO_REMOVE: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
+pub(crate) static GIT_ENVS_TO_REMOVE: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
     let keep = &[
         "GIT_EXEC_PATH",
         "GIT_SSH",

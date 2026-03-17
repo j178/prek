@@ -2118,6 +2118,113 @@ fn git_commit_a() -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn git_envs_not_leaked_to_hook_commands() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context
+        .work_dir()
+        .child("hook.sh")
+        .write_str(indoc::indoc! {r#"
+        set -eu
+
+        git_cfg() {
+            git -c commit.gpgsign=false \
+                -c tag.gpgsign=false \
+                -c core.autocrlf=false \
+                -c user.name='Prek Test' \
+                -c user.email='test@prek.dev' \
+            "$@"
+        }
+
+        rm -rf hook-repo
+        mkdir hook-repo
+        printf 'first\n' > hook-repo/file.txt
+
+        git init hook-repo >/dev/null 2>&1
+        (
+            cd hook-repo
+            git_cfg add .
+            git_cfg commit -m initial >/dev/null 2>&1
+            printf 'second\n' > file.txt
+            git_cfg commit -a -m update >/dev/null 2>&1
+        )
+    "#})?;
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: check-git-index-file
+                name: check-git-index-file
+                language: system
+                entry: sh hook.sh
+                pass_filenames: false
+                always_run: true
+                verbose: true
+    "});
+
+    let cwd = context.work_dir();
+    let file = cwd.child("file.txt");
+    file.write_str("Hello, world!\n")?;
+
+    cmd_snapshot!(context.filters(), context.install(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    "#);
+
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    // Drive the regression through `git commit -a`, which is the path where Git exports
+    // `GIT_INDEX_FILE=.git/index.lock` to the pre-commit hook environment.
+    file.write_str("Hello again!\n")?;
+
+    let mut commit = git_cmd(cwd);
+    commit
+        .arg("commit")
+        .arg("-a")
+        .arg("-m")
+        .arg("Update file")
+        .env(EnvVars::PREK_HOME, &**context.home_dir());
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\[master \w{7}\]", r"[master COMMIT]")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(
+        filters,
+        commit,
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [master COMMIT] Update file
+     1 file changed, 1 insertion(+), 1 deletion(-)
+
+    ----- stderr -----
+    check-git-index-file.....................................................Passed
+    - hook id: check-git-index-file
+    - duration: [TIME]
+    "
+    );
+
+    // The hook runs nested Git commands in a separate repository. Without stripping Git
+    // env vars from the hook subprocess, the inner `git commit -a` would use the outer
+    // repo's `GIT_INDEX_FILE` and fail.
+    assert_eq!(context.read("hook-repo/file.txt"), "second\n");
+
+    Ok(())
+}
+
 fn write_pre_commit_config(path: &Path, hooks: &[(&str, &str)]) -> Result<()> {
     let mut yaml = String::from(indoc::indoc! {"
         repos:
