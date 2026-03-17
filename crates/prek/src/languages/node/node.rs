@@ -159,7 +159,6 @@ impl LanguageImpl for Node {
                 .envs(&hook.env)
                 .args(&hook.args)
                 .args(batch)
-                .remove_git_envs()
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output()

@@ -370,7 +370,7 @@ impl Docker {
 
     pub(crate) fn docker_run_cmd(work_dir: &Path) -> Cmd {
         let mut command = Cmd::new(CONTAINER_RUNTIME.cmd(), "run container");
-        command.arg("run").arg("--rm").remove_git_envs();
+        command.arg("run").arg("--rm");
 
         if *USE_COLOR {
             command.arg("--tty");

@@ -46,7 +46,6 @@ impl LanguageImpl for System {
                 .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)
-                .remove_git_envs()
                 .check(false)
                 .stdin(Stdio::null())
                 .pty_output()

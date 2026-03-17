@@ -2120,45 +2120,38 @@ fn git_commit_a() -> Result<()> {
 
 #[cfg(unix)]
 #[test]
-fn git_envs_not_leaked_to_hook_commands() -> Result<()> {
+fn git_commit_a_currently_fails_when_hook_writes_to_temp_git_index() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
+    // Repro for #1786 documenting the current behavior.
+    // `git commit -a` exports `GIT_INDEX_FILE=.git/index.lock` to the pre-commit hook
+    // process. If the hook inherits that env var and then runs a git command that writes
+    // to an index in a different repository, Git will write those entries into the parent
+    // repo's temporary index instead.
+    //
+    // The important detail is that the temp repo stages `file.txt`, matching a tracked
+    // path in the parent repo. That makes prek's post-hook `git diff` read the corrupted
+    // parent index entry and fail with `fatal: unable to read <hash>`.
     context
         .work_dir()
         .child("hook.sh")
         .write_str(indoc::indoc! {r#"
         set -eu
-
-        git_cfg() {
-            git -c commit.gpgsign=false \
-                -c tag.gpgsign=false \
-                -c core.autocrlf=false \
-                -c user.name='Prek Test' \
-                -c user.email='test@prek.dev' \
-            "$@"
-        }
-
-        rm -rf hook-repo
-        mkdir hook-repo
-        printf 'first\n' > hook-repo/file.txt
-
-        git init hook-repo >/dev/null 2>&1
-        (
-            cd hook-repo
-            git_cfg add .
-            git_cfg commit -m initial >/dev/null 2>&1
-            printf 'second\n' > file.txt
-            git_cfg commit -a -m update >/dev/null 2>&1
-        )
+        tmpdir="$(mktemp -d)"
+        trap 'rm -rf "$tmpdir"' EXIT
+        cd "$tmpdir"
+        git init >/dev/null 2>&1
+        printf 'hook version\n' > file.txt
+        git add file.txt
     "#})?;
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
-              - id: check-git-index-file
-                name: check-git-index-file
+              - id: write-temp-index
+                name: write-temp-index
                 language: system
                 entry: sh hook.sh
                 pass_filenames: false
@@ -2182,8 +2175,8 @@ fn git_envs_not_leaked_to_hook_commands() -> Result<()> {
     context.git_add(".");
     context.git_commit("Initial commit");
 
-    // Drive the regression through `git commit -a`, which is the path where Git exports
-    // `GIT_INDEX_FILE=.git/index.lock` to the pre-commit hook environment.
+    // `git commit` does not set `GIT_INDEX_FILE`; `git commit -a` does.
+    // The repro only triggers on the `-a` path.
     file.write_str("Hello again!\n")?;
 
     let mut commit = git_cmd(cwd);
@@ -2197,30 +2190,30 @@ fn git_envs_not_leaked_to_hook_commands() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"\[master \w{7}\]", r"[master COMMIT]")])
+        .chain([
+            (r"\[master \w{7}\]", r"[master COMMIT]"),
+            (
+                r"fatal: unable to read [0-9a-f]{40}",
+                "fatal: unable to read [HASH]",
+            ),
+        ])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(
-        filters,
-        commit,
-        @r"
-    success: true
-    exit_code: 0
+    cmd_snapshot!(filters, commit, @r"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    [master COMMIT] Update file
-     1 file changed, 1 insertion(+), 1 deletion(-)
 
     ----- stderr -----
-    check-git-index-file.....................................................Passed
-    - hook id: check-git-index-file
-    - duration: [TIME]
+    error: Command `git diff` exited with an error:
+
+    [status]
+    exit status: 128
+
+    [stderr]
+    fatal: unable to read [HASH]
     "
     );
-
-    // The hook runs nested Git commands in a separate repository. Without stripping Git
-    // env vars from the hook subprocess, the inner `git commit -a` would use the outer
-    // repo's `GIT_INDEX_FILE` and fail.
-    assert_eq!(context.read("hook-repo/file.txt"), "second\n");
 
     Ok(())
 }
