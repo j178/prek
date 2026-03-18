@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use bstr::ByteSlice;
+use clap::ValueEnum;
 use owo_colors::OwoColorize;
 use prek_consts::CONFIG_FILENAMES;
 use same_file::is_same_file;
@@ -12,8 +13,6 @@ use same_file::is_same_file;
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter};
 use crate::cli::run;
 use crate::cli::run::{SelectorSource, Selectors};
-use clap::ValueEnum;
-
 use crate::cli::{ExitStatus, HookType};
 use crate::config::load_config;
 use crate::fs::{CWD, Simplified};

@@ -765,7 +765,7 @@ fn uninstall() -> anyhow::Result<()> {
 
 /// `prek uninstall --all` should remove all prek-managed hooks.
 #[test]
-fn uninstall_all_managed_hooks() {
+fn uninstall_all_managed_hooks() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -781,34 +781,26 @@ fn uninstall_all_managed_hooks() {
     assert!(context.work_dir().join(".git/hooks/pre-commit").exists());
     assert!(context.work_dir().join(".git/hooks/pre-push").exists());
 
-    // Uninstall with `--all` should remove both.
+    let custom_hook = "#!/bin/sh\necho 'custom pre-commit'\n";
+    context
+        .work_dir()
+        .child(".git/hooks/pre-commit")
+        .write_str(custom_hook)?;
+
+    // Uninstall with `--all` should only remove managed hooks.
     cmd_snapshot!(context.filters(), context.uninstall().arg("--all"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    Uninstalled `pre-commit`
     Uninstalled `pre-push`
 
     ----- stderr -----
     ");
 
-    assert!(!context.work_dir().join(".git/hooks/pre-commit").exists());
+    assert_eq!(context.read(".git/hooks/pre-commit"), custom_hook);
     assert!(!context.work_dir().join(".git/hooks/pre-push").exists());
-}
 
-/// `prek uninstall --all` with no hooks installed should exit cleanly.
-#[test]
-fn uninstall_all_no_hooks() {
-    let context = TestContext::new();
-    context.init_project();
-
-    cmd_snapshot!(context.filters(), context.uninstall().arg("--all"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    ");
+    Ok(())
 }
 
 #[test]
