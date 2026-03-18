@@ -111,7 +111,7 @@ jobs:
       - name: "rustfmt"
         run: cargo fmt --all --check
       - name: Run prek checks
-        uses: j178/prek-action@ae5fe13be6fb4d5f7f42fe9fa9ba13dfa2ac8add # v2.0.0-beta.6
+        uses: j178/prek-action@79f765515bd648eb4d6bb1b17277b7cb22cb6468 # v2.0.0
         env:
           PREK_SKIP: cargo-fmt,cargo-clippy
 
@@ -199,7 +199,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@a37010ded18ff788be4440302bd6830b1ae50d8b # v2.68.25
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-shear
       - run: cargo shear
@@ -223,12 +223,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@a37010ded18ff788be4440302bd6830b1ae50d8b # v2.68.25
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@a37010ded18ff788be4440302bd6830b1ae50d8b # v2.68.25
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-llvm-cov
 
@@ -287,17 +287,17 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@a37010ded18ff788be4440302bd6830b1ae50d8b # v2.68.25
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@a37010ded18ff788be4440302bd6830b1ae50d8b # v2.68.25
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-llvm-cov
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # v7.3.1
+        uses: astral-sh/setup-uv@6ee6290f1cbc4156c0bdd66691b2c144ef8df19a # v7.4.0
         with:
           version: ${{ env.UV_VERSION }}
 
@@ -350,17 +350,17 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@a37010ded18ff788be4440302bd6830b1ae50d8b # v2.68.25
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@a37010ded18ff788be4440302bd6830b1ae50d8b # v2.68.25
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-llvm-cov
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # v7.3.1
+        uses: astral-sh/setup-uv@6ee6290f1cbc4156c0bdd66691b2c144ef8df19a # v7.4.0
         with:
           version: ${{ env.UV_VERSION }}
           cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
@@ -448,12 +448,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@a37010ded18ff788be4440302bd6830b1ae50d8b # v2.68.25
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@a37010ded18ff788be4440302bd6830b1ae50d8b # v2.68.25
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-llvm-cov
 
@@ -462,7 +462,7 @@ jobs:
 
       - name: "Install uv"
         if: ${{ matrix.language == 'python' }}
-        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # v7.3.1
+        uses: astral-sh/setup-uv@6ee6290f1cbc4156c0bdd66691b2c144ef8df19a # v7.4.0
         with:
           version: ${{ env.UV_VERSION }}
 

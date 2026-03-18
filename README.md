@@ -304,7 +304,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: j178/prek-action@v1
+      - uses: j178/prek-action@v2
 ```
 
 This action installs prek and runs `prek run --all-files` on your repository.
