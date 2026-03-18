@@ -98,7 +98,7 @@ tokio = { version = "1.47.1", features = [
   "macros",
   "net",
 ] }
-tokio-tar = { version = "0.5.6", package = "astral-tokio-tar" }
+tokio-tar = { version = "0.6.0", package = "astral-tokio-tar" }
 tokio-util = { version = "0.7.13" }
 toml = { version = "1.0.1", default-features = false, features = [
   "fast_hash",
