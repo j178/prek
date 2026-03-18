@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use bstr::ByteSlice;
+use clap::ValueEnum;
 use owo_colors::OwoColorize;
 use prek_consts::CONFIG_FILENAMES;
 use same_file::is_same_file;
@@ -384,12 +385,19 @@ fn is_our_script(hook_path: &Path) -> std::io::Result<bool> {
 pub(crate) async fn uninstall(
     config: Option<PathBuf>,
     hook_types: Vec<HookType>,
+    all: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let project = Project::discover(config.as_deref(), &CWD).ok();
     let hooks_path = git::get_git_common_dir().await?.join("hooks");
 
-    for hook_type in get_hook_types(hook_types, project.as_ref(), config.as_deref()) {
+    let types: Vec<HookType> = if all {
+        HookType::value_variants().to_vec()
+    } else {
+        get_hook_types(hook_types, project.as_ref(), config.as_deref())
+    };
+
+    for hook_type in types {
         let hook_path = hooks_path.join(hook_type.as_ref());
         let legacy_path = hook_path.with_added_extension("legacy");
 
@@ -405,19 +413,23 @@ pub(crate) async fn uninstall(
         match is_our_script(&hook_path) {
             Ok(true) => {}
             Ok(false) => {
-                writeln!(
-                    printer.stderr(),
-                    "`{}` is not managed by prek, skipping.",
-                    hook_path.user_display().cyan()
-                )?;
+                if !all {
+                    writeln!(
+                        printer.stderr(),
+                        "`{}` is not managed by prek, skipping.",
+                        hook_path.user_display().cyan()
+                    )?;
+                }
                 continue;
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                writeln!(
-                    printer.stderr(),
-                    "`{}` does not exist, skipping.",
-                    hook_path.user_display().cyan()
-                )?;
+                if !all {
+                    writeln!(
+                        printer.stderr(),
+                        "`{}` does not exist, skipping.",
+                        hook_path.user_display().cyan()
+                    )?;
+                }
                 continue;
             }
             Err(err) => return Err(err.into()),

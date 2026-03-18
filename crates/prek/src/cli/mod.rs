@@ -375,6 +375,13 @@ pub(crate) struct PrepareHooksArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct UninstallArgs {
+    /// Uninstall all prek-managed Git shims.
+    ///
+    /// Scans the hooks directory and removes every hook managed by prek,
+    /// regardless of hook type.
+    #[arg(long, conflicts_with = "hook_types")]
+    pub(crate) all: bool,
+
     /// Which Git shim(s) to uninstall.
     ///
     /// Specifies which Git hook type(s) you want to uninstall shims for.
@@ -382,6 +389,7 @@ pub(crate) struct UninstallArgs {
     ///
     /// If not specified, uses `default_install_hook_types` from the config file,
     /// or defaults to `pre-commit` if that is also not set.
+    /// Use `--all` to remove all prek-managed hooks.
     #[arg(short = 't', long = "hook-type", value_name = "HOOK_TYPE", value_enum)]
     pub(crate) hook_types: Vec<HookType>,
 }
