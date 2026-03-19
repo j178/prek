@@ -174,6 +174,52 @@ fn invalid_config() {
       | ^ missing field `repos`
     ");
 
+    context.write_pre_commit_config(indoc::indoc! {r"
+        files: 12
+        repos: []
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: error: line 1 column 1: invalid type: integer `12`, expected a regex string or a mapping with `glob` set to a string or list of strings
+     --> <input>:1:1
+      |
+    1 | files: 12
+      | ^ invalid type: integer `12`, expected a regex string or a mapping with `glob` set to a string or list of strings
+    2 | repos: []
+      |
+    ");
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        files:
+          glog: "*.rs"
+        repos: []
+    "#});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: error: line 2 column 3: unknown field `glog`, expected one of glob
+     --> <input>:2:3
+      |
+    1 | files:
+    2 |   glog: \"*.rs\"
+      |   ^ unknown field `glog`, expected one of glob
+    3 | repos: []
+      |
+    ");
+
     context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
           - repo: local
