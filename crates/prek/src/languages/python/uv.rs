@@ -573,149 +573,154 @@ fn uv_source_from_env() -> Option<InstallSource> {
     }
 }
 
-#[test]
-fn ensure_cur_uv_version_in_range() {
-    let version = Version::parse(CUR_UV_VERSION).expect("Invalid CUR_UV_VERSION");
-    assert!(
-        UV_VERSION_RANGE.matches(&version),
-        "CUR_UV_VERSION {CUR_UV_VERSION} does not satisfy the version requirement {}",
-        &*UV_VERSION_RANGE
-    );
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn wheel_platform_tag_x86_64_linux_gnu() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::X86_64,
-        Environment::Gnu,
-    )?;
-    assert_eq!(tag, "manylinux_2_17_x86_64.manylinux2014_x86_64");
-    Ok(())
-}
+    #[test]
+    fn ensure_cur_uv_version_in_range() {
+        let version = Version::parse(CUR_UV_VERSION).expect("Invalid CUR_UV_VERSION");
+        assert!(
+            UV_VERSION_RANGE.matches(&version),
+            "CUR_UV_VERSION {CUR_UV_VERSION} does not satisfy the version requirement {}",
+            &*UV_VERSION_RANGE
+        );
+    }
 
-#[test]
-fn wheel_platform_tag_x86_64_linux_musl() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::X86_64,
-        Environment::Musl,
-    )?;
-    assert_eq!(tag, "musllinux_1_1_x86_64");
-    Ok(())
-}
+    #[test]
+    fn wheel_platform_tag_x86_64_linux_gnu() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::X86_64,
+            Environment::Gnu,
+        )?;
+        assert_eq!(tag, "manylinux_2_17_x86_64.manylinux2014_x86_64");
+        Ok(())
+    }
 
-#[test]
-fn wheel_platform_tag_i686_linux_gnu() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
-        Environment::Gnu,
-    )?;
-    assert_eq!(tag, "manylinux_2_17_i686.manylinux2014_i686");
-    Ok(())
-}
+    #[test]
+    fn wheel_platform_tag_x86_64_linux_musl() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::X86_64,
+            Environment::Musl,
+        )?;
+        assert_eq!(tag, "musllinux_1_1_x86_64");
+        Ok(())
+    }
 
-#[test]
-fn wheel_platform_tag_i686_linux_musl() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
-        Environment::Musl,
-    )?;
-    assert_eq!(tag, "musllinux_1_1_i686");
-    Ok(())
-}
+    #[test]
+    fn wheel_platform_tag_i686_linux_gnu() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
+            Environment::Gnu,
+        )?;
+        assert_eq!(tag, "manylinux_2_17_i686.manylinux2014_i686");
+        Ok(())
+    }
 
-#[test]
-fn wheel_platform_tag_aarch64_linux_gnu() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
-        Environment::Gnu,
-    )?;
-    assert_eq!(
-        tag,
-        "manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64"
-    );
-    Ok(())
-}
+    #[test]
+    fn wheel_platform_tag_i686_linux_musl() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
+            Environment::Musl,
+        )?;
+        assert_eq!(tag, "musllinux_1_1_i686");
+        Ok(())
+    }
 
-#[test]
-fn wheel_platform_tag_aarch64_linux_musl() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
-        Environment::Musl,
-    )?;
-    // aarch64 uses a single dual-tagged wheel for both glibc and musl
-    assert_eq!(
-        tag,
-        "manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64"
-    );
-    Ok(())
-}
+    #[test]
+    fn wheel_platform_tag_aarch64_linux_gnu() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+            Environment::Gnu,
+        )?;
+        assert_eq!(
+            tag,
+            "manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64"
+        );
+        Ok(())
+    }
 
-#[test]
-fn wheel_platform_tag_armv7_linux_gnu() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::Arm(ArmArchitecture::Armv7),
-        Environment::Gnu,
-    )?;
-    assert_eq!(tag, "manylinux_2_17_armv7l.manylinux2014_armv7l");
-    Ok(())
-}
+    #[test]
+    fn wheel_platform_tag_aarch64_linux_musl() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+            Environment::Musl,
+        )?;
+        // aarch64 uses a single dual-tagged wheel for both glibc and musl
+        assert_eq!(
+            tag,
+            "manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64"
+        );
+        Ok(())
+    }
 
-#[test]
-fn wheel_platform_tag_armv7_linux_musl() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::Arm(ArmArchitecture::Armv7),
-        Environment::Musl,
-    )?;
-    assert_eq!(
-        tag,
-        "manylinux_2_17_armv7l.manylinux2014_armv7l.musllinux_1_1_armv7l"
-    );
-    Ok(())
-}
+    #[test]
+    fn wheel_platform_tag_armv7_linux_gnu() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::Arm(ArmArchitecture::Armv7),
+            Environment::Gnu,
+        )?;
+        assert_eq!(tag, "manylinux_2_17_armv7l.manylinux2014_armv7l");
+        Ok(())
+    }
 
-#[tokio::test]
-async fn replace_uv_binary_overwrites_existing_file() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let source = temp.path().join("source-uv");
-    let target_dir = temp.path().join("tools").join("uv");
-    let target_path = target_dir.join("uv").with_extension(EXE_EXTENSION);
+    #[test]
+    fn wheel_platform_tag_armv7_linux_musl() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::Arm(ArmArchitecture::Armv7),
+            Environment::Musl,
+        )?;
+        assert_eq!(
+            tag,
+            "manylinux_2_17_armv7l.manylinux2014_armv7l.musllinux_1_1_armv7l"
+        );
+        Ok(())
+    }
 
-    fs_err::create_dir_all(&target_dir)?;
-    fs_err::write(&source, b"new")?;
-    fs_err::write(&target_path, b"old")?;
+    #[tokio::test]
+    async fn replace_uv_binary_overwrites_existing_file() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("source-uv");
+        let target_dir = temp.path().join("tools").join("uv");
+        let target_path = target_dir.join("uv").with_extension(EXE_EXTENSION);
 
-    replace_uv_binary(&source, &target_path).await?;
+        fs_err::create_dir_all(&target_dir)?;
+        fs_err::write(&source, b"new")?;
+        fs_err::write(&target_path, b"old")?;
 
-    assert!(!source.exists());
-    assert_eq!(fs_err::read(&target_path)?, b"new");
+        replace_uv_binary(&source, &target_path).await?;
 
-    Ok(())
-}
+        assert!(!source.exists());
+        assert_eq!(fs_err::read(&target_path)?, b"new");
 
-#[tokio::test]
-async fn replace_uv_binary_recreates_missing_parent_dir() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let source = temp.path().join("source-uv");
-    let target_dir = temp.path().join("tools").join("uv");
-    let target_path = target_dir.join("uv").with_extension(EXE_EXTENSION);
+        Ok(())
+    }
 
-    fs_err::create_dir_all(&target_dir)?;
-    fs_err::write(&target_path, b"old")?;
-    fs_err::remove_dir_all(&target_dir)?;
-    fs_err::write(&source, b"new")?;
+    #[tokio::test]
+    async fn replace_uv_binary_recreates_missing_parent_dir() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("source-uv");
+        let target_dir = temp.path().join("tools").join("uv");
+        let target_path = target_dir.join("uv").with_extension(EXE_EXTENSION);
 
-    replace_uv_binary(&source, &target_path).await?;
+        fs_err::create_dir_all(&target_dir)?;
+        fs_err::write(&target_path, b"old")?;
+        fs_err::remove_dir_all(&target_dir)?;
+        fs_err::write(&source, b"new")?;
 
-    assert!(target_dir.exists());
-    assert_eq!(fs_err::read(&target_path)?, b"new");
+        replace_uv_binary(&source, &target_path).await?;
 
-    Ok(())
+        assert!(target_dir.exists());
+        assert_eq!(fs_err::read(&target_path)?, b"new");
+
+        Ok(())
+    }
 }
