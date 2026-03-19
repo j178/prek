@@ -169,18 +169,19 @@ fn explicit_deno_prefix() {
 }
 
 /// Test that `additional_dependencies` are installed correctly.
-/// Deno caches npm packages when they're imported.
+/// This relies on `deno add` creating an import mapping for a bare specifier.
 #[test]
 fn additional_dependencies() {
     let context = TestContext::new();
     context.init_project();
 
-    // Create a script that uses an npm dependency (lodash is simpler than chalk)
+    // Create a script that uses a bare specifier.
+    // This only works if `additional_dependencies` was applied via `deno add`.
     context
         .work_dir()
         .child("use_lodash.ts")
         .write_str(indoc::indoc! {r#"
-        import _ from "npm:lodash@4";
+        import _ from "lodash";
         console.log(_.capitalize("hello from lodash"));
     "#})
         .expect("Failed to write use_lodash.ts");

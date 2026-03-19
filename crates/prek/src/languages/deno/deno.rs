@@ -217,20 +217,32 @@ impl LanguageImpl for Deno {
         let deno_bin_dir = deno_binary.parent().expect("Deno binary must have parent");
         let new_path =
             prepend_paths(&[&bin_dir(env_dir), deno_bin_dir]).context("Failed to join PATH")?;
+        let deno_config = env_dir.join("deno.json");
+        let deno_lock = env_dir.join("deno.lock");
 
         let entry = hook.entry.resolve(Some(&new_path))?;
 
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new(&entry[0], "deno hook")
-                .current_dir(hook.work_dir())
-                .args(&entry[1..])
+            let mut cmd = Cmd::new(&entry[0], "deno hook");
+            cmd.current_dir(hook.work_dir())
                 .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::DENO_DIR, &deno_cache_dir)
                 .envs(&hook.env)
+                .check(false)
+                .stdin(Stdio::null());
+
+            if deno_config.exists() {
+                cmd.arg("--config").arg(&deno_config);
+            }
+
+            if deno_lock.exists() {
+                cmd.arg("--lock").arg(&deno_lock);
+            }
+
+            let mut output = cmd
+                .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)
-                .check(false)
-                .stdin(Stdio::null())
                 .pty_output()
                 .await?;
 
