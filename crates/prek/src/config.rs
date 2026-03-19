@@ -11,7 +11,7 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use itertools::Itertools;
 use prek_identify::TagSet;
 use rustc_hash::FxHashMap;
-use serde::de::{Error as DeError, MapAccess, Visitor};
+use serde::de::{DeserializeSeed, Error as DeError, IgnoredAny, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::fs::Simplified;
@@ -51,12 +51,115 @@ impl std::fmt::Debug for GlobPatterns {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
 enum FilePatternWire {
     Glob { glob: String },
     GlobList { glob: Vec<String> },
     Regex(String),
+}
+
+impl<'de> Deserialize<'de> for FilePatternWire {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct FilePatternVisitor;
+        struct GlobFieldVisitor;
+
+        impl<'de> DeserializeSeed<'de> for GlobFieldVisitor {
+            type Value = FilePatternWire;
+
+            fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                deserializer.deserialize_any(self)
+            }
+        }
+
+        impl<'de> Visitor<'de> for GlobFieldVisitor {
+            type Value = FilePatternWire;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a string or a list of strings")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(FilePatternWire::Glob {
+                    glob: value.to_owned(),
+                })
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(FilePatternWire::Glob { glob: value })
+            }
+
+            fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                Ok(FilePatternWire::GlobList {
+                    glob: Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(
+                        seq,
+                    ))?,
+                })
+            }
+        }
+
+        impl<'de> Visitor<'de> for FilePatternVisitor {
+            type Value = FilePatternWire;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str(
+                    "a regex string or a mapping with `glob` set to a string or list of strings",
+                )
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(FilePatternWire::Regex(value.to_owned()))
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(FilePatternWire::Regex(value))
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let mut glob = None;
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "glob" => {
+                            if glob.is_some() {
+                                return Err(M::Error::duplicate_field("glob"));
+                            }
+                            glob = Some(map.next_value_seed(GlobFieldVisitor)?);
+                        }
+                        _ => {
+                            map.next_value::<IgnoredAny>()?;
+                        }
+                    }
+                }
+
+                glob.ok_or_else(|| M::Error::missing_field("glob"))
+            }
+        }
+
+        deserializer.deserialize_any(FilePatternVisitor)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
