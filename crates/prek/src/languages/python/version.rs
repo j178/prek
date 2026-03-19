@@ -1,4 +1,4 @@
-//! Implement `-p <python_spec>` argument parser of `virutualenv` from
+//! Implement `-p <python_spec>` argument parser of `virtualenv` from
 //! <https://github.com/pypa/virtualenv/blob/216dc9f3592aa1f3345290702f0e7ba3432af3ce/src/virtualenv/discovery/py_spec.py>
 use std::str::FromStr;
 
@@ -14,7 +14,7 @@ pub(crate) enum PythonRequest {
     Range(semver::VersionReq, String),
 }
 
-/// Represents a request for a specific Python version or path.
+/// Represents a request for a specific Python version.
 /// example formats:
 /// - `python`
 /// - `python3`

@@ -177,7 +177,6 @@ mod tests {
         assert!(!RubyRequest::Exact(3, 3, 7).satisfied_by(&install_info));
         assert!(!RubyRequest::Exact(3, 2, 6).satisfied_by(&install_info));
 
-        // Test path matching
         // Test range matching
         let req = semver::VersionReq::parse(">=3.2, <4.0")?;
         assert!(
