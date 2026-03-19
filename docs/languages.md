@@ -445,7 +445,6 @@ Supported formats:
 - `deno@x.y`, `x.y` (major.minor version)
 - `deno@x.y.z`, `x.y.z` (exact version)
 - Semver ranges like `>=x.y, <x+1.0`
-- Absolute path to a Deno executable
 
 #### Using npm packages
 

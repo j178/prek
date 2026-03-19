@@ -68,6 +68,7 @@ impl EnvVars {
 
     // Deno related
     pub const DENO_DIR: &'static str = "DENO_DIR";
+    pub const DENO_NO_UPDATE_CHECK: &'static str = "DENO_NO_UPDATE_CHECK";
 
     // GitHub API authentication (to avoid rate limits)
     pub const GITHUB_TOKEN: &'static str = "GITHUB_TOKEN";

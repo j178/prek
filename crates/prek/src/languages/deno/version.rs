@@ -48,7 +48,6 @@ impl FromStr for DenoVersion {
 /// - `x.y.z` or `deno@x.y.z`: Install the specific version.
 /// - `^x.y.z`: Install the latest version that satisfies the semver requirement.
 ///   Or any other semver compatible version requirement.
-/// - `local/path/to/deno`: Use deno executable at the specified path.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum DenoRequest {
     Any,

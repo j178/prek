@@ -122,31 +122,32 @@ impl LanguageImpl for Deno {
         // command name explicitly when needed via `dep:name`.
         if !hook.additional_dependencies.is_empty() {
             debug!(deps = ?hook.additional_dependencies, "Installing deno dependencies");
-            for spec in &hook.additional_dependencies {
-                let (dep, name) = parse_install_dependency(spec);
+        }
+        for spec in &hook.additional_dependencies {
+            let (dep, name) = parse_install_dependency(spec);
 
-                let mut install_cmd = Cmd::new(deno.deno(), "deno install dependency");
-                install_cmd
-                    .current_dir(install_dir)
-                    .env(EnvVars::DENO_DIR, &deno_cache_dir)
-                    .arg("install")
-                    .arg("--allow-all")
-                    .arg("--global")
-                    .arg("--force")
-                    .arg("--root")
-                    .arg(&info.env_path);
+            let mut install_cmd = Cmd::new(deno.deno(), "deno install dependency");
+            install_cmd
+                .current_dir(install_dir)
+                .env(EnvVars::DENO_DIR, &deno_cache_dir)
+                .env(EnvVars::DENO_NO_UPDATE_CHECK, "1")
+                .arg("install")
+                .arg("--allow-all")
+                .arg("--global")
+                .arg("--force")
+                .arg("--root")
+                .arg(&info.env_path);
 
-                if let Some(name) = name {
-                    install_cmd.arg("--name").arg(name);
-                }
-
-                install_cmd
-                    .arg(dep)
-                    .check(true)
-                    .output()
-                    .await
-                    .with_context(|| format!("Failed to install deno dependency `{spec}`"))?;
+            if let Some(name) = name {
+                install_cmd.arg("--name").arg(name);
             }
+
+            install_cmd
+                .arg(dep)
+                .check(true)
+                .output()
+                .await
+                .with_context(|| format!("Failed to install deno dependency `{spec}`"))?;
         }
 
         info.persist_env_path();
@@ -201,6 +202,7 @@ impl LanguageImpl for Deno {
                 .current_dir(hook.work_dir())
                 .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::DENO_DIR, &deno_cache_dir)
+                .env(EnvVars::DENO_NO_UPDATE_CHECK, "1")
                 .envs(&hook.env)
                 .args(&entry[1..])
                 .args(&hook.args)

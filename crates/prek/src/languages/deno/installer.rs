@@ -60,6 +60,7 @@ impl DenoResult {
 
     pub(crate) async fn fill_version(mut self) -> Result<Self> {
         let output = Cmd::new(&self.deno, "deno --version")
+            .env(EnvVars::DENO_NO_UPDATE_CHECK, "1")
             .arg("--version")
             .check(true)
             .output()
