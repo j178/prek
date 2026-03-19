@@ -125,7 +125,7 @@ impl RustInstaller {
         installed
             .into_iter()
             .find_map(|info| {
-                let matches = request.matches(&info.version, Some(&info.path));
+                let matches = request.matches(&info.version);
 
                 if matches {
                     trace!(name = %info.name, "Found matching installed rust");
@@ -146,7 +146,7 @@ impl RustInstaller {
             .sorted_unstable_by(|a, b| b.version.cmp(&a.version));
 
         for info in installed {
-            let matches = rust_request.matches(&info.version, Some(&info.path));
+            let matches = rust_request.matches(&info.version);
 
             if matches {
                 trace!(name = %info.name, "Found matching system rust");
@@ -193,7 +193,7 @@ impl RustInstaller {
 
                 let version = versions
                     .into_iter()
-                    .find(|version| req.matches(version, None))
+                    .find(|version| req.matches(version))
                     .with_context(|| format!("Version `{req}` not found on remote"))?;
                 Ok(version)
             }

@@ -1,5 +1,4 @@
 use std::fmt;
-use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use crate::hook::InstallInfo;
@@ -20,9 +19,6 @@ pub(crate) enum RubyRequest {
     /// Major version (latest minor.patch)
     Major(u64),
 
-    /// Explicit file path to Ruby interpreter
-    Path(PathBuf),
-
     /// Semver range (e.g., ">=3.2, <4.0")
     Range(semver::VersionReq, String),
 }
@@ -34,7 +30,6 @@ impl fmt::Display for RubyRequest {
             Self::Exact(maj, min, patch) => write!(f, "{maj}.{min}.{patch}"),
             Self::MajorMinor(maj, min) => write!(f, "{maj}.{min}"),
             Self::Major(maj) => write!(f, "{maj}"),
-            Self::Path(p) => write!(f, "{}", p.display()),
             Self::Range(_, s) => f.write_str(s),
         }
     }
@@ -70,12 +65,6 @@ impl FromStr for RubyRequest {
             return Ok(Self::Range(req, s.to_string()));
         }
 
-        // Finally try as a file path
-        let path = PathBuf::from(s);
-        if path.exists() {
-            return Ok(Self::Path(path));
-        }
-
         Err(Error::InvalidVersion(s.to_string()))
     }
 }
@@ -105,7 +94,7 @@ impl RubyRequest {
     /// Check if this request matches a Ruby version during installation search
     ///
     /// This is used by the installer when searching for existing Ruby installations.
-    pub(crate) fn matches(&self, version: &semver::Version, toolchain: Option<&Path>) -> bool {
+    pub(crate) fn matches(&self, version: &semver::Version) -> bool {
         match self {
             Self::Any => true,
             Self::Exact(maj, min, patch) => {
@@ -113,8 +102,6 @@ impl RubyRequest {
             }
             Self::MajorMinor(maj, min) => version.major == *maj && version.minor == *min,
             Self::Major(maj) => version.major == *maj,
-            // FIXME: consider resolving symlinks and normalizing paths before comparison
-            Self::Path(path) => toolchain.is_some_and(|t| t == path),
             Self::Range(req, _) => req.matches(version),
         }
     }
@@ -123,10 +110,7 @@ impl RubyRequest {
     ///
     /// This is used at runtime to verify an installation meets the requirements.
     pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
-        self.matches(
-            &install_info.language_version,
-            Some(&install_info.toolchain),
-        )
+        self.matches(&install_info.language_version)
     }
 }
 
@@ -135,6 +119,7 @@ mod tests {
     use super::*;
     use crate::config::Language;
     use rustc_hash::FxHashSet;
+    use std::path::PathBuf;
 
     #[test]
     fn test_parse_ruby_request() {
@@ -193,9 +178,6 @@ mod tests {
         assert!(!RubyRequest::Exact(3, 2, 6).satisfied_by(&install_info));
 
         // Test path matching
-        assert!(RubyRequest::Path(PathBuf::from("/usr/bin/ruby")).satisfied_by(&install_info));
-        assert!(!RubyRequest::Path(PathBuf::from("/usr/bin/ruby3.2")).satisfied_by(&install_info));
-
         // Test range matching
         let req = semver::VersionReq::parse(">=3.2, <4.0")?;
         assert!(

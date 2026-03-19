@@ -223,7 +223,7 @@ impl RubyInstaller {
             }
         };
 
-        let Some(version) = versions.into_iter().find(|v| request.matches(v, None)) else {
+        let Some(version) = versions.into_iter().find(|v| request.matches(v)) else {
             anyhow::bail!(ruby_not_found_error(
                 request,
                 &format!("No rv-ruby release found matching: {request}")
@@ -251,7 +251,7 @@ impl RubyInstaller {
             })
             .sorted_unstable_by(|(a, _), (b, _)| b.cmp(a)) // descending
             .find_map(|(version, ruby_bin)| {
-                if request.matches(&version, Some(&ruby_bin)) {
+                if request.matches(&version) {
                     Some(RubyResult {
                         ruby_bin,
                         version,
@@ -400,7 +400,7 @@ async fn try_ruby_path(ruby_path: &Path, request: &RubyRequest) -> Option<RubyRe
                 engine,
             };
 
-            if request.matches(&result.version, Some(&result.ruby_bin)) {
+            if request.matches(&result.version) {
                 Some(result)
             } else {
                 None

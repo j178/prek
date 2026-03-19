@@ -1,6 +1,5 @@
 //! Implement `-p <python_spec>` argument parser of `virutualenv` from
 //! <https://github.com/pypa/virtualenv/blob/216dc9f3592aa1f3345290702f0e7ba3432af3ce/src/virtualenv/discovery/py_spec.py>
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use crate::hook::InstallInfo;
@@ -12,7 +11,6 @@ pub(crate) enum PythonRequest {
     Major(u64),
     MajorMinor(u64, u64),
     MajorMinorPatch(u64, u64, u64),
-    Path(PathBuf),
     Range(semver::VersionReq, String),
 }
 
@@ -28,8 +26,6 @@ pub(crate) enum PythonRequest {
 /// - `3.12.3`
 /// - `>=3.12`
 /// - `>=3.8, <3.12`
-/// - `/path/to/python`
-/// - `/path/to/python3.12`
 // TODO: support version like `3.8b1`, `3.8rc2`, `python3.8t`, `python3.8-64`, `pypy3.8`.
 impl FromStr for PythonRequest {
     type Err = Error;
@@ -47,22 +43,12 @@ impl FromStr for PythonRequest {
 
             Self::parse_version_numbers(version_part, request)
         } else {
-            Self::parse_version_numbers(request, request)
-                .or_else(|_| {
-                    // Try to parse as a VersionReq (like ">= 3.12" or ">=3.8, <3.12")
-                    semver::VersionReq::parse(request)
-                        .map(|version_req| PythonRequest::Range(version_req, request.into()))
-                        .map_err(|_| Error::InvalidVersion(request.to_string()))
-                })
-                .or_else(|_| {
-                    // If it doesn't match any known format, treat it as a path
-                    let path = PathBuf::from(request);
-                    if path.exists() {
-                        Ok(PythonRequest::Path(path))
-                    } else {
-                        Err(Error::InvalidVersion(request.to_string()))
-                    }
-                })
+            Self::parse_version_numbers(request, request).or_else(|_| {
+                // Try to parse as a VersionReq (like ">= 3.12" or ">=3.8, <3.12")
+                semver::VersionReq::parse(request)
+                    .map(|version_req| PythonRequest::Range(version_req, request.into()))
+                    .map_err(|_| Error::InvalidVersion(request.to_string()))
+            })
         }
     }
 }
@@ -100,8 +86,6 @@ impl PythonRequest {
             PythonRequest::MajorMinorPatch(major, minor, patch) => {
                 version.major == *major && version.minor == *minor && version.patch == *patch
             }
-            // FIXME: consider resolving symlinks and normalizing paths before comparison
-            PythonRequest::Path(path) => path == &install_info.toolchain,
             PythonRequest::Range(req, _) => req.matches(version),
         }
     }
@@ -138,6 +122,7 @@ mod tests {
     use super::*;
     use crate::config::Language;
     use rustc_hash::FxHashSet;
+    use std::path::PathBuf;
 
     #[test]
     fn test_parse_python_request() {
@@ -229,12 +214,6 @@ mod tests {
         assert!(PythonRequest::MajorMinor(3, 12).satisfied_by(&install_info));
         assert!(PythonRequest::MajorMinorPatch(3, 12, 1).satisfied_by(&install_info));
         assert!(!PythonRequest::MajorMinorPatch(3, 12, 2).satisfied_by(&install_info));
-        assert!(
-            PythonRequest::Path(PathBuf::from("/usr/bin/python3.12")).satisfied_by(&install_info)
-        );
-        assert!(
-            !PythonRequest::Path(PathBuf::from("/usr/bin/python3.11")).satisfied_by(&install_info)
-        );
 
         let range_req = semver::VersionReq::parse(">=3.12").unwrap();
         assert!(

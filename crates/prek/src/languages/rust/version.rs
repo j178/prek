@@ -202,15 +202,12 @@ impl RustRequest {
             }
             _ => {
                 let version = &install_info.language_version;
-                self.matches(
-                    &RustVersion::from_version(version),
-                    Some(install_info.toolchain.as_ref()),
-                )
+                self.matches(&RustVersion::from_version(version))
             }
         }
     }
 
-    pub(crate) fn matches(&self, version: &RustVersion, _toolchain: Option<&Path>) -> bool {
+    pub(crate) fn matches(&self, version: &RustVersion) -> bool {
         match self {
             RustRequest::Any => true,
             RustRequest::Channel(requested_channel) => version
@@ -290,19 +287,19 @@ mod tests {
         );
         let other_version = RustVersion::from_version(&semver::Version::new(1, 72, 1));
 
-        assert!(RustRequest::Any.matches(&version, None));
-        assert!(RustRequest::Channel(Channel::Stable).matches(&version, None));
-        assert!(!RustRequest::Channel(Channel::Stable).matches(&other_version, None));
-        assert!(RustRequest::Major(1).matches(&version, None));
-        assert!(!RustRequest::Major(2).matches(&version, None));
-        assert!(RustRequest::MajorMinor(1, 71).matches(&version, None));
-        assert!(!RustRequest::MajorMinor(1, 72).matches(&version, None));
-        assert!(RustRequest::MajorMinorPatch(1, 71, 0).matches(&version, None));
-        assert!(!RustRequest::MajorMinorPatch(1, 71, 1).matches(&version, None));
+        assert!(RustRequest::Any.matches(&version));
+        assert!(RustRequest::Channel(Channel::Stable).matches(&version));
+        assert!(!RustRequest::Channel(Channel::Stable).matches(&other_version));
+        assert!(RustRequest::Major(1).matches(&version));
+        assert!(!RustRequest::Major(2).matches(&version));
+        assert!(RustRequest::MajorMinor(1, 71).matches(&version));
+        assert!(!RustRequest::MajorMinor(1, 72).matches(&version));
+        assert!(RustRequest::MajorMinorPatch(1, 71, 0).matches(&version));
+        assert!(!RustRequest::MajorMinorPatch(1, 71, 1).matches(&version));
 
         let req = semver::VersionReq::parse(">=1.70, <1.72")?;
-        assert!(RustRequest::Range(req.clone(), ">=1.70, <1.72".into()).matches(&version, None));
-        assert!(!RustRequest::Range(req, ">=1.70, <1.72".into()).matches(&other_version, None));
+        assert!(RustRequest::Range(req.clone(), ">=1.70, <1.72".into()).matches(&version));
+        assert!(!RustRequest::Range(req, ">=1.70, <1.72".into()).matches(&other_version));
 
         Ok(())
     }
