@@ -454,16 +454,16 @@ repos:
         types: [ts, tsx, js, jsx]
 ```
 
-For JSR packages, use the `jsr:` prefix:
+For JSR packages, use the `jsr:` prefix in a `deno run` entry:
 
 ```yaml
 repos:
   - repo: local
     hooks:
-      - id: deno-lint
-        name: Deno Lint
+      - id: biome
+        name: Biome
         language: deno
-        entry: deno lint
+        entry: deno run -A jsr:@biomejs/biome
         types: [ts, tsx, js, jsx]
 ```
 
