@@ -423,9 +423,17 @@ Use `script` for simple repository scripts that only need file paths and no mana
 
 **Status in prek:** ✅ Supported.
 
-prek installs Deno hooks by running `deno cache` for the entry script and `deno add` for additional dependencies. The hook runs with an isolated `DENO_DIR` for cache separation.
+prek installs each `additional_dependencies` item with `deno install --global` into the hook environment. The hook runs from the work repository with an isolated `DENO_DIR` for cache separation.
 
 Deno hooks run without needing a pre-installed Deno runtime when toolchain download is available.
+
+#### Rules
+
+- `additional_dependencies` are treated as executable installs. Each item should be something `deno install --global` can install, such as an `npm:` or `jsr:` specifier.
+- `additional_dependencies` may also point at a local file to install as an executable, using `./path/to/tool.ts:name`. Relative paths resolve from the hook repository for remote hooks and from the work repository for local hooks.
+- To override the executable name for an additional dependency, append `:name` to the dependency string. For example: `npm:semver@7:semver-tool`.
+
+For remote hooks, if the repo wants to provide its own executable, declare it explicitly in the hook's `additional_dependencies`, for example `./cli.ts:repo-tool`, and then use `repo-tool` in `entry`.
 
 #### `language_version`
 
@@ -465,6 +473,36 @@ repos:
         language: deno
         entry: deno run -A jsr:@biomejs/biome
         types: [ts, tsx, js, jsx]
+```
+
+For executable-style additional dependencies, use the package specifier directly:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: semver-version
+        name: semver version
+        language: deno
+        entry: semver-tool 1.2.3
+        additional_dependencies:
+          - npm:semver@7:semver-tool
+        pass_filenames: false
+```
+
+You can also install a local file as an executable additional dependency:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: local-tool
+        name: local tool
+        language: deno
+        entry: echo-tool
+        additional_dependencies:
+          - ./tool.ts:echo-tool
+        pass_filenames: false
 ```
 
 #### Built-in commands

@@ -127,74 +127,178 @@ fn builtin_commands() {
     ");
 }
 
-/// Test that explicit `deno` prefix is handled correctly.
+/// Test a remote Deno hook whose manifest installs its own executable.
 #[test]
-fn explicit_deno_prefix() {
+fn remote_hook() {
     let context = TestContext::new();
     context.init_project();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: local
+          - repo: https://github.com/prek-test-repos/deno-hooks
+            rev: v3.1.0
             hooks:
-              - id: deno-version
-                name: deno version
-                language: deno
-                entry: deno eval 'console.log(Deno.version.deno)'
+              - id: deno-eval
                 always_run: true
                 verbose: true
-                pass_filenames: false
     "});
 
     context.git_add(".");
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"\d+\.\d+\.\d+", "[DENO_VERSION]")])
-        .collect::<Vec<_>>();
-
-    cmd_snapshot!(filters, context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    deno version.............................................................Passed
-    - hook id: deno-version
+    deno-eval................................................................Passed
+    - hook id: deno-eval
     - duration: [TIME]
 
-      [DENO_VERSION]
+      This is a remote deno hook
 
     ----- stderr -----
     ");
 }
 
-/// Test that `additional_dependencies` are installed correctly.
-/// This relies on `deno add` creating an import mapping for a bare specifier.
+/// Test a remote Deno hook whose configured additional dependency installs the executable it runs.
+#[test]
+fn remote_hook_with_additional_dependencies() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: https://github.com/prek-test-repos/deno-hooks
+            rev: v3.1.0
+            hooks:
+              - id: deno-semver
+                additional_dependencies: ["npm:semver@7:semver-tool"]
+                always_run: true
+                verbose: true
+    "#});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    deno-semver..............................................................Passed
+    - hook id: deno-semver
+    - duration: [TIME]
+
+      1.2.3
+
+    ----- stderr -----
+    ");
+}
+
+/// Test a remote Deno hook whose manifest installs a local file as an executable dependency.
+#[test]
+fn remote_hook_with_local_file_additional_dependency() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: https://github.com/prek-test-repos/deno-hooks
+            rev: v3.1.0
+            hooks:
+              - id: deno-local-dep
+                always_run: true
+                verbose: true
+    "});
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    deno-local-dep...........................................................Passed
+    - hook id: deno-local-dep
+    - duration: [TIME]
+
+      Hello from remote local additional dependency!
+
+    ----- stderr -----
+    ");
+}
+
+/// Test that `additional_dependencies` are installed as CLI executables.
 #[test]
 fn additional_dependencies() {
     let context = TestContext::new();
     context.init_project();
 
-    // Create a script that uses a bare specifier.
-    // This only works if `additional_dependencies` was applied via `deno add`.
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: semver-version
+                name: semver version
+                language: deno
+                entry: semver-tool 1.2.3
+                additional_dependencies: ["npm:semver@7:semver-tool"]
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "#});
+
+    context.git_add(".");
+
+    let filters = context.filters().into_iter().collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    semver version...........................................................Passed
+    - hook id: semver-version
+    - duration: [TIME]
+
+      1.2.3
+
+    ----- stderr -----
+    ");
+
+    // Run again to ensure the existing environment is reused cleanly.
+    cmd_snapshot!(filters, context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    semver version...........................................................Passed
+    - hook id: semver-version
+    - duration: [TIME]
+
+      1.2.3
+
+    ----- stderr -----
+    ");
+}
+
+/// Test that a local file can be installed as an executable additional dependency.
+#[test]
+fn additional_dependencies_local_file() {
+    let context = TestContext::new();
+    context.init_project();
+
     context
         .work_dir()
-        .child("use_lodash.ts")
+        .child("tool.ts")
         .write_str(indoc::indoc! {r#"
-        import _ from "lodash";
-        console.log(_.capitalize("hello from lodash"));
-    "#})
-        .expect("Failed to write use_lodash.ts");
+            console.log("Hello from local additional dependency!");
+        "#})
+        .expect("Failed to write tool.ts");
 
     context.write_pre_commit_config(indoc::indoc! {r#"
         repos:
           - repo: local
             hooks:
-              - id: deno-lodash
-                name: deno lodash
+              - id: local-tool
+                name: local tool
                 language: deno
-                entry: deno run ./use_lodash.ts
-                additional_dependencies: ["npm:lodash@4"]
+                entry: echo-tool
+                additional_dependencies: ["./tool.ts:echo-tool"]
                 always_run: true
                 verbose: true
                 pass_filenames: false
@@ -206,25 +310,11 @@ fn additional_dependencies() {
     success: true
     exit_code: 0
     ----- stdout -----
-    deno lodash..............................................................Passed
-    - hook id: deno-lodash
+    local tool...............................................................Passed
+    - hook id: local-tool
     - duration: [TIME]
 
-      Hello from lodash
-
-    ----- stderr -----
-    ");
-
-    // Run again to check `health_check` works correctly (cache reuse).
-    cmd_snapshot!(context.filters(), context.run(), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    deno lodash..............................................................Passed
-    - hook id: deno-lodash
-    - duration: [TIME]
-
-      Hello from lodash
+      Hello from local additional dependency!
 
     ----- stderr -----
     ");
@@ -351,7 +441,7 @@ fn language_version() {
 }
 
 /// Test that deno hooks work without system deno in PATH.
-/// Regression test ensuring `install()` uses the provisioned toolchain.
+/// Regression test ensuring run-time resolution still finds the managed toolchain.
 #[test]
 fn without_system_deno() {
     let context = TestContext::new();

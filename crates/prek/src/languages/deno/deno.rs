@@ -17,32 +17,39 @@ use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::{CacheBucket, Store, ToolBucket};
 
-/// Find the script in the entry that should be cached.
-fn find_script_to_cache(cmd: &[String]) -> Option<&str> {
-    let [deno, run, rest @ ..] = cmd else {
-        return None;
-    };
-    if deno != "deno" || run != "run" {
-        return None;
-    }
-
-    rest.iter()
-        .find(|s| !s.starts_with('-') && is_cacheable_script(s))
-        .map(String::as_str)
+fn is_valid_install_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    matches!(chars.next(), Some(c) if c.is_ascii_alphanumeric())
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
-fn is_cacheable_script(script: &str) -> bool {
-    if script.starts_with("http") || script.starts_with("jsr:") || script.starts_with("npm:") {
-        return true;
-    }
+/// Parse a Deno `additional_dependencies` item.
+///
+/// Deno support treats every additional dependency as an executable install target for
+/// `deno install --global`. That makes the contract explicit and avoids guessing whether
+/// a string should be handled as `deno add` or `deno install`.
+///
+/// The optional `:name` suffix is interpreted as `deno install --name <name>`, but only
+/// when the left side clearly looks like an install target that may legitimately contain
+/// colons itself:
+/// - specifiers such as `npm:semver@7`
+/// - URLs such as `https://...`
+/// - local paths such as `./cli.ts`
+///
+/// Plain command strings are left untouched so we do not accidentally split on a colon
+/// that is part of the dependency string.
+fn parse_install_dependency(spec: &str) -> (&str, Option<&str>) {
+    let Some((dep, name)) = spec.rsplit_once(':') else {
+        return (spec, None);
+    };
 
-    Path::new(script).extension().is_some_and(|ext| {
-        ext.eq_ignore_ascii_case("ts")
-            || ext.eq_ignore_ascii_case("js")
-            || ext.eq_ignore_ascii_case("mjs")
-            || ext.eq_ignore_ascii_case("tsx")
-            || ext.eq_ignore_ascii_case("jsx")
-    })
+    let looks_like_path = dep.starts_with('.') || dep.starts_with('/') || dep.contains(['/', '\\']);
+
+    if is_valid_install_name(name) && (looks_like_path || dep.contains(':')) {
+        (dep, Some(name))
+    } else {
+        (spec, None)
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -56,13 +63,6 @@ impl LanguageImpl for Deno {
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
-
-        // 1. Install deno
-        //   1) Find from `$PREK_HOME/tools/deno`
-        //   2) Find from system
-        //   3) Download from remote
-        // 2. Create env
-        // 3. Install dependencies
 
         // 1. Install deno
         let deno_dir = store.tools_path(ToolBucket::Deno);
@@ -85,93 +85,68 @@ impl LanguageImpl for Deno {
         )?;
 
         info.with_toolchain(deno.deno().to_path_buf());
-        // DenoVersion implements Deref<Target = semver::Version>, so we clone the inner version
         info.with_language_version((**deno.version()).clone());
 
         // 2. Create env
         let env_bin_dir = bin_dir(&info.env_path);
         fs_err::tokio::create_dir_all(&env_bin_dir).await?;
 
-        // Create isolated DENO_DIR for this hook's cache
+        // Relative install targets in `additional_dependencies` are resolved by Deno
+        // against the process working directory. For remote hooks that should be the
+        // cloned hook repository so `./cli.ts:name` refers to files shipped by the hook.
+        // For local hooks we keep resolution in the user's work tree.
+        let install_dir = hook.repo_path().unwrap_or(hook.work_dir());
+
+        // We share one Deno cache bucket across install and run. Executable shims live in
+        // the per-hook env bin dir, while downloaded modules and npm artifacts are reused
+        // from this cache bucket.
         let deno_cache_dir = store.cache_path(CacheBucket::Deno);
         fs_err::tokio::create_dir_all(&deno_cache_dir).await?;
 
-        // `deno` needs to be in PATH for scripts that use `/usr/bin/env deno`
-        let deno_bin_dir = deno.deno().parent().expect("Deno binary must have parent");
-        let new_path =
-            prepend_paths(&[&env_bin_dir, deno_bin_dir]).context("Failed to join PATH")?;
+        // 3. Install additional dependencies as executables in the hook env.
+        //
+        // Current Deno contract:
+        // - prek does not try to install the remote hook repo itself
+        // - prek does not inspect or rewrite `entry` to derive install targets
+        // - every `additional_dependencies` item is provisioned into `<env>/bin`
+        //
+        // This keeps installation and execution separate. If a remote hook repo wants to
+        // expose its own executable, it must declare a local file in
+        // `additional_dependencies`, for example `./cli.ts:repo-tool`, and then use
+        // `repo-tool` in `entry`.
+        //
+        // We intentionally pass `--allow-all` because `deno install` bakes permissions into
+        // the installed wrapper. Since prek does not parse `entry` or repo metadata to infer
+        // a minimal permission set, the simplest predictable behavior is to install the
+        // executable with full permissions and let the hook author choose the installed
+        // command name explicitly when needed via `dep:name`.
+        if !hook.additional_dependencies.is_empty() {
+            debug!(deps = ?hook.additional_dependencies, "Installing deno dependencies");
+            for spec in &hook.additional_dependencies {
+                let (dep, name) = parse_install_dependency(spec);
 
-        // 3. Install dependencies
-        if hook.repo_path().is_some() || !hook.additional_dependencies.is_empty() {
-            let deno_json = info.env_path.join("deno.json");
-
-            // Copy deno.json or deno.jsonc from repo if it exists
-            if let Some(repo_path) = hook.repo_path() {
-                // Try deno.json first, then deno.jsonc
-                let repo_deno_json = repo_path.join("deno.json");
-                let repo_deno_jsonc = repo_path.join("deno.jsonc");
-                if repo_deno_json.exists() {
-                    fs_err::tokio::copy(&repo_deno_json, &deno_json).await?;
-                } else if repo_deno_jsonc.exists() {
-                    // Copy jsonc as json - Deno can read it, and deno add will update it
-                    fs_err::tokio::copy(&repo_deno_jsonc, &deno_json).await?;
-                }
-                // Also copy deno.lock if it exists
-                let repo_lock = repo_path.join("deno.lock");
-                if repo_lock.exists() {
-                    fs_err::tokio::copy(&repo_lock, info.env_path.join("deno.lock")).await?;
-                }
-            }
-
-            // Create minimal deno.json if none exists
-            if !deno_json.exists() {
-                fs_err::tokio::write(&deno_json, "{}").await?;
-            }
-
-            // Install additional dependencies via `deno add`
-            if !hook.additional_dependencies.is_empty() {
-                debug!(deps = ?hook.additional_dependencies, "Installing deno dependencies");
-                Cmd::new(deno.deno(), "deno add")
-                    .current_dir(&info.env_path)
-                    .env(EnvVars::PATH, &new_path)
+                let mut install_cmd = Cmd::new(deno.deno(), "deno install dependency");
+                install_cmd
+                    .current_dir(install_dir)
                     .env(EnvVars::DENO_DIR, &deno_cache_dir)
-                    .arg("add")
-                    .args(&hook.additional_dependencies)
+                    .arg("install")
+                    .arg("--allow-all")
+                    .arg("--global")
+                    .arg("--force")
+                    .arg("--root")
+                    .arg(&info.env_path);
+
+                if let Some(name) = name {
+                    install_cmd.arg("--name").arg(name);
+                }
+
+                install_cmd
+                    .arg(dep)
                     .check(true)
                     .output()
                     .await
-                    .context("Failed to install deno dependencies")?;
+                    .with_context(|| format!("Failed to install deno dependency `{spec}`"))?;
             }
-        }
-
-        // 4. Cache entry script dependencies
-        let cmd = hook.entry.split()?;
-        if let Some(script) = find_script_to_cache(&cmd) {
-            debug!(script, "Caching entry script dependencies");
-            let deno_config = info.env_path.join("deno.json");
-            let deno_lock = info.env_path.join("deno.lock");
-
-            let mut cache_cmd = Cmd::new(deno.deno(), "deno cache");
-            cache_cmd
-                .current_dir(hook.work_dir())
-                .env(EnvVars::PATH, &new_path)
-                .env(EnvVars::DENO_DIR, &deno_cache_dir)
-                .arg("cache");
-
-            if deno_config.exists() {
-                cache_cmd.arg("--config").arg(&deno_config);
-            }
-
-            if deno_lock.exists() {
-                cache_cmd.arg("--lock").arg(&deno_lock);
-            }
-
-            cache_cmd
-                .arg(script)
-                .check(true)
-                .output()
-                .await
-                .context("Failed to cache entry script dependencies")?;
         }
 
         info.persist_env_path();
@@ -217,32 +192,21 @@ impl LanguageImpl for Deno {
         let deno_bin_dir = deno_binary.parent().expect("Deno binary must have parent");
         let new_path =
             prepend_paths(&[&bin_dir(env_dir), deno_bin_dir]).context("Failed to join PATH")?;
-        let deno_config = env_dir.join("deno.json");
-        let deno_lock = env_dir.join("deno.lock");
 
         let entry = hook.entry.resolve(Some(&new_path))?;
 
         let run = async |batch: &[&Path]| {
             let mut cmd = Cmd::new(&entry[0], "deno hook");
-            cmd.current_dir(hook.work_dir())
+            let mut output = cmd
+                .current_dir(hook.work_dir())
                 .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::DENO_DIR, &deno_cache_dir)
                 .envs(&hook.env)
-                .check(false)
-                .stdin(Stdio::null());
-
-            if deno_config.exists() {
-                cmd.arg("--config").arg(&deno_config);
-            }
-
-            if deno_lock.exists() {
-                cmd.arg("--lock").arg(&deno_lock);
-            }
-
-            let mut output = cmd
                 .args(&entry[1..])
                 .args(&hook.args)
                 .args(batch)
+                .check(false)
+                .stdin(Stdio::null())
                 .pty_output()
                 .await?;
 
@@ -272,34 +236,37 @@ impl LanguageImpl for Deno {
 
 #[cfg(test)]
 mod tests {
-    use super::find_script_to_cache;
+    use super::parse_install_dependency;
 
     #[test]
-    fn finds_script_to_cache_for_deno_run_script() {
-        let entry = vec![
-            "deno".to_string(),
-            "run".to_string(),
-            "--allow-env".to_string(),
-            "./hook.ts".to_string(),
-        ];
-        assert_eq!(find_script_to_cache(&entry), Some("./hook.ts"));
+    fn parse_install_dependency_without_name() {
+        assert_eq!(
+            parse_install_dependency("npm:prettier@3"),
+            ("npm:prettier@3", None)
+        );
     }
 
     #[test]
-    fn does_not_cache_deno_fmt() {
-        let entry = vec!["deno".to_string(), "fmt".to_string(), "--check".to_string()];
-        assert_eq!(find_script_to_cache(&entry), None);
+    fn parse_install_dependency_with_name() {
+        assert_eq!(
+            parse_install_dependency("npm:prettier@3:fmt-tool"),
+            ("npm:prettier@3", Some("fmt-tool"))
+        );
     }
 
     #[test]
-    fn finds_script_to_cache_for_deno_run_non_file_source() {
-        let entry = vec!["deno".to_string(), "run".to_string(), "npm:foo".to_string()];
-        assert_eq!(find_script_to_cache(&entry), Some("npm:foo"));
+    fn parse_install_dependency_with_local_path_name() {
+        assert_eq!(
+            parse_install_dependency("./tools/echo.ts:echo-tool"),
+            ("./tools/echo.ts", Some("echo-tool"))
+        );
     }
 
     #[test]
-    fn find_script_to_cache_requires_deno_run() {
-        let entry = vec!["run".to_string(), "./hook.ts".to_string()];
-        assert_eq!(find_script_to_cache(&entry), None);
+    fn parse_install_dependency_with_invalid_name_keeps_original() {
+        assert_eq!(
+            parse_install_dependency("./tools/echo.ts:not valid"),
+            ("./tools/echo.ts:not valid", None)
+        );
     }
 }
