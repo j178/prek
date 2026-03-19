@@ -39,8 +39,7 @@ fn basic_deno() {
     ");
 }
 
-/// Test running a TypeScript script file.
-/// This validates the `build_deno_command` fix that prepends `deno run` for script entries.
+/// Test running a TypeScript script file with an explicit `deno run` entry.
 #[test]
 fn script_file() {
     let context = TestContext::new();
@@ -62,7 +61,7 @@ fn script_file() {
               - id: ts-script
                 name: ts script
                 language: deno
-                entry: ./check.ts
+                entry: deno run ./check.ts
                 always_run: true
                 verbose: true
                 pass_filenames: false
@@ -84,8 +83,7 @@ fn script_file() {
     ");
 }
 
-/// Test running Deno built-in subcommands (fmt, lint, etc.).
-/// These should be passed directly to deno without prepending `deno run`.
+/// Test running Deno built-in subcommands with an explicit `deno` prefix.
 #[test]
 fn builtin_commands() {
     let context = TestContext::new();
@@ -108,7 +106,7 @@ fn builtin_commands() {
               - id: deno-fmt-check
                 name: deno fmt check
                 language: deno
-                entry: fmt --check
+                entry: deno fmt --check
                 types: [ts]
                 verbose: true
     "});
@@ -194,7 +192,7 @@ fn additional_dependencies() {
               - id: deno-lodash
                 name: deno lodash
                 language: deno
-                entry: ./use_lodash.ts
+                entry: deno run ./use_lodash.ts
                 additional_dependencies: ["npm:lodash@4"]
                 always_run: true
                 verbose: true
@@ -455,7 +453,7 @@ fn hook_failure() {
               - id: deno-lint
                 name: deno lint
                 language: deno
-                entry: lint
+                entry: deno lint
                 types: [ts]
                 verbose: true
     "});

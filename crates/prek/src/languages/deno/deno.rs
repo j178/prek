@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
 
@@ -17,83 +17,18 @@ use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::{CacheBucket, Store, ToolBucket};
 
-/// Deno built-in subcommands that don't need "run" prefix.
-const DENO_SUBCOMMANDS: &[&str] = &[
-    "bench",
-    "bundle",
-    "cache",
-    "check",
-    "compile",
-    "completions",
-    "coverage",
-    "doc",
-    "eval",
-    "fmt",
-    "info",
-    "init",
-    "install",
-    "jupyter",
-    "lint",
-    "lsp",
-    "publish",
-    "repl",
-    "run",
-    "serve",
-    "task",
-    "test",
-    "types",
-    "uninstall",
-    "upgrade",
-    "vendor",
-];
-
-/// Build the deno command from the entry parts.
-///
-/// Returns (command, args) where command is the deno binary path and args are
-/// the arguments to pass to deno.
-///
-/// Logic:
-/// - If entry starts with `deno`, use the rest as args (e.g., `deno fmt` -> args: `["fmt"]`)
-/// - If entry starts with a deno subcommand, prepend nothing (e.g., `fmt` -> args: `["fmt"]`)
-/// - Otherwise, assume it's a script and prepend `run` (e.g., `./script.ts` -> args: `["run", "./script.ts"]`)
-fn build_deno_command(deno_binary: &Path, entry_parts: &[String]) -> (PathBuf, Vec<String>) {
-    let first = entry_parts.first().map(String::as_str).unwrap_or("");
-
-    // Entry starts with "deno" - use the rest as args
-    if first == "deno" {
-        return (deno_binary.to_path_buf(), entry_parts[1..].to_vec());
-    }
-
-    // Entry starts with a deno subcommand - use as-is
-    if DENO_SUBCOMMANDS.contains(&first) {
-        return (deno_binary.to_path_buf(), entry_parts.to_vec());
-    }
-
-    // Otherwise, prepend "run" for script execution
-    let mut args = vec!["run".to_string()];
-    args.extend(entry_parts.iter().cloned());
-    (deno_binary.to_path_buf(), args)
-}
-
 /// Find the script in the entry that should be cached.
-fn find_script_to_cache(entry: &[String]) -> Option<&str> {
-    let first = entry.first()?.as_str();
-
-    // Skip built-in Deno commands that don't need caching
-    if matches!(
-        first,
-        "fmt" | "lint" | "test" | "check" | "bundle" | "doc" | "repl" | "eval"
-    ) {
+fn find_script_to_cache(cmd: &[String]) -> Option<&str> {
+    let [deno, run, rest @ ..] = cmd else {
+        return None;
+    };
+    if deno != "deno" || run != "run" {
         return None;
     }
 
-    // For "deno run ...", find the script after flags
-    let candidates = if first == "run" { &entry[1..] } else { entry };
-
-    candidates
-        .iter()
-        .map(String::as_str)
+    rest.iter()
         .find(|s| !s.starts_with('-') && is_cacheable_script(s))
+        .map(String::as_str)
 }
 
 fn is_cacheable_script(script: &str) -> bool {
@@ -101,7 +36,7 @@ fn is_cacheable_script(script: &str) -> bool {
         return true;
     }
 
-    std::path::Path::new(script).extension().is_some_and(|ext| {
+    Path::new(script).extension().is_some_and(|ext| {
         ext.eq_ignore_ascii_case("ts")
             || ext.eq_ignore_ascii_case("js")
             || ext.eq_ignore_ascii_case("mjs")
@@ -210,7 +145,8 @@ impl LanguageImpl for Deno {
         }
 
         // 4. Cache entry script dependencies
-        if let Some(script) = find_script_to_cache(&hook.entry.split()?) {
+        let cmd = hook.entry.split()?;
+        if let Some(script) = find_script_to_cache(&cmd) {
             debug!(script, "Caching entry script dependencies");
             Cmd::new(deno.deno(), "deno cache")
                 .current_dir(hook.work_dir())
@@ -268,14 +204,12 @@ impl LanguageImpl for Deno {
         let new_path =
             prepend_paths(&[&bin_dir(env_dir), deno_bin_dir]).context("Failed to join PATH")?;
 
-        // Split the entry and construct the deno command
-        let entry_parts = hook.entry.split()?;
-        let (cmd, args) = build_deno_command(deno_binary, &entry_parts);
+        let entry = hook.entry.resolve(Some(&new_path))?;
 
         let run = async |batch: &[&Path]| {
-            let mut output = Cmd::new(&cmd, "deno hook")
+            let mut output = Cmd::new(&entry[0], "deno hook")
                 .current_dir(hook.work_dir())
-                .args(&args)
+                .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::DENO_DIR, &deno_cache_dir)
                 .envs(&hook.env)
@@ -293,10 +227,7 @@ impl LanguageImpl for Deno {
             anyhow::Ok((code, output.stdout))
         };
 
-        let full_entry: Vec<String> = std::iter::once(cmd.to_string_lossy().to_string())
-            .chain(args.iter().cloned())
-            .collect();
-        let results = run_by_batch(hook, filenames, &full_entry, run).await?;
+        let results = run_by_batch(hook, filenames, &entry, run).await?;
 
         reporter.on_run_complete(progress);
 
@@ -310,5 +241,39 @@ impl LanguageImpl for Deno {
         }
 
         Ok((combined_status, combined_output))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::find_script_to_cache;
+
+    #[test]
+    fn finds_script_to_cache_for_deno_run_script() {
+        let entry = vec![
+            "deno".to_string(),
+            "run".to_string(),
+            "--allow-env".to_string(),
+            "./hook.ts".to_string(),
+        ];
+        assert_eq!(find_script_to_cache(&entry), Some("./hook.ts"));
+    }
+
+    #[test]
+    fn does_not_cache_deno_fmt() {
+        let entry = vec!["deno".to_string(), "fmt".to_string(), "--check".to_string()];
+        assert_eq!(find_script_to_cache(&entry), None);
+    }
+
+    #[test]
+    fn finds_script_to_cache_for_deno_run_non_file_source() {
+        let entry = vec!["deno".to_string(), "run".to_string(), "npm:foo".to_string()];
+        assert_eq!(find_script_to_cache(&entry), Some("npm:foo"));
+    }
+
+    #[test]
+    fn find_script_to_cache_requires_deno_run() {
+        let entry = vec!["run".to_string(), "./hook.ts".to_string()];
+        assert_eq!(find_script_to_cache(&entry), None);
     }
 }
