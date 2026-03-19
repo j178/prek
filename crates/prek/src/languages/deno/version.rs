@@ -1,6 +1,6 @@
 use std::fmt::Display;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use serde::Deserialize;
@@ -55,7 +55,6 @@ pub(crate) enum DenoRequest {
     Major(u64),
     MajorMinor(u64, u64),
     MajorMinorPatch(u64, u64, u64),
-    Path(PathBuf),
     Range(semver::VersionReq),
 }
 
@@ -79,20 +78,11 @@ impl FromStr for DenoRequest {
             return Ok(DenoRequest::Any);
         }
 
-        Self::parse_version_numbers(s, s)
-            .or_else(|_| {
-                semver::VersionReq::parse(s)
-                    .map(DenoRequest::Range)
-                    .map_err(|_| Error::InvalidVersion(s.to_string()))
-            })
-            .or_else(|_| {
-                let path = PathBuf::from(s);
-                if path.exists() {
-                    Ok(DenoRequest::Path(path))
-                } else {
-                    Err(Error::InvalidVersion(s.to_string()))
-                }
-            })
+        Self::parse_version_numbers(s, s).or_else(|_| {
+            semver::VersionReq::parse(s)
+                .map(DenoRequest::Range)
+                .map_err(|_| Error::InvalidVersion(s.to_string()))
+        })
     }
 }
 
@@ -124,7 +114,7 @@ impl DenoRequest {
         )
     }
 
-    pub(crate) fn matches(&self, version: &DenoVersion, toolchain: Option<&Path>) -> bool {
+    pub(crate) fn matches(&self, version: &DenoVersion, _toolchain: Option<&Path>) -> bool {
         match self {
             Self::Any => true,
             Self::Major(major) => version.major == *major,
@@ -132,7 +122,6 @@ impl DenoRequest {
             Self::MajorMinorPatch(major, minor, patch) => {
                 version.major == *major && version.minor == *minor && version.patch == *patch
             }
-            Self::Path(path) => toolchain.is_some_and(|toolchain_path| toolchain_path == path),
             Self::Range(req) => req.matches(version),
         }
     }

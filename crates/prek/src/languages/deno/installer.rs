@@ -208,14 +208,14 @@ impl DenoInstaller {
         let arch = match HOST.architecture {
             Architecture::X86_64 => "x86_64",
             Architecture::Aarch64(_) => "aarch64",
-            _ => return Err(anyhow::anyhow!("Unsupported architecture for Deno")),
+            _ => anyhow::bail!("Unsupported architecture for Deno"),
         };
 
         let os = match HOST.operating_system {
             OperatingSystem::Darwin(_) => "apple-darwin",
             OperatingSystem::Linux => "unknown-linux-gnu",
             OperatingSystem::Windows => "pc-windows-msvc",
-            _ => return Err(anyhow::anyhow!("Unsupported OS for Deno")),
+            _ => anyhow::bail!("Unsupported OS for Deno"),
         };
 
         let filename = format!("deno-{arch}-{os}.zip");
