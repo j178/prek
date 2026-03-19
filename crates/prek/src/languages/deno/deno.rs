@@ -148,11 +148,25 @@ impl LanguageImpl for Deno {
         let cmd = hook.entry.split()?;
         if let Some(script) = find_script_to_cache(&cmd) {
             debug!(script, "Caching entry script dependencies");
-            Cmd::new(deno.deno(), "deno cache")
+            let deno_config = info.env_path.join("deno.json");
+            let deno_lock = info.env_path.join("deno.lock");
+
+            let mut cache_cmd = Cmd::new(deno.deno(), "deno cache");
+            cache_cmd
                 .current_dir(hook.work_dir())
                 .env(EnvVars::PATH, &new_path)
                 .env(EnvVars::DENO_DIR, &deno_cache_dir)
-                .arg("cache")
+                .arg("cache");
+
+            if deno_config.exists() {
+                cache_cmd.arg("--config").arg(&deno_config);
+            }
+
+            if deno_lock.exists() {
+                cache_cmd.arg("--lock").arg(&deno_lock);
+            }
+
+            cache_cmd
                 .arg(script)
                 .check(true)
                 .output()
