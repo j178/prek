@@ -82,7 +82,7 @@ fn wheel_platform_tag_for_host(
 // Get the uv wheel platform tag for the current host.
 fn get_wheel_platform_tag() -> Result<String> {
     wheel_platform_tag_for_host(HOST.operating_system, HOST.architecture, HOST.environment)
-        .map(str::to_string)
+        .map(ToString::to_string)
 }
 
 fn get_uv_version(uv_path: &Path) -> Result<Version> {
@@ -538,6 +538,21 @@ impl Uv {
             Self::select_source().await?
         };
         source.install(store, uv_dir).await?;
+
+        // Downloaded `uv` binaries can be present on disk but still fail to execute in the
+        // current runtime environment, such as when the libc variant or dynamic loader path
+        // does not match the host. Validate immediately so we can surface a clear error here.
+        match validate_uv_binary(&uv_path) {
+            Ok(version) => trace!(version = %version, "Successfully installed uv"),
+            Err(err) => bail!(
+                "Installed uv at `{}` failed validation: {err}. \
+                This usually means the downloaded uv binary is incompatible with the \
+                current runtime environment, for example due to a libc mismatch or a \
+                missing dynamic loader path. If this keeps happening, please report it \
+                with details about your environment and the full error output.",
+                uv_path.display()
+            ),
+        }
 
         Ok(Self::new(uv_path))
     }
