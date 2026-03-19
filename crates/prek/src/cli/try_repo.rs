@@ -119,9 +119,7 @@ async fn prepare_repo_and_rev<'a>(
         String::from_utf8_lossy(&head_rev)
             .split_ascii_whitespace()
             .next()
-            .ok_or_else(|| {
-                anyhow::anyhow!("Failed to parse HEAD revision from git ls-remote output")
-            })?
+            .context("Failed to parse HEAD revision from git ls-remote output")?
             .to_string()
     };
 

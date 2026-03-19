@@ -55,7 +55,7 @@ impl FromStr for CargoCliDependency {
             let scheme_end = s
                 .find("://")
                 .map(|idx| idx + 3)
-                .ok_or_else(|| anyhow::anyhow!("Invalid git URL `{s}`"))?;
+                .with_context(|| format!("Invalid git URL `{s}`"))?;
             let rest = &s[scheme_end..];
 
             let parts: Vec<&str> = rest.rsplitn(3, ':').collect();
@@ -167,7 +167,7 @@ async fn find_package_dir(
             .packages
             .iter()
             .find(|p| &p.id == package_id)
-            .ok_or_else(|| anyhow::anyhow!("Package not found in metadata"))?;
+            .with_context(|| format!("Package not found in metadata for id: {package_id}"))?;
 
         if package_produces_binary(package, binary_name) {
             let package_dir = package

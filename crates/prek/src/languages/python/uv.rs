@@ -89,7 +89,7 @@ fn get_uv_version(uv_path: &Path) -> Result<Version> {
     let output = Command::new(uv_path)
         .arg("--version")
         .output()
-        .map_err(|e| anyhow::anyhow!("Failed to execute uv: {e}"))?;
+        .context("Failed to execute uv")?;
 
     if !output.status.success() {
         bail!("Failed to get uv version");
@@ -99,7 +99,7 @@ fn get_uv_version(uv_path: &Path) -> Result<Version> {
     let version_str = version_output
         .split_whitespace()
         .nth(1)
-        .ok_or_else(|| anyhow::anyhow!("Invalid version output format"))?;
+        .context("Invalid version output format")?;
 
     Version::parse(version_str).map_err(Into::into)
 }
@@ -207,7 +207,7 @@ impl InstallSource {
             anyhow::Ok(())
         })
         .await
-        .context("Failed to download and extra uv")?;
+        .context("Failed to download and extract uv")?;
 
         Ok(())
     }
@@ -245,7 +245,7 @@ impl InstallSource {
         let metadata: serde_json::Value = response.json().await?;
         let files = metadata["urls"]
             .as_array()
-            .ok_or_else(|| anyhow::anyhow!("Invalid PyPI response: missing urls"))?;
+            .context("Invalid PyPI response: missing urls")?;
 
         let wheel_file = files
             .iter()
@@ -254,13 +254,11 @@ impl InstallSource {
                     && file["packagetype"].as_str() == Some("bdist_wheel")
                     && file["yanked"].as_bool() != Some(true)
             })
-            .ok_or_else(|| {
-                anyhow::anyhow!("Could not find wheel for {wheel_name} in PyPI response")
-            })?;
+            .with_context(|| format!("Could not find wheel for {wheel_name} in PyPI response"))?;
 
         let download_url = wheel_file["url"]
             .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Missing download URL in PyPI response"))?;
+            .context("Missing download URL in PyPI response")?;
 
         self.download_and_extract_wheel(store, target, &wheel_name, download_url)
             .await
@@ -301,8 +299,8 @@ impl InstallSource {
                 }
                 None
             })
-            .ok_or_else(|| {
-                anyhow::anyhow!(
+            .with_context(|| {
+                format!(
                     "Could not find wheel download link for {wheel_name} in simple API response"
                 )
             })?;

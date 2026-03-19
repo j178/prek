@@ -198,14 +198,14 @@ impl NodeInstaller {
             Architecture::S390x => "s390x",
             Architecture::Powerpc => "ppc64",
             Architecture::Powerpc64le => "ppc64le",
-            _ => return Err(anyhow::anyhow!("Unsupported architecture")),
+            _ => anyhow::bail!("Unsupported architecture"),
         };
         let os = match HOST.operating_system {
             OperatingSystem::Darwin(_) => "darwin",
             OperatingSystem::Linux => "linux",
             OperatingSystem::Windows => "win",
             OperatingSystem::Aix => "aix",
-            _ => return Err(anyhow::anyhow!("Unsupported OS")),
+            _ => anyhow::bail!("Unsupported OS"),
         };
         if os == "darwin" && arch == "arm64" && version.major() < 16 {
             // Node.js 16 and later are required for arm64 on macOS.

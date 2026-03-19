@@ -86,9 +86,10 @@ impl GoResult {
             .await?;
         // e.g. "go version go1.24.5 darwin/arm64"
         let version_str = String::from_utf8(output.stdout)?;
-        let version_str = version_str.split_ascii_whitespace().nth(2).ok_or_else(|| {
-            anyhow::anyhow!("Failed to parse Go version from output: {version_str}")
-        })?;
+        let version_str = version_str
+            .split_ascii_whitespace()
+            .nth(2)
+            .with_context(|| format!("Failed to parse Go version from output: {version_str}"))?;
 
         let version = GoVersion::from_str(version_str)?;
 
@@ -208,7 +209,7 @@ impl GoInstaller {
             Architecture::S390x => "s390x",
             Architecture::Powerpc => "ppc64",
             Architecture::Powerpc64le => "ppc64le",
-            _ => return Err(anyhow::anyhow!("Unsupported architecture")),
+            _ => anyhow::bail!("Unsupported architecture"),
         };
         let os = match HOST.operating_system {
             OperatingSystem::Darwin(_) => "darwin",
@@ -220,7 +221,7 @@ impl GoInstaller {
             OperatingSystem::Solaris => "solaris",
             OperatingSystem::Dragonfly => "dragonfly",
             OperatingSystem::Illumos => "illumos",
-            _ => return Err(anyhow::anyhow!("Unsupported OS")),
+            _ => anyhow::bail!("Unsupported OS"),
         };
 
         let ext = if cfg!(windows) { "zip" } else { "tar.gz" };

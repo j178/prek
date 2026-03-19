@@ -206,13 +206,13 @@ impl BunInstaller {
         let arch = match HOST.architecture {
             Architecture::X86_64 => "x64",
             Architecture::Aarch64(_) => "aarch64",
-            _ => return Err(anyhow::anyhow!("Unsupported architecture")),
+            _ => anyhow::bail!("Unsupported architecture"),
         };
         let os = match HOST.operating_system {
             OperatingSystem::Darwin(_) => "darwin",
             OperatingSystem::Linux => "linux",
             OperatingSystem::Windows => "windows",
-            _ => return Err(anyhow::anyhow!("Unsupported OS")),
+            _ => anyhow::bail!("Unsupported OS"),
         };
 
         let filename = format!("bun-{os}-{arch}.zip");
