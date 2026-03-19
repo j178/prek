@@ -11,7 +11,7 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use itertools::Itertools;
 use prek_identify::TagSet;
 use rustc_hash::FxHashMap;
-use serde::de::{DeserializeSeed, Error as DeError, IgnoredAny, MapAccess, Visitor};
+use serde::de::{DeserializeSeed, Error as DeError, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::fs::Simplified;
@@ -149,7 +149,7 @@ impl<'de> Deserialize<'de> for FilePatternWire {
                             glob = Some(map.next_value_seed(GlobFieldVisitor)?);
                         }
                         _ => {
-                            map.next_value::<IgnoredAny>()?;
+                            return Err(M::Error::unknown_field(&key, &["glob"]));
                         }
                     }
                 }
