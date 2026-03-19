@@ -62,9 +62,10 @@ impl RustResult {
 
         // e.g. "rustc 1.70.0 (90c541806 2023-05-31)"
         let version_str = str::from_utf8(&output.stdout)?;
-        let version_str = version_str.split_ascii_whitespace().nth(1).ok_or_else(|| {
-            anyhow::anyhow!("Failed to parse Rust version from output: {version_str}")
-        })?;
+        let version_str = version_str
+            .split_ascii_whitespace()
+            .nth(1)
+            .with_context(|| format!("Failed to parse Rust version from output: {version_str}"))?;
 
         let version = Version::parse(version_str)?;
         let version = RustVersion::from_path(&version, &self.toolchain);

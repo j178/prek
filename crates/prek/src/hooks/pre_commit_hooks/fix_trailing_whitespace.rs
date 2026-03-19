@@ -57,9 +57,7 @@ impl Args {
                 .chars()
                 .any(|c| matches!(c, '.' | '/' | '\\' | ':'))
             {
-                return Err(anyhow::anyhow!(
-                    "bad `--markdown-linebreak-ext` argument '{ext}' (has . / \\ :)"
-                ));
+                anyhow::bail!("bad `--markdown-linebreak-ext` argument '{ext}' (has . / \\ :)");
             }
         }
         Ok(markdown_exts)

@@ -258,10 +258,10 @@ impl LanguageImpl for Pygrep {
 
             if stderr_str.trim().is_empty() {
                 // No stderr output - create a generic error
-                return Err(anyhow::anyhow!(
+                anyhow::bail!(
                     "Python script failed with exit code {} but produced no error output",
                     output.status.code().unwrap_or(-1)
-                ));
+                );
             }
 
             // Try to parse as JSON first
@@ -269,11 +269,11 @@ impl LanguageImpl for Pygrep {
                 Ok(err) => Err(err.into()),
                 Err(_) => {
                     // Not JSON - treat as plain text error message
-                    Err(anyhow::anyhow!(
+                    anyhow::bail!(
                         "Python script failed with exit code {}: {}",
                         output.status.code().unwrap_or(-1),
                         stderr_str.trim()
-                    ))
+                    )
                 }
             }
         }
