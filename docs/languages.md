@@ -29,6 +29,7 @@ Languages with managed toolchain downloads in prek today:
 - [Python](#python)
 - [Node](#node)
 - [Bun](#bun)
+- [Deno](#deno)
 - [Golang](#golang)
 - [Rust](#rust)
 - [Ruby](#ruby)
@@ -420,10 +421,111 @@ Use `script` for simple repository scripts that only need file paths and no mana
 
 ### deno
 
-**Status in prek:** 🚧 WIP.
+**Status in prek:** ✅ Supported.
 
-prek has experimental support in progress. pre-commit does not have a native `deno` language.
+prek installs each `additional_dependencies` item with `deno install --global` into the hook environment. The hook runs from the work repository with an isolated `DENO_DIR` for cache separation.
 
-Tracking: [#619](https://github.com/j178/prek/issues/619)
+Deno hooks run without needing a pre-installed Deno runtime when toolchain download is available.
+
+#### Rules
+
+- `additional_dependencies` are treated as executable installs. Each item should be something `deno install --global` can install, such as an `npm:` or `jsr:` specifier.
+- `additional_dependencies` may also point at a local file to install as an executable, using `./path/to/tool.ts:name`. Relative paths resolve from the hook repository for remote hooks and from the work repository for local hooks.
+- To override the executable name for an additional dependency, append `:name` to the dependency string. For example: `npm:semver@7:semver-tool`.
+
+For remote hooks, if the repo wants to provide its own executable, declare it explicitly in the hook's `additional_dependencies`, for example `./cli.ts:repo-tool`, and then use `repo-tool` in `entry`.
+
+#### `language_version`
+
+Supported formats:
+
+- `default` or `system`
+- `deno`, `deno@latest`
+- `deno@x`, `x` (major version)
+- `deno@x.y`, `x.y` (major.minor version)
+- `deno@x.y.z`, `x.y.z` (exact version)
+- Semver ranges like `>=x.y, <x+1.0`
+
+#### Using npm packages
+
+Deno supports npm packages via the `npm:` prefix. For hooks that use npm packages, specify the entry using `deno run npm:package`:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: eslint
+        name: ESLint
+        language: deno
+        entry: deno run -A npm:eslint
+        types: [ts, tsx, js, jsx]
+```
+
+For JSR packages, use the `jsr:` prefix in a `deno run` entry:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: biome
+        name: Biome
+        language: deno
+        entry: deno run -A jsr:@biomejs/biome
+        types: [ts, tsx, js, jsx]
+```
+
+For executable-style additional dependencies, use the package specifier directly:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: semver-version
+        name: semver version
+        language: deno
+        entry: semver-tool 1.2.3
+        additional_dependencies:
+          - npm:semver@7:semver-tool
+        pass_filenames: false
+```
+
+You can also install a local file as an executable additional dependency:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: local-tool
+        name: local tool
+        language: deno
+        entry: echo-tool
+        additional_dependencies:
+          - ./tool.ts:echo-tool
+        pass_filenames: false
+```
+
+#### Built-in commands
+
+Deno's built-in commands (`deno fmt`, `deno lint`, `deno check`) work directly:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: deno-fmt
+        name: Deno Format
+        language: deno
+        entry: deno fmt
+        types: [ts, tsx, js, jsx, json, md]
+      - id: deno-lint
+        name: Deno Lint
+        language: deno
+        entry: deno lint
+        types: [ts, tsx, js, jsx]
+```
+
+!!! note "prek-only"
+
+    Deno language support is a prek extension. pre-commit does not have native `deno` support.
 
 If you want to help add support for the missing languages, check open issues or start a discussion in the repo.

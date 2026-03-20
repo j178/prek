@@ -26,6 +26,7 @@ env:
   GHC_VERSION: "9.14.1" # Preinstalled in ubuntu-24.04 runner image
   CABAL_VERSION: "3.16.1.0"
   JULIA_VERSION: "1.12.4"
+  DENO_VERSION: "2"
 
   # Cargo env vars
   CARGO_INCREMENTAL: 0
@@ -410,6 +411,7 @@ jobs:
           - windows-latest
         language:
           - bun
+          - deno
           - docker
           - golang
           - haskell
@@ -512,6 +514,12 @@ jobs:
         uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461 # v2.1.3
         with:
           bun-version: ${{ env.BUN_VERSION }}
+
+      - name: "Install Deno"
+        if: ${{ matrix.language == 'deno' }}
+        uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
 
       - name: "Install GHC and Cabal"
         if: ${{ matrix.language == 'haskell' }}

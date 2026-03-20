@@ -448,6 +448,7 @@ pub(crate) enum ToolBucket {
     Ruby,
     Rustup,
     Bun,
+    Deno,
 }
 
 #[derive(Copy, Clone, Eq, Hash, PartialEq, strum::AsRefStr, strum::Display)]
@@ -457,6 +458,7 @@ pub(crate) enum CacheBucket {
     Go,
     Python,
     Cargo,
+    Deno,
     Prek,
 }
 
