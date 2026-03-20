@@ -61,7 +61,7 @@ pub enum ArchiveExtension {
 }
 
 impl ArchiveExtension {
-    /// Extract the [`SourceDistExtension`] from a path.
+    /// Extract the [`ArchiveExtension`] from a path.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
         /// Returns true if the path is a tar file (e.g., `.tar.gz`).
         fn is_tar(path: &Path) -> bool {
