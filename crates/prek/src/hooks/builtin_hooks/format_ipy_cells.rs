@@ -22,10 +22,7 @@ struct Notebook {
     cells: Vec<Cell>,
 }
 
-pub(crate) async fn format_ipy_cells(
-    hook: &Hook,
-    filenames: &[&Path],
-) -> Result<(i32, Vec<u8>)> {
+pub(crate) async fn format_ipy_cells(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
         fix_file(hook.project().relative_path(), filename)
     })
@@ -42,10 +39,7 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
     }
 
     fs_err::tokio::write(&file_path, &formatted).await?;
-    Ok((
-        1,
-        format!("Fixing {}\n", filename.display()).into_bytes(),
-    ))
+    Ok((1, format!("Fixing {}\n", filename.display()).into_bytes()))
 }
 
 /// Try to parse a line as a cell delimiter (`# %%`).
@@ -269,10 +263,7 @@ bar = 2
         assert_eq!(nb.cells.len(), 2);
         assert!(nb.cells[0].comment.is_none());
         assert_eq!(nb.cells[0].lines, vec!["foo = 1", ""]);
-        assert_eq!(
-            nb.cells[1].comment,
-            Some("second cell".to_string())
-        );
+        assert_eq!(nb.cells[1].comment, Some("second cell".to_string()));
         assert_eq!(nb.cells[1].lines, vec!["bar = 2"]);
     }
 
@@ -377,20 +368,14 @@ bar = 2
         // Multiple blank lines between docstring and first cell -> exactly one
         let input = "\"\"\"module doc.\"\"\"\n\n\n\n# %%\ncode = 1\n";
         let result = format_text(input);
-        assert_eq!(
-            result,
-            "\"\"\"module doc.\"\"\"\n\n# %%\ncode = 1\n"
-        );
+        assert_eq!(result, "\"\"\"module doc.\"\"\"\n\n# %%\ncode = 1\n");
     }
 
     #[test]
     fn test_docstring_single_quotes() {
         let input = "'''module doc.'''\n\n\n\n# %%\ncode = 1\n";
         let result = format_text(input);
-        assert_eq!(
-            result,
-            "'''module doc.'''\n\n# %%\ncode = 1\n"
-        );
+        assert_eq!(result, "'''module doc.'''\n\n# %%\ncode = 1\n");
     }
 
     #[test]
@@ -398,10 +383,7 @@ bar = 2
         // Preamble that doesn't end with a docstring gets two blank lines
         let input = "import os\n\n# %%\ncode = 1\n";
         let result = format_text(input);
-        assert_eq!(
-            result,
-            "import os\n\n\n# %%\ncode = 1\n"
-        );
+        assert_eq!(result, "import os\n\n\n# %%\ncode = 1\n");
     }
 
     // === Meta properties ===
