@@ -78,9 +78,7 @@ impl PreCommitHooks {
             Self::CheckExecutablesHaveShebangs => {
                 check_executables_have_shebangs(hook, filenames).await
             }
-            Self::CheckIllegalWindowsNames => {
-                check_illegal_windows_names(hook, filenames).await
-            }
+            Self::CheckIllegalWindowsNames => check_illegal_windows_names(hook, filenames).await,
             Self::EndOfFileFixer => fix_end_of_file(hook, filenames).await,
             Self::FixByteOrderMarker => fix_byte_order_marker(hook, filenames).await,
             Self::CheckJson => check_json(hook, filenames).await,
