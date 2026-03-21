@@ -2026,7 +2026,7 @@ fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
 }
 
 #[test]
-fn check_shebang_scripts_are_executable_fast_path() -> Result<()> {
+fn check_shebang_scripts_are_executable() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
