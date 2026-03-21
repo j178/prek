@@ -884,6 +884,7 @@
         "check-json",
         "check-json5",
         "check-merge-conflict",
+        "check-shebang-scripts-are-executable",
         "check-symlinks",
         "check-toml",
         "check-vcs-permalinks",

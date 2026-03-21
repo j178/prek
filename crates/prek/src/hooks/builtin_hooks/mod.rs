@@ -35,6 +35,7 @@ pub(crate) enum BuiltinHooks {
     CheckJson,
     CheckJson5,
     CheckMergeConflict,
+    CheckShebangScriptsAreExecutable,
     CheckSymlinks,
     CheckToml,
     CheckVcsPermalinks,
@@ -72,6 +73,9 @@ impl BuiltinHooks {
             Self::CheckJson5 => check_json5::check_json5(hook, filenames).await,
             Self::CheckMergeConflict => {
                 pre_commit_hooks::check_merge_conflict(hook, filenames).await
+            }
+            Self::CheckShebangScriptsAreExecutable => {
+                pre_commit_hooks::check_shebang_scripts_are_executable(hook, filenames).await
             }
             Self::CheckSymlinks => pre_commit_hooks::check_symlinks(hook, filenames).await,
             Self::CheckToml => pre_commit_hooks::check_toml(hook, filenames).await,
@@ -188,6 +192,21 @@ impl BuiltinHook {
                         "checks for files that contain merge conflict strings.".to_string(),
                     ),
                     types: Some(tags::TAG_SET_TEXT),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::CheckShebangScriptsAreExecutable => BuiltinHook {
+                id: "check-shebang-scripts-are-executable".to_string(),
+                name: "check that scripts with shebangs are executable".to_string(),
+                entry: "check-shebang-scripts-are-executable".to_string(),
+                priority: None,
+                options: HookOptions {
+                    description: Some(
+                        "ensures that (non-binary) files with a shebang are executable."
+                            .to_string(),
+                    ),
+                    types: Some(tags::TAG_SET_TEXT),
+                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
             },

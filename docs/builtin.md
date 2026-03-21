@@ -49,6 +49,7 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 - [`check-merge-conflict`](https://github.com/pre-commit/pre-commit-hooks#check-merge-conflict) (Check for merge conflicts)
 - [`detect-private-key`](https://github.com/pre-commit/pre-commit-hooks#detect-private-key) (Detect private keys)
 - [`no-commit-to-branch`](https://github.com/pre-commit/pre-commit-hooks#no-commit-to-branch) (Prevent committing to protected branches)
+- [`check-shebang-scripts-are-executable`](https://github.com/pre-commit/pre-commit-hooks#check-shebang-scripts-are-executable) (Ensures that (non-binary) files with a shebang are executable)
 - [`check-executables-have-shebangs`](https://github.com/pre-commit/pre-commit-hooks#check-executables-have-shebangs) (Ensures that (non-binary) executables have a shebang)
 
 #### Notes
@@ -107,6 +108,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`check-merge-conflict`](#check-merge-conflict) (Check for merge conflicts)
 - [`detect-private-key`](#detect-private-key) (Detect private keys)
 - [`no-commit-to-branch`](#no-commit-to-branch) (Prevent committing to protected branches)
+- [`check-shebang-scripts-are-executable`](#check-shebang-scripts-are-executable) (Ensures that (non-binary) files with a shebang are executable)
 - [`check-executables-have-shebangs`](#check-executables-have-shebangs) (Ensures that (non-binary) executables have a shebang)
 
 ### Hook Reference
@@ -417,3 +419,18 @@ Checks that non-binary executables have a proper shebang.
 
 - The check is intentionally lightweight: it only verifies that the file starts with `#!`.
 - On systems where the executable bit is not tracked by the filesystem, `prek` consults git’s staged mode bits.
+
+---
+
+#### `check-shebang-scripts-are-executable`
+
+Checks that non-binary files with a shebang are marked executable.
+
+**Supported arguments**
+
+- None.
+
+**Caveats**
+
+- The check is intentionally lightweight: it only verifies that the file starts with `#!`.
+- To work on filesystems which do not track the executable bit, `prek` consults git’s staged mode bits.
