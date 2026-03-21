@@ -31,9 +31,8 @@ pub(crate) async fn check_vcs_permalinks(
 
 async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
     let path = file_base.join(filename);
-    let content = match fs_err::tokio::read(&path).await {
-        Ok(c) => c,
-        Err(_) => return Ok((0, Vec::new())),
+    let Ok(content) = fs_err::tokio::read(&path).await else {
+        return Ok((0, Vec::new()));
     };
 
     let mut retval = 0;
