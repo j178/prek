@@ -4,11 +4,12 @@ use prek_consts::env_vars::EnvVars;
 use std::os::unix::fs::PermissionsExt;
 
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 mod common;
 
@@ -2079,6 +2080,75 @@ fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+#[test]
+fn check_shebang_scripts_are_executable() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-shebang-scripts-are-executable
+    "});
+
+    cwd.child("plain.txt").write_str("plain text\n")?;
+    cwd.child("script.sh").write_str("#!/bin/sh\necho hi\n")?;
+    cwd.child("script_exec.sh")
+        .write_str("#!/bin/sh\necho hi\n")?;
+
+    #[cfg(unix)]
+    std::fs::set_permissions(
+        cwd.child("script_exec.sh").path(),
+        std::fs::Permissions::from_mode(0o755),
+    )?;
+
+    context.git_add(".");
+    git_cmd(cwd.path())
+        .args(["update-index", "--chmod=+x", "script_exec.sh"])
+        .assert()
+        .success();
+
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check that scripts with shebangs are executable..........................Failed
+    - hook id: check-shebang-scripts-are-executable
+    - exit code: 1
+
+      script.sh has a shebang but is not marked executable!
+        If it is supposed to be executable, try: 'chmod +x script.sh'
+        If on Windows, you may also need to: 'git add --chmod=+x script.sh'
+        If it is not supposed to be executable, double-check its shebang is wanted.
+
+    ----- stderr -----
+    ");
+
+    #[cfg(unix)]
+    std::fs::set_permissions(
+        cwd.child("script.sh").path(),
+        std::fs::Permissions::from_mode(0o755),
+    )?;
+
+    git_cmd(cwd.path())
+        .args(["update-index", "--chmod=+x", "script.sh"])
+        .assert()
+        .success();
+
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check that scripts with shebangs are executable..........................Passed
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }

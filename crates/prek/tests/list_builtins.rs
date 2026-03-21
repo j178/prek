@@ -17,6 +17,7 @@ fn list_builtins_basic() {
     check-json
     check-json5
     check-merge-conflict
+    check-shebang-scripts-are-executable
     check-symlinks
     check-toml
     check-vcs-permalinks
@@ -62,6 +63,9 @@ fn list_builtins_verbose() {
 
     check-merge-conflict
       checks for files that contain merge conflict strings.
+
+    check-shebang-scripts-are-executable
+      ensures that (non-binary) files with a shebang are executable.
 
     check-symlinks
       checks for symlinks which do not point to anything.
@@ -146,6 +150,11 @@ fn list_builtins_json() {
         "id": "check-merge-conflict",
         "name": "check for merge conflicts",
         "description": "checks for files that contain merge conflict strings."
+      },
+      {
+        "id": "check-shebang-scripts-are-executable",
+        "name": "check that scripts with shebangs are executable",
+        "description": "ensures that (non-binary) files with a shebang are executable."
       },
       {
         "id": "check-symlinks",
