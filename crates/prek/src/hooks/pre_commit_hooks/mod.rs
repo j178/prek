@@ -8,6 +8,7 @@ use crate::hook::Hook;
 mod check_added_large_files;
 mod check_case_conflict;
 mod check_executables_have_shebangs;
+mod check_illegal_windows_names;
 pub(crate) mod check_json;
 mod check_merge_conflict;
 mod check_symlinks;
@@ -24,6 +25,7 @@ mod no_commit_to_branch;
 pub(crate) use check_added_large_files::check_added_large_files;
 pub(crate) use check_case_conflict::check_case_conflict;
 pub(crate) use check_executables_have_shebangs::check_executables_have_shebangs;
+pub(crate) use check_illegal_windows_names::check_illegal_windows_names;
 pub(crate) use check_json::check_json;
 pub(crate) use check_merge_conflict::check_merge_conflict;
 pub(crate) use check_symlinks::check_symlinks;
@@ -44,6 +46,7 @@ pub(crate) enum PreCommitHooks {
     CheckAddedLargeFiles,
     CheckCaseConflict,
     CheckExecutablesHaveShebangs,
+    CheckIllegalWindowsNames,
     EndOfFileFixer,
     FixByteOrderMarker,
     CheckJson,
@@ -74,6 +77,9 @@ impl PreCommitHooks {
             Self::CheckCaseConflict => check_case_conflict(hook, filenames).await,
             Self::CheckExecutablesHaveShebangs => {
                 check_executables_have_shebangs(hook, filenames).await
+            }
+            Self::CheckIllegalWindowsNames => {
+                check_illegal_windows_names(hook, filenames).await
             }
             Self::EndOfFileFixer => fix_end_of_file(hook, filenames).await,
             Self::FixByteOrderMarker => fix_byte_order_marker(hook, filenames).await,
