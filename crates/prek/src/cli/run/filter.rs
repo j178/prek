@@ -13,7 +13,7 @@ use crate::config::{FilePattern, Stage};
 use crate::git::GIT_ROOT;
 use crate::hook::Hook;
 use crate::workspace::Project;
-use crate::{fs, git, warn_user};
+use crate::{fs, repo, warn_user};
 
 /// Filter filenames by include/exclude patterns.
 pub(crate) struct FilenameFilter<'a> {
@@ -317,7 +317,7 @@ async fn collect_files_from_args(
     }
 
     if let (Some(from_ref), Some(to_ref)) = (from_ref, to_ref) {
-        let files = git::get_changed_files(&from_ref, &to_ref, workspace_root).await?;
+        let files = repo::changed_files_between(&from_ref, &to_ref, workspace_root).await?;
         debug!(
             "Files changed between {} and {}: {}",
             from_ref,
@@ -364,7 +364,7 @@ async fn collect_files_from_args(
 
         for dir in directories {
             let dir = adjust_relative_path(&dir, git_root)?;
-            let dir_files = git::ls_files(git_root, &dir).await?;
+            let dir_files = repo::ls_files(git_root, &dir).await?;
             for file in dir_files {
                 let file = fs::normalize_path(file);
                 exists.insert(file);
@@ -376,19 +376,21 @@ async fn collect_files_from_args(
     }
 
     if all_files {
-        let files = git::ls_files(git_root, workspace_root).await?;
+        let files = repo::ls_files(git_root, workspace_root).await?;
         debug!("All files in the workspace: {}", files.len());
         return Ok(files);
     }
 
-    if git::is_in_merge_conflict().await? {
-        let files = git::get_conflicted_files(workspace_root).await?;
+    if let Some(files) = repo::conflicted_files(workspace_root).await? {
         debug!("Conflicted files: {}", files.len());
         return Ok(files);
     }
 
-    let files = git::get_staged_files(workspace_root).await?;
-    debug!("Staged files: {}", files.len());
+    let files = repo::default_files(workspace_root).await?;
+    debug!(
+        "Default files selected from repository backend: {}",
+        files.len()
+    );
 
     Ok(files)
 }

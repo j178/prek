@@ -5,8 +5,8 @@ use anyhow::Result;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 
-use crate::git;
 use crate::hook::Hook;
+use crate::repo;
 
 pub(crate) async fn check_case_conflict(
     hook: &Hook,
@@ -15,14 +15,14 @@ pub(crate) async fn check_case_conflict(
     let work_dir = hook.work_dir();
 
     // Get all files in the repo.
-    let repo_files = git::ls_files(work_dir, Path::new(".")).await?;
+    let repo_files = repo::ls_files(work_dir, Path::new(".")).await?;
     let mut repo_files_with_dirs: FxHashSet<&Path> = FxHashSet::default();
     for path in &repo_files {
         insert_path_and_parents(&mut repo_files_with_dirs, path);
     }
 
     // Get relevant files (filenames + added files) and include their parent directories.
-    let added = git::get_added_files(work_dir).await?;
+    let added = repo::added_files(work_dir).await?;
     let mut relevant_files_with_dirs: FxHashSet<&Path> = FxHashSet::default();
     for filename in filenames {
         insert_path_and_parents(&mut relevant_files_with_dirs, filename);

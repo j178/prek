@@ -38,11 +38,13 @@ mod hook;
 mod hooks;
 mod http;
 mod install_source;
+mod jj;
 mod languages;
 mod printer;
 mod process;
 #[cfg(all(unix, feature = "profiler"))]
 mod profiler;
+mod repo;
 #[cfg(unix)]
 mod resource_limit;
 mod run;
