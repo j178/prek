@@ -92,6 +92,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`trailing-whitespace`](#trailing-whitespace) (Trim trailing whitespace)
 - [`check-added-large-files`](#check-added-large-files) (Prevent committing large files)
 - [`check-case-conflict`](#check-case-conflict) (Check for files that would conflict in case-insensitive filesystems)
+- [`check-illegal-windows-names`](#check-illegal-windows-names) (Check for filenames invalid on Windows)
 - [`end-of-file-fixer`](#end-of-file-fixer) (Ensure newline at EOF)
 - [`fix-byte-order-marker`](#fix-byte-order-marker) (Remove UTF-8 byte order marker)
 - [`check-json`](#check-json) (Validate JSON files)
@@ -178,6 +179,22 @@ Checks for paths that would conflict on a case-insensitive filesystem (for examp
 **Caveats**
 
 - The check includes parent directories as well as file paths, to catch directory-level case conflicts.
+
+---
+
+#### `check-illegal-windows-names`
+
+Checks for filenames that cannot be created on Windows.
+
+**Supported arguments**
+
+- None.
+
+**Behavior / caveats**
+
+- Reports filenames containing Windows-reserved device names such as `CON`, `PRN`, `AUX`, `NUL`, `COM1`, and `LPT1`.
+- Reports filenames containing characters forbidden by Windows, including `<`, `>`, `:`, `"`, `\`, `|`, `?`, `*`, and control characters.
+- Reports path segments ending with a trailing `.` or space.
 
 ---
 
