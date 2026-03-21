@@ -890,6 +890,7 @@
         "detect-private-key",
         "end-of-file-fixer",
         "fix-byte-order-marker",
+        "format-ipy-cells",
         "mixed-line-ending",
         "no-commit-to-branch",
         "trailing-whitespace"
