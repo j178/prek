@@ -8,8 +8,8 @@ use crate::run::CONCURRENCY;
 
 /// A single cell in an interactive Python notebook, delimited by `# %%`.
 struct Cell {
-    /// Optional comment text after `# %%` on the delimiter line.
-    comment: Option<String>,
+    /// Comment text after `# %%` on the delimiter line (empty if bare delimiter).
+    comment: String,
     /// Content lines between this delimiter and the next (or end of file).
     lines: Vec<String>,
 }
@@ -44,24 +44,17 @@ async fn fix_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
 
 /// Try to parse a line as a cell delimiter (`# %%`).
 ///
-/// Returns `Some(Some(comment))` if the line is a delimiter with a comment,
-/// `Some(None)` if it is a bare delimiter, or `None` if the line is not a
-/// delimiter at all.
+/// Returns the comment text if present, or an empty string for a bare
+/// delimiter. Returns `None` if the line is not a delimiter at all.
 ///
 /// The `#` must appear at column 0 (no leading whitespace), matching the
 /// original `^#\s*%%` regex behavior. This avoids false positives on
 /// indented comments like `    # %% section` inside control flow.
-fn parse_delimiter(line: &str) -> Option<Option<String>> {
+fn parse_delimiter(line: &str) -> Option<String> {
     let rest = line.strip_prefix('#')?;
     let rest = rest.trim_start();
     let rest = rest.strip_prefix("%%")?;
-
-    let comment_text = rest.trim();
-    if comment_text.is_empty() {
-        Some(None)
-    } else {
-        Some(Some(comment_text.to_string()))
-    }
+    Some(rest.trim().to_string())
 }
 
 /// Parse file contents into a structured `Notebook`.
@@ -107,7 +100,7 @@ fn format_notebook(nb: &mut Notebook) {
     // of the original Python regex `^# %%([^\n]*)(?:\s+# %%$)+`.
     let mut merged: Vec<Cell> = Vec::new();
     for cell in nb.cells.drain(..) {
-        if cell.comment.is_none() {
+        if cell.comment.is_empty() {
             if let Some(prev) = merged.last_mut() {
                 if prev.lines.iter().all(|line| line.trim().is_empty()) {
                     prev.lines.extend(cell.lines);
@@ -121,7 +114,7 @@ fn format_notebook(nb: &mut Notebook) {
 
     // Remove truly empty cells (no comment AND no non-blank content)
     nb.cells.retain(|cell| {
-        cell.comment.is_some() || cell.lines.iter().any(|line| !line.trim().is_empty())
+        !cell.comment.is_empty() || cell.lines.iter().any(|line| !line.trim().is_empty())
     });
 
     for cell in &mut nb.cells {
@@ -147,16 +140,15 @@ fn serialize(nb: &Notebook) -> String {
     for (cell_idx, cell) in nb.cells.iter().enumerate() {
         // Determine what immediately precedes this cell for spacing decisions.
         let preceding_last_line = if cell_idx == 0 {
-            nb.preamble.last().map(|s| s.as_str())
+            nb.preamble.last().map(String::as_str)
         } else {
-            let prev = &nb.cells[cell_idx - 1];
-            prev.lines.last().map(|s| s.as_str())
+            nb.cells[cell_idx - 1].lines.last().map(String::as_str)
         };
 
         // Spacing before this cell's delimiter
         if cell_idx == 0 && nb.preamble.is_empty() {
             // First cell, no preamble — no spacing needed
-        } else if preceding_last_line.is_some_and(|line| ends_with_triple_quote(line)) {
+        } else if preceding_last_line.is_some_and(ends_with_triple_quote) {
             // After a triple-quoted string: one blank line (ruff compatibility)
             output.push('\n');
         } else {
@@ -165,12 +157,13 @@ fn serialize(nb: &Notebook) -> String {
         }
 
         // Emit the delimiter line
-        output.push_str("# %%");
-        if let Some(comment) = &cell.comment {
-            output.push(' ');
-            output.push_str(comment);
+        if cell.comment.is_empty() {
+            output.push_str("# %%\n");
+        } else {
+            output.push_str("# %% ");
+            output.push_str(&cell.comment);
+            output.push('\n');
         }
-        output.push('\n');
 
         // Emit cell content
         for line in &cell.lines {
@@ -216,25 +209,22 @@ mod tests {
     #[test]
     fn test_parse_delimiter_variants() {
         // Standard delimiter
-        assert_eq!(parse_delimiter("# %%"), Some(None));
+        assert_eq!(parse_delimiter("# %%").as_deref(), Some(""));
         // No space
-        assert_eq!(parse_delimiter("#%%"), Some(None));
+        assert_eq!(parse_delimiter("#%%").as_deref(), Some(""));
         // Extra spaces
-        assert_eq!(parse_delimiter("#   %%"), Some(None));
+        assert_eq!(parse_delimiter("#   %%").as_deref(), Some(""));
         // With comment
         assert_eq!(
-            parse_delimiter("# %% some comment"),
-            Some(Some("some comment".to_string()))
+            parse_delimiter("# %% some comment").as_deref(),
+            Some("some comment")
         );
         // Comment with no space
-        assert_eq!(
-            parse_delimiter("# %%comment"),
-            Some(Some("comment".to_string()))
-        );
+        assert_eq!(parse_delimiter("# %%comment").as_deref(), Some("comment"));
         // Comment with excessive space
         assert_eq!(
-            parse_delimiter("# %%     comment"),
-            Some(Some("comment".to_string()))
+            parse_delimiter("# %%     comment").as_deref(),
+            Some("comment")
         );
         // Not a delimiter
         assert_eq!(parse_delimiter("some_code = 42"), None);
@@ -261,9 +251,9 @@ bar = 2
         assert_eq!(nb.preamble[0], "\"\"\"module doc.\"\"\"");
         assert_eq!(nb.preamble[1], "");
         assert_eq!(nb.cells.len(), 2);
-        assert!(nb.cells[0].comment.is_none());
+        assert_eq!(nb.cells[0].comment, "");
         assert_eq!(nb.cells[0].lines, vec!["foo = 1", ""]);
-        assert_eq!(nb.cells[1].comment, Some("second cell".to_string()));
+        assert_eq!(nb.cells[1].comment, "second cell");
         assert_eq!(nb.cells[1].lines, vec!["bar = 2"]);
     }
 
