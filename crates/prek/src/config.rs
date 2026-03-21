@@ -174,6 +174,7 @@ enum FilePatternWireError {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "FilePatternWire")]
 pub(crate) enum FilePattern {
+    Never,
     Regex(Regex),
     Glob(GlobPatterns),
 }
@@ -189,6 +190,7 @@ impl FilePattern {
 
     pub(crate) fn is_match(&self, str: &str) -> bool {
         match self {
+            FilePattern::Never => false,
             FilePattern::Regex(regex) => regex.is_match(str).unwrap_or(false),
             FilePattern::Glob(globs) => globs.is_match(str),
         }
@@ -198,6 +200,7 @@ impl FilePattern {
 impl Display for FilePattern {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            FilePattern::Never => f.write_str("never"),
             FilePattern::Regex(regex) => write!(f, "regex: {}", regex.as_str()),
             FilePattern::Glob(globs) => {
                 let patterns = globs.patterns.iter().join(", ");
@@ -1462,6 +1465,14 @@ mod tests {
         assert!(pattern.is_match("src/main.rs"));
         assert!(pattern.is_match("crates/foo/src/lib.rs"));
         assert!(!pattern.is_match("tests/main.rs"));
+    }
+
+    #[test]
+    fn file_pattern_never_matches() {
+        let pattern = FilePattern::Never;
+        assert!(!pattern.is_match(""));
+        assert!(!pattern.is_match("foo.txt"));
+        assert!(!pattern.is_match("nested/path.rs"));
     }
 
     #[test]

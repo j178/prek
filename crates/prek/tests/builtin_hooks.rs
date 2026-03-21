@@ -150,6 +150,65 @@ fn end_of_file_fixer_hook() -> Result<()> {
 }
 
 #[test]
+fn file_contents_sorter_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: file-contents-sorter
+                files: ^allowlist\.txt$
+                args: [--ignore-case]
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("allowlist.txt")
+        .write_str("Banana\n\napple\nApricot\n")?;
+    cwd.child("ignored.txt").write_str("zebra\nant\n")?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    file contents sorter.....................................................Failed
+    - hook id: file-contents-sorter
+    - exit code: 1
+    - files were modified by this hook
+
+      Sorting allowlist.txt
+
+    ----- stderr -----
+    ");
+
+    assert_snapshot!(context.read("allowlist.txt"), @r"
+    apple
+    Apricot
+    Banana
+    ");
+    assert_snapshot!(context.read("ignored.txt"), @r"
+    zebra
+    ant
+    ");
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    file contents sorter.....................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn check_yaml_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();

@@ -42,6 +42,7 @@ pub(crate) enum BuiltinHooks {
     CheckYaml,
     DetectPrivateKey,
     EndOfFileFixer,
+    FileContentsSorter,
     FixByteOrderMarker,
     MixedLineEnding,
     NoCommitToBranch,
@@ -82,6 +83,9 @@ impl BuiltinHooks {
             Self::CheckYaml => pre_commit_hooks::check_yaml(hook, filenames).await,
             Self::DetectPrivateKey => pre_commit_hooks::detect_private_key(hook, filenames).await,
             Self::EndOfFileFixer => pre_commit_hooks::fix_end_of_file(hook, filenames).await,
+            Self::FileContentsSorter => {
+                pre_commit_hooks::file_contents_sorter(hook, filenames).await
+            }
             Self::FixByteOrderMarker => {
                 pre_commit_hooks::fix_byte_order_marker(hook, filenames).await
             }
@@ -273,6 +277,20 @@ impl BuiltinHook {
                     ),
                     types: Some(tags::TAG_SET_TEXT),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::FileContentsSorter => BuiltinHook {
+                id: "file-contents-sorter".to_string(),
+                name: "file contents sorter".to_string(),
+                entry: "file-contents-sorter".to_string(),
+                priority: None,
+                options: HookOptions {
+                    description: Some(
+                        "sorts the lines in specified files (defaults to alphabetical)."
+                            .to_string(),
+                    ),
+                    files: Some(FilePattern::Never),
                     ..Default::default()
                 },
             },

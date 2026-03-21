@@ -38,6 +38,7 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 - [`check-added-large-files`](https://github.com/pre-commit/pre-commit-hooks#check-added-large-files) (Prevent committing large files)
 - [`check-case-conflict`](https://github.com/pre-commit/pre-commit-hooks#check-case-conflict) (Check for files that would conflict in case-insensitive filesystems)
 - [`end-of-file-fixer`](https://github.com/pre-commit/pre-commit-hooks#end-of-file-fixer) (Ensure newline at EOF)
+- [`file-contents-sorter`](https://github.com/pre-commit/pre-commit-hooks#file-contents-sorter) (Sort lines in explicitly targeted files)
 - [`fix-byte-order-marker`](https://github.com/pre-commit/pre-commit-hooks#fix-byte-order-marker) (Remove UTF-8 byte order marker)
 - [`check-json`](https://github.com/pre-commit/pre-commit-hooks#check-json) (Validate JSON files)
 - [`check-toml`](https://github.com/pre-commit/pre-commit-hooks#check-toml) (Validate TOML files)
@@ -95,6 +96,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`check-case-conflict`](#check-case-conflict) (Check for files that would conflict in case-insensitive filesystems)
 - [`check-illegal-windows-names`](#check-illegal-windows-names) (Check for filenames invalid on Windows)
 - [`end-of-file-fixer`](#end-of-file-fixer) (Ensure newline at EOF)
+- [`file-contents-sorter`](#file-contents-sorter) (Sort lines in explicitly targeted files)
 - [`fix-byte-order-marker`](#fix-byte-order-marker) (Remove UTF-8 byte order marker)
 - [`check-json`](#check-json) (Validate JSON files)
 - [`check-json5`](#check-json5) (Validate JSON5 files)
@@ -214,6 +216,37 @@ Ensures files end in a newline and only a newline.
 - Files containing only newlines are truncated to empty.
 - If a file has no trailing newline, a single `\n` is appended (even if the file otherwise uses CRLF).
 - If a file has trailing newlines, they are reduced to exactly one trailing line ending.
+
+---
+
+#### `file-contents-sorter`
+
+Sorts the non-empty lines in each matched file and rewrites the file when the normalized order changes.
+
+**Supported arguments** (compatible with `pre-commit-hooks`):
+
+- `--ignore-case`
+    - Sort using ASCII case-folded ordering.
+    - Mutually exclusive with `--unique`.
+- `--unique`
+    - Sort and deduplicate lines.
+    - Mutually exclusive with `--ignore-case`.
+
+**Behavior / caveats**
+
+- Blank lines and whitespace-only lines are removed before sorting.
+- Line endings are normalized to `\n` in the rewritten file.
+- Like upstream, the builtin hook defaults to `files: '^$'`, so you must configure `files:` explicitly to target specific files.
+
+Example:
+
+```yaml
+repos:
+  - repo: builtin
+    hooks:
+      - id: file-contents-sorter
+        files: ^requirements(-dev)?\.txt$
+```
 
 ---
 
