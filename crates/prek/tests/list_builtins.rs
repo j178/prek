@@ -19,6 +19,7 @@ fn list_builtins_basic() {
     check-merge-conflict
     check-symlinks
     check-toml
+    check-vcs-permalinks
     check-xml
     check-yaml
     detect-private-key
@@ -66,6 +67,9 @@ fn list_builtins_verbose() {
 
     check-toml
       checks toml files for parseable syntax.
+
+    check-vcs-permalinks
+      ensures that links to vcs websites are permalinks.
 
     check-xml
       checks xml files for parseable syntax.
@@ -148,6 +152,11 @@ fn list_builtins_json() {
         "id": "check-toml",
         "name": "check toml",
         "description": "checks toml files for parseable syntax."
+      },
+      {
+        "id": "check-vcs-permalinks",
+        "name": "check vcs permalinks",
+        "description": "ensures that links to vcs websites are permalinks."
       },
       {
         "id": "check-xml",

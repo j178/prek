@@ -12,6 +12,7 @@ pub(crate) mod check_json;
 mod check_merge_conflict;
 mod check_symlinks;
 mod check_toml;
+mod check_vcs_permalinks;
 mod check_xml;
 mod check_yaml;
 mod detect_private_key;
@@ -28,6 +29,7 @@ pub(crate) use check_json::check_json;
 pub(crate) use check_merge_conflict::check_merge_conflict;
 pub(crate) use check_symlinks::check_symlinks;
 pub(crate) use check_toml::check_toml;
+pub(crate) use check_vcs_permalinks::check_vcs_permalinks;
 pub(crate) use check_xml::check_xml;
 pub(crate) use check_yaml::check_yaml;
 pub(crate) use detect_private_key::detect_private_key;
@@ -44,6 +46,7 @@ pub(crate) enum PreCommitHooks {
     CheckAddedLargeFiles,
     CheckCaseConflict,
     CheckExecutablesHaveShebangs,
+    CheckVcsPermalinks,
     EndOfFileFixer,
     FixByteOrderMarker,
     CheckJson,
@@ -75,6 +78,7 @@ impl PreCommitHooks {
             Self::CheckExecutablesHaveShebangs => {
                 check_executables_have_shebangs(hook, filenames).await
             }
+            Self::CheckVcsPermalinks => check_vcs_permalinks(hook, filenames).await,
             Self::EndOfFileFixer => fix_end_of_file(hook, filenames).await,
             Self::FixByteOrderMarker => fix_byte_order_marker(hook, filenames).await,
             Self::CheckJson => check_json(hook, filenames).await,

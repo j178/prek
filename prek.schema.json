@@ -886,6 +886,7 @@
         "check-merge-conflict",
         "check-symlinks",
         "check-toml",
+        "check-vcs-permalinks",
         "check-xml",
         "check-yaml",
         "detect-private-key",
