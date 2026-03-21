@@ -5,11 +5,12 @@ use anyhow::Result;
 use prek_identify::tags;
 
 use crate::cli::reporter::HookRunReporter;
-use crate::config::{BuiltinHook, HookOptions, PassFilenames, Stage};
+use crate::config::{BuiltinHook, FilePattern, HookOptions, PassFilenames, Stage};
 use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks;
 use crate::store::Store;
 
+mod check_illegal_windows_names;
 mod check_json5;
 
 #[derive(
@@ -30,6 +31,7 @@ pub(crate) enum BuiltinHooks {
     CheckAddedLargeFiles,
     CheckCaseConflict,
     CheckExecutablesHaveShebangs,
+    CheckIllegalWindowsNames,
     CheckJson,
     CheckJson5,
     CheckMergeConflict,
@@ -62,6 +64,9 @@ impl BuiltinHooks {
             Self::CheckExecutablesHaveShebangs => {
                 pre_commit_hooks::check_executables_have_shebangs(hook, filenames).await
             }
+            Self::CheckIllegalWindowsNames => Ok(
+                check_illegal_windows_names::check_illegal_windows_names(hook, filenames),
+            ),
             Self::CheckJson => pre_commit_hooks::check_json(hook, filenames).await,
             Self::CheckJson5 => check_json5::check_json5(hook, filenames).await,
             Self::CheckMergeConflict => {
@@ -126,6 +131,24 @@ impl BuiltinHook {
                     ),
                     types: Some(tags::TAG_SET_EXECUTABLE_TEXT),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::CheckIllegalWindowsNames => BuiltinHook {
+                id: "check-illegal-windows-names".to_string(),
+                name: "check illegal windows names".to_string(),
+                entry: "check-illegal-windows-names".to_string(),
+                priority: None,
+                options: HookOptions {
+                    description: Some(
+                        "checks for filenames which cannot be created on Windows.".to_string(),
+                    ),
+                    files: Some(
+                        FilePattern::new_regex(
+                            check_illegal_windows_names::ILLEGAL_WINDOWS_PATTERN,
+                        )
+                        .expect("builtin files regex must be valid"),
+                    ),
                     ..Default::default()
                 },
             },

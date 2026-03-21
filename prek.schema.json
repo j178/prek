@@ -880,6 +880,7 @@
         "check-added-large-files",
         "check-case-conflict",
         "check-executables-have-shebangs",
+        "check-illegal-windows-names",
         "check-json",
         "check-json5",
         "check-merge-conflict",

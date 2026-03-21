@@ -13,6 +13,7 @@ fn list_builtins_basic() {
     check-added-large-files
     check-case-conflict
     check-executables-have-shebangs
+    check-illegal-windows-names
     check-json
     check-json5
     check-merge-conflict
@@ -47,6 +48,9 @@ fn list_builtins_verbose() {
 
     check-executables-have-shebangs
       ensures that (non-binary) executables have a shebang.
+
+    check-illegal-windows-names
+      checks for filenames which cannot be created on Windows.
 
     check-json
       checks json files for parseable syntax.
@@ -114,6 +118,11 @@ fn list_builtins_json() {
         "id": "check-executables-have-shebangs",
         "name": "check that executables have shebangs",
         "description": "ensures that (non-binary) executables have a shebang."
+      },
+      {
+        "id": "check-illegal-windows-names",
+        "name": "check illegal windows names",
+        "description": "checks for filenames which cannot be created on Windows."
       },
       {
         "id": "check-json",

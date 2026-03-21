@@ -2211,6 +2211,40 @@ fn check_json5() -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn check_illegal_windows_names() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-illegal-windows-names
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("normal.txt").write_str("ok")?;
+    cwd.child("CON.txt").write_str("bad")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check illegal windows names..............................................Failed
+    - hook id: check-illegal-windows-names
+    - exit code: 1
+
+      CON.txt: Illegal Windows filename
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 /// Test that builtin hooks work correctly even when a system-wide binary with the
 /// same name exists on PATH (regression test for <https://github.com/j178/prek/issues/1412>).
 ///
