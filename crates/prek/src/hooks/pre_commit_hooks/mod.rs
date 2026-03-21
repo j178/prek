@@ -16,6 +16,7 @@ mod check_vcs_permalinks;
 mod check_xml;
 mod check_yaml;
 mod detect_private_key;
+mod file_contents_sorter;
 mod fix_byte_order_marker;
 mod fix_end_of_file;
 mod fix_trailing_whitespace;
@@ -33,6 +34,7 @@ pub(crate) use check_vcs_permalinks::check_vcs_permalinks;
 pub(crate) use check_xml::check_xml;
 pub(crate) use check_yaml::check_yaml;
 pub(crate) use detect_private_key::detect_private_key;
+pub(crate) use file_contents_sorter::file_contents_sorter;
 pub(crate) use fix_byte_order_marker::fix_byte_order_marker;
 pub(crate) use fix_end_of_file::fix_end_of_file;
 pub(crate) use fix_trailing_whitespace::fix_trailing_whitespace;
@@ -47,6 +49,7 @@ pub(crate) enum PreCommitHooks {
     CheckCaseConflict,
     CheckExecutablesHaveShebangs,
     CheckVcsPermalinks,
+    FileContentsSorter,
     EndOfFileFixer,
     FixByteOrderMarker,
     CheckJson,
@@ -79,6 +82,7 @@ impl PreCommitHooks {
                 check_executables_have_shebangs(hook, filenames).await
             }
             Self::CheckVcsPermalinks => check_vcs_permalinks(hook, filenames).await,
+            Self::FileContentsSorter => file_contents_sorter(hook, filenames).await,
             Self::EndOfFileFixer => fix_end_of_file(hook, filenames).await,
             Self::FixByteOrderMarker => fix_byte_order_marker(hook, filenames).await,
             Self::CheckJson => check_json(hook, filenames).await,

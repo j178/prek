@@ -24,6 +24,7 @@ fn list_builtins_basic() {
     check-yaml
     detect-private-key
     end-of-file-fixer
+    file-contents-sorter
     fix-byte-order-marker
     mixed-line-ending
     no-commit-to-branch
@@ -82,6 +83,9 @@ fn list_builtins_verbose() {
 
     end-of-file-fixer
       ensures that a file is either empty, or ends with one newline.
+
+    file-contents-sorter
+      sorts the lines in specified files (defaults to alphabetical).
 
     fix-byte-order-marker
       removes utf-8 byte order marker.
@@ -177,6 +181,11 @@ fn list_builtins_json() {
         "id": "end-of-file-fixer",
         "name": "fix end of files",
         "description": "ensures that a file is either empty, or ends with one newline."
+      },
+      {
+        "id": "file-contents-sorter",
+        "name": "file contents sorter",
+        "description": "sorts the lines in specified files (defaults to alphabetical)."
       },
       {
         "id": "fix-byte-order-marker",
