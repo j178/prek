@@ -35,6 +35,7 @@ pub(crate) enum BuiltinHooks {
     CheckMergeConflict,
     CheckSymlinks,
     CheckToml,
+    CheckVcsPermalinks,
     CheckXml,
     CheckYaml,
     DetectPrivateKey,
@@ -69,6 +70,9 @@ impl BuiltinHooks {
             }
             Self::CheckSymlinks => pre_commit_hooks::check_symlinks(hook, filenames).await,
             Self::CheckToml => pre_commit_hooks::check_toml(hook, filenames).await,
+            Self::CheckVcsPermalinks => {
+                pre_commit_hooks::check_vcs_permalinks(hook, filenames).await
+            }
             Self::CheckXml => pre_commit_hooks::check_xml(hook, filenames).await,
             Self::CheckYaml => pre_commit_hooks::check_yaml(hook, filenames).await,
             Self::DetectPrivateKey => pre_commit_hooks::detect_private_key(hook, filenames).await,
@@ -185,6 +189,19 @@ impl BuiltinHook {
                 options: HookOptions {
                     description: Some("checks toml files for parseable syntax.".to_string()),
                     types: Some(tags::TAG_SET_TOML),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::CheckVcsPermalinks => BuiltinHook {
+                id: "check-vcs-permalinks".to_string(),
+                name: "check vcs permalinks".to_string(),
+                entry: "check-vcs-permalinks".to_string(),
+                priority: None,
+                options: HookOptions {
+                    description: Some(
+                        "ensures that links to vcs websites are permalinks.".to_string(),
+                    ),
+                    types: Some(tags::TAG_SET_TEXT),
                     ..Default::default()
                 },
             },

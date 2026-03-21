@@ -41,6 +41,7 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 - [`fix-byte-order-marker`](https://github.com/pre-commit/pre-commit-hooks#fix-byte-order-marker) (Remove UTF-8 byte order marker)
 - [`check-json`](https://github.com/pre-commit/pre-commit-hooks#check-json) (Validate JSON files)
 - [`check-toml`](https://github.com/pre-commit/pre-commit-hooks#check-toml) (Validate TOML files)
+- [`check-vcs-permalinks`](https://github.com/pre-commit/pre-commit-hooks#check-vcs-permalinks) (Check that VCS links are permalinks)
 - [`check-yaml`](https://github.com/pre-commit/pre-commit-hooks#check-yaml) (Validate YAML files)
 - [`check-xml`](https://github.com/pre-commit/pre-commit-hooks#check-xml) (Validate XML files)
 - [`mixed-line-ending`](https://github.com/pre-commit/pre-commit-hooks#mixed-line-ending) (Normalize or check line endings)
@@ -98,6 +99,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`check-json`](#check-json) (Validate JSON files)
 - [`check-json5`](#check-json5) (Validate JSON5 files)
 - [`check-toml`](#check-toml) (Validate TOML files)
+- [`check-vcs-permalinks`](#check-vcs-permalinks) (Check that VCS links are permalinks)
 - [`check-yaml`](#check-yaml) (Validate YAML files)
 - [`check-xml`](#check-xml) (Validate XML files)
 - [`mixed-line-ending`](#mixed-line-ending) (Normalize or check line endings)
@@ -270,6 +272,23 @@ Attempts to load all TOML files to verify syntax.
 
 - Files must be valid UTF-8; invalid UTF-8 is reported as an error.
 - May report multiple parse errors for a single file.
+
+---
+
+#### `check-vcs-permalinks`
+
+Ensures that links to VCS websites are permalinks.
+
+**Supported arguments** (compatible with `pre-commit-hooks`):
+
+- `--additional-github-domain=<domain>` (repeatable)
+    - Adds extra GitHub-style domains to check in addition to the default `github.com`.
+
+**Behavior / caveats**
+
+- Flags links of the form `https://<domain>/<owner>/<repo>/blob/<branch>/...#L...`.
+- Does not flag commit-hash permalinks where `<branch>` is already a 4-64 character hexadecimal revision.
+- The builtin and fast-path implementations currently follow the upstream hook's GitHub-family matching behavior.
 
 ---
 

@@ -267,6 +267,50 @@ fn check_yaml_multiple_document() -> Result<()> {
 }
 
 #[test]
+fn check_vcs_permalinks_builtin() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-vcs-permalinks
+                args: [--additional-github-domain=github.example.com]
+    "});
+
+    context
+        .work_dir()
+        .child("links.md")
+        .write_str(indoc::indoc! {r"
+        https://github.com/owner/repo/blob/main/file.py#L10
+        https://github.example.com/owner/repo/blob/master/src/lib.rs#L5
+        https://github.com/owner/repo/blob/abcdef1234567890abcdef1234567890abcdef12/file.py#L10
+    "})?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check vcs permalinks.....................................................Failed
+    - hook id: check-vcs-permalinks
+    - exit code: 1
+
+      links.md:1:https://github.com/owner/repo/blob/main/file.py#L10
+      links.md:2:https://github.example.com/owner/repo/blob/master/src/lib.rs#L5
+
+      Non-permanent github link detected.
+      On any page on github press [y] to load a permalink.
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn check_json_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();

@@ -1,56 +1,109 @@
+use std::collections::BTreeSet;
+use std::io::Write;
 use std::path::Path;
 
 use anyhow::Result;
-use fancy_regex::Regex;
-use std::sync::LazyLock;
+use clap::Parser;
+use fancy_regex::{Regex, escape};
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::CONCURRENCY;
 
-/// Matches GitHub blob URLs that use a branch name instead of a commit hash.
-/// A permalink uses a hex commit hash (4-64 chars) after `/blob/`.
-/// A non-permalink uses a branch name (not all-hex, or shorter than 4 chars).
-static NON_PERMALINK_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"https://github\.com/[^/ ]+/[^/ ]+/blob/(?![a-fA-F0-9]{4,64}/)([^/. ]+)/[^# ]+#L\d+",
-    )
-    .expect("Invalid regex")
-});
+#[derive(Parser)]
+#[command(disable_help_subcommand = true)]
+#[command(disable_version_flag = true)]
+#[command(disable_help_flag = true)]
+struct Args {
+    #[arg(long = "additional-github-domain")]
+    additional_github_domains: Vec<String>,
+}
+
+#[derive(Debug)]
+struct GithubPermalinkMatcher {
+    patterns: Vec<Regex>,
+}
+
+impl GithubPermalinkMatcher {
+    fn from_hook(hook: &Hook) -> Result<Self> {
+        let args = Args::try_parse_from(hook.entry.split()?.iter().chain(&hook.args))?;
+        Ok(Self::new(args.additional_github_domains))
+    }
+
+    fn new(additional_domains: Vec<String>) -> Self {
+        let mut domains = BTreeSet::from([String::from("github.com")]);
+        domains.extend(additional_domains);
+
+        let patterns = domains
+            .into_iter()
+            .map(|domain| {
+                let domain = escape(&domain);
+                let pattern = format!(
+                    r"https://{domain}/[^/ ]+/[^/ ]+/blob/(?![a-fA-F0-9]{{4,64}}/)([^/. ]+)/[^# ]+#L\d+"
+                );
+                Regex::new(&pattern).expect("vcs permalink regex must be valid")
+            })
+            .collect();
+
+        Self { patterns }
+    }
+
+    fn is_non_permalink(&self, line: &[u8]) -> bool {
+        let line = String::from_utf8_lossy(line);
+        self.patterns
+            .iter()
+            .any(|pattern| pattern.is_match(&line).unwrap_or(false))
+    }
+}
 
 pub(crate) async fn check_vcs_permalinks(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
     let file_base = hook.project().relative_path();
+    let matcher = GithubPermalinkMatcher::from_hook(hook)?;
+
     run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
-        check_file(file_base, filename)
+        check_file(file_base, filename, &matcher)
     })
     .await
 }
 
-async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
+async fn check_file(
+    file_base: &Path,
+    filename: &Path,
+    matcher: &GithubPermalinkMatcher,
+) -> Result<(i32, Vec<u8>)> {
     let path = file_base.join(filename);
-    let Ok(content) = fs_err::tokio::read(&path).await else {
-        return Ok((0, Vec::new()));
-    };
+    let file = fs_err::tokio::File::open(&path).await?;
+    let mut reader = BufReader::new(file);
 
     let mut retval = 0;
     let mut output = Vec::new();
+    let mut line = Vec::new();
+    let mut line_number = 0;
 
-    for (i, line) in content.split(|&b| b == b'\n').enumerate() {
-        let line_str = String::from_utf8_lossy(line);
-        if NON_PERMALINK_RE.is_match(&line_str)? {
+    while reader.read_until(b'\n', &mut line).await? != 0 {
+        line_number += 1;
+        if matcher.is_non_permalink(&line) {
             retval = 1;
-            output.extend_from_slice(
-                format!("{}:{}:{}\n", filename.display(), i + 1, line_str).as_bytes(),
-            );
+            write!(output, "{}:{}:", filename.display(), line_number)?;
+            output.write_all(&line)?;
+            if !line.ends_with(b"\n") {
+                writeln!(output)?;
+            }
         }
+        line.clear();
     }
 
     if retval != 0 {
-        output.extend_from_slice(b"\nNon-permanent GitHub link detected.\n");
-        output.extend_from_slice(b"On any page on GitHub press [y] to load a permalink.\n");
+        writeln!(output)?;
+        writeln!(output, "Non-permanent github link detected.")?;
+        writeln!(
+            output,
+            "On any page on github press [y] to load a permalink."
+        )?;
     }
 
     Ok((retval, output))
@@ -59,28 +112,82 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+    use tempfile::tempdir;
+
+    fn matcher(domains: &[&str]) -> GithubPermalinkMatcher {
+        GithubPermalinkMatcher::new(domains.iter().map(ToString::to_string).collect())
+    }
 
     #[test]
     fn test_permalink_not_flagged() {
-        let re = &*NON_PERMALINK_RE;
-        // Commit hash permalink - should NOT match
-        assert!(!re.is_match("https://github.com/owner/repo/blob/abc123def456/file.py#L10").unwrap());
-        assert!(!re.is_match("https://github.com/owner/repo/blob/abcdef1234567890abcdef1234567890abcdef12/src/main.rs#L42").unwrap());
+        let matcher = matcher(&[]);
+        assert!(
+            !matcher
+                .is_non_permalink(b"https://github.com/owner/repo/blob/abc123def456/file.py#L10")
+        );
+        assert!(!matcher.is_non_permalink(
+            b"https://github.com/owner/repo/blob/abcdef1234567890abcdef1234567890abcdef12/src/main.rs#L42",
+        ));
     }
 
     #[test]
     fn test_branch_link_flagged() {
-        let re = &*NON_PERMALINK_RE;
-        // Branch name links - SHOULD match
-        assert!(re.is_match("https://github.com/owner/repo/blob/main/file.py#L10").unwrap());
-        assert!(re.is_match("https://github.com/owner/repo/blob/master/src/lib.rs#L5").unwrap());
-        assert!(re.is_match("https://github.com/owner/repo/blob/develop/README.md#L1").unwrap());
+        let matcher = matcher(&[]);
+        assert!(matcher.is_non_permalink(b"https://github.com/owner/repo/blob/main/file.py#L10"));
+        assert!(
+            matcher.is_non_permalink(b"https://github.com/owner/repo/blob/master/src/lib.rs#L5")
+        );
+        assert!(
+            matcher.is_non_permalink(b"https://github.com/owner/repo/blob/develop/README.md#L1")
+        );
     }
 
     #[test]
     fn test_no_line_number_not_flagged() {
-        let re = &*NON_PERMALINK_RE;
-        // No line number anchor - should NOT match (the hook only flags links with #L)
-        assert!(!re.is_match("https://github.com/owner/repo/blob/main/file.py").unwrap());
+        let matcher = matcher(&[]);
+        assert!(!matcher.is_non_permalink(b"https://github.com/owner/repo/blob/main/file.py"));
+    }
+
+    #[test]
+    fn test_additional_github_domain_flagged() {
+        let matcher = matcher(&["github.example.com"]);
+        assert!(
+            matcher
+                .is_non_permalink(b"https://github.example.com/owner/repo/blob/main/file.py#L10",)
+        );
+    }
+
+    #[test]
+    fn test_github_domains_are_deduplicated() {
+        let matcher = GithubPermalinkMatcher::new(vec![
+            "github.example.com".to_string(),
+            "github.com".to_string(),
+            "github.example.com".to_string(),
+        ]);
+        assert_eq!(matcher.patterns.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_check_file_with_additional_domain() -> Result<()> {
+        let dir = tempdir()?;
+        let file_path = dir.path().join("links.md");
+        fs_err::tokio::write(
+            &file_path,
+            b"https://github.example.com/owner/repo/blob/main/file.py#L10\n",
+        )
+        .await?;
+
+        let matcher = matcher(&["github.example.com"]);
+        let relative = PathBuf::from("links.md");
+        let (code, output) = check_file(dir.path(), &relative, &matcher).await?;
+
+        assert_eq!(code, 1);
+        assert_eq!(
+            String::from_utf8(output)?,
+            "links.md:1:https://github.example.com/owner/repo/blob/main/file.py#L10\n\nNon-permanent github link detected.\nOn any page on github press [y] to load a permalink.\n",
+        );
+
+        Ok(())
     }
 }
