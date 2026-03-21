@@ -105,6 +105,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`detect-private-key`](#detect-private-key) (Detect private keys)
 - [`no-commit-to-branch`](#no-commit-to-branch) (Prevent committing to protected branches)
 - [`check-executables-have-shebangs`](#check-executables-have-shebangs) (Ensures that (non-binary) executables have a shebang)
+- [`format-ipy-cells`](#format-ipy-cells) (Format `# %%` cell delimiters in interactive Python notebooks)
 
 ### Hook Reference
 
@@ -381,3 +382,31 @@ Checks that non-binary executables have a proper shebang.
 
 - The check is intentionally lightweight: it only verifies that the file starts with `#!`.
 - On systems where the executable bit is not tracked by the filesystem, `prek` consults git’s staged mode bits.
+
+---
+
+#### `format-ipy-cells`
+
+Formats `# %%` cell delimiters in [VS Code interactive Python notebooks](https://code.visualstudio.com/docs/python/jupyter-support-py).
+
+Based on the [format-ipy-cells](https://github.com/janosh/format-ipy-cells) Python hook, reimplemented in Rust as a structured parser.
+
+**Formatting rules:**
+
+- Normalize delimiter spacing: `#%%`, `#   %%` become `# %%`.
+- Normalize comments: `# %%comment`, `# %%   comment` become `# %% comment`.
+- Remove empty cells (no comment and no code).
+- Remove leading blank lines within each cell.
+- Ensure exactly two blank lines before each cell delimiter.
+- Ensure one blank line between a module docstring and the first cell.
+- Remove trailing empty cell at end of file.
+- Strip trailing whitespace from each line.
+
+**Supported arguments**
+
+- None.
+
+**Caveats**
+
+- Only runs on Python files (`types: [python]`).
+- Files without any `# %%` delimiter are left unchanged.

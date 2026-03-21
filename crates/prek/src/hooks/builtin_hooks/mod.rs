@@ -11,6 +11,7 @@ use crate::hooks::pre_commit_hooks;
 use crate::store::Store;
 
 mod check_json5;
+mod format_ipy_cells;
 
 #[derive(
     Debug,
@@ -40,6 +41,7 @@ pub(crate) enum BuiltinHooks {
     DetectPrivateKey,
     EndOfFileFixer,
     FixByteOrderMarker,
+    FormatIpyCells,
     MixedLineEnding,
     NoCommitToBranch,
     TrailingWhitespace,
@@ -76,6 +78,7 @@ impl BuiltinHooks {
             Self::FixByteOrderMarker => {
                 pre_commit_hooks::fix_byte_order_marker(hook, filenames).await
             }
+            Self::FormatIpyCells => format_ipy_cells::format_ipy_cells(hook, filenames).await,
             Self::MixedLineEnding => pre_commit_hooks::mixed_line_ending(hook, filenames).await,
             Self::NoCommitToBranch => pre_commit_hooks::no_commit_to_branch(hook).await,
             Self::TrailingWhitespace => {
@@ -244,6 +247,21 @@ impl BuiltinHook {
                 options: HookOptions {
                     description: Some("removes utf-8 byte order marker.".to_string()),
                     types: Some(tags::TAG_SET_TEXT),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::FormatIpyCells => BuiltinHook {
+                id: "format-ipy-cells".to_string(),
+                name: "format ipy cells".to_string(),
+                entry: "format-ipy-cells".to_string(),
+                priority: None,
+                options: HookOptions {
+                    description: Some(
+                        "formats '# %%' cell delimiters in interactive Python notebooks."
+                            .to_string(),
+                    ),
+                    types: Some(prek_identify::TagSet::from_tags(["python"])),
+                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
             },

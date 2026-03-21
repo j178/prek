@@ -23,6 +23,7 @@ fn list_builtins_basic() {
     detect-private-key
     end-of-file-fixer
     fix-byte-order-marker
+    format-ipy-cells
     mixed-line-ending
     no-commit-to-branch
     trailing-whitespace
@@ -77,6 +78,9 @@ fn list_builtins_verbose() {
 
     fix-byte-order-marker
       removes utf-8 byte order marker.
+
+    format-ipy-cells
+      formats '# %%' cell delimiters in interactive Python notebooks.
 
     mixed-line-ending
       replaces or checks mixed line ending.
@@ -164,6 +168,11 @@ fn list_builtins_json() {
         "id": "fix-byte-order-marker",
         "name": "fix utf-8 byte order marker",
         "description": "removes utf-8 byte order marker."
+      },
+      {
+        "id": "format-ipy-cells",
+        "name": "format ipy cells",
+        "description": "formats '# %%' cell delimiters in interactive Python notebooks."
       },
       {
         "id": "mixed-line-ending",
