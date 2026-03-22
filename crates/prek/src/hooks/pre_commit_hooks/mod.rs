@@ -70,7 +70,10 @@ pub(crate) enum PreCommitHooks {
     MixedLineEnding,
     DetectPrivateKey,
     NoCommitToBranch,
-    PrettyFormatJson,
+    // `pretty-format-json` is intentionally builtin-only for now. Do not enable
+    // automatic fast-path replacement until parity coverage against upstream
+    // Python is broad enough to trust it as the default implementation.
+    // PrettyFormatJson,
     TrailingWhitespace,
 }
 
@@ -108,7 +111,6 @@ impl PreCommitHooks {
             Self::MixedLineEnding => mixed_line_ending(hook, filenames).await,
             Self::DetectPrivateKey => detect_private_key(hook, filenames).await,
             Self::NoCommitToBranch => no_commit_to_branch(hook).await,
-            Self::PrettyFormatJson => pretty_format_json(hook, filenames).await,
             Self::TrailingWhitespace => fix_trailing_whitespace(hook, filenames).await,
         }
     }

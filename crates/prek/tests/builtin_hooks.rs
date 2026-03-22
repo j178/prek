@@ -1089,8 +1089,7 @@ fn pretty_format_json_hook() -> Result<()> {
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/pre-commit/pre-commit-hooks
-            rev: v5.0.0
+          - repo: builtin
             hooks:
               - id: pretty-format-json
                 args: ['--autofix']
@@ -1226,8 +1225,7 @@ fn pretty_format_json_with_options() -> Result<()> {
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/pre-commit/pre-commit-hooks
-            rev: v5.0.0
+          - repo: builtin
             hooks:
               - id: pretty-format-json
                 args: ['--autofix', '--indent=4', '--no-sort-keys']
@@ -1247,6 +1245,7 @@ fn pretty_format_json_with_options() -> Result<()> {
     - hook id: pretty-format-json
     - exit code: 1
     - files were modified by this hook
+
       Fixed & autoformatted file test.json
 
     ----- stderr -----
@@ -1282,8 +1281,7 @@ fn pretty_format_json_with_top_keys() -> Result<()> {
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/pre-commit/pre-commit-hooks
-            rev: v5.0.0
+          - repo: builtin
             hooks:
               - id: pretty-format-json
                 args: ['--autofix', '--top-keys=version,name']
@@ -1305,6 +1303,7 @@ fn pretty_format_json_with_top_keys() -> Result<()> {
     - hook id: pretty-format-json
     - exit code: 1
     - files were modified by this hook
+
       Fixed & autoformatted file package.json
 
     ----- stderr -----
@@ -1337,15 +1336,13 @@ fn pretty_format_json_with_top_keys() -> Result<()> {
     Ok(())
 }
 #[test]
-
 fn pretty_format_json_no_ensure_ascii() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/pre-commit/pre-commit-hooks
-            rev: v5.0.0
+          - repo: builtin
             hooks:
               - id: pretty-format-json
                 args: ['--autofix', '--no-ensure-ascii']
@@ -1366,6 +1363,7 @@ fn pretty_format_json_no_ensure_ascii() -> Result<()> {
     - hook id: pretty-format-json
     - exit code: 1
     - files were modified by this hook
+
       Fixed & autoformatted file unicode.json
 
     ----- stderr -----
@@ -1399,8 +1397,7 @@ fn pretty_format_json_tab_indent() -> Result<()> {
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
-          - repo: https://github.com/pre-commit/pre-commit-hooks
-            rev: v5.0.0
+          - repo: builtin
             hooks:
               - id: pretty-format-json
                 args: ['--autofix', '--indent=  ']
@@ -1420,12 +1417,13 @@ fn pretty_format_json_tab_indent() -> Result<()> {
     - hook id: pretty-format-json
     - exit code: 1
     - files were modified by this hook
+
       Fixed & autoformatted file test.json
 
     ----- stderr -----
     "#);
 
-    // Should use tabs for indentation
+    // Should use the literal two-space indent from `--indent=  `.
     let content = context.read("test.json");
     assert!(content.contains("  \"a\":"));
     assert!(content.contains("  \"b\":"));

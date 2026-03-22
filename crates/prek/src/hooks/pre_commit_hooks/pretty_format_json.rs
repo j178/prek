@@ -1,15 +1,48 @@
-use crate::hook::Hook;
+use std::fmt::Write;
+use std::io;
+use std::path::Path;
 
-use crate::run::CONCURRENCY;
 use anyhow::Result;
 use clap::Parser;
 use futures::StreamExt;
 use owo_colors::OwoColorize;
 use serde::Serialize;
+use serde_json::ser::{Formatter, PrettyFormatter};
 use serde_json::{Map, Value};
 use similar::{ChangeTag, TextDiff};
-use std::fmt::Write;
-use std::path::Path;
+
+use crate::hook::Hook;
+use crate::run::CONCURRENCY;
+
+#[derive(Parser, Debug)]
+#[command(disable_help_subcommand = true)]
+#[command(disable_version_flag = true)]
+#[command(disable_help_flag = true)]
+struct Args {
+    #[arg(long)]
+    autofix: bool,
+
+    #[arg(long, default_value = "2")]
+    indent: String,
+
+    #[arg(long = "no-ensure-ascii")]
+    no_ensure_ascii: bool,
+
+    #[arg(long = "no-sort-keys")]
+    no_sort_keys: bool,
+
+    #[arg(long = "top-keys", value_delimiter = ',')]
+    top_keys: Vec<String>,
+}
+
+impl Args {
+    fn indent(&self) -> Vec<u8> {
+        match self.indent.parse::<usize>() {
+            Ok(num_spaces) => vec![b' '; num_spaces],
+            Err(_) => self.indent.as_bytes().to_vec(),
+        }
+    }
+}
 
 pub(crate) async fn pretty_format_json(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
@@ -30,16 +63,14 @@ pub(crate) async fn pretty_format_json(hook: &Hook, filenames: &[&Path]) -> Resu
 }
 
 async fn check_file(file_base: &Path, filename: &Path, args: &Args) -> Result<(i32, Vec<u8>)> {
-    let content = fs_err::tokio::read(file_base.join(filename)).await?;
-    if content.is_empty() {
+    let original_content = fs_err::tokio::read_to_string(file_base.join(filename)).await?;
+    if original_content.is_empty() {
         let error_message = format!(
             "{}: Failed to json parse (no element found). Think about using the 'check-json' hook. \n",
             filename.display()
         );
         return Ok((1, error_message.into_bytes()));
     }
-
-    let original_content = String::from_utf8(content)?;
 
     match prettify_json(&original_content, args) {
         Ok(prettified_json) => {
@@ -78,29 +109,13 @@ fn prettify_json(json: &str, args: &Args) -> Result<String> {
     let mut value: Value = serde_json::from_str(json)?;
     value = reorder_keys(value, &args.top_keys, !args.no_sort_keys);
 
-    let indent_bytes = if args.indent.chars().all(|c| c.is_ascii_digit()) {
-        vec![b' '; args.indent.parse::<usize>().unwrap_or(2)]
-    } else {
-        args.indent.as_bytes().to_vec()
-    };
-    let mut buf = Vec::new();
-    let formatter = serde_json::ser::PrettyFormatter::with_indent(&indent_bytes);
+    let indent_bytes = args.indent();
+    let mut buf = Vec::with_capacity(json.len());
+    let formatter = JsonFormatter::with_indent(&indent_bytes, !args.no_ensure_ascii);
     let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
     value.serialize(&mut ser)?;
-    let mut result = String::from_utf8(buf)?;
 
-    if !args.no_ensure_ascii {
-        let mut buf = String::with_capacity(result.len());
-        for c in result.chars() {
-            if c.is_ascii() {
-                buf.push(c);
-            } else {
-                use std::fmt::Write;
-                write!(buf, "\\u{:04x}", c as u32).unwrap();
-            }
-        }
-        result = buf;
-    }
+    let mut result = String::from_utf8(buf)?;
     // Always end with exactly one newline
     if !result.ends_with('\n') {
         result.push('\n');
@@ -108,25 +123,145 @@ fn prettify_json(json: &str, args: &Args) -> Result<String> {
     Ok(result)
 }
 
-#[derive(Parser, Debug)]
-#[command(disable_help_subcommand = true)]
-#[command(disable_version_flag = true)]
-#[command(disable_help_flag = true)]
-struct Args {
-    #[arg(long, action = clap::ArgAction::SetTrue)]
-    autofix: bool,
+struct JsonFormatter<'a> {
+    pretty: PrettyFormatter<'a>,
+    ensure_ascii: bool,
+}
 
-    #[arg(long, default_value = "2")]
-    indent: String,
+impl<'a> JsonFormatter<'a> {
+    fn with_indent(indent: &'a [u8], ensure_ascii: bool) -> Self {
+        // `serde_json` does not expose an `ensure_ascii` option, so we reuse its
+        // pretty-printer state and only customize string fragment emission.
+        Self {
+            pretty: PrettyFormatter::with_indent(indent),
+            ensure_ascii,
+        }
+    }
+}
 
-    #[arg(long = "no-ensure-ascii", action = clap::ArgAction::SetTrue)]
-    no_ensure_ascii: bool,
+impl Formatter for JsonFormatter<'_> {
+    fn begin_array<W>(&mut self, writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + io::Write,
+    {
+        self.pretty.begin_array(writer)
+    }
 
-    #[arg(long = "no-sort-keys", action = clap::ArgAction::SetTrue)]
-    no_sort_keys: bool,
+    fn end_array<W>(&mut self, writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + io::Write,
+    {
+        self.pretty.end_array(writer)
+    }
 
-    #[arg(long = "top-keys", value_delimiter = ',', default_value = "[]")]
-    top_keys: Vec<String>,
+    fn begin_array_value<W>(&mut self, writer: &mut W, first: bool) -> io::Result<()>
+    where
+        W: ?Sized + io::Write,
+    {
+        self.pretty.begin_array_value(writer, first)
+    }
+
+    fn end_array_value<W>(&mut self, writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + io::Write,
+    {
+        self.pretty.end_array_value(writer)
+    }
+
+    fn begin_object<W>(&mut self, writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + io::Write,
+    {
+        self.pretty.begin_object(writer)
+    }
+
+    fn end_object<W>(&mut self, writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + io::Write,
+    {
+        self.pretty.end_object(writer)
+    }
+
+    fn begin_object_key<W>(&mut self, writer: &mut W, first: bool) -> io::Result<()>
+    where
+        W: ?Sized + io::Write,
+    {
+        self.pretty.begin_object_key(writer, first)
+    }
+
+    fn begin_object_value<W>(&mut self, writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + io::Write,
+    {
+        self.pretty.begin_object_value(writer)
+    }
+
+    fn end_object_value<W>(&mut self, writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + io::Write,
+    {
+        self.pretty.end_object_value(writer)
+    }
+
+    fn write_string_fragment<W>(&mut self, writer: &mut W, fragment: &str) -> io::Result<()>
+    where
+        W: ?Sized + io::Write,
+    {
+        if !self.ensure_ascii || fragment.is_ascii() {
+            return writer.write_all(fragment.as_bytes());
+        }
+
+        write_ascii_only_fragment(writer, fragment)
+    }
+}
+
+fn write_ascii_only_fragment<W>(writer: &mut W, fragment: &str) -> io::Result<()>
+where
+    W: ?Sized + io::Write,
+{
+    let mut start = 0;
+
+    for (index, ch) in fragment.char_indices() {
+        if ch.is_ascii() {
+            continue;
+        }
+
+        if start < index {
+            writer.write_all(&fragment.as_bytes()[start..index])?;
+        }
+        write_unicode_escape(writer, ch)?;
+        start = index + ch.len_utf8();
+    }
+
+    writer.write_all(&fragment.as_bytes()[start..])
+}
+
+fn write_unicode_escape<W>(writer: &mut W, ch: char) -> io::Result<()>
+where
+    W: ?Sized + io::Write,
+{
+    let mut buf = [0_u16; 2];
+    for unit in ch.encode_utf16(&mut buf).iter().copied() {
+        write_u16_escape(writer, unit)?;
+    }
+    Ok(())
+}
+
+fn write_u16_escape<W>(writer: &mut W, unit: u16) -> io::Result<()>
+where
+    W: ?Sized + io::Write,
+{
+    const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
+
+    let escape = [
+        b'\\',
+        b'u',
+        HEX_DIGITS[((unit >> 12) & 0x0f) as usize],
+        HEX_DIGITS[((unit >> 8) & 0x0f) as usize],
+        HEX_DIGITS[((unit >> 4) & 0x0f) as usize],
+        HEX_DIGITS[(unit & 0x0f) as usize],
+    ];
+    writer.write_all(&escape)
 }
 
 /// Recursively reorder JSON object keys with optional top-level keys and sorting.
@@ -630,6 +765,28 @@ mod tests {
 "#;
         assert_eq!(result, expected);
         dir.close()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_ensure_ascii_surrogate_pair_and_object_keys() -> Result<()> {
+        let formatted = prettify_json(
+            r#"{"emoji":"🐐","α":"beta"}"#,
+            &Args {
+                autofix: false,
+                indent: "2".to_string(),
+                no_ensure_ascii: false,
+                no_sort_keys: false,
+                top_keys: vec![],
+            },
+        )?;
+
+        let expected = r#"{
+  "emoji": "\ud83d\udc10",
+  "\u03b1": "beta"
+}
+"#;
+        assert_eq!(formatted, expected);
         Ok(())
     }
 

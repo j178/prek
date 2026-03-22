@@ -30,6 +30,7 @@ fn list_builtins_basic() {
     fix-byte-order-marker
     mixed-line-ending
     no-commit-to-branch
+    pretty-format-json
     trailing-whitespace
 
     ----- stderr -----
@@ -102,6 +103,9 @@ fn list_builtins_verbose() {
       replaces or checks mixed line ending.
 
     no-commit-to-branch
+
+    pretty-format-json
+      checks that JSON files are pretty-formatted.
 
     trailing-whitespace
       trims trailing whitespace.
@@ -219,6 +223,11 @@ fn list_builtins_json() {
         "id": "no-commit-to-branch",
         "name": "don't commit to branch",
         "description": null
+      },
+      {
+        "id": "pretty-format-json",
+        "name": "pretty format json",
+        "description": "checks that JSON files are pretty-formatted."
       },
       {
         "id": "trailing-whitespace",
