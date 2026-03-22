@@ -41,6 +41,7 @@ pub(crate) enum BuiltinHooks {
     CheckVcsPermalinks,
     CheckXml,
     CheckYaml,
+    DestroyedSymlinks,
     DetectPrivateKey,
     EndOfFileFixer,
     FileContentsSorter,
@@ -85,6 +86,7 @@ impl BuiltinHooks {
             }
             Self::CheckXml => pre_commit_hooks::check_xml(hook, filenames).await,
             Self::CheckYaml => pre_commit_hooks::check_yaml(hook, filenames).await,
+            Self::DestroyedSymlinks => pre_commit_hooks::destroyed_symlinks(hook, filenames).await,
             Self::DetectPrivateKey => pre_commit_hooks::detect_private_key(hook, filenames).await,
             Self::EndOfFileFixer => pre_commit_hooks::fix_end_of_file(hook, filenames).await,
             Self::FileContentsSorter => {
@@ -270,6 +272,20 @@ impl BuiltinHook {
                 options: HookOptions {
                     description: Some("checks yaml files for parseable syntax.".to_string()),
                     types: Some(tags::TAG_SET_YAML),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::DestroyedSymlinks => BuiltinHook {
+                id: "destroyed-symlinks".to_string(),
+                name: "detect destroyed symlinks".to_string(),
+                entry: "destroyed-symlinks".to_string(),
+                priority: None,
+                options: HookOptions {
+                    description: Some(
+                        "detects symlinks which are changed to regular files with a content of a path which that symlink was pointing to.".to_string(),
+                    ),
+                    types: Some(tags::TAG_SET_FILE),
+                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
             },

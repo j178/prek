@@ -23,6 +23,7 @@ fn list_builtins_basic() {
     check-vcs-permalinks
     check-xml
     check-yaml
+    destroyed-symlinks
     detect-private-key
     end-of-file-fixer
     file-contents-sorter
@@ -81,6 +82,9 @@ fn list_builtins_verbose() {
 
     check-yaml
       checks yaml files for parseable syntax.
+
+    destroyed-symlinks
+      detects symlinks which are changed to regular files with a content of a path which that symlink was pointing to.
 
     detect-private-key
       detects the presence of private keys.
@@ -180,6 +184,11 @@ fn list_builtins_json() {
         "id": "check-yaml",
         "name": "check yaml",
         "description": "checks yaml files for parseable syntax."
+      },
+      {
+        "id": "destroyed-symlinks",
+        "name": "detect destroyed symlinks",
+        "description": "detects symlinks which are changed to regular files with a content of a path which that symlink was pointing to."
       },
       {
         "id": "detect-private-key",

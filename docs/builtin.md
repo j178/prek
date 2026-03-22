@@ -47,6 +47,7 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 - [`check-xml`](https://github.com/pre-commit/pre-commit-hooks#check-xml) (Validate XML files)
 - [`mixed-line-ending`](https://github.com/pre-commit/pre-commit-hooks#mixed-line-ending) (Normalize or check line endings)
 - [`check-symlinks`](https://github.com/pre-commit/pre-commit-hooks#check-symlinks) (Check for broken symlinks)
+- [`destroyed-symlinks`](https://github.com/pre-commit/pre-commit-hooks#destroyed-symlinks) (Detect destroyed symlinks)
 - [`check-merge-conflict`](https://github.com/pre-commit/pre-commit-hooks#check-merge-conflict) (Check for merge conflicts)
 - [`detect-private-key`](https://github.com/pre-commit/pre-commit-hooks#detect-private-key) (Detect private keys)
 - [`no-commit-to-branch`](https://github.com/pre-commit/pre-commit-hooks#no-commit-to-branch) (Prevent committing to protected branches)
@@ -107,6 +108,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`check-xml`](#check-xml) (Validate XML files)
 - [`mixed-line-ending`](#mixed-line-ending) (Normalize or check line endings)
 - [`check-symlinks`](#check-symlinks) (Check for broken symlinks)
+- [`destroyed-symlinks`](#destroyed-symlinks) (Detect destroyed symlinks)
 - [`check-merge-conflict`](#check-merge-conflict) (Check for merge conflicts)
 - [`detect-private-key`](#detect-private-key) (Detect private keys)
 - [`no-commit-to-branch`](#no-commit-to-branch) (Prevent committing to protected branches)
@@ -389,6 +391,21 @@ Checks for symlinks which do not point to anything.
 **Caveats**
 
 - Relies on filesystem symlink support. On Windows, symlink creation and detection can be permission-dependent.
+
+---
+
+#### `destroyed-symlinks`
+
+Detects files staged as regular files whose `HEAD` version is a symlink, which usually happens when a repository is checked out in an environment without symlink support.
+
+**Supported arguments**
+
+- None.
+
+**Caveats**
+
+- This matches upstream `pre-commit-hooks` behavior: it only checks tracked entries reported by `git status --porcelain=v2`.
+- It intentionally tolerates trailing newline / CRLF-only changes when comparing the staged file against the original symlink target path, because those differences are commonly introduced by formatting hooks.
 
 ---
 
