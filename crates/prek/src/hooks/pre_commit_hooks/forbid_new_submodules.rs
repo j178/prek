@@ -1,4 +1,3 @@
-use std::fmt::Write as _;
 use std::path::Path;
 
 use anyhow::Context;
@@ -32,21 +31,15 @@ pub(crate) async fn forbid_new_submodules(
             .context("couldn't get file-name from raw diff output")?;
 
         if file_mode == "160000" {
-            let mut msg = String::new();
-            writeln!(
-                msg,
-                "{}",
-                format!("{}: new submodule introduced", file_name)
-            )?;
-            writeln!(msg, "{}", format!("This commit introduces new submodules."))?;
-            writeln!(msg, "{}", format!("Did you unintentionally `git add .`?"))?;
-            writeln!(
-                msg,
-                "{}",
-                format!("To fix: git rm {{thesubmodule}}  # no trailing slash")
-            )?;
-            writeln!(msg, "{}", format!("Also check .gitmodules"))?;
-            return Ok((1, msg.into_bytes())); // if at least one is found, It's okay to return
+            let msg = format!(
+                "{file_name}: new submodule introduced\n\
+                This commit introduces new submodules.\n\
+                Did you unintentionally `git add .`?\n\
+                To fix: git rm {{thesubmodule}}  # no trailing slash\n\
+                Also check .gitmodules"
+            );
+
+            return Ok((1, msg.into_bytes()));
         }
     }
 
