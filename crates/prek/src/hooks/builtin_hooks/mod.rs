@@ -345,9 +345,9 @@ impl BuiltinHook {
                 },
             },
             BuiltinHooks::ForbidNewSubmodules => BuiltinHook {
-                 id: "forbid-new-submodules".to_string(), 
-                 name: "forbid new submodules".to_string(), 
-                 entry: "forbid-new-submodules".to_string(), 
+                 id: "forbid-new-submodules".to_string(),
+                 name: "forbid new submodules".to_string(),
+                 entry: "forbid-new-submodules".to_string(),
                  priority: None,
                  options: HookOptions {
                     description: Some("Doesn't allow to commit with Submodules.".to_string()),
