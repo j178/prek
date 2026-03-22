@@ -100,7 +100,7 @@ fn list_builtins_verbose() {
       removes utf-8 byte order marker.
 
     forbid-new-submodules
-      Doesn't allow to commit with Submodules.
+      Prevent addition of new git submodules.
 
     mixed-line-ending
       replaces or checks mixed line ending.
@@ -217,7 +217,7 @@ fn list_builtins_json() {
       {
         "id": "forbid-new-submodules",
         "name": "forbid new submodules",
-        "description": "Doesn't allow to commit with Submodules."
+        "description": "Prevent addition of new git submodules."
       },
       {
         "id": "mixed-line-ending",

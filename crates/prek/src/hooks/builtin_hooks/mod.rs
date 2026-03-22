@@ -350,7 +350,7 @@ impl BuiltinHook {
                  entry: "forbid-new-submodules".to_string(),
                  priority: None,
                  options: HookOptions {
-                    description: Some("Doesn't allow to commit with Submodules.".to_string()),
+                    description: Some("Prevent addition of new git submodules.".to_string()),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                  },
