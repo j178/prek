@@ -22,6 +22,7 @@ mod file_contents_sorter;
 mod fix_byte_order_marker;
 mod fix_end_of_file;
 mod fix_trailing_whitespace;
+mod forbid_new_submodules;
 mod mixed_line_ending;
 mod no_commit_to_branch;
 mod shebangs;
@@ -43,6 +44,7 @@ pub(crate) use file_contents_sorter::file_contents_sorter;
 pub(crate) use fix_byte_order_marker::fix_byte_order_marker;
 pub(crate) use fix_end_of_file::fix_end_of_file;
 pub(crate) use fix_trailing_whitespace::fix_trailing_whitespace;
+pub(crate) use forbid_new_submodules::forbid_new_submodules;
 pub(crate) use mixed_line_ending::mixed_line_ending;
 pub(crate) use no_commit_to_branch::no_commit_to_branch;
 
@@ -58,6 +60,7 @@ pub(crate) enum PreCommitHooks {
     FileContentsSorter,
     EndOfFileFixer,
     FixByteOrderMarker,
+    ForbidNewSubmodules,
     CheckJson,
     CheckSymlinks,
     CheckMergeConflict,
@@ -95,6 +98,7 @@ impl PreCommitHooks {
             Self::FileContentsSorter => file_contents_sorter(hook, filenames).await,
             Self::EndOfFileFixer => fix_end_of_file(hook, filenames).await,
             Self::FixByteOrderMarker => fix_byte_order_marker(hook, filenames).await,
+            Self::ForbidNewSubmodules => forbid_new_submodules(hook, filenames).await,
             Self::CheckJson => check_json(hook, filenames).await,
             Self::CheckSymlinks => check_symlinks(hook, filenames).await,
             Self::CheckMergeConflict => check_merge_conflict(hook, filenames).await,
