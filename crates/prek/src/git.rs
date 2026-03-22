@@ -107,7 +107,7 @@ pub(crate) async fn get_added_files(root: &Path) -> Result<Vec<PathBuf>, Error> 
         // `git diff --name-only` reports paths relative to the repository root by default,
         // even when it runs inside a subdirectory. `--relative` keeps the output aligned
         // with hooks, which receive filenames relative to their project root.
-        // .arg("--relative")
+        .arg("--relative")
         .arg("--name-only")
         .arg("--diff-filter=A")
         .arg("-z") // Use NUL as line terminator

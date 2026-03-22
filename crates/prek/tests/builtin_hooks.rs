@@ -954,18 +954,19 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     ");
 
     // Manually fix the files that can't be auto-fixed.
-    app.child("invalid.yaml").write_str("a:\n  b: c")?;
-    app.child("duplicate.yaml").write_str("a: 1\nb: 2")?;
-    app.child("invalid.json").write_str(r#"{"a": 1}"#)?;
+    app.child("invalid.yaml").write_str("a:\n  b: c\n")?;
+    app.child("duplicate.yaml").write_str("a: 1\nb: 2\n")?;
+    app.child("invalid.json")
+        .write_str(concat!(r#"{"a": 1}"#, "\n"))?;
     app.child("duplicate.json")
-        .write_str(r#"{"a": 1, "b": 2}"#)?;
+        .write_str(concat!(r#"{"a": 1, "b": 2}"#, "\n"))?;
     app.child("large.bin").write_binary(&[0u8; 100])?;
     context.git_add(".");
 
     // Second run: all hooks should now pass.
     cmd_snapshot!(context.filters(), context.run(), @"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
     Running hooks for `app`:
     identity.................................................................Passed
@@ -985,15 +986,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
       invalid.json
       .pre-commit-config.yaml
       eof_no_newline.txt
-    fix end of files.........................................................Failed
-    - hook id: end-of-file-fixer
-    - exit code: 1
-    - files were modified by this hook
-
-      Fixing invalid.yaml
-      Fixing duplicate.json
-      Fixing duplicate.yaml
-      Fixing invalid.json
+    fix end of files.........................................................Passed
     check yaml...............................................................Passed
     check json...............................................................Passed
     mixed line ending........................................................Passed
