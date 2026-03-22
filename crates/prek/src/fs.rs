@@ -33,8 +33,13 @@ use tracing::{debug, error, info, trace};
 
 use crate::cli::reporter;
 
-pub static CWD: LazyLock<PathBuf> =
-    LazyLock::new(|| std::env::current_dir().expect("The current directory must be exist"));
+pub static CWD: LazyLock<PathBuf> = LazyLock::new(|| {
+    let cwd = std::env::current_dir().expect("The current directory must exist");
+    match dunce::canonicalize(&cwd) {
+        Ok(canonical) => canonical,
+        Err(_) => cwd,
+    }
+});
 
 static IN_PROCESS_LOCK_HELD_COUNTS: LazyLock<Mutex<FxHashMap<PathBuf, usize>>> =
     LazyLock::new(Default::default);
@@ -297,8 +302,7 @@ impl<T: AsRef<Path>> Simplified for T {
             return path.display();
         }
 
-        // Attempt to strip the current working directory, then the canonicalized current working
-        // directory, in case they differ.
+        // Attempt to strip the current working directory.
         let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
 
         path.display()

@@ -205,6 +205,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     //      https://github.com/pre-commit/pre-commit/issues/2295
     if EnvVars::is_set(EnvVars::GIT_DIR) && !EnvVars::is_set(EnvVars::GIT_WORK_TREE) {
         let cwd = std::env::current_dir().context("Failed to get current directory")?;
+        let cwd = match dunce::canonicalize(&cwd) {
+            Ok(canonical) => canonical,
+            Err(_) => cwd,
+        };
         debug!("Setting {} to `{}`", EnvVars::GIT_WORK_TREE, cwd.display());
         unsafe { std::env::set_var(EnvVars::GIT_WORK_TREE, cwd) }
     }

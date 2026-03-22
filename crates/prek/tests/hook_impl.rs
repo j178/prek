@@ -1,5 +1,5 @@
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{PermissionsExt, symlink};
 #[cfg(unix)]
 use std::path::Path;
 
@@ -586,6 +586,78 @@ fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
     - duration: [TIME]
 
       cwd: [TEMP_DIR]/project2
+    ");
+
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn hook_impl_install_from_symlinked_repo_root() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r#"
+    repos:
+      - repo: local
+        hooks:
+        - id: test-hook
+          name: Test Hook
+          language: python
+          entry: python -c 'import os; print("cwd:", os.getcwd())'
+          verbose: true
+    "#});
+    context.git_add(".");
+
+    let repo_link = context.home_dir().child("repo-link");
+    symlink(context.work_dir().path(), repo_link.path())?;
+
+    cmd_snapshot!(
+        context.filters(),
+        context.install().current_dir(repo_link.path()),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    "
+    );
+
+    let hook_script = context.read(".git/hooks/pre-commit");
+    assert!(
+        !hook_script.contains("--cd="),
+        "installing from a symlinked repo root should not pin a workspace with --cd: {hook_script}"
+    );
+
+    let mut commit = git_cmd(repo_link.path());
+    commit
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
+        .arg("commit")
+        .arg("-m")
+        .arg("Test commit from symlinked repo root");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([("[a-f0-9]{7}", "abc1234")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, commit, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [master (root-commit) abc1234] Test commit from symlinked repo root
+     1 file changed, 8 insertions(+)
+     create mode 100644 .pre-commit-config.yaml
+
+    ----- stderr -----
+    Test Hook................................................................Passed
+    - hook id: test-hook
+    - duration: [TIME]
+
+      cwd: [TEMP_DIR]/
     ");
 
     Ok(())
