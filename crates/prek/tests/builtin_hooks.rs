@@ -688,6 +688,85 @@ fn check_added_large_files_hook() -> Result<()> {
 }
 
 #[test]
+fn check_added_large_files_workspace_mode_respects_project_relative_lfs_paths() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config("repos: []\n");
+
+    // Regression: builtin hooks receive project-relative filenames even in workspace mode.
+    // `check-added-large-files` must therefore resolve git-lfs attributes relative to the
+    // nested project root, not the workspace root.
+    let app = context.work_dir().child("app");
+    app.create_dir_all()?;
+    // Use `--enforce-all` so this regression isolates git-lfs attribute lookup in workspace
+    // mode instead of depending on the separate staged-file path filtering behavior.
+    app.child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-added-large-files
+                args: ['--maxkb', '1', '--enforce-all']
+    "})?;
+    app.child(".gitattributes")
+        .write_str("*.dat filter=lfs diff=lfs merge=lfs -text")?;
+    app.child("large.dat").write_binary(&[0; 2048])?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `app`:
+    check for added large files..............................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_added_large_files_workspace_mode_respects_project_relative_added_files() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config("repos: []\n");
+
+    let app = context.work_dir().child("app");
+    app.create_dir_all()?;
+    app.child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-added-large-files
+                args: ['--maxkb', '1']
+    "})?;
+    app.child("large.bin").write_binary(&[0; 2048])?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Running hooks for `app`:
+    check for added large files..............................................Failed
+    - hook id: check-added-large-files
+    - exit code: 1
+
+      large.bin (2 KB) exceeds 1 KB
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn tracked_file_exceeds_large_file_limit() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
@@ -845,7 +924,11 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     - files were modified by this hook
 
       Fixing trailing_ws.txt
-    check for added large files..............................................Passed
+    check for added large files..............................................Failed
+    - hook id: check-added-large-files
+    - exit code: 1
+
+      large.bin (2 KB) exceeds 1 KB
 
     Running hooks for `.`:
     identity.................................................................Passed
@@ -870,18 +953,20 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     ----- stderr -----
     ");
 
-    // Fix YAML and JSON issues, then stage.
-    app.child("invalid.yaml").write_str("a:\n  b: c")?;
-    app.child("duplicate.yaml").write_str("a: 1\nb: 2")?;
-    app.child("invalid.json").write_str(r#"{"a": 1}"#)?;
+    // Manually fix the files that can't be auto-fixed.
+    app.child("invalid.yaml").write_str("a:\n  b: c\n")?;
+    app.child("duplicate.yaml").write_str("a: 1\nb: 2\n")?;
+    app.child("invalid.json")
+        .write_str(concat!(r#"{"a": 1}"#, "\n"))?;
     app.child("duplicate.json")
-        .write_str(r#"{"a": 1, "b": 2}"#)?;
+        .write_str(concat!(r#"{"a": 1, "b": 2}"#, "\n"))?;
+    app.child("large.bin").write_binary(&[0u8; 100])?;
     context.git_add(".");
 
-    // Second run: all hooks should pass.
-    cmd_snapshot!(context.filters(), context.run(), @r"
-    success: false
-    exit_code: 1
+    // Second run: all hooks should now pass.
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: true
+    exit_code: 0
     ----- stdout -----
     Running hooks for `app`:
     identity.................................................................Passed
@@ -901,15 +986,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
       invalid.json
       .pre-commit-config.yaml
       eof_no_newline.txt
-    fix end of files.........................................................Failed
-    - hook id: end-of-file-fixer
-    - exit code: 1
-    - files were modified by this hook
-
-      Fixing invalid.yaml
-      Fixing duplicate.json
-      Fixing duplicate.yaml
-      Fixing invalid.json
+    fix end of files.........................................................Passed
     check yaml...............................................................Passed
     check json...............................................................Passed
     mixed line ending........................................................Passed
@@ -2446,6 +2523,64 @@ fn check_case_conflict_among_new_files() -> Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+#[test]
+fn check_case_conflict_workspace_mode_includes_added_files() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    if !is_case_sensitive_filesystem(&context)? {
+        return Ok(());
+    }
+
+    context.write_pre_commit_config("repos: []\n");
+
+    let app = context.work_dir().child("app");
+    app.create_dir_all()?;
+    app.child("foo.txt").write_str("existing file")?;
+    app.child("trigger.txt").write_str("tracked trigger")?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    app.child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-case-conflict
+    "})?;
+
+    app.child("FOO.txt").write_str("conflicting case")?;
+    context.git_add("app/FOO.txt");
+
+    // Regression: in workspace mode, `get_added_files()` must return paths relative to the
+    // nested project root so added files still participate in conflict detection even when
+    // `--files` only names some other file in that project.
+    cmd_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .arg("check-case-conflict")
+            .arg("--files")
+            .arg("app/trigger.txt"),
+        @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Running hooks for `app`:
+    check for case conflicts.................................................Failed
+    - hook id: check-case-conflict
+    - exit code: 1
+
+      Case-insensitivity conflict found: FOO.txt
+      Case-insensitivity conflict found: foo.txt
+
+    ----- stderr -----
+    "#
+    );
 
     Ok(())
 }
