@@ -23,6 +23,7 @@ fn list_builtins_basic() {
     check-vcs-permalinks
     check-xml
     check-yaml
+    destroyed-symlinks
     detect-private-key
     end-of-file-fixer
     file-contents-sorter
@@ -39,7 +40,7 @@ fn list_builtins_basic() {
 fn list_builtins_verbose() {
     let context = TestContext::new();
 
-    cmd_snapshot!(context.filters(), context.command().arg("util").arg("list-builtins").arg("--verbose"), @r"
+    cmd_snapshot!(context.filters(), context.command().arg("util").arg("list-builtins").arg("--verbose"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -81,6 +82,9 @@ fn list_builtins_verbose() {
 
     check-yaml
       checks yaml files for parseable syntax.
+
+    destroyed-symlinks
+      detects symlinks that were replaced with regular files whose contents are the original symlink target path.
 
     detect-private-key
       detects the presence of private keys.
@@ -180,6 +184,11 @@ fn list_builtins_json() {
         "id": "check-yaml",
         "name": "check yaml",
         "description": "checks yaml files for parseable syntax."
+      },
+      {
+        "id": "destroyed-symlinks",
+        "name": "detect destroyed symlinks",
+        "description": "detects symlinks that were replaced with regular files whose contents are the original symlink target path."
       },
       {
         "id": "detect-private-key",

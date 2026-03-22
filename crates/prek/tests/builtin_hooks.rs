@@ -1140,6 +1140,141 @@ fn check_symlinks_hook_windows() -> Result<()> {
 }
 
 #[test]
+#[cfg(unix)]
+fn destroyed_symlinks_hook() -> Result<()> {
+    const TEST_SYMLINK: &str = "test_symlink";
+    const TEST_SYMLINK_TARGET: &str = "/doesnt/really/matters";
+    const TEST_FILE: &str = "test_file";
+    const TEST_FILE_RENAMED: &str = "test_file_renamed";
+
+    let source = TestContext::new();
+    source.init_project();
+
+    std::os::unix::fs::symlink(
+        TEST_SYMLINK_TARGET,
+        source.work_dir().child(TEST_SYMLINK).path(),
+    )?;
+    source
+        .work_dir()
+        .child(TEST_FILE)
+        .write_str("some random content\n")?;
+    source.git_add(".");
+    source.git_commit("initial");
+
+    let tree = git_cmd(source.work_dir())
+        .arg("cat-file")
+        .arg("-p")
+        .arg("HEAD^{tree}")
+        .output()?;
+    assert!(tree.status.success());
+    assert!(String::from_utf8(tree.stdout)?.contains("120000 "));
+
+    let context = TestContext::new();
+    git_cmd(context.work_dir())
+        .arg("-c")
+        .arg("core.symlinks=false")
+        .arg("clone")
+        .arg(source.work_dir().path())
+        .arg(".")
+        .assert()
+        .success();
+
+    git_cmd(context.work_dir())
+        .args(["config", "--local", "core.symlinks", "true"])
+        .assert()
+        .success();
+    git_cmd(context.work_dir())
+        .args(["mv", TEST_FILE, TEST_FILE_RENAMED])
+        .assert()
+        .success();
+
+    assert!(!context.work_dir().child(TEST_SYMLINK).path().is_symlink());
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: destroyed-symlinks
+    "});
+
+    context.git_add(TEST_SYMLINK);
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    detect destroyed symlinks................................................Failed
+    - hook id: destroyed-symlinks
+    - exit code: 1
+
+      Destroyed symlinks:
+      - test_symlink
+      You should unstage affected files:
+      	git reset HEAD -- test_symlink
+      And retry commit. As a long term solution you may try to explicitly tell git that your environment does not support symlinks:
+      	git config core.symlinks false
+
+    ----- stderr -----
+    ");
+
+    context
+        .work_dir()
+        .child(TEST_SYMLINK)
+        .write_str(&format!("{TEST_SYMLINK_TARGET}\n"))?;
+    context.git_add(TEST_SYMLINK);
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    detect destroyed symlinks................................................Failed
+    - hook id: destroyed-symlinks
+    - exit code: 1
+
+      Destroyed symlinks:
+      - test_symlink
+      You should unstage affected files:
+      	git reset HEAD -- test_symlink
+      And retry commit. As a long term solution you may try to explicitly tell git that your environment does not support symlinks:
+      	git config core.symlinks false
+
+    ----- stderr -----
+    ");
+
+    context
+        .work_dir()
+        .child(TEST_SYMLINK)
+        .write_str(&format!("{}\n", "0".repeat(TEST_SYMLINK_TARGET.len())))?;
+    context.git_add(TEST_SYMLINK);
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    detect destroyed symlinks................................................Passed
+
+    ----- stderr -----
+    ");
+
+    context
+        .work_dir()
+        .child(TEST_SYMLINK)
+        .write_str(&format!("{}\n", "0".repeat(TEST_SYMLINK_TARGET.len() + 3)))?;
+    context.git_add(TEST_SYMLINK);
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    detect destroyed symlinks................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn detect_private_key_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();

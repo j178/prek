@@ -890,6 +890,7 @@
         "check-vcs-permalinks",
         "check-xml",
         "check-yaml",
+        "destroyed-symlinks",
         "detect-private-key",
         "end-of-file-fixer",
         "file-contents-sorter",

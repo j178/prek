@@ -16,6 +16,7 @@ mod check_toml;
 mod check_vcs_permalinks;
 mod check_xml;
 mod check_yaml;
+mod destroyed_symlinks;
 mod detect_private_key;
 mod file_contents_sorter;
 mod fix_byte_order_marker;
@@ -36,6 +37,7 @@ pub(crate) use check_toml::check_toml;
 pub(crate) use check_vcs_permalinks::check_vcs_permalinks;
 pub(crate) use check_xml::check_xml;
 pub(crate) use check_yaml::check_yaml;
+pub(crate) use destroyed_symlinks::destroyed_symlinks;
 pub(crate) use detect_private_key::detect_private_key;
 pub(crate) use file_contents_sorter::file_contents_sorter;
 pub(crate) use fix_byte_order_marker::fix_byte_order_marker;
@@ -62,6 +64,7 @@ pub(crate) enum PreCommitHooks {
     CheckToml,
     CheckXml,
     CheckYaml,
+    DestroyedSymlinks,
     MixedLineEnding,
     DetectPrivateKey,
     NoCommitToBranch,
@@ -98,6 +101,7 @@ impl PreCommitHooks {
             Self::CheckToml => check_toml(hook, filenames).await,
             Self::CheckYaml => check_yaml(hook, filenames).await,
             Self::CheckXml => check_xml(hook, filenames).await,
+            Self::DestroyedSymlinks => destroyed_symlinks(hook, filenames).await,
             Self::MixedLineEnding => mixed_line_ending(hook, filenames).await,
             Self::DetectPrivateKey => detect_private_key(hook, filenames).await,
             Self::NoCommitToBranch => no_commit_to_branch(hook).await,
