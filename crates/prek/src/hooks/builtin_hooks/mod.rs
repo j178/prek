@@ -282,7 +282,7 @@ impl BuiltinHook {
                 priority: None,
                 options: HookOptions {
                     description: Some(
-                        "detects symlinks which are changed to regular files with a content of a path which that symlink was pointing to.".to_string(),
+                        "detects symlinks that were replaced with regular files whose contents are the original symlink target path.".to_string(),
                     ),
                     types: Some(tags::TAG_SET_FILE),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
