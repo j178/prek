@@ -405,7 +405,7 @@ Detects files staged as regular files whose `HEAD` version is a symlink, which u
 **Caveats**
 
 - This matches upstream `pre-commit-hooks` behavior: it only checks tracked entries reported by `git status --porcelain=v2`.
-- It intentionally tolerates trailing newline / CRLF-only changes when comparing the staged file against the original symlink target path, because those differences are commonly introduced by formatting hooks.
+- It intentionally ignores differences consisting only of trailing ASCII whitespace (including spaces, tabs, and newline/CRLF conversions) when comparing the staged file against the original symlink target path, because those differences are commonly introduced by formatting hooks.
 
 ---
 

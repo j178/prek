@@ -40,7 +40,7 @@ fn list_builtins_basic() {
 fn list_builtins_verbose() {
     let context = TestContext::new();
 
-    cmd_snapshot!(context.filters(), context.command().arg("util").arg("list-builtins").arg("--verbose"), @r"
+    cmd_snapshot!(context.filters(), context.command().arg("util").arg("list-builtins").arg("--verbose"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -84,7 +84,7 @@ fn list_builtins_verbose() {
       checks yaml files for parseable syntax.
 
     destroyed-symlinks
-      detects symlinks which are changed to regular files with a content of a path which that symlink was pointing to.
+      detects symlinks that were replaced with regular files whose contents are the original symlink target path.
 
     detect-private-key
       detects the presence of private keys.
@@ -188,7 +188,7 @@ fn list_builtins_json() {
       {
         "id": "destroyed-symlinks",
         "name": "detect destroyed symlinks",
-        "description": "detects symlinks which are changed to regular files with a content of a path which that symlink was pointing to."
+        "description": "detects symlinks that were replaced with regular files whose contents are the original symlink target path."
       },
       {
         "id": "detect-private-key",
