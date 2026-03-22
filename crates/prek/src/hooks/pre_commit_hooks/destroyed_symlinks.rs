@@ -1,8 +1,9 @@
 use std::io::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str;
 
 use anyhow::{Context, Result};
+use rustc_hash::FxHashSet;
 
 use crate::git;
 use crate::hook::Hook;
@@ -12,7 +13,16 @@ const PERMS_LINK: u32 = 0o120_000;
 const PERMS_NONEXIST: u32 = 0;
 
 pub(crate) async fn destroyed_symlinks(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
-    let destroyed_links = find_destroyed_symlinks(hook, filenames).await?;
+    let status_output = git_status_output(hook.work_dir()).await?;
+    let entries = status_output
+        .split(|&byte| byte == b'\0')
+        .filter_map(|entry| match parse_ordinary_changed_entry(entry) {
+            Ok(Some(entry)) => Some(Ok(entry)),
+            Ok(None) => None,
+            Err(err) => Some(Err(err)),
+        });
+
+    let destroyed_links = find_destroyed_symlinks(hook, filenames, entries).await?;
     if destroyed_links.is_empty() {
         return Ok((0, Vec::new()));
     }
@@ -41,27 +51,45 @@ pub(crate) async fn destroyed_symlinks(hook: &Hook, filenames: &[&Path]) -> Resu
     Ok((1, output))
 }
 
-async fn find_destroyed_symlinks(hook: &Hook, filenames: &[&Path]) -> Result<Vec<PathBuf>> {
+async fn git_status_output(work_dir: &Path) -> Result<Vec<u8>> {
+    Ok(git::git_cmd("git status")?
+        .current_dir(work_dir)
+        .arg("status")
+        .arg("--porcelain=v2")
+        .arg("-z")
+        // Query the whole project with a single pathspec to avoid one-argv-entry-per-file
+        // command lines that can exceed the platform limit for very large commits.
+        .arg("--")
+        .arg(".")
+        .check(true)
+        .output()
+        .await?
+        .stdout)
+}
+
+async fn find_destroyed_symlinks<'a>(
+    hook: &Hook,
+    filenames: &[&Path],
+    entries: impl IntoIterator<Item = Result<OrdinaryChangedEntry<'a>>>,
+) -> Result<Vec<&'a Path>> {
     if filenames.is_empty() {
         return Ok(Vec::new());
     }
 
-    let output = git::git_cmd("git status")?
-        .current_dir(hook.work_dir())
-        .arg("status")
-        .arg("--porcelain=v2")
-        .arg("-z")
-        .arg("--")
-        .args(filenames)
-        .check(true)
-        .output()
-        .await?;
-
+    let filenames = filenames.iter().copied().collect::<FxHashSet<_>>();
+    let relative_prefix = hook.project().relative_path();
     let mut destroyed_links = Vec::new();
-    for entry in output.stdout.split(|&byte| byte == b'\0') {
-        let Some(entry) = parse_ordinary_changed_entry(entry)? else {
+
+    for entry in entries {
+        let entry = entry?;
+        // `git status -z` reports paths relative to the repository root, so strip the project
+        // prefix before comparing against the requested filenames.
+        let Ok(entry_path) = entry.path.strip_prefix(relative_prefix) else {
             continue;
         };
+        if !filenames.contains(entry_path) {
+            continue;
+        }
 
         // We only care about entries that used to be symlinks in HEAD but are
         // now staged as regular files. Still-a-symlink entries are fine, and a
@@ -74,24 +102,12 @@ async fn find_destroyed_symlinks(hook: &Hook, filenames: &[&Path]) -> Result<Vec
         }
 
         if is_destroyed_symlink(hook.work_dir(), &entry).await? {
-            // Builtin hooks receive project-relative filenames and this hook
-            // runs `git status` from `hook.work_dir()`, so we can pass those
-            // filenames to git directly as pathspecs.
-            //
-            // Porcelain v2 still reports `entry.path` relative to the
-            // repository root, which is exactly the form we want to display
-            // and pass to `git reset HEAD -- ...`.
-            //
-            // Example: if this hook runs from `crates/prek` and we query git
-            // with `foo.txt`, the parsed `entry.path` comes back as
-            // `crates/prek/foo.txt`.
-            destroyed_links.push(entry.path.to_path_buf());
+            destroyed_links.push(entry_path);
         }
     }
 
     Ok(destroyed_links)
 }
-
 // Parsed from `git status --porcelain=v2` ordinary changed entries:
 // `1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>`
 // See: https://git-scm.com/docs/git-status#_changed_tracked_entries
@@ -105,7 +121,8 @@ struct OrdinaryChangedEntry<'a> {
     head_hash: &'a str,
     // `<hI>`: The object name in the index.
     index_hash: &'a str,
-    // `<path>`: The pathname, reported relative to the repository root.
+    // `<path>`: The pathname, reported relative to the repository root when
+    // using `git status --porcelain=v2 -z`.
     path: &'a Path,
 }
 
