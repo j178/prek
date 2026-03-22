@@ -895,6 +895,7 @@
         "end-of-file-fixer",
         "file-contents-sorter",
         "fix-byte-order-marker",
+        "forbid-new-submodules",
         "mixed-line-ending",
         "no-commit-to-branch",
         "trailing-whitespace"
