@@ -653,6 +653,13 @@ pub(crate) struct RemoteHook {
     /// This is only allowed in project config files (e.g. `.pre-commit-config.yaml`).
     /// It is not allowed in manifests (e.g. `.pre-commit-hooks.yaml`).
     pub priority: Option<u32>,
+    /// An optional group label for this hook. Other hooks can depend on all hooks
+    /// in a group completing via `after: [group:<name>]`.
+    pub group: Option<String>,
+    /// An optional list of dependencies. The hook waits for all listed dependencies
+    /// to complete before running. Supports hook IDs (`after: [ruff-lint]`) and
+    /// group references (`after: [group:setup]`).
+    pub after: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,
 }
@@ -675,6 +682,10 @@ pub(crate) struct LocalHook {
     /// Priority used by the scheduler to determine ordering and concurrency.
     /// Hooks with the same priority can run in parallel.
     pub priority: Option<u32>,
+    /// An optional group label for this hook.
+    pub group: Option<String>,
+    /// An optional list of dependencies for DAG-based scheduling.
+    pub after: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,
 }
@@ -693,6 +704,10 @@ pub(crate) struct MetaHook {
     /// Priority used by the scheduler to determine ordering and concurrency.
     /// Hooks with the same priority can run in parallel.
     pub priority: Option<u32>,
+    /// An optional group label for this hook.
+    pub group: Option<String>,
+    /// An optional list of dependencies for DAG-based scheduling.
+    pub after: Option<Vec<String>>,
     #[serde(flatten)]
     pub options: HookOptions,
 }
@@ -755,6 +770,8 @@ impl TryFrom<RemoteHook> for MetaHook {
         if hook_options.priority.is_some() {
             meta_hook.priority = hook_options.priority;
         }
+        meta_hook.group = hook_options.group;
+        meta_hook.after = hook_options.after;
         meta_hook.options.update(&hook_options.options);
 
         Ok(meta_hook)
@@ -777,6 +794,10 @@ pub(crate) struct BuiltinHook {
     /// Priority used by the scheduler to determine ordering and concurrency.
     /// Hooks with the same priority can run in parallel.
     pub priority: Option<u32>,
+    /// An optional group label for this hook.
+    pub group: Option<String>,
+    /// An optional list of dependencies for DAG-based scheduling.
+    pub after: Option<Vec<String>>,
     /// Common hook options.
     ///
     /// Builtin hooks allow the same set of options overrides as other hooks.
@@ -812,6 +833,8 @@ impl TryFrom<RemoteHook> for BuiltinHook {
         if hook_options.priority.is_some() {
             builtin_hook.priority = hook_options.priority;
         }
+        builtin_hook.group = hook_options.group;
+        builtin_hook.after = hook_options.after;
         builtin_hook.options.update(&hook_options.options);
 
         Ok(builtin_hook)
@@ -1066,6 +1089,8 @@ where
         entry: hook.entry.ok_or_else(|| E::missing_field("entry"))?,
         language: hook.language.ok_or_else(|| E::missing_field("language"))?,
         priority: hook.priority,
+        group: hook.group,
+        after: hook.after,
         options: hook.options,
     })
 }
