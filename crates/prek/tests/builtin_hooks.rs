@@ -1132,22 +1132,23 @@ fn pretty_format_json_hook() -> Result<()> {
     context.git_add(".");
 
     // First run: hooks should fail and fix the files
-    let output = context.run().output()?;
-    assert!(!output.status.success());
-    assert_eq!(output.status.code(), Some(1));
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    pretty format json.......................................................Failed
+    - hook id: pretty-format-json
+    - exit code: 1
+    - files were modified by this hook
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains(
-        "pretty format json.......................................................Failed"
-    ));
-    assert!(stdout.contains("- hook id: pretty-format-json"));
-    assert!(stdout.contains("- exit code: 1"));
-    assert!(stdout.contains("- files were modified by this hook"));
-    assert!(stdout.contains("Fixed & autoformatted file compact.json"));
-    assert!(stdout.contains("Fixed & autoformatted file unsorted.json"));
-    assert!(stdout.contains("Fixed & autoformatted file uppercase_unicode.json"));
-    assert!(stdout.contains("empty.json: Failed to json parse (no element found)"));
-    assert!(stdout.contains("invalid.json: Failed to json parse: trailing comma"));
+      empty.json: invalid JSON. Consider using the `check-json` hook.
+      Fixing file compact.json
+      Fixing file uppercase_unicode.json
+      invalid.json: invalid JSON. Consider using the `check-json` hook.
+      Fixing file unsorted.json
+
+    ----- stderr -----
+    "#);
 
     // Verify the files have been corrected
     assert_snapshot!(context.read("valid_pretty.json"), @r#"
@@ -1246,7 +1247,7 @@ fn pretty_format_json_with_options() -> Result<()> {
     - exit code: 1
     - files were modified by this hook
 
-      Fixed & autoformatted file test.json
+      Fixing file test.json
 
     ----- stderr -----
     "#);
@@ -1304,23 +1305,19 @@ fn pretty_format_json_with_top_keys() -> Result<()> {
     - exit code: 1
     - files were modified by this hook
 
-      Fixed & autoformatted file package.json
+      Fixing file package.json
 
     ----- stderr -----
     "#);
 
-    // "version" and "name" should be at the top
-    let content = context.read("package.json");
-    let lines: Vec<&str> = content.lines().collect();
-    let version_pos = lines
-        .iter()
-        .position(|l| l.contains("\"version\""))
-        .unwrap();
-    let name_pos = lines.iter().position(|l| l.contains("\"name\"")).unwrap();
-    let author_pos = lines.iter().position(|l| l.contains("\"author\"")).unwrap();
-
-    assert!(version_pos < name_pos);
-    assert!(name_pos < author_pos);
+    insta::assert_snapshot!(context.read("package.json"), @r#"
+    {
+      "version": "1.0.0",
+      "name": "my-package",
+      "author": "me",
+      "description": "test"
+    }
+    "#);
 
     context.git_add(".");
 
@@ -1335,6 +1332,7 @@ fn pretty_format_json_with_top_keys() -> Result<()> {
 
     Ok(())
 }
+
 #[test]
 fn pretty_format_json_no_ensure_ascii() -> Result<()> {
     let context = TestContext::new();
@@ -1364,7 +1362,7 @@ fn pretty_format_json_no_ensure_ascii() -> Result<()> {
     - exit code: 1
     - files were modified by this hook
 
-      Fixed & autoformatted file unicode.json
+      Fixing file unicode.json
 
     ----- stderr -----
     "#);
@@ -1418,15 +1416,17 @@ fn pretty_format_json_tab_indent() -> Result<()> {
     - exit code: 1
     - files were modified by this hook
 
-      Fixed & autoformatted file test.json
+      Fixing file test.json
 
     ----- stderr -----
     "#);
 
-    // Should use the literal two-space indent from `--indent=  `.
-    let content = context.read("test.json");
-    assert!(content.contains("  \"a\":"));
-    assert!(content.contains("  \"b\":"));
+    insta::assert_snapshot!(context.read("test.json"), @r#"
+    {
+      "a": 1,
+      "b": 2
+    }
+    "#);
 
     context.git_add(".");
 

@@ -4,7 +4,6 @@ use std::path::Path;
 
 use anyhow::Result;
 use clap::Parser;
-use futures::StreamExt;
 use owo_colors::OwoColorize;
 use serde::Serialize;
 use serde_json::ser::{Formatter, PrettyFormatter};
@@ -12,6 +11,7 @@ use serde_json::{Map, Value};
 use similar::{ChangeTag, TextDiff};
 
 use crate::hook::Hook;
+use crate::hooks::run_concurrent_file_checks;
 use crate::run::CONCURRENCY;
 
 #[derive(Parser, Debug)]
@@ -19,24 +19,24 @@ use crate::run::CONCURRENCY;
 #[command(disable_version_flag = true)]
 #[command(disable_help_flag = true)]
 struct Args {
-    #[arg(long)]
-    autofix: bool,
+    #[arg(long = "autofix")]
+    auto_fix: bool,
 
     #[arg(long, default_value = "2")]
     indent: String,
 
-    #[arg(long = "no-ensure-ascii")]
+    #[arg(long)]
     no_ensure_ascii: bool,
 
-    #[arg(long = "no-sort-keys")]
+    #[arg(long)]
     no_sort_keys: bool,
 
-    #[arg(long = "top-keys", value_delimiter = ',')]
+    #[arg(long, value_delimiter = ',')]
     top_keys: Vec<String>,
 }
 
 impl Args {
-    fn indent(&self) -> Vec<u8> {
+    fn indent_bytes(&self) -> Vec<u8> {
         match self.indent.parse::<usize>() {
             Ok(num_spaces) => vec![b' '; num_spaces],
             Err(_) => self.indent.as_bytes().to_vec(),
@@ -45,63 +45,35 @@ impl Args {
 }
 
 pub(crate) async fn pretty_format_json(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.resolve(None)?.iter().chain(&hook.args))?;
-    let mut tasks = futures::stream::iter(filenames)
-        .map(async |filename| check_file(hook.project().relative_path(), filename, &args).await)
-        .buffered(*CONCURRENCY);
+    let args = Args::try_parse_from(hook.entry.split()?.iter().chain(&hook.args))?;
 
-    let mut code = 0;
-    let mut output = Vec::new();
-
-    while let Some(result) = tasks.next().await {
-        let (c, o) = result?;
-        code |= c;
-        output.extend(o);
-    }
-
-    Ok((code, output))
+    run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
+        check_file(hook.project().relative_path(), filename, &args)
+    })
+    .await
 }
 
 async fn check_file(file_base: &Path, filename: &Path, args: &Args) -> Result<(i32, Vec<u8>)> {
     let original_content = fs_err::tokio::read_to_string(file_base.join(filename)).await?;
-    if original_content.is_empty() {
-        let error_message = format!(
-            "{}: Failed to json parse (no element found). Think about using the 'check-json' hook. \n",
-            filename.display()
-        );
-        return Ok((1, error_message.into_bytes()));
-    }
 
-    match prettify_json(&original_content, args) {
-        Ok(prettified_json) => {
-            if original_content == prettified_json {
-                Ok((0, Vec::new()))
-            } else if args.autofix {
-                fs_err::tokio::write(file_base.join(filename), prettified_json.as_bytes()).await?;
-                let message = format!("Fixed & autoformatted file {} \n", filename.display());
-                Ok((1, message.into_bytes()))
-            } else {
-                let diff_output = get_diff(
-                    &original_content,
-                    &prettified_json,
-                    filename.to_str().unwrap(),
-                );
-                let message = format!(
-                    "File {}: is not pretty-formatted.\n{}",
-                    filename.display(),
-                    diff_output
-                );
-                Ok((1, message.into_bytes()))
-            }
+    if let Ok(prettified_json) = prettify_json(&original_content, args) {
+        if original_content == prettified_json {
+            Ok((0, Vec::new()))
+        } else if args.auto_fix {
+            fs_err::tokio::write(file_base.join(filename), prettified_json.as_bytes()).await?;
+            let message = format!("Fixing file {}\n", filename.display());
+            Ok((1, message.into_bytes()))
+        } else {
+            let diff = generate_diff(&original_content, &prettified_json, filename);
+            let message = format!("{}: not pretty-formatted.\n{diff}", filename.display());
+            Ok((1, message.into_bytes()))
         }
-        Err(e) => {
-            let error_message = format!(
-                "{}: Failed to json parse: {}. Think about using the 'check-json' hook. \n",
-                filename.display(),
-                e
-            );
-            Ok((1, error_message.into_bytes()))
-        }
+    } else {
+        let error_message = format!(
+            "{}: invalid JSON. Consider using the `check-json` hook.\n",
+            filename.display(),
+        );
+        Ok((1, error_message.into_bytes()))
     }
 }
 
@@ -109,8 +81,8 @@ fn prettify_json(json: &str, args: &Args) -> Result<String> {
     let mut value: Value = serde_json::from_str(json)?;
     value = reorder_keys(value, &args.top_keys, !args.no_sort_keys);
 
-    let indent_bytes = args.indent();
     let mut buf = Vec::with_capacity(json.len());
+    let indent_bytes = args.indent_bytes();
     let formatter = JsonFormatter::with_indent(&indent_bytes, !args.no_ensure_ascii);
     let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
     value.serialize(&mut ser)?;
@@ -305,12 +277,12 @@ fn reorder_keys(mut value: Value, top_keys: &[String], sort_keys: bool) -> Value
     }
 }
 
-fn get_diff(original: &str, formatted: &str, filename: &str) -> String {
+fn generate_diff(original: &str, formatted: &str, filename: &Path) -> String {
     let diff = TextDiff::from_lines(original, formatted);
 
     let mut output = String::new();
-    writeln!(output, "{}", format!("--- {filename}").bold()).unwrap();
-    writeln!(output, "{}", format!("+++ {filename}").bold()).unwrap();
+    let _ = writeln!(output, "{}", format!("--- {}", filename.display()).bold());
+    let _ = writeln!(output, "{}", format!("+++ {}", filename.display()).bold());
 
     for change in diff.iter_all_changes() {
         let line = match change.tag() {
@@ -330,39 +302,42 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::tempdir;
 
-    const PRETTY_JSON: &str = r#"{
-  "alist": [
-    2,
-    34,
-    234
-  ],
-  "blah": null,
-  "foo": "bar"
-}
-"#;
+    const PRETTY_JSON: &str = indoc::indoc! {r#"
+    {
+      "alist": [
+        2,
+        34,
+        234
+      ],
+      "blah": null,
+      "foo": "bar"
+    }
+    "#};
 
-    const UNSORTED_JSON: &str = r#"{
-  "foo": "bar",
-  "alist": [
-    2,
-    34,
-    234
-  ],
-  "blah": null
-}
-"#;
+    const UNSORTED_JSON: &str = indoc::indoc! {r#"
+    {
+      "foo": "bar",
+      "alist": [
+        2,
+        34,
+        234
+      ],
+      "blah": null
+    }
+    "#};
 
-    const NON_ASCII_JSON: &str = r#"{
-  "alist": [
-    2,
-    34,
-    234
-  ],
-  "blah": null,
-  "foo": "bar",
-  "non_ascii": "\u4E2D\u6587\u306B\u307B\u3093\u3054\uD55C\uAD6D\uC5B4"
-}
-"#;
+    const NON_ASCII_JSON: &str = indoc::indoc! {r#"
+    {
+      "alist": [
+        2,
+        34,
+        234
+      ],
+      "blah": null,
+      "foo": "bar",
+      "non_ascii": "\u4E2D\u6587\u306B\u307B\u3093\u3054\uD55C\uAD6D\uC5B4"
+    }
+    "#};
 
     async fn create_test_file(
         dir: &tempfile::TempDir,
@@ -371,6 +346,7 @@ mod tests {
     ) -> Result<PathBuf> {
         let file_path = dir.path().join(name);
         fs_err::tokio::write(&file_path, content).await?;
+
         Ok(file_path)
     }
 
@@ -393,8 +369,8 @@ mod tests {
         .await?;
 
         assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("Failed to json parse"));
-        dir.close()?;
+        assert!(String::from_utf8_lossy(&output).contains("invalid JSON"));
+
         Ok(())
     }
 
@@ -417,8 +393,8 @@ mod tests {
         .await?;
 
         assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("Failed to json parse"));
-        dir.close()?;
+        assert!(String::from_utf8_lossy(&output).contains("invalid JSON"));
+
         Ok(())
     }
 
@@ -442,7 +418,7 @@ mod tests {
 
         assert_eq!(code, 0);
         assert!(output.is_empty());
-        dir.close()?;
+
         Ok(())
     }
 
@@ -450,28 +426,20 @@ mod tests {
     async fn test_unsorted_json_file() -> Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "non_pretty.json", UNSORTED_JSON).await?;
+        let args = Args {
+            autofix: false,
+            indent: "2".to_string(),
+            no_ensure_ascii: false,
+            no_sort_keys: false,
+            top_keys: vec![],
+        };
 
-        let (code, output) = check_file(
-            Path::new(""),
-            &file_path,
-            &Args {
-                autofix: false,
-                indent: "2".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: false,
-                top_keys: vec![],
-            },
-        )
-        .await?;
+        let (code, _output) = check_file(Path::new(""), &file_path, &args).await?;
 
         assert_eq!(code, 1);
-        let output_str = String::from_utf8_lossy(&output);
-        assert!(output_str.contains("is not pretty-formatted"));
-        assert!(output_str.contains("-  \"foo\": \"bar\""));
-        assert!(output_str.contains("+  \"foo\": \"bar\""));
-        assert!(output_str.contains("+  \"blah\": null,"));
-        assert!(output_str.contains("-  \"blah\": null"));
-        dir.close()?;
+        let formatted = prettify_json(UNSORTED_JSON, &args)?;
+        assert_eq!(formatted, PRETTY_JSON);
+
         Ok(())
     }
 
@@ -496,7 +464,7 @@ mod tests {
         // With sorting disabled, no changes needed
         assert_eq!(code, 0);
         assert!(output.is_empty());
-        dir.close()?;
+
         Ok(())
     }
 
@@ -520,8 +488,8 @@ mod tests {
 
         assert_eq!(code, 1);
         let output_str = String::from_utf8_lossy(&output);
-        assert!(output_str.contains("is not pretty-formatted"));
-        dir.close()?;
+        assert!(output_str.contains("not pretty-formatted."));
+
         Ok(())
     }
 
@@ -544,12 +512,12 @@ mod tests {
         .await?;
 
         assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("Fixed & autoformatted file"));
+        assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
 
         // Verify the file was actually fixed
         let result = fs_err::tokio::read_to_string(&file_path).await?;
         assert_eq!(result, PRETTY_JSON);
-        dir.close()?;
+
         Ok(())
     }
 
@@ -572,12 +540,12 @@ mod tests {
         .await?;
 
         assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("Fixed & autoformatted file"));
+        assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
 
         let result = fs_err::tokio::read_to_string(&file_path).await?;
         let expected = "{\n\t\"alist\": [\n\t\t2,\n\t\t34,\n\t\t234\n\t],\n\t\"blah\": null,\n\t\"foo\": \"bar\"\n}\n";
         assert_eq!(result, expected);
-        dir.close()?;
+
         Ok(())
     }
 
@@ -600,37 +568,39 @@ mod tests {
         .await?;
 
         assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("Fixed & autoformatted file"));
+        assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
 
         let result = fs_err::tokio::read_to_string(&file_path).await?;
-        let expected = r#"{
-    "alist": [
-        2,
-        34,
-        234
-    ],
-    "blah": null,
-    "foo": "bar"
-}
-"#;
+        let expected = indoc::indoc! {r#"
+        {
+            "alist": [
+                2,
+                34,
+                234
+            ],
+            "blah": null,
+            "foo": "bar"
+        }
+        "#};
         assert_eq!(result, expected);
-        dir.close()?;
+
         Ok(())
     }
 
     #[tokio::test]
     async fn test_remove_tab_indent() -> Result<()> {
         let dir = tempdir()?;
-        let tab_content = r#"{
-    "alist": [
-        2,
-        34,
-        234
-    ],
-    "blah": null,
-    "foo": "bar"
-}
-"#;
+        let tab_content = indoc::indoc! {r#"
+        {
+            "alist": [
+                2,
+                34,
+                234
+            ],
+            "blah": null,
+            "foo": "bar"
+        }
+        "#};
         let file_path = create_test_file(&dir, "tab_indented.json", tab_content).await?;
 
         let (code, output) = check_file(
@@ -647,11 +617,11 @@ mod tests {
         .await?;
 
         assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("Fixed & autoformatted file"));
+        assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
 
         let result = fs_err::tokio::read_to_string(&file_path).await?;
         assert_eq!(result, PRETTY_JSON);
-        dir.close()?;
+
         Ok(())
     }
 
@@ -674,22 +644,23 @@ mod tests {
         .await?;
 
         assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("Fixed & autoformatted file"));
+        assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
 
         let result = fs_err::tokio::read_to_string(&file_path).await?;
-        let expected = r#"{
-  "alist": [
-    2,
-    34,
-    234
-  ],
-  "blah": null,
-  "foo": "bar",
-  "non_ascii": "\u4e2d\u6587\u306b\u307b\u3093\u3054\ud55c\uad6d\uc5b4"
-}
-"#;
+        let expected = indoc::indoc! {r#"
+        {
+          "alist": [
+            2,
+            34,
+            234
+          ],
+          "blah": null,
+          "foo": "bar",
+          "non_ascii": "\u4e2d\u6587\u306b\u307b\u3093\u3054\ud55c\uad6d\uc5b4"
+        }
+        "#};
         assert_eq!(result, expected);
-        dir.close()?;
+
         Ok(())
     }
 
@@ -714,19 +685,20 @@ mod tests {
 
         assert_eq!(code, 0);
         let result = fs_err::tokio::read_to_string(&file_path).await?;
-        let expected = r#"{
-  "alist": [
-    2,
-    34,
-    234
-  ],
-  "blah": null,
-  "foo": "bar",
-  "non_ascii": "\u4e2d\u6587\u306b\u307b\u3093\u3054\ud55c\uad6d\uc5b4"
-}
-"#;
+        let expected = indoc::indoc! {r#"
+        {
+          "alist": [
+            2,
+            34,
+            234
+          ],
+          "blah": null,
+          "foo": "bar",
+          "non_ascii": "\u4e2d\u6587\u306b\u307b\u3093\u3054\ud55c\uad6d\uc5b4"
+        }
+        "#};
         assert_eq!(result, expected);
-        dir.close()?;
+
         Ok(())
     }
 
@@ -749,22 +721,23 @@ mod tests {
         .await?;
 
         assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("Fixed & autoformatted file"));
+        assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
 
         let result = fs_err::tokio::read_to_string(&file_path).await?;
-        let expected = r#"{
-  "alist": [
-    2,
-    34,
-    234
-  ],
-  "blah": null,
-  "foo": "bar",
-  "non_ascii": "中文にほんご한국어"
-}
-"#;
+        let expected = indoc::indoc! {r#"
+        {
+          "alist": [
+            2,
+            34,
+            234
+          ],
+          "blah": null,
+          "foo": "bar",
+          "non_ascii": "中文にほんご한국어"
+        }
+        "#};
         assert_eq!(result, expected);
-        dir.close()?;
+
         Ok(())
     }
 
@@ -781,12 +754,14 @@ mod tests {
             },
         )?;
 
-        let expected = r#"{
-  "emoji": "\ud83d\udc10",
-  "\u03b1": "beta"
-}
-"#;
+        let expected = indoc::indoc! {r#"
+        {
+          "emoji": "\ud83d\udc10",
+          "\u03b1": "beta"
+        }
+        "#};
         assert_eq!(formatted, expected);
+
         Ok(())
     }
 
@@ -811,9 +786,17 @@ mod tests {
 
         assert_eq!(code, 1);
         let result = fs_err::tokio::read_to_string(&file_path).await?;
-        assert!(result.contains("\"another\": 123"));
-        assert!(result.contains("\"inner\": \"value\""));
-        dir.close()?;
+        let expected = indoc::indoc! {r#"
+        {
+          "outer": {
+            "another": 123,
+            "inner": "value"
+          },
+          "top": true
+        }
+        "#};
+        assert_eq!(result, expected);
+
         Ok(())
     }
 
@@ -838,12 +821,19 @@ mod tests {
 
         assert_eq!(code, 1);
         let result = fs_err::tokio::read_to_string(&file_path).await?;
-        // Array order should be preserved
-        assert!(
-            result.contains("[5, 1, 9, 3]")
-                || result.contains("[\n    5,\n    1,\n    9,\n    3\n  ]")
-        );
-        dir.close()?;
+        let expected = indoc::indoc! {r#"
+        {
+          "numbers": [
+            5,
+            1,
+            9,
+            3
+          ],
+          "sorted": false
+        }
+        "#};
+        assert_eq!(result, expected);
+
         Ok(())
     }
 }
