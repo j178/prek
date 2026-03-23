@@ -1,14 +1,12 @@
-use std::fmt::Write;
 use std::io;
 use std::path::Path;
 
 use anyhow::Result;
 use clap::Parser;
-use owo_colors::OwoColorize;
 use serde::Serialize;
 use serde_json::Value;
 use serde_json::ser::{Formatter, PrettyFormatter};
-use similar::{ChangeTag, TextDiff};
+use similar::TextDiff;
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
@@ -86,24 +84,27 @@ async fn check_file(
 ) -> Result<(i32, Vec<u8>)> {
     let original_content = fs_err::tokio::read_to_string(file_base.join(filename)).await?;
 
-    if let Ok(prettified_json) = prettify_json(&original_content, args) {
-        if original_content == prettified_json {
-            Ok((0, Vec::new()))
-        } else if args.auto_fix {
-            fs_err::tokio::write(file_base.join(filename), prettified_json.as_bytes()).await?;
-            let message = format!("Fixing file {}\n", filename.display());
-            Ok((1, message.into_bytes()))
-        } else {
-            let diff = generate_diff(&original_content, &prettified_json, filename);
-            let message = format!("{}: not pretty-formatted.\n{diff}", filename.display());
-            Ok((1, message.into_bytes()))
+    match prettify_json(&original_content, args) {
+        Ok(prettified_json) => {
+            if original_content == prettified_json {
+                Ok((0, Vec::new()))
+            } else if args.auto_fix {
+                fs_err::tokio::write(file_base.join(filename), prettified_json.as_bytes()).await?;
+                let message = format!("Fixing file {}\n", filename.display());
+                Ok((1, message.into_bytes()))
+            } else {
+                let diff = generate_diff(&original_content, &prettified_json, filename);
+                let message = format!("{}: not pretty-formatted.\n{diff}", filename.display());
+                Ok((1, message.into_bytes()))
+            }
         }
-    } else {
-        let error_message = format!(
-            "{}: invalid JSON. Consider using the `check-json` hook.\n",
-            filename.display(),
-        );
-        Ok((1, error_message.into_bytes()))
+        Err(err) => {
+            let error_message = format!(
+                "{}: invalid JSON ({err}). Consider using the `check-json` hook.\n",
+                filename.display(),
+            );
+            Ok((1, error_message.into_bytes()))
+        }
     }
 }
 
@@ -322,28 +323,19 @@ fn reorder_keys(value: &mut Value, top_keys: &[String], sort_keys: bool) {
 }
 
 fn generate_diff(original: &str, formatted: &str, filename: &Path) -> String {
-    let diff = TextDiff::from_lines(original, formatted);
-
-    let mut output = String::new();
-    let _ = writeln!(output, "{}", format!("--- {}", filename.display()).bold());
-    let _ = writeln!(output, "{}", format!("+++ {}", filename.display()).bold());
-
-    for change in diff.iter_all_changes() {
-        let line = match change.tag() {
-            ChangeTag::Delete => format!("-{change}").red().to_string(),
-            ChangeTag::Insert => format!("+{change}").green().to_string(),
-            ChangeTag::Equal => format!(" {change}").to_string(),
-        };
-        output.push_str(&line);
-    }
-
-    output
+    TextDiff::from_lines(original, formatted)
+        .unified_diff()
+        .context_radius(3)
+        .header(
+            &filename.display().to_string(),
+            &filename.display().to_string(),
+        )
+        .to_string()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use regex::Regex;
     use std::path::PathBuf;
     use tempfile::tempdir;
 
@@ -395,17 +387,10 @@ mod tests {
         Ok(file_path)
     }
 
-    fn strip_ansi_escape_codes(text: &str) -> String {
-        Regex::new(r"\x1b\[[0-9;]*m")
-            .unwrap()
-            .replace_all(text, "")
-            .into_owned()
-    }
-
     #[tokio::test]
     async fn test_empty_json_file() -> Result<()> {
         let dir = tempdir()?;
-        let file_path = create_test_file(&dir, "empty.json", "").await?;
+        create_test_file(&dir, "empty.json", "").await?;
         let args = PreparedArgs {
             auto_fix: false,
             ensure_ascii: true,
@@ -414,10 +399,14 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+        let (code, output) = check_file(dir.path(), Path::new("empty.json"), &args).await?;
 
         assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("invalid JSON"));
+        let output = String::from_utf8(output)?;
+        assert_eq!(
+            output,
+            "empty.json: invalid JSON (EOF while parsing a value at line 1 column 0). Consider using the `check-json` hook.\n",
+        );
 
         Ok(())
     }
@@ -425,7 +414,7 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_json() -> Result<()> {
         let dir = tempdir()?;
-        let file_path = create_test_file(&dir, "invalid.json", r#"{"foo": bar}"#).await?;
+        create_test_file(&dir, "invalid.json", r#"{"foo": bar}"#).await?;
         let args = PreparedArgs {
             auto_fix: false,
             ensure_ascii: true,
@@ -434,10 +423,14 @@ mod tests {
             sort_keys: true,
         };
 
-        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
+        let (code, output) = check_file(dir.path(), Path::new("invalid.json"), &args).await?;
 
         assert_eq!(code, 1);
-        assert!(String::from_utf8_lossy(&output).contains("invalid JSON"));
+        let output = String::from_utf8(output)?;
+        assert_eq!(
+            output,
+            "invalid.json: invalid JSON (expected value at line 1 column 9). Consider using the `check-json` hook.\n",
+        );
 
         Ok(())
     }
@@ -476,11 +469,12 @@ mod tests {
         let (code, output) = check_file(dir.path(), Path::new("non_pretty.json"), &args).await?;
 
         assert_eq!(code, 1);
-        let output = strip_ansi_escape_codes(&String::from_utf8(output)?);
+        let output = String::from_utf8(output)?;
         let expected = indoc::indoc! {r#"
         non_pretty.json: not pretty-formatted.
         --- non_pretty.json
         +++ non_pretty.json
+        @@ -1,9 +1,9 @@
          {
         -  "foo": "bar",
            "alist": [

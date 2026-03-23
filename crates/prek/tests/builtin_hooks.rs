@@ -1141,10 +1141,10 @@ fn pretty_format_json_hook() -> Result<()> {
     - exit code: 1
     - files were modified by this hook
 
-      empty.json: invalid JSON. Consider using the `check-json` hook.
+      empty.json: invalid JSON (EOF while parsing a value at line 1 column 0). Consider using the `check-json` hook.
       Fixing file compact.json
       Fixing file uppercase_unicode.json
-      invalid.json: invalid JSON. Consider using the `check-json` hook.
+      invalid.json: invalid JSON (trailing comma at line 1 column 9). Consider using the `check-json` hook.
       Fixing file unsorted.json
 
     ----- stderr -----
