@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.7
+## 0.3.8
 
 Released on 2026-03-23.
 
@@ -27,6 +27,10 @@ Released on 2026-03-23.
 - @mvanhorn
 - @feliblo
 - @Tiryoh
+
+## 0.3.7
+
+Due to a release process failure, this version was republished as 0.3.8.
 
 ## 0.3.6
 
