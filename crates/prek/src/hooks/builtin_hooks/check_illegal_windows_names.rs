@@ -4,13 +4,18 @@ use crate::hook::Hook;
 
 pub(super) const ILLEGAL_WINDOWS_PATTERN: &str = r"(?i)((^|/)(CON|PRN|AUX|NUL|COM[\d\x{00B9}\x{00B2}\x{00B3}]|LPT[\d\x{00B9}\x{00B2}\x{00B3}])(\.|/|$)|[<>:\x22\\|?*\x00-\x1F]|/[^/]*[\.\s]/|[^/]*[\.\s]$)";
 
+// Keep this hook in `builtin_hooks` instead of `pre_commit_hooks`.
+//
+// Upstream implements `check-illegal-windows-names` as a `fail` hook with a
+// `files` regex. Our pre-commit-hooks fast path already handles that generic
+// `fail` language in Rust, so there is no dedicated fast-path implementation to
+// add here. This module only exists to provide the builtin-hook equivalent:
+// reuse the same regex for matching, then emit a simple fail-style message.
 pub(crate) fn check_illegal_windows_names(_hook: &Hook, filenames: &[&Path]) -> (i32, Vec<u8>) {
     if filenames.is_empty() {
         return (0, Vec::new());
     }
 
-    // Matching is handled by the hook's `files` pattern. Any filename that reaches this
-    // builtin is already known to be invalid, so we only need to emit fail-style errors.
     let mut output = Vec::new();
     for filename in filenames {
         output.extend_from_slice(
