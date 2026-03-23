@@ -35,40 +35,55 @@ struct Args {
     top_keys: Vec<String>,
 }
 
-impl Args {
-    fn indent_bytes(&self) -> Vec<u8> {
-        match self.indent.parse::<usize>() {
+struct PreparedArgs {
+    auto_fix: bool,
+    ensure_ascii: bool,
+    indent_bytes: Vec<u8>,
+    ordered_top_keys: Vec<String>,
+    sort_keys: bool,
+}
+
+impl From<&Args> for PreparedArgs {
+    fn from(args: &Args) -> Self {
+        let indent_bytes = match args.indent.parse::<usize>() {
             Ok(num_spaces) => vec![b' '; num_spaces],
-            Err(_) => self.indent.as_bytes().to_vec(),
-        }
-    }
+            Err(_) => args.indent.as_bytes().to_vec(),
+        };
 
-    // Keep only the first occurrence of each key so reordering can follow the
-    // same "first index wins" rule as Python's `top_keys.index(key)`.
-    fn ordered_top_keys(&self) -> Vec<&str> {
-        let mut ordered = Vec::with_capacity(self.top_keys.len());
-
-        for top_key in &self.top_keys {
-            let top_key = top_key.as_str();
-            if !ordered.contains(&top_key) {
-                ordered.push(top_key);
+        // Keep only the first occurrence of each key so reordering can follow
+        // the same "first index wins" rule as Python's `top_keys.index(key)`.
+        let mut ordered_top_keys = Vec::with_capacity(args.top_keys.len());
+        for top_key in &args.top_keys {
+            if !ordered_top_keys.contains(top_key) {
+                ordered_top_keys.push(top_key.clone());
             }
         }
 
-        ordered
+        Self {
+            auto_fix: args.auto_fix,
+            ensure_ascii: !args.no_ensure_ascii,
+            indent_bytes,
+            ordered_top_keys,
+            sort_keys: !args.no_sort_keys,
+        }
     }
 }
 
 pub(crate) async fn pretty_format_json(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     let args = Args::try_parse_from(hook.entry.split()?.iter().chain(&hook.args))?;
+    let prepared = PreparedArgs::from(&args);
 
     run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
-        check_file(hook.project().relative_path(), filename, &args)
+        check_file(hook.project().relative_path(), filename, &prepared)
     })
     .await
 }
 
-async fn check_file(file_base: &Path, filename: &Path, args: &Args) -> Result<(i32, Vec<u8>)> {
+async fn check_file(
+    file_base: &Path,
+    filename: &Path,
+    args: &PreparedArgs,
+) -> Result<(i32, Vec<u8>)> {
     let original_content = fs_err::tokio::read_to_string(file_base.join(filename)).await?;
 
     if let Ok(prettified_json) = prettify_json(&original_content, args) {
@@ -92,16 +107,12 @@ async fn check_file(file_base: &Path, filename: &Path, args: &Args) -> Result<(i
     }
 }
 
-fn prettify_json(json: &str, args: &Args) -> Result<String> {
+fn prettify_json(json: &str, args: &PreparedArgs) -> Result<String> {
     let mut value: Value = serde_json::from_str(json)?;
-    let top_keys = args.ordered_top_keys();
-    let indent_bytes = args.indent_bytes();
-
-    reorder_keys(&mut value, &top_keys, !args.no_sort_keys);
+    reorder_keys(&mut value, &args.ordered_top_keys, args.sort_keys);
 
     let mut buf = Vec::with_capacity(json.len());
-
-    let formatter = JsonFormatter::with_indent(&indent_bytes, !args.no_ensure_ascii);
+    let formatter = JsonFormatter::with_indent(&args.indent_bytes, args.ensure_ascii);
     let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
     value.serialize(&mut ser)?;
 
@@ -281,7 +292,7 @@ where
 ///
 /// We recurse into nested arrays and objects first, then reorder the current object in
 /// place using `serde_json`'s `preserve_order` map operations.
-fn reorder_keys(value: &mut Value, top_keys: &[&str], sort_keys: bool) {
+fn reorder_keys(value: &mut Value, top_keys: &[String], sort_keys: bool) {
     match value {
         Value::Object(map) => {
             for nested in map.values_mut() {
@@ -294,8 +305,8 @@ fn reorder_keys(value: &mut Value, top_keys: &[&str], sort_keys: bool) {
 
             let mut insert_at = 0;
 
-            for &top_key in top_keys {
-                if let Some((key, nested)) = map.shift_remove_entry(top_key) {
+            for top_key in top_keys {
+                if let Some((key, nested)) = map.shift_remove_entry(top_key.as_str()) {
                     map.shift_insert(insert_at, key, nested);
                     insert_at += 1;
                 }
@@ -332,6 +343,7 @@ fn generate_diff(original: &str, formatted: &str, filename: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use regex::Regex;
     use std::path::PathBuf;
     use tempfile::tempdir;
 
@@ -383,23 +395,26 @@ mod tests {
         Ok(file_path)
     }
 
+    fn strip_ansi_escape_codes(text: &str) -> String {
+        Regex::new(r"\x1b\[[0-9;]*m")
+            .unwrap()
+            .replace_all(text, "")
+            .into_owned()
+    }
+
     #[tokio::test]
     async fn test_empty_json_file() -> Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "empty.json", "").await?;
+        let args = PreparedArgs {
+            auto_fix: false,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
 
-        let (code, output) = check_file(
-            Path::new(""),
-            &file_path,
-            &Args {
-                auto_fix: false,
-                indent: "2".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: false,
-                top_keys: vec![],
-            },
-        )
-        .await?;
+        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
 
         assert_eq!(code, 1);
         assert!(String::from_utf8_lossy(&output).contains("invalid JSON"));
@@ -411,19 +426,15 @@ mod tests {
     async fn test_invalid_json() -> Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "invalid.json", r#"{"foo": bar}"#).await?;
+        let args = PreparedArgs {
+            auto_fix: false,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
 
-        let (code, output) = check_file(
-            Path::new(""),
-            &file_path,
-            &Args {
-                auto_fix: false,
-                indent: "2".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: false,
-                top_keys: vec![],
-            },
-        )
-        .await?;
+        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
 
         assert_eq!(code, 1);
         assert!(String::from_utf8_lossy(&output).contains("invalid JSON"));
@@ -435,19 +446,15 @@ mod tests {
     async fn test_pretty_json_file() -> Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "pretty.json", PRETTY_JSON).await?;
+        let args = PreparedArgs {
+            auto_fix: false,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
 
-        let (code, output) = check_file(
-            Path::new(""),
-            &file_path,
-            &Args {
-                auto_fix: false,
-                indent: "2".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: false,
-                top_keys: vec![],
-            },
-        )
-        .await?;
+        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
 
         assert_eq!(code, 0);
         assert!(output.is_empty());
@@ -458,20 +465,39 @@ mod tests {
     #[tokio::test]
     async fn test_unsorted_json_file() -> Result<()> {
         let dir = tempdir()?;
-        let file_path = create_test_file(&dir, "non_pretty.json", UNSORTED_JSON).await?;
-        let args = Args {
+        create_test_file(&dir, "non_pretty.json", UNSORTED_JSON).await?;
+        let args = PreparedArgs {
             auto_fix: false,
-            indent: "2".to_string(),
-            no_ensure_ascii: false,
-            no_sort_keys: false,
-            top_keys: vec![],
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
         };
-
-        let (code, _output) = check_file(Path::new(""), &file_path, &args).await?;
+        let (code, output) = check_file(dir.path(), Path::new("non_pretty.json"), &args).await?;
 
         assert_eq!(code, 1);
-        let formatted = prettify_json(UNSORTED_JSON, &args)?;
-        assert_eq!(formatted, PRETTY_JSON);
+        let output = strip_ansi_escape_codes(&String::from_utf8(output)?);
+        let expected = indoc::indoc! {r#"
+        non_pretty.json: not pretty-formatted.
+        --- non_pretty.json
+        +++ non_pretty.json
+         {
+        -  "foo": "bar",
+           "alist": [
+             2,
+             34,
+             234
+           ],
+        -  "blah": null
+        +  "blah": null,
+        +  "foo": "bar"
+         }
+        "#};
+        assert_eq!(output, expected);
+        assert_eq!(
+            fs_err::tokio::read_to_string(dir.path().join("non_pretty.json")).await?,
+            UNSORTED_JSON
+        );
 
         Ok(())
     }
@@ -480,19 +506,15 @@ mod tests {
     async fn test_sorting_disabled() -> Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "non_pretty.json", UNSORTED_JSON).await?;
+        let args = PreparedArgs {
+            auto_fix: false,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: false,
+        };
 
-        let (code, output) = check_file(
-            Path::new(""),
-            &file_path,
-            &Args {
-                auto_fix: false,
-                indent: "2".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: true,
-                top_keys: vec![],
-            },
-        )
-        .await?;
+        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
 
         // With sorting disabled, no changes needed
         assert_eq!(code, 0);
@@ -505,19 +527,15 @@ mod tests {
     async fn test_top_keys() -> Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "non_pretty.json", UNSORTED_JSON).await?;
+        let args = PreparedArgs {
+            auto_fix: false,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec!["blah".to_string()],
+            sort_keys: true,
+        };
 
-        let (code, output) = check_file(
-            Path::new(""),
-            &file_path,
-            &Args {
-                auto_fix: false,
-                indent: "2".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: false,
-                top_keys: vec!["blah".to_string()],
-            },
-        )
-        .await?;
+        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
 
         assert_eq!(code, 1);
         let output_str = String::from_utf8_lossy(&output);
@@ -527,52 +545,36 @@ mod tests {
     }
 
     #[test]
-    fn test_duplicate_top_keys_follow_first_occurrence() -> Result<()> {
-        let formatted = prettify_json(
-            r#"{"description":"test","name":"my-package","author":"me","version":"1.0.0"}"#,
-            &Args {
-                auto_fix: false,
-                indent: "2".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: false,
-                top_keys: vec![
-                    "name".to_string(),
-                    "version".to_string(),
-                    "name".to_string(),
-                ],
-            },
-        )?;
+    fn test_prepared_args_deduplicates_top_keys() {
+        let args = Args {
+            auto_fix: false,
+            indent: "2".to_string(),
+            no_ensure_ascii: false,
+            no_sort_keys: false,
+            top_keys: vec![
+                "name".to_string(),
+                "version".to_string(),
+                "name".to_string(),
+            ],
+        };
+        let prepared = PreparedArgs::from(&args);
 
-        let expected = indoc::indoc! {r#"
-        {
-          "name": "my-package",
-          "version": "1.0.0",
-          "author": "me",
-          "description": "test"
-        }
-        "#};
-        assert_eq!(formatted, expected);
-
-        Ok(())
+        assert_eq!(prepared.ordered_top_keys, vec!["name", "version"]);
     }
 
     #[tokio::test]
     async fn test_autofix() -> Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "non_pretty.json", UNSORTED_JSON).await?;
+        let args = PreparedArgs {
+            auto_fix: true,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
 
-        let (code, output) = check_file(
-            Path::new(""),
-            &file_path,
-            &Args {
-                auto_fix: true,
-                indent: "2".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: false,
-                top_keys: vec![],
-            },
-        )
-        .await?;
+        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
 
         assert_eq!(code, 1);
         assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
@@ -588,19 +590,15 @@ mod tests {
     async fn test_tab_indent() -> Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "non_pretty.json", UNSORTED_JSON).await?;
+        let args = PreparedArgs {
+            auto_fix: true,
+            ensure_ascii: true,
+            indent_bytes: b"\t".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
 
-        let (code, output) = check_file(
-            Path::new(""),
-            &file_path,
-            &Args {
-                auto_fix: true,
-                indent: "\t".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: false,
-                top_keys: vec![],
-            },
-        )
-        .await?;
+        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
 
         assert_eq!(code, 1);
         assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
@@ -616,19 +614,15 @@ mod tests {
     async fn test_custom_space_indent() -> Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "non_pretty.json", UNSORTED_JSON).await?;
+        let args = PreparedArgs {
+            auto_fix: true,
+            ensure_ascii: true,
+            indent_bytes: b"    ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
 
-        let (code, output) = check_file(
-            Path::new(""),
-            &file_path,
-            &Args {
-                auto_fix: true,
-                indent: "4".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: false,
-                top_keys: vec![],
-            },
-        )
-        .await?;
+        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
 
         assert_eq!(code, 1);
         assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
@@ -665,19 +659,15 @@ mod tests {
         }
         "#};
         let file_path = create_test_file(&dir, "tab_indented.json", tab_content).await?;
+        let args = PreparedArgs {
+            auto_fix: true,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
 
-        let (code, output) = check_file(
-            Path::new(""),
-            &file_path,
-            &Args {
-                auto_fix: true,
-                indent: "2".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: false,
-                top_keys: vec![],
-            },
-        )
-        .await?;
+        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
 
         assert_eq!(code, 1);
         assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
@@ -692,19 +682,15 @@ mod tests {
     async fn test_ensure_ascii_uppercase_to_lowercase() -> Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "non_ascii.json", NON_ASCII_JSON).await?;
+        let args = PreparedArgs {
+            auto_fix: true,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
 
-        let (code, output) = check_file(
-            Path::new(""),
-            &file_path,
-            &Args {
-                auto_fix: true,
-                indent: "2".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: false,
-                top_keys: vec![],
-            },
-        )
-        .await?;
+        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
 
         assert_eq!(code, 1);
         assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
@@ -732,19 +718,15 @@ mod tests {
         let dir = tempdir()?;
         let lowercase_content = NON_ASCII_JSON.to_lowercase();
         let file_path = create_test_file(&dir, "non_ascii.json", &lowercase_content).await?;
+        let args = PreparedArgs {
+            auto_fix: true,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
 
-        let (code, _output) = check_file(
-            Path::new(""),
-            &file_path,
-            &Args {
-                auto_fix: true,
-                indent: "2".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: false,
-                top_keys: vec![],
-            },
-        )
-        .await?;
+        let (code, _output) = check_file(Path::new(""), &file_path, &args).await?;
 
         assert_eq!(code, 0);
         let result = fs_err::tokio::read_to_string(&file_path).await?;
@@ -769,19 +751,15 @@ mod tests {
     async fn test_no_ensure_ascii() -> Result<()> {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "non_ascii.json", NON_ASCII_JSON).await?;
+        let args = PreparedArgs {
+            auto_fix: true,
+            ensure_ascii: false,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
 
-        let (code, output) = check_file(
-            Path::new(""),
-            &file_path,
-            &Args {
-                auto_fix: true,
-                indent: "2".to_string(),
-                no_ensure_ascii: true,
-                no_sort_keys: false,
-                top_keys: vec![],
-            },
-        )
-        .await?;
+        let (code, output) = check_file(Path::new(""), &file_path, &args).await?;
 
         assert_eq!(code, 1);
         assert!(String::from_utf8_lossy(&output).contains("Fixing file"));
@@ -806,16 +784,14 @@ mod tests {
 
     #[test]
     fn test_ensure_ascii_surrogate_pair_and_object_keys() -> Result<()> {
-        let formatted = prettify_json(
-            r#"{"emoji":"🐐","α":"beta"}"#,
-            &Args {
-                auto_fix: false,
-                indent: "2".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: false,
-                top_keys: vec![],
-            },
-        )?;
+        let args = PreparedArgs {
+            auto_fix: false,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
+        let formatted = prettify_json(r#"{"emoji":"🐐","α":"beta"}"#, &args)?;
 
         let expected = indoc::indoc! {r#"
         {
@@ -833,19 +809,15 @@ mod tests {
         let dir = tempdir()?;
         let nested = r#"{"outer": {"inner": "value", "another": 123}, "top": true}"#;
         let file_path = create_test_file(&dir, "nested.json", nested).await?;
+        let args = PreparedArgs {
+            auto_fix: true,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
 
-        let (code, _output) = check_file(
-            Path::new(""),
-            &file_path,
-            &Args {
-                auto_fix: true,
-                indent: "2".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: false,
-                top_keys: vec![],
-            },
-        )
-        .await?;
+        let (code, _output) = check_file(Path::new(""), &file_path, &args).await?;
 
         assert_eq!(code, 1);
         let result = fs_err::tokio::read_to_string(&file_path).await?;
@@ -868,19 +840,15 @@ mod tests {
         let dir = tempdir()?;
         let array_json = r#"{"numbers": [5, 1, 9, 3], "sorted": false}"#;
         let file_path = create_test_file(&dir, "array.json", array_json).await?;
+        let args = PreparedArgs {
+            auto_fix: true,
+            ensure_ascii: true,
+            indent_bytes: b"  ".to_vec(),
+            ordered_top_keys: vec![],
+            sort_keys: true,
+        };
 
-        let (code, _) = check_file(
-            Path::new(""),
-            &file_path,
-            &Args {
-                auto_fix: true,
-                indent: "2".to_string(),
-                no_ensure_ascii: false,
-                no_sort_keys: false,
-                top_keys: vec![],
-            },
-        )
-        .await?;
+        let (code, _) = check_file(Path::new(""), &file_path, &args).await?;
 
         assert_eq!(code, 1);
         let result = fs_err::tokio::read_to_string(&file_path).await?;
