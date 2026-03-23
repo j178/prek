@@ -6,8 +6,8 @@ use anyhow::Result;
 use clap::Parser;
 use owo_colors::OwoColorize;
 use serde::Serialize;
+use serde_json::Value;
 use serde_json::ser::{Formatter, PrettyFormatter};
-use serde_json::{Map, Value};
 use similar::{ChangeTag, TextDiff};
 
 use crate::hook::Hook;
@@ -41,6 +41,21 @@ impl Args {
             Ok(num_spaces) => vec![b' '; num_spaces],
             Err(_) => self.indent.as_bytes().to_vec(),
         }
+    }
+
+    // Keep only the first occurrence of each key so reordering can follow the
+    // same "first index wins" rule as Python's `top_keys.index(key)`.
+    fn ordered_top_keys(&self) -> Vec<&str> {
+        let mut ordered = Vec::with_capacity(self.top_keys.len());
+
+        for top_key in &self.top_keys {
+            let top_key = top_key.as_str();
+            if !ordered.contains(&top_key) {
+                ordered.push(top_key);
+            }
+        }
+
+        ordered
     }
 }
 
@@ -79,10 +94,13 @@ async fn check_file(file_base: &Path, filename: &Path, args: &Args) -> Result<(i
 
 fn prettify_json(json: &str, args: &Args) -> Result<String> {
     let mut value: Value = serde_json::from_str(json)?;
-    value = reorder_keys(value, &args.top_keys, !args.no_sort_keys);
+    let top_keys = args.ordered_top_keys();
+    let indent_bytes = args.indent_bytes();
+
+    reorder_keys(&mut value, &top_keys, !args.no_sort_keys);
 
     let mut buf = Vec::with_capacity(json.len());
-    let indent_bytes = args.indent_bytes();
+
     let formatter = JsonFormatter::with_indent(&indent_bytes, !args.no_ensure_ascii);
     let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
     value.serialize(&mut ser)?;
@@ -236,44 +254,59 @@ where
     writer.write_all(&escape)
 }
 
-/// Recursively reorder JSON object keys with optional top-level keys and sorting.
+/// Recursively reorder JSON object keys to match `pre-commit-hooks`' Python implementation.
 ///
-/// Reorder keys according to the following rules:
-/// 1. Keys specified in `top_keys` are placed first, in the order they appear in the slice
-/// 2. Remaining keys are either sorted alphabetically (if `sort_keys` is true) or kept in original order
-/// 3. The reordering is applied recursively to all nested objects and arrays
-fn reorder_keys(mut value: Value, top_keys: &[String], sort_keys: bool) -> Value {
-    match &mut value {
+/// Upstream effectively treats each object as an ordered `pairs` sequence and then does:
+///
+/// ```python
+/// def pairs_first(pairs: Sequence[tuple[str, str]]) -> Mapping[str, str]:
+///     before = [pair for pair in pairs if pair[0] in top_keys]
+///     before = sorted(before, key=lambda x: top_keys.index(x[0]))
+///     after = [pair for pair in pairs if pair[0] not in top_keys]
+///     if sort_keys:
+///         after.sort()
+///     return dict(before + after)
+/// ```
+///
+/// In other words:
+/// - `top_keys` does not create new keys and does not affect keys that are absent.
+/// - Keys present in `top_keys` are moved to the front of the object.
+/// - Their relative order is the order of the first matching name in `top_keys`.
+///   We deduplicate `top_keys` before calling this function while preserving the first
+///   occurrence of each name, which matches Python's `top_keys.index(key)` behavior.
+/// - All remaining keys come after that prefix. They are either sorted
+///   lexicographically (`sort_keys == true`) or kept in their existing order.
+/// - Python's `dict(before + after)` preserves that final pair order, so the serialized
+///   JSON uses exactly that key sequence.
+///
+/// We recurse into nested arrays and objects first, then reorder the current object in
+/// place using `serde_json`'s `preserve_order` map operations.
+fn reorder_keys(value: &mut Value, top_keys: &[&str], sort_keys: bool) {
+    match value {
         Value::Object(map) => {
-            let mut new_map = Map::new();
+            for nested in map.values_mut() {
+                reorder_keys(nested, top_keys, sort_keys);
+            }
 
-            for key in top_keys {
-                if let Some(v) = map.remove(key) {
-                    new_map.insert(key.clone(), reorder_keys(v, top_keys, sort_keys));
+            if sort_keys {
+                map.sort_keys();
+            }
+
+            let mut insert_at = 0;
+
+            for &top_key in top_keys {
+                if let Some((key, nested)) = map.shift_remove_entry(top_key) {
+                    map.shift_insert(insert_at, key, nested);
+                    insert_at += 1;
                 }
             }
-
-            let mut remaining: Vec<_> = map.iter_mut().collect();
-            if sort_keys {
-                remaining.sort_by_key(|(k, _)| *k);
-            }
-
-            for (k, v) in remaining {
-                new_map.insert(k.clone(), reorder_keys(v.take(), top_keys, sort_keys));
-            }
-
-            Value::Object(new_map)
         }
-
-        // Recursively process arrays
-        Value::Array(arr) => {
-            let new_arr: Vec<Value> = arr
-                .drain(..)
-                .map(|v| reorder_keys(v, top_keys, sort_keys))
-                .collect();
-            Value::Array(new_arr)
+        Value::Array(array) => {
+            for nested in array {
+                reorder_keys(nested, top_keys, sort_keys);
+            }
         }
-        _ => value,
+        _ => {}
     }
 }
 
@@ -359,7 +392,7 @@ mod tests {
             Path::new(""),
             &file_path,
             &Args {
-                autofix: false,
+                auto_fix: false,
                 indent: "2".to_string(),
                 no_ensure_ascii: false,
                 no_sort_keys: false,
@@ -383,7 +416,7 @@ mod tests {
             Path::new(""),
             &file_path,
             &Args {
-                autofix: false,
+                auto_fix: false,
                 indent: "2".to_string(),
                 no_ensure_ascii: false,
                 no_sort_keys: false,
@@ -407,7 +440,7 @@ mod tests {
             Path::new(""),
             &file_path,
             &Args {
-                autofix: false,
+                auto_fix: false,
                 indent: "2".to_string(),
                 no_ensure_ascii: false,
                 no_sort_keys: false,
@@ -427,7 +460,7 @@ mod tests {
         let dir = tempdir()?;
         let file_path = create_test_file(&dir, "non_pretty.json", UNSORTED_JSON).await?;
         let args = Args {
-            autofix: false,
+            auto_fix: false,
             indent: "2".to_string(),
             no_ensure_ascii: false,
             no_sort_keys: false,
@@ -452,7 +485,7 @@ mod tests {
             Path::new(""),
             &file_path,
             &Args {
-                autofix: false,
+                auto_fix: false,
                 indent: "2".to_string(),
                 no_ensure_ascii: false,
                 no_sort_keys: true,
@@ -477,7 +510,7 @@ mod tests {
             Path::new(""),
             &file_path,
             &Args {
-                autofix: false,
+                auto_fix: false,
                 indent: "2".to_string(),
                 no_ensure_ascii: false,
                 no_sort_keys: false,
@@ -493,6 +526,36 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn test_duplicate_top_keys_follow_first_occurrence() -> Result<()> {
+        let formatted = prettify_json(
+            r#"{"description":"test","name":"my-package","author":"me","version":"1.0.0"}"#,
+            &Args {
+                auto_fix: false,
+                indent: "2".to_string(),
+                no_ensure_ascii: false,
+                no_sort_keys: false,
+                top_keys: vec![
+                    "name".to_string(),
+                    "version".to_string(),
+                    "name".to_string(),
+                ],
+            },
+        )?;
+
+        let expected = indoc::indoc! {r#"
+        {
+          "name": "my-package",
+          "version": "1.0.0",
+          "author": "me",
+          "description": "test"
+        }
+        "#};
+        assert_eq!(formatted, expected);
+
+        Ok(())
+    }
+
     #[tokio::test]
     async fn test_autofix() -> Result<()> {
         let dir = tempdir()?;
@@ -502,7 +565,7 @@ mod tests {
             Path::new(""),
             &file_path,
             &Args {
-                autofix: true,
+                auto_fix: true,
                 indent: "2".to_string(),
                 no_ensure_ascii: false,
                 no_sort_keys: false,
@@ -530,7 +593,7 @@ mod tests {
             Path::new(""),
             &file_path,
             &Args {
-                autofix: true,
+                auto_fix: true,
                 indent: "\t".to_string(),
                 no_ensure_ascii: false,
                 no_sort_keys: false,
@@ -558,7 +621,7 @@ mod tests {
             Path::new(""),
             &file_path,
             &Args {
-                autofix: true,
+                auto_fix: true,
                 indent: "4".to_string(),
                 no_ensure_ascii: false,
                 no_sort_keys: false,
@@ -607,7 +670,7 @@ mod tests {
             Path::new(""),
             &file_path,
             &Args {
-                autofix: true,
+                auto_fix: true,
                 indent: "2".to_string(),
                 no_ensure_ascii: false,
                 no_sort_keys: false,
@@ -634,7 +697,7 @@ mod tests {
             Path::new(""),
             &file_path,
             &Args {
-                autofix: true,
+                auto_fix: true,
                 indent: "2".to_string(),
                 no_ensure_ascii: false,
                 no_sort_keys: false,
@@ -674,7 +737,7 @@ mod tests {
             Path::new(""),
             &file_path,
             &Args {
-                autofix: true,
+                auto_fix: true,
                 indent: "2".to_string(),
                 no_ensure_ascii: false,
                 no_sort_keys: false,
@@ -711,7 +774,7 @@ mod tests {
             Path::new(""),
             &file_path,
             &Args {
-                autofix: true,
+                auto_fix: true,
                 indent: "2".to_string(),
                 no_ensure_ascii: true,
                 no_sort_keys: false,
@@ -746,7 +809,7 @@ mod tests {
         let formatted = prettify_json(
             r#"{"emoji":"🐐","α":"beta"}"#,
             &Args {
-                autofix: false,
+                auto_fix: false,
                 indent: "2".to_string(),
                 no_ensure_ascii: false,
                 no_sort_keys: false,
@@ -775,7 +838,7 @@ mod tests {
             Path::new(""),
             &file_path,
             &Args {
-                autofix: true,
+                auto_fix: true,
                 indent: "2".to_string(),
                 no_ensure_ascii: false,
                 no_sort_keys: false,
@@ -810,7 +873,7 @@ mod tests {
             Path::new(""),
             &file_path,
             &Args {
-                autofix: true,
+                auto_fix: true,
                 indent: "2".to_string(),
                 no_ensure_ascii: false,
                 no_sort_keys: false,

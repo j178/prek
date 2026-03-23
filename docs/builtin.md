@@ -316,7 +316,10 @@ Checks that JSON files are pretty-formatted and can optionally rewrite them in p
 - `--no-sort-keys`
     - Preserve the original key order instead of sorting object keys.
 - `--top-keys=<k1,k2,...>`
-    - Place the specified top-level keys first, in the given order, before sorting the rest.
+    - In every JSON object, move matching keys to the front in the given order.
+    - Duplicate names after the first one are ignored.
+    - Remaining keys come after that prefix and are sorted unless `--no-sort-keys` is set.
+    - This applies recursively to nested objects too, not just the root object.
 
 **Caveats**
 

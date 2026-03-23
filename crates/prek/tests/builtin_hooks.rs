@@ -1389,7 +1389,7 @@ fn pretty_format_json_no_ensure_ascii() -> Result<()> {
 }
 
 #[test]
-fn pretty_format_json_tab_indent() -> Result<()> {
+fn pretty_format_json_custom_space_indent() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
