@@ -24,6 +24,7 @@ mod fix_end_of_file;
 mod fix_trailing_whitespace;
 mod mixed_line_ending;
 mod no_commit_to_branch;
+mod pretty_format_json;
 mod shebangs;
 
 pub(crate) use check_added_large_files::check_added_large_files;
@@ -45,6 +46,7 @@ pub(crate) use fix_end_of_file::fix_end_of_file;
 pub(crate) use fix_trailing_whitespace::fix_trailing_whitespace;
 pub(crate) use mixed_line_ending::mixed_line_ending;
 pub(crate) use no_commit_to_branch::no_commit_to_branch;
+pub(crate) use pretty_format_json::pretty_format_json;
 
 /// Hooks from `https://github.com/pre-commit/pre-commit-hooks`.
 #[derive(strum::EnumString)]
@@ -68,6 +70,10 @@ pub(crate) enum PreCommitHooks {
     MixedLineEnding,
     DetectPrivateKey,
     NoCommitToBranch,
+    // `pretty-format-json` is intentionally builtin-only for now. Do not enable
+    // automatic fast-path replacement until parity coverage against upstream
+    // Python is broad enough to trust it as the default implementation.
+    // PrettyFormatJson,
     TrailingWhitespace,
 }
 

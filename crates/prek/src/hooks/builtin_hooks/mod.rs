@@ -48,6 +48,7 @@ pub(crate) enum BuiltinHooks {
     FixByteOrderMarker,
     MixedLineEnding,
     NoCommitToBranch,
+    PrettyFormatJson,
     TrailingWhitespace,
 }
 
@@ -97,6 +98,7 @@ impl BuiltinHooks {
             }
             Self::MixedLineEnding => pre_commit_hooks::mixed_line_ending(hook, filenames).await,
             Self::NoCommitToBranch => pre_commit_hooks::no_commit_to_branch(hook).await,
+            Self::PrettyFormatJson => pre_commit_hooks::pretty_format_json(hook, filenames).await,
             Self::TrailingWhitespace => {
                 pre_commit_hooks::fix_trailing_whitespace(hook, filenames).await
             }
@@ -359,6 +361,18 @@ impl BuiltinHook {
                 options: HookOptions {
                     pass_filenames: Some(PassFilenames::None),
                     always_run: Some(true),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::PrettyFormatJson => BuiltinHook {
+                id: "pretty-format-json".to_string(),
+                name: "pretty format json".to_string(),
+                entry: "pretty-format-json".to_string(),
+                priority: None,
+                options: HookOptions {
+                    description: Some("checks that JSON files are pretty-formatted.".to_string()),
+                    types: Some(tags::TAG_SET_JSON),
+                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
             },

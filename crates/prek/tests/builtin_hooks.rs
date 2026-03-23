@@ -1083,6 +1083,366 @@ fn fix_byte_order_marker_hook() -> Result<()> {
 }
 
 #[test]
+fn pretty_format_json_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: pretty-format-json
+                args: ['--autofix']
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files
+    cwd.child("valid_pretty.json").write_str(
+        r#"{
+  "alist": [
+    2,
+    34,
+    234
+  ],
+  "blah": null,
+  "foo": "bar"
+}
+"#,
+    )?;
+    cwd.child("unsorted.json").write_str(
+        r#"{
+  "foo": "bar",
+  "alist": [2, 34, 234],
+  "blah": null
+}
+"#,
+    )?;
+    cwd.child("compact.json")
+        .write_str(r#"{"foo":"bar","alist":[2,34,234],"blah":null}"#)?;
+    cwd.child("uppercase_unicode.json").write_str(
+        r#"{
+  "text": "\u4E2D\u6587"
+}
+"#,
+    )?;
+    cwd.child("invalid.json").write_str(r#"{"a": 1,}"#)?;
+    cwd.child("empty.json").touch()?;
+
+    context.git_add(".");
+
+    // First run: hooks should fail and fix the files
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    pretty format json.......................................................Failed
+    - hook id: pretty-format-json
+    - exit code: 1
+    - files were modified by this hook
+
+      empty.json: invalid JSON (EOF while parsing a value at line 1 column 0). Consider using the `check-json` hook.
+      Fixing file compact.json
+      Fixing file uppercase_unicode.json
+      invalid.json: invalid JSON (trailing comma at line 1 column 9). Consider using the `check-json` hook.
+      Fixing file unsorted.json
+
+    ----- stderr -----
+    "#);
+
+    // Verify the files have been corrected
+    assert_snapshot!(context.read("valid_pretty.json"), @r#"
+    {
+      "alist": [
+        2,
+        34,
+        234
+      ],
+      "blah": null,
+      "foo": "bar"
+    }
+    "#);
+    assert_snapshot!(context.read("unsorted.json"), @r#"
+    {
+      "alist": [
+        2,
+        34,
+        234
+      ],
+      "blah": null,
+      "foo": "bar"
+    }
+    "#);
+    assert_snapshot!(context.read("compact.json"), @r#"
+    {
+      "alist": [
+        2,
+        34,
+        234
+      ],
+      "blah": null,
+      "foo": "bar"
+    }
+    "#);
+    assert_snapshot!(context.read("uppercase_unicode.json"), @r#"
+    {
+      "text": "\u4e2d\u6587"
+    }
+    "#);
+
+    // Fix invalid files with proper formatting
+    cwd.child("invalid.json").write_str(
+        r#"{
+  "a": 1
+}
+"#,
+    )?;
+    cwd.child("empty.json").write_str(
+        r#"{
+  "b": 2
+}
+"#,
+    )?;
+
+    context.git_add(".");
+
+    // Second run: hooks should now pass
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pretty format json.......................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pretty_format_json_with_options() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: pretty-format-json
+                args: ['--autofix', '--indent=4', '--no-sort-keys']
+    "});
+
+    let cwd = context.work_dir();
+
+    cwd.child("test.json").write_str(r#"{"z":1,"a":2,"m":3}"#)?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    pretty format json.......................................................Failed
+    - hook id: pretty-format-json
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing file test.json
+
+    ----- stderr -----
+    "#);
+
+    // Keys should NOT be sorted, but indented with 4 spaces
+    assert_snapshot!(context.read("test.json"), @r#"
+    {
+        "z": 1,
+        "a": 2,
+        "m": 3
+    }
+    "#);
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pretty format json.......................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pretty_format_json_with_top_keys() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: pretty-format-json
+                args: ['--autofix', '--top-keys=version,name']
+    "});
+
+    let cwd = context.work_dir();
+
+    cwd.child("package.json").write_str(
+        r#"{"description":"test","name":"my-package","author":"me","version":"1.0.0"}"#,
+    )?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    pretty format json.......................................................Failed
+    - hook id: pretty-format-json
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing file package.json
+
+    ----- stderr -----
+    "#);
+
+    insta::assert_snapshot!(context.read("package.json"), @r#"
+    {
+      "version": "1.0.0",
+      "name": "my-package",
+      "author": "me",
+      "description": "test"
+    }
+    "#);
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pretty format json.......................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pretty_format_json_no_ensure_ascii() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: pretty-format-json
+                args: ['--autofix', '--no-ensure-ascii']
+    "});
+
+    let cwd = context.work_dir();
+
+    cwd.child("unicode.json")
+        .write_str(r#"{"text":"\u4E2D\u6587\u306B\u307B\u3093\u3054"}"#)?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    pretty format json.......................................................Failed
+    - hook id: pretty-format-json
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing file unicode.json
+
+    ----- stderr -----
+    "#);
+
+    // Unicode should be decoded, not escaped
+    assert_snapshot!(context.read("unicode.json"), @r#"
+    {
+      "text": "中文にほんご"
+    }
+    "#);
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pretty format json.......................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pretty_format_json_custom_space_indent() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: pretty-format-json
+                args: ['--autofix', '--indent=  ']
+    "});
+
+    let cwd = context.work_dir();
+
+    cwd.child("test.json").write_str(r#"{"a":1,"b":2}"#)?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    pretty format json.......................................................Failed
+    - hook id: pretty-format-json
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing file test.json
+
+    ----- stderr -----
+    "#);
+
+    insta::assert_snapshot!(context.read("test.json"), @r#"
+    {
+      "a": 1,
+      "b": 2
+    }
+    "#);
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pretty format json.......................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
 #[cfg(unix)]
 fn check_symlinks_hook_unix() -> Result<()> {
     let context = TestContext::new();

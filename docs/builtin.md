@@ -57,6 +57,7 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 #### Notes
 
 - `check-yaml` fast path does not yet support the `--unsafe` flag; for those cases, the automatic fast path is skipped.
+- `pretty-format-json` is currently available only via `repo: builtin` while parity coverage against upstream Python behavior is still being expanded.
 - Other hooks from the repository which have no fast path implementation will run via the standard method.
 
 ### Disabling the fast path
@@ -102,6 +103,7 @@ For `repo: builtin`, the following hooks are supported:
 - [`fix-byte-order-marker`](#fix-byte-order-marker) (Remove UTF-8 byte order marker)
 - [`check-json`](#check-json) (Validate JSON files)
 - [`check-json5`](#check-json5) (Validate JSON5 files)
+- [`pretty-format-json`](#pretty-format-json) (Pretty format JSON files)
 - [`check-toml`](#check-toml) (Validate TOML files)
 - [`check-vcs-permalinks`](#check-vcs-permalinks) (Check that VCS links are permalinks)
 - [`check-yaml`](#check-yaml) (Validate YAML files)
@@ -294,6 +296,35 @@ Attempts to load all JSON5 files to verify syntax.
 **Caveats / differences**
 
 - This implementation rejects **duplicate object keys** (errors with `duplicate key ...`).
+
+---
+
+#### `pretty-format-json`
+
+Checks that JSON files are pretty-formatted and can optionally rewrite them in place.
+
+**Supported arguments** (compatible with `pre-commit-hooks`):
+
+- `--autofix`
+    - Rewrite files in place when formatting changes are needed.
+- `--indent=<indent>` (default: `2`)
+    - Use `<indent>` for each indentation level.
+    - Numeric values mean that many spaces.
+    - Non-numeric values are used literally, so `--indent=\t` uses tabs.
+- `--no-ensure-ascii`
+    - Keep non-ASCII characters as UTF-8 instead of escaping them as `\uXXXX`.
+- `--no-sort-keys`
+    - Preserve the original key order instead of sorting object keys.
+- `--top-keys=<k1,k2,...>`
+    - In every JSON object, move matching keys to the front in the given order.
+    - Duplicate names after the first one are ignored.
+    - Remaining keys come after that prefix and are sorted unless `--no-sort-keys` is set.
+    - This applies recursively to nested objects too, not just the root object.
+
+**Caveats**
+
+- This hook is currently available only via `repo: builtin`; automatic fast-path replacement of the upstream Python hook remains disabled until parity coverage is broader.
+- Rewritten files always use LF (`\n`) line endings and end with exactly one trailing newline.
 
 ---
 
