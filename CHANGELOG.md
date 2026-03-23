@@ -6,6 +6,7 @@ Released on 2026-03-23.
 
 ### Enhancements
 
+- Add experimental `language: deno` support ([#1516](https://github.com/j178/prek/pull/1516))
 - Add `pretty-format-json` as builtin hook ([#915](https://github.com/j178/prek/pull/915))
 - Add `check-vcs-permalinks` as builtin hook ([#1842](https://github.com/j178/prek/pull/1842))
 - Add `check-illegal-windows-names` as builtin hook ([#1841](https://github.com/j178/prek/pull/1841))
@@ -24,6 +25,7 @@ Released on 2026-03-23.
 ### Contributors
 
 - @j178
+- @shaanmajid
 - @mvanhorn
 - @feliblo
 - @Tiryoh
