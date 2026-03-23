@@ -40,7 +40,10 @@ jobs:
         id: refresh
         env:
           GITHUB_TOKEN: ${{ secrets.PREK_ACTION_TOKEN }}
-        run: npm run update-known-versions
+        run: |
+          # Wait a bit to ensure the new release is available via the GitHub API.
+          sleep 10
+          npm run update-known-versions
 
       - name: Check whether known version files changed
         id: changes
