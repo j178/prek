@@ -2104,7 +2104,7 @@ dependencies = [
 
 [[package]]
 name = "prek"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "aho-corasick",
  "anstream",
@@ -2186,14 +2186,14 @@ dependencies = [
 
 [[package]]
 name = "prek-consts"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "tracing",
 ]
 
 [[package]]
 name = "prek-identify"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "anyhow",
  "fs-err",
@@ -2209,7 +2209,7 @@ dependencies = [
 
 [[package]]
 name = "prek-pty"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "rustix",
  "tokio",
