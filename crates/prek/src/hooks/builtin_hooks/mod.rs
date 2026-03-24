@@ -351,7 +351,7 @@ impl BuiltinHook {
                  priority: None,
                  options: HookOptions {
                     description: Some("Prevent addition of new git submodules.".to_string()),
-                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
+                    types: Some(tags::TAG_SET_DIRECTORY),
                     ..Default::default()
                  },
             },
