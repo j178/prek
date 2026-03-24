@@ -20,7 +20,7 @@ use tracing_subscriber::{EnvFilter, Layer};
 
 use crate::cleanup::cleanup;
 use crate::cli::{
-    CacheCommand, CacheNamespace, Cli, Command, ExitStatus, UtilCommand, UtilNamespace,
+    CacheCommand, CacheNamespace, Cli, Command, ExitStatus, UtilCommand, UtilNamespace, flag,
 };
 #[cfg(feature = "self-update")]
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
@@ -288,7 +288,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.directory,
                 args.last_commit,
                 args.show_diff_on_failure,
-                args.fail_fast,
+                flag(args.fail_fast, args.no_fail_fast),
                 args.dry_run,
                 cli.globals.refresh,
                 args.extra,

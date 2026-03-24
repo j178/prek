@@ -45,7 +45,7 @@ pub(crate) async fn run(
     directories: Vec<String>,
     last_commit: bool,
     show_diff_on_failure: bool,
-    fail_fast: bool,
+    fail_fast: Option<bool>,
     dry_run: bool,
     refresh: bool,
     extra_args: RunExtraArgs,
@@ -578,7 +578,7 @@ async fn run_hooks(
     filenames: Vec<PathBuf>,
     store: &Store,
     show_diff_on_failure: bool,
-    fail_fast: bool,
+    fail_fast: Option<bool>,
     dry_run: bool,
     verbose: bool,
     printer: Printer,
@@ -636,7 +636,7 @@ async fn run_hooks(
         }
         let mut prev_diff = git::get_diff(project.path()).await?;
 
-        let project_fail_fast = fail_fast || project.config().fail_fast.unwrap_or(false);
+        let project_fail_fast = fail_fast.or(project.config().fail_fast).unwrap_or(false);
 
         for group_range in PriorityGroupRanges::new(&hooks) {
             let group_hooks = hooks[group_range].to_vec();

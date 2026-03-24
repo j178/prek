@@ -109,6 +109,16 @@ impl From<ColorChoice> for anstream::ColorChoice {
     }
 }
 
+/// Given a boolean flag pair (like `--fail-fast` and `--no-fail-fast`), resolve the value of the flag.
+pub(crate) fn flag(yes: bool, no: bool) -> Option<bool> {
+    match (yes, no) {
+        (true, false) => Some(true),
+        (false, true) => Some(false),
+        (false, false) => None,
+        (true, true) => unreachable!("clap should prevent both flags from being set"),
+    }
+}
+
 const STYLES: Styles = Styles::styled()
     .header(AnsiColor::Green.on_default().effects(Effects::BOLD))
     .usage(AnsiColor::Green.on_default().effects(Effects::BOLD))
@@ -518,6 +528,10 @@ pub(crate) struct RunArgs {
     /// Stop running hooks after the first failure.
     #[arg(long)]
     pub(crate) fail_fast: bool,
+
+    /// Do not stop running hooks after the first failure.
+    #[arg(long, hide = true, overrides_with = "fail_fast")]
+    pub(crate) no_fail_fast: bool,
 
     /// Do not run the hooks, but print the hooks that would have been run.
     #[arg(long)]

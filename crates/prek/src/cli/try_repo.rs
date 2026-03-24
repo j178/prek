@@ -8,8 +8,8 @@ use prek_consts::PREK_TOML;
 use tempfile::TempDir;
 use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Value};
 
-use crate::cli::ExitStatus;
 use crate::cli::run::Selectors;
+use crate::cli::{ExitStatus, flag};
 use crate::config;
 use crate::git;
 use crate::git::GIT_ROOT;
@@ -219,7 +219,7 @@ pub(crate) async fn try_repo(
         run_args.directory,
         run_args.last_commit,
         run_args.show_diff_on_failure,
-        run_args.fail_fast,
+        flag(run_args.fail_fast, run_args.no_fail_fast),
         run_args.dry_run,
         refresh,
         run_args.extra,
