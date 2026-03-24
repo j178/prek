@@ -5,11 +5,12 @@ use anyhow::Result;
 use prek_identify::tags;
 
 use crate::cli::reporter::HookRunReporter;
-use crate::config::{BuiltinHook, HookOptions, PassFilenames, Stage};
+use crate::config::{BuiltinHook, FilePattern, HookOptions, PassFilenames, Stage};
 use crate::hook::Hook;
 use crate::hooks::pre_commit_hooks;
 use crate::store::Store;
 
+mod check_illegal_windows_names;
 mod check_json5;
 
 #[derive(
@@ -30,18 +31,24 @@ pub(crate) enum BuiltinHooks {
     CheckAddedLargeFiles,
     CheckCaseConflict,
     CheckExecutablesHaveShebangs,
+    CheckIllegalWindowsNames,
     CheckJson,
     CheckJson5,
     CheckMergeConflict,
+    CheckShebangScriptsAreExecutable,
     CheckSymlinks,
     CheckToml,
+    CheckVcsPermalinks,
     CheckXml,
     CheckYaml,
+    DestroyedSymlinks,
     DetectPrivateKey,
     EndOfFileFixer,
+    FileContentsSorter,
     FixByteOrderMarker,
     MixedLineEnding,
     NoCommitToBranch,
+    PrettyFormatJson,
     TrailingWhitespace,
 }
 
@@ -62,22 +69,36 @@ impl BuiltinHooks {
             Self::CheckExecutablesHaveShebangs => {
                 pre_commit_hooks::check_executables_have_shebangs(hook, filenames).await
             }
+            Self::CheckIllegalWindowsNames => Ok(
+                check_illegal_windows_names::check_illegal_windows_names(hook, filenames),
+            ),
             Self::CheckJson => pre_commit_hooks::check_json(hook, filenames).await,
             Self::CheckJson5 => check_json5::check_json5(hook, filenames).await,
             Self::CheckMergeConflict => {
                 pre_commit_hooks::check_merge_conflict(hook, filenames).await
             }
+            Self::CheckShebangScriptsAreExecutable => {
+                pre_commit_hooks::check_shebang_scripts_are_executable(hook, filenames).await
+            }
             Self::CheckSymlinks => pre_commit_hooks::check_symlinks(hook, filenames).await,
             Self::CheckToml => pre_commit_hooks::check_toml(hook, filenames).await,
+            Self::CheckVcsPermalinks => {
+                pre_commit_hooks::check_vcs_permalinks(hook, filenames).await
+            }
             Self::CheckXml => pre_commit_hooks::check_xml(hook, filenames).await,
             Self::CheckYaml => pre_commit_hooks::check_yaml(hook, filenames).await,
+            Self::DestroyedSymlinks => pre_commit_hooks::destroyed_symlinks(hook, filenames).await,
             Self::DetectPrivateKey => pre_commit_hooks::detect_private_key(hook, filenames).await,
             Self::EndOfFileFixer => pre_commit_hooks::fix_end_of_file(hook, filenames).await,
+            Self::FileContentsSorter => {
+                pre_commit_hooks::file_contents_sorter(hook, filenames).await
+            }
             Self::FixByteOrderMarker => {
                 pre_commit_hooks::fix_byte_order_marker(hook, filenames).await
             }
             Self::MixedLineEnding => pre_commit_hooks::mixed_line_ending(hook, filenames).await,
             Self::NoCommitToBranch => pre_commit_hooks::no_commit_to_branch(hook).await,
+            Self::PrettyFormatJson => pre_commit_hooks::pretty_format_json(hook, filenames).await,
             Self::TrailingWhitespace => {
                 pre_commit_hooks::fix_trailing_whitespace(hook, filenames).await
             }
@@ -129,6 +150,24 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
+            BuiltinHooks::CheckIllegalWindowsNames => BuiltinHook {
+                id: "check-illegal-windows-names".to_string(),
+                name: "check illegal windows names".to_string(),
+                entry: "check-illegal-windows-names".to_string(),
+                priority: None,
+                options: HookOptions {
+                    description: Some(
+                        "checks for filenames which cannot be created on Windows.".to_string(),
+                    ),
+                    files: Some(
+                        FilePattern::new_regex(
+                            check_illegal_windows_names::ILLEGAL_WINDOWS_PATTERN,
+                        )
+                        .expect("builtin files regex must be valid"),
+                    ),
+                    ..Default::default()
+                },
+            },
             BuiltinHooks::CheckJson => BuiltinHook {
                 id: "check-json".to_string(),
                 name: "check json".to_string(),
@@ -164,6 +203,21 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
+            BuiltinHooks::CheckShebangScriptsAreExecutable => BuiltinHook {
+                id: "check-shebang-scripts-are-executable".to_string(),
+                name: "check that scripts with shebangs are executable".to_string(),
+                entry: "check-shebang-scripts-are-executable".to_string(),
+                priority: None,
+                options: HookOptions {
+                    description: Some(
+                        "ensures that (non-binary) files with a shebang are executable."
+                            .to_string(),
+                    ),
+                    types: Some(tags::TAG_SET_TEXT),
+                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
+                    ..Default::default()
+                },
+            },
             BuiltinHooks::CheckSymlinks => BuiltinHook {
                 id: "check-symlinks".to_string(),
                 name: "check for broken symlinks".to_string(),
@@ -188,6 +242,19 @@ impl BuiltinHook {
                     ..Default::default()
                 },
             },
+            BuiltinHooks::CheckVcsPermalinks => BuiltinHook {
+                id: "check-vcs-permalinks".to_string(),
+                name: "check vcs permalinks".to_string(),
+                entry: "check-vcs-permalinks".to_string(),
+                priority: None,
+                options: HookOptions {
+                    description: Some(
+                        "ensures that links to vcs websites are permalinks.".to_string(),
+                    ),
+                    types: Some(tags::TAG_SET_TEXT),
+                    ..Default::default()
+                },
+            },
             BuiltinHooks::CheckXml => BuiltinHook {
                 id: "check-xml".to_string(),
                 name: "check xml".to_string(),
@@ -207,6 +274,20 @@ impl BuiltinHook {
                 options: HookOptions {
                     description: Some("checks yaml files for parseable syntax.".to_string()),
                     types: Some(tags::TAG_SET_YAML),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::DestroyedSymlinks => BuiltinHook {
+                id: "destroyed-symlinks".to_string(),
+                name: "detect destroyed symlinks".to_string(),
+                entry: "destroyed-symlinks".to_string(),
+                priority: None,
+                options: HookOptions {
+                    description: Some(
+                        "detects symlinks that were replaced with regular files whose contents are the original symlink target path.".to_string(),
+                    ),
+                    types: Some(tags::TAG_SET_FILE),
+                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
             },
@@ -233,6 +314,20 @@ impl BuiltinHook {
                     ),
                     types: Some(tags::TAG_SET_TEXT),
                     stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::FileContentsSorter => BuiltinHook {
+                id: "file-contents-sorter".to_string(),
+                name: "file contents sorter".to_string(),
+                entry: "file-contents-sorter".to_string(),
+                priority: None,
+                options: HookOptions {
+                    description: Some(
+                        "sorts the lines in specified files (defaults to alphabetical)."
+                            .to_string(),
+                    ),
+                    files: Some(FilePattern::Never),
                     ..Default::default()
                 },
             },
@@ -266,6 +361,18 @@ impl BuiltinHook {
                 options: HookOptions {
                     pass_filenames: Some(PassFilenames::None),
                     always_run: Some(true),
+                    ..Default::default()
+                },
+            },
+            BuiltinHooks::PrettyFormatJson => BuiltinHook {
+                id: "pretty-format-json".to_string(),
+                name: "pretty format json".to_string(),
+                entry: "pretty-format-json".to_string(),
+                priority: None,
+                options: HookOptions {
+                    description: Some("checks that JSON files are pretty-formatted.".to_string()),
+                    types: Some(tags::TAG_SET_JSON),
+                    stages: Some([Stage::PreCommit, Stage::PrePush, Stage::Manual].into()),
                     ..Default::default()
                 },
             },

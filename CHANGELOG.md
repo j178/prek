@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.3.8
+
+Released on 2026-03-23.
+
+### Enhancements
+
+- Add experimental `language: deno` support ([#1516](https://github.com/j178/prek/pull/1516))
+- Add `pretty-format-json` as builtin hook ([#915](https://github.com/j178/prek/pull/915))
+- Add `check-vcs-permalinks` as builtin hook ([#1842](https://github.com/j178/prek/pull/1842))
+- Add `check-illegal-windows-names` as builtin hook ([#1841](https://github.com/j178/prek/pull/1841))
+- Add `check-shebang-scripts-are-executable` builtin hook ([#1847](https://github.com/j178/prek/pull/1847))
+- Add `destroyed-symlinks` builtin hook ([#1851](https://github.com/j178/prek/pull/1851))
+- Add `file-contents-sorter` as builtin hook ([#1846](https://github.com/j178/prek/pull/1846))
+- Add `--all` flag to `prek uninstall` ([#1817](https://github.com/j178/prek/pull/1817))
+- Improve file pattern parse errors ([#1829](https://github.com/j178/prek/pull/1829))
+- Validate `uv` binary after download ([#1825](https://github.com/j178/prek/pull/1825))
+
+### Bug fixes
+
+- Fix workspace-relative added file paths ([#1852](https://github.com/j178/prek/pull/1852))
+- Relax alias-anchor ratio check for check-yaml ([#1839](https://github.com/j178/prek/pull/1839))
+
+### Contributors
+
+- @j178
+- @shaanmajid
+- @mvanhorn
+- @feliblo
+- @Tiryoh
+
+## 0.3.7
+
+Due to a release process failure, this version was republished as 0.3.8.
+
 ## 0.3.6
 
 Released on 2026-03-16.

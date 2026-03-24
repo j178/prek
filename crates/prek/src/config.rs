@@ -11,7 +11,7 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use itertools::Itertools;
 use prek_identify::TagSet;
 use rustc_hash::FxHashMap;
-use serde::de::{Error as DeError, MapAccess, Visitor};
+use serde::de::{DeserializeSeed, Error as DeError, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::fs::Simplified;
@@ -51,12 +51,115 @@ impl std::fmt::Debug for GlobPatterns {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
 enum FilePatternWire {
     Glob { glob: String },
     GlobList { glob: Vec<String> },
     Regex(String),
+}
+
+impl<'de> Deserialize<'de> for FilePatternWire {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct FilePatternVisitor;
+        struct GlobFieldVisitor;
+
+        impl<'de> DeserializeSeed<'de> for GlobFieldVisitor {
+            type Value = FilePatternWire;
+
+            fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                deserializer.deserialize_any(self)
+            }
+        }
+
+        impl<'de> Visitor<'de> for GlobFieldVisitor {
+            type Value = FilePatternWire;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a string or a list of strings")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(FilePatternWire::Glob {
+                    glob: value.to_owned(),
+                })
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(FilePatternWire::Glob { glob: value })
+            }
+
+            fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                Ok(FilePatternWire::GlobList {
+                    glob: Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(
+                        seq,
+                    ))?,
+                })
+            }
+        }
+
+        impl<'de> Visitor<'de> for FilePatternVisitor {
+            type Value = FilePatternWire;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str(
+                    "a regex string or a mapping with `glob` set to a string or list of strings",
+                )
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(FilePatternWire::Regex(value.to_owned()))
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(FilePatternWire::Regex(value))
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let mut glob = None;
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "glob" => {
+                            if glob.is_some() {
+                                return Err(M::Error::duplicate_field("glob"));
+                            }
+                            glob = Some(map.next_value_seed(GlobFieldVisitor)?);
+                        }
+                        _ => {
+                            return Err(M::Error::unknown_field(&key, &["glob"]));
+                        }
+                    }
+                }
+
+                glob.ok_or_else(|| M::Error::missing_field("glob"))
+            }
+        }
+
+        deserializer.deserialize_any(FilePatternVisitor)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -71,6 +174,7 @@ enum FilePatternWireError {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "FilePatternWire")]
 pub(crate) enum FilePattern {
+    Never,
     Regex(Regex),
     Glob(GlobPatterns),
 }
@@ -86,6 +190,7 @@ impl FilePattern {
 
     pub(crate) fn is_match(&self, str: &str) -> bool {
         match self {
+            FilePattern::Never => false,
             FilePattern::Regex(regex) => regex.is_match(str).unwrap_or(false),
             FilePattern::Glob(globs) => globs.is_match(str),
         }
@@ -95,6 +200,7 @@ impl FilePattern {
 impl Display for FilePattern {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            FilePattern::Never => f.write_str("never"),
             FilePattern::Regex(regex) => write!(f, "regex: {}", regex.as_str()),
             FilePattern::Glob(globs) => {
                 let patterns = globs.patterns.iter().join(", ");
@@ -138,6 +244,7 @@ pub enum Language {
     Conda,
     Coursier,
     Dart,
+    Deno,
     Docker,
     DockerImage,
     Dotnet,
@@ -1358,6 +1465,14 @@ mod tests {
         assert!(pattern.is_match("src/main.rs"));
         assert!(pattern.is_match("crates/foo/src/lib.rs"));
         assert!(!pattern.is_match("tests/main.rs"));
+    }
+
+    #[test]
+    fn file_pattern_never_matches() {
+        let pattern = FilePattern::Never;
+        assert!(!pattern.is_match(""));
+        assert!(!pattern.is_match("foo.txt"));
+        assert!(!pattern.is_match("nested/path.rs"));
     }
 
     #[test]

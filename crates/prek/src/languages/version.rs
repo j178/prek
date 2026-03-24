@@ -4,6 +4,7 @@ use crate::config::Language;
 use crate::hook::InstallInfo;
 use crate::languages::bun::BunRequest;
 use crate::languages::dotnet::DotnetRequest;
+use crate::languages::deno::DenoRequest;
 use crate::languages::golang::GoRequest;
 use crate::languages::node::NodeRequest;
 use crate::languages::python::PythonRequest;
@@ -21,6 +22,7 @@ pub(crate) enum LanguageRequest {
     Any { system_only: bool },
     Bun(BunRequest),
     Dotnet(DotnetRequest),
+    Deno(DenoRequest),
     Golang(GoRequest),
     Ruby(RubyRequest),
     Node(NodeRequest),
@@ -36,6 +38,7 @@ impl LanguageRequest {
             LanguageRequest::Any { .. } => true,
             LanguageRequest::Bun(req) => req.is_any(),
             LanguageRequest::Dotnet(req) => req.is_any(),
+            LanguageRequest::Deno(req) => req.is_any(),
             LanguageRequest::Golang(req) => req.is_any(),
             LanguageRequest::Node(req) => req.is_any(),
             LanguageRequest::Python(req) => req.is_any(),
@@ -78,6 +81,7 @@ impl LanguageRequest {
         Ok(match lang {
             Language::Bun => Self::Bun(request.parse()?),
             Language::Dotnet => Self::Dotnet(request.parse()?),
+            Language::Deno => Self::Deno(request.parse()?),
             Language::Golang => Self::Golang(request.parse()?),
             Language::Node => Self::Node(request.parse()?),
             Language::Python => Self::Python(request.parse()?),
@@ -92,6 +96,7 @@ impl LanguageRequest {
             LanguageRequest::Any { .. } => true,
             LanguageRequest::Bun(req) => req.satisfied_by(install_info),
             LanguageRequest::Dotnet(req) => req.satisfied_by(install_info),
+            LanguageRequest::Deno(req) => req.satisfied_by(install_info),
             LanguageRequest::Golang(req) => req.satisfied_by(install_info),
             LanguageRequest::Node(req) => req.satisfied_by(install_info),
             LanguageRequest::Python(req) => req.satisfied_by(install_info),

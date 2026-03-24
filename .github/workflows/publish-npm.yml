@@ -16,7 +16,6 @@ jobs:
     permissions:
       # For npm's trusted publishing.
       id-token: write
-      packages: write
     env:
       PLAN: ${{ inputs.plan }}
     steps:

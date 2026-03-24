@@ -104,6 +104,10 @@ pub(crate) async fn get_added_files(root: &Path) -> Result<Vec<PathBuf>, Error> 
         .current_dir(root)
         .arg("diff")
         .arg("--staged")
+        // `git diff --name-only` reports paths relative to the repository root by default,
+        // even when it runs inside a subdirectory. `--relative` keeps the output aligned
+        // with hooks, which receive filenames relative to their project root.
+        .arg("--relative")
         .arg("--name-only")
         .arg("--diff-filter=A")
         .arg("-z") // Use NUL as line terminator
@@ -634,12 +638,16 @@ pub(crate) async fn get_shared_repository_file_mode(mode: u32) -> Result<u32> {
     }
 }
 
-pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<FxHashSet<PathBuf>, Error> {
+pub(crate) async fn get_lfs_files(
+    current_dir: &Path,
+    paths: &[&Path],
+) -> Result<FxHashSet<PathBuf>, Error> {
     if paths.is_empty() {
         return Ok(FxHashSet::default());
     }
 
     let mut child = git_cmd("git check-attr")?
+        .current_dir(current_dir)
         .arg("check-attr")
         .arg("filter")
         .arg("-z")

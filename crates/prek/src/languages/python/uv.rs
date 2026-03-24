@@ -82,14 +82,14 @@ fn wheel_platform_tag_for_host(
 // Get the uv wheel platform tag for the current host.
 fn get_wheel_platform_tag() -> Result<String> {
     wheel_platform_tag_for_host(HOST.operating_system, HOST.architecture, HOST.environment)
-        .map(str::to_string)
+        .map(ToString::to_string)
 }
 
 fn get_uv_version(uv_path: &Path) -> Result<Version> {
     let output = Command::new(uv_path)
         .arg("--version")
         .output()
-        .map_err(|e| anyhow::anyhow!("Failed to execute uv: {e}"))?;
+        .context("Failed to execute uv")?;
 
     if !output.status.success() {
         bail!("Failed to get uv version");
@@ -99,7 +99,7 @@ fn get_uv_version(uv_path: &Path) -> Result<Version> {
     let version_str = version_output
         .split_whitespace()
         .nth(1)
-        .ok_or_else(|| anyhow::anyhow!("Invalid version output format"))?;
+        .context("Invalid version output format")?;
 
     Version::parse(version_str).map_err(Into::into)
 }
@@ -207,7 +207,7 @@ impl InstallSource {
             anyhow::Ok(())
         })
         .await
-        .context("Failed to download and extra uv")?;
+        .context("Failed to download and extract uv")?;
 
         Ok(())
     }
@@ -245,7 +245,7 @@ impl InstallSource {
         let metadata: serde_json::Value = response.json().await?;
         let files = metadata["urls"]
             .as_array()
-            .ok_or_else(|| anyhow::anyhow!("Invalid PyPI response: missing urls"))?;
+            .context("Invalid PyPI response: missing urls")?;
 
         let wheel_file = files
             .iter()
@@ -254,13 +254,11 @@ impl InstallSource {
                     && file["packagetype"].as_str() == Some("bdist_wheel")
                     && file["yanked"].as_bool() != Some(true)
             })
-            .ok_or_else(|| {
-                anyhow::anyhow!("Could not find wheel for {wheel_name} in PyPI response")
-            })?;
+            .with_context(|| format!("Could not find wheel for {wheel_name} in PyPI response"))?;
 
         let download_url = wheel_file["url"]
             .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Missing download URL in PyPI response"))?;
+            .context("Missing download URL in PyPI response")?;
 
         self.download_and_extract_wheel(store, target, &wheel_name, download_url)
             .await
@@ -301,8 +299,8 @@ impl InstallSource {
                 }
                 None
             })
-            .ok_or_else(|| {
-                anyhow::anyhow!(
+            .with_context(|| {
+                format!(
                     "Could not find wheel download link for {wheel_name} in simple API response"
                 )
             })?;
@@ -539,6 +537,21 @@ impl Uv {
         };
         source.install(store, uv_dir).await?;
 
+        // Downloaded `uv` binaries can be present on disk but still fail to execute in the
+        // current runtime environment, such as when the libc variant or dynamic loader path
+        // does not match the host. Validate immediately so we can surface a clear error here.
+        match validate_uv_binary(&uv_path) {
+            Ok(version) => trace!(version = %version, "Successfully installed uv"),
+            Err(err) => bail!(
+                "Installed uv at `{}` failed validation: {err}. \
+                This usually means the downloaded uv binary is incompatible with the \
+                current runtime environment, for example due to a libc mismatch or a \
+                missing dynamic loader path. If this keeps happening, please report it \
+                with details about your environment and the full error output.",
+                uv_path.display()
+            ),
+        }
+
         Ok(Self::new(uv_path))
     }
 }
@@ -560,149 +573,154 @@ fn uv_source_from_env() -> Option<InstallSource> {
     }
 }
 
-#[test]
-fn ensure_cur_uv_version_in_range() {
-    let version = Version::parse(CUR_UV_VERSION).expect("Invalid CUR_UV_VERSION");
-    assert!(
-        UV_VERSION_RANGE.matches(&version),
-        "CUR_UV_VERSION {CUR_UV_VERSION} does not satisfy the version requirement {}",
-        &*UV_VERSION_RANGE
-    );
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn wheel_platform_tag_x86_64_linux_gnu() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::X86_64,
-        Environment::Gnu,
-    )?;
-    assert_eq!(tag, "manylinux_2_17_x86_64.manylinux2014_x86_64");
-    Ok(())
-}
+    #[test]
+    fn ensure_cur_uv_version_in_range() {
+        let version = Version::parse(CUR_UV_VERSION).expect("Invalid CUR_UV_VERSION");
+        assert!(
+            UV_VERSION_RANGE.matches(&version),
+            "CUR_UV_VERSION {CUR_UV_VERSION} does not satisfy the version requirement {}",
+            &*UV_VERSION_RANGE
+        );
+    }
 
-#[test]
-fn wheel_platform_tag_x86_64_linux_musl() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::X86_64,
-        Environment::Musl,
-    )?;
-    assert_eq!(tag, "musllinux_1_1_x86_64");
-    Ok(())
-}
+    #[test]
+    fn wheel_platform_tag_x86_64_linux_gnu() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::X86_64,
+            Environment::Gnu,
+        )?;
+        assert_eq!(tag, "manylinux_2_17_x86_64.manylinux2014_x86_64");
+        Ok(())
+    }
 
-#[test]
-fn wheel_platform_tag_i686_linux_gnu() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
-        Environment::Gnu,
-    )?;
-    assert_eq!(tag, "manylinux_2_17_i686.manylinux2014_i686");
-    Ok(())
-}
+    #[test]
+    fn wheel_platform_tag_x86_64_linux_musl() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::X86_64,
+            Environment::Musl,
+        )?;
+        assert_eq!(tag, "musllinux_1_1_x86_64");
+        Ok(())
+    }
 
-#[test]
-fn wheel_platform_tag_i686_linux_musl() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
-        Environment::Musl,
-    )?;
-    assert_eq!(tag, "musllinux_1_1_i686");
-    Ok(())
-}
+    #[test]
+    fn wheel_platform_tag_i686_linux_gnu() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
+            Environment::Gnu,
+        )?;
+        assert_eq!(tag, "manylinux_2_17_i686.manylinux2014_i686");
+        Ok(())
+    }
 
-#[test]
-fn wheel_platform_tag_aarch64_linux_gnu() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
-        Environment::Gnu,
-    )?;
-    assert_eq!(
-        tag,
-        "manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64"
-    );
-    Ok(())
-}
+    #[test]
+    fn wheel_platform_tag_i686_linux_musl() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
+            Environment::Musl,
+        )?;
+        assert_eq!(tag, "musllinux_1_1_i686");
+        Ok(())
+    }
 
-#[test]
-fn wheel_platform_tag_aarch64_linux_musl() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
-        Environment::Musl,
-    )?;
-    // aarch64 uses a single dual-tagged wheel for both glibc and musl
-    assert_eq!(
-        tag,
-        "manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64"
-    );
-    Ok(())
-}
+    #[test]
+    fn wheel_platform_tag_aarch64_linux_gnu() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+            Environment::Gnu,
+        )?;
+        assert_eq!(
+            tag,
+            "manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64"
+        );
+        Ok(())
+    }
 
-#[test]
-fn wheel_platform_tag_armv7_linux_gnu() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::Arm(ArmArchitecture::Armv7),
-        Environment::Gnu,
-    )?;
-    assert_eq!(tag, "manylinux_2_17_armv7l.manylinux2014_armv7l");
-    Ok(())
-}
+    #[test]
+    fn wheel_platform_tag_aarch64_linux_musl() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+            Environment::Musl,
+        )?;
+        // aarch64 uses a single dual-tagged wheel for both glibc and musl
+        assert_eq!(
+            tag,
+            "manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64"
+        );
+        Ok(())
+    }
 
-#[test]
-fn wheel_platform_tag_armv7_linux_musl() -> Result<()> {
-    let tag = wheel_platform_tag_for_host(
-        OperatingSystem::Linux,
-        Architecture::Arm(ArmArchitecture::Armv7),
-        Environment::Musl,
-    )?;
-    assert_eq!(
-        tag,
-        "manylinux_2_17_armv7l.manylinux2014_armv7l.musllinux_1_1_armv7l"
-    );
-    Ok(())
-}
+    #[test]
+    fn wheel_platform_tag_armv7_linux_gnu() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::Arm(ArmArchitecture::Armv7),
+            Environment::Gnu,
+        )?;
+        assert_eq!(tag, "manylinux_2_17_armv7l.manylinux2014_armv7l");
+        Ok(())
+    }
 
-#[tokio::test]
-async fn replace_uv_binary_overwrites_existing_file() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let source = temp.path().join("source-uv");
-    let target_dir = temp.path().join("tools").join("uv");
-    let target_path = target_dir.join("uv").with_extension(EXE_EXTENSION);
+    #[test]
+    fn wheel_platform_tag_armv7_linux_musl() -> Result<()> {
+        let tag = wheel_platform_tag_for_host(
+            OperatingSystem::Linux,
+            Architecture::Arm(ArmArchitecture::Armv7),
+            Environment::Musl,
+        )?;
+        assert_eq!(
+            tag,
+            "manylinux_2_17_armv7l.manylinux2014_armv7l.musllinux_1_1_armv7l"
+        );
+        Ok(())
+    }
 
-    fs_err::create_dir_all(&target_dir)?;
-    fs_err::write(&source, b"new")?;
-    fs_err::write(&target_path, b"old")?;
+    #[tokio::test]
+    async fn replace_uv_binary_overwrites_existing_file() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("source-uv");
+        let target_dir = temp.path().join("tools").join("uv");
+        let target_path = target_dir.join("uv").with_extension(EXE_EXTENSION);
 
-    replace_uv_binary(&source, &target_path).await?;
+        fs_err::create_dir_all(&target_dir)?;
+        fs_err::write(&source, b"new")?;
+        fs_err::write(&target_path, b"old")?;
 
-    assert!(!source.exists());
-    assert_eq!(fs_err::read(&target_path)?, b"new");
+        replace_uv_binary(&source, &target_path).await?;
 
-    Ok(())
-}
+        assert!(!source.exists());
+        assert_eq!(fs_err::read(&target_path)?, b"new");
 
-#[tokio::test]
-async fn replace_uv_binary_recreates_missing_parent_dir() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let source = temp.path().join("source-uv");
-    let target_dir = temp.path().join("tools").join("uv");
-    let target_path = target_dir.join("uv").with_extension(EXE_EXTENSION);
+        Ok(())
+    }
 
-    fs_err::create_dir_all(&target_dir)?;
-    fs_err::write(&target_path, b"old")?;
-    fs_err::remove_dir_all(&target_dir)?;
-    fs_err::write(&source, b"new")?;
+    #[tokio::test]
+    async fn replace_uv_binary_recreates_missing_parent_dir() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("source-uv");
+        let target_dir = temp.path().join("tools").join("uv");
+        let target_path = target_dir.join("uv").with_extension(EXE_EXTENSION);
 
-    replace_uv_binary(&source, &target_path).await?;
+        fs_err::create_dir_all(&target_dir)?;
+        fs_err::write(&target_path, b"old")?;
+        fs_err::remove_dir_all(&target_dir)?;
+        fs_err::write(&source, b"new")?;
 
-    assert!(target_dir.exists());
-    assert_eq!(fs_err::read(&target_path)?, b"new");
+        replace_uv_binary(&source, &target_path).await?;
 
-    Ok(())
+        assert!(target_dir.exists());
+        assert_eq!(fs_err::read(&target_path)?, b"new");
+
+        Ok(())
+    }
 }

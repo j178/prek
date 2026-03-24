@@ -13,18 +13,24 @@ fn list_builtins_basic() {
     check-added-large-files
     check-case-conflict
     check-executables-have-shebangs
+    check-illegal-windows-names
     check-json
     check-json5
     check-merge-conflict
+    check-shebang-scripts-are-executable
     check-symlinks
     check-toml
+    check-vcs-permalinks
     check-xml
     check-yaml
+    destroyed-symlinks
     detect-private-key
     end-of-file-fixer
+    file-contents-sorter
     fix-byte-order-marker
     mixed-line-ending
     no-commit-to-branch
+    pretty-format-json
     trailing-whitespace
 
     ----- stderr -----
@@ -35,7 +41,7 @@ fn list_builtins_basic() {
 fn list_builtins_verbose() {
     let context = TestContext::new();
 
-    cmd_snapshot!(context.filters(), context.command().arg("util").arg("list-builtins").arg("--verbose"), @r"
+    cmd_snapshot!(context.filters(), context.command().arg("util").arg("list-builtins").arg("--verbose"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -48,6 +54,9 @@ fn list_builtins_verbose() {
     check-executables-have-shebangs
       ensures that (non-binary) executables have a shebang.
 
+    check-illegal-windows-names
+      checks for filenames which cannot be created on Windows.
+
     check-json
       checks json files for parseable syntax.
 
@@ -57,11 +66,17 @@ fn list_builtins_verbose() {
     check-merge-conflict
       checks for files that contain merge conflict strings.
 
+    check-shebang-scripts-are-executable
+      ensures that (non-binary) files with a shebang are executable.
+
     check-symlinks
       checks for symlinks which do not point to anything.
 
     check-toml
       checks toml files for parseable syntax.
+
+    check-vcs-permalinks
+      ensures that links to vcs websites are permalinks.
 
     check-xml
       checks xml files for parseable syntax.
@@ -69,11 +84,17 @@ fn list_builtins_verbose() {
     check-yaml
       checks yaml files for parseable syntax.
 
+    destroyed-symlinks
+      detects symlinks that were replaced with regular files whose contents are the original symlink target path.
+
     detect-private-key
       detects the presence of private keys.
 
     end-of-file-fixer
       ensures that a file is either empty, or ends with one newline.
+
+    file-contents-sorter
+      sorts the lines in specified files (defaults to alphabetical).
 
     fix-byte-order-marker
       removes utf-8 byte order marker.
@@ -82,6 +103,9 @@ fn list_builtins_verbose() {
       replaces or checks mixed line ending.
 
     no-commit-to-branch
+
+    pretty-format-json
+      checks that JSON files are pretty-formatted.
 
     trailing-whitespace
       trims trailing whitespace.
@@ -116,6 +140,11 @@ fn list_builtins_json() {
         "description": "ensures that (non-binary) executables have a shebang."
       },
       {
+        "id": "check-illegal-windows-names",
+        "name": "check illegal windows names",
+        "description": "checks for filenames which cannot be created on Windows."
+      },
+      {
         "id": "check-json",
         "name": "check json",
         "description": "checks json files for parseable syntax."
@@ -131,6 +160,11 @@ fn list_builtins_json() {
         "description": "checks for files that contain merge conflict strings."
       },
       {
+        "id": "check-shebang-scripts-are-executable",
+        "name": "check that scripts with shebangs are executable",
+        "description": "ensures that (non-binary) files with a shebang are executable."
+      },
+      {
         "id": "check-symlinks",
         "name": "check for broken symlinks",
         "description": "checks for symlinks which do not point to anything."
@@ -139,6 +173,11 @@ fn list_builtins_json() {
         "id": "check-toml",
         "name": "check toml",
         "description": "checks toml files for parseable syntax."
+      },
+      {
+        "id": "check-vcs-permalinks",
+        "name": "check vcs permalinks",
+        "description": "ensures that links to vcs websites are permalinks."
       },
       {
         "id": "check-xml",
@@ -151,6 +190,11 @@ fn list_builtins_json() {
         "description": "checks yaml files for parseable syntax."
       },
       {
+        "id": "destroyed-symlinks",
+        "name": "detect destroyed symlinks",
+        "description": "detects symlinks that were replaced with regular files whose contents are the original symlink target path."
+      },
+      {
         "id": "detect-private-key",
         "name": "detect private key",
         "description": "detects the presence of private keys."
@@ -159,6 +203,11 @@ fn list_builtins_json() {
         "id": "end-of-file-fixer",
         "name": "fix end of files",
         "description": "ensures that a file is either empty, or ends with one newline."
+      },
+      {
+        "id": "file-contents-sorter",
+        "name": "file contents sorter",
+        "description": "sorts the lines in specified files (defaults to alphabetical)."
       },
       {
         "id": "fix-byte-order-marker",
@@ -174,6 +223,11 @@ fn list_builtins_json() {
         "id": "no-commit-to-branch",
         "name": "don't commit to branch",
         "description": null
+      },
+      {
+        "id": "pretty-format-json",
+        "name": "pretty format json",
+        "description": "checks that JSON files are pretty-formatted."
       },
       {
         "id": "trailing-whitespace",

@@ -38,21 +38,26 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 - [`check-added-large-files`](https://github.com/pre-commit/pre-commit-hooks#check-added-large-files) (Prevent committing large files)
 - [`check-case-conflict`](https://github.com/pre-commit/pre-commit-hooks#check-case-conflict) (Check for files that would conflict in case-insensitive filesystems)
 - [`end-of-file-fixer`](https://github.com/pre-commit/pre-commit-hooks#end-of-file-fixer) (Ensure newline at EOF)
+- [`file-contents-sorter`](https://github.com/pre-commit/pre-commit-hooks#file-contents-sorter) (Sort lines in explicitly targeted files)
 - [`fix-byte-order-marker`](https://github.com/pre-commit/pre-commit-hooks#fix-byte-order-marker) (Remove UTF-8 byte order marker)
 - [`check-json`](https://github.com/pre-commit/pre-commit-hooks#check-json) (Validate JSON files)
 - [`check-toml`](https://github.com/pre-commit/pre-commit-hooks#check-toml) (Validate TOML files)
+- [`check-vcs-permalinks`](https://github.com/pre-commit/pre-commit-hooks#check-vcs-permalinks) (Check that VCS links are permalinks)
 - [`check-yaml`](https://github.com/pre-commit/pre-commit-hooks#check-yaml) (Validate YAML files)
 - [`check-xml`](https://github.com/pre-commit/pre-commit-hooks#check-xml) (Validate XML files)
 - [`mixed-line-ending`](https://github.com/pre-commit/pre-commit-hooks#mixed-line-ending) (Normalize or check line endings)
 - [`check-symlinks`](https://github.com/pre-commit/pre-commit-hooks#check-symlinks) (Check for broken symlinks)
+- [`destroyed-symlinks`](https://github.com/pre-commit/pre-commit-hooks#destroyed-symlinks) (Detect destroyed symlinks)
 - [`check-merge-conflict`](https://github.com/pre-commit/pre-commit-hooks#check-merge-conflict) (Check for merge conflicts)
 - [`detect-private-key`](https://github.com/pre-commit/pre-commit-hooks#detect-private-key) (Detect private keys)
 - [`no-commit-to-branch`](https://github.com/pre-commit/pre-commit-hooks#no-commit-to-branch) (Prevent committing to protected branches)
+- [`check-shebang-scripts-are-executable`](https://github.com/pre-commit/pre-commit-hooks#check-shebang-scripts-are-executable) (Ensures that (non-binary) files with a shebang are executable)
 - [`check-executables-have-shebangs`](https://github.com/pre-commit/pre-commit-hooks#check-executables-have-shebangs) (Ensures that (non-binary) executables have a shebang)
 
 #### Notes
 
 - `check-yaml` fast path does not yet support the `--unsafe` flag; for those cases, the automatic fast path is skipped.
+- `pretty-format-json` is currently available only via `repo: builtin` while parity coverage against upstream Python behavior is still being expanded.
 - Other hooks from the repository which have no fast path implementation will run via the standard method.
 
 ### Disabling the fast path
@@ -92,18 +97,24 @@ For `repo: builtin`, the following hooks are supported:
 - [`trailing-whitespace`](#trailing-whitespace) (Trim trailing whitespace)
 - [`check-added-large-files`](#check-added-large-files) (Prevent committing large files)
 - [`check-case-conflict`](#check-case-conflict) (Check for files that would conflict in case-insensitive filesystems)
+- [`check-illegal-windows-names`](#check-illegal-windows-names) (Check for filenames invalid on Windows)
 - [`end-of-file-fixer`](#end-of-file-fixer) (Ensure newline at EOF)
+- [`file-contents-sorter`](#file-contents-sorter) (Sort lines in explicitly targeted files)
 - [`fix-byte-order-marker`](#fix-byte-order-marker) (Remove UTF-8 byte order marker)
 - [`check-json`](#check-json) (Validate JSON files)
 - [`check-json5`](#check-json5) (Validate JSON5 files)
+- [`pretty-format-json`](#pretty-format-json) (Pretty format JSON files)
 - [`check-toml`](#check-toml) (Validate TOML files)
+- [`check-vcs-permalinks`](#check-vcs-permalinks) (Check that VCS links are permalinks)
 - [`check-yaml`](#check-yaml) (Validate YAML files)
 - [`check-xml`](#check-xml) (Validate XML files)
 - [`mixed-line-ending`](#mixed-line-ending) (Normalize or check line endings)
 - [`check-symlinks`](#check-symlinks) (Check for broken symlinks)
+- [`destroyed-symlinks`](#destroyed-symlinks) (Detect destroyed symlinks)
 - [`check-merge-conflict`](#check-merge-conflict) (Check for merge conflicts)
 - [`detect-private-key`](#detect-private-key) (Detect private keys)
 - [`no-commit-to-branch`](#no-commit-to-branch) (Prevent committing to protected branches)
+- [`check-shebang-scripts-are-executable`](#check-shebang-scripts-are-executable) (Ensures that (non-binary) files with a shebang are executable)
 - [`check-executables-have-shebangs`](#check-executables-have-shebangs) (Ensures that (non-binary) executables have a shebang)
 
 ### Hook Reference
@@ -181,6 +192,22 @@ Checks for paths that would conflict on a case-insensitive filesystem (for examp
 
 ---
 
+#### `check-illegal-windows-names`
+
+Checks for filenames that cannot be created on Windows.
+
+**Supported arguments**
+
+- None.
+
+**Behavior / caveats**
+
+- Reports filenames containing Windows-reserved device names such as `CON`, `PRN`, `AUX`, `NUL`, `COM1`, and `LPT1`.
+- Reports filenames containing characters forbidden by Windows, including `<`, `>`, `:`, `"`, `\`, `|`, `?`, `*`, and control characters.
+- Reports path segments ending with a trailing `.` or space.
+
+---
+
 #### `end-of-file-fixer`
 
 Ensures files end in a newline and only a newline.
@@ -195,6 +222,37 @@ Ensures files end in a newline and only a newline.
 - Files containing only newlines are truncated to empty.
 - If a file has no trailing newline, a single `\n` is appended (even if the file otherwise uses CRLF).
 - If a file has trailing newlines, they are reduced to exactly one trailing line ending.
+
+---
+
+#### `file-contents-sorter`
+
+Sorts the non-empty lines in each matched file and rewrites the file when the normalized order changes.
+
+**Supported arguments** (compatible with `pre-commit-hooks`):
+
+- `--ignore-case`
+    - Sort using ASCII case-folded ordering.
+    - Mutually exclusive with `--unique`.
+- `--unique`
+    - Sort and deduplicate lines.
+    - Mutually exclusive with `--ignore-case`.
+
+**Behavior / caveats**
+
+- Blank lines and whitespace-only lines are removed before sorting.
+- Line endings are normalized to `\n` in the rewritten file.
+- Like upstream, the builtin hook defaults to `files: '^$'`, so you must configure `files:` explicitly to target specific files.
+
+Example:
+
+```yaml
+repos:
+  - repo: builtin
+    hooks:
+      - id: file-contents-sorter
+        files: ^requirements(-dev)?\.txt$
+```
 
 ---
 
@@ -241,6 +299,35 @@ Attempts to load all JSON5 files to verify syntax.
 
 ---
 
+#### `pretty-format-json`
+
+Checks that JSON files are pretty-formatted and can optionally rewrite them in place.
+
+**Supported arguments** (compatible with `pre-commit-hooks`):
+
+- `--autofix`
+    - Rewrite files in place when formatting changes are needed.
+- `--indent=<indent>` (default: `2`)
+    - Use `<indent>` for each indentation level.
+    - Numeric values mean that many spaces.
+    - Non-numeric values are used literally, so `--indent=\t` uses tabs.
+- `--no-ensure-ascii`
+    - Keep non-ASCII characters as UTF-8 instead of escaping them as `\uXXXX`.
+- `--no-sort-keys`
+    - Preserve the original key order instead of sorting object keys.
+- `--top-keys=<k1,k2,...>`
+    - In every JSON object, move matching keys to the front in the given order.
+    - Duplicate names after the first one are ignored.
+    - Remaining keys come after that prefix and are sorted unless `--no-sort-keys` is set.
+    - This applies recursively to nested objects too, not just the root object.
+
+**Caveats**
+
+- This hook is currently available only via `repo: builtin`; automatic fast-path replacement of the upstream Python hook remains disabled until parity coverage is broader.
+- Rewritten files always use LF (`\n`) line endings and end with exactly one trailing newline.
+
+---
+
 #### `check-toml`
 
 Attempts to load all TOML files to verify syntax.
@@ -253,6 +340,23 @@ Attempts to load all TOML files to verify syntax.
 
 - Files must be valid UTF-8; invalid UTF-8 is reported as an error.
 - May report multiple parse errors for a single file.
+
+---
+
+#### `check-vcs-permalinks`
+
+Ensures that links to VCS websites are permalinks.
+
+**Supported arguments** (compatible with `pre-commit-hooks`):
+
+- `--additional-github-domain=<domain>` (repeatable)
+    - Adds extra GitHub-style domains to check in addition to the default `github.com`.
+
+**Behavior / caveats**
+
+- Flags links of the form `https://<domain>/<owner>/<repo>/blob/<branch>/...#L...`.
+- Does not flag commit-hash permalinks where `<branch>` is already a 4-64 character hexadecimal revision.
+- The builtin and fast-path implementations currently follow the upstream hook's GitHub-family matching behavior.
 
 ---
 
@@ -321,6 +425,21 @@ Checks for symlinks which do not point to anything.
 
 ---
 
+#### `destroyed-symlinks`
+
+Detects files staged as regular files whose `HEAD` version is a symlink, which usually happens when a repository is checked out in an environment without symlink support.
+
+**Supported arguments**
+
+- None.
+
+**Caveats**
+
+- This matches upstream `pre-commit-hooks` behavior: it only checks tracked entries reported by `git status --porcelain=v2`.
+- It intentionally ignores differences consisting only of trailing ASCII whitespace (including spaces, tabs, and newline/CRLF conversions) when comparing the staged file against the original symlink target path, because those differences are commonly introduced by formatting hooks.
+
+---
+
 #### `check-merge-conflict`
 
 Checks for merge conflict strings.
@@ -381,3 +500,18 @@ Checks that non-binary executables have a proper shebang.
 
 - The check is intentionally lightweight: it only verifies that the file starts with `#!`.
 - On systems where the executable bit is not tracked by the filesystem, `prek` consults git’s staged mode bits.
+
+---
+
+#### `check-shebang-scripts-are-executable`
+
+Checks that non-binary files with a shebang are marked executable.
+
+**Supported arguments**
+
+- None.
+
+**Caveats**
+
+- The check is intentionally lightweight: it only verifies that the file starts with `#!`.
+- To work on filesystems which do not track the executable bit, `prek` consults git’s staged mode bits.

@@ -11,6 +11,10 @@ test-threads = 8
 inherits = "ci-core"
 default-filter = "binary_id(prek::languages) and test(bun::)"
 
+[profile.lang-deno]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages) and test(deno::)"
+
 [profile.lang-docker]
 inherits = "ci-core"
 default-filter = "binary_id(prek::languages) and (test(docker::) or test(docker_image::))"
