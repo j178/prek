@@ -46,7 +46,9 @@ pub(crate) async fn forbid_new_submodules(
                 "{file_name}: new submodule introduced\n\
                 This commit introduces new submodules.\n\
                 Did you unintentionally `git add .`?\n\
-                To fix: git rm {{thesubmodule}}  # no trailing slash\n\
+                To fix: \n\
+                    1. git rm {{thesubmodule}}  # no trailing slash\n\
+                    2. rm -rf .git/modules/{{thesubmodule}}  # manually remove this item\n\
                 Also check .gitmodules"
             );
 
