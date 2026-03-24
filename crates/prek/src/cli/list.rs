@@ -116,7 +116,7 @@ pub(crate) async fn list(
                 .map(|h| {
                     let id = h.id.clone();
                     let full_id = h.full_id();
-                    let stages = h.stages.to_vec();
+                    let stages = h.stages.iter().collect();
                     SerializableHook {
                         id,
                         full_id,

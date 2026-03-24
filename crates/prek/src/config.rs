@@ -1,11 +1,10 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::error::Error as _;
 use std::fmt::Display;
 use std::ops::RangeInclusive;
 use std::path::Path;
 
 use anyhow::Result;
-use clap::ValueEnum;
 use fancy_regex::Regex;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use itertools::Itertools;
@@ -13,6 +12,7 @@ use prek_identify::TagSet;
 use rustc_hash::FxHashMap;
 use serde::de::{DeserializeSeed, Error as DeError, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
+use strum::EnumCount;
 
 use crate::fs::Simplified;
 use crate::install_source::InstallSource;
@@ -320,10 +320,12 @@ impl HookType {
     clap::ValueEnum,
     strum::AsRefStr,
     strum::Display,
+    strum::EnumCount,
 )]
 #[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[repr(u8)]
 pub(crate) enum Stage {
     Manual,
     CommitMsg,
@@ -360,6 +362,28 @@ impl From<HookType> for Stage {
 }
 
 impl Stage {
+    const ORDER: [Self; Self::COUNT] = [
+        Self::Manual,
+        Self::CommitMsg,
+        Self::PostCheckout,
+        Self::PostCommit,
+        Self::PostMerge,
+        Self::PostRewrite,
+        Self::PreCommit,
+        Self::PreMergeCommit,
+        Self::PrePush,
+        Self::PreRebase,
+        Self::PrepareCommitMsg,
+    ];
+
+    const fn bit(self) -> u16 {
+        1u16 << (self as u8)
+    }
+
+    fn from_index(index: u32) -> Self {
+        Self::ORDER[index as usize]
+    }
+
     pub fn operate_on_files(self) -> bool {
         matches!(
             self,
@@ -373,56 +397,58 @@ impl Stage {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) enum Stages {
-    All,
-    Some(BTreeSet<Stage>),
-}
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct Stages(u16);
 
 impl Stages {
-    pub(crate) fn is_empty(&self) -> bool {
-        matches!(self, Self::Some(stages) if stages.is_empty())
+    const ALL_BITS: u16 = (1u16 << Stage::COUNT) - 1;
+
+    pub(crate) const ALL: Self = Self(Self::ALL_BITS);
+
+    pub(crate) fn iter(self) -> impl Iterator<Item = Stage> {
+        let mut bits = self.0;
+        std::iter::from_fn(move || {
+            if bits == 0 {
+                return None;
+            }
+            let index = bits.trailing_zeros();
+            bits &= bits - 1;
+            Some(Stage::from_index(index))
+        })
     }
 
-    pub(crate) fn contains(&self, stage: Stage) -> bool {
-        match self {
-            Self::All => true,
-            Self::Some(stages) => stages.contains(&stage),
-        }
+    pub(crate) fn is_empty(self) -> bool {
+        self.0 == 0
     }
 
-    pub(crate) fn to_vec(&self) -> Vec<Stage> {
-        match self {
-            Self::All => Stage::value_variants().to_vec(),
-            Self::Some(stages) => stages.iter().copied().collect(),
-        }
+    pub(crate) fn contains(self, stage: Stage) -> bool {
+        (self.0 & stage.bit()) != 0
     }
 }
 
 impl Display for Stages {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::All => write!(f, "all"),
-            Self::Some(stages) => {
-                if stages.is_empty() {
-                    write!(f, "none")
-                } else {
-                    let stages_str = stages.iter().map(ToString::to_string).join(", ");
-                    write!(f, "{stages_str}")
-                }
-            }
+        if *self == Self::ALL {
+            write!(f, "all")
+        } else if self.is_empty() {
+            write!(f, "none")
+        } else {
+            let stages_str = self.iter().map(|stage| stage.to_string()).join(", ");
+            write!(f, "{stages_str}")
         }
+    }
+}
+
+impl std::fmt::Debug for Stages {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Stages({self})")
     }
 }
 
 impl From<Vec<Stage>> for Stages {
     fn from(value: Vec<Stage>) -> Self {
-        let stages: BTreeSet<_> = value.into_iter().collect();
-        if stages.len() == Stage::value_variants().len() {
-            Self::All
-        } else {
-            Self::Some(stages)
-        }
+        let bits = value.into_iter().fold(0, |bits, stage| bits | stage.bit());
+        Self(bits & Self::ALL_BITS)
     }
 }
 
@@ -1342,6 +1368,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::ValueEnum;
     use std::io::Write as _;
 
     /// Filter to replace dynamic version in snapshots
@@ -1358,7 +1385,7 @@ mod tests {
         }
 
         let parsed: Wrapper = serde_saphyr::from_str("stages: []\n").expect("stages should parse");
-        assert_eq!(parsed.stages, Stages::Some(BTreeSet::new()));
+        assert_eq!(parsed.stages, Stages::from([]));
         assert!(!parsed.stages.contains(Stage::Manual));
         assert!(!parsed.stages.contains(Stage::PreCommit));
     }
@@ -1368,7 +1395,7 @@ mod tests {
         let parsed: Config =
             serde_saphyr::from_str("repos: []\ndefault_stages: []\n").expect("config should parse");
 
-        assert_eq!(parsed.default_stages, Some(Stages::Some(BTreeSet::new())));
+        assert_eq!(parsed.default_stages, Some(Stages::from([])));
     }
 
     #[test]
@@ -1390,6 +1417,11 @@ mod tests {
         assert!(parsed.stages.contains(Stage::PreCommit));
         assert!(parsed.stages.contains(Stage::Manual));
         assert!(!parsed.stages.contains(Stage::PrePush));
+    }
+
+    #[test]
+    fn stages_full_set_normalizes_to_all() {
+        assert_eq!(Stages::from(Stage::value_variants().to_vec()), Stages::ALL);
     }
 
     #[test]
