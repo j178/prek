@@ -1,3 +1,4 @@
+use std::env;
 use std::path::Path;
 
 use anyhow::Context;
@@ -7,17 +8,27 @@ use crate::hook::Hook;
 
 pub(crate) async fn forbid_new_submodules(
     _hook: &Hook,
-    _filenames: &[&Path],
+    filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>), anyhow::Error> {
-    let stdout = git::git_cmd("check staged items for submodule addition")?
-        .arg("diff")
-        .arg("--diff-filter=A")
-        .arg("--raw")
-        .arg("--staged")
-        .check(true)
-        .output()
-        .await?
-        .stdout;
+    let mut cmd = git::git_cmd("check staged items")?;
+    cmd.arg("diff");
+
+    if let (Ok(from_ref), Ok(to_ref)) = (
+        env::var("PRE_COMMIT_FROM_REF"),
+        env::var("PRE_COMMIT_TO_REF"),
+    ) {
+        cmd.arg(format!("{}...{}", from_ref, to_ref));
+    } else {
+        cmd.arg("--staged");
+    }
+
+    cmd.arg("--diff-filter=A").arg("--raw").arg("--");
+
+    for path in filenames {
+        cmd.arg(path);
+    }
+
+    let stdout = cmd.check(true).output().await?.stdout;
 
     let stdout_str = std::str::from_utf8(&stdout)?;
 
