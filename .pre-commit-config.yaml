@@ -13,7 +13,6 @@ repos:
       - id: check-yaml
       - id: check-toml
       - id: end-of-file-fixer
-      - id: forbid-new-submodules
 
   - repo: https://github.com/crate-ci/typos
     rev: v1.44.0
@@ -49,18 +48,18 @@ repos:
         additional_dependencies: ["taplo==0.9.3"]
         types: [toml]
 
-  # - repo: local
-  #   hooks:
-  #     - id: cargo-fmt
-  #       name: cargo fmt
-  #       entry: cargo fmt --
-  #       language: system
-  #       types: [rust]
-  #       pass_filenames: false # This makes it a lot faster
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --
+        language: system
+        types: [rust]
+        pass_filenames: false # This makes it a lot faster
 
-  #     - id: cargo-clippy
-  #       name: cargo clippy
-  #       language: system
-  #       types: [rust]
-  #       pass_filenames: false
-  #       entry: cargo clippy --all-targets --all-features -- -D warnings
+      - id: cargo-clippy
+        name: cargo clippy
+        language: system
+        types: [rust]
+        pass_filenames: false
+        entry: cargo clippy --all-targets --all-features -- -D warnings
