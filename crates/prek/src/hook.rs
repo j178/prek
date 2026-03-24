@@ -84,8 +84,13 @@ impl HookSpec {
                 .and_then(|v| v.get(&language).cloned());
         }
 
-        if self.options.stages.as_ref().is_none_or(Stages::is_empty) {
-            self.options.stages = Some(config.default_stages.clone().unwrap_or(Stages::All));
+        if self
+            .options
+            .stages
+            .as_ref()
+            .is_none_or(|stages| stages.is_empty())
+        {
+            self.options.stages = Some(config.default_stages.unwrap_or(Stages::ALL));
         }
     }
 }
@@ -327,7 +332,7 @@ impl HookBuilder {
         let pass_filenames = options.pass_filenames.unwrap_or(PassFilenames::All);
         let require_serial = options.require_serial.unwrap_or(false);
         let verbose = options.verbose.unwrap_or(false);
-        let stages = options.stages.unwrap_or(Stages::All);
+        let stages = options.stages.unwrap_or(Stages::ALL);
         let additional_dependencies = options
             .additional_dependencies
             .unwrap_or_default()
@@ -926,11 +931,7 @@ mod tests {
                         },
                     ),
                     default_stages: Some(
-                        Some(
-                            {
-                                Manual,
-                            },
-                        ),
+                        Stages(manual),
                     ),
                     files: None,
                     exclude: None,
@@ -986,11 +987,7 @@ mod tests {
             ),
             log_file: None,
             require_serial: false,
-            stages: Some(
-                {
-                    Manual,
-                },
-            ),
+            stages: Stages(manual),
             verbose: true,
             minimum_prek_version: None,
             priority: 42,
@@ -1019,7 +1016,7 @@ mod tests {
             language: Language::Python,
             priority: None,
             options: HookOptions {
-                stages: Some(Stages::Some(std::collections::BTreeSet::new())),
+                stages: Some(Stages::from([])),
                 ..Default::default()
             },
         };
@@ -1028,10 +1025,7 @@ mod tests {
             .build()
             .await?;
 
-        assert_eq!(
-            hook.stages,
-            Stages::Some([Stage::Manual].into_iter().collect())
-        );
+        assert_eq!(hook.stages, Stages::from([Stage::Manual]));
         Ok(())
     }
 
@@ -1050,7 +1044,7 @@ mod tests {
 
         hook_spec.apply_project_defaults(&config);
 
-        assert_eq!(hook_spec.options.stages, Some(Stages::All));
+        assert_eq!(hook_spec.options.stages, Some(Stages::ALL));
     }
 
     #[tokio::test]
@@ -1078,7 +1072,7 @@ mod tests {
             .build()
             .await?;
 
-        assert_eq!(hook.stages, Stages::Some(std::collections::BTreeSet::new()));
+        assert_eq!(hook.stages, Stages::from([]));
         Ok(())
     }
 
@@ -1107,7 +1101,7 @@ mod tests {
             .build()
             .await?;
 
-        assert_eq!(hook.stages, Stages::All);
+        assert_eq!(hook.stages, Stages::ALL);
         Ok(())
     }
 
@@ -1131,7 +1125,7 @@ mod tests {
             language: Language::Python,
             priority: None,
             options: HookOptions {
-                stages: Some(Stages::Some(std::collections::BTreeSet::new())),
+                stages: Some(Stages::from([])),
                 ..Default::default()
             },
         };
@@ -1140,7 +1134,7 @@ mod tests {
             .build()
             .await?;
 
-        assert_eq!(hook.stages, Stages::All);
+        assert_eq!(hook.stages, Stages::ALL);
         Ok(())
     }
 
