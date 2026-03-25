@@ -19,6 +19,7 @@ mod bun;
 mod deno;
 mod docker;
 mod docker_image;
+mod dotnet;
 mod fail;
 mod golang;
 mod haskell;
@@ -38,6 +39,7 @@ static BUN: bun::Bun = bun::Bun;
 static DENO: deno::Deno = deno::Deno;
 static DOCKER: docker::Docker = docker::Docker;
 static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
+static DOTNET: dotnet::Dotnet = dotnet::Dotnet;
 static FAIL: fail::Fail = fail::Fail;
 static GOLANG: golang::Golang = golang::Golang;
 static HASKELL: haskell::Haskell = haskell::Haskell;
@@ -110,7 +112,7 @@ impl LanguageImpl for Unimplemented {
 // dart: only system version, support env, support additional deps
 // docker_image: only system version, no env, no additional deps
 // docker: only system version, support env, no additional deps
-// dotnet: only system version, support env, no additional deps
+// dotnet: install requested version, support env, support additional deps
 // fail: only system version, no env, no additional deps
 // golang: install requested version, support env, support additional deps
 // haskell: only system version, support env, support additional deps
@@ -134,6 +136,7 @@ impl Language {
                 | Self::Deno
                 | Self::Docker
                 | Self::DockerImage
+                | Self::Dotnet
                 | Self::Fail
                 | Self::Golang
                 | Self::Haskell
@@ -160,6 +163,7 @@ impl Language {
     pub fn tool_buckets(self) -> &'static [ToolBucket] {
         match self {
             Self::Bun => &[ToolBucket::Bun],
+            Self::Dotnet => &[ToolBucket::Dotnet],
             Self::Deno => &[ToolBucket::Deno],
             Self::Golang => &[ToolBucket::Go],
             Self::Node => &[ToolBucket::Node],
@@ -187,6 +191,7 @@ impl Language {
         matches!(
             self,
             Self::Bun
+                | Self::Dotnet
                 | Self::Deno
                 | Self::Golang
                 | Self::Node
@@ -209,7 +214,6 @@ impl Language {
                 | Self::Script
                 | Self::System
                 | Self::Docker
-                | Self::Dotnet
                 | Self::Swift
         )
     }
@@ -225,6 +229,7 @@ impl Language {
             Self::Deno => DENO.install(hook, store, reporter).await,
             Self::Docker => DOCKER.install(hook, store, reporter).await,
             Self::DockerImage => DOCKER_IMAGE.install(hook, store, reporter).await,
+            Self::Dotnet => DOTNET.install(hook, store, reporter).await,
             Self::Fail => FAIL.install(hook, store, reporter).await,
             Self::Golang => GOLANG.install(hook, store, reporter).await,
             Self::Haskell => HASKELL.install(hook, store, reporter).await,
@@ -248,6 +253,7 @@ impl Language {
             Self::Deno => DENO.check_health(info).await,
             Self::Docker => DOCKER.check_health(info).await,
             Self::DockerImage => DOCKER_IMAGE.check_health(info).await,
+            Self::Dotnet => DOTNET.check_health(info).await,
             Self::Fail => FAIL.check_health(info).await,
             Self::Golang => GOLANG.check_health(info).await,
             Self::Haskell => HASKELL.check_health(info).await,
@@ -300,6 +306,7 @@ impl Language {
             Self::Deno => DENO.run(hook, filenames, store, reporter).await,
             Self::Docker => DOCKER.run(hook, filenames, store, reporter).await,
             Self::DockerImage => DOCKER_IMAGE.run(hook, filenames, store, reporter).await,
+            Self::Dotnet => DOTNET.run(hook, filenames, store, reporter).await,
             Self::Fail => FAIL.run(hook, filenames, store, reporter).await,
             Self::Golang => GOLANG.run(hook, filenames, store, reporter).await,
             Self::Haskell => HASKELL.run(hook, filenames, store, reporter).await,
