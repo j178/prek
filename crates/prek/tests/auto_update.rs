@@ -1569,3 +1569,196 @@ fn auto_update_freeze_toml_with_comment() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn auto_update_exclude_repos() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo1_path = create_local_git_repo(&context, "repo1", &["v1.0.0", "v1.1.0"])?;
+    let repo2_path = create_local_git_repo(&context, "repo2", &["v2.0.0", "v2.1.0"])?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+          - repo: {}
+            rev: v2.0.0
+            hooks:
+              - id: another-hook
+    ", repo1_path, repo2_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    // Exclude repo1 — only repo2 should update
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--exclude").arg("repo1").arg("--cooldown-days").arg("0"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/repo2] updating v2.0.0 -> v2.1.0
+
+    ----- stderr -----
+    "#);
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            repos:
+              - repo: [HOME]/test-repos/repo1
+                rev: v1.0.0
+                hooks:
+                  - id: test-hook
+              - repo: [HOME]/test-repos/repo2
+                rev: v2.1.0
+                hooks:
+                  - id: another-hook
+            "#);
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_exclude_all_repos() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo1_path = create_local_git_repo(&context, "repo1", &["v1.0.0", "v1.1.0"])?;
+    let repo2_path = create_local_git_repo(&context, "repo2", &["v2.0.0", "v2.1.0"])?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+          - repo: {}
+            rev: v2.0.0
+            hooks:
+              - id: another-hook
+    ", repo1_path, repo2_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    // Exclude all repos with wildcard
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--exclude").arg("*").arg("--cooldown-days").arg("0"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // Config should be unchanged
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            repos:
+              - repo: [HOME]/test-repos/repo1
+                rev: v1.0.0
+                hooks:
+                  - id: test-hook
+              - repo: [HOME]/test-repos/repo2
+                rev: v2.0.0
+                hooks:
+                  - id: another-hook
+            "#);
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_exclude_multiple_repos() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo1_path = create_local_git_repo(&context, "repo1", &["v1.0.0", "v1.1.0"])?;
+    let repo2_path = create_local_git_repo(&context, "repo2", &["v2.0.0", "v2.1.0"])?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+          - repo: {}
+            rev: v2.0.0
+            hooks:
+              - id: another-hook
+    ", repo1_path, repo2_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    // Exclude both repos — nothing should update
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--exclude").arg("repo1").arg("--exclude").arg("repo2").arg("--cooldown-days").arg("0"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // Config should be unchanged
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            repos:
+              - repo: [HOME]/test-repos/repo1
+                rev: v1.0.0
+                hooks:
+                  - id: test-hook
+              - repo: [HOME]/test-repos/repo2
+                rev: v2.0.0
+                hooks:
+                  - id: another-hook
+            "#);
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_exclude_wildcard_conflicts_with_bleeding_edge() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(&context, "repo1", &["v1.0.0", "v1.1.0"])?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--exclude").arg("*").arg("--bleeding-edge"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: --bleeding-edge cannot be used with --exclude '*'
+    ");
+
+    Ok(())
+}

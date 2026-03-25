@@ -698,8 +698,13 @@ pub(crate) struct AutoUpdateArgs {
     #[arg(long)]
     pub(crate) freeze: bool,
     /// Only update this repository. This option may be specified multiple times.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "exclude")]
     pub(crate) repo: Vec<String>,
+    /// Exclude a repository from the update check. The value is matched as a
+    /// substring against the repo URL. Can be specified multiple times.
+    /// Use '*' to exclude all repositories.
+    #[arg(short, long, conflicts_with = "repo")]
+    pub(crate) exclude: Vec<String>,
     /// Do not write changes to the config file, only display what would be changed.
     #[arg(long)]
     pub(crate) dry_run: bool,
