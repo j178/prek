@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::path::Path;
 
-use anyhow::Context;
 use itertools::Itertools;
 use prek_consts::env_vars::EnvVars;
 
@@ -25,7 +24,9 @@ pub(crate) async fn forbid_new_submodules(
         .current_dir(hook.work_dir())
         .arg("diff")
         .arg("--diff-filter=A")
+        .arg("--no-ext-diff")
         .arg("--raw")
+        .arg("-z")
         .arg(diff_arg.as_ref())
         .arg("--")
         .args(filenames)
@@ -34,19 +35,16 @@ pub(crate) async fn forbid_new_submodules(
         .await?
         .stdout;
 
-    let new_submodules = collect_new_submodules(&stdout)?;
-    let Some(message) = render_message(&new_submodules) else {
-        return Ok((0, Vec::new()));
-    };
-
-    Ok((1, message.into_bytes()))
+    let new_submodules = collect_new_submodules(&stdout);
+    if new_submodules.is_empty() {
+        Ok((0, Vec::new()))
+    } else {
+        let message = render_message(&new_submodules);
+        Ok((1, message.into_bytes()))
+    }
 }
 
-fn render_message(new_submodules: &[&str]) -> Option<String> {
-    if new_submodules.is_empty() {
-        return None;
-    }
-
+fn render_message(new_submodules: &[&str]) -> String {
     let mut message = new_submodules
         .iter()
         .map(|filename| format!("{filename}: new submodule introduced"))
@@ -60,35 +58,31 @@ fn render_message(new_submodules: &[&str]) -> Option<String> {
         Also check `.gitmodules` for any unintended changes.
     "});
 
-    Some(message)
+    message
 }
 
-fn collect_new_submodules(stdout: &[u8]) -> Result<Vec<&str>, anyhow::Error> {
-    let mut new_submodules = Vec::new();
-    for line in std::str::from_utf8(stdout)?.lines() {
-        let (metadata, filename) = line
-            .split_once('\t')
-            .context("couldn't parse raw diff output")?;
-        let file_mode = metadata
-            .split_whitespace()
-            .nth(1)
-            .context("couldn't get file-mode from raw diff output")?;
+fn collect_new_submodules(stdout: &[u8]) -> Vec<&str> {
+    stdout
+        .split(|&b| b == b'\0')
+        .filter(|line| !line.is_empty())
+        .filter_map(|line| {
+            let line = std::str::from_utf8(line).ok()?;
+            let (metadata, filename) = line.split_once('\t')?;
+            let file_mode = metadata.split_whitespace().nth(1)?;
 
-        if file_mode == "160000" {
-            new_submodules.push(filename);
-        }
-    }
-    Ok(new_submodules)
+            // https://git-scm.com/docs/gitdatamodel#Documentation/gitdatamodel.txt-tree
+            (file_mode == "160000").then_some(filename)
+        })
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
     fn collect_new_submodules_ignores_non_submodules() {
-        let stdout = b":000000 100644 0000000 abcdef1 A\t.gitmodules\n";
+        let stdout = b":000000 100644 0000000 abcdef1 A\t.gitmodules\0";
 
-        let new_submodules =
-            super::collect_new_submodules(stdout).expect("diff output should parse");
+        let new_submodules = super::collect_new_submodules(stdout);
 
         assert!(new_submodules.is_empty());
     }
@@ -96,22 +90,20 @@ mod tests {
     #[test]
     fn collect_new_submodules_finds_new_submodules() {
         let stdout = indoc::indoc! {"
-            :000000 100644 0000000 abcdef1 A\t.gitmodules
-            :000000 160000 0000000 abcdef2 A\tproject2/sub module
-            :000000 160000 0000000 abcdef3 A\tvendor/dep
+            :000000 100644 0000000 abcdef1 A\t.gitmodules\0
+            :000000 160000 0000000 abcdef2 A\tproject2/sub module\0
+            :000000 160000 0000000 abcdef3 A\tvendor/dep\0
         "}
         .as_bytes();
 
-        let new_submodules =
-            super::collect_new_submodules(stdout).expect("diff output should parse");
+        let new_submodules = super::collect_new_submodules(stdout);
 
         assert_eq!(new_submodules, vec!["project2/sub module", "vendor/dep"]);
     }
 
     #[test]
     fn render_message() {
-        let message = super::render_message(&["project2/sub module", "vendor/dep"])
-            .expect("submodules should be reported");
+        let message = super::render_message(&["project2/sub module", "vendor/dep"]);
 
         assert_eq!(
             message,
