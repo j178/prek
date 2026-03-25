@@ -1,5 +1,4 @@
 use std::fmt::Display;
-use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize};
@@ -134,14 +133,12 @@ impl NodeVersion {
 /// - `^x.y.z`: Install the latest version of node that satisfies the version requirement.
 ///   Or any other semver compatible version requirement.
 /// - `lts/<codename>`: Install the latest version of node with the specified code name.
-/// - `local/path/to/node`: Use the node executable at the specified path.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum NodeRequest {
     Any,
     Major(u64),
     MajorMinor(u64, u64),
     MajorMinorPatch(u64, u64, u64),
-    Path(PathBuf),
     Range(semver::VersionReq),
     // A bare `lts` request is interpreted as the latest LTS version.
     Lts,
@@ -174,20 +171,11 @@ impl FromStr for NodeRequest {
                 Err(Error::InvalidVersion(request.to_string()))
             }
         } else {
-            Self::parse_version_numbers(request, request)
-                .or_else(|_| {
-                    semver::VersionReq::parse(request)
-                        .map(NodeRequest::Range)
-                        .map_err(|_| Error::InvalidVersion(request.to_string()))
-                })
-                .or_else(|_| {
-                    let path = PathBuf::from(request);
-                    if path.exists() {
-                        Ok(NodeRequest::Path(path))
-                    } else {
-                        Err(Error::InvalidVersion(request.to_string()))
-                    }
-                })
+            Self::parse_version_numbers(request, request).or_else(|_| {
+                semver::VersionReq::parse(request)
+                    .map(NodeRequest::Range)
+                    .map_err(|_| Error::InvalidVersion(request.to_string()))
+            })
         }
     }
 }
@@ -221,16 +209,13 @@ impl NodeRequest {
             .and_then(|s| serde_json::from_str(s).ok())
             .unwrap_or(Lts::NotLts);
 
-        self.matches(
-            &NodeVersion {
-                version: version.clone(),
-                lts: tls,
-            },
-            Some(install_info.toolchain.as_ref()),
-        )
+        self.matches(&NodeVersion {
+            version: version.clone(),
+            lts: tls,
+        })
     }
 
-    pub(crate) fn matches(&self, version: &NodeVersion, toolchain: Option<&Path>) -> bool {
+    pub(crate) fn matches(&self, version: &NodeVersion) -> bool {
         match self {
             NodeRequest::Any => true,
             NodeRequest::Major(major) => version.major() == *major,
@@ -240,8 +225,6 @@ impl NodeRequest {
             NodeRequest::MajorMinorPatch(major, minor, patch) => {
                 version.major() == *major && version.minor() == *minor && version.patch() == *patch
             }
-            // FIXME: consider resolving symlinks and normalizing paths before comparison
-            NodeRequest::Path(path) => toolchain.is_some_and(|t| t == path),
             NodeRequest::Range(req) => req.matches(version.version()),
             NodeRequest::Lts => version.lts.code_name().is_some(),
             NodeRequest::CodeName(name) => version
@@ -336,12 +319,6 @@ mod tests {
         assert!(request.satisfied_by(&install_info));
 
         let request = NodeRequest::CodeName("Boron".to_string());
-        assert!(!request.satisfied_by(&install_info));
-
-        let request = NodeRequest::Path(PathBuf::from("/usr/bin/node"));
-        assert!(request.satisfied_by(&install_info));
-
-        let request = NodeRequest::Path(PathBuf::from("/usr/bin/nodejs"));
         assert!(!request.satisfied_by(&install_info));
 
         let request = NodeRequest::Range(semver::VersionReq::parse(">=12.18").unwrap());

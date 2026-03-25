@@ -123,7 +123,7 @@ impl RustInstaller {
         toolchains
             .into_iter()
             .find_map(|info| {
-                let matches = request.matches(&info.version, Some(&info.path));
+                let matches = request.matches(&info.version);
 
                 if matches {
                     trace!(name = %info.name, "Found matching installed rust");
@@ -142,7 +142,7 @@ impl RustInstaller {
         sort_toolchains(&mut toolchains);
 
         for info in toolchains {
-            let matches = rust_request.matches(&info.version, Some(&info.path));
+            let matches = rust_request.matches(&info.version);
 
             if matches {
                 trace!(name = %info.name, "Found matching system rust");
@@ -189,7 +189,7 @@ impl RustInstaller {
 
                 let version = versions
                     .into_iter()
-                    .find(|version| req.matches(version, None))
+                    .find(|version| req.matches(version))
                     .with_context(|| format!("Version `{req}` not found on remote"))?;
                 Ok(version)
             }
@@ -261,7 +261,7 @@ mod tests {
         sort_toolchains(&mut toolchains);
         let selected = toolchains
             .into_iter()
-            .find(|info| RustRequest::Any.matches(&info.version, Some(&info.path)))
+            .find(|info| RustRequest::Any.matches(&info.version))
             .expect("matching toolchain");
 
         assert_eq!(selected.name, "stable-aarch64-apple-darwin");
@@ -278,7 +278,7 @@ mod tests {
         sort_toolchains(&mut toolchains);
         let selected = toolchains
             .into_iter()
-            .find(|info| RustRequest::Any.matches(&info.version, Some(&info.path)))
+            .find(|info| RustRequest::Any.matches(&info.version))
             .expect("matching toolchain");
 
         assert_eq!(selected.name, "nightly-aarch64-apple-darwin");

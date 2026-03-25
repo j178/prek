@@ -1,6 +1,5 @@
 use std::fmt::Display;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use serde::Deserialize;
@@ -51,14 +50,12 @@ impl FromStr for GoVersion {
 /// `go1.20rc1` or `1.20rc1`
 /// `go1.18beta1` or `1.18beta1`
 /// `>= 1.20, < 1.22`
-/// `local/path/to/go`
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum GoRequest {
     Any,
     Major(u64),
     MajorMinor(u64, u64),
     MajorMinorPatch(u64, u64, u64),
-    Path(PathBuf),
     Range(semver::VersionReq, String),
     // TODO: support prerelease versions like `go1.20.0b1`, `go1.20rc1`
     // MajorMinorPrerelease(u64, u64, String),
@@ -73,7 +70,6 @@ impl Display for GoRequest {
             GoRequest::MajorMinorPatch(major, minor, patch) => {
                 write!(f, "go{major}.{minor}.{patch}")
             }
-            GoRequest::Path(path) => write!(f, "path: {}", path.display()),
             GoRequest::Range(_, raw) => write!(f, "{raw}"),
         }
     }
@@ -96,21 +92,11 @@ impl FromStr for GoRequest {
             return Self::parse_version_numbers(version_part, s);
         }
 
-        Self::parse_version_numbers(s, s)
-            .or_else(|_| {
-                semver::VersionReq::parse(s)
-                    .map(|version_req| GoRequest::Range(version_req, s.into()))
-                    .map_err(|_| Error::InvalidVersion(s.to_string()))
-            })
-            .or_else(|_| {
-                let path = PathBuf::from(s);
-                if path.exists() {
-                    Ok(GoRequest::Path(path))
-                } else {
-                    // TODO: better error message
-                    Err(Error::InvalidVersion(s.to_string()))
-                }
-            })
+        Self::parse_version_numbers(s, s).or_else(|_| {
+            semver::VersionReq::parse(s)
+                .map(|version_req| GoRequest::Range(version_req, s.into()))
+                .map_err(|_| Error::InvalidVersion(s.to_string()))
+        })
     }
 }
 
@@ -137,13 +123,10 @@ impl GoRequest {
     pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
         let version = &install_info.language_version;
 
-        self.matches(
-            &GoVersion(version.clone()),
-            Some(install_info.toolchain.as_ref()),
-        )
+        self.matches(&GoVersion(version.clone()))
     }
 
-    pub(crate) fn matches(&self, version: &GoVersion, toolchain: Option<&Path>) -> bool {
+    pub(crate) fn matches(&self, version: &GoVersion) -> bool {
         match self {
             GoRequest::Any => true,
             GoRequest::Major(major) => version.0.major == *major,
@@ -153,8 +136,6 @@ impl GoRequest {
             GoRequest::MajorMinorPatch(major, minor, patch) => {
                 version.0.major == *major && version.0.minor == *minor && version.0.patch == *patch
             }
-            // FIXME: consider resolving symlinks and normalizing paths before comparison
-            GoRequest::Path(path) => toolchain.is_some_and(|t| t == path),
             GoRequest::Range(req, _) => req.matches(&version.0),
         }
     }
@@ -227,7 +208,7 @@ mod tests {
         ];
 
         for (req, expected) in cases {
-            let result = req.matches(&version, None);
+            let result = req.matches(&version);
             assert_eq!(result, expected, "Request: {req}");
         }
     }
