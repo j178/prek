@@ -8,6 +8,7 @@ Config {
             RemoteRepo {
                 repo: "https://github.com/pre-commit/mirrors-mypy",
                 rev: "1.0",
+                pin: None,
                 hooks: [
                     RemoteHook {
                         id: "mypy",
