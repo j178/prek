@@ -98,6 +98,10 @@ pub(crate) async fn auto_update(
     let reporter = AutoUpdateReporter::new(printer);
 
     let mut tasks = futures::stream::iter(repo_updates.iter().filter(|(remote_repo, _)| {
+        // Skip pinned repositories
+        if remote_repo.pin == Some(true) {
+            return false;
+        }
         // Exclude user specified repositories
         if !exclude_repos.is_empty() {
             let repo_url = remote_repo.repo.as_str();

@@ -1762,3 +1762,125 @@ fn auto_update_exclude_wildcard_conflicts_with_bleeding_edge() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn auto_update_pinned_repo_yaml() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo1_path = create_local_git_repo(&context, "repo1", &["v1.0.0", "v1.1.0"])?;
+    let repo2_path = create_local_git_repo(&context, "repo2", &["v2.0.0", "v2.1.0"])?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            pin: true
+            hooks:
+              - id: test-hook
+          - repo: {}
+            rev: v2.0.0
+            hooks:
+              - id: another-hook
+    ", repo1_path, repo2_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    // Pinned repo1 should be skipped, only repo2 updates
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/repo2] updating v2.0.0 -> v2.1.0
+
+    ----- stderr -----
+    "#);
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            repos:
+              - repo: [HOME]/test-repos/repo1
+                rev: v1.0.0
+                pin: true
+                hooks:
+                  - id: test-hook
+              - repo: [HOME]/test-repos/repo2
+                rev: v2.1.0
+                hooks:
+                  - id: another-hook
+            "#);
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_pinned_repo_toml() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo1_path = create_local_git_repo(&context, "repo1", &["v1.0.0", "v1.1.0"])?;
+    let repo2_path = create_local_git_repo(&context, "repo2", &["v2.0.0", "v2.1.0"])?;
+
+    context
+        .work_dir()
+        .child(PREK_TOML)
+        .write_str(&indoc::formatdoc! {r#"
+        [[repos]]
+        repo = "{}"
+        rev = "v1.0.0"
+        pin = true
+        hooks = [
+          {{ id = "test-hook" }},
+        ]
+
+        [[repos]]
+        repo = "{}"
+        rev = "v2.0.0"
+        hooks = [
+          {{ id = "another-hook" }},
+        ]
+      "#, repo1_path.replace('\\', "/"), repo2_path.replace('\\', "/")})?;
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    // Pinned repo1 should be skipped, only repo2 updates
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/repo2] updating v2.0.0 -> v2.1.0
+
+    ----- stderr -----
+    "#);
+
+    insta::with_settings!(
+      { filters => filters.clone() },
+      {
+        assert_snapshot!(context.read(PREK_TOML), @r#"
+        [[repos]]
+        repo = "[HOME]/test-repos/repo1"
+        rev = "v1.0.0"
+        pin = true
+        hooks = [
+          { id = "test-hook" },
+        ]
+
+        [[repos]]
+        repo = "[HOME]/test-repos/repo2"
+        rev = "v2.1.0"
+        hooks = [
+          { id = "another-hook" },
+        ]
+        "#);
+      }
+    );
+
+    Ok(())
+}
