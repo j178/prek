@@ -1287,7 +1287,7 @@ If not set, `prek` may use `default_language_version` for the hook’s language.
 
     Language-specific behavior:
 
-    - Python: passed to the Python resolver (for example `python3`, `python3.12`, or a specific interpreter name). May trigger toolchain download.
+    - Python: passed to the Python resolver (for example `python3` or `python3.12`). May trigger toolchain download.
     - Node: passed to the Node resolver (for example `20`, `18.19.0`). May trigger toolchain download.
     - Go: uses Go version strings such as `1.22.1` (downloaded if missing).
     - Rust: supports rustup toolchains such as `stable`, `beta`, `nightly`, or versioned toolchains.

@@ -58,7 +58,6 @@ Supported formats:
 - `bun@1.1`, `1.1`
 - `bun@1.1.0`, `1.1.0`
 - Semver ranges like `>=1.0, <2.0`
-- Absolute path to a Bun executable
 
 !!! note "prek-only"
 
@@ -146,7 +145,6 @@ Supported formats:
 - `go1.22`, `1.22`
 - `go1.22.1`, `1.22.1`
 - Semver ranges like `>=1.20, <1.23`
-- Absolute path to a `go` executable
 
 Pre-release strings (for example `go1.22rc1`) are not supported yet.
 
@@ -206,7 +204,6 @@ Supported formats:
 - `node18`, `18`, `18.19`, `18.19.1`
 - Semver ranges like `^18.12` or `>=18, <20`
 - LTS selectors: `lts` or `lts/<codename>`
-- Absolute path to a Node executable
 
 ### perl
 
@@ -231,7 +228,6 @@ Supported formats:
 - `3`, `3.12`, `3.12.1`
 - Wheel-style short forms like `312` or `python312`
 - Semver ranges like `>=3.9, <3.13`
-- Absolute path to a Python executable
 
 !!! note "prek-only"
 
@@ -310,7 +306,6 @@ Supported formats:
 - `3`, `3.3`, `3.3.6`
 - `ruby-3`, `ruby-3.3`, `ruby-3.3.6`
 - Semver ranges like `>=3.2, <4.0`
-- Absolute path to a Ruby executable
 
 !!! note "prek-only"
 

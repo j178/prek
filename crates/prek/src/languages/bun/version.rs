@@ -1,6 +1,5 @@
 use std::fmt::Display;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use serde::Deserialize;
@@ -48,14 +47,12 @@ impl FromStr for BunVersion {
 /// - `x.y.z` or `bun@x.y.z`: Install the specific version.
 /// - `^x.y.z`: Install the latest version that satisfies the semver requirement.
 ///   Or any other semver compatible version requirement.
-/// - `local/path/to/bun`: Use bun executable at the specified path.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum BunRequest {
     Any,
     Major(u64),
     MajorMinor(u64, u64),
     MajorMinorPatch(u64, u64, u64),
-    Path(PathBuf),
     Range(semver::VersionReq),
 }
 
@@ -79,20 +76,11 @@ impl FromStr for BunRequest {
             return Ok(BunRequest::Any);
         }
 
-        Self::parse_version_numbers(s, s)
-            .or_else(|_| {
-                semver::VersionReq::parse(s)
-                    .map(BunRequest::Range)
-                    .map_err(|_| Error::InvalidVersion(s.to_string()))
-            })
-            .or_else(|_| {
-                let path = PathBuf::from(s);
-                if path.exists() {
-                    Ok(BunRequest::Path(path))
-                } else {
-                    Err(Error::InvalidVersion(s.to_string()))
-                }
-            })
+        Self::parse_version_numbers(s, s).or_else(|_| {
+            semver::VersionReq::parse(s)
+                .map(BunRequest::Range)
+                .map_err(|_| Error::InvalidVersion(s.to_string()))
+        })
     }
 }
 
@@ -118,13 +106,10 @@ impl BunRequest {
 
     pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
         let version = &install_info.language_version;
-        self.matches(
-            &BunVersion(version.clone()),
-            Some(install_info.toolchain.as_ref()),
-        )
+        self.matches(&BunVersion(version.clone()))
     }
 
-    pub(crate) fn matches(&self, version: &BunVersion, toolchain: Option<&Path>) -> bool {
+    pub(crate) fn matches(&self, version: &BunVersion) -> bool {
         match self {
             Self::Any => true,
             Self::Major(major) => version.major == *major,
@@ -132,8 +117,6 @@ impl BunRequest {
             Self::MajorMinorPatch(major, minor, patch) => {
                 version.major == *major && version.minor == *minor && version.patch == *patch
             }
-            // FIXME: consider resolving symlinks and normalizing paths before comparison
-            Self::Path(path) => toolchain.is_some_and(|toolchain_path| toolchain_path == path),
             Self::Range(req) => req.matches(version),
         }
     }
@@ -204,12 +187,12 @@ mod tests {
     fn test_bun_request_matches() {
         let version = BunVersion(semver::Version::new(1, 1, 4));
 
-        assert!(BunRequest::Any.matches(&version, None));
-        assert!(BunRequest::Major(1).matches(&version, None));
-        assert!(!BunRequest::Major(2).matches(&version, None));
-        assert!(BunRequest::MajorMinor(1, 1).matches(&version, None));
-        assert!(!BunRequest::MajorMinor(1, 2).matches(&version, None));
-        assert!(BunRequest::MajorMinorPatch(1, 1, 4).matches(&version, None));
-        assert!(!BunRequest::MajorMinorPatch(1, 1, 5).matches(&version, None));
+        assert!(BunRequest::Any.matches(&version));
+        assert!(BunRequest::Major(1).matches(&version));
+        assert!(!BunRequest::Major(2).matches(&version));
+        assert!(BunRequest::MajorMinor(1, 1).matches(&version));
+        assert!(!BunRequest::MajorMinor(1, 2).matches(&version));
+        assert!(BunRequest::MajorMinorPatch(1, 1, 4).matches(&version));
+        assert!(!BunRequest::MajorMinorPatch(1, 1, 5).matches(&version));
     }
 }

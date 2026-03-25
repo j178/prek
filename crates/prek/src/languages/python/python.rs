@@ -246,7 +246,6 @@ fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
                 Some(format!("{major}.{minor}.{patch}"))
             }
             PythonRequest::Range(_, raw) => Some(raw.clone()),
-            PythonRequest::Path(path) => Some(path.to_string_lossy().to_string()),
         },
         _ => unreachable!(),
     }

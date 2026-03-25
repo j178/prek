@@ -149,7 +149,7 @@ impl BunInstaller {
 
         installed
             .find_map(|(v, path)| {
-                if req.matches(&v, Some(&path)) {
+                if req.matches(&v) {
                     Some(BunResult::from_dir(&path).with_version(v))
                 } else {
                     None
@@ -166,7 +166,7 @@ impl BunInstaller {
             .context("Failed to list remote versions")?;
         let version = versions
             .into_iter()
-            .find(|version| req.matches(version, None))
+            .find(|version| req.matches(version))
             .context("Version not found on remote")?;
         Ok(version)
     }
@@ -259,7 +259,7 @@ impl BunInstaller {
             match BunResult::from_executable(bun_path).fill_version().await {
                 Ok(bun_result) => {
                     // Check if this version matches the request
-                    if bun_request.matches(&bun_result.version, Some(&bun_result.bun)) {
+                    if bun_request.matches(&bun_result.version) {
                         trace!(
                             %bun_result,
                             "Found a matching system bun"

@@ -7,15 +7,7 @@ use crate::common::{TestContext, cmd_snapshot, git_cmd};
 fn system_ruby() {
     let context = TestContext::new();
     context.init_project();
-
-    // Discover the actual system Ruby path
-    let ruby_path = which::which("ruby")
-        .expect("Ruby not found in PATH")
-        .to_string_lossy()
-        .to_string();
-
-    context.write_pre_commit_config(&format!(
-        indoc::indoc! {r"
+    context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -32,16 +24,7 @@ fn system_ruby() {
                 entry: ruby --version
                 pass_filenames: false
                 always_run: true
-              - id: ruby-version-path
-                name: ruby-version-path
-                language: ruby
-                language_version: {}
-                entry: ruby --version
-                pass_filenames: false
-                always_run: true
-    "},
-        ruby_path
-    ));
+    "});
     context.git_add(".");
 
     let filters = [(
@@ -63,11 +46,6 @@ fn system_ruby() {
       ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
     ruby-version-unspecified.................................................Passed
     - hook id: ruby-version-unspecified
-    - duration: [TIME]
-
-      ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
-    ruby-version-path........................................................Passed
-    - hook id: ruby-version-path
     - duration: [TIME]
 
       ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]

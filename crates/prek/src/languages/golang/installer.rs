@@ -164,7 +164,7 @@ impl GoInstaller {
 
         installed
             .find_map(|(version, path)| {
-                if request.matches(&version, Some(&path)) {
+                if request.matches(&version) {
                     trace!(%version, "Found matching installed go");
                     Some(GoResult::from_dir(&path, false).with_version(version))
                 } else {
@@ -196,7 +196,7 @@ impl GoInstaller {
 
         let version = versions
             .into_iter()
-            .find(|version| req.matches(version, None))
+            .find(|version| req.matches(version))
             .with_context(|| format!("Version `{req}` not found on remote"))?;
         Ok(version)
     }
@@ -263,7 +263,7 @@ impl GoInstaller {
             {
                 Ok(go) => {
                     // Check if this version matches the request
-                    if go_request.matches(&go.version, Some(&go.path)) {
+                    if go_request.matches(&go.version) {
                         trace!(
                             %go,
                             "Found matching system go"
