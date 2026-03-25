@@ -40,6 +40,7 @@ Currently, only part of hooks from `https://github.com/pre-commit/pre-commit-hoo
 - [`end-of-file-fixer`](https://github.com/pre-commit/pre-commit-hooks#end-of-file-fixer) (Ensure newline at EOF)
 - [`file-contents-sorter`](https://github.com/pre-commit/pre-commit-hooks#file-contents-sorter) (Sort lines in explicitly targeted files)
 - [`fix-byte-order-marker`](https://github.com/pre-commit/pre-commit-hooks#fix-byte-order-marker) (Remove UTF-8 byte order marker)
+- [`forbid-new-submodules`](https://github.com/pre-commit/pre-commit-hooks#forbid-new-submodules) (Prevent addition of new git submodules.)
 - [`check-json`](https://github.com/pre-commit/pre-commit-hooks#check-json) (Validate JSON files)
 - [`check-toml`](https://github.com/pre-commit/pre-commit-hooks#check-toml) (Validate TOML files)
 - [`check-vcs-permalinks`](https://github.com/pre-commit/pre-commit-hooks#check-vcs-permalinks) (Check that VCS links are permalinks)

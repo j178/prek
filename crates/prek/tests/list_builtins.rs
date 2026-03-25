@@ -28,6 +28,7 @@ fn list_builtins_basic() {
     end-of-file-fixer
     file-contents-sorter
     fix-byte-order-marker
+    forbid-new-submodules
     mixed-line-ending
     no-commit-to-branch
     pretty-format-json
@@ -98,6 +99,9 @@ fn list_builtins_verbose() {
 
     fix-byte-order-marker
       removes utf-8 byte order marker.
+
+    forbid-new-submodules
+      Prevent addition of new git submodules.
 
     mixed-line-ending
       replaces or checks mixed line ending.
@@ -213,6 +217,11 @@ fn list_builtins_json() {
         "id": "fix-byte-order-marker",
         "name": "fix utf-8 byte order marker",
         "description": "removes utf-8 byte order marker."
+      },
+      {
+        "id": "forbid-new-submodules",
+        "name": "forbid new submodules",
+        "description": "Prevent addition of new git submodules."
       },
       {
         "id": "mixed-line-ending",

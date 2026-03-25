@@ -210,6 +210,77 @@ fn file_contents_sorter_hook() -> Result<()> {
 }
 
 #[test]
+fn forbid_new_submodules_hook_in_workspace_project() -> Result<()> {
+    let context = TestContext::new();
+    let cwd = context.work_dir();
+    context.init_project();
+
+    context.write_pre_commit_config("repos: []\n");
+    cwd.child("project2").create_dir_all()?;
+    cwd.child("project2")
+        .child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
+            repos:
+              - repo: builtin
+                hooks:
+                  - id: forbid-new-submodules
+        "})?;
+
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    let submodule_path = cwd.child("project2/sub module");
+    submodule_path.create_dir_all()?;
+    git_cmd(&submodule_path)
+        .arg("-c")
+        .arg("init.defaultBranch=master")
+        .arg("init")
+        .assert()
+        .success();
+    submodule_path.child("README.md").write_str("submodule\n")?;
+    git_cmd(&submodule_path)
+        .arg("add")
+        .arg("README.md")
+        .assert()
+        .success();
+    git_cmd(&submodule_path)
+        .args(["commit", "-m", "Initial commit"])
+        .assert()
+        .success();
+
+    git_cmd(cwd)
+        .args([
+            "submodule",
+            "add",
+            "./project2/sub module",
+            "project2/sub module",
+        ])
+        .assert()
+        .success();
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Running hooks for `project2`:
+    forbid new submodules....................................................Failed
+    - hook id: forbid-new-submodules
+    - exit code: 1
+
+      sub module: new submodule introduced
+
+      This commit introduces new git submodules.
+      Did you unintentionally `git add .`?
+      To fix this, run `git rm <submodule>`.
+      Also check `.gitmodules` for any unintended changes.
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn check_yaml_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();

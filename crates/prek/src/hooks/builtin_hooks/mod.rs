@@ -46,6 +46,7 @@ pub(crate) enum BuiltinHooks {
     EndOfFileFixer,
     FileContentsSorter,
     FixByteOrderMarker,
+    ForbidNewSubmodules,
     MixedLineEnding,
     NoCommitToBranch,
     PrettyFormatJson,
@@ -95,6 +96,9 @@ impl BuiltinHooks {
             }
             Self::FixByteOrderMarker => {
                 pre_commit_hooks::fix_byte_order_marker(hook, filenames).await
+            }
+            Self::ForbidNewSubmodules => {
+                pre_commit_hooks::forbid_new_submodules(hook, filenames).await
             }
             Self::MixedLineEnding => pre_commit_hooks::mixed_line_ending(hook, filenames).await,
             Self::NoCommitToBranch => pre_commit_hooks::no_commit_to_branch(hook).await,
@@ -341,6 +345,17 @@ impl BuiltinHook {
                     types: Some(tags::TAG_SET_TEXT),
                     ..Default::default()
                 },
+            },
+            BuiltinHooks::ForbidNewSubmodules => BuiltinHook {
+                 id: "forbid-new-submodules".to_string(),
+                 name: "forbid new submodules".to_string(),
+                 entry: "forbid-new-submodules".to_string(),
+                 priority: None,
+                 options: HookOptions {
+                    description: Some("Prevent addition of new git submodules.".to_string()),
+                    types: Some(tags::TAG_SET_DIRECTORY),
+                    ..Default::default()
+                 },
             },
             BuiltinHooks::MixedLineEnding => BuiltinHook {
                 id: "mixed-line-ending".to_string(),

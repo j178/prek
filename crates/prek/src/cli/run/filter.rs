@@ -332,9 +332,6 @@ async fn collect_files_from_args(
         // so `pre-commit` will ignore user provided directories.
         // We do the same here for compatibility.
         // For `types: [directory]`, `pre-commit` passes the directory names to the hook directly.
-
-        // Fun fact: if a hook specified `types: [directory]`, it won't run in `--all-files` mode.
-
         let (exists, non_exists): (FxHashSet<_>, Vec<_>) =
             files.into_iter().partition_map(|filename| {
                 if std::fs::exists(&filename).unwrap_or(false) {
