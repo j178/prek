@@ -23,6 +23,7 @@ pub(crate) async fn forbid_new_submodules(
     let stdout = git::git_cmd("git diff")?
         .current_dir(hook.work_dir())
         .arg("diff")
+        .arg("--relative")
         .arg("--diff-filter=A")
         .arg("--no-ext-diff")
         .arg("--raw")
@@ -62,25 +63,37 @@ fn render_message(new_submodules: &[&str]) -> String {
 }
 
 fn collect_new_submodules(stdout: &[u8]) -> Vec<&str> {
-    stdout
+    let mut entries = stdout
         .split(|&b| b == b'\0')
-        .filter(|line| !line.is_empty())
-        .filter_map(|line| {
-            let line = std::str::from_utf8(line).ok()?;
-            let (metadata, filename) = line.split_once('\t')?;
-            let file_mode = metadata.split_whitespace().nth(1)?;
+        .filter(|entry| !entry.is_empty());
+    let mut new_submodules = Vec::new();
 
-            // https://git-scm.com/docs/gitdatamodel#Documentation/gitdatamodel.txt-tree
-            (file_mode == "160000").then_some(filename)
-        })
-        .collect()
+    while let Some(metadata) = entries.next() {
+        let Some(filename) = entries.next() else {
+            break;
+        };
+
+        let Ok(metadata) = std::str::from_utf8(metadata) else {
+            continue;
+        };
+        let Ok(filename) = std::str::from_utf8(filename) else {
+            continue;
+        };
+
+        // https://git-scm.com/docs/gitdatamodel#Documentation/gitdatamodel.txt-tree
+        if metadata.split_whitespace().nth(1) == Some("160000") {
+            new_submodules.push(filename);
+        }
+    }
+
+    new_submodules
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
     fn collect_new_submodules_ignores_non_submodules() {
-        let stdout = b":000000 100644 0000000 abcdef1 A\t.gitmodules\0";
+        let stdout = b":000000 100644 0000000 abcdef1 A\0.gitmodules\0";
 
         let new_submodules = super::collect_new_submodules(stdout);
 
@@ -89,12 +102,9 @@ mod tests {
 
     #[test]
     fn collect_new_submodules_finds_new_submodules() {
-        let stdout = indoc::indoc! {"
-            :000000 100644 0000000 abcdef1 A\t.gitmodules\0
-            :000000 160000 0000000 abcdef2 A\tproject2/sub module\0
-            :000000 160000 0000000 abcdef3 A\tvendor/dep\0
-        "}
-        .as_bytes();
+        let stdout = b":000000 100644 0000000 abcdef1 A\0.gitmodules\0\
+:000000 160000 0000000 abcdef2 A\0project2/sub module\0\
+:000000 160000 0000000 abcdef3 A\0vendor/dep\0";
 
         let new_submodules = super::collect_new_submodules(stdout);
 

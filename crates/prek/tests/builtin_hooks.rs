@@ -267,7 +267,7 @@ fn forbid_new_submodules_hook_in_workspace_project() -> Result<()> {
     - hook id: forbid-new-submodules
     - exit code: 1
 
-      project2/sub module: new submodule introduced
+      sub module: new submodule introduced
 
       This commit introduces new git submodules.
       Did you unintentionally `git add .`?
