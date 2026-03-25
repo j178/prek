@@ -37,6 +37,7 @@ pub(crate) async fn auto_update(
     store: &Store,
     config: Option<PathBuf>,
     filter_repos: Vec<String>,
+    exclude_repos: Vec<String>,
     bleeding_edge: bool,
     freeze: bool,
     jobs: usize,
@@ -48,6 +49,10 @@ pub(crate) async fn auto_update(
         project: &'a Project,
         remote_size: usize,
         remote_index: usize,
+    }
+
+    if bleeding_edge && exclude_repos.iter().any(|e| e == "*") {
+        anyhow::bail!("--bleeding-edge cannot be used with --exclude '*'");
     }
 
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
@@ -93,6 +98,17 @@ pub(crate) async fn auto_update(
     let reporter = AutoUpdateReporter::new(printer);
 
     let mut tasks = futures::stream::iter(repo_updates.iter().filter(|(remote_repo, _)| {
+        // Skip pinned repositories
+        if remote_repo.pin == Some(true) {
+            return false;
+        }
+        // Exclude user specified repositories
+        if !exclude_repos.is_empty() {
+            let repo_url = remote_repo.repo.as_str();
+            return !exclude_repos
+                .iter()
+                .any(|e| e == "*" || repo_url.contains(e.as_str()));
+        }
         // Filter by user specified repositories
         if filter_repos.is_empty() {
             true

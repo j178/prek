@@ -165,6 +165,10 @@
         "rev": {
           "type": "string"
         },
+        "pin": {
+          "description": "Pin the repository at its current revision, skipping it during `auto-update`.",
+          "type": "boolean"
+        },
         "hooks": {
           "type": "array",
           "items": {
