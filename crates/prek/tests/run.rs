@@ -3053,6 +3053,12 @@ fn system_language_version() {
                 language_version: system
                 entry: bun -e 'console.log(`Bun ${Bun.version}`)'
                 pass_filenames: false
+              - id: system-dotnet
+                name: system-dotnet
+                language: dotnet
+                language_version: system
+                entry: dotnet --version
+                pass_filenames: false
    "});
     context.git_add(".");
 
@@ -3061,9 +3067,7 @@ fn system_language_version() {
         context.filters(),
         context.run()
         .arg("system-node")
-        .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
-        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist")
-        .env(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME, "bun-never-exist"), @r"
+        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3078,9 +3082,7 @@ fn system_language_version() {
         context.filters(),
         context.run()
         .arg("system-go")
-        .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
-        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist")
-        .env(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME, "bun-never-exist"), @r"
+        .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3095,8 +3097,6 @@ fn system_language_version() {
         context.filters(),
         context.run()
         .arg("system-bun")
-        .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
-        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist")
         .env(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME, "bun-never-exist"), @r"
     success: false
     exit_code: 2
@@ -3106,6 +3106,21 @@ fn system_language_version() {
     error: Failed to install hook `system-bun`
       caused by: Failed to install bun
       caused by: No suitable system Bun version found and downloads are disabled
+    ");
+
+    cmd_snapshot!(
+        context.filters(),
+        context.run()
+        .arg("system-dotnet")
+        .env(EnvVars::PREK_INTERNAL__DOTNET_BINARY_NAME, "dotnet-never-exist"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install hook `system-dotnet`
+      caused by: Failed to install dotnet SDK
+      caused by: No suitable dotnet version found and downloads are disabled
     ");
 }
 
