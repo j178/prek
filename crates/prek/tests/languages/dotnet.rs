@@ -243,6 +243,21 @@ fn additional_dependencies() {
         .chain([(r"\b(4\.7\.1\+)[0-9a-f]+\b", "${1}[SHA]")])
         .collect();
 
+    cmd_snapshot!(filters.clone(), context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    local....................................................................Passed
+    - hook id: local
+    - duration: [TIME]
+
+      A .NET Core global tool to list outdated Nuget packages.
+      4.7.1+[SHA]
+
+    ----- stderr -----
+    ");
+
+    // Run again to verify the `check_health` logic.
     cmd_snapshot!(filters, context.run(), @"
     success: true
     exit_code: 0

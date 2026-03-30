@@ -40,12 +40,6 @@ impl Display for DotnetVersion {
     }
 }
 
-impl From<DotnetVersion> for semver::Version {
-    fn from(version: DotnetVersion) -> Self {
-        version.0
-    }
-}
-
 impl FromStr for DotnetVersion {
     type Err = Error;
 
