@@ -448,6 +448,7 @@ pub(crate) enum ToolBucket {
     Ruby,
     Rustup,
     Bun,
+    Dotnet,
     Deno,
 }
 
