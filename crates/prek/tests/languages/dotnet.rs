@@ -150,6 +150,7 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
                 language_version: '8.0'
                 always_run: true
                 pass_filenames: false
+                verbose: true
               - id: hook-10
                 name: hook-10
                 language: dotnet
@@ -157,6 +158,7 @@ fn multiple_sdk_versions() -> anyhow::Result<()> {
                 language_version: '10.0'
                 always_run: true
                 pass_filenames: false
+                verbose: true
     "});
     context.git_add(".");
 
@@ -249,7 +251,7 @@ fn additional_dependencies() {
     - hook id: local
     - duration: [TIME]
 
-    [DOTNET_TOOL_OUTPUT]
+      A .NET Core global tool to list outdated Nuget packages.
       4.7.1+[SHA]
 
     ----- stderr -----

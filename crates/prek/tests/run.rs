@@ -3112,7 +3112,7 @@ fn system_language_version() {
         context.filters(),
         context.run()
         .arg("system-dotnet")
-        .env(EnvVars::PREK_INTERNAL_DOTNET_BINARY_NAME, "dotnet-never-exist"), @"
+        .env(EnvVars::PREK_INTERNAL__DOTNET_BINARY_NAME, "dotnet-never-exist"), @"
     success: false
     exit_code: 2
     ----- stdout -----

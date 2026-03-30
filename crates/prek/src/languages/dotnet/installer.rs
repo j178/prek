@@ -16,7 +16,7 @@ use crate::languages::dotnet::DotnetRequest;
 use crate::process::Cmd;
 
 static DOTNET_BINARY_NAME: LazyLock<String> = LazyLock::new(|| {
-    if let Ok(name) = EnvVars::var(EnvVars::PREK_INTERNAL_DOTNET_BINARY_NAME) {
+    if let Ok(name) = EnvVars::var(EnvVars::PREK_INTERNAL__DOTNET_BINARY_NAME) {
         name
     } else {
         "dotnet".to_string()
