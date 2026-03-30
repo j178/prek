@@ -1057,7 +1057,7 @@ fn auto_download() -> anyhow::Result<()> {
                 name: ruby-downloaded
                 language: ruby
                 entry: ruby --version
-                language_version: '3.3'
+                language_version: '3.2.9'
                 pass_filenames: false
                 always_run: true
               - id: ruby-system
@@ -1081,7 +1081,7 @@ fn auto_download() -> anyhow::Result<()> {
     .chain(context.filters())
     .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters, context.run().arg("-v"), @r"
+    cmd_snapshot!(filters.clone(), context.run().arg("-v"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1089,7 +1089,7 @@ fn auto_download() -> anyhow::Result<()> {
     - hook id: ruby-downloaded
     - duration: [TIME]
 
-      ruby 3.3.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
+      ruby 3.2.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
     ruby-system..............................................................Passed
     - hook id: ruby-system
     - duration: [TIME]
@@ -1099,7 +1099,7 @@ fn auto_download() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
-    // Verify that only Ruby 3.3 was downloaded (3.4 should use system Ruby)
+    // Verify that only Ruby 3.1 was downloaded (3.4 should use system Ruby)
     let installed_versions = ruby_dir
         .read_dir()?
         .flatten()
@@ -1119,8 +1119,8 @@ fn auto_download() -> anyhow::Result<()> {
         "Expected only one Ruby version to be downloaded, but found: {installed_versions:?}"
     );
     assert!(
-        installed_versions.iter().any(|v| v.starts_with("3.3.")),
-        "Expected Ruby 3.3.x to be downloaded, but found: {installed_versions:?}"
+        installed_versions.iter().any(|v| v.starts_with("3.2.9")),
+        "Expected Ruby 3.2.9 to be downloaded, but found: {installed_versions:?}"
     );
 
     // Record the mtime of the downloaded Ruby directory so we can verify
@@ -1128,12 +1128,12 @@ fn auto_download() -> anyhow::Result<()> {
     let ruby_version_dir = ruby_dir
         .read_dir()?
         .flatten()
-        .find(|d| d.file_name().to_string_lossy().starts_with("3.3."))
-        .expect("Expected a 3.3.x directory");
+        .find(|d| d.file_name().to_string_lossy().starts_with("3.2.9"))
+        .expect("Expected a 3.2.9 directory");
     let mtime_before = ruby_version_dir.metadata()?.modified()?;
 
     // Step 2: Re-run with a looser version match that should reuse the
-    // already-downloaded 3.3.x without hitting the network again.
+    // already-downloaded 3.2.9 without hitting the network again.
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: local
@@ -1142,19 +1142,11 @@ fn auto_download() -> anyhow::Result<()> {
                 name: ruby-reused
                 language: ruby
                 entry: ruby --version
-                language_version: '>=3.3, <3.4'
+                language_version: '3.2.9'
                 pass_filenames: false
                 always_run: true
     "});
     context.git_add(".");
-
-    let filters = [(
-        r"ruby (\d+\.\d+)\.\d+(?:p\d+)? \(\d{4}-\d{2}-\d{2} revision [0-9a-f]{0,10}\).*?\[.+\]",
-        "ruby $1.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]",
-    )]
-    .into_iter()
-    .chain(context.filters())
-    .collect::<Vec<_>>();
 
     cmd_snapshot!(filters, context.run().arg("-v"), @r"
     success: true
@@ -1164,7 +1156,7 @@ fn auto_download() -> anyhow::Result<()> {
     - hook id: ruby-reused
     - duration: [TIME]
 
-      ruby 3.3.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
+      ruby 3.2.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
 
     ----- stderr -----
     ");
