@@ -24,6 +24,19 @@ fn tools_dir(env_path: &Path) -> PathBuf {
     env_path.join("tools")
 }
 
+/// Resolves the runtime root for a dotnet executable.
+///
+/// For system installs, `toolchain` can point at a shim or symlinked path such
+/// as `/usr/bin/dotnet`. Canonicalizing first ensures `DOTNET_ROOT` points at
+/// the real SDK/runtime directory.
+fn resolve_dotnet_root(dotnet: &Path) -> Result<PathBuf> {
+    let dotnet = fs_err::canonicalize(dotnet).unwrap_or_else(|_| dotnet.to_path_buf());
+    dotnet
+        .parent()
+        .map(Path::to_path_buf)
+        .context("dotnet executable must have parent")
+}
+
 impl LanguageImpl for Dotnet {
     async fn install(
         &self,
@@ -108,11 +121,13 @@ impl LanguageImpl for Dotnet {
 
         let env_dir = hook.env_path().expect("dotnet hook must have env path");
         let tools_dir = tools_dir(env_dir);
-        let dotnet_root = hook
-            .toolchain_dir()
-            .expect("dotnet must have toolchain dir");
+        let dotnet = &hook
+            .install_info()
+            .expect("dotnet hook must have install info")
+            .toolchain;
+        let dotnet_root = resolve_dotnet_root(dotnet).context("Failed to resolve DOTNET_ROOT")?;
 
-        let new_path = prepend_paths(&[&tools_dir, dotnet_root]).context("Failed to join PATH")?;
+        let new_path = prepend_paths(&[&tools_dir, &dotnet_root]).context("Failed to join PATH")?;
         let entry = hook.entry.resolve(Some(&new_path))?;
 
         let run = async |batch: &[&Path]| {
@@ -120,7 +135,7 @@ impl LanguageImpl for Dotnet {
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
-                .env(EnvVars::DOTNET_ROOT, dotnet_root)
+                .env(EnvVars::DOTNET_ROOT, &dotnet_root)
                 .envs(&hook.env)
                 .args(&hook.args)
                 .args(batch)
@@ -196,5 +211,49 @@ async fn install_tool(dotnet: &Path, tool_dir: &Path, dependency: &str) -> Resul
                 Err(err).with_context(|| format!("Failed to install dotnet tool {dependency}"))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_dotnet_root;
+    #[test]
+    fn resolve_dotnet_root_falls_back_to_declared_parent_when_missing() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let dotnet = temp_dir.path().join("missing").join("dotnet");
+
+        assert_eq!(
+            resolve_dotnet_root(&dotnet)?,
+            temp_dir.path().join("missing")
+        );
+
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_dotnet_root_uses_canonicalized_parent_for_symlink() -> anyhow::Result<()> {
+        use assert_fs::fixture::{PathChild, PathCreateDir};
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = assert_fs::TempDir::new()?;
+        let real_root = temp_dir.child("real");
+        let shim_root = temp_dir.child("shim");
+        real_root.create_dir_all()?;
+        shim_root.create_dir_all()?;
+
+        let real_dotnet = real_root.child("dotnet");
+        fs_err::write(real_dotnet.path(), "#!/bin/sh\n")?;
+
+        let shim_dotnet = shim_root.child("dotnet");
+        symlink(real_dotnet.path(), shim_dotnet.path())?;
+
+        assert_eq!(
+            resolve_dotnet_root(shim_dotnet.path())?,
+            real_root.path().canonicalize()?
+        );
+
+        temp_dir.close()?;
+        Ok(())
     }
 }
