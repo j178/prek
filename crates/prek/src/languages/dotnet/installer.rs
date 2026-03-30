@@ -271,13 +271,11 @@ impl DotnetInstaller {
         install_dir: &Path,
         request: &DotnetRequest,
     ) -> Result<()> {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs_err::tokio::metadata(script_path).await?.permissions();
-        perms.set_mode(0o755);
-        fs_err::tokio::set_permissions(script_path, perms).await?;
-
-        let mut cmd = Cmd::new(script_path, "dotnet-install.sh");
-        cmd.arg("--no-path").arg("--install-dir").arg(install_dir);
+        let mut cmd = Cmd::new("bash", "dotnet-install.sh");
+        cmd.arg(script_path)
+            .arg("--no-path")
+            .arg("--install-dir")
+            .arg(install_dir);
         match request {
             DotnetRequest::Any => {
                 cmd.arg("--channel").arg("LTS");
