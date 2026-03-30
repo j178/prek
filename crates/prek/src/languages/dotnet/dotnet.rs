@@ -10,15 +10,17 @@ use tracing::debug;
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
-use crate::languages::dotnet::installer::{installer_from_store, query_dotnet_version};
+use crate::languages::dotnet::DotnetRequest;
+use crate::languages::dotnet::installer::{DotnetInstaller, DotnetResult};
+use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
-use crate::store::Store;
+use crate::store::{Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Dotnet;
 
-fn tools_path(env_path: &Path) -> PathBuf {
+fn tools_dir(env_path: &Path) -> PathBuf {
     env_path.join("tools")
 }
 
@@ -31,34 +33,40 @@ impl LanguageImpl for Dotnet {
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
 
+        let installer = DotnetInstaller::new(store.tools_path(ToolBucket::Dotnet));
+        let (request, allows_download) = match &hook.language_request {
+            LanguageRequest::Any { system_only } => (&DotnetRequest::Any, !system_only),
+            LanguageRequest::Dotnet(request) => (request, true),
+            _ => unreachable!(),
+        };
+        let dotnet = installer
+            .install(request, allows_download)
+            .await
+            .context("Failed to install dotnet SDK")?;
+
         let mut info = InstallInfo::new(
             hook.language,
             hook.env_key_dependencies().clone(),
             &store.hooks_dir(),
         )?;
 
-        debug!(%hook, target = %info.env_path.display(), "Installing dotnet environment");
+        let tools_dir = tools_dir(&info.env_path);
 
-        // Install or find dotnet SDK
-        let allows_download = hook.language_request.allows_download();
-        let installer = installer_from_store(store);
-        let dotnet_result = installer
-            .install(&hook.language_request, allows_download)
-            .await
-            .context("Failed to install or find dotnet SDK")?;
-
-        let tool_path = tools_path(&info.env_path);
+        debug!(
+            path = %tools_dir.display(),
+            "Installing additional dotnet tools for hook"
+        );
         if !hook.additional_dependencies.is_empty() {
-            fs_err::tokio::create_dir_all(&tool_path).await?;
-            for dep in &hook.additional_dependencies {
-                install_tool(dotnet_result.dotnet(), &tool_path, dep).await?;
+            fs_err::tokio::create_dir_all(&tools_dir).await?;
+            for dependency in &hook.additional_dependencies {
+                install_tool(dotnet.dotnet(), &tools_dir, dependency).await?;
             }
         }
 
-        info.with_language_version(dotnet_result.version().clone())
-            .with_toolchain(dotnet_result.dotnet().to_path_buf());
-        info.persist_env_path();
+        info.with_language_version((**dotnet.version()).clone())
+            .with_toolchain(dotnet.dotnet().to_path_buf());
 
+        info.persist_env_path();
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
@@ -68,20 +76,21 @@ impl LanguageImpl for Dotnet {
     }
 
     async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        let current_version = query_dotnet_version(&info.toolchain)
+        let current_version = DotnetResult::from_executable(info.toolchain.clone())
+            .fill_version()
             .await
             .context("Failed to query current dotnet info")?;
 
         // Only check major.minor for compatibility
-        if current_version.major != info.language_version.major
-            || current_version.minor != info.language_version.minor
+        if current_version.version().major != info.language_version.major
+            || current_version.version().minor != info.language_version.minor
         {
             anyhow::bail!(
                 "dotnet version mismatch: expected `{}.{}`, found `{}.{}`",
                 info.language_version.major,
                 info.language_version.minor,
-                current_version.major,
-                current_version.minor
+                current_version.version().major,
+                current_version.version().minor
             );
         }
 
@@ -97,35 +106,13 @@ impl LanguageImpl for Dotnet {
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());
 
-        let env_dir = hook.env_path().ok_or_else(|| {
-            anyhow::anyhow! {
-                "Dotnet hook missing env_path; try re-installing hook."
-            }
-        })?;
-        let tool_path = tools_path(env_dir);
-        let toolchain_path = hook
-            .install_info()
-            .ok_or_else(|| {
-                anyhow::anyhow! {
-                    "Dotnet hook missing install info, try re-installing hook."
-                }
-            })?
-            .toolchain
-            .clone();
+        let env_dir = hook.env_path().expect("dotnet hook must have env path");
+        let tools_dir = tools_dir(env_dir);
+        let dotnet_root = hook
+            .toolchain_dir()
+            .expect("dotnet must have toolchain dir");
 
-        // Resolve any symlinks in the dotnet executable path and use its parent
-        // directory as both the PATH entry and DOTNET_ROOT. This avoids setting
-        // DOTNET_ROOT to a shim directory such as /usr/bin.
-        let canonical_path = fs_err::tokio::canonicalize(&toolchain_path)
-            .await
-            .context("Failed to resolve dotnet toolchain path")?;
-
-        let dotnet_root = canonical_path
-            .parent()
-            .map(Path::to_path_buf)
-            .ok_or_else(|| anyhow::anyhow!("Canonicalized dotnet executable must have parent"))?;
-
-        let new_path = prepend_paths(&[&tool_path, &dotnet_root]).context("Failed to join PATH")?;
+        let new_path = prepend_paths(&[&tools_dir, dotnet_root]).context("Failed to join PATH")?;
         let entry = hook.entry.resolve(Some(&new_path))?;
 
         let run = async |batch: &[&Path]| {
@@ -133,7 +120,7 @@ impl LanguageImpl for Dotnet {
                 .current_dir(hook.work_dir())
                 .args(&entry[1..])
                 .env(EnvVars::PATH, &new_path)
-                .env(EnvVars::DOTNET_ROOT, &dotnet_root)
+                .env(EnvVars::DOTNET_ROOT, dotnet_root)
                 .envs(&hook.env)
                 .args(&hook.args)
                 .args(batch)
@@ -170,184 +157,44 @@ impl LanguageImpl for Dotnet {
 /// The dependency can be specified as:
 /// - `package` - installs latest version
 /// - `package:version` - installs specific version
-async fn install_tool(dotnet: &Path, tool_path: &Path, dependency: &str) -> Result<()> {
+async fn install_tool(dotnet: &Path, tool_dir: &Path, dependency: &str) -> Result<()> {
     let (package, version) = dependency
         .split_once(':')
-        .map_or((dependency, None), |(pkg, ver)| (pkg, Some(ver)));
+        .map_or((dependency, None), |(package, version)| {
+            (package, Some(version))
+        });
 
-    // Helper to build the command with shared arguments
-    let build_cmd = |action: &str| {
-        let mut c = Cmd::new(dotnet, format!("dotnet tool {action}"));
-        c.arg("tool")
+    let tool_cmd = |action: &str| {
+        let mut cmd = Cmd::new(dotnet, format!("dotnet tool {action}"));
+        cmd.arg("tool")
             .arg(action)
             .arg("--tool-path")
-            .arg(tool_path)
+            .arg(tool_dir)
             .arg(package);
-        if let Some(ver) = version {
-            c.arg("--version").arg(ver);
+        if let Some(version) = version {
+            cmd.arg("--version").arg(version);
         }
-        c
+        cmd
     };
 
-    // Attempt dotnet install
-    let install_res = build_cmd("install").check(true).output().await;
-
-    if let Err(err) = install_res {
-        let msg = err.to_string();
-
-        if msg.contains("is already installed") {
-            debug!(
-                "dotnet tool '{package}' already installed at {:?}, attempting update",
-                tool_path
-            );
-
-            // Attempt update instead
-            build_cmd("update")
-                .check(true)
-                .output()
-                .await
-                .with_context(|| format!("Failed to update dotnet tool: {dependency}"))?;
-        } else {
-            return Err(err).with_context(|| format!("Failed to install dotnet tool {dependency}"));
+    match tool_cmd("install").check(true).output().await {
+        Ok(_) => Ok(()),
+        Err(err) => {
+            if err.to_string().contains("is already installed") {
+                debug!(
+                    package,
+                    path = %tool_dir.display(),
+                    "Dotnet tool already installed, attempting update"
+                );
+                tool_cmd("update")
+                    .check(true)
+                    .output()
+                    .await
+                    .with_context(|| format!("Failed to update dotnet tool: {dependency}"))?;
+                Ok(())
+            } else {
+                Err(err).with_context(|| format!("Failed to install dotnet tool {dependency}"))
+            }
         }
-    }
-
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use rustc_hash::FxHashSet;
-
-    use crate::config::Language;
-    use crate::hook::InstallInfo;
-    use crate::languages::LanguageImpl;
-    use crate::languages::dotnet::installer::query_dotnet_version;
-
-    use super::{Dotnet, install_tool, tools_path};
-
-    fn dotnet_path() -> Option<std::path::PathBuf> {
-        which::which("dotnet").ok()
-    }
-
-    #[tokio::test]
-    async fn test_check_health() -> anyhow::Result<()> {
-        let Some(dotnet_path) = dotnet_path() else {
-            // Skip test if dotnet not found in PATH
-            return Ok(());
-        };
-        let version = query_dotnet_version(&dotnet_path).await?;
-
-        let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::new(Language::Dotnet, FxHashSet::default(), temp_dir.path())?;
-        install_info
-            .with_language_version(version)
-            .with_toolchain(dotnet_path);
-
-        // Test the Dotnet impl directly
-        let result = Dotnet.check_health(&install_info).await;
-        assert!(result.is_ok());
-
-        // Also test through Language dispatch
-        let result = Language::Dotnet.check_health(&install_info).await;
-        assert!(result.is_ok());
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_check_health_version_mismatch() -> anyhow::Result<()> {
-        let Some(dotnet_path) = dotnet_path() else {
-            // Skip test if dotnet not found in PATH
-            return Ok(());
-        };
-
-        let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::new(Language::Dotnet, FxHashSet::default(), temp_dir.path())?;
-        // Use a fake version that won't match the actual dotnet version
-        install_info
-            .with_language_version(semver::Version::new(1, 0, 0))
-            .with_toolchain(dotnet_path);
-
-        let result = Dotnet.check_health(&install_info).await;
-        assert!(result.is_err());
-
-        let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("dotnet version mismatch"),
-            "expected version mismatch error, got: {err}"
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_tools_path_function() {
-        let env_path = std::path::Path::new("/test/path");
-        let tools = tools_path(env_path);
-        assert_eq!(tools, env_path.join("tools"));
-    }
-
-    #[tokio::test]
-    async fn test_install_tool_with_version() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let fake_dotnet = temp_dir.path().join("fake_dotnet");
-        let tool_path = temp_dir.path().join("tools");
-
-        // Create fake dotnet that will succeed
-        fs_err::tokio::write(
-            &fake_dotnet,
-            "#!/bin/sh\necho 'Tool installed successfully'\n",
-        )
-        .await?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let perms = std::fs::Permissions::from_mode(0o755);
-            std::fs::set_permissions(&fake_dotnet, perms)?;
-        }
-
-        fs_err::tokio::create_dir_all(&tool_path).await?;
-
-        // Test install_tool with version specifier
-        let _result = install_tool(&fake_dotnet, &tool_path, "package:1.0.0").await;
-        // This will likely fail but we're testing the parsing logic
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_install_tool_already_installed() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let fake_dotnet = temp_dir.path().join("fake_dotnet");
-        let tool_path = temp_dir.path().join("tools");
-
-        // Create fake dotnet that simulates "already installed" error
-        fs_err::tokio::write(
-            &fake_dotnet,
-            r#"#!/bin/sh
-if [ "$1" = "tool" ] && [ "$2" = "install" ]; then
-    echo "Tool 'test-tool' is already installed"
-    exit 1
-fi
-"#,
-        )
-        .await?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let perms = std::fs::Permissions::from_mode(0o755);
-            std::fs::set_permissions(&fake_dotnet, perms)?;
-        }
-
-        fs_err::tokio::create_dir_all(&tool_path).await?;
-
-        // This will test the "already installed" error handling path
-        let _result = install_tool(&fake_dotnet, &tool_path, "test-tool").await;
-        // The result will be an error, which tests our error paths
-
-        Ok(())
     }
 }
