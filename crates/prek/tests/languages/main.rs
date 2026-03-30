@@ -7,6 +7,7 @@ mod deno;
 mod docker;
 #[cfg(all(feature = "docker", target_os = "linux"))]
 mod docker_image;
+mod dotnet;
 mod fail;
 mod golang;
 mod haskell;

@@ -26,6 +26,7 @@ env:
   GHC_VERSION: "9.14.1" # Preinstalled in ubuntu-24.04 runner image
   CABAL_VERSION: "3.16.1.0"
   JULIA_VERSION: "1.12.4"
+  DOTNET_VERSION: "10.0"
   DENO_VERSION: "2"
 
   # Cargo env vars
@@ -413,6 +414,7 @@ jobs:
           - bun
           - deno
           - docker
+          - dotnet
           - golang
           - haskell
           - julia
@@ -533,6 +535,12 @@ jobs:
         uses: julia-actions/setup-julia@4c0cb0fce8556fdb04a90347310e5db8b1f98fb9 # v2.7.0
         with:
           version: ${{ env.JULIA_VERSION }}
+
+      - name: "Install .NET"
+        if: ${{ matrix.language == 'dotnet' }}
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: "Run language tests"
         if: ${{ matrix.os != 'windows-latest' }}

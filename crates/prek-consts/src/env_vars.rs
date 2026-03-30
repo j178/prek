@@ -96,6 +96,9 @@ impl EnvVars {
     pub const RUSTUP_AUTO_INSTALL: &'static str = "RUSTUP_AUTO_INSTALL";
     pub const CARGO_HOME: &'static str = "CARGO_HOME";
     pub const RUSTUP_HOME: &'static str = "RUSTUP_HOME";
+
+    // .NET related
+    pub const DOTNET_ROOT: &'static str = "DOTNET_ROOT";
 }
 
 impl EnvVars {
