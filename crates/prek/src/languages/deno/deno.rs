@@ -188,9 +188,8 @@ impl LanguageImpl for Deno {
 
         let deno_cache_dir = store.cache_path(CacheBucket::Deno);
         let info = hook.install_info().expect("Deno must be installed");
-        let deno_binary = &info.toolchain;
         let env_dir = &info.env_path;
-        let deno_bin_dir = deno_binary.parent().expect("Deno binary must have parent");
+        let deno_bin_dir = hook.toolchain_dir().expect("Deno must have toolchain dir");
         let new_path =
             prepend_paths(&[&bin_dir(env_dir), deno_bin_dir]).context("Failed to join PATH")?;
 

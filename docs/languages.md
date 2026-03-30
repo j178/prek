@@ -124,21 +124,28 @@ If the image already defines an `ENTRYPOINT`, you can omit `--entrypoint` in `en
 
 **Status in prek:** ✅ Supported.
 
-prek supports .NET tool-based hooks. Tools specified in `additional_dependencies` are installed using `dotnet tool install --tool-path` and made available on the PATH when the hook runs.
+prek supports .NET SDK-based hooks. Hook entries run with a matching `dotnet` on the PATH, and tools specified in `additional_dependencies` are installed into an isolated hook environment via `dotnet tool install --tool-path`.
 
 #### `language_version`
 
-You can request a specific .NET SDK version:
+Supported formats:
 
-- `language_version: "8"` – any .NET 8.x SDK
-- `language_version: "8.0"` – any .NET 8.0.x SDK
+- `default` or `system`
+- `language_version: "8"` – the .NET 8.0 SDK channel
+- `language_version: "8.0"` – the .NET 8.0 SDK channel
 - `language_version: "8.0.100"` – exactly .NET SDK 8.0.100
+- `language_version: "8.0.1xx"` – the .NET 8.0 SDK feature-band channel
+- `language_version: "net8.0"` – TFM-style alias for the .NET 8.0 SDK channel
+- `language_version: "net8.0.1xx"` – TFM-style alias for the .NET 8.0 SDK feature-band channel
+- `language_version: "net10.0"` – TFM-style alias for the .NET 10.0 SDK channel
+- `language_version: "lts"` – the latest LTS SDK channel
+- `language_version: "sts"` – the latest STS SDK channel
 
-prek first looks for a matching system-installed `dotnet`, then falls back to downloading the SDK via the official install script if needed.
+prek first looks for a matching system-installed `dotnet`, then falls back to downloading the SDK via the official install script when downloads are allowed. Channel-style requests (`8`, `8.0`, `8.0.1xx`, `lts`, `sts`, `net8.0`) are resolved to a concrete SDK version at install time.
 
 #### `additional_dependencies`
 
-Tools are specified in `additional_dependencies` as either `package:version` (to pin a specific version) or just `package` (to install the latest available version):
+Tools are installed into the hook's isolated `tools/` directory. Specify them in `additional_dependencies` as either `package:version` (to pin a specific version) or just `package` (to install the latest available version):
 
 ```yaml
 repos:

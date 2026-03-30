@@ -163,8 +163,8 @@ impl Language {
     pub fn tool_buckets(self) -> &'static [ToolBucket] {
         match self {
             Self::Bun => &[ToolBucket::Bun],
-            Self::Dotnet => &[ToolBucket::Dotnet],
             Self::Deno => &[ToolBucket::Deno],
+            Self::Dotnet => &[ToolBucket::Dotnet],
             Self::Golang => &[ToolBucket::Go],
             Self::Node => &[ToolBucket::Node],
             Self::Python | Self::Pygrep => &[ToolBucket::Uv, ToolBucket::Python],
@@ -191,8 +191,8 @@ impl Language {
         matches!(
             self,
             Self::Bun
-                | Self::Dotnet
                 | Self::Deno
+                | Self::Dotnet
                 | Self::Golang
                 | Self::Node
                 | Self::Python
