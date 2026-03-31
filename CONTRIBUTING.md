@@ -6,7 +6,7 @@ Thanks for your interest in improving **prek**! This guide walks through the dev
 
 1. **Install Rust with `rustup`** (recommended)
 
-    Install `rustup` from <https://rustup.rs> if you do not already have it. Then install the toolchain pinned in `rust-toolchain.toml` (currently Rust 1.90):
+    Install `rustup` from <https://rustup.rs> if you do not already have it. Then install the toolchain pinned in `rust-toolchain.toml`:
 
     ```bash
     rustup show
