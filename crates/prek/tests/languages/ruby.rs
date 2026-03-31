@@ -244,9 +244,8 @@ fn specific_ruby_unavailable() {
     error: Failed to install hook `ruby-version`
       caused by: Failed to install Ruby
       caused by: No suitable Ruby found for request: 3.1.3
-
-    Ruby language only supports system Ruby on Windows.
-    Please install Ruby from https://rubyinstaller.org/
+    Automatic installation is not supported on this platform.
+    Please install Ruby manually.
     ");
 
     #[cfg(not(target_os = "windows"))]
@@ -259,13 +258,8 @@ fn specific_ruby_unavailable() {
     error: Failed to install hook `ruby-version`
       caused by: Failed to install Ruby
       caused by: No suitable Ruby found for request: 3.1.3
-
-    Detected version manager(s): brew
-
-    You can install the required Ruby version using:
-      brew install ruby  # Installs latest version
-      # Note: Homebrew typically installs the latest Ruby version.
-      # For specific versions, consider using a version manager like rbenv or mise.
+    No rv-ruby release found matching: 3.1.3
+    Please install Ruby manually.
     ");
 }
 
@@ -754,6 +748,229 @@ fn native_gem_dependency() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Test that multiple gemspecs in a hook repo are built and installed together,
+/// with all dependencies resolved in a single pass.
+#[test]
+fn multiple_gemspecs() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let hook_repo = context.work_dir().child("multi-gem-repo");
+    hook_repo.create_dir_all()?;
+
+    // First gemspec: depends on `rainbow`
+    hook_repo
+        .child("gem_one.gemspec")
+        .write_str(indoc::indoc! {r#"
+            Gem::Specification.new do |spec|
+              spec.name          = "gem_one"
+              spec.version       = "0.1.0"
+              spec.authors       = ["Test"]
+              spec.summary       = "First gem"
+              spec.files         = ["bin/gem-one"]
+              spec.executables   = ["gem-one"]
+              spec.bindir        = "bin"
+              spec.add_dependency "rainbow", "~> 3.0"
+            end
+        "#})?;
+
+    // Second gemspec: also depends on `rainbow` (overlapping) plus `unicode-display_width`.
+    // This tests that --explain de-duplicates shared dependencies across gemspecs.
+    hook_repo.child("lib").create_dir_all()?;
+    hook_repo
+        .child("lib/gem_two.rb")
+        .write_str("module GemTwo; end\n")?;
+    hook_repo
+        .child("gem_two.gemspec")
+        .write_str(indoc::indoc! {r#"
+            Gem::Specification.new do |spec|
+              spec.name          = "gem_two"
+              spec.version       = "0.1.0"
+              spec.authors       = ["Test"]
+              spec.summary       = "Second gem"
+              spec.files         = ["lib/gem_two.rb"]
+              spec.add_dependency "rainbow", "~> 3.0"
+              spec.add_dependency "unicode-display_width", "~> 3.0"
+            end
+        "#})?;
+
+    // Executable that requires both gems' dependencies
+    hook_repo.child("bin").create_dir_all()?;
+    hook_repo.child("bin/gem-one").write_str(indoc::indoc! {r#"
+        #!/usr/bin/env ruby
+        require 'rainbow'
+        require 'unicode/display_width'
+        puts "rainbow=#{Gem.loaded_specs['rainbow'].version}"
+        puts "udw=#{Gem.loaded_specs['unicode-display_width'].version}"
+    "#})?;
+
+    hook_repo
+        .child(".pre-commit-hooks.yaml")
+        .write_str(indoc::indoc! {r"
+            - id: multi-gem
+              name: Multi Gem
+              entry: gem-one
+              language: ruby
+              pass_filenames: false
+        "})?;
+
+    let output = git_cmd(&hook_repo).args(["init"]).output()?;
+    assert!(output.status.success(), "git init failed: {output:?}");
+    git_cmd(&hook_repo)
+        .args(["config", "user.name", "Test User"])
+        .output()?;
+    git_cmd(&hook_repo)
+        .args(["config", "user.email", "test@example.com"])
+        .output()?;
+    let output = git_cmd(&hook_repo).args(["add", "."]).output()?;
+    assert!(output.status.success(), "git add failed: {output:?}");
+    let output = git_cmd(&hook_repo)
+        .args(["commit", "-m", "Initial commit"])
+        .output()?;
+    assert!(output.status.success(), "git commit failed: {output:?}");
+
+    let rev_output = git_cmd(&hook_repo).args(["rev-parse", "HEAD"]).output()?;
+    let rev = String::from_utf8_lossy(&rev_output.stdout)
+        .trim()
+        .to_string();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+            repos:
+              - repo: {}
+                rev: {}
+                hooks:
+                  - id: multi-gem
+                    always_run: true
+        ",
+        hook_repo.to_path_buf().display(),
+        rev
+    });
+    context.git_add(".pre-commit-config.yaml");
+
+    let filters = [
+        (r"rainbow=\d+\.\d+\.\d+", "rainbow=X.Y.Z"),
+        (r"udw=\d+\.\d+\.\d+", "udw=X.Y.Z"),
+    ]
+    .into_iter()
+    .chain(context.filters())
+    .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, context.run().arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Multi Gem................................................................Passed
+    - hook id: multi-gem
+    - duration: [TIME]
+
+      rainbow=X.Y.Z
+      udw=X.Y.Z
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Test that pre-built platform-specific gems skip compilation while source gems
+/// compile natively. Installs `sqlite3` (publishes precompiled platform gems) and
+/// `msgpack` (source-only, requires C compilation) side by side.
+#[test]
+fn prebuilt_vs_compiled_gems() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context
+        .work_dir()
+        .child("check_gems.rb")
+        .write_str(indoc::indoc! {r#"
+            require 'sqlite3'
+            require 'msgpack'
+
+            db = SQLite3::Database.new(":memory:")
+            db.execute("CREATE TABLE t (v TEXT)")
+            db.execute("INSERT INTO t VALUES (?)", [MessagePack.pack("ok")])
+            puts "sqlite3=#{SQLite3::VERSION} msgpack=#{MessagePack::VERSION}"
+        "#})?;
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: test-native-gems
+                name: test-native-gems
+                language: ruby
+                entry: ruby check_gems.rb
+                additional_dependencies: ['sqlite3', 'msgpack']
+                pass_filenames: false
+                always_run: true
+    "});
+    context.git_add(".");
+
+    let filters = [
+        (r"sqlite3=\d+\.\d+\.\d+", "sqlite3=X.Y.Z"),
+        (r"msgpack=\d+\.\d+\.\d+", "msgpack=X.Y.Z"),
+    ]
+    .into_iter()
+    .chain(context.filters())
+    .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, context.run().arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    test-native-gems.........................................................Passed
+    - hook id: test-native-gems
+    - duration: [TIME]
+
+      sqlite3=X.Y.Z msgpack=X.Y.Z
+
+    ----- stderr -----
+    ");
+
+    // Verify installation methods by inspecting the gem directories.
+    // Pre-built gems include a platform suffix (e.g. sqlite3-X.Y.Z-x86_64-linux-gnu),
+    // while compiled-from-source gems do not (e.g. msgpack-X.Y.Z).
+    let hooks_dir = context.home_dir().join("hooks");
+    let gems_dir = fs_err::read_dir(&hooks_dir)?
+        .filter_map(Result::ok)
+        .find(|e| e.file_name().to_string_lossy().starts_with("ruby-"))
+        .map(|e| e.path().join("gems").join("gems"))
+        .expect("No ruby hook directory found");
+
+    let gem_dirs: Vec<String> = fs_err::read_dir(&gems_dir)?
+        .filter_map(Result::ok)
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
+
+    // sqlite3 should have a platform suffix (precompiled)
+    let sqlite3_dir = gem_dirs
+        .iter()
+        .find(|d| d.starts_with("sqlite3-"))
+        .expect("sqlite3 gem not found");
+    assert!(
+        sqlite3_dir.contains("x86_64-linux")
+            || sqlite3_dir.contains("aarch64-linux")
+            || sqlite3_dir.contains("arm64-darwin")
+            || sqlite3_dir.contains("x64-mingw"),
+        "sqlite3 should be a prebuilt platform gem, got: {sqlite3_dir}"
+    );
+
+    // msgpack should NOT have a platform suffix (compiled from source)
+    let msgpack_dir = gem_dirs
+        .iter()
+        .find(|d| d.starts_with("msgpack-"))
+        .expect("msgpack gem not found");
+    assert!(
+        !msgpack_dir.contains("linux")
+            && !msgpack_dir.contains("darwin")
+            && !msgpack_dir.contains("mingw"),
+        "msgpack should be compiled from source (no platform suffix), got: {msgpack_dir}"
+    );
+
+    Ok(())
+}
+
 /// Test Ruby hook that processes files
 #[test]
 fn process_files() -> anyhow::Result<()> {
@@ -810,6 +1027,146 @@ fn process_files() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
+
+    Ok(())
+}
+
+/// Test that Ruby is auto-downloaded from rv-ruby when a specific version
+/// is requested that isn't available on the system.
+/// Windows doesn't support auto-download, so this test is only for non-Windows platforms.
+/// The Windows-specific message is tested in `specific_ruby_unavailable`.
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn auto_download() -> anyhow::Result<()> {
+    use assert_fs::assert::PathAssert;
+    use prek_consts::env_vars::EnvVars;
+
+    if !EnvVars::is_set(EnvVars::CI) {
+        // Skip when not running in CI: local environments may have
+        // unexpected Ruby versions installed.
+        return Ok(());
+    }
+
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: ruby-downloaded
+                name: ruby-downloaded
+                language: ruby
+                entry: ruby --version
+                language_version: '3.2.9'
+                pass_filenames: false
+                always_run: true
+              - id: ruby-system
+                name: ruby-system
+                language: ruby
+                entry: ruby --version
+                language_version: '3.4'
+                pass_filenames: false
+                always_run: true
+    "});
+    context.git_add(".");
+
+    let ruby_dir = context.home_dir().child("tools").child("ruby");
+    ruby_dir.assert(predicates::path::missing());
+
+    let filters = [(
+        r"ruby (\d+\.\d+)\.\d+(?:p\d+)? \(\d{4}-\d{2}-\d{2} revision [0-9a-f]{0,10}\).*?\[.+\]",
+        "ruby $1.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]",
+    )]
+    .into_iter()
+    .chain(context.filters())
+    .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.run().arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ruby-downloaded..........................................................Passed
+    - hook id: ruby-downloaded
+    - duration: [TIME]
+
+      ruby 3.2.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
+    ruby-system..............................................................Passed
+    - hook id: ruby-system
+    - duration: [TIME]
+
+      ruby 3.4.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
+
+    ----- stderr -----
+    ");
+
+    // Verify that only Ruby 3.1 was downloaded (3.4 should use system Ruby)
+    let installed_versions = ruby_dir
+        .read_dir()?
+        .flatten()
+        .filter_map(|d| {
+            let filename = d.file_name().to_string_lossy().to_string();
+            if filename.starts_with('.') {
+                None
+            } else {
+                Some(filename)
+            }
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        installed_versions.len(),
+        1,
+        "Expected only one Ruby version to be downloaded, but found: {installed_versions:?}"
+    );
+    assert!(
+        installed_versions.iter().any(|v| v.starts_with("3.2.9")),
+        "Expected Ruby 3.2.9 to be downloaded, but found: {installed_versions:?}"
+    );
+
+    // Record the mtime of the downloaded Ruby directory so we can verify
+    // step 2 doesn't re-download it.
+    let ruby_version_dir = ruby_dir
+        .read_dir()?
+        .flatten()
+        .find(|d| d.file_name().to_string_lossy().starts_with("3.2.9"))
+        .expect("Expected a 3.2.9 directory");
+    let mtime_before = ruby_version_dir.metadata()?.modified()?;
+
+    // Step 2: Re-run with a looser version match that should reuse the
+    // already-downloaded 3.2.9 without hitting the network again.
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: ruby-reused
+                name: ruby-reused
+                language: ruby
+                entry: ruby --version
+                language_version: '3.2.9'
+                pass_filenames: false
+                always_run: true
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(filters, context.run().arg("-v"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ruby-reused..............................................................Passed
+    - hook id: ruby-reused
+    - duration: [TIME]
+
+      ruby 3.2.X ([DATE] revision [HASH]) [FLAGS] [PLATFORM]
+
+    ----- stderr -----
+    ");
+
+    // Verify the directory wasn't re-downloaded: mtime should be unchanged
+    let mtime_after = ruby_version_dir.metadata()?.modified()?;
+    assert_eq!(
+        mtime_before, mtime_after,
+        "Ruby directory was modified during reuse, suggests it was re-downloaded"
+    );
 
     Ok(())
 }

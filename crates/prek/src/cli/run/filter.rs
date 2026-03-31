@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use itertools::{Either, Itertools};
 use path_clean::PathClean;
 use prek_consts::env_vars::EnvVars;
+use prek_identify::{TagSet, tags_from_path};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::FxHashSet;
 use tracing::{debug, error, instrument};
@@ -11,7 +12,6 @@ use tracing::{debug, error, instrument};
 use crate::config::{FilePattern, Stage};
 use crate::git::GIT_ROOT;
 use crate::hook::Hook;
-use crate::identify::{TagSet, tags_from_path};
 use crate::workspace::Project;
 use crate::{fs, git, warn_user};
 
@@ -46,13 +46,17 @@ impl<'a> FilenameFilter<'a> {
 
 /// Filter files by tags.
 pub(crate) struct FileTagFilter<'a> {
-    all: &'a [String],
-    any: &'a [String],
-    exclude: &'a [String],
+    all: Option<&'a TagSet>,
+    any: Option<&'a TagSet>,
+    exclude: Option<&'a TagSet>,
 }
 
 impl<'a> FileTagFilter<'a> {
-    fn new(types: &'a [String], types_or: &'a [String], exclude_types: &'a [String]) -> Self {
+    fn new(
+        types: Option<&'a TagSet>,
+        types_or: Option<&'a TagSet>,
+        exclude_types: Option<&'a TagSet>,
+    ) -> Self {
         Self {
             all: types,
             any: types_or,
@@ -61,20 +65,19 @@ impl<'a> FileTagFilter<'a> {
     }
 
     pub(crate) fn filter(&self, file_types: &TagSet) -> bool {
-        if !self.all.is_empty() && !self.all.iter().all(|t| file_types.contains(t.as_str())) {
+        if self.all.is_some_and(|s| !s.is_subset(file_types)) {
             return false;
         }
-        if !self.any.is_empty() && !self.any.iter().any(|t| file_types.contains(t.as_str())) {
+        if self
+            .any
+            .is_some_and(|s| !s.is_empty() && s.is_disjoint(file_types))
+        {
             return false;
         }
-        if self.exclude.iter().any(|t| file_types.contains(t.as_str())) {
+        if self.exclude.is_some_and(|s| !s.is_disjoint(file_types)) {
             return false;
         }
         true
-    }
-
-    pub(crate) fn for_hook(hook: &'a Hook) -> Self {
-        Self::new(&hook.types, &hook.types_or, &hook.exclude_types)
     }
 }
 
@@ -84,7 +87,8 @@ pub(crate) struct FileFilter<'a> {
 }
 
 impl<'a> FileFilter<'a> {
-    // Here, `filenames` are paths relative to the workspace root.
+    /// Create a `FileFilter` for a project by filtering the input filenames with the project's relative path and include/exclude patterns.
+    /// `filenames` are paths relative to the workspace root.
     #[instrument(level = "trace", skip_all, fields(project = %project))]
     pub(crate) fn for_project<I>(
         filenames: I,
@@ -121,7 +125,13 @@ impl<'a> FileFilter<'a> {
                     true
                 }
             })
-            .filter(|filename| filter.filter(filename))
+            // Strip the project-relative prefix before applying project-level include/exclude patterns.
+            .filter(|filename| {
+                let relative = filename
+                    .strip_prefix(project.relative_path())
+                    .expect("Filename should start with project relative path");
+                filter.filter(relative)
+            })
             .collect::<Vec<_>>();
 
         Self {
@@ -137,9 +147,9 @@ impl<'a> FileFilter<'a> {
     /// Filter filenames by type tags for a specific hook.
     pub(crate) fn by_type(
         &self,
-        types: &[String],
-        types_or: &[String],
-        exclude_types: &[String],
+        types: Option<&TagSet>,
+        types_or: Option<&TagSet>,
+        exclude_types: Option<&TagSet>,
     ) -> Vec<&Path> {
         let filter = FileTagFilter::new(types, types_or, exclude_types);
         let filenames: Vec<_> = self
@@ -165,15 +175,20 @@ impl<'a> FileFilter<'a> {
         let filter = FilenameFilter::new(hook.files.as_ref(), hook.exclude.as_ref());
 
         let filenames = self.filenames.par_iter().filter(|filename| {
-            if let Ok(stripped) = filename.strip_prefix(self.filename_prefix) {
-                filter.filter(stripped)
+            // Strip the project-relative prefix before applying hook-level include/exclude patterns.
+            if let Ok(relative) = filename.strip_prefix(self.filename_prefix) {
+                filter.filter(relative)
             } else {
                 false
             }
         });
 
         // Filter by hook `types`, `types_or` and `exclude_types`.
-        let filter = FileTagFilter::for_hook(hook);
+        let filter = FileTagFilter::new(
+            Some(&hook.types),
+            Some(&hook.types_or),
+            Some(&hook.exclude_types),
+        );
         let filenames = filenames.filter(|filename| match tags_from_path(filename) {
             Ok(tags) => filter.filter(&tags),
             Err(err) => {
@@ -186,7 +201,7 @@ impl<'a> FileFilter<'a> {
         let filenames: Vec<_> = filenames
             .map(|p| {
                 p.strip_prefix(self.filename_prefix)
-                    .expect("Failed to strip prefix")
+                    .expect("Filename should start with project relative path")
             })
             .collect();
 
@@ -317,9 +332,6 @@ async fn collect_files_from_args(
         // so `pre-commit` will ignore user provided directories.
         // We do the same here for compatibility.
         // For `types: [directory]`, `pre-commit` passes the directory names to the hook directly.
-
-        // Fun fact: if a hook specified `types: [directory]`, it won't run in `--all-files` mode.
-
         let (exists, non_exists): (FxHashSet<_>, Vec<_>) =
             files.into_iter().partition_map(|filename| {
                 if std::fs::exists(&filename).unwrap_or(false) {

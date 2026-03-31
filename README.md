@@ -1,13 +1,15 @@
 <div align="center">
 
 <h1>
-  <img width="180" alt="prek" src="https://raw.githubusercontent.com/j178/prek/master/docs/assets/logo.webp" />
-  <br/>prek
+<img width="180" alt="prek" src="https://raw.githubusercontent.com/j178/prek/master/docs/assets/logo.webp" />
+
+prek
+
 </h1>
 
 [![prek](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json)](https://github.com/j178/prek)
+[![PyPI version](https://img.shields.io/pypi/v/prek.svg)](https://pypi.python.org/pypi/prek)
 [![codecov](https://codecov.io/github/j178/prek/graph/badge.svg?token=MP6TY24F43)](https://codecov.io/github/j178/prek)
-[![GitHub Downloads](https://img.shields.io/github/downloads/j178/prek/total?logo=github)](https://github.com/j178/prek/releases)
 [![PyPI Downloads](https://img.shields.io/pypi/dm/prek?logo=python)](https://pepy.tech/projects/prek)
 [![Discord](https://img.shields.io/discord/1403581202102878289?logo=discord)](https://discord.gg/3NRJUqJz86)
 
@@ -63,7 +65,7 @@ On Linux and macOS:
 <!-- --8<-- [start: linux-standalone-install] -->
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.3.2/prek-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v0.3.8/prek-installer.sh | sh
 ```
 
 <!-- --8<-- [end: linux-standalone-install] -->
@@ -73,7 +75,7 @@ On Windows:
 <!-- --8<-- [start: windows-standalone-install] -->
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.3.2/prek-installer.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/j178/prek/releases/download/v0.3.8/prek-installer.ps1 | iex"
 ```
 
 <!-- --8<-- [end: windows-standalone-install] -->
@@ -248,6 +250,21 @@ scoop install main/prek
 </details>
 
 <details>
+<summary>Winget (Windows)</summary>
+
+<!-- --8<-- [start: winget-install] -->
+
+prek is available via [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/).
+
+```powershell
+winget install --id j178.Prek
+```
+
+<!-- --8<-- [end: winget-install] -->
+
+</details>
+
+<details>
 <summary>MacPorts</summary>
 
 <!-- --8<-- [start: macports-install] -->
@@ -291,7 +308,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: j178/prek-action@v1
+      - uses: j178/prek-action@v2
 ```
 
 This action installs prek and runs `prek run --all-files` on your repository.
@@ -332,7 +349,7 @@ prek self update
 ## Quick start
 
 - **I already use pre-commit:** follow the short migration checklist in the [quickstart guide](https://prek.j178.dev/quickstart/#already-using-pre-commit) to swap in `prek` safely.
-- **I'm new to pre-commit-style tools:** learn the basics—creating a config, running hooks, and installing git hooks—in the [beginner quickstart walkthrough](https://prek.j178.dev/quickstart/#new-to-pre-commit-style-workflows).
+- **I'm new to pre-commit-style tools:** learn the basics—creating a config, running hooks, and installing Git shims—in the [beginner quickstart walkthrough](https://prek.j178.dev/quickstart/#new-to-pre-commit-style-workflows).
 
 <!-- --8<-- [start: why] -->
 
@@ -377,6 +394,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [astral-sh/ty](https://github.com/astral-sh/ty/pull/2469)
 - [openclaw/openclaw](https://github.com/openclaw/openclaw/pull/1720)
 - [home-assistant/core](https://github.com/home-assistant/core/pull/160427)
+- [python-telegram-bot/python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot/pull/5142)
 - [DetachHead/basedpyright](https://github.com/DetachHead/basedpyright/pull/1413)
 - [OpenLineage/OpenLineage](https://github.com/OpenLineage/OpenLineage/pull/3965)
 - [authlib/authlib](https://github.com/authlib/authlib/pull/804)
@@ -387,6 +405,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [python-attrs/attrs](https://github.com/python-attrs/attrs/commit/c95b177682e76a63478d29d040f9cb36a8d31915)
 - [jlowin/fastmcp](https://github.com/jlowin/fastmcp/pull/2309)
 - [apache/iceberg-python](https://github.com/apache/iceberg-python/pull/2533)
+- [apache/iggy](https://github.com/apache/iggy/pull/2383)
 - [apache/lucene](https://github.com/apache/lucene/pull/15629)
 - [jcrist/msgspec](https://github.com/jcrist/msgspec/pull/918)
 - [python-humanize/humanize](https://github.com/python-humanize/humanize/pull/276)
@@ -397,6 +416,7 @@ prek is pretty new, but it is already being used or recommend by some projects a
 - [cocoindex-io/cocoindex](https://github.com/cocoindex-io/cocoindex/pull/1564)
 - [cachix/devenv](https://github.com/cachix/devenv/pull/2304)
 - [copper-project/copper-rs](https://github.com/copper-project/copper-rs/pull/783)
+- [bramstroker/homeassistant-powercalc](https://github.com/bramstroker/homeassistant-powercalc/pull/3978)
 
 <!-- --8<-- [end: why] -->
 

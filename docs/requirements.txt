@@ -72,5 +72,5 @@ typing-inspection==0.4.2
     # via pydantic
 wcwidth==0.5.3
     # via mdformat-tables
-zensical==0.0.17
+zensical==0.0.24
     # via -r docs/requirements.in

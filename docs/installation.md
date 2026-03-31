@@ -72,6 +72,10 @@ npm add -D @j178/prek
 
 --8<-- "README.md:scoop-install"
 
+### Winget (Windows)
+
+--8<-- "README.md:winget-install"
+
 ### MacPorts
 
 --8<-- "README.md:macports-install"

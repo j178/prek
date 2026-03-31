@@ -1,0 +1,43 @@
+name: "Publish to npmjs registry"
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+jobs:
+  publish:
+    name: Upload to npmjs registry
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+    permissions:
+      # For npm's trusted publishing.
+      id-token: write
+    env:
+      PLAN: ${{ inputs.plan }}
+    steps:
+      - name: Fetch npm packages
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          pattern: artifacts-build-global
+          path: npm/
+          merge-multiple: true
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: "24.x"
+          registry-url: "https://registry.npmjs.org"
+      - name: Update npm
+        run: npm install -g npm@latest
+      - run: |
+          for release in $(echo "$PLAN" | jq --compact-output '.releases[] | select([.artifacts[] | endswith("-npm-package.tar.gz")] | any)'); do
+            pkg=$(echo "$release" | jq '.artifacts[] | select(endswith("-npm-package.tar.gz"))' --raw-output)
+            prerelease=$(echo "$PLAN" | jq ".announcement_is_prerelease")
+            if [ "$prerelease" = "true" ]; then
+              npm publish --tag beta --provenance --access public "./npm/${pkg}"
+            else
+              npm publish --provenance --access public "./npm/${pkg}"
+            fi
+          done

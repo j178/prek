@@ -12,3 +12,6 @@ rules:
   secrets-inherit:
     ignore:
       - release.yml
+  secrets-outside-env:
+    ignore:
+      - ci.yml # CODECOV_TOKEN is not important

@@ -1,0 +1,39 @@
+name: "Sync pre-commit identify tags"
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
+
+permissions: {}
+
+jobs:
+  sync:
+    if: github.repository == 'j178/prek'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@6ee6290f1cbc4156c0bdd66691b2c144ef8df19a # v7.4.0
+        with:
+          version: "latest"
+          enable-cache: true
+      - name: "Sync identify tags"
+        run: uv run --upgrade gen.py
+        working-directory: ./crates/prek-identify
+
+      - name: "Create Pull Request"
+        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
+        with:
+          commit-message: "Sync latest identify tags"
+          add-paths: |
+            crates/prek-identify/src/tags.rs
+            crates/prek-identify/gen.py.lock
+          branch: "sync-identify-tags"
+          title: "Sync latest identify tags"
+          body: "Automated update for identify tags."
+          base: "master"
+          draft: true

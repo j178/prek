@@ -1,9 +1,143 @@
+use crate::config::{
+    BuiltinHook, BuiltinRepo, FilePattern, LocalRepo, MetaHook, MetaRepo, PassFilenames,
+    RemoteHook, RemoteRepo, Repo, Stage, Stages,
+};
 use std::borrow::Cow;
 
-use crate::config::{
-    BuiltinHook, BuiltinRepo, FilePattern, LocalRepo, MetaHook, MetaRepo, RemoteHook, RemoteRepo,
-    Repo,
-};
+#[derive(Debug, Clone)]
+struct RemoveNullTypes;
+
+impl schemars::transform::Transform for RemoveNullTypes {
+    fn transform(&mut self, schema: &mut schemars::Schema) {
+        strip_null_acceptance(schema);
+        schemars::transform::transform_subschemas(self, schema);
+    }
+}
+
+fn strip_null_acceptance(schema: &mut schemars::Schema) {
+    use serde_json::Value;
+
+    let Some(obj) = schema.as_object_mut() else {
+        return;
+    };
+
+    const ANNOTATION_KEYS: &[&str] = &["title", "description", "default", "examples"];
+
+    // After stripping nullability, `default: null` is invalid for most schemas and can
+    // trigger editor warnings. Treat it as "no default".
+    if obj.get("default").is_some_and(Value::is_null) {
+        obj.remove("default");
+    }
+
+    // Remove `null` from `type`.
+    if let Some(ty) = obj.get_mut("type") {
+        match ty {
+            Value::String(s) if s == "null" => {
+                *schema = schemars::json_schema!(false);
+                return;
+            }
+            Value::Array(arr) => {
+                arr.retain(|v| v != "null");
+                match arr.len() {
+                    0 => {
+                        *schema = schemars::json_schema!(false);
+                        return;
+                    }
+                    1 => {
+                        if let Some(Value::String(single)) = arr.pop() {
+                            *ty = Value::String(single);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Remove explicit `null` schemas from combinators.
+    for key in ["anyOf", "oneOf", "allOf"] {
+        let Some(Value::Array(arr)) = obj.get_mut(key) else {
+            continue;
+        };
+
+        arr.retain(|sub| {
+            let Some(sub_obj) = sub.as_object() else {
+                return true;
+            };
+
+            match sub_obj.get("type") {
+                Some(Value::String(s)) if s == "null" => false,
+                Some(Value::Array(types)) if types.iter().all(|t| t == "null") => false,
+                _ => true,
+            }
+        });
+
+        if arr.is_empty() {
+            *schema = schemars::json_schema!(false);
+            return;
+        }
+
+        // If the combinator has only one subschema left, collapse it.
+        if arr.len() == 1 {
+            let only = arr[0].clone();
+
+            // Preserve common annotations from the original wrapper schema.
+            let mut annotations = Vec::new();
+            for k in ANNOTATION_KEYS {
+                if let Some(v) = obj.get(*k).cloned() {
+                    if *k == "default" && v.is_null() {
+                        continue;
+                    }
+                    annotations.push(((*k).to_string(), v));
+                }
+            }
+
+            let Ok(only_schema) = serde_json::from_value::<schemars::Schema>(only) else {
+                return;
+            };
+
+            *schema = only_schema;
+            if let Some(new_obj) = schema.as_object_mut() {
+                for (k, v) in annotations {
+                    new_obj.entry(k).or_insert(v);
+                }
+            }
+
+            return;
+        }
+    }
+
+    // If a schema explicitly matches only `null`, block it.
+    if obj.get("const").is_some_and(Value::is_null) {
+        *schema = schemars::json_schema!(false);
+        return;
+    }
+    if let Some(Value::Array(values)) = obj.get("enum") {
+        if !values.is_empty() && values.iter().all(Value::is_null) {
+            *schema = schemars::json_schema!(false);
+        }
+    }
+}
+
+impl schemars::JsonSchema for Stages {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("Stages")
+    }
+
+    fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        let stage_schema = generator.subschema_for::<Stage>();
+        schemars::json_schema!({
+            "type": "array",
+            "items": stage_schema,
+            "uniqueItems": true,
+        })
+    }
+}
 
 impl schemars::JsonSchema for FilePattern {
     fn schema_name() -> Cow<'static, str> {
@@ -44,6 +178,25 @@ impl schemars::JsonSchema for FilePattern {
     }
 }
 
+impl schemars::JsonSchema for PassFilenames {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("PassFilenames")
+    }
+
+    fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "Whether to pass filenames to the hook. \
+            `true` passes all matching filenames (default), \
+            `false` passes none, and \
+            a positive integer limits each invocation to at most that many filenames.",
+            "oneOf": [
+                {"type": "boolean"},
+                {"type": "integer", "exclusiveMinimum": 0}
+            ]
+        })
+    }
+}
+
 fn predefined_hook_schema(
     schema_gen: &mut schemars::SchemaGenerator,
     description: &str,
@@ -64,15 +217,10 @@ fn predefined_hook_schema(
         properties.insert(
             "language".to_string(),
             serde_json::json!({
-                "anyOf": [
-                    {
-                        "type": "string",
-                        "enum": ["system"],
-                        "description": "Language must be `system` for predefined hooks (or omitted).",
-                    },
-                    { "type": "null" }
-                ]
-            })
+                "type": "string",
+                "enum": ["system"],
+                "description": "Language must be `system` for predefined hooks (or omitted)."
+            }),
         );
         // `entry` is not allowed for predefined hooks.
         properties.insert(
@@ -173,6 +321,7 @@ impl schemars::JsonSchema for Repo {
                 meta_schema,
                 builtin_schema,
             ],
+            "additionalProperties": true,
         })
     }
 }
@@ -200,14 +349,11 @@ mod _gen {
     }
 
     fn generate() -> String {
-        let settings = schemars::generate::SchemaSettings::draft07();
+        let settings = schemars::generate::SchemaSettings::draft07()
+            .with_transform(schemars::transform::RestrictFormats::default())
+            .with_transform(super::RemoveNullTypes);
         let generator = schemars::SchemaGenerator::new(settings);
-        let mut schema = generator.into_root_schema_for::<Config>();
-        schema.insert(
-            "$id".to_string(),
-            "https://www.schemastore.org/prek.json".into(),
-        );
-
+        let schema = generator.into_root_schema_for::<Config>();
         serde_json::to_string_pretty(&schema).unwrap() + "\n"
     }
 

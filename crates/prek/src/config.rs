@@ -8,12 +8,13 @@ use anyhow::Result;
 use fancy_regex::Regex;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use itertools::Itertools;
+use prek_identify::TagSet;
 use rustc_hash::FxHashMap;
-use serde::de::{Error as DeError, MapAccess, Visitor};
+use serde::de::{DeserializeSeed, Error as DeError, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
+use strum::EnumCount;
 
 use crate::fs::Simplified;
-use crate::identify;
 use crate::install_source::InstallSource;
 #[cfg(feature = "schemars")]
 use crate::schema::{schema_repo_builtin, schema_repo_local, schema_repo_meta, schema_repo_remote};
@@ -50,12 +51,115 @@ impl std::fmt::Debug for GlobPatterns {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
 enum FilePatternWire {
     Glob { glob: String },
     GlobList { glob: Vec<String> },
     Regex(String),
+}
+
+impl<'de> Deserialize<'de> for FilePatternWire {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct FilePatternVisitor;
+        struct GlobFieldVisitor;
+
+        impl<'de> DeserializeSeed<'de> for GlobFieldVisitor {
+            type Value = FilePatternWire;
+
+            fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                deserializer.deserialize_any(self)
+            }
+        }
+
+        impl<'de> Visitor<'de> for GlobFieldVisitor {
+            type Value = FilePatternWire;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a string or a list of strings")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(FilePatternWire::Glob {
+                    glob: value.to_owned(),
+                })
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(FilePatternWire::Glob { glob: value })
+            }
+
+            fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                Ok(FilePatternWire::GlobList {
+                    glob: Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(
+                        seq,
+                    ))?,
+                })
+            }
+        }
+
+        impl<'de> Visitor<'de> for FilePatternVisitor {
+            type Value = FilePatternWire;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str(
+                    "a regex string or a mapping with `glob` set to a string or list of strings",
+                )
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(FilePatternWire::Regex(value.to_owned()))
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                Ok(FilePatternWire::Regex(value))
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let mut glob = None;
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "glob" => {
+                            if glob.is_some() {
+                                return Err(M::Error::duplicate_field("glob"));
+                            }
+                            glob = Some(map.next_value_seed(GlobFieldVisitor)?);
+                        }
+                        _ => {
+                            return Err(M::Error::unknown_field(&key, &["glob"]));
+                        }
+                    }
+                }
+
+                glob.ok_or_else(|| M::Error::missing_field("glob"))
+            }
+        }
+
+        deserializer.deserialize_any(FilePatternVisitor)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -70,6 +174,7 @@ enum FilePatternWireError {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "FilePatternWire")]
 pub(crate) enum FilePattern {
+    Never,
     Regex(Regex),
     Glob(GlobPatterns),
 }
@@ -85,6 +190,7 @@ impl FilePattern {
 
     pub(crate) fn is_match(&self, str: &str) -> bool {
         match self {
+            FilePattern::Never => false,
             FilePattern::Regex(regex) => regex.is_match(str).unwrap_or(false),
             FilePattern::Glob(globs) => globs.is_match(str),
         }
@@ -94,6 +200,7 @@ impl FilePattern {
 impl Display for FilePattern {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            FilePattern::Never => f.write_str("never"),
             FilePattern::Regex(regex) => write!(f, "regex: {}", regex.as_str()),
             FilePattern::Glob(globs) => {
                 let patterns = globs.patterns.iter().join(", ");
@@ -137,6 +244,7 @@ pub enum Language {
     Conda,
     Coursier,
     Dart,
+    Deno,
     Docker,
     DockerImage,
     Dotnet,
@@ -212,10 +320,12 @@ impl HookType {
     clap::ValueEnum,
     strum::AsRefStr,
     strum::Display,
+    strum::EnumCount,
 )]
 #[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[repr(u8)]
 pub(crate) enum Stage {
     Manual,
     CommitMsg,
@@ -252,6 +362,28 @@ impl From<HookType> for Stage {
 }
 
 impl Stage {
+    const ORDER: [Self; Self::COUNT] = [
+        Self::Manual,
+        Self::CommitMsg,
+        Self::PostCheckout,
+        Self::PostCommit,
+        Self::PostMerge,
+        Self::PostRewrite,
+        Self::PreCommit,
+        Self::PreMergeCommit,
+        Self::PrePush,
+        Self::PreRebase,
+        Self::PrepareCommitMsg,
+    ];
+
+    const fn bit(self) -> u16 {
+        1u16 << (self as u8)
+    }
+
+    fn from_index(index: u32) -> Self {
+        Self::ORDER[index as usize]
+    }
+
     pub fn operate_on_files(self) -> bool {
         matches!(
             self,
@@ -262,6 +394,139 @@ impl Stage {
                 | Stage::PrePush
                 | Stage::PrepareCommitMsg
         )
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct Stages(u16);
+
+impl Stages {
+    const ALL_BITS: u16 = (1u16 << Stage::COUNT) - 1;
+
+    pub(crate) const ALL: Self = Self(Self::ALL_BITS);
+
+    pub(crate) fn iter(self) -> impl Iterator<Item = Stage> {
+        let mut bits = self.0;
+        std::iter::from_fn(move || {
+            if bits == 0 {
+                return None;
+            }
+            let index = bits.trailing_zeros();
+            bits &= bits - 1;
+            Some(Stage::from_index(index))
+        })
+    }
+
+    pub(crate) fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    pub(crate) fn contains(self, stage: Stage) -> bool {
+        (self.0 & stage.bit()) != 0
+    }
+}
+
+impl Display for Stages {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if *self == Self::ALL {
+            write!(f, "all")
+        } else if self.is_empty() {
+            write!(f, "none")
+        } else {
+            let stages_str = self.iter().map(|stage| stage.to_string()).join(", ");
+            write!(f, "{stages_str}")
+        }
+    }
+}
+
+impl std::fmt::Debug for Stages {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Stages({self})")
+    }
+}
+
+impl From<Vec<Stage>> for Stages {
+    fn from(value: Vec<Stage>) -> Self {
+        let bits = value.into_iter().fold(0, |bits, stage| bits | stage.bit());
+        Self(bits & Self::ALL_BITS)
+    }
+}
+
+impl<const N: usize> From<[Stage; N]> for Stages {
+    fn from(value: [Stage; N]) -> Self {
+        Self::from(Vec::from(value))
+    }
+}
+
+impl<'de> Deserialize<'de> for Stages {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let stages = Vec::<Stage>::deserialize(deserializer)?;
+        Ok(Self::from(stages))
+    }
+}
+
+/// Controls whether filenames are appended to a hook's command line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PassFilenames {
+    /// Pass all matching filenames (default). Corresponds to `pass_filenames:
+    /// true`.
+    All,
+    /// Pass no filenames. Corresponds to `pass_filenames: false`.
+    None,
+    /// Pass at most `n` filenames per invocation. Corresponds to
+    /// `pass_filenames: n`.
+    Limited(std::num::NonZeroUsize),
+}
+
+impl<'de> Deserialize<'de> for PassFilenames {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct PassFilenamesVisitor;
+
+        impl serde::de::Visitor<'_> for PassFilenamesVisitor {
+            type Value = PassFilenames;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a boolean or a positive integer")
+            }
+
+            fn visit_bool<E: DeError>(self, v: bool) -> Result<PassFilenames, E> {
+                Ok(if v {
+                    PassFilenames::All
+                } else {
+                    PassFilenames::None
+                })
+            }
+
+            fn visit_u64<E: DeError>(self, v: u64) -> Result<PassFilenames, E> {
+                let n = usize::try_from(v)
+                    .ok()
+                    .and_then(std::num::NonZeroUsize::new)
+                    .ok_or_else(|| {
+                        E::custom(
+                            "pass_filenames must be a positive integer; use `false` to pass no filenames",
+                        )
+                    })?;
+                Ok(PassFilenames::Limited(n))
+            }
+
+            fn visit_i64<E: DeError>(self, v: i64) -> Result<PassFilenames, E> {
+                if v <= 0 {
+                    return Err(E::custom(
+                        "pass_filenames must be a positive integer; use `false` to pass no filenames",
+                    ));
+                }
+                #[allow(clippy::cast_sign_loss)]
+                self.visit_u64(v as u64)
+            }
+        }
+
+        deserializer.deserialize_any(PassFilenamesVisitor)
     }
 }
 
@@ -278,16 +543,13 @@ pub(crate) struct HookOptions {
     pub exclude: Option<FilePattern>,
     /// List of file types to run on (AND).
     /// Default is `[file]`, which matches all files.
-    #[serde(deserialize_with = "deserialize_and_validate_tags", default)]
-    pub types: Option<Vec<String>>,
+    pub types: Option<TagSet>,
     /// List of file types to run on (OR).
     /// Default is `[]`.
-    #[serde(deserialize_with = "deserialize_and_validate_tags", default)]
-    pub types_or: Option<Vec<String>>,
+    pub types_or: Option<TagSet>,
     /// List of file types to exclude.
     /// Default is `[]`.
-    #[serde(deserialize_with = "deserialize_and_validate_tags", default)]
-    pub exclude_types: Option<Vec<String>>,
+    pub exclude_types: Option<TagSet>,
     /// Not documented in the official docs.
     pub additional_dependencies: Option<Vec<String>>,
     /// Additional arguments to pass to the hook.
@@ -302,7 +564,7 @@ pub(crate) struct HookOptions {
     pub fail_fast: Option<bool>,
     /// Append filenames that would be checked to the hook entry as arguments.
     /// Default is true.
-    pub pass_filenames: Option<bool>,
+    pub pass_filenames: Option<PassFilenames>,
     /// A description of the hook. For metadata only.
     pub description: Option<String>,
     /// Run the hook on a specific version of the language.
@@ -314,10 +576,10 @@ pub(crate) struct HookOptions {
     /// This hook will execute using a single process instead of in parallel.
     /// Default is false.
     pub require_serial: Option<bool>,
-    /// Select which git hook(s) to run for.
+    /// Select which Git hook stages this hook runs for.
     /// Default all stages are selected.
     /// See <https://pre-commit.com/#confining-hooks-to-run-at-certain-stages>.
-    pub stages: Option<Vec<Stage>>,
+    pub stages: Option<Stages>,
     /// Print the output of the hook even if it passes.
     /// Default is false.
     pub verbose: Option<bool>,
@@ -837,10 +1099,13 @@ where
 // TODO: warn sensible regex
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(
     feature = "schemars",
-    schemars(title = "prek configuration file format")
+    derive(schemars::JsonSchema),
+    schemars(title = "prek.toml"),
+    schemars(description = "The configuration file for prek, a git hook manager written in Rust."),
+    schemars(extend("$id" = "https://www.schemastore.org/prek.json")),
+    schemars(extend("x-tombi-toml-version" = "v1.1.0")),
 )]
 pub(crate) struct Config {
     pub repos: Vec<Repo>,
@@ -851,7 +1116,7 @@ pub(crate) struct Config {
     pub default_language_version: Option<FxHashMap<Language, String>>,
     /// A configuration-wide default for the stages property of hooks.
     /// Default to all stages.
-    pub default_stages: Option<Vec<Stage>>,
+    pub default_stages: Option<Stages>,
     /// Global file include pattern.
     pub files: Option<FilePattern>,
     /// Global file exclude pattern.
@@ -1100,29 +1365,10 @@ where
     Ok(Some(s))
 }
 
-/// Deserializes a vector of strings and validates that each is a known file type tag.
-fn deserialize_and_validate_tags<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let tags_opt: Option<Vec<String>> = Option::deserialize(deserializer)?;
-    if let Some(tags) = &tags_opt {
-        let all_tags = identify::all_tags();
-        for tag in tags {
-            if !all_tags.contains(tag.as_str()) {
-                let msg = format!(
-                    "Type tag `{tag}` is not recognized. Check for typos or upgrade prek to get new tags."
-                );
-                return Err(serde::de::Error::custom(msg));
-            }
-        }
-    }
-    Ok(tags_opt)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::ValueEnum;
     use std::io::Write as _;
 
     /// Filter to replace dynamic version in snapshots
@@ -1130,6 +1376,53 @@ mod tests {
         r"current version `\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?`",
         "current version `[CURRENT_VERSION]`",
     );
+
+    #[test]
+    fn stages_deserialize_empty_as_empty() {
+        #[derive(Debug, Deserialize)]
+        struct Wrapper {
+            stages: Stages,
+        }
+
+        let parsed: Wrapper = serde_saphyr::from_str("stages: []\n").expect("stages should parse");
+        assert_eq!(parsed.stages, Stages::from([]));
+        assert!(!parsed.stages.contains(Stage::Manual));
+        assert!(!parsed.stages.contains(Stage::PreCommit));
+    }
+
+    #[test]
+    fn config_default_stages_deserialize_empty_as_empty() {
+        let parsed: Config =
+            serde_saphyr::from_str("repos: []\ndefault_stages: []\n").expect("config should parse");
+
+        assert_eq!(parsed.default_stages, Some(Stages::from([])));
+    }
+
+    #[test]
+    fn config_default_stages_omitted_keeps_none() {
+        let parsed: Config = serde_saphyr::from_str("repos: []\n").expect("config should parse");
+
+        assert_eq!(parsed.default_stages, None);
+    }
+
+    #[test]
+    fn stages_deserialize_to_subset() {
+        #[derive(Debug, Deserialize)]
+        struct Wrapper {
+            stages: Stages,
+        }
+
+        let parsed: Wrapper =
+            serde_saphyr::from_str("stages: [pre-commit, manual]\n").expect("stages should parse");
+        assert!(parsed.stages.contains(Stage::PreCommit));
+        assert!(parsed.stages.contains(Stage::Manual));
+        assert!(!parsed.stages.contains(Stage::PrePush));
+    }
+
+    #[test]
+    fn stages_full_set_normalizes_to_all() {
+        assert_eq!(Stages::from(Stage::value_variants().to_vec()), Stages::ALL);
+    }
 
     #[test]
     fn parse_file_patterns_regex_and_glob() {
@@ -1207,6 +1500,14 @@ mod tests {
     }
 
     #[test]
+    fn file_pattern_never_matches() {
+        let pattern = FilePattern::Never;
+        assert!(!pattern.is_match(""));
+        assert!(!pattern.is_match("foo.txt"));
+        assert!(!pattern.is_match("nested/path.rs"));
+    }
+
+    #[test]
     fn empty_glob_list_matches_nothing() {
         let pattern = serde_saphyr::from_str::<FilePattern>("glob: []").unwrap();
         assert!(!pattern.is_match("any/file.rs"));
@@ -1254,12 +1555,12 @@ mod tests {
         // Error on extra `rev` field, but not other fields
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 2 column 5: `rev` is not allowed for local repos at line 2, column 5
+        error: line 2 column 5: `rev` is not allowed for local repos
          --> <input>:2:5
           |
         1 | repos:
         2 |   - repo: local
-          |     ^ `rev` is not allowed for local repos at line 2, column 5
+          |     ^ `rev` is not allowed for local repos
         3 |     rev: v1.0.0
         4 |     hooks:
           |
@@ -1300,13 +1601,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 2 column 5: missing field `rev` at line 2, column 5
-         --> <input>:2:5
+        error: line 3 column 5: missing field `rev`
+         --> <input>:3:5
           |
         1 | repos:
         2 |   - repo: https://github.com/crate-ci/typos
-          |     ^ missing field `rev` at line 2, column 5
         3 |     hooks:
+          |     ^ missing field `rev`
         4 |       - id: typos
           |
         ");
@@ -1331,13 +1632,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 5 column 9: missing field `name` at line 5, column 9
+        error: line 5 column 9: missing field `name`
          --> <input>:5:9
           |
         3 |     repo: local
         4 |     hooks:
         5 |       - id: typos
-          |         ^ missing field `name` at line 5, column 9
+          |         ^ missing field `name`
         ");
 
         let yaml = indoc::indoc! {r"
@@ -1349,13 +1650,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 5 column 9: unknown meta hook id `typos` at line 5, column 9
+        error: line 5 column 9: unknown meta hook id `typos`
          --> <input>:5:9
           |
         3 |     repo: meta
         4 |     hooks:
         5 |       - id: typos
-          |         ^ unknown meta hook id `typos` at line 5, column 9
+          |         ^ unknown meta hook id `typos`
         ");
 
         let yaml = indoc::indoc! {r"
@@ -1367,13 +1668,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 5 column 9: unknown builtin hook id `typos` at line 5, column 9
+        error: line 5 column 9: unknown builtin hook id `typos`
          --> <input>:5:9
           |
         3 |     repo: builtin
         4 |     hooks:
         5 |       - id: typos
-          |         ^ unknown builtin hook id `typos` at line 5, column 9
+          |         ^ unknown builtin hook id `typos`
         ");
     }
 
@@ -1390,15 +1691,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 5 column 9: missing field `id` at line 5, column 9
-         --> <input>:5:9
+        error: line 6 column 9: missing field `id`
+         --> <input>:6:9
           |
-        3 |     rev: v1.0.0
         4 |     hooks:
         5 |       - name: typos
-          |         ^ missing field `id` at line 5, column 9
         6 |         alias: typo
-          |
+          |         ^ missing field `id`
         ");
 
         // Local hook should have `id`, `name`, and `entry` and `language`.
@@ -1414,15 +1713,14 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 4 column 9: missing field `language` at line 4, column 9
-         --> <input>:4:9
+        error: line 7 column 9: missing field `language`
+         --> <input>:7:9
           |
-        2 |   - repo: local
-        3 |     hooks:
-        4 |       - id: cargo-fmt
-          |         ^ missing field `language` at line 4, column 9
         5 |         name: cargo fmt
         6 |         entry: cargo fmt
+        7 |         types:
+          |         ^ missing field `language`
+        8 |           - rust
           |
         ");
 
@@ -1452,15 +1750,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 5 column 9: missing field `id` at line 5, column 9
-         --> <input>:5:9
+        error: line 6 column 9: missing field `id`
+         --> <input>:6:9
           |
-        3 |     rev: v1.0.0
         4 |     hooks:
         5 |       - name: typos
-          |         ^ missing field `id` at line 5, column 9
         6 |         alias: typo
-          |
+          |         ^ missing field `id`
         ");
 
         // Invalid meta hook id
@@ -1472,13 +1768,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 4 column 9: unknown meta hook id `hello` at line 4, column 9
+        error: line 4 column 9: unknown meta hook id `hello`
          --> <input>:4:9
           |
         2 |   - repo: meta
         3 |     hooks:
         4 |       - id: hello
-          |         ^ unknown meta hook id `hello` at line 4, column 9
+          |         ^ unknown meta hook id `hello`
         ");
 
         // Invalid language
@@ -1491,13 +1787,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 4 column 9: language must be `system` for meta hooks at line 4, column 9
+        error: line 4 column 9: language must be `system` for meta hooks
          --> <input>:4:9
           |
         2 |   - repo: meta
         3 |     hooks:
         4 |       - id: check-hooks-apply
-          |         ^ language must be `system` for meta hooks at line 4, column 9
+          |         ^ language must be `system` for meta hooks
         5 |         language: python
           |
         ");
@@ -1512,13 +1808,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 4 column 9: `entry` is not allowed for meta hooks at line 4, column 9
+        error: line 4 column 9: `entry` is not allowed for meta hooks
          --> <input>:4:9
           |
         2 |   - repo: meta
         3 |     hooks:
         4 |       - id: check-hooks-apply
-          |         ^ `entry` is not allowed for meta hooks at line 4, column 9
+          |         ^ `entry` is not allowed for meta hooks
         5 |         entry: echo hell world
           |
         ");
@@ -1725,13 +2021,13 @@ mod tests {
         let err = serde_saphyr::from_str::<Config>(yaml).unwrap_err();
         insta::with_settings!({ filters => vec![VERSION_FILTER] }, {
             insta::assert_snapshot!(err, @"
-            error: line 8 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek at line 8, column 23
+            error: line 8 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
              --> <input>:8:23
               |
             6 |         entry: echo test
             7 |         language: system
             8 | minimum_prek_version: '10.0.0'
-              |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek at line 8, column 23
+              |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
             ");
         });
 
@@ -1746,11 +2042,11 @@ mod tests {
         let err = serde_saphyr::from_str::<Manifest>(yaml).unwrap_err();
         insta::with_settings!({ filters => vec![VERSION_FILTER] }, {
             insta::assert_snapshot!(err, @"
-            error: line 1 column 3: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek at line 1, column 3
+            error: line 1 column 3: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
              --> <input>:1:3
               |
             1 | - id: test-hook
-              |   ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek at line 1, column 3
+              |   ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
             2 |   name: Test Hook
             3 |   entry: echo test
               |
@@ -1808,13 +2104,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml_invalid_types).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 4 column 9: Type tag `pythoon` is not recognized. Check for typos or upgrade prek to get new tags. at line 4, column 9
+        error: line 4 column 9: Type tag `pythoon` is not recognized. Check for typos or upgrade prek to get new tags.
          --> <input>:4:9
           |
         2 |   - repo: local
         3 |     hooks:
         4 |       - id: my-hook
-          |         ^ Type tag `pythoon` is not recognized. Check for typos or upgrade prek to get new tags. at line 4, column 9
+          |         ^ Type tag `pythoon` is not recognized. Check for typos or upgrade prek to get new tags.
         5 |         name: My Hook
         6 |         entry: echo
           |
@@ -1833,13 +2129,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml_invalid_types_or).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 4 column 9: Type tag `invalidtag` is not recognized. Check for typos or upgrade prek to get new tags. at line 4, column 9
+        error: line 4 column 9: Type tag `invalidtag` is not recognized. Check for typos or upgrade prek to get new tags.
          --> <input>:4:9
           |
         2 |   - repo: local
         3 |     hooks:
         4 |       - id: my-hook
-          |         ^ Type tag `invalidtag` is not recognized. Check for typos or upgrade prek to get new tags. at line 4, column 9
+          |         ^ Type tag `invalidtag` is not recognized. Check for typos or upgrade prek to get new tags.
         5 |         name: My Hook
         6 |         entry: echo
           |
@@ -1858,13 +2154,13 @@ mod tests {
         "};
         let err = serde_saphyr::from_str::<Config>(yaml_invalid_exclude_types).unwrap_err();
         insta::assert_snapshot!(err, @"
-        error: line 4 column 9: Type tag `not-a-real-tag` is not recognized. Check for typos or upgrade prek to get new tags. at line 4, column 9
+        error: line 4 column 9: Type tag `not-a-real-tag` is not recognized. Check for typos or upgrade prek to get new tags.
          --> <input>:4:9
           |
         2 |   - repo: local
         3 |     hooks:
         4 |       - id: my-hook
-          |         ^ Type tag `not-a-real-tag` is not recognized. Check for typos or upgrade prek to get new tags. at line 4, column 9
+          |         ^ Type tag `not-a-real-tag` is not recognized. Check for typos or upgrade prek to get new tags.
         5 |         name: My Hook
         6 |         entry: echo
           |
@@ -1966,5 +2262,53 @@ mod tests {
         "};
         let config = serde_saphyr::from_str::<Config>(yaml).unwrap();
         insta::assert_debug_snapshot!(config);
+    }
+
+    #[test]
+    fn pass_filenames_zero_is_rejected() {
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: invalid-pass-filenames-zero
+                    name: invalid pass_filenames zero
+                    entry: echo
+                    language: system
+                    pass_filenames: 0
+        "};
+        let result = serde_saphyr::from_str::<Config>(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn pass_filenames_negative_is_rejected() {
+        let yaml = indoc::indoc! {r"
+            repos:
+              - repo: local
+                hooks:
+                  - id: invalid-pass-filenames-negative
+                    name: invalid pass_filenames negative
+                    entry: echo
+                    language: system
+                    pass_filenames: -1
+        "};
+        let result = serde_saphyr::from_str::<Config>(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn pass_filenames_string_is_rejected() {
+        let yaml = indoc::indoc! {r#"
+            repos:
+              - repo: local
+                hooks:
+                  - id: invalid-pass-filenames-string
+                    name: invalid pass_filenames string
+                    entry: echo
+                    language: system
+                    pass_filenames: "foo"
+        "#};
+        let result = serde_saphyr::from_str::<Config>(yaml);
+        assert!(result.is_err());
     }
 }

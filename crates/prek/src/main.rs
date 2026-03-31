@@ -20,7 +20,7 @@ use tracing_subscriber::{EnvFilter, Layer};
 
 use crate::cleanup::cleanup;
 use crate::cli::{
-    CacheCommand, CacheNamespace, Cli, Command, ExitStatus, UtilCommand, UtilNamespace,
+    CacheCommand, CacheNamespace, Cli, Command, ExitStatus, UtilCommand, UtilNamespace, flag,
 };
 #[cfg(feature = "self-update")]
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
@@ -36,13 +36,15 @@ mod fs;
 mod git;
 mod hook;
 mod hooks;
-mod identify;
+mod http;
 mod install_source;
 mod languages;
 mod printer;
 mod process;
 #[cfg(all(unix, feature = "profiler"))]
 mod profiler;
+#[cfg(unix)]
+mod resource_limit;
 mod run;
 #[cfg(feature = "schemars")]
 mod schema;
@@ -183,6 +185,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
     debug!("prek: {}", version::version());
 
+    #[cfg(unix)]
+    match resource_limit::adjust_open_file_limit() {
+        Ok(_) | Err(resource_limit::OpenFileLimitError::AlreadySufficient { .. }) => {}
+        Err(err) => {
+            tracing::warn!("Failed to adjust open file limit: {err}");
+        }
+    }
+
     // If `GIT_DIR` is set, prek may be running from a git hook.
     // Git exports `GIT_DIR` but *not* `GIT_WORK_TREE`. Without `GIT_WORK_TREE`, git
     // treats the current working directory as the working tree. If prek changes the current
@@ -234,17 +244,20 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.includes,
                 args.skips,
                 args.hook_types,
-                args.install_hooks,
+                args.prepare_hooks,
                 args.overwrite,
                 args.allow_missing_config,
                 cli.globals.refresh,
+                cli.globals.quiet,
+                cli.globals.verbose,
+                cli.globals.no_progress,
                 printer,
-                None,
+                args.git_dir.as_deref(),
             )
             .await
         }
-        Command::InstallHooks(args) => {
-            cli::install_hooks(
+        Command::PrepareHooks(args) => {
+            cli::prepare_hooks(
                 &store,
                 cli.globals.config,
                 args.includes,
@@ -257,7 +270,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Command::Uninstall(args) => {
             show_settings!(args);
 
-            cli::uninstall(cli.globals.config, args.hook_types, printer).await
+            cli::uninstall(cli.globals.config, args.hook_types, args.all, printer).await
         }
         Command::Run(args) => {
             show_settings!(args);
@@ -275,7 +288,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.directory,
                 args.last_commit,
                 args.show_diff_on_failure,
-                args.fail_fast,
+                flag(args.fail_fast, args.no_fail_fast),
                 args.dry_run,
                 cli.globals.refresh,
                 args.extra,
@@ -399,6 +412,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     args.hook_types,
                     args.no_allow_missing_config,
                     cli.globals.refresh,
+                    cli.globals.quiet,
+                    cli.globals.verbose,
+                    cli.globals.no_progress,
                     printer,
                 )
                 .await
@@ -458,6 +474,9 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.hook_types,
                 args.no_allow_missing_config,
                 cli.globals.refresh,
+                cli.globals.quiet,
+                cli.globals.verbose,
+                cli.globals.no_progress,
                 printer,
             )
             .await

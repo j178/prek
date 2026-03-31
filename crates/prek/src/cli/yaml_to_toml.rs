@@ -108,13 +108,12 @@ fn json_to_toml(value: &serde_json::Value) -> Result<String> {
         .context("Expected a top-level mapping in the config file")?;
 
     let mut doc = DocumentMut::new();
-    doc.decor_mut().set_prefix(indoc::indoc! {r#"
+    doc.decor_mut().set_prefix(indoc::indoc! {r"
         # Configuration file for `prek`, a git hook framework written in Rust.
         # See https://prek.j178.dev for more information.
         #:schema https://www.schemastore.org/prek.json
-        #:tombi toml-version = "v1.1.0"
 
-        "#});
+        "});
 
     for (key, value) in map {
         if key == "repos" {

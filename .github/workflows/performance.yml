@@ -17,6 +17,10 @@ env:
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   bloat-check:
     runs-on: ubuntu-latest
@@ -31,7 +35,7 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-      - uses: taiki-e/install-action@7e574ed8bb89811282a11aecb3fe1d043bf5bf0e # v2.67.15
+      - uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-bloat
 
@@ -96,9 +100,72 @@ jobs:
           Path("bloat-comparison.txt").write_text(comparison)
 
       - name: Upload bloat results
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          # NOTE: prek-ci-bot uses this artifact name to post comments on PRs.
+          # NOTE: https://github.com/j178/prek-ci-bot uses this artifact name to post comments on PRs.
           # Make sure to update the bot if you rename the artifact.
           name: bloat-check-results
           path: bloat-comparison.txt
+
+  hyperfine-benchmark:
+    runs-on: ubuntu-latest
+    name: "hyperfine benchmark"
+    timeout-minutes: 10
+    env:
+      HYPERFINE_BENCHMARK_WORKSPACE: /tmp/prek-bench
+      HYPERFINE_BIN_DIR: ${{ github.workspace }}/.hyperfine-bin
+      HYPERFINE_RESULTS_FILE: ${{ github.workspace }}/hyperfine-benchmark.md
+      HYPERFINE_HEAD_BINARY: prek-head
+      HYPERFINE_BASE_BINARY: prek-base
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Add hyperfine bin dir to PATH
+        run: |
+          mkdir -p "$HYPERFINE_BIN_DIR"
+          echo "$HYPERFINE_BIN_DIR" >> "$GITHUB_PATH"
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - id: base-binary-cache
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: ${{ env.HYPERFINE_BIN_DIR }}/${{ env.HYPERFINE_BASE_BINARY }}
+          key: prek-hyperfine-base-${{ github.event.pull_request.base.sha }}-${{ hashFiles('Cargo.lock') }}-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Build base version
+        if: ${{ steps.base-binary-cache.outputs.cache-hit != 'true' }}
+        env:
+          BASE_VERSION: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git checkout ${{ github.event.pull_request.base.sha }}
+          cargo build --profile profiling && mv target/profiling/prek "$HYPERFINE_BIN_DIR/$HYPERFINE_BASE_BINARY"
+          git checkout ${{ github.sha }}
+
+      - name: Build head version
+        run: |
+          cargo build --profile profiling && mv target/profiling/prek "$HYPERFINE_BIN_DIR/$HYPERFINE_HEAD_BINARY"
+
+      - name: Install hyperfine
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
+        with:
+          tool: hyperfine
+
+      - name: Setup test environment for builtin hooks
+        run: scripts/hyperfine-setup-test-env.sh
+
+      - name: Run benchmarks
+        run: scripts/hyperfine-run-benchmarks.sh
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          # NOTE: https://github.com/j178/prek-ci-bot uses this artifact name to post comments on PRs.
+          # Make sure to update the bot if you rename the artifact.
+          name: hyperfine-benchmark-results
+          path: ${{ env.HYPERFINE_RESULTS_FILE }}

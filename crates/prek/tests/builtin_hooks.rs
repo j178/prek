@@ -4,11 +4,12 @@ use prek_consts::env_vars::EnvVars;
 use std::os::unix::fs::PermissionsExt;
 
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 
-use crate::common::{TestContext, cmd_snapshot};
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 mod common;
 
@@ -66,13 +67,13 @@ fn builtin_hooks_unknown_hook() {
 
     ----- stderr -----
     error: Failed to parse `.pre-commit-config.yaml`
-      caused by: error: line 4 column 9: unknown builtin hook id `this-hook-does-not-exist` at line 4, column 9
+      caused by: error: line 4 column 9: unknown builtin hook id `this-hook-does-not-exist`
      --> <input>:4:9
       |
     2 |   - repo: builtin
     3 |     hooks:
     4 |       - id: this-hook-does-not-exist
-      |         ^ unknown builtin hook id `this-hook-does-not-exist` at line 4, column 9
+      |         ^ unknown builtin hook id `this-hook-does-not-exist`
     ");
 }
 
@@ -150,6 +151,136 @@ fn end_of_file_fixer_hook() -> Result<()> {
 }
 
 #[test]
+fn file_contents_sorter_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: file-contents-sorter
+                files: ^allowlist\.txt$
+                args: [--ignore-case]
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("allowlist.txt")
+        .write_str("Banana\n\napple\nApricot\n")?;
+    cwd.child("ignored.txt").write_str("zebra\nant\n")?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    file contents sorter.....................................................Failed
+    - hook id: file-contents-sorter
+    - exit code: 1
+    - files were modified by this hook
+
+      Sorting allowlist.txt
+
+    ----- stderr -----
+    ");
+
+    assert_snapshot!(context.read("allowlist.txt"), @r"
+    apple
+    Apricot
+    Banana
+    ");
+    assert_snapshot!(context.read("ignored.txt"), @r"
+    zebra
+    ant
+    ");
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    file contents sorter.....................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn forbid_new_submodules_hook_in_workspace_project() -> Result<()> {
+    let context = TestContext::new();
+    let cwd = context.work_dir();
+    context.init_project();
+
+    context.write_pre_commit_config("repos: []\n");
+    cwd.child("project2").create_dir_all()?;
+    cwd.child("project2")
+        .child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
+            repos:
+              - repo: builtin
+                hooks:
+                  - id: forbid-new-submodules
+        "})?;
+
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    let submodule_path = cwd.child("project2/sub module");
+    submodule_path.create_dir_all()?;
+    git_cmd(&submodule_path)
+        .arg("-c")
+        .arg("init.defaultBranch=master")
+        .arg("init")
+        .assert()
+        .success();
+    submodule_path.child("README.md").write_str("submodule\n")?;
+    git_cmd(&submodule_path)
+        .arg("add")
+        .arg("README.md")
+        .assert()
+        .success();
+    git_cmd(&submodule_path)
+        .args(["commit", "-m", "Initial commit"])
+        .assert()
+        .success();
+
+    git_cmd(cwd)
+        .args([
+            "submodule",
+            "add",
+            "./project2/sub module",
+            "project2/sub module",
+        ])
+        .assert()
+        .success();
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Running hooks for `project2`:
+    forbid new submodules....................................................Failed
+    - hook id: forbid-new-submodules
+    - exit code: 1
+
+      sub module: new submodule introduced
+
+      This commit introduces new git submodules.
+      Did you unintentionally `git add .`?
+      To fix this, run `git rm <submodule>`.
+      Also check `.gitmodules` for any unintended changes.
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn check_yaml_hook() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
@@ -180,17 +311,17 @@ fn check_yaml_hook() -> Result<()> {
     - hook id: check-yaml
     - exit code: 1
 
-      duplicate.yaml: Failed to yaml decode (error: line 2 column 1: duplicate mapping key: a at line 2, column 1
+      duplicate.yaml: Failed to yaml decode (error: line 2 column 1: duplicate mapping key: a not allowed here
        --> <input>:2:1
         |
       1 | a: 1
       2 | a: 2
-        | ^ duplicate mapping key: a at line 2, column 1)
-      invalid.yaml: Failed to yaml decode (error: line 1 column 5: mapping values are not allowed in this context at line 1, column 5
+        | ^ duplicate mapping key: a not allowed here)
+      invalid.yaml: Failed to yaml decode (error: line 1 column 5: mapping values are not allowed in this context
        --> <input>:1:5
         |
       1 | a: b: c
-        |     ^ mapping values are not allowed in this context at line 1, column 5)
+        |     ^ mapping values are not allowed in this context)
 
     ----- stderr -----
     ");
@@ -252,13 +383,57 @@ fn check_yaml_multiple_document() -> Result<()> {
     - hook id: check-yaml
     - exit code: 1
 
-      multiple.yaml: Failed to yaml decode (error: line 4 column 1: multiple YAML documents detected at line 4, column 1
+      multiple.yaml: Failed to yaml decode (error: line 4 column 1: only single YAML document expected but multiple found
        --> <input>:4:1
         |
       2 | a: 1
       3 | ---
       4 | b: 2
-        | ^ multiple YAML documents detected at line 4, column 1)
+        | ^ only single YAML document expected but multiple found)
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_vcs_permalinks_builtin() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-vcs-permalinks
+                args: [--additional-github-domain=github.example.com]
+    "});
+
+    context
+        .work_dir()
+        .child("links.md")
+        .write_str(indoc::indoc! {r"
+        https://github.com/owner/repo/blob/main/file.py#L10
+        https://github.example.com/owner/repo/blob/master/src/lib.rs#L5
+        https://github.com/owner/repo/blob/abcdef1234567890abcdef1234567890abcdef12/file.py#L10
+    "})?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check vcs permalinks.....................................................Failed
+    - hook id: check-vcs-permalinks
+    - exit code: 1
+
+      links.md:1:https://github.com/owner/repo/blob/main/file.py#L10
+      links.md:2:https://github.example.com/owner/repo/blob/master/src/lib.rs#L5
+
+      Non-permanent github link detected.
+      On any page on github press [y] to load a permalink.
 
     ----- stderr -----
     ");
@@ -584,6 +759,85 @@ fn check_added_large_files_hook() -> Result<()> {
 }
 
 #[test]
+fn check_added_large_files_workspace_mode_respects_project_relative_lfs_paths() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config("repos: []\n");
+
+    // Regression: builtin hooks receive project-relative filenames even in workspace mode.
+    // `check-added-large-files` must therefore resolve git-lfs attributes relative to the
+    // nested project root, not the workspace root.
+    let app = context.work_dir().child("app");
+    app.create_dir_all()?;
+    // Use `--enforce-all` so this regression isolates git-lfs attribute lookup in workspace
+    // mode instead of depending on the separate staged-file path filtering behavior.
+    app.child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-added-large-files
+                args: ['--maxkb', '1', '--enforce-all']
+    "})?;
+    app.child(".gitattributes")
+        .write_str("*.dat filter=lfs diff=lfs merge=lfs -text")?;
+    app.child("large.dat").write_binary(&[0; 2048])?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Running hooks for `app`:
+    check for added large files..............................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_added_large_files_workspace_mode_respects_project_relative_added_files() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config("repos: []\n");
+
+    let app = context.work_dir().child("app");
+    app.create_dir_all()?;
+    app.child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-added-large-files
+                args: ['--maxkb', '1']
+    "})?;
+    app.child("large.bin").write_binary(&[0; 2048])?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Running hooks for `app`:
+    check for added large files..............................................Failed
+    - hook id: check-added-large-files
+    - exit code: 1
+
+      large.bin (2 KB) exceeds 1 KB
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn tracked_file_exceeds_large_file_limit() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
@@ -712,17 +966,17 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     - hook id: check-yaml
     - exit code: 1
 
-      duplicate.yaml: Failed to yaml decode (error: line 2 column 1: duplicate mapping key: a at line 2, column 1
+      duplicate.yaml: Failed to yaml decode (error: line 2 column 1: duplicate mapping key: a not allowed here
        --> <input>:2:1
         |
       1 | a: 1
       2 | a: 2
-        | ^ duplicate mapping key: a at line 2, column 1)
-      invalid.yaml: Failed to yaml decode (error: line 1 column 5: mapping values are not allowed in this context at line 1, column 5
+        | ^ duplicate mapping key: a not allowed here)
+      invalid.yaml: Failed to yaml decode (error: line 1 column 5: mapping values are not allowed in this context
        --> <input>:1:5
         |
       1 | a: b: c
-        |     ^ mapping values are not allowed in this context at line 1, column 5)
+        |     ^ mapping values are not allowed in this context)
     check json...............................................................Failed
     - hook id: check-json
     - exit code: 1
@@ -741,7 +995,11 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     - files were modified by this hook
 
       Fixing trailing_ws.txt
-    check for added large files..............................................Passed
+    check for added large files..............................................Failed
+    - hook id: check-added-large-files
+    - exit code: 1
+
+      large.bin (2 KB) exceeds 1 KB
 
     Running hooks for `.`:
     identity.................................................................Passed
@@ -766,18 +1024,20 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
     ----- stderr -----
     ");
 
-    // Fix YAML and JSON issues, then stage.
-    app.child("invalid.yaml").write_str("a:\n  b: c")?;
-    app.child("duplicate.yaml").write_str("a: 1\nb: 2")?;
-    app.child("invalid.json").write_str(r#"{"a": 1}"#)?;
+    // Manually fix the files that can't be auto-fixed.
+    app.child("invalid.yaml").write_str("a:\n  b: c\n")?;
+    app.child("duplicate.yaml").write_str("a: 1\nb: 2\n")?;
+    app.child("invalid.json")
+        .write_str(concat!(r#"{"a": 1}"#, "\n"))?;
     app.child("duplicate.json")
-        .write_str(r#"{"a": 1, "b": 2}"#)?;
+        .write_str(concat!(r#"{"a": 1, "b": 2}"#, "\n"))?;
+    app.child("large.bin").write_binary(&[0u8; 100])?;
     context.git_add(".");
 
-    // Second run: all hooks should pass.
-    cmd_snapshot!(context.filters(), context.run(), @r"
-    success: false
-    exit_code: 1
+    // Second run: all hooks should now pass.
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: true
+    exit_code: 0
     ----- stdout -----
     Running hooks for `app`:
     identity.................................................................Passed
@@ -797,15 +1057,7 @@ fn builtin_hooks_workspace_mode() -> Result<()> {
       invalid.json
       .pre-commit-config.yaml
       eof_no_newline.txt
-    fix end of files.........................................................Failed
-    - hook id: end-of-file-fixer
-    - exit code: 1
-    - files were modified by this hook
-
-      Fixing invalid.yaml
-      Fixing duplicate.json
-      Fixing duplicate.yaml
-      Fixing invalid.json
+    fix end of files.........................................................Passed
     check yaml...............................................................Passed
     check json...............................................................Passed
     mixed line ending........................................................Passed
@@ -897,6 +1149,366 @@ fn fix_byte_order_marker_hook() -> Result<()> {
 
     ----- stderr -----
     ");
+
+    Ok(())
+}
+
+#[test]
+fn pretty_format_json_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: pretty-format-json
+                args: ['--autofix']
+    "});
+
+    let cwd = context.work_dir();
+
+    // Create test files
+    cwd.child("valid_pretty.json").write_str(
+        r#"{
+  "alist": [
+    2,
+    34,
+    234
+  ],
+  "blah": null,
+  "foo": "bar"
+}
+"#,
+    )?;
+    cwd.child("unsorted.json").write_str(
+        r#"{
+  "foo": "bar",
+  "alist": [2, 34, 234],
+  "blah": null
+}
+"#,
+    )?;
+    cwd.child("compact.json")
+        .write_str(r#"{"foo":"bar","alist":[2,34,234],"blah":null}"#)?;
+    cwd.child("uppercase_unicode.json").write_str(
+        r#"{
+  "text": "\u4E2D\u6587"
+}
+"#,
+    )?;
+    cwd.child("invalid.json").write_str(r#"{"a": 1,}"#)?;
+    cwd.child("empty.json").touch()?;
+
+    context.git_add(".");
+
+    // First run: hooks should fail and fix the files
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    pretty format json.......................................................Failed
+    - hook id: pretty-format-json
+    - exit code: 1
+    - files were modified by this hook
+
+      empty.json: invalid JSON (EOF while parsing a value at line 1 column 0). Consider using the `check-json` hook.
+      Fixing file compact.json
+      Fixing file uppercase_unicode.json
+      invalid.json: invalid JSON (trailing comma at line 1 column 9). Consider using the `check-json` hook.
+      Fixing file unsorted.json
+
+    ----- stderr -----
+    "#);
+
+    // Verify the files have been corrected
+    assert_snapshot!(context.read("valid_pretty.json"), @r#"
+    {
+      "alist": [
+        2,
+        34,
+        234
+      ],
+      "blah": null,
+      "foo": "bar"
+    }
+    "#);
+    assert_snapshot!(context.read("unsorted.json"), @r#"
+    {
+      "alist": [
+        2,
+        34,
+        234
+      ],
+      "blah": null,
+      "foo": "bar"
+    }
+    "#);
+    assert_snapshot!(context.read("compact.json"), @r#"
+    {
+      "alist": [
+        2,
+        34,
+        234
+      ],
+      "blah": null,
+      "foo": "bar"
+    }
+    "#);
+    assert_snapshot!(context.read("uppercase_unicode.json"), @r#"
+    {
+      "text": "\u4e2d\u6587"
+    }
+    "#);
+
+    // Fix invalid files with proper formatting
+    cwd.child("invalid.json").write_str(
+        r#"{
+  "a": 1
+}
+"#,
+    )?;
+    cwd.child("empty.json").write_str(
+        r#"{
+  "b": 2
+}
+"#,
+    )?;
+
+    context.git_add(".");
+
+    // Second run: hooks should now pass
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pretty format json.......................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pretty_format_json_with_options() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: pretty-format-json
+                args: ['--autofix', '--indent=4', '--no-sort-keys']
+    "});
+
+    let cwd = context.work_dir();
+
+    cwd.child("test.json").write_str(r#"{"z":1,"a":2,"m":3}"#)?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    pretty format json.......................................................Failed
+    - hook id: pretty-format-json
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing file test.json
+
+    ----- stderr -----
+    "#);
+
+    // Keys should NOT be sorted, but indented with 4 spaces
+    assert_snapshot!(context.read("test.json"), @r#"
+    {
+        "z": 1,
+        "a": 2,
+        "m": 3
+    }
+    "#);
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pretty format json.......................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pretty_format_json_with_top_keys() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: pretty-format-json
+                args: ['--autofix', '--top-keys=version,name']
+    "});
+
+    let cwd = context.work_dir();
+
+    cwd.child("package.json").write_str(
+        r#"{"description":"test","name":"my-package","author":"me","version":"1.0.0"}"#,
+    )?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    pretty format json.......................................................Failed
+    - hook id: pretty-format-json
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing file package.json
+
+    ----- stderr -----
+    "#);
+
+    insta::assert_snapshot!(context.read("package.json"), @r#"
+    {
+      "version": "1.0.0",
+      "name": "my-package",
+      "author": "me",
+      "description": "test"
+    }
+    "#);
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pretty format json.......................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pretty_format_json_no_ensure_ascii() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: pretty-format-json
+                args: ['--autofix', '--no-ensure-ascii']
+    "});
+
+    let cwd = context.work_dir();
+
+    cwd.child("unicode.json")
+        .write_str(r#"{"text":"\u4E2D\u6587\u306B\u307B\u3093\u3054"}"#)?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    pretty format json.......................................................Failed
+    - hook id: pretty-format-json
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing file unicode.json
+
+    ----- stderr -----
+    "#);
+
+    // Unicode should be decoded, not escaped
+    assert_snapshot!(context.read("unicode.json"), @r#"
+    {
+      "text": "中文にほんご"
+    }
+    "#);
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pretty format json.......................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pretty_format_json_custom_space_indent() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: pretty-format-json
+                args: ['--autofix', '--indent=  ']
+    "});
+
+    let cwd = context.work_dir();
+
+    cwd.child("test.json").write_str(r#"{"a":1,"b":2}"#)?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    pretty format json.......................................................Failed
+    - hook id: pretty-format-json
+    - exit code: 1
+    - files were modified by this hook
+
+      Fixing file test.json
+
+    ----- stderr -----
+    "#);
+
+    insta::assert_snapshot!(context.read("test.json"), @r#"
+    {
+      "a": 1,
+      "b": 2
+    }
+    "#);
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pretty format json.......................................................Passed
+
+    ----- stderr -----
+    "#);
 
     Ok(())
 }
@@ -1031,6 +1643,141 @@ fn check_symlinks_hook_windows() -> Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn destroyed_symlinks_hook() -> Result<()> {
+    const TEST_SYMLINK: &str = "test_symlink";
+    const TEST_SYMLINK_TARGET: &str = "/doesnt/really/matters";
+    const TEST_FILE: &str = "test_file";
+    const TEST_FILE_RENAMED: &str = "test_file_renamed";
+
+    let source = TestContext::new();
+    source.init_project();
+
+    std::os::unix::fs::symlink(
+        TEST_SYMLINK_TARGET,
+        source.work_dir().child(TEST_SYMLINK).path(),
+    )?;
+    source
+        .work_dir()
+        .child(TEST_FILE)
+        .write_str("some random content\n")?;
+    source.git_add(".");
+    source.git_commit("initial");
+
+    let tree = git_cmd(source.work_dir())
+        .arg("cat-file")
+        .arg("-p")
+        .arg("HEAD^{tree}")
+        .output()?;
+    assert!(tree.status.success());
+    assert!(String::from_utf8(tree.stdout)?.contains("120000 "));
+
+    let context = TestContext::new();
+    git_cmd(context.work_dir())
+        .arg("-c")
+        .arg("core.symlinks=false")
+        .arg("clone")
+        .arg(source.work_dir().path())
+        .arg(".")
+        .assert()
+        .success();
+
+    git_cmd(context.work_dir())
+        .args(["config", "--local", "core.symlinks", "true"])
+        .assert()
+        .success();
+    git_cmd(context.work_dir())
+        .args(["mv", TEST_FILE, TEST_FILE_RENAMED])
+        .assert()
+        .success();
+
+    assert!(!context.work_dir().child(TEST_SYMLINK).path().is_symlink());
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: destroyed-symlinks
+    "});
+
+    context.git_add(TEST_SYMLINK);
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    detect destroyed symlinks................................................Failed
+    - hook id: destroyed-symlinks
+    - exit code: 1
+
+      Destroyed symlinks:
+      - test_symlink
+      You should unstage affected files:
+      	git reset HEAD -- test_symlink
+      And retry commit. As a long term solution you may try to explicitly tell git that your environment does not support symlinks:
+      	git config core.symlinks false
+
+    ----- stderr -----
+    ");
+
+    context
+        .work_dir()
+        .child(TEST_SYMLINK)
+        .write_str(&format!("{TEST_SYMLINK_TARGET}\n"))?;
+    context.git_add(TEST_SYMLINK);
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    detect destroyed symlinks................................................Failed
+    - hook id: destroyed-symlinks
+    - exit code: 1
+
+      Destroyed symlinks:
+      - test_symlink
+      You should unstage affected files:
+      	git reset HEAD -- test_symlink
+      And retry commit. As a long term solution you may try to explicitly tell git that your environment does not support symlinks:
+      	git config core.symlinks false
+
+    ----- stderr -----
+    ");
+
+    context
+        .work_dir()
+        .child(TEST_SYMLINK)
+        .write_str(&format!("{}\n", "0".repeat(TEST_SYMLINK_TARGET.len())))?;
+    context.git_add(TEST_SYMLINK);
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    detect destroyed symlinks................................................Passed
+
+    ----- stderr -----
+    ");
+
+    context
+        .work_dir()
+        .child(TEST_SYMLINK)
+        .write_str(&format!("{}\n", "0".repeat(TEST_SYMLINK_TARGET.len() + 3)))?;
+    context.git_add(TEST_SYMLINK);
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    detect destroyed symlinks................................................Passed
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }
@@ -1980,6 +2727,75 @@ fn check_executables_have_shebangs_various_cases_win() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn check_shebang_scripts_are_executable() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-shebang-scripts-are-executable
+    "});
+
+    cwd.child("plain.txt").write_str("plain text\n")?;
+    cwd.child("script.sh").write_str("#!/bin/sh\necho hi\n")?;
+    cwd.child("script_exec.sh")
+        .write_str("#!/bin/sh\necho hi\n")?;
+
+    #[cfg(unix)]
+    std::fs::set_permissions(
+        cwd.child("script_exec.sh").path(),
+        std::fs::Permissions::from_mode(0o755),
+    )?;
+
+    context.git_add(".");
+    git_cmd(cwd.path())
+        .args(["update-index", "--chmod=+x", "script_exec.sh"])
+        .assert()
+        .success();
+
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check that scripts with shebangs are executable..........................Failed
+    - hook id: check-shebang-scripts-are-executable
+    - exit code: 1
+
+      script.sh has a shebang but is not marked executable!
+        If it is supposed to be executable, try: 'chmod +x script.sh'
+        If on Windows, you may also need to: 'git add --chmod=+x script.sh'
+        If it is not supposed to be executable, double-check its shebang is wanted.
+
+    ----- stderr -----
+    ");
+
+    #[cfg(unix)]
+    std::fs::set_permissions(
+        cwd.child("script.sh").path(),
+        std::fs::Permissions::from_mode(0o755),
+    )?;
+
+    git_cmd(cwd.path())
+        .args(["update-index", "--chmod=+x", "script.sh"])
+        .assert()
+        .success();
+
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check that scripts with shebangs are executable..........................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 fn is_case_sensitive_filesystem(context: &TestContext) -> Result<bool> {
     let test_lower = context.work_dir().child("case_test_file.txt");
     test_lower.write_str("test")?;
@@ -2143,6 +2959,64 @@ fn check_case_conflict_among_new_files() -> Result<()> {
 }
 
 #[test]
+fn check_case_conflict_workspace_mode_includes_added_files() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    if !is_case_sensitive_filesystem(&context)? {
+        return Ok(());
+    }
+
+    context.write_pre_commit_config("repos: []\n");
+
+    let app = context.work_dir().child("app");
+    app.create_dir_all()?;
+    app.child("foo.txt").write_str("existing file")?;
+    app.child("trigger.txt").write_str("tracked trigger")?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    app.child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-case-conflict
+    "})?;
+
+    app.child("FOO.txt").write_str("conflicting case")?;
+    context.git_add("app/FOO.txt");
+
+    // Regression: in workspace mode, `get_added_files()` must return paths relative to the
+    // nested project root so added files still participate in conflict detection even when
+    // `--files` only names some other file in that project.
+    cmd_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .arg("check-case-conflict")
+            .arg("--files")
+            .arg("app/trigger.txt"),
+        @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Running hooks for `app`:
+    check for case conflicts.................................................Failed
+    - hook id: check-case-conflict
+    - exit code: 1
+
+      Case-insensitivity conflict found: FOO.txt
+      Case-insensitivity conflict found: foo.txt
+
+    ----- stderr -----
+    "#
+    );
+
+    Ok(())
+}
+
+#[test]
 fn check_json5() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
@@ -2204,6 +3078,40 @@ fn check_json5() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     check json5..............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn check_illegal_windows_names() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-illegal-windows-names
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("normal.txt").write_str("ok")?;
+    cwd.child("CON.txt").write_str("bad")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check illegal windows names..............................................Failed
+    - hook id: check-illegal-windows-names
+    - exit code: 1
+
+      CON.txt: Illegal Windows filename
 
     ----- stderr -----
     ");

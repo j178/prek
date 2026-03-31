@@ -167,11 +167,57 @@ fn invalid_config() {
 
     ----- stderr -----
     error: Failed to parse `.pre-commit-config.yaml`
-      caused by: error: line 1 column 1: missing field `repos` at line 1, column 1
+      caused by: error: line 1 column 1: missing field `repos`
      --> <input>:1:1
       |
     1 | invalid: config
-      | ^ missing field `repos` at line 1, column 1
+      | ^ missing field `repos`
+    ");
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        files: 12
+        repos: []
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: error: line 1 column 1: invalid type: integer `12`, expected a regex string or a mapping with `glob` set to a string or list of strings
+     --> <input>:1:1
+      |
+    1 | files: 12
+      | ^ invalid type: integer `12`, expected a regex string or a mapping with `glob` set to a string or list of strings
+    2 | repos: []
+      |
+    ");
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        files:
+          glog: "*.rs"
+        repos: []
+    "#});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `.pre-commit-config.yaml`
+      caused by: error: line 2 column 3: unknown field `glog`, expected one of glob
+     --> <input>:2:3
+      |
+    1 | files:
+    2 |   glog: \"*.rs\"
+      |   ^ unknown field `glog`, expected one of glob
+    3 | repos: []
+      |
     ");
 
     context.write_pre_commit_config(indoc::indoc! {r#"
@@ -180,8 +226,8 @@ fn invalid_config() {
             hooks:
               - id: trailing-whitespace
                 name: trailing-whitespace
-                language: dotnet
-                additional_dependencies: ["dotnet@6"]
+                language: swift
+                additional_dependencies: ["swift-format@5.0.0"]
                 entry: echo Hello, world!
     "#});
     context.git_add(".");
@@ -194,7 +240,7 @@ fn invalid_config() {
     ----- stderr -----
     error: Failed to init hooks
       caused by: Invalid hook `trailing-whitespace`
-      caused by: Hook specified `additional_dependencies: dotnet@6` but the language `dotnet` does not support installing dependencies for now
+      caused by: Hook specified `additional_dependencies: swift-format@5.0.0` but the language `swift` does not support installing dependencies for now
     ");
 
     context.write_pre_commit_config(indoc::indoc! {r"
@@ -1149,6 +1195,58 @@ fn fail_fast_cli_flag() {
     ");
 }
 
+/// Test --no-fail-fast CLI flag overrides config-level `fail_fast`.
+#[test]
+fn no_fail_fast_cli_flag() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        fail_fast: true
+        repos:
+          - repo: local
+            hooks:
+              - id: failing-hook
+                name: failing-hook
+                language: system
+                entry: python3 -c 'print("Failed"); exit(1)'
+                always_run: true
+              - id: passing-hook
+                name: passing-hook
+                language: system
+                entry: python3 -c 'print("Passed")'
+                always_run: true
+    "#});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    failing-hook.............................................................Failed
+    - hook id: failing-hook
+    - exit code: 1
+
+      Failed
+
+    ----- stderr -----
+    ");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--no-fail-fast"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    failing-hook.............................................................Failed
+    - hook id: failing-hook
+    - exit code: 1
+
+      Failed
+    passing-hook.............................................................Passed
+
+    ----- stderr -----
+    ");
+}
+
 /// Run from a subdirectory. File arguments should be fixed to be relative to the root.
 #[test]
 fn subdirectory() -> Result<()> {
@@ -1539,14 +1637,14 @@ fn init_nonexistent_repo() {
         ])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters, context.run(), @r"
+    cmd_snapshot!(filters, context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Failed to init hooks
-      caused by: Failed to initialize repo `https://notexistentatallnevergonnahappen.com/nonexistent/repo`
+      caused by: Failed to clone repo `https://notexistentatallnevergonnahappen.com/nonexistent/repo`
       caused by: Command `git full clone` exited with an error:
 
     [status]
@@ -1931,11 +2029,11 @@ fn minimum_prek_version() {
 
     ----- stderr -----
     error: Failed to parse `.pre-commit-config.yaml`
-      caused by: error: line 1 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek at line 1, column 23
+      caused by: error: line 1 column 23: Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
      --> <input>:1:23
       |
     1 | minimum_prek_version: 10.0.0
-      |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek at line 1, column 23
+      |                       ^ Required minimum prek version `10.0.0` is greater than current version `[CURRENT_VERSION]`; Please consider updating prek
     2 | repos:
     3 |   - repo: local
       |
@@ -2097,7 +2195,10 @@ fn git_commit_a() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"\[master \w{7}\]", r"[master COMMIT]")])
+        .chain([
+            (r"\[master \w{7}\]", r"[master COMMIT]"),
+            ("7c8398204bbc95c33a6d2543f86a27621647cf78", "[HASH]"),
+        ])
         .collect::<Vec<_>>();
 
     cmd_snapshot!(filters, commit, @r"
@@ -2114,6 +2215,106 @@ fn git_commit_a() -> Result<()> {
 
       file.txt
     ");
+
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn git_commit_a_currently_fails_when_hook_writes_to_temp_git_index() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Repro for #1786 documenting the current behavior.
+    // `git commit -a` exports `GIT_INDEX_FILE=.git/index.lock` to the pre-commit hook
+    // process. If the hook inherits that env var and then runs a git command that writes
+    // to an index in a different repository, Git will write those entries into the parent
+    // repo's temporary index instead.
+    //
+    // The important detail is that the temp repo stages `file.txt`, matching a tracked
+    // path in the parent repo. That makes prek's post-hook `git diff` read the corrupted
+    // parent index entry and fail with `fatal: unable to read <hash>`.
+    context
+        .work_dir()
+        .child("hook.sh")
+        .write_str(indoc::indoc! {r#"
+        set -eu
+        tmpdir="$(mktemp -d)"
+        trap 'rm -rf "$tmpdir"' EXIT
+        cd "$tmpdir"
+        git init >/dev/null 2>&1
+        printf 'hook version\n' > file.txt
+        git add file.txt
+    "#})?;
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: write-temp-index
+                name: write-temp-index
+                language: system
+                entry: sh hook.sh
+                pass_filenames: false
+                always_run: true
+                verbose: true
+    "});
+
+    let cwd = context.work_dir();
+    let file = cwd.child("file.txt");
+    file.write_str("Hello, world!\n")?;
+
+    cmd_snapshot!(context.filters(), context.install(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+    "#);
+
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    // `git commit` does not set `GIT_INDEX_FILE`; `git commit -a` does.
+    // The repro only triggers on the `-a` path.
+    file.write_str("Hello again!\n")?;
+
+    let mut commit = git_cmd(cwd);
+    commit
+        .arg("commit")
+        .arg("-a")
+        .arg("-m")
+        .arg("Update file")
+        .env(EnvVars::PREK_HOME, &**context.home_dir());
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"\[master \w{7}\]", r"[master COMMIT]"),
+            (
+                r"fatal: unable to read [0-9a-f]{40}",
+                "fatal: unable to read [HASH]",
+            ),
+        ])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, commit, @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Command `git diff` exited with an error:
+
+    [status]
+    exit status: 128
+
+    [stderr]
+    fatal: unable to read [HASH]
+    "
+    );
 
     Ok(())
 }
@@ -2169,11 +2370,11 @@ fn selectors_completion() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    install	Install prek as a git hook under the `.git/hooks/` directory
-    install-hooks	Create environments for all hooks used in the config file
+    install	Install prek Git shims under the `.git/hooks/` directory
+    prepare-hooks	Prepare environments for all hooks used in the config file
     run	Run hooks
     list	List hooks configured in the current workspace
-    uninstall	Uninstall prek from git hooks
+    uninstall	Uninstall prek Git shims
     validate-config	Validate configuration files (prek.toml or .pre-commit-config.yaml)
     validate-manifest	Validate `.pre-commit-hooks.yaml` files
     sample-config	Produce a sample configuration file (prek.toml or .pre-commit-config.yaml)
@@ -2553,7 +2754,7 @@ fn show_diff_on_failure() -> Result<()> {
     filters.push((r"index \w{7}\.\.\w{7} \d{6}", "index [OLD]..[NEW] 100644"));
 
     // When failed in CI environment
-    cmd_snapshot!(filters.clone(), context.run().env(EnvVars::CI, "1").arg("--show-diff-on-failure").arg("-v"), @r"
+    cmd_snapshot!(filters.clone(), context.run().env(EnvVars::CI, "1").arg("--show-diff-on-failure").arg("-v"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2564,7 +2765,7 @@ fn show_diff_on_failure() -> Result<()> {
 
     hint: Some hooks made changes to the files.
     If you are seeing this message in CI, reproduce locally with: `prek run --all-files`
-    To run prek as part of git workflow, use `prek install` to set up git hooks.
+    To run prek as part of Git workflow, use `prek install` to set up Git shims.
 
     All changes made by hooks:
     diff --git a/file.txt b/file.txt
@@ -2852,6 +3053,12 @@ fn system_language_version() {
                 language_version: system
                 entry: bun -e 'console.log(`Bun ${Bun.version}`)'
                 pass_filenames: false
+              - id: system-dotnet
+                name: system-dotnet
+                language: dotnet
+                language_version: system
+                entry: dotnet --version
+                pass_filenames: false
    "});
     context.git_add(".");
 
@@ -2860,9 +3067,7 @@ fn system_language_version() {
         context.filters(),
         context.run()
         .arg("system-node")
-        .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
-        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist")
-        .env(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME, "bun-never-exist"), @r"
+        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2877,9 +3082,7 @@ fn system_language_version() {
         context.filters(),
         context.run()
         .arg("system-go")
-        .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
-        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist")
-        .env(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME, "bun-never-exist"), @r"
+        .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2894,8 +3097,6 @@ fn system_language_version() {
         context.filters(),
         context.run()
         .arg("system-bun")
-        .env(EnvVars::PREK_INTERNAL__GO_BINARY_NAME, "go-never-exist")
-        .env(EnvVars::PREK_INTERNAL__NODE_BINARY_NAME, "node-never-exist")
         .env(EnvVars::PREK_INTERNAL__BUN_BINARY_NAME, "bun-never-exist"), @r"
     success: false
     exit_code: 2
@@ -2905,6 +3106,21 @@ fn system_language_version() {
     error: Failed to install hook `system-bun`
       caused by: Failed to install bun
       caused by: No suitable system Bun version found and downloads are disabled
+    ");
+
+    cmd_snapshot!(
+        context.filters(),
+        context.run()
+        .arg("system-dotnet")
+        .env(EnvVars::PREK_INTERNAL__DOTNET_BINARY_NAME, "dotnet-never-exist"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install hook `system-dotnet`
+      caused by: Failed to install dotnet SDK
+      caused by: No suitable dotnet version found and downloads are disabled
     ");
 }
 
@@ -3099,6 +3315,90 @@ fn run_with_tree_object_as_ref() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     echo files...............................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// `pass_filenames: n` limits each invocation to at most n files.
+/// With n=1, each matched file gets its own invocation.
+#[test]
+fn pass_filenames_1_limits_batch_size() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    // Use a script that errors if it receives more than one filename argument.
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: one-at-a-time
+                name: one at a time
+                entry: python -c "import sys; args = sys.argv[1:]; sys.exit(0 if len(args) <= 1 else 1)"
+                language: system
+                pass_filenames: 1
+                require_serial: true
+                verbose: true
+    "#});
+
+    cwd.child("a.txt").write_str("a")?;
+    cwd.child("b.txt").write_str("b")?;
+    cwd.child("c.txt").write_str("c")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    one at a time............................................................Passed
+    - hook id: one-at-a-time
+    - duration: [TIME]
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// `pass_filenames: n` limits each invocation to at most n files.
+/// With n=2 and more than 2 matching files, multiple batches are spawned.
+#[test]
+fn pass_filenames_2_limits_batch_size() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    // Use a script that errors if it receives more than two filename arguments.
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: two-at-a-time
+                name: two at a time
+                entry: python -c "import sys; args = sys.argv[1:]; sys.exit(0 if len(args) <= 2 else 1)"
+                language: system
+                pass_filenames: 2
+                require_serial: true
+                verbose: true
+    "#});
+
+    cwd.child("a.txt").write_str("a")?;
+    cwd.child("b.txt").write_str("b")?;
+    cwd.child("c.txt").write_str("c")?;
+    cwd.child("d.txt").write_str("d")?;
+    cwd.child("e.txt").write_str("e")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--all-files"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    two at a time............................................................Passed
+    - hook id: two-at-a-time
+    - duration: [TIME]
 
     ----- stderr -----
     ");

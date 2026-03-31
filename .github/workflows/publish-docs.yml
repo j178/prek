@@ -20,7 +20,7 @@ concurrency:
 permissions: {}
 
 env:
-  UV_VERSION: "0.9.27"
+  UV_VERSION: "0.10.9"
   # Match version used to compile `docs/requirements.txt`
   PYTHON_VERSION: "3.14"
 
@@ -34,7 +34,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
+      - uses: astral-sh/setup-uv@6ee6290f1cbc4156c0bdd66691b2c144ef8df19a # v7.4.0
         with:
           version: ${{ env.UV_VERSION }}
           python-version: ${{ env.PYTHON_VERSION }}

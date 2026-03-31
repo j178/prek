@@ -43,6 +43,13 @@ async fn check_file(
     }
 
     let options = serde_saphyr::Options {
+        budget: Some(serde_saphyr::Budget {
+            // `check-yaml` is a syntax/structure validator, not a service parsing
+            // untrusted YAML at runtime. Keep the absolute caps, but allow
+            // high-reuse anchors that are common in compose-style files.
+            enforce_alias_anchor_ratio: false,
+            ..Default::default()
+        }),
         ignore_binary_tag_for_string: true,
         ..Default::default()
     };
@@ -59,11 +66,7 @@ async fn check_file(
         match serde_saphyr::from_slice_with_options::<serde_json::Value>(&content, options) {
             Ok(_) => Ok((0, Vec::new())),
             Err(e) => {
-                // Remove programmatic suggestion from error message
-                // TODO: bring up an issue in serde-saphyr to improve error messages
-                let err = e
-                    .to_string()
-                    .replace("; use from_multiple or from_multiple_with_options", "");
+                let err = e.render_with_formatter(&serde_saphyr::UserMessageFormatter);
                 let error_message =
                     format!("{}: Failed to yaml decode ({err})\n", filename.display());
                 Ok((1, error_message.into_bytes()))
@@ -75,6 +78,7 @@ async fn check_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fmt::Write;
     use std::path::PathBuf;
     use tempfile::tempdir;
 
@@ -179,6 +183,25 @@ response:
         let file_path = create_test_file(&dir, "binary.yaml", content).await?;
         let (code, output) = check_file(Path::new(""), &file_path, false).await?;
         assert_eq!(code, 0);
+        assert!(output.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_yaml_with_many_aliases_and_few_anchors() -> Result<()> {
+        let dir = tempdir()?;
+        let mut content = indoc::formatdoc! {"
+        defaults: &defaults
+          image: alpine
+        services:
+        "};
+        for index in 0..158 {
+            let _ = write!(content, "  svc{index}:\n    <<: *defaults\n");
+        }
+
+        let file_path = create_test_file(&dir, "many-aliases.yaml", content.as_bytes()).await?;
+        let (code, output) = check_file(Path::new(""), &file_path, false).await?;
+        assert_eq!(code, 0, "{}", String::from_utf8_lossy(&output));
         assert!(output.is_empty());
         Ok(())
     }

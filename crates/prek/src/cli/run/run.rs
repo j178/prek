@@ -21,7 +21,7 @@ use crate::cli::reporter::{HookInitReporter, HookInstallReporter, HookRunReporte
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{CollectOptions, FileFilter, Selectors, collect_files};
 use crate::cli::{ExitStatus, RunExtraArgs};
-use crate::config::{Language, Stage};
+use crate::config::{Language, PassFilenames, Stage};
 use crate::fs::CWD;
 use crate::git::GIT_ROOT;
 use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
@@ -45,7 +45,7 @@ pub(crate) async fn run(
     directories: Vec<String>,
     last_commit: bool,
     show_diff_on_failure: bool,
-    fail_fast: bool,
+    fail_fast: Option<bool>,
     dry_run: bool,
     refresh: bool,
     extra_args: RunExtraArgs,
@@ -555,10 +555,11 @@ impl StatusPrinter {
         } else {
             (prefix.dimmed().to_string(), prefix.width())
         };
-        let dots = self.columns - prefix_width - hook_name.width() - suffix.width() - status_width;
+        let used_width = prefix_width + hook_name.width() + suffix.width() + status_width;
+        let dots = self.columns.saturating_sub(used_width);
         let line = format!(
             "{prefix}{hook_name}{}{suffix}{status_line}",
-            ".".repeat(dots.max(0)),
+            ".".repeat(dots),
         );
         match status {
             RunStatus::Failed => {
@@ -577,7 +578,7 @@ async fn run_hooks(
     filenames: Vec<PathBuf>,
     store: &Store,
     show_diff_on_failure: bool,
-    fail_fast: bool,
+    fail_fast: Option<bool>,
     dry_run: bool,
     verbose: bool,
     printer: Printer,
@@ -635,7 +636,7 @@ async fn run_hooks(
         }
         let mut prev_diff = git::get_diff(project.path()).await?;
 
-        let project_fail_fast = fail_fast || project.config().fail_fast.unwrap_or(false);
+        let project_fail_fast = fail_fast.or(project.config().fail_fast).unwrap_or(false);
 
         for group_range in PriorityGroupRanges::new(&hooks) {
             let group_hooks = hooks[group_range].to_vec();
@@ -693,14 +694,14 @@ async fn run_hooks(
     }
 
     if !success && show_diff_on_failure && file_modified {
-        if EnvVars::is_set(EnvVars::CI) {
+        if EnvVars::is_under_ci() {
             writeln!(
                 printer.stdout(),
                 "{}",
                 indoc::formatdoc! {
                     "\n{}: Some hooks made changes to the files.
                     If you are seeing this message in CI, reproduce locally with: `{}`
-                    To run prek as part of git workflow, use `{}` to set up git hooks.\n",
+                    To run prek as part of Git workflow, use `{}` to set up Git shims.\n",
                     "hint".yellow().bold(),
                     "prek run --all-files".cyan(),
                     "prek install".cyan()
@@ -1018,11 +1019,12 @@ async fn run_hook(
     }
     let start = std::time::Instant::now();
 
-    let filenames = if hook.pass_filenames {
-        shuffle(&mut filenames);
-        filenames
-    } else {
-        vec![]
+    let filenames = match hook.pass_filenames {
+        PassFilenames::All | PassFilenames::Limited(_) => {
+            shuffle(&mut filenames);
+            filenames
+        }
+        PassFilenames::None => vec![],
     };
 
     let (exit_status, hook_output) = if dry_run {
@@ -1063,4 +1065,23 @@ async fn run_hook(
         exit_status,
         output: hook_output,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_printer_write_dots_saturates_instead_of_underflow() {
+        let status_printer = StatusPrinter {
+            printer: Printer::Silent,
+            columns: 10,
+        };
+
+        // This would underflow if computed with plain `-` on `usize`.
+        let long_name = "this hook name is definitely longer than ten columns";
+        status_printer
+            .write(long_name, "", RunStatus::Failed)
+            .expect("write should not fail");
+    }
 }

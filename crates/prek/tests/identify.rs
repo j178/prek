@@ -28,7 +28,7 @@ fn identify_text_with_missing_paths() -> anyhow::Result<()> {
     exit_code: 1
     ----- stdout -----
     .: directory
-    hello.py: file, non-executable, text, python
+    hello.py: file, non-executable, python, text
 
     ----- stderr -----
     error: missing.py: No such file or directory (os error 2)
@@ -74,8 +74,8 @@ fn identify_json_with_missing_paths() -> anyhow::Result<()> {
         "tags": [
           "file",
           "non-executable",
-          "text",
-          "python"
+          "python",
+          "text"
         ]
       }
     ]

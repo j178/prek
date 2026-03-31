@@ -201,9 +201,9 @@ impl TestContext {
         command
     }
 
-    pub fn install_hooks(&self) -> Command {
+    pub fn prepare_hooks(&self) -> Command {
         let mut command = self.command();
-        command.arg("install-hooks");
+        command.arg("prepare-hooks");
         command
     }
 
@@ -385,8 +385,18 @@ impl TestContext {
             .push((r"(?m)^\d+\n".to_string(), "[SIZE]\n".to_string()));
         // Filter human-readable sizes (e.g., "384.2 KiB")
         self.filters.push((
-            r"(?m)^\d+(\.\d+)? [KMGT]i?B\n".to_string(),
+            r"(?m)^\d+(\.\d+)? ([KMGTPE]i)?B\n".to_string(),
             "[SIZE]\n".to_string(),
+        ));
+        self
+    }
+
+    /// Add extra filtering for `cache clean` summary output.
+    #[must_use]
+    pub fn with_filtered_cache_clean_summary(mut self) -> Self {
+        self.filters.push((
+            r"(?m)^Removed \d+ files? \([^)]+\)\n".to_string(),
+            "Removed [N] file(s) ([SIZE])\n".to_string(),
         ));
         self
     }
@@ -395,7 +405,7 @@ impl TestContext {
 #[doc(hidden)] // Macro and test context only, don't use directly.
 pub const INSTA_FILTERS: &[(&str, &str)] = &[
     // File sizes
-    (r"(\s|\()(\d+\.)?\d+([KM]i)?B", "$1[SIZE]"),
+    (r"(\s|\()(\d+\.)?\d+\s?([KMGTPE]i)?B", "$1[SIZE]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d]|\.\.|\.)", "/$1"),
     // The exact message is host language dependent
@@ -405,6 +415,8 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
     // Time seconds
     (r"\b(\d+\.)?\d+(ms|s)\b", "[TIME]"),
+    // Strip non-deterministic lock contention warnings from parallel test execution
+    (r"(?m)^warning: Waiting to acquire lock.*\n", ""),
 ];
 
 #[allow(unused_macros)]

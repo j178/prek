@@ -82,7 +82,6 @@ fn yaml_to_toml_writes_default_output() -> anyhow::Result<()> {
     # Configuration file for `prek`, a git hook framework written in Rust.
     # See https://prek.j178.dev for more information.
     #:schema https://www.schemastore.org/prek.json
-    #:tombi toml-version = "v1.1.0"
 
     fail_fast = true
     default_install_hook_types = ["pre-push"]
@@ -215,11 +214,11 @@ fn yaml_to_toml_rejects_invalid_config() -> anyhow::Result<()> {
 
     ----- stderr -----
     error: Failed to parse `config.yaml`
-      caused by: error: line 1 column 8: unexpected event: expected sequence start at line 1, column 8
+      caused by: error: line 1 column 8: unexpected event: expected sequence start
      --> <input>:1:8
       |
     1 | repos: 123
-      |        ^ unexpected event: expected sequence start at line 1, column 8
+      |        ^ unexpected event: expected sequence start
     "
     );
 

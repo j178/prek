@@ -1,5 +1,181 @@
 # Changelog
 
+## 0.3.8
+
+Released on 2026-03-23.
+
+### Enhancements
+
+- Add experimental `language: deno` support ([#1516](https://github.com/j178/prek/pull/1516))
+- Add `pretty-format-json` as builtin hook ([#915](https://github.com/j178/prek/pull/915))
+- Add `check-vcs-permalinks` as builtin hook ([#1842](https://github.com/j178/prek/pull/1842))
+- Add `check-illegal-windows-names` as builtin hook ([#1841](https://github.com/j178/prek/pull/1841))
+- Add `check-shebang-scripts-are-executable` builtin hook ([#1847](https://github.com/j178/prek/pull/1847))
+- Add `destroyed-symlinks` builtin hook ([#1851](https://github.com/j178/prek/pull/1851))
+- Add `file-contents-sorter` as builtin hook ([#1846](https://github.com/j178/prek/pull/1846))
+- Add `--all` flag to `prek uninstall` ([#1817](https://github.com/j178/prek/pull/1817))
+- Improve file pattern parse errors ([#1829](https://github.com/j178/prek/pull/1829))
+- Validate `uv` binary after download ([#1825](https://github.com/j178/prek/pull/1825))
+
+### Bug fixes
+
+- Fix workspace-relative added file paths ([#1852](https://github.com/j178/prek/pull/1852))
+- Relax alias-anchor ratio check for check-yaml ([#1839](https://github.com/j178/prek/pull/1839))
+
+### Contributors
+
+- @j178
+- @shaanmajid
+- @mvanhorn
+- @feliblo
+- @Tiryoh
+
+## 0.3.7
+
+Due to a release process failure, this version was republished as 0.3.8.
+
+## 0.3.6
+
+Released on 2026-03-16.
+
+### Enhancements
+
+- Allow selectors for hook ids containing colons ([#1782](https://github.com/j178/prek/pull/1782))
+- Rename `prek install-hooks` to `prek prepare-hooks` and `prek install --install-hooks` to `prek install --prepare-hooks` ([#1766](https://github.com/j178/prek/pull/1766))
+- Retry auth-failed repo clones with terminal prompts enabled ([#1761](https://github.com/j178/prek/pull/1761))
+
+### Performance
+
+- Optimize `detect_private_key` by chunked reading and using aho-corasick ([#1791](https://github.com/j178/prek/pull/1791))
+- Optimize `fix_byte_order_marker` by shifting file contents in place ([#1790](https://github.com/j178/prek/pull/1790))
+
+### Bug fixes
+
+- Align stage defaulting behavior with pre-commit ([#1788](https://github.com/j178/prek/pull/1788))
+- Make sure child output is drained in the PTY subprocess ([#1768](https://github.com/j178/prek/pull/1768))
+- fix(golang): use `GOTOOLCHAIN=local` when probing system go ([#1797](https://github.com/j178/prek/pull/1797))
+
+### Documentation
+
+- Disambiguate “hook” terminology by renaming "Git hooks" to "Git shims" ([#1776](https://github.com/j178/prek/pull/1776))
+- Document compatibility with pre-commit ([#1767](https://github.com/j178/prek/pull/1767))
+- Update configuration.md with TOML 1.1 notes ([#1764](https://github.com/j178/prek/pull/1764))
+
+### Other changes
+
+- Sync latest identify tags ([#1798](https://github.com/j178/prek/pull/1798))
+
+### Contributors
+
+- @github-actions
+- @j178
+- @pcastellazzi
+- @deadnews
+- @copilot-swe-agent
+
+## 0.3.5
+
+Released on 2026-03-09.
+
+### Enhancements
+
+- Add automatic Ruby download support using rv binaries ([#1668](https://github.com/j178/prek/pull/1668))
+- Adjust open file limit on process startup ([#1705](https://github.com/j178/prek/pull/1705))
+- Allow parallel gem retry ([#1732](https://github.com/j178/prek/pull/1732))
+- Enable system-proxy feature on reqwest ([#1738](https://github.com/j178/prek/pull/1738))
+- Expose `--git-dir` to force hook installation target ([#1723](https://github.com/j178/prek/pull/1723))
+- Pass `--quiet`, `--verbose`, and `--no-progress` through `prek install` into generated hook scripts ([#1753](https://github.com/j178/prek/pull/1753))
+- Respect `core.sharedRepository` for hook permissions ([#1755](https://github.com/j178/prek/pull/1755))
+- Support legacy mode hook script ([#1706](https://github.com/j178/prek/pull/1706))
+- rust: support `cli:` git dependency 4th segment package disambiguation ([#1747](https://github.com/j178/prek/pull/1747))
+
+### Bug fixes
+
+- Fix Python `__main__.py` entry ([#1741](https://github.com/j178/prek/pull/1741))
+- python: strip `UV_SYSTEM_PYTHON` from `uv venv` and `pip install` commands ([#1756](https://github.com/j178/prek/pull/1756))
+
+### Other changes
+
+- Sync latest identify tags ([#1733](https://github.com/j178/prek/pull/1733))
+
+### Contributors
+
+- @Dev-iL
+- @tennox
+- @shaanmajid
+- @is-alnilam
+- @github-actions
+- @j178
+
+## 0.3.4
+
+Released on 2026-02-28.
+
+### Enhancements
+
+- Allow `pass_filenames` to accept a positive integer ([#1698](https://github.com/j178/prek/pull/1698))
+- Install and compile gems in parallel ([#1674](https://github.com/j178/prek/pull/1674))
+- Sync identify file-type mappings with pre-commit identify ([#1660](https://github.com/j178/prek/pull/1660))
+- Use `--locked` for Rust `cargo install` commands ([#1661](https://github.com/j178/prek/pull/1661))
+- Add `PREK_MAX_CONCURRENCY` environment variable for configuring maximum concurrency ([#1697](https://github.com/j178/prek/pull/1697))
+- Add `PREK_LOG_TRUNCATE_LIMIT` environment variable for configuring log truncation ([#1679](https://github.com/j178/prek/pull/1679))
+- Add support for `python -m prek` ([#1686](https://github.com/j178/prek/pull/1686))
+
+### Bug fixes
+
+- Skip invalid Rust toolchains instead of failing ([#1699](https://github.com/j178/prek/pull/1699))
+
+### Performance
+
+- Bitset-based TagSet refactor: precompute tag masks and speed up hook type filtering ([#1665](https://github.com/j178/prek/pull/1665))
+
+### Documentation
+
+- Document `winget install j178.Prek` ([#1670](https://github.com/j178/prek/pull/1670))
+
+### Contributors
+
+- @uplsh580
+- @Svecco
+- @dbast
+- @drichardson
+- @JP-Ellis
+- @j178
+- @is-alnilam
+- @copilot-swe-agent
+
+## 0.3.3
+
+Released on 2026-02-15.
+
+### Enhancements
+
+- Read Python version specifier from hook repo `pyproject.toml` ([#1596](https://github.com/j178/prek/pull/1596))
+- Add `#:schema` directives to generated prek.toml ([#1597](https://github.com/j178/prek/pull/1597))
+- Add `prek util list-builtins` command ([#1600](https://github.com/j178/prek/pull/1600))
+- Expand install source detection to `mise`, `uv tool`, `pipx`, and `asdf` ([#1605](https://github.com/j178/prek/pull/1605), [#1607](https://github.com/j178/prek/pull/1607))
+- Add progress bar to `cache clean` and show removal summary ([#1616](https://github.com/j178/prek/pull/1616))
+- Make `yaml-to-toml` CONFIG argument optional ([#1593](https://github.com/j178/prek/pull/1593))
+- `prek uninstall` removes legacy scripts too ([#1622](https://github.com/j178/prek/pull/1622))
+
+### Bug fixes
+
+- Fix underflow when formatting summary output ([#1626](https://github.com/j178/prek/pull/1626))
+- Match `files/exclude` filter against relative path of nested project ([#1624](https://github.com/j178/prek/pull/1624))
+- Select `musllinux` wheel tag for uv on musl-based distros ([#1628](https://github.com/j178/prek/pull/1628))
+
+### Documentation
+
+- Clarify `prek list` description ([#1604](https://github.com/j178/prek/pull/1604))
+
+### Contributors
+
+- @ichoosetoaccept
+- @shaanmajid
+- @soraxas
+- @9999years
+- @j178
+
 ## 0.3.2
 
 Released on 2026-02-06.

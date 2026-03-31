@@ -436,13 +436,13 @@ async fn checkout_and_validate_manifest(
         .map(|h| h.id.clone())
         .collect::<Vec<_>>();
     if !hooks_missing.is_empty() {
-        return Err(anyhow::anyhow!(
+        anyhow::bail!(
             "Cannot update to rev `{}`, hook{} {} missing: {}",
             rev,
             if hooks_missing.len() > 1 { "s" } else { "" },
             if hooks_missing.len() > 1 { "are" } else { "is" },
             hooks_missing.join(", ")
-        ));
+        );
     }
 
     Ok(())
@@ -472,7 +472,7 @@ async fn get_best_candidate_tag(repo: &Path, rev: &str, current_rev: &str) -> Re
         })
         .next()
         .map(ToString::to_string)
-        .ok_or_else(|| anyhow::anyhow!("No tags found for revision {rev}"))
+        .with_context(|| format!("No tags found for revision {rev}"))
 }
 
 async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result<()> {

@@ -1,3 +1,8 @@
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
+use std::path::Path;
+
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use indoc::indoc;
@@ -172,6 +177,152 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
     Everything up-to-date
     ");
 
+    Ok(())
+}
+
+#[test]
+fn hook_impl_runs_legacy_hook() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context
+        .work_dir()
+        .child(PRE_COMMIT_CONFIG_YAML)
+        .write_str(indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: manual-only
+                name: manual-only
+                language: system
+                entry: echo manual-only
+                stages: [ manual ]
+  "})?;
+
+    context.work_dir().child("file.txt").write_str("x")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/pre-commit`
+
+    ----- stderr -----
+  ");
+
+    let legacy_hook = context.work_dir().child(".git/hooks/pre-commit.legacy");
+    legacy_hook.write_str(indoc::indoc! {r#"
+        #!/bin/sh
+        python3 -c 'print("legacy pre-commit ran")'
+        exit 1
+    "#})?;
+    #[cfg(unix)]
+    set_executable(legacy_hook.path())?;
+
+    let mut commit = git_cmd(context.work_dir());
+    commit
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
+        .arg("commit")
+        .arg("-m")
+        .arg("Test commit");
+
+    cmd_snapshot!(context.filters(), commit, @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    legacy pre-commit ran
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn hook_impl_pre_push_runs_legacy_and_prek() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc! { r#"
+    repos:
+    - repo: local
+      hooks:
+          - id: success
+            name: success
+            language: system
+            entry: echo "hook ran successfully"
+            always_run: true
+  "#});
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    cmd_snapshot!(context.filters(), context.install().arg("--hook-type").arg("pre-push"), @r#"
+  success: true
+  exit_code: 0
+  ----- stdout -----
+  prek installed at `.git/hooks/pre-push`
+
+  ----- stderr -----
+  "#);
+
+    let legacy_hook = context.work_dir().child(".git/hooks/pre-push.legacy");
+    legacy_hook.write_str(indoc::indoc! {r#"
+        #!/bin/sh
+        python3 -c 'print("legacy pre-push ran")'
+        exit 1
+    "#})?;
+    #[cfg(unix)]
+    set_executable(legacy_hook.path())?;
+
+    let remote_repo_path = context.home_dir().join("remote.git");
+    std::fs::create_dir_all(&remote_repo_path)?;
+
+    let mut init_remote = git_cmd(&remote_repo_path);
+    init_remote
+        .arg("-c")
+        .arg("init.defaultBranch=master")
+        .arg("init")
+        .arg("--bare");
+    init_remote.output()?.assert().success();
+
+    let mut add_remote = git_cmd(context.work_dir());
+    add_remote
+        .arg("remote")
+        .arg("add")
+        .arg("origin")
+        .arg(&remote_repo_path);
+    add_remote.output()?.assert().success();
+
+    context.work_dir().child("file.txt").write_str("x")?;
+    context.git_add(".");
+    context.git_commit("Second commit");
+
+    let mut push_cmd = git_cmd(context.work_dir());
+    push_cmd
+        .arg("push")
+        .arg("origin")
+        .arg("master")
+        .env(EnvVars::PREK_HOME, &**context.home_dir());
+
+    cmd_snapshot!(context.filters(), push_cmd, @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    legacy pre-push ran
+    success..................................................................Passed
+
+    ----- stderr -----
+    error: failed to push some refs to '[HOME]/remote.git'
+    ");
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_executable(path: &Path) -> anyhow::Result<()> {
+    let mut perms = fs_err::metadata(path)?.permissions();
+    perms.set_mode(0o755);
+    fs_err::set_permissions(path, perms)?;
     Ok(())
 }
 
@@ -595,12 +746,12 @@ fn workspace_hook_impl_no_project_found() -> anyhow::Result<()> {
         .child(PRE_COMMIT_CONFIG_YAML)
         .write_str(indoc::indoc! {r"
         repos:
-        - repo: local
-          hooks:
-           - id: fail
-             name: fail
-             entry: fail
-             language: fail
+          - repo: local
+            hooks:
+              - id: fail
+                name: fail
+                entry: fail
+                language: fail
     "})?;
     context.git_add(".");
 

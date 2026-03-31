@@ -29,8 +29,10 @@ Languages with managed toolchain downloads in prek today:
 - [Python](#python)
 - [Node](#node)
 - [Bun](#bun)
+- [Deno](#deno)
 - [Golang](#golang)
 - [Rust](#rust)
+- [Ruby](#ruby)
 
 Other supported languages rely on system installations and will fail if a matching toolchain is not available.
 
@@ -120,9 +122,43 @@ If the image already defines an `ENTRYPOINT`, you can omit `--entrypoint` in `en
 
 ### dotnet
 
-**Status in prek:** Not supported yet.
+**Status in prek:** ✅ Supported.
 
-Tracking: [#48](https://github.com/j178/prek/issues/48)
+prek supports .NET SDK-based hooks. Hook entries run with a matching `dotnet` on the PATH, and tools specified in `additional_dependencies` are installed into an isolated hook environment via `dotnet tool install --tool-path`.
+
+#### `language_version`
+
+Supported formats:
+
+- `default` or `system`
+- `language_version: "8"` – the .NET 8.0 SDK channel
+- `language_version: "8.0"` – the .NET 8.0 SDK channel
+- `language_version: "8.0.100"` – exactly .NET SDK 8.0.100
+- `language_version: "8.0.1xx"` – the .NET 8.0 SDK feature-band channel
+- `language_version: "net8.0"` – TFM-style alias for the .NET 8.0 SDK channel
+- `language_version: "net8.0.1xx"` – TFM-style alias for the .NET 8.0 SDK feature-band channel
+- `language_version: "net10.0"` – TFM-style alias for the .NET 10.0 SDK channel
+- `language_version: "lts"` – the latest LTS SDK channel
+- `language_version: "sts"` – the latest STS SDK channel
+
+prek first looks for a matching system-installed `dotnet`, then falls back to downloading the SDK via the official install script when downloads are allowed. Channel-style requests (`8`, `8.0`, `8.0.1xx`, `lts`, `sts`, `net8.0`) are resolved to a concrete SDK version at install time.
+
+#### `additional_dependencies`
+
+Tools are installed into the hook's isolated `tools/` directory. Specify them in `additional_dependencies` as either `package:version` (to pin a specific version) or just `package` (to install the latest available version):
+
+```yaml
+repos:
+  - repo: https://github.com/example/csharpier-hook
+    rev: v1.0.0
+    hooks:
+      - id: csharpier
+        additional_dependencies:
+          # Pin to a specific version
+          - "csharpier:1.2.6"
+          # Or install the latest version available
+          - "dotnet-format"
+```
 
 ### fail
 
@@ -296,7 +332,7 @@ Tracking: [#42](https://github.com/j178/prek/issues/42)
 
 ### ruby
 
-**Status in prek:** ✅ Supported (with limitations).
+**Status in prek:** ✅ Supported.
 
 prek installs gems from a `*.gemspec` and runs executables declared in the gemspec. `additional_dependencies` are installed into the same isolated gemset.
 
@@ -312,9 +348,11 @@ Supported formats:
 
 !!! note "prek-only"
 
-    prek does not automatically download Ruby toolchains. It uses system-installed Rubies, including common version managers, and fails if no suitable version matches `language_version`.
+    prek can use system-installed Rubies, including a variety of common version managers. On some platforms, if the system search fails to find a suitable version matching `language_version`, it can then attempt to download one.
 
-Tracking for Ruby toolchain download support: [#43](https://github.com/j178/prek/issues/43)
+    Ruby interpreters are downloaded from those built by the `rv` project, and as such are limited in supported platform versions (currently limited to MacOS and Linux on x86_64 and ARM64). Older versions are also not available, with the oldest being 3.2.1. Unsupported platforms or versions will require a compatible system Ruby installation.
+
+    The `PREK_RUBY_MIRROR` environment variable can be used to point to a different source for installers, for example to support mirrors or air-gapped CI environments. Mirrors need to follow the GitHub URL patterns, but note that although the GitHub hostname changes between `api.github.com` and `github.com` as needed, any non-GitHub mirror server will not be remapped in this manner. Where Ruby is being downloaded from GitHub (either from the upstream `rv` or a mirror), this remapping does occur, and any `GITHUB_TOKEN` will be sent with the requests. This both limits impact of rate limiting, and also allows a private GitHub repository to be used (e.g. for a vetted subset of `rv` rubies to be mirrored). Note that GitHub tokens will only be sent to mirrors which are hosted on GitHub.
 
 Gems specified in hook gemspec files and `additional_dependencies` are installed into an isolated gemset shared across hooks with the same Ruby version and dependencies.
 
@@ -322,7 +360,11 @@ Gems specified in hook gemspec files and `additional_dependencies` are installed
 
 **Status in prek:** ✅ Supported.
 
-prek installs binaries via `cargo install --bins` and runs the specified executable. The repository should contain a `Cargo.toml` that produces the binary referenced by `entry`. `additional_dependencies` and `language_version` are supported.
+prek installs binaries via `cargo install --bins --locked` and runs the specified executable. The repository should contain a `Cargo.toml` that produces the binary referenced by `entry`. `additional_dependencies` and `language_version` are supported.
+
+!!! note "Using `--locked` flag"
+
+    prek uses the `--locked` flag when installing Rust packages to ensure exact dependency versions from `Cargo.lock` are used. This prevents breaking changes from new dependency releases.
 
 #### `language_version`
 
@@ -338,7 +380,25 @@ Supported formats:
     - prek supports installing packages from virtual workspaces. See [#1180](https://github.com/j178/prek/pull/1180).
     - `additional_dependencies` supports:
         - Library dependencies using `name` or `name:version` (applied via `cargo add`).
-        - CLI dependencies using `cli:`. These can be crates.io packages (`cli:rg:13.0.0`) or git URLs (`cli:https://github.com/BurntSushi/ripgrep:13.0.0`).
+        - CLI dependencies using `cli:`.
+            - There are two forms:
+                - crates.io: `cli:<crate>[:<version>]`
+                - git: `cli:<url>[:<tag>[:<package>]]`
+            - For git dependencies:
+                - `<url>` is the git repository URL.
+                - `<tag>` is optional and selects a specific git tag.
+                - `<package>` is optional and selects which Cargo package to install binaries from.
+                - Use `<package>` when the git repository is a workspace or multi-crate repository and Cargo needs you to choose one package.
+                - This matches the package argument in `cargo install --git <url> <package>`.
+            - Examples:
+                - crates.io package: `cli:rg`
+                - crates.io package with version: `cli:rg:13.0.0`
+                - git repository default ref: `cli:https://github.com/fish-shell/fish-shell`
+                - git repository with tag: `cli:https://github.com/fish-shell/fish-shell:v4.5.0`
+                - git repository with package but no tag: `cli:https://github.com/fish-shell/fish-shell::fish`
+                - git repository with tag and package: `cli:https://github.com/fish-shell/fish-shell:v4.5.0:fish`
+            - Invalid forms:
+                - empty package is invalid, for example `...:v4.5.0:` or `...::`.
 
 ### swift
 
@@ -395,10 +455,111 @@ Use `script` for simple repository scripts that only need file paths and no mana
 
 ### deno
 
-**Status in prek:** 🚧 WIP.
+**Status in prek:** ✅ Supported.
 
-prek has experimental support in progress. pre-commit does not have a native `deno` language.
+prek installs each `additional_dependencies` item with `deno install --global` into the hook environment. The hook runs from the work repository with an isolated `DENO_DIR` for cache separation.
 
-Tracking: [#619](https://github.com/j178/prek/issues/619)
+Deno hooks run without needing a pre-installed Deno runtime when toolchain download is available.
+
+#### Rules
+
+- `additional_dependencies` are treated as executable installs. Each item should be something `deno install --global` can install, such as an `npm:` or `jsr:` specifier.
+- `additional_dependencies` may also point at a local file to install as an executable, using `./path/to/tool.ts:name`. Relative paths resolve from the hook repository for remote hooks and from the work repository for local hooks.
+- To override the executable name for an additional dependency, append `:name` to the dependency string. For example: `npm:semver@7:semver-tool`.
+
+For remote hooks, if the repo wants to provide its own executable, declare it explicitly in the hook's `additional_dependencies`, for example `./cli.ts:repo-tool`, and then use `repo-tool` in `entry`.
+
+#### `language_version`
+
+Supported formats:
+
+- `default` or `system`
+- `deno`, `deno@latest`
+- `deno@x`, `x` (major version)
+- `deno@x.y`, `x.y` (major.minor version)
+- `deno@x.y.z`, `x.y.z` (exact version)
+- Semver ranges like `>=x.y, <x+1.0`
+
+#### Using npm packages
+
+Deno supports npm packages via the `npm:` prefix. For hooks that use npm packages, specify the entry using `deno run npm:package`:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: eslint
+        name: ESLint
+        language: deno
+        entry: deno run -A npm:eslint
+        types: [ts, tsx, js, jsx]
+```
+
+For JSR packages, use the `jsr:` prefix in a `deno run` entry:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: biome
+        name: Biome
+        language: deno
+        entry: deno run -A jsr:@biomejs/biome
+        types: [ts, tsx, js, jsx]
+```
+
+For executable-style additional dependencies, use the package specifier directly:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: semver-version
+        name: semver version
+        language: deno
+        entry: semver-tool 1.2.3
+        additional_dependencies:
+          - npm:semver@7:semver-tool
+        pass_filenames: false
+```
+
+You can also install a local file as an executable additional dependency:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: local-tool
+        name: local tool
+        language: deno
+        entry: echo-tool
+        additional_dependencies:
+          - ./tool.ts:echo-tool
+        pass_filenames: false
+```
+
+#### Built-in commands
+
+Deno's built-in commands (`deno fmt`, `deno lint`, `deno check`) work directly:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: deno-fmt
+        name: Deno Format
+        language: deno
+        entry: deno fmt
+        types: [ts, tsx, js, jsx, json, md]
+      - id: deno-lint
+        name: Deno Lint
+        language: deno
+        entry: deno lint
+        types: [ts, tsx, js, jsx]
+```
+
+!!! note "prek-only"
+
+    Deno language support is a prek extension. pre-commit does not have native `deno` support.
 
 If you want to help add support for the missing languages, check open issues or start a discussion in the repo.

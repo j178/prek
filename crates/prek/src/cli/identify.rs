@@ -3,10 +3,10 @@ use std::path::PathBuf;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use prek_identify::tags_from_path;
 use serde::Serialize;
 
 use crate::cli::{ExitStatus, IdentifyOutputFormat};
-use crate::identify::tags_from_path;
 use crate::printer::Printer;
 
 #[derive(Serialize)]

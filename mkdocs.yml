@@ -89,6 +89,7 @@ plugins:
           - debugging.md
           - faq.md
         About:
+          - compatibility.md
           - diff.md
           - benchmark.md
           - changelog.md
@@ -110,6 +111,7 @@ nav:
     - Debugging: debugging.md
     - FAQ: faq.md
   - About:
+    - Compatibility: compatibility.md
     - Differences: diff.md
     - Benchmark: benchmark.md
     - Changelog: changelog.md

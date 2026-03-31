@@ -1,0 +1,94 @@
+name: "Publish prek-action known versions"
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+    secrets:
+      PREK_ACTION_TOKEN:
+        required: true
+
+permissions: {}
+
+jobs:
+  publish:
+    name: Publish prek-action known versions
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+    env:
+      PLAN: ${{ inputs.plan }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: j178/prek-action
+          ref: main
+          token: ${{ secrets.PREK_ACTION_TOKEN }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Update known versions
+        id: refresh
+        env:
+          GITHUB_TOKEN: ${{ secrets.PREK_ACTION_TOKEN }}
+        run: |
+          # Wait a bit to ensure the new release is available via the GitHub API.
+          sleep 10
+          npm run update-known-versions
+
+      - name: Check whether known version files changed
+        id: changes
+        run: |
+          if git diff --quiet -- version-manifest.json src/known-checksums.ts; then
+            echo "known_versions_changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "known_versions_changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run tests
+        if: steps.changes.outputs.known_versions_changed == 'true'
+        run: npm test
+
+      - name: Rebuild dist
+        if: steps.changes.outputs.known_versions_changed == 'true'
+        run: npm run bundle
+
+      - name: Create pull request
+        id: cpr
+        if: steps.changes.outputs.known_versions_changed == 'true'
+        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
+        with:
+          token: ${{ secrets.PREK_ACTION_TOKEN }}
+          add-paths: |
+            version-manifest.json
+            src/known-checksums.ts
+            dist/index.cjs
+            dist/post/index.cjs
+          branch: automation/update-known-versions
+          base: main
+          commit-message: ${{ steps.refresh.outputs.pr_title }}
+          title: ${{ steps.refresh.outputs.pr_title }}
+          body: |
+            Automated update from the prek release workflow.
+
+            Added releases:
+            ${{ steps.refresh.outputs.added_versions_markdown }}
+
+      - name: Merge pull request
+        if: steps.cpr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ secrets.PREK_ACTION_TOKEN }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        shell: bash
+        run: |
+          sleep 10
+          gh pr merge --squash --repo j178/prek-action "$PR_NUMBER"

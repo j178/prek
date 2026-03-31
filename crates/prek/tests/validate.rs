@@ -54,12 +54,12 @@ fn validate_config() -> anyhow::Result<()> {
 
     ----- stderr -----
     error: Failed to parse `config-1.yaml`
-      caused by: error: line 2 column 5: missing field `rev` at line 2, column 5
+      caused by: error: line 2 column 5: missing field `rev`
      --> <input>:2:5
       |
     1 | repos:
     2 |   - repo: https://github.com/pre-commit/pre-commit-hooks
-      |     ^ missing field `rev` at line 2, column 5
+      |     ^ missing field `rev`
     ");
 
     Ok(())
@@ -106,13 +106,13 @@ fn invalid_config_error() {
 
     ----- stderr -----
     error: Failed to parse `.pre-commit-config.yaml`
-      caused by: error: line 9 column 9: missing field `id` at line 9, column 9
+      caused by: error: line 9 column 9: missing field `id`
      --> <input>:9:9
       |
     7 |   - repo: local
     8 |     hooks:
     9 |       - name: check-json
-      |         ^ missing field `id` at line 9, column 9
+      |         ^ missing field `id`
     ");
 }
 
@@ -172,14 +172,13 @@ fn validate_manifest() -> anyhow::Result<()> {
 
     ----- stderr -----
     error: Failed to parse `hooks-1.yaml`
-      caused by: error: line 1 column 5: missing field `entry` at line 1, column 5
-     --> <input>:1:5
+      caused by: error: line 6 column 5: missing field `entry`
+     --> <input>:6:5
       |
-    1 | -   id: check-added-large-files
-      |     ^ missing field `entry` at line 1, column 5
-    2 |     name: check for added large files
-    3 |     description: prevents giant files from being committed.
-      |
+    4 |     language: python
+    5 |     stages: [pre-commit, pre-push, manual]
+    6 |     minimum_pre_commit_version: 3.2.0
+      |     ^ missing field `entry`
     ");
 
     Ok(())

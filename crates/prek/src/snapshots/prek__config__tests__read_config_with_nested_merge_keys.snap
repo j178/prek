@@ -27,7 +27,7 @@ Config {
                             always_run: None,
                             fail_fast: None,
                             pass_filenames: Some(
-                                false,
+                                None,
                             ),
                             description: None,
                             language_version: None,
@@ -36,9 +36,7 @@ Config {
                                 true,
                             ),
                             stages: Some(
-                                [
-                                    PreCommit,
-                                ],
+                                Stages(pre-commit),
                             ),
                             verbose: None,
                             minimum_prek_version: None,

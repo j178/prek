@@ -15,7 +15,7 @@ permissions: {}
 env:
   # UV_VERSION should not greater than MAX_UV_VERSION in `languages/python/uv`.
   # Otherwise, tests jobs will install their own uv, and it will encounter concurrency issue.
-  UV_VERSION: "0.9.27"
+  UV_VERSION: "0.10.9"
   NODE_VERSION: "20"
   BUN_VERSION: "1.3"
   GO_VERSION: "1.24"
@@ -23,9 +23,11 @@ env:
   RUBY_VERSION: "3.4"
   LUA_VERSION: "5.4"
   LUAROCKS_VERSION: "3.12.2"
-  GHC_VERSION: "9.8.2" # Don't upgrade, because higher version is very slow to build
+  GHC_VERSION: "9.14.1" # Preinstalled in ubuntu-24.04 runner image
   CABAL_VERSION: "3.16.1.0"
   JULIA_VERSION: "1.12.4"
+  DOTNET_VERSION: "10.0"
+  DENO_VERSION: "2"
 
   # Cargo env vars
   CARGO_INCREMENTAL: 0
@@ -39,8 +41,8 @@ jobs:
     outputs:
       test-code: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.any_code_changed == 'true' || github.ref == 'refs/heads/master') }}
       save-rust-cache: ${{ github.ref == 'refs/heads/master' || steps.changed.outputs.cache_changed == 'true' }}
-      # Run benchmarks only if Rust code changed
-      run-bench: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.rust_code_changed == 'true' || github.ref == 'refs/heads/master') }}
+      # Run benchmarks if Rust code or benchmark-related files changed
+      run-bench: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.rust_code_changed == 'true' || steps.changed.outputs.bench_related_changed == 'true' || github.ref == 'refs/heads/master') }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -56,6 +58,7 @@ jobs:
           ANY_CODE_CHANGED=false
           CACHE_CHANGED=false
           RUST_CODE_CHANGED=false
+          BENCH_RELATED_CHANGED=false
 
           while IFS= read -r file; do
             # Check if cache-relevant files changed (Cargo files, toolchain, workflows)
@@ -68,6 +71,11 @@ jobs:
             if [[ "${file}" =~ \.rs$ ]] || [[ "${file}" =~ Cargo\.toml$ ]] || [[ "${file}" == "Cargo.lock" ]] || [[ "${file}" == "rust-toolchain.toml" ]] || [[ "${file}" =~ ^\.cargo/ ]]; then
               echo "Detected Rust code change: ${file}"
               RUST_CODE_CHANGED=true
+            fi
+
+            if [[ "${file}" == ".github/workflows/performance.yml" ]] || [[ "${file}" =~ ^scripts/hyperfine-.*\.sh$ ]]; then
+              echo "Detected benchmark-related change: ${file}"
+              BENCH_RELATED_CHANGED=true
             fi
 
             if [[ "${file}" =~ ^docs/ ]]; then
@@ -90,6 +98,7 @@ jobs:
           echo "any_code_changed=${ANY_CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
           echo "cache_changed=${CACHE_CHANGED}" >> "${GITHUB_OUTPUT}"
           echo "rust_code_changed=${RUST_CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
+          echo "bench_related_changed=${BENCH_RELATED_CHANGED}" >> "${GITHUB_OUTPUT}"
 
   lint:
     name: "lint"
@@ -104,7 +113,7 @@ jobs:
       - name: "rustfmt"
         run: cargo fmt --all --check
       - name: Run prek checks
-        uses: j178/prek-action@564dda4cfa5e96aafdc4a5696c4bf7b46baae5ac # v1.1.0
+        uses: j178/prek-action@79f765515bd648eb4d6bb1b17277b7cb22cb6468 # v2.0.0
         env:
           PREK_SKIP: cargo-fmt,cargo-clippy
 
@@ -122,7 +131,7 @@ jobs:
 
       - name: Install dist
         shell: bash
-        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.30.3/cargo-dist-installer.sh | sh"
+        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.31.0/cargo-dist-installer.sh | sh"
 
       - name: Run dist plan
         run: |
@@ -192,7 +201,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@7e574ed8bb89811282a11aecb3fe1d043bf5bf0e # v2.67.15
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-shear
       - run: cargo shear
@@ -216,12 +225,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@7e574ed8bb89811282a11aecb3fe1d043bf5bf0e # v2.67.15
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@7e574ed8bb89811282a11aecb3fe1d043bf5bf0e # v2.67.15
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-llvm-cov
 
@@ -280,17 +289,17 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@7e574ed8bb89811282a11aecb3fe1d043bf5bf0e # v2.67.15
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@7e574ed8bb89811282a11aecb3fe1d043bf5bf0e # v2.67.15
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-llvm-cov
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
+        uses: astral-sh/setup-uv@6ee6290f1cbc4156c0bdd66691b2c144ef8df19a # v7.4.0
         with:
           version: ${{ env.UV_VERSION }}
 
@@ -343,17 +352,17 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@7e574ed8bb89811282a11aecb3fe1d043bf5bf0e # v2.67.15
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@7e574ed8bb89811282a11aecb3fe1d043bf5bf0e # v2.67.15
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-llvm-cov
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
+        uses: astral-sh/setup-uv@6ee6290f1cbc4156c0bdd66691b2c144ef8df19a # v7.4.0
         with:
           version: ${{ env.UV_VERSION }}
           cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
@@ -392,7 +401,7 @@ jobs:
     name: "language tests | ${{ matrix.language }} | ${{ matrix.os }}"
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -403,7 +412,9 @@ jobs:
           - windows-latest
         language:
           - bun
+          - deno
           - docker
+          - dotnet
           - golang
           - haskell
           - julia
@@ -422,6 +433,9 @@ jobs:
           # Swift is preinstalled on ubuntu and macOS; Windows requires setup which is slow
           - os: windows-latest
             language: swift
+          # GHC is not preinstalled on macOS, and installing it takes a long time
+          - os: macos-latest
+            language: haskell
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -438,12 +452,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@7e574ed8bb89811282a11aecb3fe1d043bf5bf0e # v2.67.15
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@7e574ed8bb89811282a11aecb3fe1d043bf5bf0e # v2.67.15
+        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
         with:
           tool: cargo-llvm-cov
 
@@ -452,7 +466,7 @@ jobs:
 
       - name: "Install uv"
         if: ${{ matrix.language == 'python' }}
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
+        uses: astral-sh/setup-uv@6ee6290f1cbc4156c0bdd66691b2c144ef8df19a # v7.4.0
         with:
           version: ${{ env.UV_VERSION }}
 
@@ -464,7 +478,7 @@ jobs:
 
       - name: "Install Node.js"
         if: ${{ matrix.language == 'node' }}
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -473,7 +487,7 @@ jobs:
 
       - name: "Install Go"
         if: ${{ matrix.language == 'golang' }}
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version: ${{ env.GO_VERSION }}
           # Dummy dependency path to satisfy required input while enabling caching
@@ -493,24 +507,21 @@ jobs:
 
       - name: "Install Ruby"
         if: ${{ matrix.language == 'ruby' }}
-        uses: ruby/setup-ruby@90be1154f987f4dc0fe0dd0feedac9e473aa4ba8 # v1.286.0
+        uses: ruby/setup-ruby@6ca151fd1bfcfd6fe0c4eb6837eb0584d0134a0c # v1.290.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
 
       - name: "Install Bun"
         if: ${{ matrix.language == 'bun' }}
-        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
+        uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461 # v2.1.3
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      - name: "Cache GHC"
-        if: ${{ matrix.language == 'haskell' }}
-        id: cache-haskell
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+      - name: "Install Deno"
+        if: ${{ matrix.language == 'deno' }}
+        uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
         with:
-          path: ~/.ghcup
-          key: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
-          restore-keys: ${{ runner.os }}-ghc-${{ env.GHC_VERSION }}
+          deno-version: ${{ env.DENO_VERSION }}
 
       - name: "Install GHC and Cabal"
         if: ${{ matrix.language == 'haskell' }}
@@ -521,12 +532,22 @@ jobs:
 
       - name: "Install Julia"
         if: ${{ matrix.language == 'julia' }}
-        uses: julia-actions/setup-julia@5c9647d97b78a5debe5164e9eec09d653d29bd71 # v2.6.1
+        uses: julia-actions/setup-julia@4c0cb0fce8556fdb04a90347310e5db8b1f98fb9 # v2.7.0
         with:
           version: ${{ env.JULIA_VERSION }}
 
+      - name: "Install .NET"
+        if: ${{ matrix.language == 'dotnet' }}
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
       - name: "Run language tests"
         if: ${{ matrix.os != 'windows-latest' }}
+        env:
+          # Ruby auto_download test queries the GitHub Releases API; without a
+          # token, shared runners quickly hit the 60 req/hour rate limit.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cargo llvm-cov nextest \
             --lcov \
@@ -539,6 +560,8 @@ jobs:
       - name: "Run language tests (windows)"
         if: ${{ matrix.os == 'windows-latest' }}
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Remove msys64 from PATH for Rust compilation
           $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch '\\msys64\\' }) -join ';'
@@ -594,6 +617,35 @@ jobs:
         working-directory: cpython
         run: cargo run -p prek -- --all-files
 
+  build-binary-msrv:
+    needs: plan
+    if: ${{ needs.plan.outputs.test-code == 'true' }}
+    name: "build binary | msrv"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: "Read MSRV from Cargo.toml"
+        id: msrv
+        run: |
+          MSRV=$(grep -m1 'rust-version' Cargo.toml | sed 's/.*"\([^"]*\)".*/\1/')
+          echo "value=$MSRV" >> "$GITHUB_OUTPUT"
+      - name: "Install Rust toolchain"
+        run: rustup default ${MSRV}
+        env:
+          MSRV: ${{ steps.msrv.outputs.value }}
+      - name: "Install mold"
+        uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
+      - run: cargo +${MSRV} build --profile no-debug --bin prek
+        env:
+          MSRV: ${{ steps.msrv.outputs.value }}
+      - run: ./target/no-debug/prek --version
+
   build-binary-linux-libc:
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
@@ -615,7 +667,7 @@ jobs:
         run: cargo build --profile no-debug --bin prek
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: prek-linux-libc-${{ github.sha }}
           path: |
@@ -641,7 +693,7 @@ jobs:
         run: cargo build --profile no-debug --bin prek
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: prek-macos-aarch64-${{ github.sha }}
           path: |
@@ -677,7 +729,7 @@ jobs:
         run: cargo build --profile no-debug --bin prek
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: prek-windows-x86_64-${{ github.sha }}
           path: |

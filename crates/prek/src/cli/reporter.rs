@@ -278,3 +278,31 @@ impl AutoUpdateReporter {
         self.reporter.on_complete();
     }
 }
+
+#[derive(Debug)]
+pub(crate) struct CleaningReporter {
+    bar: ProgressBar,
+}
+
+impl CleaningReporter {
+    pub(crate) fn new(printer: Printer, max: usize) -> Self {
+        let bar = ProgressBar::with_draw_target(Some(max as u64), printer.target());
+        bar.set_style(
+            ProgressStyle::with_template("{prefix} [{bar:20}] {percent}%")
+                .unwrap()
+                .progress_chars("=> "),
+        );
+        bar.set_prefix(format!("{}", "Cleaning".bold().cyan()));
+        Self { bar }
+    }
+}
+
+impl CleaningReporter {
+    pub(crate) fn on_clean(&self) {
+        self.bar.inc(1);
+    }
+
+    pub(crate) fn on_complete(&self) {
+        self.bar.finish_and_clear();
+    }
+}

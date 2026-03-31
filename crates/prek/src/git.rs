@@ -104,6 +104,10 @@ pub(crate) async fn get_added_files(root: &Path) -> Result<Vec<PathBuf>, Error> 
         .current_dir(root)
         .arg("diff")
         .arg("--staged")
+        // `git diff --name-only` reports paths relative to the repository root by default,
+        // even when it runs inside a subdirectory. `--relative` keeps the output aligned
+        // with hooks, which receive filenames relative to their project root.
+        .arg("--relative")
         .arg("--name-only")
         .arg("--diff-filter=A")
         .arg("-z") // Use NUL as line terminator
@@ -390,7 +394,54 @@ pub(crate) async fn init_repo(url: &str, path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum TerminalPrompt {
+    Disabled,
+    Enabled,
+}
+
+impl TerminalPrompt {
+    fn env_value(self) -> &'static str {
+        match self {
+            Self::Disabled => "0",
+            Self::Enabled => "1",
+        }
+    }
+}
+
+/// Return whether a git clone failure looks like an authentication error.
+pub(crate) fn is_auth_error(err: &Error) -> bool {
+    let Error::Command(process::Error::Status {
+        error: StatusError {
+            output: Some(output),
+            ..
+        },
+        ..
+    }) = err
+    else {
+        return false;
+    };
+
+    let error = String::from_utf8_lossy(&output.stderr).to_lowercase();
+
+    [
+        "terminal prompts disabled",
+        "could not read username",
+        "could not read password",
+        "authentication failed",
+        "http basic: access denied",
+        "missing or invalid credentials",
+        "could not authenticate to server",
+    ]
+    .iter()
+    .any(|needle| error.contains(needle))
+}
+
+async fn shallow_clone(
+    rev: &str,
+    path: &Path,
+    terminal_prompt: TerminalPrompt,
+) -> Result<(), Error> {
     git_cmd("git shallow clone")?
         .current_dir(path)
         .arg("-c")
@@ -399,10 +450,9 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .arg("origin")
         .arg(rev)
         .arg("--depth=1")
-        // Disable interactive prompts in the terminal, as they'll be erased by the progress bar
-        // animation and the process will "hang".
-        .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
         .remove_git_envs()
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
         .output()
         .await?;
@@ -413,6 +463,8 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .arg("FETCH_HEAD")
         .remove_git_envs()
         .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
         .output()
         .await?;
@@ -426,8 +478,9 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .arg("--init")
         .arg("--recursive")
         .arg("--depth=1")
-        .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
         .remove_git_envs()
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
         .output()
         .await?;
@@ -435,14 +488,15 @@ async fn shallow_clone(rev: &str, path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
+async fn full_clone(rev: &str, path: &Path, terminal_prompt: TerminalPrompt) -> Result<(), Error> {
     git_cmd("git full clone")?
         .current_dir(path)
         .arg("fetch")
         .arg("origin")
         .arg("--tags")
-        .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
         .remove_git_envs()
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
         .output()
         .await?;
@@ -451,8 +505,10 @@ async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .current_dir(path)
         .arg("checkout")
         .arg(rev)
-        .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
         .remove_git_envs()
+        .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
         .output()
         .await?;
@@ -463,8 +519,9 @@ async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
         .arg("update")
         .arg("--init")
         .arg("--recursive")
-        .env(EnvVars::GIT_TERMINAL_PROMPT, "0")
         .remove_git_envs()
+        .env(EnvVars::LC_ALL, "C")
+        .env(EnvVars::GIT_TERMINAL_PROMPT, terminal_prompt.env_value())
         .check(true)
         .output()
         .await?;
@@ -472,15 +529,33 @@ async fn full_clone(rev: &str, path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-pub(crate) async fn clone_repo(url: &str, rev: &str, path: &Path) -> Result<(), Error> {
-    init_repo(url, path).await?;
+async fn clone_repo_attempt(
+    rev: &str,
+    path: &Path,
+    terminal_prompt: TerminalPrompt,
+) -> Result<(), Error> {
+    if let Err(err) = shallow_clone(rev, path, terminal_prompt).await {
+        if is_auth_error(&err) {
+            warn!(?err, "Failed to shallow clone due to authentication error");
+            return Err(err);
+        }
 
-    if let Err(err) = shallow_clone(rev, path).await {
         warn!(?err, "Failed to shallow clone, falling back to full clone");
-        full_clone(rev, path).await
-    } else {
-        Ok(())
+        return full_clone(rev, path, terminal_prompt).await;
     }
+
+    Ok(())
+}
+
+/// Clone a repository into an initialized destination with the requested terminal prompt mode.
+pub(crate) async fn clone_repo(
+    url: &str,
+    rev: &str,
+    path: &Path,
+    terminal_prompt: TerminalPrompt,
+) -> Result<(), Error> {
+    init_repo(url, path).await?;
+    clone_repo_attempt(rev, path, terminal_prompt).await
 }
 
 pub(crate) async fn has_hooks_path_set() -> Result<bool> {
@@ -498,12 +573,81 @@ pub(crate) async fn has_hooks_path_set() -> Result<bool> {
     }
 }
 
-pub(crate) async fn get_lfs_files(paths: &[&Path]) -> Result<FxHashSet<PathBuf>, Error> {
+/// Compute the file mode for a newly created file based on `core.sharedRepository`.
+///
+/// This mirrors the relevant parts of Git's `git_config_perm` in `setup.c`
+/// and `calc_shared_perm` in `path.c`.
+fn shared_repository_file_mode(value: &str, mode: u32) -> Option<u32> {
+    const PERM_GROUP: u32 = 0o660;
+    const PERM_EVERYBODY: u32 = 0o664;
+
+    fn apply(mode: u32, mut tweak: u32, replace: bool) -> u32 {
+        // From Git's `calc_shared_perm`: if the original file is not
+        // user-writable, do not introduce any write bits via the shared
+        // repository permission tweak.
+        if mode & 0o200 == 0 {
+            tweak &= !0o222;
+        }
+        // Also from `calc_shared_perm`: for executable files, mirror read bits
+        // into execute bits so an explicit mode like 0640 becomes 0750 when
+        // applied to a 0755 file.
+        if mode & 0o100 != 0 {
+            tweak |= (tweak & 0o444) >> 2;
+        }
+        // Named values like `group` and `all` add permissions on top of the
+        // existing mode, while octal values replace the low permission bits.
+        if replace {
+            (mode & !0o777) | tweak
+        } else {
+            mode | tweak
+        }
+    }
+
+    let value = value.trim().to_ascii_lowercase();
+    let (tweak, replace) = match value.as_str() {
+        "" | "umask" | "false" | "no" | "off" | "0" => return None,
+        "group" | "true" | "yes" | "on" | "1" => (PERM_GROUP, false),
+        "all" | "world" | "everybody" | "2" => (PERM_EVERYBODY, false),
+        // Parsed like Git's `git_config_perm`, which also accepts explicit
+        // octal modes such as `0640`.
+        _ => (u32::from_str_radix(&value, 8).ok()?, true),
+    };
+
+    // `git_config_perm` rejects explicit modes that do not grant user read/write.
+    if replace && tweak & 0o600 != 0o600 {
+        return None;
+    }
+
+    Some(apply(mode, tweak, replace))
+}
+
+/// Resolve the file mode implied by `core.sharedRepository` for a newly created file.
+pub(crate) async fn get_shared_repository_file_mode(mode: u32) -> Result<u32> {
+    let output = git_cmd("get shared repository config")?
+        .arg("config")
+        .arg("--get")
+        .arg("core.sharedRepository")
+        .check(false)
+        .output()
+        .await?;
+    if output.status.success() {
+        let value = str::from_utf8(&output.stdout)?;
+        Ok(shared_repository_file_mode(value, mode).unwrap_or(mode))
+    } else {
+        Ok(mode)
+    }
+}
+
+pub(crate) async fn get_lfs_files(
+    current_dir: &Path,
+    paths: &[&Path],
+) -> Result<FxHashSet<PathBuf>, Error> {
     if paths.is_empty() {
         return Ok(FxHashSet::default());
     }
 
     let mut child = git_cmd("git check-attr")?
+        .current_dir(current_dir)
         .arg("check-attr")
         .arg("filter")
         .arg("-z")
@@ -650,4 +794,36 @@ pub(crate) fn list_submodules(git_root: &Path) -> Result<Vec<PathBuf>, Error> {
         .filter_map(|line| line.split_whitespace().nth(1))
         .map(|submodule| git_root.join(submodule))
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::shared_repository_file_mode;
+
+    #[test]
+    fn shared_repository_group_mode_matches_git_behavior() {
+        for value in ["group", "true", "yes", "on", "1"] {
+            assert_eq!(shared_repository_file_mode(value, 0o755), Some(0o775));
+        }
+    }
+
+    #[test]
+    fn shared_repository_everybody_mode_matches_git_behavior() {
+        for value in ["all", "world", "everybody", "2"] {
+            assert_eq!(shared_repository_file_mode(value, 0o755), Some(0o775));
+        }
+    }
+
+    #[test]
+    fn shared_repository_octal_mode_matches_git_behavior() {
+        assert_eq!(shared_repository_file_mode("0640", 0o644), Some(0o640));
+        assert_eq!(shared_repository_file_mode("0640", 0o755), Some(0o750));
+    }
+
+    #[test]
+    fn shared_repository_umask_or_invalid_values_do_not_override_mode() {
+        for value in ["", "umask", "false", "no", "off", "0", "invalid", "0400"] {
+            assert_eq!(shared_repository_file_mode(value, 0o755), None);
+        }
+    }
 }

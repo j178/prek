@@ -8,8 +8,8 @@ use prek_consts::PREK_TOML;
 use tempfile::TempDir;
 use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Value};
 
-use crate::cli::ExitStatus;
 use crate::cli::run::Selectors;
+use crate::cli::{ExitStatus, flag};
 use crate::config;
 use crate::git;
 use crate::git::GIT_ROOT;
@@ -119,9 +119,7 @@ async fn prepare_repo_and_rev<'a>(
         String::from_utf8_lossy(&head_rev)
             .split_ascii_whitespace()
             .next()
-            .ok_or_else(|| {
-                anyhow::anyhow!("Failed to parse HEAD revision from git ls-remote output")
-            })?
+            .context("Failed to parse HEAD revision from git ls-remote output")?
             .to_string()
     };
 
@@ -182,12 +180,8 @@ pub(crate) async fn try_repo(
         .context("Failed to determine repository and revision")?;
 
     let store = Store::from_path(tmp_dir.path()).init()?;
-    let repo_clone_path = store
-        .clone_repo(
-            &config::RemoteRepo::new(repo_path.to_string(), rev.clone(), vec![]),
-            None,
-        )
-        .await?;
+    let repo_config = config::RemoteRepo::new(repo_path.to_string(), rev.clone(), vec![]);
+    let repo_clone_path = store.clone_repo(&repo_config, None).await?;
 
     let selectors = Selectors::load(&run_args.includes, &run_args.skips, GIT_ROOT.as_ref()?)?;
 
@@ -225,7 +219,7 @@ pub(crate) async fn try_repo(
         run_args.directory,
         run_args.last_commit,
         run_args.show_diff_on_failure,
-        run_args.fail_fast,
+        flag(run_args.fail_fast, run_args.no_fail_fast),
         run_args.dry_run,
         refresh,
         run_args.extra,

@@ -160,6 +160,26 @@ Example:
     ]
     ```
 
+The previous example uses multiline inline tables, a feature that was introduced in
+[TOML 1.1](https://toml.io/en/v1.1.0), not all parsers have support for it yet.
+You may want to use the longer form if your editor/IDE complains about it.
+
+=== "prek.toml"
+
+    ```toml
+    default_language_version.python = "3.12"
+
+    [[repos]]
+    repo = "local"
+
+    [[repos.hooks]]
+    id = "ruff"
+    name = "ruff"
+    language = "system"
+    entry = "python3 -m ruff check"
+    files = "\\.py$"
+    ```
+
 #### YAML (`.pre-commit-config.yaml` / `.yml`)
 
 Practical notes:
@@ -293,6 +313,25 @@ Global *include* regex applied before hook-level filtering.
 
 This is usually used to narrow down the universe of files in large repositories.
 
+!!! note "What path is matched? (workspace + nested projects)"
+
+    `files` (and `exclude`) are matched against the file path **relative to the project root** — i.e. the directory containing the configuration file.
+
+    - For the root project, this is the workspace root.
+    - For a nested project, this is the nested project directory.
+
+    Example (workspace mode):
+
+    - Root project config: `./.pre-commit-config.yaml`
+    - Nested project config: `./nested/.pre-commit-config.yaml`
+
+    For a file at `nested/excluded_by_project`:
+
+    - Root project sees the path as `nested/excluded_by_project`
+    - Nested project sees the path as `excluded_by_project`
+
+    This matters most for anchored patterns like `^...$`.
+
 !!! tip "Regex matching"
 
     When `files` / `exclude` are regex strings, they are matched with *search* semantics (the pattern can match anywhere in the path).
@@ -354,6 +393,10 @@ Global *exclude* regex applied before hook-level filtering.
 - Default: no global exclude filter
 
 `exclude` is useful for generated folders, vendored code, or build outputs.
+
+!!! note "What path is matched?"
+
+    Same as [`files`](#top-level-files): the pattern is evaluated against the file path **relative to the project root** (the directory containing the config).
 
 !!! note "prek-only globs"
 
@@ -475,12 +518,12 @@ Allowed values:
 
 #### `default_install_hook_types`
 
-Default hook type(s) installed by `prek install` when you don’t pass `--hook-type`.
+Default Git shim name(s) installed by `prek install` when you don’t pass `--hook-type`.
 
-- Type: list of git hook types
+- Type: list of `--hook-type` values
 - Default: `[pre-commit]`
 
-This controls which *git hook scripts* are installed (for example `pre-commit` vs `pre-push`).
+This controls which Git shims are installed (for example `pre-commit` vs `pre-push`).
 It is separate from a hook’s `stages`, which controls when a particular hook is eligible to run.
 
 Allowed values:
@@ -795,6 +838,14 @@ The stable identifier of the hook.
 
 `id` is also used for CLI selection (for example `prek run <id>` and `PREK_SKIP`).
 
+!!! note "Hook ids containing `:`"
+
+    If your hook id contains `:` (for example `id: lint:ruff`), `prek run lint:ruff`
+    will not select that hook. `prek` interprets `lint:ruff` as the selector
+    `<project-path>:<hook-id>`, with project `lint` and hook `ruff`.
+    To select the hook id `lint:ruff`, add a leading `:` and run
+    `prek run :lint:ruff`.
+
 #### `name`
 
 Human-friendly label shown in output.
@@ -1055,10 +1106,14 @@ This is commonly used for hooks that check repository-wide state (for example, r
 
 Controls whether `prek` appends the matching filenames to the command line.
 
-- Type: boolean
-- Default: `true`
+- Type: boolean or positive integer
+- Default: `true` which passes all matching filenames
 
 Set `pass_filenames: false` for hooks that don’t accept file arguments (or that discover files themselves).
+
+Set `pass_filenames: n` (a positive integer) to limit each invocation to at most `n` filenames. When there are more matching files than `n`, `prek` spawns multiple invocations and runs them in parallel. This is useful for tools that can only process a limited number of files at once.
+
+Prek will automatically limit the number of filenames to ensure command lines don’t exceed the OS limit, even when `pass_filenames: true`.
 
 #### `stages`
 
@@ -1309,6 +1364,8 @@ prek supports the following environment variables:
 
 - `PREK_NO_CONCURRENCY` — Disable parallelism for installs and runs (If set, force concurrency to 1).
 
+- `PREK_MAX_CONCURRENCY` — Set the maximum number of concurrent hooks (minimum 1). Defaults to the number of CPU cores when unset. Ignored when `PREK_NO_CONCURRENCY` is set. If you encounter "Too many open files" errors, lowering this value or raising the file descriptor limit with `ulimit -n` can help.
+
 - `PREK_NO_FAST_PATH` — Disable Rust-native built-in hooks; always use the original hook implementation. See [Built-in Fast Hooks](builtin.md) for details.
 
 - `PREK_UV_SOURCE` — Control how uv (Python package installer) is installed. Options:
@@ -1328,9 +1385,16 @@ prek supports the following environment variables:
 - `PREK_CONTAINER_RUNTIME` — Specify the container runtime to use for container-based hooks (e.g., `docker`, `docker_image`). Options:
 
     - `auto` (default, auto-detect available runtime)
+
     - `docker`
+
     - `podman`
+
     - `container` (Apple's Container runtime on macOS, see [container](https://github.com/apple/container))
+
+- `PREK_LOG_TRUNCATE_LIMIT` — Control the truncation limit for command lines shown in trace logs (`Executing ...`). Defaults to `120` characters of arguments; set a larger value to reduce truncation.
+
+- `PREK_RUBY_MIRROR` — Override the Ruby installer base URL used for downloaded Ruby toolchains (for example, when using mirrors or air-gapped CI environments). See [Ruby language support](languages.md#ruby) for details.
 
 Compatibility fallbacks:
 

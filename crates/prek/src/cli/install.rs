@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use bstr::ByteSlice;
+use clap::ValueEnum;
 use owo_colors::OwoColorize;
 use prek_consts::CONFIG_FILENAMES;
 use same_file::is_same_file;
@@ -28,10 +29,13 @@ pub(crate) async fn install(
     includes: Vec<String>,
     skips: Vec<String>,
     hook_types: Vec<HookType>,
-    install_hook_environments: bool,
+    prepare_hooks: bool,
     overwrite: bool,
     allow_missing_config: bool,
     refresh: bool,
+    quiet: u8,
+    verbose: u8,
+    no_progress: bool,
     printer: Printer,
     git_dir: Option<&Path>,
 ) -> Result<ExitStatus> {
@@ -42,6 +46,10 @@ pub(crate) async fn install(
             "git config --unset-all --global core.hooksPath".cyan()
         );
     }
+
+    let hook_mode = git::get_shared_repository_file_mode(0o755)
+        .await
+        .unwrap_or(0o755);
 
     let project = match Project::discover(config.as_deref(), &CWD) {
         Ok(project) => Some(project),
@@ -78,18 +86,22 @@ pub(crate) async fn install(
             &hooks_path,
             overwrite,
             allow_missing_config,
+            hook_mode,
+            quiet,
+            verbose,
+            no_progress,
             printer,
         )?;
     }
 
-    if install_hook_environments {
-        install_hooks(store, config, includes, skips, refresh, printer).await?;
+    if prepare_hooks {
+        self::prepare_hooks(store, config, includes, skips, refresh, printer).await?;
     }
 
     Ok(ExitStatus::Success)
 }
 
-pub(crate) async fn install_hooks(
+pub(crate) async fn prepare_hooks(
     store: &Store,
     config: Option<PathBuf>,
     includes: Vec<String>,
@@ -160,6 +172,7 @@ fn get_hook_types(
     hook_types
 }
 
+#[allow(clippy::fn_params_excessive_bools)]
 fn install_hook_script(
     project: Option<&Project>,
     config: Option<PathBuf>,
@@ -168,9 +181,14 @@ fn install_hook_script(
     hooks_path: &Path,
     overwrite: bool,
     skip_on_missing_config: bool,
+    hook_mode: u32,
+    quiet: u8,
+    verbose: u8,
+    no_progress: bool,
     printer: Printer,
 ) -> Result<()> {
     let hook_path = hooks_path.join(hook_type.as_ref());
+    let legacy_path = hook_path.with_added_extension("legacy");
 
     if hook_path.try_exists()? {
         if overwrite {
@@ -181,7 +199,6 @@ fn install_hook_script(
             )?;
         } else {
             if !is_our_script(&hook_path)? {
-                let legacy_path = format!("{}.legacy", hook_path.display());
                 fs_err::rename(&hook_path, &legacy_path)?;
                 writeln!(
                     printer.stdout(),
@@ -190,6 +207,19 @@ fn install_hook_script(
                     legacy_path.user_display().yellow()
                 )?;
             }
+        }
+    }
+
+    if legacy_path.try_exists()? {
+        if overwrite {
+            // Remove existing legacy script too if we're overwriting.
+            fs_err::remove_file(&legacy_path)?;
+        } else {
+            writeln!(
+                printer.stdout(),
+                "Migration mode: prek will also run legacy hook `{}`. Use `--overwrite` to remove legacy hooks.",
+                legacy_path.user_display().yellow()
+            )?;
         }
     }
 
@@ -261,9 +291,14 @@ fn install_hook_script(
 
     let prek = std::env::current_exe()?;
     let prek = prek.simplified_display().to_string();
+    let mut prek_global_args = render_global_args(quiet, verbose, no_progress);
+    if !prek_global_args.is_empty() {
+        prek_global_args.push(' ');
+    }
     let hook_script = HOOK_TMPL
         .replace("[CUR_SCRIPT_VERSION]", &CUR_SCRIPT_VERSION.to_string())
         .replace("[PREK_PATH]", &format!(r#""{prek}""#))
+        .replace("[PREK_GLOBAL_ARGS]", &prek_global_args)
         .replace("[PREK_ARGS]", &args.join(" "));
 
     fs_err::OpenOptions::new()
@@ -278,13 +313,39 @@ fn install_hook_script(
         use std::os::unix::fs::PermissionsExt;
 
         let mut perms = hook_path.metadata()?.permissions();
-        perms.set_mode(0o755);
+        perms.set_mode(hook_mode);
         fs_err::set_permissions(&hook_path, perms)?;
     }
+
+    // Unused on non-Unix platforms
+    #[cfg(not(unix))]
+    let _ = hook_mode;
 
     writeln!(printer.stdout(), "{hint}")?;
 
     Ok(())
+}
+
+fn render_global_args(quiet: u8, verbose: u8, no_progress: bool) -> String {
+    let mut args = Vec::with_capacity(3);
+
+    if quiet > 0 {
+        args.push(format!("-{}", "q".repeat(quiet.into())));
+    }
+
+    if verbose > 0 {
+        args.push(format!("-{}", "v".repeat(verbose.into())));
+    }
+
+    if no_progress {
+        args.push("--no-progress".to_string());
+    }
+
+    if args.is_empty() {
+        String::new()
+    } else {
+        args.join(" ")
+    }
 }
 
 /// The version of the hook script. Increment this when the script changes in a way that
@@ -303,7 +364,7 @@ if [ ! -x "$PREK" ]; then
     PREK="prek"
 fi
 
-exec "$PREK" hook-impl --hook-dir "$HERE" --script-version [CUR_SCRIPT_VERSION] [PREK_ARGS] -- "$@"
+exec "$PREK" [PREK_GLOBAL_ARGS]hook-impl --hook-dir "$HERE" --script-version [CUR_SCRIPT_VERSION] [PREK_ARGS] -- "$@"
 
 "#;
 
@@ -314,7 +375,7 @@ static PRIOR_HASHES: &[&str] = &[];
 static CURRENT_HASH: &str = "182c10f181da4464a3eec51b83331688";
 
 /// Checks if the script contains any of the hashes that `prek` has used in the past.
-fn is_our_script(hook_path: &Path) -> Result<bool> {
+fn is_our_script(hook_path: &Path) -> std::io::Result<bool> {
     let content = fs_err::read_to_string(hook_path)?;
     Ok(std::iter::once(CURRENT_HASH)
         .chain(PRIOR_HASHES.iter().copied())
@@ -324,43 +385,71 @@ fn is_our_script(hook_path: &Path) -> Result<bool> {
 pub(crate) async fn uninstall(
     config: Option<PathBuf>,
     hook_types: Vec<HookType>,
+    all: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let project = Project::discover(config.as_deref(), &CWD).ok();
     let hooks_path = git::get_git_common_dir().await?.join("hooks");
 
-    for hook_type in get_hook_types(hook_types, project.as_ref(), config.as_deref()) {
-        let hook_path = hooks_path.join(hook_type.as_ref());
-        let legacy_path = hooks_path.join(format!("{hook_type}.legacy"));
+    let types: Vec<HookType> = if all {
+        HookType::value_variants().to_vec()
+    } else {
+        get_hook_types(hook_types, project.as_ref(), config.as_deref())
+    };
 
-        if !hook_path.try_exists()? {
+    for hook_type in types {
+        let hook_path = hooks_path.join(hook_type.as_ref());
+        let legacy_path = hook_path.with_added_extension("legacy");
+
+        if is_our_script(&legacy_path).unwrap_or(false) {
+            fs_err::remove_file(&legacy_path)?;
             writeln!(
                 printer.stderr(),
-                "`{}` does not exist, skipping.",
-                hook_path.user_display().cyan()
+                "Found legacy hook at `{}`, removing it.",
+                legacy_path.user_display().cyan()
             )?;
-        } else if !is_our_script(&hook_path)? {
-            writeln!(
-                printer.stderr(),
-                "`{}` is not managed by prek, skipping.",
-                hook_path.user_display().cyan()
-            )?;
-        } else {
-            fs_err::remove_file(&hook_path)?;
+        }
+
+        match is_our_script(&hook_path) {
+            Ok(true) => {}
+            Ok(false) => {
+                if !all {
+                    writeln!(
+                        printer.stderr(),
+                        "`{}` is not managed by prek, skipping.",
+                        hook_path.user_display().cyan()
+                    )?;
+                }
+                continue;
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                if !all {
+                    writeln!(
+                        printer.stderr(),
+                        "`{}` does not exist, skipping.",
+                        hook_path.user_display().cyan()
+                    )?;
+                }
+                continue;
+            }
+            Err(err) => return Err(err.into()),
+        }
+
+        fs_err::remove_file(&hook_path)?;
+        writeln!(
+            printer.stdout(),
+            "Uninstalled `{}`",
+            hook_type.as_ref().cyan()
+        )?;
+
+        if legacy_path.try_exists()? {
+            fs_err::rename(&legacy_path, &hook_path)?;
             writeln!(
                 printer.stdout(),
-                "Uninstalled `{}`",
-                hook_type.as_ref().cyan()
+                "Restored `{}` to `{}`",
+                legacy_path.user_display().cyan(),
+                hook_path.user_display().cyan()
             )?;
-
-            if legacy_path.try_exists()? {
-                fs_err::rename(&legacy_path, &hook_path)?;
-                writeln!(
-                    printer.stdout(),
-                    "Restored previous hook to `{}`",
-                    hook_path.user_display().cyan()
-                )?;
-            }
         }
     }
 
@@ -374,6 +463,9 @@ pub(crate) async fn init_template_dir(
     hook_types: Vec<HookType>,
     requires_config: bool,
     refresh: bool,
+    quiet: u8,
+    verbose: u8,
+    no_progress: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     install(
@@ -386,6 +478,9 @@ pub(crate) async fn init_template_dir(
         true,
         !requires_config,
         refresh,
+        quiet,
+        verbose,
+        no_progress,
         printer,
         Some(&directory),
     )

@@ -1,6 +1,9 @@
 use std::path::Path;
+use std::sync::LazyLock;
 
+use aho_corasick::AhoCorasick;
 use anyhow::Result;
+use tokio::io::AsyncReadExt;
 
 use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
@@ -18,6 +21,25 @@ const BLACKLIST: &[&[u8]] = &[
     b"BEGIN ENCRYPTED PRIVATE KEY",
     b"BEGIN OpenVPN Static key V1",
 ];
+const BUFFER_SIZE: usize = 8192;
+
+// Keep at most the longest marker minus one byte so split matches can span two reads.
+const CARRY_CAPACITY: usize = {
+    let mut max_len = 0;
+    let mut idx = 0;
+    while idx < BLACKLIST.len() {
+        let len = BLACKLIST[idx].len();
+        if len > max_len {
+            max_len = len;
+        }
+        idx += 1;
+    }
+
+    max_len.saturating_sub(1)
+};
+static PRIVATE_KEY_MATCHER: LazyLock<AhoCorasick> = LazyLock::new(|| {
+    AhoCorasick::new(BLACKLIST).expect("private key blacklist patterns should be valid")
+});
 
 pub(crate) async fn detect_private_key(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
     run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
@@ -26,14 +48,35 @@ pub(crate) async fn detect_private_key(hook: &Hook, filenames: &[&Path]) -> Resu
     .await
 }
 
+/// Scan the file in chunks while preserving a small tail between reads.
+///
+/// For example, if one read ends with `BEGIN RSA PRIV` and the next read starts
+/// with `ATE KEY`, we keep the tail of the first read, prepend it to the second
+/// read, and search the combined window so `BEGIN RSA PRIVATE KEY` is still found.
 async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)> {
-    let content = fs_err::tokio::read(file_base.join(filename)).await?;
+    let mut file = fs_err::tokio::File::open(file_base.join(filename)).await?;
+    let mut buf = vec![0u8; BUFFER_SIZE + CARRY_CAPACITY];
+    let mut carry_len = 0;
 
-    // Use memchr's memmem for faster substring search
-    for pattern in BLACKLIST {
-        if memchr::memmem::find(&content, pattern).is_some() {
+    loop {
+        let bytes_read = file.read(&mut buf[carry_len..]).await?;
+        if bytes_read == 0 {
+            break;
+        }
+
+        let search_len = carry_len + bytes_read;
+        let search_buf = &buf[..search_len];
+
+        if PRIVATE_KEY_MATCHER.find(search_buf).is_some() {
             let error_message = format!("Private key found: {}\n", filename.display());
             return Ok((1, error_message.into_bytes()));
+        }
+
+        // Move the tail of this chunk to the front of the buffer so a key marker
+        // split across this read and the next read is still seen.
+        carry_len = CARRY_CAPACITY.min(search_len);
+        if carry_len > 0 {
+            buf.copy_within(search_len - carry_len..search_len, 0);
         }
     }
 

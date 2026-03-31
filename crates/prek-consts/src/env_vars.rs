@@ -8,6 +8,7 @@ impl EnvVars {
     pub const PATH: &'static str = "PATH";
     pub const HOME: &'static str = "HOME";
     pub const CI: &'static str = "CI";
+    pub const LC_ALL: &'static str = "LC_ALL";
 
     // Git related
     pub const GIT_DIR: &'static str = "GIT_DIR";
@@ -22,12 +23,15 @@ impl EnvVars {
     pub const PREK_SKIP: &'static str = "PREK_SKIP";
     pub const PREK_ALLOW_NO_CONFIG: &'static str = "PREK_ALLOW_NO_CONFIG";
     pub const PREK_NO_CONCURRENCY: &'static str = "PREK_NO_CONCURRENCY";
+    pub const PREK_MAX_CONCURRENCY: &'static str = "PREK_MAX_CONCURRENCY";
     pub const PREK_NO_FAST_PATH: &'static str = "PREK_NO_FAST_PATH";
     pub const PREK_UV_SOURCE: &'static str = "PREK_UV_SOURCE";
     pub const PREK_NATIVE_TLS: &'static str = "PREK_NATIVE_TLS";
     pub const SSL_CERT_FILE: &'static str = "SSL_CERT_FILE";
+    pub const SSL_CERT_DIR: &'static str = "SSL_CERT_DIR";
     pub const PREK_CONTAINER_RUNTIME: &'static str = "PREK_CONTAINER_RUNTIME";
     pub const PREK_QUIET: &'static str = "PREK_QUIET";
+    pub const PREK_LOG_TRUNCATE_LIMIT: &'static str = "PREK_LOG_TRUNCATE_LIMIT";
 
     // PREK internal environment variables
     pub const PREK_INTERNAL__TEST_DIR: &'static str = "PREK_INTERNAL__TEST_DIR";
@@ -36,16 +40,20 @@ impl EnvVars {
     pub const PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT: &'static str =
         "PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT";
     pub const PREK_INTERNAL__BUN_BINARY_NAME: &'static str = "PREK_INTERNAL__BUN_BINARY_NAME";
+    pub const PREK_INTERNAL__DENO_BINARY_NAME: &'static str = "PREK_INTERNAL__DENO_BINARY_NAME";
+    pub const PREK_INTERNAL__DOTNET_BINARY_NAME: &'static str = "PREK_INTERNAL_DOTNET_BINARY_NAME";
     pub const PREK_INTERNAL__GO_BINARY_NAME: &'static str = "PREK_INTERNAL__GO_BINARY_NAME";
     pub const PREK_INTERNAL__NODE_BINARY_NAME: &'static str = "PREK_INTERNAL__NODE_BINARY_NAME";
     pub const PREK_INTERNAL__RUSTUP_BINARY_NAME: &'static str = "PREK_INTERNAL__RUSTUP_BINARY_NAME";
     pub const PREK_INTERNAL__SKIP_CABAL_UPDATE: &'static str = "PREK_INTERNAL__SKIP_CABAL_UPDATE";
+    pub const PREK_RUNNING_LEGACY: &'static str = "PREK_RUNNING_LEGACY";
     pub const PREK_GENERATE: &'static str = "PREK_GENERATE";
 
     // Python & uv related
     pub const VIRTUAL_ENV: &'static str = "VIRTUAL_ENV";
     pub const PYTHONHOME: &'static str = "PYTHONHOME";
     pub const UV_PYTHON: &'static str = "UV_PYTHON";
+    pub const UV_SYSTEM_PYTHON: &'static str = "UV_SYSTEM_PYTHON";
     pub const UV_CACHE_DIR: &'static str = "UV_CACHE_DIR";
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
     pub const UV_MANAGED_PYTHON: &'static str = "UV_MANAGED_PYTHON";
@@ -58,6 +66,10 @@ impl EnvVars {
 
     // Bun related
     pub const BUN_INSTALL: &'static str = "BUN_INSTALL";
+
+    // Deno related
+    pub const DENO_DIR: &'static str = "DENO_DIR";
+    pub const DENO_NO_UPDATE_CHECK: &'static str = "DENO_NO_UPDATE_CHECK";
 
     // GitHub API authentication (to avoid rate limits)
     pub const GITHUB_TOKEN: &'static str = "GITHUB_TOKEN";
@@ -74,6 +86,7 @@ impl EnvVars {
     pub const LUA_CPATH: &'static str = "LUA_CPATH";
 
     // Ruby related
+    pub const PREK_RUBY_MIRROR: &'static str = "PREK_RUBY_MIRROR";
     pub const GEM_HOME: &'static str = "GEM_HOME";
     pub const GEM_PATH: &'static str = "GEM_PATH";
     pub const BUNDLE_IGNORE_CONFIG: &'static str = "BUNDLE_IGNORE_CONFIG";
@@ -84,6 +97,9 @@ impl EnvVars {
     pub const RUSTUP_AUTO_INSTALL: &'static str = "RUSTUP_AUTO_INSTALL";
     pub const CARGO_HOME: &'static str = "CARGO_HOME";
     pub const RUSTUP_HOME: &'static str = "RUSTUP_HOME";
+
+    // .NET related
+    pub const DOTNET_ROOT: &'static str = "DOTNET_ROOT";
 }
 
 impl EnvVars {
@@ -107,6 +123,11 @@ impl EnvVars {
 
     pub fn is_set(name: &str) -> bool {
         Self::var_os(name).is_some()
+    }
+
+    /// Return whether the current process is running under CI.
+    pub fn is_under_ci() -> bool {
+        Self::is_set(Self::CI)
     }
 
     /// Read an environment variable, falling back to pre-commit corresponding variable if not found.

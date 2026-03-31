@@ -40,7 +40,7 @@ Example:
 
 ## Choosing hook stages
 
-Hook authors can declare which git hook stages they support with `stages` in
+Hook authors can declare which Git hook stages they support with `stages` in
 `.pre-commit-hooks.yaml`. End users can override that list in their
 configuration. If neither is set, `prek` falls back to the top-level
 `default_stages` (which defaults to all stages).

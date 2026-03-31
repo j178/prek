@@ -12,7 +12,7 @@ use tracing::{debug, trace, warn};
 
 use crate::fs::LockedFile;
 use crate::git;
-use crate::languages::download_and_extract;
+use crate::http::download_and_extract;
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::golang::bin_dir;
 use crate::languages::golang::version::GoVersion;
@@ -80,14 +80,16 @@ impl GoResult {
         let output = self
             .cmd("go version")
             .arg("version")
+            .env(EnvVars::GOTOOLCHAIN, "local")
             .check(true)
             .output()
             .await?;
         // e.g. "go version go1.24.5 darwin/arm64"
         let version_str = String::from_utf8(output.stdout)?;
-        let version_str = version_str.split_ascii_whitespace().nth(2).ok_or_else(|| {
-            anyhow::anyhow!("Failed to parse Go version from output: {version_str}")
-        })?;
+        let version_str = version_str
+            .split_ascii_whitespace()
+            .nth(2)
+            .with_context(|| format!("Failed to parse Go version from output: {version_str}"))?;
 
         let version = GoVersion::from_str(version_str)?;
 
@@ -207,7 +209,7 @@ impl GoInstaller {
             Architecture::S390x => "s390x",
             Architecture::Powerpc => "ppc64",
             Architecture::Powerpc64le => "ppc64le",
-            _ => return Err(anyhow::anyhow!("Unsupported architecture")),
+            _ => anyhow::bail!("Unsupported architecture"),
         };
         let os = match HOST.operating_system {
             OperatingSystem::Darwin(_) => "darwin",
@@ -219,7 +221,7 @@ impl GoInstaller {
             OperatingSystem::Solaris => "solaris",
             OperatingSystem::Dragonfly => "dragonfly",
             OperatingSystem::Illumos => "illumos",
-            _ => return Err(anyhow::anyhow!("Unsupported OS")),
+            _ => anyhow::bail!("Unsupported OS"),
         };
 
         let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
@@ -281,5 +283,45 @@ impl GoInstaller {
 
         debug!(?go_request, "No system go matches the requested version");
         Ok(None)
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn fill_version_uses_local_gotoolchain() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let fake_go = temp_dir.path().join("go");
+        fs_err::write(
+            &fake_go,
+            indoc::indoc! {r#"#!/bin/sh
+                if [ "$1" = "version" ]; then
+                  if [ "${GOTOOLCHAIN:-}" = "local" ]; then
+                    printf 'go version go1.24.13 linux/amd64\n'
+                  else
+                    printf 'go version go1.26.0 linux/amd64\n'
+                  fi
+                  exit 0
+                fi
+
+                printf 'unexpected args: %s\n' "$*" >&2
+                exit 1
+            "#},
+        )?;
+
+        let mut permissions = fs_err::metadata(&fake_go)?.permissions();
+        permissions.set_mode(0o755);
+        fs_err::set_permissions(&fake_go, permissions)?;
+
+        let go = GoResult::from_executable(fake_go, true)
+            .fill_version()
+            .await?;
+
+        assert_eq!(go.version().to_string(), "1.24.13");
+        Ok(())
     }
 }

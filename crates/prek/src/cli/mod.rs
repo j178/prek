@@ -37,7 +37,7 @@ pub(crate) use cache_size::cache_size;
 use completion::selector_completer;
 pub(crate) use hook_impl::hook_impl;
 pub(crate) use identify::identify;
-pub(crate) use install::{init_template_dir, install, install_hooks, uninstall};
+pub(crate) use install::{init_template_dir, install, prepare_hooks, uninstall};
 pub(crate) use list::list;
 pub(crate) use list_builtins::list_builtins;
 pub(crate) use run::run;
@@ -78,6 +78,15 @@ impl From<ExitStatus> for ExitCode {
     }
 }
 
+impl From<u8> for ExitStatus {
+    fn from(code: u8) -> Self {
+        match code {
+            0 => Self::Success,
+            other => Self::External(other),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, clap::ValueEnum)]
 pub enum ColorChoice {
     /// Enables colored output only when the output is going to a terminal or TTY with support.
@@ -97,6 +106,16 @@ impl From<ColorChoice> for anstream::ColorChoice {
             ColorChoice::Always => Self::Always,
             ColorChoice::Never => Self::Never,
         }
+    }
+}
+
+/// Given a boolean flag pair (like `--fail-fast` and `--no-fail-fast`), resolve the value of the flag.
+pub(crate) fn flag(yes: bool, no: bool) -> Option<bool> {
+    match (yes, no) {
+        (true, false) => Some(true),
+        (false, true) => Some(false),
+        (false, false) => None,
+        (true, true) => unreachable!("clap should prevent both flags from being set"),
     }
 }
 
@@ -206,17 +225,26 @@ pub(crate) struct GlobalArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Install prek as a git hook under the `.git/hooks/` directory.
-    Install(InstallArgs),
-    /// Create environments for all hooks used in the config file.
+    /// Install prek Git shims under the `.git/hooks/` directory.
     ///
-    /// This command does not install the git hook. To install the git hook along with the hook environments in one command, use `prek install --install-hooks`.
-    InstallHooks(InstallHooksArgs),
+    /// The Git shims installed by this command are determined by `--hook-type`
+    /// or `default_install_hook_types` in the config file, falling back to
+    /// `pre-commit` when neither is set.
+    ///
+    /// A hook's `stages` field does not affect which Git shims this
+    /// command installs.
+    Install(InstallArgs),
+    /// Prepare environments for all hooks used in the config file.
+    ///
+    /// This command does not install Git shims. To install the Git shims
+    /// along with the hook environments in one command, use `prek install --prepare-hooks`.
+    #[command(alias = "install-hooks")]
+    PrepareHooks(PrepareHooksArgs),
     /// Run hooks.
     Run(Box<RunArgs>),
     /// List hooks configured in the current workspace.
     List(ListArgs),
-    /// Uninstall prek from git hooks.
+    /// Uninstall prek Git shims.
     Uninstall(UninstallArgs),
     /// Validate configuration files (prek.toml or .pre-commit-config.yaml).
     ValidateConfig(ValidateConfigArgs),
@@ -235,12 +263,12 @@ pub(crate) enum Command {
     /// Remove all prek cached data.
     #[command(hide = true)]
     Clean,
-    /// Install hook script in a directory intended for use with `git config init.templateDir`.
+    /// Install Git shims in a directory intended for use with `git config init.templateDir`.
     #[command(alias = "init-templatedir", hide = true)]
     InitTemplateDir(InitTemplateDirArgs),
     /// Try the pre-commit hooks in the current repo.
     TryRepo(Box<TryRepoArgs>),
-    /// The implementation of the prek hook script that is installed in the `.git/hooks/` directory.
+    /// The implementation of the prek Git shim that is installed in the `.git/hooks/` directory.
     #[command(hide = true)]
     HookImpl(HookImplArgs),
     /// Utility commands.
@@ -284,18 +312,18 @@ pub(crate) struct InstallArgs {
     #[arg(long = "skip", value_name = "HOOK|PROJECT", add = ArgValueCompleter::new(selector_completer))]
     pub(crate) skips: Vec<String>,
 
-    /// Overwrite existing hooks.
+    /// Overwrite existing Git shims.
     #[arg(short = 'f', long)]
     pub(crate) overwrite: bool,
 
-    /// Create environments for all hooks used in the config file.
-    #[arg(long)]
-    pub(crate) install_hooks: bool,
+    /// Also prepare environments for all hooks used in the config file.
+    #[arg(long, alias = "install-hooks")]
+    pub(crate) prepare_hooks: bool,
 
-    /// Which hook type(s) to install.
+    /// Which Git shim(s) to install.
     ///
-    /// Specifies which git hook stage(s) you want to install the hook script for.
-    /// Can be specified multiple times to install hooks for multiple stages.
+    /// Specifies which Git hook type(s) you want to install shims for.
+    /// Can be specified multiple times to install shims for multiple hook types.
     ///
     /// If not specified, uses `default_install_hook_types` from the config file,
     /// or defaults to `pre-commit` if that is also not set.
@@ -308,10 +336,20 @@ pub(crate) struct InstallArgs {
     /// Allow a missing configuration file.
     #[arg(long)]
     pub(crate) allow_missing_config: bool,
+
+    /// Install Git shims into the `hooks` subdirectory of the given git directory (`<GIT_DIR>/hooks/`).
+    ///
+    /// When this flag is used, `prek install` bypasses the safety check that normally
+    /// refuses to install shims while `core.hooksPath` is set. Git itself will still
+    /// ignore `.git/hooks` while `core.hooksPath` is configured, so ensure your Git
+    /// configuration points to the directory where the shim is installed if you want
+    /// it to be executed.
+    #[arg(long, value_name = "GIT_DIR", value_hint = ValueHint::DirPath)]
+    pub(crate) git_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct InstallHooksArgs {
+pub(crate) struct PrepareHooksArgs {
     /// Include the specified hooks or projects.
     ///
     /// Supports flexible selector syntax:
@@ -347,13 +385,21 @@ pub(crate) struct InstallHooksArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct UninstallArgs {
-    /// Which hook type(s) to uninstall.
+    /// Uninstall all prek-managed Git shims.
     ///
-    /// Specifies which git hook stage(s) you want to uninstall.
-    /// Can be specified multiple times to uninstall hooks for multiple stages.
+    /// Scans the hooks directory and removes every hook managed by prek,
+    /// regardless of hook type.
+    #[arg(long, conflicts_with = "hook_types")]
+    pub(crate) all: bool,
+
+    /// Which Git shim(s) to uninstall.
+    ///
+    /// Specifies which Git hook type(s) you want to uninstall shims for.
+    /// Can be specified multiple times to uninstall shims for multiple hook types.
     ///
     /// If not specified, uses `default_install_hook_types` from the config file,
     /// or defaults to `pre-commit` if that is also not set.
+    /// Use `--all` to remove all prek-managed hooks.
     #[arg(short = 't', long = "hook-type", value_name = "HOOK_TYPE", value_enum)]
     pub(crate) hook_types: Vec<HookType>,
 }
@@ -469,7 +515,7 @@ pub(crate) struct RunArgs {
     /// The stage during which the hook is fired.
     ///
     /// When specified, only hooks configured for that stage (for example `manual`,
-    /// `pre-commit`, or `pre-commit`) will run.
+    /// `pre-commit`, or `pre-push`) will run.
     /// Defaults to `pre-commit` if not specified.
     /// For hooks specified directly in the command line, fallback to `manual` stage if no hooks found for `pre-commit` stage.
     #[arg(long, value_enum, alias = "hook-stage")]
@@ -482,6 +528,10 @@ pub(crate) struct RunArgs {
     /// Stop running hooks after the first failure.
     #[arg(long)]
     pub(crate) fail_fast: bool,
+
+    /// Do not stop running hooks after the first failure.
+    #[arg(long, hide = true, overrides_with = "fail_fast")]
+    pub(crate) no_fail_fast: bool,
 
     /// Do not run the hooks, but print the hooks that would have been run.
     #[arg(long)]
@@ -733,7 +783,7 @@ pub(crate) enum UtilCommand {
     Identify(IdentifyArgs),
     /// List all built-in hooks bundled with prek.
     ListBuiltins(ListBuiltinsArgs),
-    /// Install hook script in a directory intended for use with `git config init.templateDir`.
+    /// Install Git shims in a directory intended for use with `git config init.templateDir`.
     #[command(alias = "init-templatedir")]
     InitTemplateDir(InitTemplateDirArgs),
     /// Convert a YAML configuration file to prek.toml.
@@ -819,17 +869,17 @@ pub(crate) struct GenerateShellCompletionArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct InitTemplateDirArgs {
-    /// The directory in which to write the hook script.
+    /// The directory in which to write the Git shim.
     pub(crate) directory: PathBuf,
 
     /// Assume cloned repos should have a `pre-commit` config.
     #[arg(long)]
     pub(crate) no_allow_missing_config: bool,
 
-    /// Which hook type(s) to install.
+    /// Which Git shim(s) to install.
     ///
-    /// Specifies which git hook stage(s) you want to install the hook script for.
-    /// Can be specified multiple times to install hooks for multiple stages.
+    /// Specifies which Git hook type(s) you want to install shims for.
+    /// Can be specified multiple times to install shims for multiple hook types.
     ///
     /// If not specified, uses `default_install_hook_types` from the config file,
     /// or defaults to `pre-commit` if that is also not set.

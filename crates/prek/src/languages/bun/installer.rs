@@ -12,9 +12,9 @@ use tracing::{debug, trace, warn};
 
 use crate::fs::LockedFile;
 use crate::git;
+use crate::http::download_and_extract;
 use crate::languages::bun::BunRequest;
 use crate::languages::bun::version::BunVersion;
-use crate::languages::download_and_extract;
 use crate::process::Cmd;
 use crate::store::Store;
 
@@ -206,13 +206,13 @@ impl BunInstaller {
         let arch = match HOST.architecture {
             Architecture::X86_64 => "x64",
             Architecture::Aarch64(_) => "aarch64",
-            _ => return Err(anyhow::anyhow!("Unsupported architecture")),
+            _ => anyhow::bail!("Unsupported architecture"),
         };
         let os = match HOST.operating_system {
             OperatingSystem::Darwin(_) => "darwin",
             OperatingSystem::Linux => "linux",
             OperatingSystem::Windows => "windows",
-            _ => return Err(anyhow::anyhow!("Unsupported OS")),
+            _ => anyhow::bail!("Unsupported OS"),
         };
 
         let filename = format!("bun-{os}-{arch}.zip");
