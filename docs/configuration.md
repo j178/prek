@@ -1234,6 +1234,12 @@ Example:
     If two hooks run in the same priority group and both mutate the same files (or depend on shared state), results are undefined.
     Use separate priorities to avoid overlap.
 
+!!! note "Hooks modifying files without a non-zero exit code"
+
+    If a hook modifies files without emitting a non-zero exit code (e.g. `ruff format`), the priority group as a whole will fail.
+    It is not possible for prek to attribute the failure to a specific hook in the group which modified files.
+    Use separate priorities for clearer failure attribution.
+
 !!! note "`require_serial` is different"
 
     `require_serial: true` prevents concurrent invocations of the *same hook*.
