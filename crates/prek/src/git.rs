@@ -34,9 +34,11 @@ pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
     LazyLock::new(|| which::which("git"));
 
 pub(crate) static GIT_ROOT: LazyLock<Result<PathBuf, Error>> = LazyLock::new(|| {
-    get_root().inspect(|root| {
-        debug!("Git root: {}", root.display());
-    })
+    get_root()
+        .map(|root| dunce::canonicalize(&root).unwrap_or(root))
+        .inspect(|root| {
+            debug!("Git root: {}", root.display());
+        })
 });
 
 /// Remove some `GIT_` environment variables exposed by `git`.
