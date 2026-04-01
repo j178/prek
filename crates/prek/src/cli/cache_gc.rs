@@ -2,6 +2,7 @@ use std::fmt::Write;
 use std::fmt::{Display, Formatter};
 use std::ops::AddAssign;
 use std::path::Path;
+use std::time::{Duration, SystemTime};
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
@@ -23,6 +24,7 @@ enum RemovalKind {
     HookEnvs,
     Tools,
     CacheEntries,
+    PatchFiles,
 }
 
 impl RemovalKind {
@@ -33,6 +35,7 @@ impl RemovalKind {
                 RemovalKind::HookEnvs => "hook envs",
                 RemovalKind::Tools => "tools",
                 RemovalKind::CacheEntries => "cache entries",
+                RemovalKind::PatchFiles => "patch files",
             }
         } else {
             match self {
@@ -40,10 +43,13 @@ impl RemovalKind {
                 RemovalKind::HookEnvs => "hook env",
                 RemovalKind::Tools => "tool",
                 RemovalKind::CacheEntries => "cache entry",
+                RemovalKind::PatchFiles => "patch file",
             }
         }
     }
 }
+
+const STALE_PATCH_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 
 #[derive(Debug, Clone)]
 struct RemovalItem {
@@ -272,16 +278,15 @@ pub(crate) async fn cache_gc(
     if !dry_run {
         let _ = fs_err::remove_dir_all(store.scratch_path());
     }
-    // NOTE: Do not clear `patches/` here. It can contain user-important temporary patches.
-    // A future enhancement could implement a safer cleanup strategy (e.g. GC patches older
-    // than a configurable age, or only remove patches known to be orphaned).
-    // let _ = fs_err::remove_dir_all(store.patches_dir())?;
+    // Keep recent recovery patches, but clear out stale ones that are unlikely to be useful.
+    let removed_patches = sweep_stale_patch_files(&store.patches_dir(), dry_run, verbose)?;
 
     let mut removed = RemovalSummary::default();
     removed += &removed_repos;
     removed += &removed_hooks;
     removed += &removed_tools;
     removed += &removed_cache;
+    removed += &removed_patches;
 
     let removed_total_bytes = removed.total_bytes();
     let (removed_bytes, removed_unit) = human_readable_bytes(removed_total_bytes);
@@ -302,6 +307,7 @@ pub(crate) async fn cache_gc(
             print_removed_details(printer, verb, &removed_hooks)?;
             print_removed_details(printer, verb, &removed_tools)?;
             print_removed_details(printer, verb, &removed_cache)?;
+            print_removed_details(printer, verb, &removed_patches)?;
         }
     }
 
@@ -601,6 +607,82 @@ fn sweep_dir_by_name(
                 if let Some(item) = item {
                     removal.items.push(item);
                 }
+            }
+        }
+    }
+
+    Ok(removal)
+}
+
+fn sweep_stale_patch_files(root: &Path, dry_run: bool, collect_names: bool) -> Result<Removal> {
+    let mut removal = Removal::new(RemovalKind::PatchFiles);
+    let entries = match fs_err::read_dir(root) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(Removal::new(RemovalKind::PatchFiles));
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    let cutoff = SystemTime::now()
+        .checked_sub(STALE_PATCH_RETENTION)
+        .unwrap_or(SystemTime::UNIX_EPOCH);
+
+    for entry in entries {
+        let Ok(entry) = entry else {
+            continue;
+        };
+
+        if !entry.file_type().is_ok_and(|file_type| file_type.is_file()) {
+            continue;
+        }
+
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if name.starts_with('.') || path.extension().and_then(|ext| ext.to_str()) != Some("patch") {
+            continue;
+        }
+
+        let metadata = match entry.metadata() {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                warn!(%err, path = %path.display(), "Failed to read patch metadata");
+                continue;
+            }
+        };
+        let modified = match metadata.modified() {
+            Ok(modified) => modified,
+            Err(err) => {
+                warn!(%err, path = %path.display(), "Failed to read patch modified time");
+                continue;
+            }
+        };
+        if modified > cutoff {
+            continue;
+        }
+
+        let entry_bytes = metadata.len();
+        let item = collect_names
+            .then(|| RemovalItem::new(name.to_string(), path.to_string_lossy().to_string()));
+
+        if dry_run {
+            removal.count += 1;
+            removal.bytes = removal.bytes.saturating_add(entry_bytes);
+            if let Some(item) = item {
+                removal.items.push(item);
+            }
+            continue;
+        }
+
+        if let Err(err) = fs_err::remove_file(&path) {
+            warn!(%err, path = %path.display(), "Failed to remove old patch file");
+        } else {
+            removal.count += 1;
+            removal.bytes = removal.bytes.saturating_add(entry_bytes);
+            if let Some(item) = item {
+                removal.items.push(item);
             }
         }
     }

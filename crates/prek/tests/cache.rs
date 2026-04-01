@@ -3,6 +3,7 @@ use assert_fs::fixture::{ChildPath, PathChild, PathCreateDir};
 use assert_fs::prelude::FileWriteStr;
 use prek_consts::PRE_COMMIT_CONFIG_YAML;
 use serde_json::json;
+use std::time::{Duration, SystemTime};
 
 use crate::common::{TestContext, cmd_snapshot};
 
@@ -561,6 +562,64 @@ fn cache_gc_keeps_local_hook_env() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn cache_gc_removes_stale_patch_files() -> anyhow::Result<()> {
+    let context = TestContext::new();
+
+    context.write_pre_commit_config("repos: []\n");
+
+    let home = context.home_dir();
+    let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
+    write_config_tracking_file(home, &[config_path.path()])?;
+
+    let old_patch = home.child("patches/old.patch");
+    let recent_patch = home.child("patches/recent.patch");
+
+    write_patch_file(
+        &old_patch,
+        "old patch\n",
+        SystemTime::now() - Duration::from_secs(60 * 24 * 60 * 60),
+    )?;
+    write_patch_file(
+        &recent_patch,
+        "recent patch\n",
+        SystemTime::now() - Duration::from_secs(24 * 60 * 60),
+    )?;
+
+    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "-v", "--dry-run"]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Would remove 1 patch file ([SIZE])
+
+    Would remove 1 patch file:
+    - old.patch
+      path: [HOME]/patches/old.patch
+
+    ----- stderr -----
+    ");
+    old_patch.assert(predicates::path::is_file());
+    recent_patch.assert(predicates::path::is_file());
+
+    cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "-v"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed 1 patch file ([SIZE])
+
+    Removed 1 patch file:
+    - old.patch
+      path: [HOME]/patches/old.patch
+
+    ----- stderr -----
+    ");
+
+    old_patch.assert(predicates::path::missing());
+    recent_patch.assert(predicates::path::is_file());
+
+    Ok(())
+}
+
 fn write_config_tracking_file(
     home: &ChildPath,
     configs: &[&std::path::Path],
@@ -571,6 +630,17 @@ fn write_config_tracking_file(
         .collect();
     let content = serde_json::to_string_pretty(&configs)?;
     home.child("config-tracking.json").write_str(&content)?;
+    Ok(())
+}
+
+fn write_patch_file(path: &ChildPath, content: &str, modified: SystemTime) -> anyhow::Result<()> {
+    let parent = path.path().parent().expect("patch file has parent");
+    fs_err::create_dir_all(parent)?;
+    fs_err::write(path.path(), content)?;
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(path.path())?
+        .set_modified(modified)?;
     Ok(())
 }
 
@@ -681,7 +751,7 @@ fn cache_gc_drops_missing_tracked_config() -> anyhow::Result<()> {
     let tracked: Vec<String> = serde_json::from_str(&content)?;
     assert!(tracked.is_empty());
 
-    // Scratch and patches are always cleared when GC runs.
+    // Scratch is always cleared. Patch directories remain unless they contain stale patch files.
     home.child("scratch").assert(predicates::path::missing());
     home.child("patches").assert(predicates::path::is_dir());
 
