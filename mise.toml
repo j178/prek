@@ -65,7 +65,7 @@ run = [
 [tasks.compile-docs-deps]
 # Python version should match PYTHON_VERSION in .github/workflows/publish-docs.yml
 description = "Compile documentation dependencies"
-run = "uv pip compile docs/requirements.in --universal -o docs/requirements.txt --python 3.14"
+run = "uv pip compile docs/requirements.in --universal --upgrade -o docs/requirements.txt --python 3.14"
 
 [tasks.update-macports]
 description = "Update MacPorts portfile"
