@@ -33,8 +33,11 @@ use tracing::{debug, error, info, trace};
 
 use crate::cli::reporter;
 
-pub static CWD: LazyLock<PathBuf> =
-    LazyLock::new(|| std::env::current_dir().expect("The current directory must be exist"));
+pub static CWD: LazyLock<PathBuf> = LazyLock::new(|| {
+    std::env::current_dir()
+        .map(|cwd| dunce::canonicalize(&cwd).unwrap_or(cwd))
+        .expect("The current directory must be exist")
+});
 
 static IN_PROCESS_LOCK_HELD_COUNTS: LazyLock<Mutex<FxHashMap<PathBuf, usize>>> =
     LazyLock::new(Default::default);
