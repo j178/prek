@@ -31,7 +31,7 @@ fn ensure_patches_dir(path: &Path) -> Result<()> {
         use std::os::unix::fs::PermissionsExt;
 
         // Patch files can contain unstaged source diffs, so keep the directory owner-only.
-        fs_err::set_permissions(path, Permissions::from_mode(0o700))?;
+        let _ = fs_err::set_permissions(path, Permissions::from_mode(0o700));
     }
 
     Ok(())
