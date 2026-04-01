@@ -22,6 +22,21 @@ struct WorkingTreeKeeper {
     patch: Option<PathBuf>,
 }
 
+fn ensure_patches_dir(path: &Path) -> Result<()> {
+    fs_err::create_dir_all(path)?;
+
+    #[cfg(unix)]
+    {
+        use std::fs::Permissions;
+        use std::os::unix::fs::PermissionsExt;
+
+        // Patch files can contain unstaged source diffs, so keep the directory owner-only.
+        let _ = fs_err::set_permissions(path, Permissions::from_mode(0o700));
+    }
+
+    Ok(())
+}
+
 impl IntentToAddKeeper {
     async fn clean(root: &Path) -> Result<Self> {
         let files = git::intent_to_add_files(root).await?;
@@ -114,6 +129,7 @@ impl WorkingTreeKeeper {
                     now.duration_since(std::time::UNIX_EPOCH)?.as_millis(),
                     pid
                 );
+                ensure_patches_dir(patch_dir)?;
                 let patch_path = patch_dir.join(&patch_name);
 
                 debug!("Unstaged changes detected");
@@ -126,7 +142,6 @@ impl WorkingTreeKeeper {
                     .yellow()
                     .bold()
                 );
-                fs_err::create_dir_all(patch_dir)?;
                 fs_err::write(&patch_path, output.stdout)?;
 
                 // Clean the working tree
