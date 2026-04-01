@@ -113,7 +113,7 @@ jobs:
       - name: "rustfmt"
         run: cargo fmt --all --check
       - name: Run prek checks
-        uses: j178/prek-action@79f765515bd648eb4d6bb1b17277b7cb22cb6468 # v2.0.0
+        uses: j178/prek-action@53276d8b0d10f8b6672aa85b4588c6921d0370cc # v2.0.1
         env:
           PREK_SKIP: cargo-fmt,cargo-clippy
 
@@ -150,7 +150,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
@@ -178,7 +178,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: ${{ env.PREK_WORKSPACE }}
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
@@ -201,7 +201,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
+        uses: taiki-e/install-action@7627fb428e65e78e2ec9a24ae5c5bd5f8553f182 # v2.69.10
         with:
           tool: cargo-shear
       - run: cargo shear
@@ -217,7 +217,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
@@ -225,12 +225,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
+        uses: taiki-e/install-action@7627fb428e65e78e2ec9a24ae5c5bd5f8553f182 # v2.69.10
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
+        uses: taiki-e/install-action@7627fb428e65e78e2ec9a24ae5c5bd5f8553f182 # v2.69.10
         with:
           tool: cargo-llvm-cov
 
@@ -258,7 +258,7 @@ jobs:
           cargo llvm-cov report --profile fast-build --lcov --output-path lcov.info
 
       - name: "Upload coverage reports to Codecov"
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5.5.3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
@@ -281,7 +281,7 @@ jobs:
           persist-credentials: false
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
         if: ${{ matrix.os == 'ubuntu-latest' }}
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
@@ -289,17 +289,17 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
+        uses: taiki-e/install-action@7627fb428e65e78e2ec9a24ae5c5bd5f8553f182 # v2.69.10
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
+        uses: taiki-e/install-action@7627fb428e65e78e2ec9a24ae5c5bd5f8553f182 # v2.69.10
         with:
           tool: cargo-llvm-cov
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@6ee6290f1cbc4156c0bdd66691b2c144ef8df19a # v7.4.0
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           version: ${{ env.UV_VERSION }}
 
@@ -319,7 +319,7 @@ jobs:
             --features schemars
 
       - name: "Upload coverage reports to Codecov"
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5.5.3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
@@ -343,7 +343,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: ${{ env.PREK_WORKSPACE }}
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
@@ -352,17 +352,17 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
+        uses: taiki-e/install-action@7627fb428e65e78e2ec9a24ae5c5bd5f8553f182 # v2.69.10
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
+        uses: taiki-e/install-action@7627fb428e65e78e2ec9a24ae5c5bd5f8553f182 # v2.69.10
         with:
           tool: cargo-llvm-cov
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@6ee6290f1cbc4156c0bdd66691b2c144ef8df19a # v7.4.0
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           version: ${{ env.UV_VERSION }}
           cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
@@ -392,7 +392,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: "Upload coverage reports to Codecov"
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5.5.3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ${{ env.PREK_WORKSPACE }}/lcov.info
@@ -444,7 +444,7 @@ jobs:
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
         if: ${{ matrix.os == 'ubuntu-latest' }}
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
@@ -452,12 +452,12 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
+        uses: taiki-e/install-action@7627fb428e65e78e2ec9a24ae5c5bd5f8553f182 # v2.69.10
         with:
           tool: cargo-nextest
 
       - name: "Install cargo-llvm-cov"
-        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
+        uses: taiki-e/install-action@7627fb428e65e78e2ec9a24ae5c5bd5f8553f182 # v2.69.10
         with:
           tool: cargo-llvm-cov
 
@@ -466,7 +466,7 @@ jobs:
 
       - name: "Install uv"
         if: ${{ matrix.language == 'python' }}
-        uses: astral-sh/setup-uv@6ee6290f1cbc4156c0bdd66691b2c144ef8df19a # v7.4.0
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           version: ${{ env.UV_VERSION }}
 
@@ -487,7 +487,7 @@ jobs:
 
       - name: "Install Go"
         if: ${{ matrix.language == 'golang' }}
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version: ${{ env.GO_VERSION }}
           # Dummy dependency path to satisfy required input while enabling caching
@@ -507,19 +507,19 @@ jobs:
 
       - name: "Install Ruby"
         if: ${{ matrix.language == 'ruby' }}
-        uses: ruby/setup-ruby@6ca151fd1bfcfd6fe0c4eb6837eb0584d0134a0c # v1.290.0
+        uses: ruby/setup-ruby@319994f95fa847cf3fb3cd3dbe89f6dcde9f178f # v1.295.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
 
       - name: "Install Bun"
         if: ${{ matrix.language == 'bun' }}
-        uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461 # v2.1.3
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: "Install Deno"
         if: ${{ matrix.language == 'deno' }}
-        uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
+        uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
         with:
           deno-version: ${{ env.DENO_VERSION }}
 
@@ -577,7 +577,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: "Upload coverage reports to Codecov"
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5.5.3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
@@ -609,7 +609,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
@@ -638,7 +638,7 @@ jobs:
           MSRV: ${{ steps.msrv.outputs.value }}
       - name: "Install mold"
         uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
       - run: cargo +${MSRV} build --profile no-debug --bin prek
@@ -659,7 +659,7 @@ jobs:
 
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
@@ -685,7 +685,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
 
@@ -719,7 +719,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: ${{ env.PREK_WORKSPACE }}
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}

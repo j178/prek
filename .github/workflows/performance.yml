@@ -32,10 +32,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-      - uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
+      - uses: taiki-e/install-action@7627fb428e65e78e2ec9a24ae5c5bd5f8553f182 # v2.69.10
         with:
           tool: cargo-bloat
 
@@ -128,12 +128,12 @@ jobs:
           mkdir -p "$HYPERFINE_BIN_DIR"
           echo "$HYPERFINE_BIN_DIR" >> "$GITHUB_PATH"
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - id: base-binary-cache
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ env.HYPERFINE_BIN_DIR }}/${{ env.HYPERFINE_BASE_BINARY }}
           key: prek-hyperfine-base-${{ github.event.pull_request.base.sha }}-${{ hashFiles('Cargo.lock') }}-${{ runner.os }}-${{ runner.arch }}
@@ -152,7 +152,7 @@ jobs:
           cargo build --profile profiling && mv target/profiling/prek "$HYPERFINE_BIN_DIR/$HYPERFINE_HEAD_BINARY"
 
       - name: Install hyperfine
-        uses: taiki-e/install-action@64c5c20c872907b6f7cd50994ac189e7274160f2 # v2.68.26
+        uses: taiki-e/install-action@7627fb428e65e78e2ec9a24ae5c5bd5f8553f182 # v2.69.10
         with:
           tool: hyperfine
 
