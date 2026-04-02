@@ -110,6 +110,7 @@ fn setup_logging(level: Level, log_file: LogFile, store: &Store) -> Result<()> {
         .with_span_events(FmtSpan::CLOSE)
         .event_format(stderr_format)
         .with_writer(anstream::stderr)
+        .with_ansi_sanitization(false)
         .with_filter(stderr_filter);
 
     let registry = tracing_subscriber::registry().with(stderr_layer);
