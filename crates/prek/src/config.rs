@@ -850,6 +850,9 @@ pub(crate) struct RemoteRepo {
     #[cfg_attr(feature = "schemars", schemars(schema_with = "schema_repo_remote"))]
     pub repo: String,
     pub rev: String,
+    /// Pin the repository at its current revision, skipping it during `auto-update`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pin: Option<bool>,
     #[serde(skip_serializing)]
     pub hooks: Vec<RemoteHook>,
 
@@ -862,6 +865,7 @@ impl RemoteRepo {
         Self {
             repo,
             rev,
+            pin: None,
             hooks,
             _unused_keys: BTreeMap::new(),
         }
@@ -969,6 +973,7 @@ impl<'de> Deserialize<'de> for Repo {
 
                 let mut repo: Option<String> = None;
                 let mut rev: Option<String> = None;
+                let mut pin: Option<bool> = None;
                 let mut hooks: Option<HooksValue> = None;
                 let mut unused = BTreeMap::new();
 
@@ -980,6 +985,9 @@ impl<'de> Deserialize<'de> for Repo {
                         }
                         "rev" => {
                             rev = Some(map.next_value()?);
+                        }
+                        "pin" => {
+                            pin = Some(map.next_value()?);
                         }
                         "hooks" => {
                             hooks = Some(match repo.as_deref() {
@@ -1070,6 +1078,7 @@ impl<'de> Deserialize<'de> for Repo {
                         Ok(Repo::Remote(RemoteRepo {
                             repo: repo_value,
                             rev,
+                            pin,
                             hooks,
                             _unused_keys: unused,
                         }))
