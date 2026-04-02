@@ -511,14 +511,14 @@ fn auto_update_freeze() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r" [a-f0-9]{40}", r" [COMMIT_SHA]")])
+        .chain([(r"[a-f0-9]{40}", r"[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
     cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("0"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/freeze-repo] updating v1.0.0 -> [COMMIT_SHA]
+    [[HOME]/test-repos/freeze-repo] updating v1.0.0 -> v1.1.0@[COMMIT_SHA]
 
     ----- stderr -----
     ");
@@ -706,7 +706,7 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/frozen-repo] updating [COMMIT_SHA] -> v1.2.0
+    [[HOME]/test-repos/frozen-repo] updating v1.0.0@[COMMIT_SHA] -> v1.2.0
 
     ----- stderr -----
     "#);
@@ -1312,7 +1312,7 @@ fn auto_update_freeze_toml() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/freeze-repo] updating v1.0.0 -> [COMMIT_SHA]
+    [[HOME]/test-repos/freeze-repo] updating v1.0.0 -> v1.1.0@[COMMIT_SHA]
 
     ----- stderr -----
     ");
@@ -1545,7 +1545,7 @@ fn auto_update_freeze_toml_with_comment() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/freeze-repo] updating v1.0.0 -> [COMMIT_SHA]
+    [[HOME]/test-repos/freeze-repo] updating v1.0.0 -> v1.1.0@[COMMIT_SHA]
 
     ----- stderr -----
     ");

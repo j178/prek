@@ -33,6 +33,15 @@ struct Revision {
     frozen: Option<String>,
 }
 
+impl Revision {
+    fn display_rev(&self) -> String {
+        match &self.frozen {
+            Some(rev) => format!("{rev}@{}", self.rev),
+            None => self.rev.clone(),
+        }
+    }
+}
+
 pub(crate) async fn auto_update(
     store: &Store,
     config: Option<PathBuf>,
@@ -54,6 +63,9 @@ pub(crate) async fn auto_update(
     // TODO: support selectors?
     let selectors = Selectors::default();
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), true)?;
+
+    // Parse `# frozen: <rev>` comments from config files to display old revs
+    let frozen_revs = parse_frozen_comments(&workspace);
 
     // Collect repos and deduplicate by RemoteRepo
     #[allow(clippy::mutable_key_type)]
@@ -129,12 +141,16 @@ pub(crate) async fn auto_update(
                 let is_changed = remote_repo.rev != new_rev.rev;
 
                 if is_changed {
+                    let old = Revision {
+                        rev: remote_repo.rev.clone(),
+                        frozen: frozen_revs.get(&remote_repo.rev).cloned(),
+                    };
                     writeln!(
                         printer.stdout(),
                         "[{}] updating {} -> {}",
                         remote_repo.repo.as_str().cyan(),
-                        remote_repo.rev,
-                        new_rev.rev
+                        old.display_rev(),
+                        new_rev.display_rev()
                     )?;
                 } else {
                     writeln!(
@@ -473,6 +489,25 @@ async fn get_best_candidate_tag(repo: &Path, rev: &str, current_rev: &str) -> Re
         .next()
         .map(ToString::to_string)
         .with_context(|| format!("No tags found for revision {rev}"))
+}
+
+/// Parse `# frozen: <rev>` comments from config files, returning a map from SHA to rev name.
+fn parse_frozen_comments(workspace: &Workspace) -> FxHashMap<String, String> {
+    let rev_re = regex!(r#"^\s*rev\b\s*[:=]\s*['"]?([a-f0-9]{40})['"]?\s*#\s*frozen:\s*(\S+)"#);
+    let mut map = FxHashMap::default();
+
+    for project in workspace.projects() {
+        let Ok(content) = fs_err::read_to_string(project.config_file()) else {
+            continue;
+        };
+        for line in content.lines() {
+            if let Some(caps) = rev_re.captures(line) {
+                map.insert(caps[1].to_string(), caps[2].to_string());
+            }
+        }
+    }
+
+    map
 }
 
 async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result<()> {
