@@ -225,7 +225,10 @@ pub(crate) struct GlobalArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Install prek Git shims under the `.git/hooks/` directory.
+    /// Install prek Git shims into Git's effective hooks directory.
+    ///
+    /// By default this is `.git/hooks/`, but repo-local or worktree-local
+    /// `core.hooksPath` is honored when set.
     ///
     /// The Git shims installed by this command are determined by `--hook-type`
     /// or `default_install_hook_types` in the config file, falling back to
@@ -268,7 +271,7 @@ pub(crate) enum Command {
     InitTemplateDir(InitTemplateDirArgs),
     /// Try the pre-commit hooks in the current repo.
     TryRepo(Box<TryRepoArgs>),
-    /// The implementation of the prek Git shim that is installed in the `.git/hooks/` directory.
+    /// The implementation of the prek Git shim that is installed in Git's effective hooks directory.
     #[command(hide = true)]
     HookImpl(HookImplArgs),
     /// Utility commands.
@@ -340,10 +343,9 @@ pub(crate) struct InstallArgs {
     /// Install Git shims into the `hooks` subdirectory of the given git directory (`<GIT_DIR>/hooks/`).
     ///
     /// When this flag is used, `prek install` bypasses the safety check that normally
-    /// refuses to install shims while `core.hooksPath` is set. Git itself will still
-    /// ignore `.git/hooks` while `core.hooksPath` is configured, so ensure your Git
-    /// configuration points to the directory where the shim is installed if you want
-    /// it to be executed.
+    /// refuses to install shims while `core.hooksPath` is configured outside the repo.
+    /// It only writes shims to `<GIT_DIR>/hooks`; Git will keep using
+    /// `core.hooksPath` until that config changes.
     #[arg(long, value_name = "GIT_DIR", value_hint = ValueHint::DirPath)]
     pub(crate) git_dir: Option<PathBuf>,
 }
@@ -402,6 +404,15 @@ pub(crate) struct UninstallArgs {
     /// Use `--all` to remove all prek-managed hooks.
     #[arg(short = 't', long = "hook-type", value_name = "HOOK_TYPE", value_enum)]
     pub(crate) hook_types: Vec<HookType>,
+
+    /// Uninstall Git shims from the `hooks` subdirectory of the given git directory (`<GIT_DIR>/hooks/`).
+    ///
+    /// When this flag is used, `prek uninstall` bypasses the safety check that normally
+    /// refuses to modify shims while `core.hooksPath` is configured outside the repo.
+    /// It only removes shims from `<GIT_DIR>/hooks`; Git may still use the configured
+    /// `core.hooksPath` until that config changes.
+    #[arg(long, value_name = "GIT_DIR", value_hint = ValueHint::DirPath)]
+    pub(crate) git_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Default, Args)]
