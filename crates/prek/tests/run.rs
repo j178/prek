@@ -2370,7 +2370,7 @@ fn selectors_completion() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    install	Install prek Git shims under the `.git/hooks/` directory
+    install	Install prek Git shims into Git's effective hooks directory
     prepare-hooks	Prepare environments for all hooks used in the config file
     run	Run hooks
     list	List hooks configured in the current workspace

@@ -12,7 +12,7 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="#prek-install"><code>prek install</code></a></dt><dd><p>Install prek Git shims under the <code>.git/hooks/</code> directory</p></dd>
+<dl class="cli-reference"><dt><a href="#prek-install"><code>prek install</code></a></dt><dd><p>Install prek Git shims into Git's effective hooks directory</p></dd>
 <dt><a href="#prek-prepare-hooks"><code>prek prepare-hooks</code></a></dt><dd><p>Prepare environments for all hooks used in the config file</p></dd>
 <dt><a href="#prek-run"><code>prek run</code></a></dt><dd><p>Run hooks</p></dd>
 <dt><a href="#prek-list"><code>prek list</code></a></dt><dd><p>List hooks configured in the current workspace</p></dd>
@@ -29,7 +29,9 @@ prek [OPTIONS] [HOOK|PROJECT]... [COMMAND]
 
 ## prek install
 
-Install prek Git shims under the `.git/hooks/` directory.
+Install prek Git shims into Git's effective hooks directory.
+
+By default this is `.git/hooks/`, but repo-local or worktree-local `core.hooksPath` is honored when set.
 
 The Git shims installed by this command are determined by `--hook-type` or `default_install_hook_types` in the config file, falling back to `pre-commit` when neither is set.
 
@@ -71,7 +73,7 @@ prek install [OPTIONS] [HOOK|PROJECT]...
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-install--config"><a href="#prek-install--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
 </dd><dt id="prek-install--git-dir"><a href="#prek-install--git-dir"><code>--git-dir</code></a> <i>git-dir</i></dt><dd><p>Install Git shims into the <code>hooks</code> subdirectory of the given git directory (<code>&lt;GIT_DIR&gt;/hooks/</code>).</p>
-<p>When this flag is used, <code>prek install</code> bypasses the safety check that normally refuses to install shims while <code>core.hooksPath</code> is set. Git itself will still ignore <code>.git/hooks</code> while <code>core.hooksPath</code> is configured, so ensure your Git configuration points to the directory where the shim is installed if you want it to be executed.</p>
+<p>When this flag is used, <code>prek install</code> bypasses the safety check that normally refuses to install shims while <code>core.hooksPath</code> is configured outside the repo. It only writes shims to <code>&lt;GIT_DIR&gt;/hooks</code>; Git will keep using <code>core.hooksPath</code> until that config changes.</p>
 </dd><dt id="prek-install--help"><a href="#prek-install--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-install--hook-type"><a href="#prek-install--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which Git shim(s) to install.</p>
 <p>Specifies which Git hook type(s) you want to install shims for. Can be specified multiple times to install shims for multiple hook types.</p>
@@ -398,6 +400,8 @@ prek uninstall [OPTIONS]
 <li><code>always</code>:  Enables colored output regardless of the detected environment</li>
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="prek-uninstall--config"><a href="#prek-uninstall--config"><code>--config</code></a>, <code>-c</code> <i>config</i></dt><dd><p>Path to alternate config file</p>
+</dd><dt id="prek-uninstall--git-dir"><a href="#prek-uninstall--git-dir"><code>--git-dir</code></a> <i>git-dir</i></dt><dd><p>Uninstall Git shims from the <code>hooks</code> subdirectory of the given git directory (<code>&lt;GIT_DIR&gt;/hooks/</code>).</p>
+<p>When this flag is used, <code>prek uninstall</code> bypasses the safety check that normally refuses to modify shims while <code>core.hooksPath</code> is configured outside the repo. It only removes shims from <code>&lt;GIT_DIR&gt;/hooks</code>; Git may still use the configured <code>core.hooksPath</code> until that config changes.</p>
 </dd><dt id="prek-uninstall--help"><a href="#prek-uninstall--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-uninstall--hook-type"><a href="#prek-uninstall--hook-type"><code>--hook-type</code></a>, <code>-t</code> <i>hook-type</i></dt><dd><p>Which Git shim(s) to uninstall.</p>
 <p>Specifies which Git hook type(s) you want to uninstall shims for. Can be specified multiple times to uninstall shims for multiple hook types.</p>

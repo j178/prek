@@ -271,7 +271,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Command::Uninstall(args) => {
             show_settings!(args);
 
-            cli::uninstall(cli.globals.config, args.hook_types, args.all, printer).await
+            cli::uninstall(
+                cli.globals.config,
+                args.hook_types,
+                args.all,
+                printer,
+                args.git_dir.as_deref(),
+            )
+            .await
         }
         Command::Run(args) => {
             show_settings!(args);
