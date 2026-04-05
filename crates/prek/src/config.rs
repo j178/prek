@@ -1330,7 +1330,7 @@ pub(crate) fn read_manifest(path: &Path) -> Result<Manifest, Error> {
 }
 
 /// Check if a string looks like a git SHA
-fn looks_like_sha(s: &str) -> bool {
+pub(crate) fn looks_like_sha(s: &str) -> bool {
     !s.is_empty() && s.as_bytes().iter().all(u8::is_ascii_hexdigit)
 }
 

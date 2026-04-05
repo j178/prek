@@ -709,6 +709,13 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
     [[HOME]/test-repos/frozen-repo] updating [COMMIT_SHA] -> v1.2.0
 
     ----- stderr -----
+    warning: [[HOME]/test-repos/frozen-repo] `# frozen:` comment does not match `rev: [COMMIT_SHA]`
+      ╭▸ .pre-commit-config.yaml:3:62
+      │
+    3 │     rev: [COMMIT_SHA]  # frozen: v1.0.0
+      │                                                              ━━━━━━ `v1.0.0` resolves to a different commit
+      │
+      ╰ note: no tag points at the configured commit
     "#);
 
     insta::with_settings!(
@@ -720,6 +727,195 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
                 rev: v1.2.0
                 hooks:
                   - id: test-hook
+            "#);
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_updates_mismatched_frozen_comment() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(&context, "check-frozen-repo", &["v1.0.0", "v1.1.0"])?;
+
+    let commit_sha = git_cmd(&repo_path)
+        .args(["rev-parse", "v1.1.0^{}"])
+        .output()?
+        .stdout;
+    let commit_sha = str::from_utf8(&commit_sha)?.trim().to_string();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: {}  # frozen: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path, commit_sha});
+
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(commit_sha.as_str(), "[COMMIT_SHA]")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/check-frozen-repo] updating frozen reference v1.0.0 -> v1.1.0 in .pre-commit-config.yaml
+
+    ----- stderr -----
+    warning: [[HOME]/test-repos/check-frozen-repo] `# frozen:` comment does not match `rev: [COMMIT_SHA]`
+      ╭▸ .pre-commit-config.yaml:3:62
+      │
+    3 │     rev: [COMMIT_SHA]  # frozen: v1.0.0
+      │                                                              ━━━━━━ `v1.0.0` resolves to a different commit
+      │
+      ╰ note: updating comment to `v1.1.0`
+    "#);
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            repos:
+              - repo: [HOME]/test-repos/check-frozen-repo
+                rev: [COMMIT_SHA]  # frozen: v1.1.0
+                hooks:
+                  - id: test-hook
+            "#);
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path =
+        create_local_git_repo(&context, "check-frozen-dry-run-repo", &["v1.0.0", "v1.1.0"])?;
+
+    let commit_sha = git_cmd(&repo_path)
+        .args(["rev-parse", "v1.1.0^{}"])
+        .output()?
+        .stdout;
+    let commit_sha = str::from_utf8(&commit_sha)?.trim().to_string();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: {}  # frozen: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path, commit_sha});
+
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(commit_sha.as_str(), "[COMMIT_SHA]")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--dry-run"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: [[HOME]/test-repos/check-frozen-dry-run-repo] `# frozen:` comment does not match `rev: [COMMIT_SHA]`
+      ╭▸ .pre-commit-config.yaml:3:62
+      │
+    3 │     rev: [COMMIT_SHA]  # frozen: v1.0.0
+      │                                                              ━━━━━━ `v1.0.0` resolves to a different commit
+      │
+      ╰ note: would update comment to `v1.1.0`
+    "#);
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            repos:
+              - repo: [HOME]/test-repos/check-frozen-dry-run-repo
+                rev: [COMMIT_SHA]  # frozen: v1.0.0
+                hooks:
+                  - id: test-hook
+            "#);
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_updates_mismatched_frozen_comment_toml() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path =
+        create_local_git_repo(&context, "check-frozen-repo-toml", &["v1.0.0", "v1.1.0"])?;
+
+    let commit_sha = git_cmd(&repo_path)
+        .args(["rev-parse", "v1.1.0^{}"])
+        .output()?
+        .stdout;
+    let commit_sha = str::from_utf8(&commit_sha)?.trim().to_string();
+
+    context
+        .work_dir()
+        .child(PREK_TOML)
+        .write_str(&indoc::formatdoc! {r#"
+        [[repos]]
+        repo = "{}"
+        rev = "{}" # frozen: v1.0.0
+        hooks = [
+          {{ id = "test-hook" }},
+        ]
+        "#, repo_path.replace('\\', "/"), commit_sha})?;
+
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(commit_sha.as_str(), "[COMMIT_SHA]")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/check-frozen-repo-toml] updating frozen reference v1.0.0 -> v1.1.0 in prek.toml
+
+    ----- stderr -----
+    warning: [[HOME]/test-repos/check-frozen-repo-toml] `# frozen:` comment does not match `rev: [COMMIT_SHA]`
+      ╭▸ prek.toml:3:60
+      │
+    3 │ rev = "[COMMIT_SHA]" # frozen: v1.0.0
+      │                                                            ━━━━━━ `v1.0.0` resolves to a different commit
+      │
+      ╰ note: updating comment to `v1.1.0`
+    "#);
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PREK_TOML), @r#"
+            [[repos]]
+            repo = "[HOME]/test-repos/check-frozen-repo-toml"
+            rev = "[COMMIT_SHA]" # frozen: v1.1.0
+            hooks = [
+              { id = "test-hook" },
+            ]
             "#);
         }
     );
@@ -1039,7 +1235,7 @@ fn auto_update_dry_run() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/test-repo] updating v1.0.0 -> v2.0.0
+    [[HOME]/test-repos/test-repo] would update v1.0.0 -> v2.0.0
 
     ----- stderr -----
     "#);
