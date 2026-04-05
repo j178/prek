@@ -2112,6 +2112,7 @@ name = "prek"
 version = "0.3.8"
 dependencies = [
  "aho-corasick",
+ "annotate-snippets",
  "anstream",
  "anstyle-query",
  "anyhow",

@@ -1,8 +1,12 @@
+#![allow(clippy::mutable_key_type)]
+
 use std::fmt::Write;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use annotate_snippets::{AnnotationKind, Level, Renderer, Snippet, renderer::DecorStyle};
 use anyhow::{Context, Result};
 use futures::StreamExt;
 use itertools::Itertools;
@@ -13,12 +17,12 @@ use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use semver::Version;
 use toml_edit::DocumentMut;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use crate::cli::ExitStatus;
 use crate::cli::reporter::AutoUpdateReporter;
 use crate::cli::run::Selectors;
-use crate::config::{RemoteRepo, Repo};
+use crate::config::{RemoteRepo, Repo, looks_like_sha};
 use crate::fs::{CWD, Simplified};
 use crate::printer::Printer;
 use crate::run::CONCURRENCY;
@@ -27,12 +31,156 @@ use crate::workspace::{Project, Workspace};
 use crate::yaml::serialize_yaml_scalar;
 use crate::{config, git};
 
+/// The `rev` value to write back to config, plus an optional `# frozen:` comment.
 #[derive(Default, Clone)]
 struct Revision {
+    /// The resolved revision string to store in `rev`.
     rev: String,
+    /// The tag-like reference to preserve in a `# frozen:` comment.
     frozen: Option<String>,
 }
 
+/// One occurrence of a remote repo in a project config file.
+struct RepoUsage<'a> {
+    /// The project whose config contains this repo entry.
+    project: &'a Project,
+    /// The number of remote repos in that project config.
+    remote_size: usize,
+    /// The position of this remote repo among the project's remote repos.
+    remote_index: usize,
+    /// The existing `# frozen:` comment for this repo entry, if present.
+    current_frozen: Option<String>,
+    /// The source location of the existing `# frozen:` comment, if present.
+    current_frozen_site: Option<FrozenCommentSite>,
+}
+
+/// The outcome of resolving a repo during `auto-update`.
+struct RepoUpdate {
+    /// The revision data that may be written back to config.
+    revision: Revision,
+    /// Data used to check whether existing frozen comments still match a SHA `rev`.
+    frozen_comment_context: Option<FrozenCommentContext>,
+}
+
+/// Cached data for checking whether existing `# frozen:` comments still match a SHA `rev`.
+struct FrozenCommentContext {
+    /// The commit pointed to by the current SHA `rev`.
+    rev_commit: String,
+    /// Tags that point at `rev_commit`.
+    rev_tags: Vec<String>,
+    /// Pre-resolved commit SHAs for every frozen reference found in config.
+    resolved_frozen_refs: FxHashMap<String, Option<String>>,
+}
+
+/// The action to take when a `# frozen:` comment no longer matches a SHA `rev`.
+enum FrozenMismatch {
+    /// Rewrite the comment to this replacement tag.
+    ReplaceWith(String),
+    /// Warn only because no tag points at the configured commit.
+    NoReplacement,
+}
+
+/// One stale `# frozen:` comment found for a specific repo entry.
+struct FrozenCommentMismatch<'a> {
+    /// The project config that contains this stale comment.
+    project: &'a Project,
+    /// The number of remote repos in that project config.
+    remote_size: usize,
+    /// The position of this remote repo among the project's remote repos.
+    remote_index: usize,
+    /// The current `# frozen:` reference string from config.
+    current_frozen: String,
+    /// The source location of the current `# frozen:` comment.
+    frozen_site: Option<FrozenCommentSite>,
+    /// The action to take for this stale comment.
+    mismatch: FrozenMismatch,
+}
+
+/// The source location of a `# frozen:` comment value within a config line.
+#[derive(Clone)]
+struct FrozenCommentSite {
+    /// The 1-based line number in the config file.
+    line_number: usize,
+    /// The full source line that contains the `# frozen:` comment.
+    source_line: String,
+    /// The byte range of the frozen reference value within `source_line`.
+    span: Range<usize>,
+}
+
+/// Parsed frozen-comment metadata for one `rev` entry in config.
+#[derive(Clone)]
+struct FrozenRef {
+    /// The parsed frozen reference value, if the `rev` line has one.
+    current_frozen: Option<String>,
+    /// The source location of that frozen reference value, if present.
+    site: Option<FrozenCommentSite>,
+}
+
+/// A tag reference with the metadata needed for cooldown selection and SHA matching.
+struct TagTimestamp {
+    /// The tag name without the `refs/tags/` prefix.
+    tag: String,
+    /// The tag timestamp used for cooldown ordering.
+    timestamp: u64,
+    /// The peeled commit SHA the tag ultimately points at.
+    commit: String,
+}
+
+/// One remote repository URL with all distinct configured revisions that reference it.
+struct RepoGroup<'a> {
+    /// The remote repository URL.
+    repo: &'a str,
+    /// Distinct `repo + rev` entries that should be evaluated against this fetched repo.
+    remote_repos: Vec<&'a RemoteRepo>,
+}
+
+/// Indexed workspace data needed for auto-update.
+struct RepoIndex<'a> {
+    /// Config entries grouped by exact `repo + rev`.
+    repo_usages: FxHashMap<&'a RemoteRepo, Vec<RepoUsage<'a>>>,
+    /// Distinct remote repository URLs, each with the revisions that use it.
+    repo_groups: Vec<RepoGroup<'a>>,
+}
+
+/// The full outcome for one configured `repo + rev` entry.
+struct RepoOutcome<'a> {
+    /// The exact config repo entry being evaluated.
+    remote_repo: &'a RemoteRepo,
+    /// All config usages that share this exact `repo + rev`.
+    usages: &'a [RepoUsage<'a>],
+    /// The computed update result for this `repo + rev`.
+    result: Result<RepoUpdate>,
+    /// Any stale `# frozen:` comments found for these usages.
+    frozen_mismatches: Vec<FrozenCommentMismatch<'a>>,
+}
+
+/// Pending config mutations grouped by project config file.
+type ProjectUpdates<'a> = FxHashMap<&'a Project, Vec<Option<Revision>>>;
+
+impl FrozenCommentContext {
+    /// Returns the replacement `# frozen:` tag when the current one no longer matches the SHA.
+    fn mismatch_replacement(&self, current_frozen: &str) -> Option<FrozenMismatch> {
+        let frozen_commit = self
+            .resolved_frozen_refs
+            .get(current_frozen)
+            .cloned()
+            .flatten();
+
+        if frozen_commit
+            .as_deref()
+            .is_some_and(|frozen_commit| revision_matches_commit(frozen_commit, &self.rev_commit))
+        {
+            None
+        } else {
+            Some(
+                select_best_tag(&self.rev_tags, current_frozen, true)
+                    .map_or(FrozenMismatch::NoReplacement, FrozenMismatch::ReplaceWith),
+            )
+        }
+    }
+}
+
+/// Updates remote repo revisions and, when possible, keeps existing `# frozen:` comments in sync.
 pub(crate) async fn auto_update(
     store: &Store,
     config: Option<PathBuf>,
@@ -44,20 +192,115 @@ pub(crate) async fn auto_update(
     cooldown_days: u8,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    struct RepoInfo<'a> {
-        project: &'a Project,
-        remote_size: usize,
-        remote_index: usize,
-    }
-
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     // TODO: support selectors?
     let selectors = Selectors::default();
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), true)?;
 
-    // Collect repos and deduplicate by RemoteRepo
-    #[allow(clippy::mutable_key_type)]
-    let mut repo_updates: FxHashMap<&RemoteRepo, Vec<RepoInfo>> = FxHashMap::default();
+    let repo_index = index_remote_repos(&workspace)?;
+    let jobs = if jobs == 0 { *CONCURRENCY } else { jobs };
+    let jobs = jobs
+        .min(if filter_repos.is_empty() {
+            repo_index.repo_groups.len()
+        } else {
+            filter_repos.len()
+        })
+        .max(1);
+
+    let reporter = AutoUpdateReporter::new(printer);
+    let mut outcomes = run_repo_updates(
+        &repo_index,
+        &filter_repos,
+        bleeding_edge,
+        freeze,
+        cooldown_days,
+        jobs,
+        &reporter,
+    )
+    .await;
+
+    reporter.on_complete();
+
+    // Sort outcomes by repository URL and revision for consistent output order.
+    outcomes.sort_by(|a, b| {
+        a.remote_repo
+            .repo
+            .cmp(&b.remote_repo.repo)
+            .then_with(|| a.remote_repo.rev.cmp(&b.remote_repo.rev))
+    });
+
+    warn_frozen_mismatches(&outcomes, dry_run, printer)?;
+
+    // Group results by project config file
+    let mut project_updates: ProjectUpdates<'_> = FxHashMap::default();
+    let failure = apply_repo_outcomes(outcomes, dry_run, printer, &mut project_updates)?;
+
+    if !dry_run {
+        for (project, revisions) in project_updates {
+            if revisions.iter().any(Option::is_some) {
+                write_new_config(project.config_file(), &revisions).await?;
+            }
+        }
+    }
+
+    if failure {
+        return Ok(ExitStatus::Failure);
+    }
+    Ok(ExitStatus::Success)
+}
+
+/// Builds the indexed workspace state used by auto-update.
+fn index_remote_repos(workspace: &Workspace) -> Result<RepoIndex<'_>> {
+    let repo_usages = collect_repo_usages(workspace)?;
+    let repo_groups = collect_repo_groups(&repo_usages);
+    Ok(RepoIndex {
+        repo_usages,
+        repo_groups,
+    })
+}
+
+/// Emits all frozen-comment warnings before the normal update output.
+fn warn_frozen_mismatches(
+    outcomes: &[RepoOutcome<'_>],
+    dry_run: bool,
+    printer: Printer,
+) -> Result<()> {
+    for outcome in outcomes {
+        for mismatch in &outcome.frozen_mismatches {
+            write!(
+                printer.stderr(),
+                "{}",
+                render_frozen_mismatch_warning(outcome.remote_repo, mismatch, dry_run)
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// Groups deduplicated `repo + rev` entries by remote repository URL.
+fn collect_repo_groups<'a>(
+    repo_usages: &FxHashMap<&'a RemoteRepo, Vec<RepoUsage<'a>>>,
+) -> Vec<RepoGroup<'a>> {
+    let mut repo_groups: FxHashMap<&'a str, Vec<&'a RemoteRepo>> = FxHashMap::default();
+
+    for remote_repo in repo_usages.keys() {
+        repo_groups
+            .entry(remote_repo.repo.as_str())
+            .or_default()
+            .push(*remote_repo);
+    }
+
+    repo_groups
+        .into_iter()
+        .map(|(repo, remote_repos)| RepoGroup { repo, remote_repos })
+        .collect()
+}
+
+/// Groups every remote repo in the workspace with the config entries that reference it.
+fn collect_repo_usages(
+    workspace: &Workspace,
+) -> Result<FxHashMap<&RemoteRepo, Vec<RepoUsage<'_>>>> {
+    let mut repo_usages: FxHashMap<&RemoteRepo, Vec<RepoUsage<'_>>> = FxHashMap::default();
 
     for project in workspace.projects() {
         let remote_size = project
@@ -67,96 +310,147 @@ pub(crate) async fn auto_update(
             .filter(|r| matches!(r, Repo::Remote(_)))
             .count();
 
+        let frozen_refs = read_frozen_refs(project.config_file()).with_context(|| {
+            format!(
+                "Failed to read frozen references from `{}`",
+                project.config_file().user_display()
+            )
+        })?;
+
+        if frozen_refs.len() != remote_size {
+            anyhow::bail!(
+                "Found {} remote repos in `{}` but {} `rev:` entries while checking frozen refs",
+                remote_size,
+                project.config_file().user_display(),
+                frozen_refs.len()
+            );
+        }
+
         let mut remote_index = 0;
         for repo in &project.config().repos {
             if let Repo::Remote(remote_repo) = repo {
-                let updates = repo_updates.entry(remote_repo).or_default();
-                updates.push(RepoInfo {
+                repo_usages.entry(remote_repo).or_default().push(RepoUsage {
                     project,
                     remote_size,
                     remote_index,
+                    current_frozen: frozen_refs[remote_index].current_frozen.clone(),
+                    current_frozen_site: frozen_refs[remote_index].site.clone(),
                 });
                 remote_index += 1;
             }
         }
     }
 
-    let jobs = if jobs == 0 { *CONCURRENCY } else { jobs };
-    let jobs = jobs
-        .min(if filter_repos.is_empty() {
-            repo_updates.len()
-        } else {
-            filter_repos.len()
+    Ok(repo_usages)
+}
+
+/// Runs repo update work in parallel, fetching each remote repository URL only once.
+async fn run_repo_updates<'a>(
+    repo_index: &'a RepoIndex<'a>,
+    filter_repos: &[String],
+    bleeding_edge: bool,
+    freeze: bool,
+    cooldown_days: u8,
+    jobs: usize,
+    reporter: &AutoUpdateReporter,
+) -> Vec<RepoOutcome<'a>> {
+    futures::stream::iter(repo_index.repo_groups.iter())
+        .filter(|repo_group| {
+            futures::future::ready(
+                filter_repos.is_empty() || filter_repos.iter().any(|repo| repo == repo_group.repo),
+            )
         })
-        .max(1);
+        .map(async |repo_group| {
+            let progress = reporter.on_update_start(repo_group.repo);
+            let results =
+                evaluate_repo_group(repo_group, repo_index, bleeding_edge, freeze, cooldown_days)
+                    .await;
+            reporter.on_update_complete(progress);
+            results
+        })
+        .buffer_unordered(jobs)
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .flatten()
+        .collect()
+}
 
-    let reporter = AutoUpdateReporter::new(printer);
-
-    let mut tasks = futures::stream::iter(repo_updates.iter().filter(|(remote_repo, _)| {
-        // Filter by user specified repositories
-        if filter_repos.is_empty() {
-            true
-        } else {
-            filter_repos.iter().any(|r| r == remote_repo.repo.as_str())
-        }
-    }))
-    .map(async |(remote_repo, _)| {
-        let progress = reporter.on_update_start(&remote_repo.to_string());
-
-        let result = update_repo(remote_repo, bleeding_edge, freeze, cooldown_days).await;
-
-        reporter.on_update_complete(progress);
-
-        (*remote_repo, result)
-    })
-    .buffer_unordered(jobs)
-    .collect::<Vec<_>>()
-    .await;
-
-    // Sort tasks by repository URL for consistent output order
-    tasks.sort_by(|(a, _), (b, _)| a.repo.cmp(&b.repo));
-
-    reporter.on_complete();
-
-    // Group results by project config file
-    #[allow(clippy::mutable_key_type)]
-    let mut project_updates: FxHashMap<&Project, Vec<Option<Revision>>> = FxHashMap::default();
+/// Applies evaluated repo outcomes, recording config changes and printing stdout/stderr output.
+fn apply_repo_outcomes<'a>(
+    outcomes: Vec<RepoOutcome<'a>>,
+    dry_run: bool,
+    printer: Printer,
+    project_updates: &mut ProjectUpdates<'a>,
+) -> Result<bool> {
     let mut failure = false;
 
-    for (remote_repo, result) in tasks {
+    for outcome in outcomes {
+        let RepoOutcome {
+            remote_repo,
+            usages,
+            result,
+            frozen_mismatches,
+        } = outcome;
+
         match result {
-            Ok(new_rev) => {
-                let is_changed = remote_repo.rev != new_rev.rev;
+            Ok(update) => {
+                let is_changed = remote_repo.rev != update.revision.rev;
+                let has_frozen_notice = !frozen_mismatches.is_empty();
+
+                if !dry_run && !is_changed {
+                    for mismatch in frozen_mismatches {
+                        let FrozenMismatch::ReplaceWith(replacement) = mismatch.mismatch else {
+                            continue;
+                        };
+
+                        writeln!(
+                            printer.stdout(),
+                            "[{}] updating frozen reference {} -> {} in {}",
+                            remote_repo.repo.as_str().cyan(),
+                            mismatch.current_frozen,
+                            replacement,
+                            mismatch.project.config_file().user_display()
+                        )?;
+
+                        record_project_revision(
+                            project_updates,
+                            mismatch.project,
+                            mismatch.remote_size,
+                            mismatch.remote_index,
+                            Revision {
+                                rev: remote_repo.rev.clone(),
+                                frozen: Some(replacement),
+                            },
+                        );
+                    }
+                }
 
                 if is_changed {
                     writeln!(
                         printer.stdout(),
-                        "[{}] updating {} -> {}",
+                        "[{}] {} {} -> {}",
                         remote_repo.repo.as_str().cyan(),
+                        if dry_run { "would update" } else { "updating" },
                         remote_repo.rev,
-                        new_rev.rev
+                        update.revision.rev
                     )?;
-                } else {
+
+                    for usage in usages {
+                        record_project_revision(
+                            project_updates,
+                            usage.project,
+                            usage.remote_size,
+                            usage.remote_index,
+                            update.revision.clone(),
+                        );
+                    }
+                } else if !has_frozen_notice {
                     writeln!(
                         printer.stdout(),
                         "[{}] already up to date",
                         remote_repo.repo.as_str().yellow()
                     )?;
-                }
-
-                // Apply this update to all projects that reference this repo
-                if is_changed && let Some(projects) = repo_updates.get(&remote_repo) {
-                    for RepoInfo {
-                        project,
-                        remote_size,
-                        remote_index,
-                    } in projects
-                    {
-                        let revisions = project_updates
-                            .entry(project)
-                            .or_insert_with(|| vec![None; *remote_size]);
-                        revisions[*remote_index] = Some(new_rev.clone());
-                    }
                 }
             }
             Err(e) => {
@@ -170,46 +464,232 @@ pub(crate) async fn auto_update(
         }
     }
 
-    if !dry_run {
-        // Update each project config file
-        for (project, revisions) in project_updates {
-            let has_changes = revisions.iter().any(Option::is_some);
-            if has_changes {
-                write_new_config(project.config_file(), &revisions).await?;
-            }
-        }
-    }
-
-    if failure {
-        return Ok(ExitStatus::Failure);
-    }
-    Ok(ExitStatus::Success)
+    Ok(failure)
 }
 
-async fn update_repo(
-    repo: &RemoteRepo,
+/// Collects stale `# frozen:` comments for one deduplicated `repo + rev` entry.
+fn collect_frozen_mismatches<'a>(
+    usages: &'a [RepoUsage<'a>],
+    frozen_comment_context: Option<&FrozenCommentContext>,
+) -> Vec<FrozenCommentMismatch<'a>> {
+    let Some(frozen_comment_context) = frozen_comment_context else {
+        return Vec::new();
+    };
+
+    usages
+        .iter()
+        .filter_map(|usage| {
+            let current_frozen = usage.current_frozen.as_deref()?;
+            let mismatch = frozen_comment_context.mismatch_replacement(current_frozen)?;
+            Some(FrozenCommentMismatch {
+                project: usage.project,
+                remote_size: usage.remote_size,
+                remote_index: usage.remote_index,
+                current_frozen: current_frozen.to_string(),
+                frozen_site: usage.current_frozen_site.clone(),
+                mismatch,
+            })
+        })
+        .collect()
+}
+
+fn record_project_revision<'a>(
+    project_updates: &mut ProjectUpdates<'a>,
+    project: &'a Project,
+    remote_size: usize,
+    remote_index: usize,
+    revision: Revision,
+) {
+    let revisions = project_updates
+        .entry(project)
+        .or_insert_with(|| vec![None; remote_size]);
+    revisions[remote_index] = Some(revision);
+}
+
+/// Resolves the configured commit SHA and all existing frozen refs for mismatch detection.
+async fn collect_frozen_comment_context(
+    repo_path: &Path,
+    commit: &str,
+    frozen_refs_to_check: FxHashSet<&str>,
+    tag_timestamps: &[TagTimestamp],
+) -> Result<FrozenCommentContext> {
+    let rev_tags = get_tags_pointing_at_revision(tag_timestamps, commit);
+
+    let mut resolved_frozen_refs = FxHashMap::default();
+    for frozen_ref in frozen_refs_to_check {
+        let resolved = resolve_revision_to_commit(repo_path, frozen_ref).await.ok();
+        resolved_frozen_refs.insert(frozen_ref.to_string(), resolved);
+    }
+
+    Ok(FrozenCommentContext {
+        rev_commit: commit.to_string(),
+        rev_tags,
+        resolved_frozen_refs,
+    })
+}
+
+/// Fetches a remote repository once, then evaluates all configured revisions that use it.
+async fn evaluate_repo_group<'a>(
+    repo_group: &'a RepoGroup<'a>,
+    repo_index: &'a RepoIndex<'a>,
     bleeding_edge: bool,
     freeze: bool,
     cooldown_days: u8,
-) -> Result<Revision> {
-    let tmp_dir = tempfile::tempdir()?;
+) -> Vec<RepoOutcome<'a>> {
+    let result = async {
+        let tmp_dir = tempfile::tempdir()?;
+        let repo_path = tmp_dir.path();
+
+        trace!(
+            "Cloning repository `{}` to `{}`",
+            repo_group.repo,
+            repo_path.display()
+        );
+        setup_and_fetch_repo(repo_group.repo, repo_path).await?;
+
+        let tag_timestamps =
+            collect_group_tag_timestamps(repo_group, repo_index, repo_path, bleeding_edge).await?;
+
+        anyhow::Ok((tmp_dir, tag_timestamps))
+    }
+    .await;
+    let (tmp_dir, tag_timestamps) = match result {
+        Ok(data) => data,
+        Err(e) => return failed_repo_group_outcomes(repo_group, repo_index, &e),
+    };
     let repo_path = tmp_dir.path();
 
-    trace!(
-        "Cloning repository `{}` to `{}`",
-        repo.repo,
-        repo_path.display()
-    );
+    let mut outcomes = Vec::with_capacity(repo_group.remote_repos.len());
+    for &remote_repo in &repo_group.remote_repos {
+        let Some(usages) = repo_index.repo_usages.get(remote_repo) else {
+            continue;
+        };
+        let result = update_repo(
+            repo_path,
+            remote_repo,
+            usages,
+            bleeding_edge,
+            freeze,
+            cooldown_days,
+            &tag_timestamps,
+        )
+        .await;
+        let frozen_mismatches = match &result {
+            Ok(update) => collect_frozen_mismatches(usages, update.frozen_comment_context.as_ref()),
+            Err(_) => Vec::new(),
+        };
+        outcomes.push(RepoOutcome {
+            remote_repo,
+            usages,
+            result,
+            frozen_mismatches,
+        });
+    }
 
-    setup_and_fetch_repo(repo.repo.as_str(), repo_path).await?;
+    outcomes
+}
 
-    let rev = resolve_revision(repo_path, &repo.rev, bleeding_edge, cooldown_days).await?;
+/// Loads tag metadata for a fetched repo when any revision evaluation depends on it.
+async fn collect_group_tag_timestamps(
+    repo_group: &RepoGroup<'_>,
+    repo_index: &RepoIndex<'_>,
+    repo_path: &Path,
+    bleeding_edge: bool,
+) -> Result<Vec<TagTimestamp>> {
+    let should_load_tag_timestamps = repo_group.remote_repos.iter().any(|remote_repo| {
+        !bleeding_edge
+            || (looks_like_sha(&remote_repo.rev)
+                && repo_index
+                    .repo_usages
+                    .get(remote_repo)
+                    .is_some_and(|usages| {
+                        usages.iter().any(|usage| usage.current_frozen.is_some())
+                    }))
+    });
+
+    if should_load_tag_timestamps {
+        get_tag_timestamps(repo_path).await
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+/// Converts a group-level failure into per-revision outcomes for that repository URL.
+fn failed_repo_group_outcomes<'a>(
+    repo_group: &'a RepoGroup<'a>,
+    repo_index: &'a RepoIndex<'a>,
+    error: &anyhow::Error,
+) -> Vec<RepoOutcome<'a>> {
+    let error = format!("{error:#}");
+    repo_group
+        .remote_repos
+        .iter()
+        .filter_map(|&remote_repo| {
+            let usages = repo_index.repo_usages.get(remote_repo)?;
+            Some(RepoOutcome {
+                remote_repo,
+                usages,
+                result: Err(anyhow::anyhow!(error.clone())),
+                frozen_mismatches: Vec::new(),
+            })
+        })
+        .collect()
+}
+
+/// Resolves one configured `repo + rev` entry within an already-fetched remote repository.
+async fn update_repo(
+    repo_path: &Path,
+    repo: &RemoteRepo,
+    usages: &[RepoUsage<'_>],
+    bleeding_edge: bool,
+    freeze: bool,
+    cooldown_days: u8,
+    tag_timestamps: &[TagTimestamp],
+) -> Result<RepoUpdate> {
+    let frozen_refs_to_check = usages
+        .iter()
+        .filter_map(|usage| usage.current_frozen.as_deref())
+        .collect::<FxHashSet<_>>();
+
+    let frozen_comment_context = if looks_like_sha(&repo.rev) && !frozen_refs_to_check.is_empty() {
+        match collect_frozen_comment_context(
+            repo_path,
+            &repo.rev,
+            frozen_refs_to_check,
+            tag_timestamps,
+        )
+        .await
+        {
+            Ok(context) => Some(context),
+            Err(e) => {
+                warn!(
+                    "Failed to collect frozen comment context for repo `{}`: {e}",
+                    repo.repo
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let rev = resolve_revision(
+        repo_path,
+        &repo.rev,
+        bleeding_edge,
+        cooldown_days,
+        tag_timestamps,
+    )
+    .await?;
 
     let Some(rev) = rev else {
         debug!("No suitable revision found for repo `{}`", repo.repo);
-        return Ok(Revision {
-            rev: repo.rev.clone(),
-            frozen: None,
+        return Ok(RepoUpdate {
+            revision: Revision {
+                rev: repo.rev.clone(),
+                frozen: None,
+            },
+            frozen_comment_context,
         });
     };
 
@@ -222,9 +702,13 @@ async fn update_repo(
 
     checkout_and_validate_manifest(repo_path, &rev, repo).await?;
 
-    Ok(Revision { rev, frozen })
+    Ok(RepoUpdate {
+        revision: Revision { rev, frozen },
+        frozen_comment_context,
+    })
 }
 
+/// Initializes a temporary git repo and fetches the remote HEAD plus tags.
 async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Result<()> {
     git::init_repo(repo_url, repo_path).await?;
     git::git_cmd("git config")?
@@ -254,6 +738,132 @@ async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Resolves any revision-like string to the underlying commit SHA.
+async fn resolve_revision_to_commit(repo_path: &Path, rev: &str) -> Result<String> {
+    let output = git::git_cmd("git rev-parse")?
+        .arg("rev-parse")
+        .arg(format!("{rev}^{{}}"))
+        .check(true)
+        .current_dir(repo_path)
+        .remove_git_envs()
+        .output()
+        .await?;
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+/// Lists tags from the fetched tag metadata that resolve to the given commit SHA.
+fn get_tags_pointing_at_revision(tag_timestamps: &[TagTimestamp], rev: &str) -> Vec<String> {
+    tag_timestamps
+        .iter()
+        .filter(|tag_timestamp| revision_matches_commit(&tag_timestamp.commit, rev))
+        .map(|tag_timestamp| tag_timestamp.tag.clone())
+        .collect()
+}
+
+/// Returns whether a resolved commit SHA matches a configured SHA revision, including abbreviations.
+fn revision_matches_commit(commit: &str, rev: &str) -> bool {
+    let commit = commit.to_ascii_lowercase();
+    let rev = rev.to_ascii_lowercase();
+    commit == rev || commit.starts_with(&rev)
+}
+
+/// Formats one stale `# frozen:` warning as an annotated source snippet.
+fn render_frozen_mismatch_warning(
+    remote_repo: &RemoteRepo,
+    mismatch: &FrozenCommentMismatch<'_>,
+    dry_run: bool,
+) -> String {
+    let details = match &mismatch.mismatch {
+        FrozenMismatch::ReplaceWith(replacement) => {
+            if dry_run {
+                format!("would update comment to `{replacement}`")
+            } else {
+                format!("updating comment to `{replacement}`")
+            }
+        }
+        FrozenMismatch::NoReplacement => "no tag points at the configured commit".to_string(),
+    };
+    let title = format!(
+        "[{}] `# frozen:` comment does not match `rev: {}`",
+        remote_repo.repo, remote_repo.rev
+    );
+
+    let report =
+        if let Some(site) = &mismatch.frozen_site {
+            Level::WARNING
+                .primary_title(title)
+                .element(
+                    Snippet::source(&site.source_line)
+                        .line_start(site.line_number)
+                        .path(mismatch.project.config_file().user_display().to_string())
+                        .annotation(AnnotationKind::Primary.span(site.span.clone()).label(
+                            format!(
+                                "`{}` resolves to a different commit",
+                                mismatch.current_frozen
+                            ),
+                        )),
+                )
+                .element(Level::NOTE.message(details))
+        } else {
+            Level::WARNING
+                .primary_title(title)
+                .element(Level::NOTE.message(format!(
+                    "in `{}`: {details}",
+                    mismatch.project.config_file().user_display()
+                )))
+        };
+
+    let renderer = Renderer::plain().decor_style(DecorStyle::Unicode);
+    format!("{}\n", renderer.render(&[report]))
+}
+
+/// Extracts the frozen reference and its source span from a full config line.
+fn parse_frozen_ref(line: &str, line_number: usize) -> FrozenRef {
+    let Some(captures) = regex!(r#"#\s*frozen:\s*([^\s#]+)"#).captures(line) else {
+        return FrozenRef {
+            current_frozen: None,
+            site: None,
+        };
+    };
+    let frozen_match = captures.get(1).expect("capture group 1 must exist");
+    FrozenRef {
+        current_frozen: Some(frozen_match.as_str().to_string()),
+        site: Some(FrozenCommentSite {
+            line_number,
+            source_line: line.to_string(),
+            span: frozen_match.start()..frozen_match.end(),
+        }),
+    }
+}
+
+/// Reads the existing frozen comments for each remote repo entry from YAML or TOML config.
+fn read_frozen_refs(path: &Path) -> Result<Vec<FrozenRef>> {
+    let content = fs_err::read_to_string(path)?;
+
+    match path.extension() {
+        Some(ext) if ext.eq_ignore_ascii_case("toml") => Ok(content
+            .lines()
+            .enumerate()
+            .filter(|(_, line)| regex!(r#"^\s*rev\s*="#).is_match(line))
+            .map(|(index, line)| parse_frozen_ref(line, index + 1))
+            .collect()),
+        _ => {
+            let rev_regex = regex!(r#"^\s+rev:\s*['"]?[^\s#]+(?P<comment>.*)$"#);
+            Ok(content
+                .lines()
+                .enumerate()
+                .filter_map(|(index, line)| {
+                    rev_regex
+                        .captures(line)
+                        .map(|_| parse_frozen_ref(line, index + 1))
+                })
+                .collect())
+        }
+    }
+}
+
+/// Resolves the default branch tip to an exact tag when possible, otherwise to a commit SHA.
 async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<String>> {
     let output = git::git_cmd("git describe")?
         .arg("describe")
@@ -289,17 +899,20 @@ async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<String>> {
     Ok(Some(rev))
 }
 
-/// Returns all tags and their Unix timestamps (newest first).
+/// Returns all fetched tags, their Unix timestamps, and peeled commit SHAs (newest first).
 ///
 /// Within groups of tags sharing the same timestamp, semver-parseable tags
 /// are sorted highest version first; non-semver tags sort after them.
-async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
+async fn get_tag_timestamps(repo: &Path) -> Result<Vec<TagTimestamp>> {
     let output = git::git_cmd("git for-each-ref")?
         .arg("for-each-ref")
         .arg("--sort=-creatordate")
         // `creatordate` is the date the tag was created (annotated tags) or the commit date (lightweight tags)
         // `lstrip=2` removes the "refs/tags/" prefix
-        .arg("--format=%(refname:lstrip=2) %(creatordate:unix)")
+        // `objectname` is the tag object SHA for annotated tags, while `*objectname`
+        // peels annotated tags to their target object. For lightweight tags the peeled
+        // value is empty, so we fall back to `objectname`.
+        .arg("--format=%(refname:lstrip=2)\t%(creatordate:unix)\t%(objectname)\t%(*objectname)")
         .arg("refs/tags")
         .check(true)
         .current_dir(repo)
@@ -307,14 +920,21 @@ async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
         .output()
         .await?;
 
-    let mut tags: Vec<(String, u64)> = String::from_utf8_lossy(&output.stdout)
+    let mut tags: Vec<TagTimestamp> = String::from_utf8_lossy(&output.stdout)
         .lines()
         .filter_map(|line| {
-            let mut parts = line.split_whitespace();
+            let mut parts = line.split('\t');
             let tag = parts.next()?.trim_ascii();
             let ts_str = parts.next()?.trim_ascii();
+            let object = parts.next()?.trim_ascii();
+            let peeled = parts.next().unwrap_or_default().trim_ascii();
             let ts: u64 = ts_str.parse().ok()?;
-            Some((tag.to_string(), ts))
+            let commit = if peeled.is_empty() { object } else { peeled };
+            Some(TagTimestamp {
+                tag: tag.to_string(),
+                timestamp: ts,
+                commit: commit.to_string(),
+            })
         })
         .collect();
 
@@ -322,15 +942,15 @@ async fn get_tag_timestamps(repo: &Path) -> Result<Vec<(String, u64)>> {
     // Within equal timestamps, prefer higher semver versions; non-semver tags
     // sort after semver ones. As a final tie-breaker, compare the tag refname
     // so ordering is stable across platforms/filesystems.
-    tags.sort_by(|(tag_a, ts_a), (tag_b, ts_b)| {
-        ts_b.cmp(ts_a).then_with(|| {
-            let ver_a = Version::parse(tag_a.strip_prefix('v').unwrap_or(tag_a));
-            let ver_b = Version::parse(tag_b.strip_prefix('v').unwrap_or(tag_b));
+    tags.sort_by(|tag_a, tag_b| {
+        tag_b.timestamp.cmp(&tag_a.timestamp).then_with(|| {
+            let ver_a = Version::parse(tag_a.tag.strip_prefix('v').unwrap_or(&tag_a.tag));
+            let ver_b = Version::parse(tag_b.tag.strip_prefix('v').unwrap_or(&tag_b.tag));
             match (ver_a, ver_b) {
-                (Ok(a), Ok(b)) => b.cmp(&a).then_with(|| tag_a.cmp(tag_b)),
+                (Ok(a), Ok(b)) => b.cmp(&a).then_with(|| tag_a.tag.cmp(&tag_b.tag)),
                 (Ok(_), Err(_)) => std::cmp::Ordering::Less,
                 (Err(_), Ok(_)) => std::cmp::Ordering::Greater,
-                (Err(_), Err(_)) => tag_a.cmp(tag_b),
+                (Err(_), Err(_)) => tag_a.tag.cmp(&tag_b.tag),
             }
         })
     });
@@ -343,54 +963,95 @@ async fn resolve_revision(
     current_rev: &str,
     bleeding_edge: bool,
     cooldown_days: u8,
+    tag_timestamps: &[TagTimestamp],
 ) -> Result<Option<String>> {
     if bleeding_edge {
         return resolve_bleeding_edge(repo_path).await;
     }
 
-    let tags_with_ts = get_tag_timestamps(repo_path).await?;
-
     let cutoff_secs = u64::from(cooldown_days) * 86400;
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let cutoff = now.saturating_sub(cutoff_secs);
 
-    // tags_with_ts is sorted newest -> oldest; find the first bucket where ts <= cutoff.
-    let left = match tags_with_ts.binary_search_by(|(_, ts)| ts.cmp(&cutoff).reverse()) {
+    // `tag_timestamps` is sorted newest -> oldest; find the first bucket where ts <= cutoff.
+    let left = match tag_timestamps.binary_search_by(|tag| tag.timestamp.cmp(&cutoff).reverse()) {
         Ok(i) | Err(i) => i,
     };
 
-    let Some((target_tag, target_ts)) = tags_with_ts.get(left) else {
+    let Some(target_tag) = tag_timestamps.get(left) else {
         trace!("No tags meet cooldown cutoff {cutoff_secs}s");
         return Ok(None);
     };
 
-    debug!("Using tag `{target_tag}` cutoff timestamp {target_ts}");
+    debug!(
+        "Using tag `{}` cutoff timestamp {}",
+        target_tag.tag, target_tag.timestamp
+    );
 
-    let best = get_best_candidate_tag(repo_path, target_tag, current_rev)
-        .await
-        .unwrap_or_else(|_| target_tag.clone());
-    debug!("Using best candidate tag `{best}` for revision `{target_tag}`");
+    let tags = get_tags_pointing_at_revision(tag_timestamps, &target_tag.commit);
+    let best = select_best_tag(&tags, current_rev, false).unwrap_or_else(|| target_tag.tag.clone());
+    debug!(
+        "Using best candidate tag `{best}` for revision `{}`",
+        target_tag.tag
+    );
 
     Ok(Some(best))
 }
 
+/// Turns a tag-like revision into an exact commit SHA for `--freeze`.
 async fn freeze_revision(repo_path: &Path, rev: &str) -> Result<Option<String>> {
-    let exact = git::git_cmd("git rev-parse")?
-        .arg("rev-parse")
-        .arg(format!("{rev}^{{}}"))
-        .current_dir(repo_path)
-        .remove_git_envs()
-        .output()
-        .await?
-        .stdout;
-    let exact = str::from_utf8(&exact)?.trim();
+    let exact = resolve_revision_to_commit(repo_path, rev).await?;
     if rev == exact {
         Ok(None)
     } else {
-        Ok(Some(exact.to_string()))
+        Ok(Some(exact))
     }
 }
 
+/// Orders version-like tags from newest to oldest semantic version.
+fn compare_tag_versions_desc(tag_a: &str, tag_b: &str) -> std::cmp::Ordering {
+    let version_a = Version::parse(tag_a.strip_prefix('v').unwrap_or(tag_a));
+    let version_b = Version::parse(tag_b.strip_prefix('v').unwrap_or(tag_b));
+
+    match (version_a, version_b) {
+        (Ok(a), Ok(b)) => b.cmp(&a),
+        (Ok(_), Err(_)) => std::cmp::Ordering::Less,
+        (Err(_), Ok(_)) => std::cmp::Ordering::Greater,
+        (Err(_), Err(_)) => std::cmp::Ordering::Equal,
+    }
+}
+
+/// Multiple tags can exist on an SHA. Sometimes a moving tag is attached to a
+/// version tag. Prefer tags that look like versions, then pick the one most
+/// similar to the current reference.
+fn select_best_tag(
+    tags: &[String],
+    current_ref: &str,
+    allow_non_version_like: bool,
+) -> Option<String> {
+    let has_version_like = tags.iter().any(|tag| tag.contains('.'));
+    let mut candidates = if has_version_like {
+        tags.iter()
+            .filter(|tag| tag.contains('.'))
+            .cloned()
+            .collect::<Vec<_>>()
+    } else if allow_non_version_like {
+        tags.to_vec()
+    } else {
+        return None;
+    };
+
+    candidates.sort_by(|tag_a, tag_b| {
+        levenshtein::levenshtein(tag_a, current_ref)
+            .cmp(&levenshtein::levenshtein(tag_b, current_ref))
+            .then_with(|| compare_tag_versions_desc(tag_a, tag_b))
+            .then_with(|| tag_a.cmp(tag_b))
+    });
+
+    candidates.into_iter().next()
+}
+
+/// Checks out the candidate manifest and verifies all configured hook ids still exist.
 async fn checkout_and_validate_manifest(
     repo_path: &Path,
     rev: &str,
@@ -448,33 +1109,7 @@ async fn checkout_and_validate_manifest(
     Ok(())
 }
 
-/// Multiple tags can exist on an SHA. Sometimes a moving tag is attached
-/// to a version tag. Try to pick the tag that looks like a version and most similar
-/// to the current revision.
-async fn get_best_candidate_tag(repo: &Path, rev: &str, current_rev: &str) -> Result<String> {
-    let stdout = git::git_cmd("git tag")?
-        .arg("tag")
-        .arg("--points-at")
-        .arg(format!("{rev}^{{}}"))
-        .check(true)
-        .current_dir(repo)
-        .remove_git_envs()
-        .output()
-        .await?
-        .stdout;
-
-    String::from_utf8_lossy(&stdout)
-        .lines()
-        .filter(|line| line.contains('.'))
-        .sorted_by_key(|tag| {
-            // Prefer tags that are more similar to the current revision
-            levenshtein::levenshtein(tag, current_rev)
-        })
-        .next()
-        .map(ToString::to_string)
-        .with_context(|| format!("No tags found for revision {rev}"))
-}
-
+/// Rewrites one config file with the resolved revisions for its remote repos.
 async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result<()> {
     let content = fs_err::tokio::read_to_string(path).await?;
     let new_content = match path.extension() {
@@ -496,6 +1131,7 @@ async fn write_new_config(path: &Path, revisions: &[Option<Revision>]) -> Result
     Ok(())
 }
 
+/// Updates `rev` values and `# frozen:` comments in a TOML config while preserving formatting.
 fn render_updated_toml_config(
     path: &Path,
     content: &str,
@@ -568,6 +1204,7 @@ fn render_updated_toml_config(
     Ok(doc.to_string())
 }
 
+/// Updates `rev` values and `# frozen:` comments in a YAML config while preserving line layout.
 fn render_updated_yaml_config(
     path: &Path,
     content: &str,
@@ -789,9 +1426,10 @@ mod tests {
 
         let timestamps = get_tag_timestamps(repo).await.unwrap();
         assert_eq!(timestamps.len(), 3);
-        assert_eq!(timestamps[0].0, "alias-v0.2.0");
-        assert_eq!(timestamps[1].0, "v0.2.0");
-        assert_eq!(timestamps[2].0, "v0.1.0");
+        assert_eq!(timestamps[0].tag, "alias-v0.2.0");
+        assert_eq!(timestamps[1].tag, "v0.2.0");
+        assert_eq!(timestamps[2].tag, "v0.1.0");
+        assert_eq!(timestamps[0].commit, timestamps[1].commit);
     }
 
     #[tokio::test]
@@ -859,7 +1497,10 @@ mod tests {
         create_backdated_commit(repo, "latest", 1).await;
         create_lightweight_tag(repo, "v2.0.0").await;
 
-        let rev = resolve_revision(repo, "v2.0.0", false, 3).await.unwrap();
+        let tag_timestamps = get_tag_timestamps(repo).await.unwrap();
+        let rev = resolve_revision(repo, "v2.0.0", false, 3, &tag_timestamps)
+            .await
+            .unwrap();
 
         assert_eq!(rev, Some("v2.0.0-rc1".to_string()));
     }
@@ -875,7 +1516,10 @@ mod tests {
         create_backdated_commit(repo, "recent-2", 1).await;
         create_lightweight_tag(repo, "v1.1.0").await;
 
-        let rev = resolve_revision(repo, "v1.1.0", false, 5).await.unwrap();
+        let tag_timestamps = get_tag_timestamps(repo).await.unwrap();
+        let rev = resolve_revision(repo, "v1.1.0", false, 5, &tag_timestamps)
+            .await
+            .unwrap();
 
         assert_eq!(rev, None);
     }
@@ -894,7 +1538,10 @@ mod tests {
         create_backdated_commit(repo, "newest", 1).await;
         create_lightweight_tag(repo, "v1.2.0").await;
 
-        let rev = resolve_revision(repo, "v1.2.0", false, 5).await.unwrap();
+        let tag_timestamps = get_tag_timestamps(repo).await.unwrap();
+        let rev = resolve_revision(repo, "v1.2.0", false, 5, &tag_timestamps)
+            .await
+            .unwrap();
 
         assert_eq!(rev, Some("v1.0.0".to_string()));
     }
@@ -910,7 +1557,8 @@ mod tests {
 
         // Even though the current rev matches the moving tag exactly, the dotted tag
         // should be preferred.
-        let rev = resolve_revision(repo, "moving-tag", false, 1)
+        let tag_timestamps = get_tag_timestamps(repo).await.unwrap();
+        let rev = resolve_revision(repo, "moving-tag", false, 1, &tag_timestamps)
             .await
             .unwrap();
 
@@ -927,7 +1575,10 @@ mod tests {
         create_lightweight_tag(repo, "foo-1.2.0").await;
         create_lightweight_tag(repo, "v2.0.0").await;
 
-        let rev = resolve_revision(repo, "v1.2.3", false, 1).await.unwrap();
+        let tag_timestamps = get_tag_timestamps(repo).await.unwrap();
+        let rev = resolve_revision(repo, "v1.2.3", false, 1, &tag_timestamps)
+            .await
+            .unwrap();
 
         assert_eq!(rev, Some("v1.2.0".to_string()));
     }
@@ -948,7 +1599,7 @@ mod tests {
 
         // All timestamps are equal (tags on same commit).
         // Within equal timestamps, semver tags should sort highest version first.
-        let tags: Vec<&str> = timestamps.iter().map(|(t, _)| t.as_str()).collect();
+        let tags: Vec<&str> = timestamps.iter().map(|tag| tag.tag.as_str()).collect();
         assert_eq!(tags, vec!["v1.0.5", "v1.0.3", "v1.0.2", "v1.0.0"]);
     }
 
@@ -964,7 +1615,7 @@ mod tests {
         create_lightweight_tag(repo, "gamma").await;
 
         let timestamps = get_tag_timestamps(repo).await.unwrap();
-        let tags: Vec<&str> = timestamps.iter().map(|(t, _)| t.as_str()).collect();
+        let tags: Vec<&str> = timestamps.iter().map(|tag| tag.tag.as_str()).collect();
         assert_eq!(tags, vec!["alpha", "beta", "gamma"]);
     }
 }
