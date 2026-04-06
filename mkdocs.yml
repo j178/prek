@@ -1,12 +1,12 @@
 site_name: prek
-site_description: Better `pre-commit` alternative, re-engineered in Rust
+site_description: A Git hook manager written in Rust, designed as a drop-in alternative to pre-commit.
 site_author: j178
 site_url: https://prek.j178.dev/
 
 repo_name: j178/prek
 repo_url: https://github.com/j178/prek
 
-copyright: Copyright &copy; 2025 j178
+copyright: Copyright &copy; 2026 j178
 
 theme:
   name: material

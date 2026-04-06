@@ -1,7 +1,7 @@
 [project]
 name = "prek"
 version = "0.3.8"
-description = "Better `pre-commit`, re-engineered in Rust"
+description = "A Git hook manager written in Rust, designed as a drop-in alternative to pre-commit."
 authors = [{ name = "j178", email = "hi@j178.dev" }]
 requires-python = ">=3.8"
 keywords = ["pre-commit", "git", "hooks"]
