@@ -31,15 +31,12 @@
     rangeStrategy: "update-lockfile",
     managerFilePatterns: ["/^Cargo\\.toml$/", "/^crates/.*Cargo\\.toml$/"],
   },
-  'pip-compile': {
-    managerFilePatterns: ["/(^|/)docs/requirements\\.txt$/"],
-  },
   enabledManagers: [
     'github-actions',
     'pre-commit',
     'cargo',
     'custom.regex',
-    'pip-compile',
+    'pep621',
   ],
   customManagers: [
     // Update `uv` version in `crates/prek/src/languages/python/uv.rs` and CI workflows.
@@ -146,7 +143,7 @@
       commitMessageTopic: "Rust",
     },
     {
-      matchManagers: [ 'cargo', 'pre-commit', 'github-actions', 'custom.regex' ],
+      matchManagers: [ 'cargo', 'pre-commit', 'github-actions', 'pep621', 'custom.regex' ],
       minimumReleaseAge: '7 days'
     },
     {

@@ -1,3 +1,7 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
 [project]
 name = "prek"
 version = "0.3.8"
@@ -23,9 +27,16 @@ Changelog = "https://github.com/j178/prek/blob/master/CHANGELOG.md"
 Releases = "https://github.com/j178/prek/releases"
 Homepage = "https://prek.j178.dev/"
 
-[build-system]
-requires = ["maturin>=1.0,<2.0"]
-build-backend = "maturin"
+[dependency-groups]
+dev = ["rooster"]
+docs = ["llmstxt-standalone>=0.2.0", "zensical>=0.0.24"]
+
+[tool.uv.sources]
+rooster = { git = "https://github.com/j178/rooster", rev = "747d16f" }
+
+[tool.uv.dependency-groups]
+dev = { requires-python = ">=3.12" }
+docs = { requires-python = ">=3.12" }
 
 [tool.maturin]
 bindings = "bin"
@@ -61,4 +72,4 @@ version_files = [
 ]
 
 [tool.uv]
-managed = false
+package = false
