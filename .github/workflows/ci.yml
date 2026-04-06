@@ -258,7 +258,7 @@ jobs:
           cargo llvm-cov report --profile fast-build --lcov --output-path lcov.info
 
       - name: "Upload coverage reports to Codecov"
-        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5.5.3
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
@@ -299,7 +299,7 @@ jobs:
           tool: cargo-llvm-cov
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           version: ${{ env.UV_VERSION }}
 
@@ -319,7 +319,7 @@ jobs:
             --features schemars
 
       - name: "Upload coverage reports to Codecov"
-        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5.5.3
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
@@ -362,7 +362,7 @@ jobs:
           tool: cargo-llvm-cov
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           version: ${{ env.UV_VERSION }}
           cache-local-path: ${{ env.DEV_DRIVE }}/uv-cache
@@ -392,7 +392,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: "Upload coverage reports to Codecov"
-        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5.5.3
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ${{ env.PREK_WORKSPACE }}/lcov.info
@@ -466,7 +466,7 @@ jobs:
 
       - name: "Install uv"
         if: ${{ matrix.language == 'python' }}
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           version: ${{ env.UV_VERSION }}
 
@@ -577,7 +577,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: "Upload coverage reports to Codecov"
-        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5.5.3
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
