@@ -53,19 +53,14 @@ run = [{ task = "generate-cli-reference" }, { task = "generate-json-schema" }]
 
 [tasks.preview-docs]
 description = "Serve documentation locally"
-run = "uvx --with-requirements docs/requirements.txt zensical serve"
+run = "uv run --group docs zensical serve"
 
 [tasks.build-docs]
 description = "Build documentation"
 run = [
-  "uvx --with-requirements docs/requirements.txt zensical build",
-  "uvx --with-requirements docs/requirements.txt llmstxt-standalone build",
+  "uv run --group docs zensical build",
+  "uv run --group docs llmstxt-standalone build",
 ]
-
-[tasks.compile-docs-deps]
-# Python version should match PYTHON_VERSION in .github/workflows/publish-docs.yml
-description = "Compile documentation dependencies"
-run = "uv pip compile docs/requirements.in --universal --upgrade -o docs/requirements.txt --python 3.14"
 
 [tasks.update-macports]
 description = "Update MacPorts portfile"
@@ -75,5 +70,5 @@ run = "uv run scripts/update-macports-portfile.py"
 description = "Prepare for a release"
 run = """
 git checkout -b bump
-uvx --from 'rooster @ git+https://github.com/j178/rooster@747d16f' --python 3.13 -- rooster release
+uv run --group dev rooster release
 """
