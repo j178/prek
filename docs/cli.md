@@ -2,7 +2,7 @@
 
 ## prek
 
-Better pre-commit, re-engineered in Rust
+A Git hook manager written in Rust, designed as a drop-in alternative to pre-commit.
 
 <h3 class="cli-reference">Usage</h3>
 
