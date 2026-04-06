@@ -16,6 +16,11 @@
   labels: [
     'internal'
   ],
+  // Refresh lock files to keep them up-to-date
+  lockFileMaintenance: {
+    enabled: true,
+    groupName: 'Lock file maintenance',
+  },
   semanticCommits: 'disabled',
   // pre-commit is currently in beta testing, must opt in
   'pre-commit': {
