@@ -676,6 +676,33 @@ Notes:
 - For reproducibility, prefer immutable pins (tags or commit SHAs).
 - `prek auto-update` can help update `rev` values.
 
+##### `pin`
+
+When set to `true`, `prek auto-update` will skip this repository.
+This is useful when you need to stay on a specific version (for example,
+while upgrading your codebase to work with a newer release).
+
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "https://github.com/astral-sh/ruff-pre-commit"
+    rev = "v0.8.4"
+    pin = true
+    hooks = [{ id = "ruff" }]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: https://github.com/astral-sh/ruff-pre-commit
+        rev: v0.8.4
+        pin: true
+        hooks:
+          - id: ruff
+    ```
+
 #### `repo: local`
 
 Define hooks inline inside your repository.

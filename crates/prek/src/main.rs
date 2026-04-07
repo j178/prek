@@ -369,6 +369,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &store,
                 cli.globals.config,
                 args.repo,
+                args.exclude,
                 args.bleeding_edge,
                 args.freeze,
                 args.jobs,

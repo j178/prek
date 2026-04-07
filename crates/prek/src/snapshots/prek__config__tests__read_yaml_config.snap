@@ -8,6 +8,7 @@ Config {
             RemoteRepo {
                 repo: "https://github.com/abravalheri/validate-pyproject",
                 rev: "v0.20.2",
+                pin: None,
                 hooks: [
                     RemoteHook {
                         id: "validate-pyproject",
@@ -46,6 +47,7 @@ Config {
             RemoteRepo {
                 repo: "https://github.com/crate-ci/typos",
                 rev: "v1.26.0",
+                pin: None,
                 hooks: [
                     RemoteHook {
                         id: "typos",
@@ -176,6 +178,7 @@ Config {
             RemoteRepo {
                 repo: "https://github.com/pre-commit/mirrors-prettier",
                 rev: "v3.1.0",
+                pin: None,
                 hooks: [
                     RemoteHook {
                         id: "prettier",
@@ -219,6 +222,7 @@ Config {
             RemoteRepo {
                 repo: "https://github.com/astral-sh/ruff-pre-commit",
                 rev: "v0.6.9",
+                pin: None,
                 hooks: [
                     RemoteHook {
                         id: "ruff-format",
