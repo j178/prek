@@ -1,5 +1,3 @@
-#![allow(clippy::mutable_key_type)]
-
 use std::fmt::Write;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -78,8 +76,18 @@ struct RepoSource<'a> {
 enum FrozenMismatch {
     /// Rewrite the comment to this replacement tag.
     ReplaceWith(String),
-    /// Warn only because no tag points at the configured commit.
+    /// Remove the stale comment because no ref points at the pinned commit.
+    Remove,
+    /// Warn only because the pinned commit itself could not be resolved.
     NoReplacement,
+}
+
+/// Why an existing `# frozen:` comment no longer matches the configured `rev`.
+enum FrozenMismatchReason {
+    /// The frozen reference resolves successfully, but to a different commit than `rev`.
+    ResolvesToDifferentCommit,
+    /// The frozen reference could not be resolved at all.
+    Unresolvable,
 }
 
 /// One stale `# frozen:` comment found for a specific repo entry.
@@ -94,6 +102,8 @@ struct FrozenCommentMismatch<'a> {
     current_frozen: String,
     /// The source location of the current `# frozen:` comment.
     frozen_site: Option<FrozenCommentSite>,
+    /// Why the existing frozen reference is stale.
+    reason: FrozenMismatchReason,
     /// The action to take for this stale comment.
     mismatch: FrozenMismatch,
 }
@@ -147,7 +157,13 @@ struct RepoUpdate<'a> {
 /// Pending config mutations grouped by project config file.
 type ProjectUpdates<'a> = FxHashMap<&'a Project, Vec<Option<Revision>>>;
 
+struct ApplyRepoUpdatesResult {
+    failure: bool,
+    has_updates: bool,
+}
+
 /// Updates remote repo revisions and, when possible, keeps existing `# frozen:` comments in sync.
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn auto_update(
     store: &Store,
     config: Option<PathBuf>,
@@ -156,6 +172,7 @@ pub(crate) async fn auto_update(
     freeze: bool,
     jobs: usize,
     dry_run: bool,
+    check: bool,
     cooldown_days: u8,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -208,8 +225,9 @@ pub(crate) async fn auto_update(
     warn_frozen_mismatches(&outcomes, dry_run, printer)?;
 
     // Group results by project config file
+    #[expect(clippy::mutable_key_type)]
     let mut project_updates: ProjectUpdates<'_> = FxHashMap::default();
-    let failure = apply_repo_updates(outcomes, dry_run, printer, &mut project_updates)?;
+    let apply_result = apply_repo_updates(outcomes, dry_run, printer, &mut project_updates)?;
 
     if !dry_run {
         for (project, revisions) in project_updates {
@@ -219,7 +237,7 @@ pub(crate) async fn auto_update(
         }
     }
 
-    if failure {
+    if apply_result.failure || (check && apply_result.has_updates) {
         return Ok(ExitStatus::Failure);
     }
     Ok(ExitStatus::Success)
@@ -331,54 +349,82 @@ fn warn_frozen_mismatches(
 }
 
 /// Applies evaluated repo outcomes, recording config changes and printing stdout/stderr output.
+#[expect(clippy::mutable_key_type)]
 fn apply_repo_updates<'a>(
     updates: Vec<RepoUpdate<'a>>,
     dry_run: bool,
     printer: Printer,
     project_updates: &mut ProjectUpdates<'a>,
-) -> Result<bool> {
+) -> Result<ApplyRepoUpdatesResult> {
     let mut failure = false;
+    let mut has_updates = false;
 
     for update in updates {
         match update.result {
             Ok(resolved) => {
                 let is_changed = update.target.current_rev != resolved.revision.rev;
+                let has_frozen_updates = resolved
+                    .frozen_mismatches
+                    .iter()
+                    .any(|mismatch| !matches!(mismatch.mismatch, FrozenMismatch::NoReplacement));
                 let has_frozen_notice = !resolved.frozen_mismatches.is_empty();
+
+                has_updates |= is_changed || has_frozen_updates;
 
                 // If `rev` itself is unchanged, the normal update path below will not rewrite this
                 // repo entry. Still fix stale `# frozen:` comments in update mode so the comment
                 // continues to point at the configured commit SHA.
                 if !dry_run && !is_changed {
                     for mismatch in &resolved.frozen_mismatches {
-                        let FrozenMismatch::ReplaceWith(replacement) = &mismatch.mismatch else {
-                            continue;
-                        };
+                        match &mismatch.mismatch {
+                            FrozenMismatch::ReplaceWith(replacement) => {
+                                writeln!(
+                                    printer.stdout(),
+                                    "[{}] updating frozen reference `{}` -> `{}`",
+                                    update.target.repo.cyan(),
+                                    mismatch.current_frozen,
+                                    replacement,
+                                )?;
 
-                        writeln!(
-                            printer.stdout(),
-                            "[{}] updating frozen reference {} -> {}",
-                            update.target.repo.cyan(),
-                            mismatch.current_frozen,
-                            replacement,
-                        )?;
+                                record_project_revision(
+                                    project_updates,
+                                    mismatch.project,
+                                    mismatch.remote_size,
+                                    mismatch.remote_index,
+                                    Revision {
+                                        rev: update.target.current_rev.to_string(),
+                                        frozen: Some(replacement.clone()),
+                                    },
+                                );
+                            }
+                            FrozenMismatch::Remove => {
+                                writeln!(
+                                    printer.stdout(),
+                                    "[{}] removing frozen reference `{}`",
+                                    update.target.repo.cyan(),
+                                    mismatch.current_frozen,
+                                )?;
 
-                        record_project_revision(
-                            project_updates,
-                            mismatch.project,
-                            mismatch.remote_size,
-                            mismatch.remote_index,
-                            Revision {
-                                rev: update.target.current_rev.to_string(),
-                                frozen: Some(replacement.clone()),
-                            },
-                        );
+                                record_project_revision(
+                                    project_updates,
+                                    mismatch.project,
+                                    mismatch.remote_size,
+                                    mismatch.remote_index,
+                                    Revision {
+                                        rev: update.target.current_rev.to_string(),
+                                        frozen: None,
+                                    },
+                                );
+                            }
+                            FrozenMismatch::NoReplacement => {}
+                        }
                     }
                 }
 
                 if is_changed {
                     writeln!(
                         printer.stdout(),
-                        "[{}] {} {} -> {}",
+                        "[{}] {} `{}` -> `{}`",
                         update.target.repo.cyan(),
                         if dry_run { "would update" } else { "updating" },
                         update.target.current_rev,
@@ -413,9 +459,13 @@ fn apply_repo_updates<'a>(
         }
     }
 
-    Ok(failure)
+    Ok(ApplyRepoUpdatesResult {
+        failure,
+        has_updates,
+    })
 }
 
+#[expect(clippy::mutable_key_type)]
 fn record_project_revision<'a>(
     project_updates: &mut ProjectUpdates<'a>,
     project: &'a Project,
@@ -448,7 +498,14 @@ async fn collect_frozen_mismatches<'a>(
         return Ok(Vec::new());
     }
 
-    let rev_tags = get_tags_pointing_at_revision(tag_timestamps, target.current_rev);
+    let current_rev_is_valid = resolve_revision_to_commit(repo_path, target.current_rev)
+        .await
+        .is_ok();
+    let rev_tags = if current_rev_is_valid {
+        get_tags_pointing_at_revision(tag_timestamps, target.current_rev)
+    } else {
+        Vec::new()
+    };
     let mut resolved_frozen_refs = FxHashMap::default();
     for frozen_ref in frozen_refs_to_check {
         let resolved = resolve_revision_to_commit(repo_path, frozen_ref).await.ok();
@@ -462,18 +519,23 @@ async fn collect_frozen_mismatches<'a>(
             let current_frozen = usage.current_frozen.as_deref()?;
             let frozen_commit = resolved_frozen_refs.get(current_frozen).cloned().flatten();
 
-            let mismatch = if let Some(frozen_commit) = frozen_commit.as_deref()
-                && frozen_commit.eq_ignore_ascii_case(target.current_rev)
-            {
-                None
-            } else {
-                Some(
-                    select_best_tag(&rev_tags, current_frozen, true)
-                        .map_or(FrozenMismatch::NoReplacement, |tag: &str| {
-                            FrozenMismatch::ReplaceWith(tag.to_string())
-                        }),
-                )
-            }?;
+            let reason = match frozen_commit.as_deref() {
+                Some(frozen_commit) if frozen_commit.eq_ignore_ascii_case(target.current_rev) => {
+                    return None;
+                }
+                Some(_) => FrozenMismatchReason::ResolvesToDifferentCommit,
+                None => FrozenMismatchReason::Unresolvable,
+            };
+            let mismatch = select_best_tag(&rev_tags, current_frozen, true).map_or_else(
+                || {
+                    if current_rev_is_valid {
+                        FrozenMismatch::Remove
+                    } else {
+                        FrozenMismatch::NoReplacement
+                    }
+                },
+                |tag: &str| FrozenMismatch::ReplaceWith(tag.to_string()),
+            );
 
             Some(FrozenCommentMismatch {
                 project: usage.project,
@@ -481,6 +543,7 @@ async fn collect_frozen_mismatches<'a>(
                 remote_index: usage.remote_index,
                 current_frozen: current_frozen.to_string(),
                 frozen_site: usage.current_frozen_site.clone(),
+                reason,
                 mismatch,
             })
         })
@@ -504,7 +567,7 @@ async fn evaluate_repo_source<'a>(
             repo_path.display()
         );
         setup_and_fetch_repo(repo_source.repo, repo_path).await?;
-        let metadata = load_tag_metadata(repo_source, repo_path, bleeding_edge).await?;
+        let metadata = list_tag_metadata(repo_path).await?;
 
         anyhow::Ok(metadata)
     }
@@ -541,28 +604,6 @@ async fn evaluate_repo_source<'a>(
     }
 
     Ok(updates)
-}
-
-/// Loads fetched tag metadata when any revision evaluation depends on it.
-async fn load_tag_metadata(
-    repo_source: &RepoSource<'_>,
-    repo_path: &Path,
-    bleeding_edge: bool,
-) -> Result<Vec<TagTimestamp>> {
-    let should_load_tag_timestamps = repo_source.targets.iter().any(|target| {
-        !bleeding_edge
-            || (looks_like_sha(target.current_rev)
-                && target
-                    .usages
-                    .iter()
-                    .any(|usage| usage.current_frozen.is_some()))
-    });
-
-    if should_load_tag_timestamps {
-        list_tag_metadata(repo_path).await
-    } else {
-        Ok(Vec::new())
-    }
 }
 
 /// Resolves one configured `repo + rev + hook set` entry within an already-fetched remote repository.
@@ -688,17 +729,38 @@ fn render_frozen_mismatch_warning(
     mismatch: &FrozenCommentMismatch<'_>,
     dry_run: bool,
 ) -> String {
+    let label = match mismatch.reason {
+        FrozenMismatchReason::ResolvesToDifferentCommit => {
+            format!(
+                "`{}` resolves to a different commit",
+                mismatch.current_frozen
+            )
+        }
+        FrozenMismatchReason::Unresolvable => {
+            format!("`{}` could not be resolved", mismatch.current_frozen)
+        }
+    };
     let details = match &mismatch.mismatch {
         FrozenMismatch::ReplaceWith(replacement) => {
-            if dry_run {
-                format!("would update comment to `{replacement}`")
-            } else {
-                format!("updating comment to `{replacement}`")
-            }
+            format!(
+                "{} frozen comment to `{replacement}`",
+                if dry_run { "would update" } else { "updating" }
+            )
         }
-        FrozenMismatch::NoReplacement => "no tag points at the configured commit".to_string(),
+        FrozenMismatch::Remove => {
+            format!(
+                "{} frozen comment because no tag points at the pinned commit",
+                if dry_run { "would remove" } else { "removing" }
+            )
+        }
+        FrozenMismatch::NoReplacement => {
+            format!("pinned commit `{current_rev}` does not exist in the repo")
+        }
     };
-    let title = format!("[{repo}] frozen comment does not match `rev: {current_rev}`");
+    let title = format!(
+        "[{repo}] frozen ref `{}` does not match `{current_rev}`",
+        mismatch.current_frozen
+    );
 
     let site = mismatch
         .frozen_site
@@ -710,18 +772,11 @@ fn render_frozen_mismatch_warning(
             Snippet::source(&site.source_line)
                 .line_start(site.line_number)
                 .path(mismatch.project.config_file().user_display().to_string())
-                .annotation(
-                    AnnotationKind::Primary
-                        .span(site.span.clone())
-                        .label(format!(
-                            "`{}` resolves to a different commit",
-                            mismatch.current_frozen
-                        )),
-                ),
+                .annotation(AnnotationKind::Primary.span(site.span.clone()).label(label)),
         )
         .element(Level::NOTE.message(details));
 
-    let renderer = Renderer::styled().decor_style(DecorStyle::Unicode);
+    let renderer = Renderer::styled().decor_style(DecorStyle::Ascii);
     format!("{}\n", renderer.render(&[report]))
 }
 

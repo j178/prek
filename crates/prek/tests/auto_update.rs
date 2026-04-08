@@ -131,7 +131,7 @@ fn auto_update_basic() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/test-repo] updating v1.0.0 -> v2.0.0
+    [[HOME]/test-repos/test-repo] updating `v1.0.0` -> `v2.0.0`
 
     ----- stderr -----
     ");
@@ -272,7 +272,7 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
     success: false
     exit_code: 1
     ----- stdout -----
-    [[HOME]/test-repos/repo1] updating v1.0.0 -> v1.1.0
+    [[HOME]/test-repos/repo1] updating `v1.0.0` -> `v1.1.0`
     [[HOME]/test-repos/repo2] already up to date
 
     ----- stderr -----
@@ -332,7 +332,7 @@ fn test_resolve_revision_ignores_git_dir_env_var() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/target-repo] updating v0.1.0 -> v0.2.0
+    [[HOME]/test-repos/target-repo] updating `v0.1.0` -> `v0.2.0`
 
     ----- stderr -----
     ");
@@ -382,7 +382,7 @@ fn auto_update_specific_repos() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/repo1] updating v1.0.0 -> v1.1.0
+    [[HOME]/test-repos/repo1] updating `v1.0.0` -> `v1.1.0`
 
     ----- stderr -----
     ");
@@ -410,7 +410,7 @@ fn auto_update_specific_repos() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/repo1] already up to date
-    [[HOME]/test-repos/repo2] updating v2.0.0 -> v2.1.0
+    [[HOME]/test-repos/repo2] updating `v2.0.0` -> `v2.1.0`
 
     ----- stderr -----
     ");
@@ -462,7 +462,7 @@ fn auto_update_bleeding_edge() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/bleeding-repo] updating v1.0.0 -> [COMMIT_SHA]
+    [[HOME]/test-repos/bleeding-repo] updating `v1.0.0` -> `[COMMIT_SHA]`
 
     ----- stderr -----
     ");
@@ -512,14 +512,14 @@ fn auto_update_freeze() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r" [a-f0-9]{40}", r" [COMMIT_SHA]")])
+        .chain([(r"[a-f0-9]{40}", r"[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
     cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/freeze-repo] updating v1.0.0 -> [COMMIT_SHA]
+    [[HOME]/test-repos/freeze-repo] updating `v1.0.0` -> `[COMMIT_SHA]`
 
     ----- stderr -----
     ");
@@ -640,8 +640,8 @@ fn auto_update_preserve_quote_style() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/repo1] updating v1.0.0 -> v1.1.0
-    [[HOME]/test-repos/repo2] updating v1.0.0 -> v1.1.0
+    [[HOME]/test-repos/repo1] updating `v1.0.0` -> `v1.1.0`
+    [[HOME]/test-repos/repo2] updating `v1.0.0` -> `v1.1.0`
 
     ----- stderr -----
     ");
@@ -707,16 +707,16 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/frozen-repo] updating [COMMIT_SHA] -> v1.2.0
+    [[HOME]/test-repos/frozen-repo] updating `[COMMIT_SHA]` -> `v1.2.0`
 
     ----- stderr -----
-    warning: [[HOME]/test-repos/frozen-repo] frozen comment does not match `rev: [COMMIT_SHA]`
-      ╭▸ .pre-commit-config.yaml:3:62
-      │
-    3 │     rev: [COMMIT_SHA]  # frozen: v1.0.0
-      │                                                              ━━━━━━ `v1.0.0` resolves to a different commit
-      │
-      ╰ note: no tag points at the configured commit
+    warning: [[HOME]/test-repos/frozen-repo] frozen ref `v1.0.0` does not match `[COMMIT_SHA]`
+     --> .pre-commit-config.yaml:3:62
+      |
+    3 |     rev: [COMMIT_SHA]  # frozen: v1.0.0
+      |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
+      |
+      = note: pinned commit `[COMMIT_SHA]` does not exist in the repo
     ");
 
     insta::with_settings!(
@@ -768,16 +768,16 @@ fn auto_update_updates_mismatched_frozen_comment() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/check-frozen-repo] updating frozen reference v1.0.0 -> v1.1.0
+    [[HOME]/test-repos/check-frozen-repo] updating frozen reference `v1.0.0` -> `v1.1.0`
 
     ----- stderr -----
-    warning: [[HOME]/test-repos/check-frozen-repo] frozen comment does not match `rev: [COMMIT_SHA]`
-      ╭▸ .pre-commit-config.yaml:3:62
-      │
-    3 │     rev: [COMMIT_SHA]  # frozen: v1.0.0
-      │                                                              ━━━━━━ `v1.0.0` resolves to a different commit
-      │
-      ╰ note: updating comment to `v1.1.0`
+    warning: [[HOME]/test-repos/check-frozen-repo] frozen ref `v1.0.0` does not match `[COMMIT_SHA]`
+     --> .pre-commit-config.yaml:3:62
+      |
+    3 |     rev: [COMMIT_SHA]  # frozen: v1.0.0
+      |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
+      |
+      = note: updating frozen comment to `v1.1.0`
     ");
 
     insta::with_settings!(
@@ -787,6 +787,200 @@ fn auto_update_updates_mismatched_frozen_comment() -> Result<()> {
             repos:
               - repo: [HOME]/test-repos/check-frozen-repo
                 rev: [COMMIT_SHA]  # frozen: v1.1.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_updates_unresolvable_frozen_comment() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(
+        &context,
+        "check-unresolvable-frozen-repo",
+        &["v1.0.0", "v1.1.0"],
+    )?;
+
+    let commit_sha = git_cmd(&repo_path)
+        .args(["rev-parse", "v1.1.0^{}"])
+        .output()?
+        .stdout;
+    let commit_sha = str::from_utf8(&commit_sha)?.trim().to_string();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: {}  # frozen: does-not-exist
+            hooks:
+              - id: test-hook
+    ", repo_path, commit_sha});
+
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(commit_sha.as_str(), "[COMMIT_SHA]")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/check-unresolvable-frozen-repo] updating frozen reference `does-not-exist` -> `v1.1.0`
+
+    ----- stderr -----
+    warning: [[HOME]/test-repos/check-unresolvable-frozen-repo] frozen ref `does-not-exist` does not match `[COMMIT_SHA]`
+     --> .pre-commit-config.yaml:3:62
+      |
+    3 |     rev: [COMMIT_SHA]  # frozen: does-not-exist
+      |                                                              ^^^^^^^^^^^^^^ `does-not-exist` could not be resolved
+      |
+      = note: updating frozen comment to `v1.1.0`
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/check-unresolvable-frozen-repo
+                rev: [COMMIT_SHA]  # frozen: v1.1.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_removes_frozen_comment_when_pinned_commit_has_no_tag() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(
+        &context,
+        "check-remove-frozen-comment-repo",
+        &["v1.0.0", "v1.1.0"],
+    )?;
+
+    let commit_sha = git_cmd(&repo_path)
+        .args(["rev-parse", "HEAD"])
+        .output()?
+        .stdout;
+    let commit_sha = str::from_utf8(&commit_sha)?.trim().to_string();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: {}  # frozen: v1.1.0
+            hooks:
+              - id: test-hook
+    ", repo_path, commit_sha});
+
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(commit_sha.as_str(), "[COMMIT_SHA]")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--bleeding-edge").arg("--freeze"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/check-remove-frozen-comment-repo] removing frozen reference `v1.1.0`
+
+    ----- stderr -----
+    warning: [[HOME]/test-repos/check-remove-frozen-comment-repo] frozen ref `v1.1.0` does not match `[COMMIT_SHA]`
+     --> .pre-commit-config.yaml:3:62
+      |
+    3 |     rev: [COMMIT_SHA]  # frozen: v1.1.0
+      |                                                              ^^^^^^ `v1.1.0` resolves to a different commit
+      |
+      = note: removing frozen comment because no tag points at the pinned commit
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/check-remove-frozen-comment-repo
+                rev: [COMMIT_SHA]
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_warns_for_invalid_pinned_commit_with_frozen_comment() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(
+        &context,
+        "check-invalid-pinned-frozen-repo",
+        &["v1.0.0", "v1.1.0"],
+    )?;
+
+    let invalid_commit = "1234567890abcdef1234567890abcdef12345678";
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: {}  # frozen: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path, invalid_commit});
+
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (invalid_commit, "[INVALID_COMMIT]"),
+            (r"[a-f0-9]{40}", r"[COMMIT_SHA]"),
+        ])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--dry-run"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/check-invalid-pinned-frozen-repo] would update `[INVALID_COMMIT]` -> `[COMMIT_SHA]`
+
+    ----- stderr -----
+    warning: [[HOME]/test-repos/check-invalid-pinned-frozen-repo] frozen ref `v1.0.0` does not match `[INVALID_COMMIT]`
+     --> .pre-commit-config.yaml:3:62
+      |
+    3 |     rev: [INVALID_COMMIT]  # frozen: v1.0.0
+      |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
+      |
+      = note: pinned commit `[INVALID_COMMIT]` does not exist in the repo
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/check-invalid-pinned-frozen-repo
+                rev: [INVALID_COMMIT]  # frozen: v1.0.0
                 hooks:
                   - id: test-hook
             ");
@@ -832,13 +1026,13 @@ fn auto_update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: [[HOME]/test-repos/check-frozen-dry-run-repo] frozen comment does not match `rev: [COMMIT_SHA]`
-      ╭▸ .pre-commit-config.yaml:3:62
-      │
-    3 │     rev: [COMMIT_SHA]  # frozen: v1.0.0
-      │                                                              ━━━━━━ `v1.0.0` resolves to a different commit
-      │
-      ╰ note: would update comment to `v1.1.0`
+    warning: [[HOME]/test-repos/check-frozen-dry-run-repo] frozen ref `v1.0.0` does not match `[COMMIT_SHA]`
+     --> .pre-commit-config.yaml:3:62
+      |
+    3 |     rev: [COMMIT_SHA]  # frozen: v1.0.0
+      |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
+      |
+      = note: would update frozen comment to `v1.1.0`
     ");
 
     insta::with_settings!(
@@ -847,6 +1041,67 @@ fn auto_update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
             assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/check-frozen-dry-run-repo
+                rev: [COMMIT_SHA]  # frozen: v1.0.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_check_fails_for_mismatched_frozen_comment() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path =
+        create_local_git_repo(&context, "check-frozen-check-repo", &["v1.0.0", "v1.1.0"])?;
+
+    let commit_sha = git_cmd(&repo_path)
+        .args(["rev-parse", "v1.1.0^{}"])
+        .output()?
+        .stdout;
+    let commit_sha = str::from_utf8(&commit_sha)?.trim().to_string();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: {}  # frozen: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path, commit_sha});
+
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(commit_sha.as_str(), "[COMMIT_SHA]")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--check"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: [[HOME]/test-repos/check-frozen-check-repo] frozen ref `v1.0.0` does not match `[COMMIT_SHA]`
+     --> .pre-commit-config.yaml:3:62
+      |
+    3 |     rev: [COMMIT_SHA]  # frozen: v1.0.0
+      |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
+      |
+      = note: would update frozen comment to `v1.1.0`
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/check-frozen-check-repo
                 rev: [COMMIT_SHA]  # frozen: v1.0.0
                 hooks:
                   - id: test-hook
@@ -895,16 +1150,16 @@ fn auto_update_updates_mismatched_frozen_comment_toml() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/check-frozen-repo-toml] updating frozen reference v1.0.0 -> v1.1.0
+    [[HOME]/test-repos/check-frozen-repo-toml] updating frozen reference `v1.0.0` -> `v1.1.0`
 
     ----- stderr -----
-    warning: [[HOME]/test-repos/check-frozen-repo-toml] frozen comment does not match `rev: [COMMIT_SHA]`
-      ╭▸ prek.toml:3:60
-      │
-    3 │ rev = "[COMMIT_SHA]" # frozen: v1.0.0
-      │                                                            ━━━━━━ `v1.0.0` resolves to a different commit
-      │
-      ╰ note: updating comment to `v1.1.0`
+    warning: [[HOME]/test-repos/check-frozen-repo-toml] frozen ref `v1.0.0` does not match `[COMMIT_SHA]`
+     --> prek.toml:3:60
+      |
+    3 | rev = "[COMMIT_SHA]" # frozen: v1.0.0
+      |                                                            ^^^^^^ `v1.0.0` resolves to a different commit
+      |
+      = note: updating frozen comment to `v1.1.0`
     "#);
 
     insta::with_settings!(
@@ -953,7 +1208,7 @@ fn auto_update_local_repo_ignored() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/remote-repo] updating v1.0.0 -> v1.1.0
+    [[HOME]/test-repos/remote-repo] updating `v1.0.0` -> `v1.1.0`
 
     ----- stderr -----
     ");
@@ -1088,8 +1343,8 @@ fn auto_update_workspace() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/workspace-repo1] updating v1.0.0 -> v2.0.0
-    [[HOME]/test-repos/workspace-repo2] updating v1.0.0 -> v1.5.0
+    [[HOME]/test-repos/workspace-repo1] updating `v1.0.0` -> `v2.0.0`
+    [[HOME]/test-repos/workspace-repo2] updating `v1.0.0` -> `v1.5.0`
     [[HOME]/test-repos/workspace-repo3] already up to date
 
     ----- stderr -----
@@ -1187,7 +1442,7 @@ fn prefer_similar_tags() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/remote-repo] updating v1.0.0 -> v1.1.0
+    [[HOME]/test-repos/remote-repo] updating `v1.0.0` -> `v1.1.0`
 
     ----- stderr -----
     ");
@@ -1236,7 +1491,7 @@ fn auto_update_dry_run() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/test-repo] would update v1.0.0 -> v2.0.0
+    [[HOME]/test-repos/test-repo] would update `v1.0.0` -> `v2.0.0`
 
     ----- stderr -----
     ");
@@ -1247,6 +1502,50 @@ fn auto_update_dry_run() -> Result<()> {
             assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/test-repo
+                rev: v1.0.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_check() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path =
+        create_local_git_repo(&context, "check-test-repo", &["v1.0.0", "v1.1.0", "v2.0.0"])?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--check").arg("--cooldown-days").arg("0"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    [[HOME]/test-repos/check-test-repo] would update `v1.0.0` -> `v2.0.0`
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/check-test-repo
                 rev: v1.0.0
                 hooks:
                   - id: test-hook
@@ -1281,7 +1580,7 @@ fn quoting_float_like_version_number() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/test-repo] updating 0.49 -> 0.50
+    [[HOME]/test-repos/test-repo] updating `0.49` -> `0.50`
 
     ----- stderr -----
     ");
@@ -1359,7 +1658,7 @@ fn auto_update_toml() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/test-repo-toml] updating v1.0.0 -> v2.0.0
+    [[HOME]/test-repos/test-repo-toml] updating `v1.0.0` -> `v2.0.0`
 
     ----- stderr -----
     ");
@@ -1409,7 +1708,7 @@ fn auto_update_toml_with_comment() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/test-repo-toml] updating v1.0.0 -> v2.0.0
+    [[HOME]/test-repos/test-repo-toml] updating `v1.0.0` -> `v2.0.0`
 
     ----- stderr -----
     ");
@@ -1447,7 +1746,7 @@ fn auto_update_toml_with_comment() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/test-repo-toml] updating v1.0.0 -> v2.0.0
+    [[HOME]/test-repos/test-repo-toml] updating `v1.0.0` -> `v2.0.0`
 
     ----- stderr -----
     ");
@@ -1509,7 +1808,7 @@ fn auto_update_freeze_toml() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/freeze-repo] updating v1.0.0 -> [COMMIT_SHA]
+    [[HOME]/test-repos/freeze-repo] updating `v1.0.0` -> `[COMMIT_SHA]`
 
     ----- stderr -----
     ");
@@ -1558,7 +1857,7 @@ fn auto_update_equal_timestamp_tags_picks_highest_version() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/mirror-repo] updating v1.0.3 -> v1.0.5
+    [[HOME]/test-repos/mirror-repo] updating `v1.0.3` -> `v1.0.5`
 
     ----- stderr -----
     ");
@@ -1608,7 +1907,7 @@ fn auto_update_equal_timestamp_prefers_semver_over_nonsemver() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/mixed-tags-repo] updating v1.0.0 -> v2.0.0
+    [[HOME]/test-repos/mixed-tags-repo] updating `v1.0.0` -> `v2.0.0`
 
     ----- stderr -----
     ");
@@ -1679,7 +1978,7 @@ fn auto_update_mixed_timestamps_with_equal_subgroups() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/mixed-ts-repo] updating v1.0.0 -> v2.0.1
+    [[HOME]/test-repos/mixed-ts-repo] updating `v1.0.0` -> `v2.0.1`
 
     ----- stderr -----
     ");
@@ -1742,7 +2041,7 @@ fn auto_update_freeze_toml_with_comment() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/freeze-repo] updating v1.0.0 -> [COMMIT_SHA]
+    [[HOME]/test-repos/freeze-repo] updating `v1.0.0` -> `[COMMIT_SHA]`
 
     ----- stderr -----
     ");
