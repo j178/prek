@@ -485,7 +485,7 @@ async fn collect_frozen_mismatches<'a>(
     target: &'a RepoTarget<'a>,
     tag_timestamps: &[TagTimestamp],
 ) -> Result<Vec<FrozenCommentMismatch<'a>>> {
-    if !looks_like_sha(target.current_rev) {
+    if !(target.current_rev.len() == 40 && looks_like_sha(target.current_rev)) {
         return Ok(Vec::new());
     }
 
@@ -649,7 +649,7 @@ async fn evaluate_repo_target<'a>(
 
     let (rev, frozen) = if freeze {
         let exact = resolve_revision_to_commit(repo_path, &rev).await?;
-        if rev == exact {
+        if rev.eq_ignore_ascii_case(&exact) {
             (rev, None)
         } else {
             debug!("Freezing revision `{rev}` to `{exact}`");

@@ -1289,7 +1289,7 @@ pub(crate) fn read_config(path: &Path) -> Result<Config, Error> {
             if let Repo::Remote(repo) = repo {
                 let rev = &repo.rev;
                 // A rev is considered mutable if it doesn't contain a '.' (like a version)
-                // and is not a full hexadecimal commit SHA.
+                // and is not a hexadecimal string (like a commit SHA).
                 if !rev.contains('.') && !looks_like_sha(rev) {
                     return Some(repo);
                 }
@@ -1329,9 +1329,9 @@ pub(crate) fn read_manifest(path: &Path) -> Result<Manifest, Error> {
     Ok(manifest)
 }
 
-/// Check if a string looks like a full git SHA-1.
+/// Check if a string looks like a git SHA-1.
 pub(crate) fn looks_like_sha(s: &str) -> bool {
-    s.len() == 40 && s.as_bytes().iter().all(u8::is_ascii_hexdigit)
+    !s.is_empty() && s.as_bytes().iter().all(u8::is_ascii_hexdigit)
 }
 
 fn deserialize_and_validate_minimum_version<'de, D>(
@@ -2310,14 +2310,5 @@ mod tests {
         "#};
         let result = serde_saphyr::from_str::<Config>(yaml);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn looks_like_sha_requires_full_sha1() {
-        assert!(looks_like_sha("0123456789abcdef0123456789abcdef01234567"));
-        assert!(looks_like_sha("ABCDEF0123456789ABCDEF0123456789ABCDEF01"));
-        assert!(!looks_like_sha("0123456789abcdef0123456789abcdef0123456"));
-        assert!(!looks_like_sha("0123456789abcdef0123456789abcdef012345678"));
-        assert!(!looks_like_sha("0123456789abcdef0123456789abcdef0123456g"));
     }
 }
