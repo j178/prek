@@ -127,25 +127,25 @@ fn auto_update_basic() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/test-repo] updating v1.0.0 -> v2.0.0
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/test-repo
                 rev: v2.0.0
                 hooks:
                   - id: test-hook
-            "#);
+            ");
         }
     );
 
@@ -171,25 +171,25 @@ fn auto_update_already_up_to_date() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/up-to-date-repo] already up to date
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/up-to-date-repo
                 rev: v1.0.0
                 hooks:
                   - id: test-hook
-            "#);
+            ");
         }
     );
 
@@ -328,25 +328,25 @@ fn test_resolve_revision_ignores_git_dir_env_var() -> Result<()> {
         .arg("0")
         .env("GIT_DIR", ChildPath::new(&external_repo_path).join(".git"));
 
-    cmd_snapshot!(filters.clone(), cmd, @r#"
+    cmd_snapshot!(filters.clone(), cmd, @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/target-repo] updating v0.1.0 -> v0.2.0
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/target-repo
                 rev: v0.2.0
                 hooks:
                   - id: test-hook
-            "#);
+            ");
         }
     );
 
@@ -378,19 +378,19 @@ fn auto_update_specific_repos() -> Result<()> {
     let filters = context.filters();
 
     // Update only repo1
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--repo").arg(&repo1_path).arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--repo").arg(&repo1_path).arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/repo1] updating v1.0.0 -> v1.1.0
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/repo1
                 rev: v1.1.0
@@ -400,12 +400,12 @@ fn auto_update_specific_repos() -> Result<()> {
                 rev: v2.0.0
                 hooks:
                   - id: another-hook
-            "#);
+            ");
         }
     );
 
     // Update both repo1 and repo2
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--repo").arg(&repo1_path).arg("--repo").arg(&repo2_path).arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--repo").arg(&repo1_path).arg("--repo").arg(&repo2_path).arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -413,12 +413,12 @@ fn auto_update_specific_repos() -> Result<()> {
     [[HOME]/test-repos/repo2] updating v2.0.0 -> v2.1.0
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/repo1
                 rev: v1.1.0
@@ -428,7 +428,7 @@ fn auto_update_specific_repos() -> Result<()> {
                 rev: v2.1.0
                 hooks:
                   - id: another-hook
-            "#);
+            ");
         }
     );
 
@@ -458,25 +458,25 @@ fn auto_update_bleeding_edge() -> Result<()> {
         .chain([("[a-f0-9]{40}", "[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--bleeding-edge"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--bleeding-edge"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/bleeding-repo] updating v1.0.0 -> [COMMIT_SHA]
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/bleeding-repo
                 rev: [COMMIT_SHA]
                 hooks:
                   - id: test-hook
-            "#);
+            ");
         }
     );
 
@@ -515,7 +515,7 @@ fn auto_update_freeze() -> Result<()> {
         .chain([(r" [a-f0-9]{40}", r" [COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("0"), @r"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -528,13 +528,13 @@ fn auto_update_freeze() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r##"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/freeze-repo
                 rev: [COMMIT_SHA]  # frozen: v1.1.0
                 hooks:
                   - id: test-hook
-            "##);
+            ");
         }
     );
 
@@ -636,7 +636,7 @@ fn auto_update_preserve_quote_style() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -644,7 +644,7 @@ fn auto_update_preserve_quote_style() -> Result<()> {
     [[HOME]/test-repos/repo2] updating v1.0.0 -> v1.1.0
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
@@ -722,13 +722,13 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/frozen-repo
                 rev: v1.2.0
                 hooks:
                   - id: test-hook
-            "#);
+            ");
         }
     );
 
@@ -768,7 +768,7 @@ fn auto_update_updates_mismatched_frozen_comment() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/check-frozen-repo] updating frozen reference v1.0.0 -> v1.1.0 in .pre-commit-config.yaml
+    [[HOME]/test-repos/check-frozen-repo] updating frozen reference v1.0.0 -> v1.1.0
 
     ----- stderr -----
     warning: [[HOME]/test-repos/check-frozen-repo] frozen comment does not match `rev: [COMMIT_SHA]`
@@ -783,13 +783,13 @@ fn auto_update_updates_mismatched_frozen_comment() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/check-frozen-repo
                 rev: [COMMIT_SHA]  # frozen: v1.1.0
                 hooks:
                   - id: test-hook
-            "#);
+            ");
         }
     );
 
@@ -844,13 +844,13 @@ fn auto_update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/check-frozen-dry-run-repo
                 rev: [COMMIT_SHA]  # frozen: v1.0.0
                 hooks:
                   - id: test-hook
-            "#);
+            ");
         }
     );
 
@@ -895,7 +895,7 @@ fn auto_update_updates_mismatched_frozen_comment_toml() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/check-frozen-repo-toml] updating frozen reference v1.0.0 -> v1.1.0 in prek.toml
+    [[HOME]/test-repos/check-frozen-repo-toml] updating frozen reference v1.0.0 -> v1.1.0
 
     ----- stderr -----
     warning: [[HOME]/test-repos/check-frozen-repo-toml] frozen comment does not match `rev: [COMMIT_SHA]`
@@ -949,19 +949,19 @@ fn auto_update_local_repo_ignored() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/remote-repo] updating v1.0.0 -> v1.1.0
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: local
                 hooks:
@@ -973,7 +973,7 @@ fn auto_update_local_repo_ignored() -> Result<()> {
                 rev: v1.1.0
                 hooks:
                   - id: test-hook
-            "#);
+            ");
         }
     );
 
@@ -1023,14 +1023,14 @@ fn missing_hook_ids() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     [[HOME]/test-repos/missing-hook-repo] update failed: Cannot update to rev `v2.0.0`, hook is missing: test-hook
-    "#);
+    ");
 
     Ok(())
 }
@@ -1084,7 +1084,7 @@ fn auto_update_workspace() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1098,7 +1098,7 @@ fn auto_update_workspace() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read("project-a/.pre-commit-config.yaml"), @r#"
+            assert_snapshot!(context.read("project-a/.pre-commit-config.yaml"), @"
             repos:
               - repo: [HOME]/test-repos/workspace-repo1
                 rev: v2.0.0
@@ -1108,14 +1108,14 @@ fn auto_update_workspace() -> Result<()> {
                 rev: v1.5.0
                 hooks:
                   - id: another-hook
-            "#);
+            ");
         }
     );
 
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read("project-b/.pre-commit-config.yaml"), @r#"
+            assert_snapshot!(context.read("project-b/.pre-commit-config.yaml"), @"
             repos:
               - repo: [HOME]/test-repos/workspace-repo2
                 rev: v1.5.0
@@ -1125,7 +1125,7 @@ fn auto_update_workspace() -> Result<()> {
                 rev: v2.0.0
                 hooks:
                   - id: test-hook
-            "#);
+            ");
         }
     );
 
@@ -1183,7 +1183,7 @@ fn prefer_similar_tags() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1195,7 +1195,7 @@ fn prefer_similar_tags() -> Result<()> {
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: local
                 hooks:
@@ -1232,19 +1232,19 @@ fn auto_update_dry_run() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--dry-run").arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--dry-run").arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/test-repo] would update v1.0.0 -> v2.0.0
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/test-repo
                 rev: v1.0.0
@@ -1277,14 +1277,14 @@ fn quoting_float_like_version_number() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/test-repo] updating 0.49 -> 0.50
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
@@ -1355,14 +1355,14 @@ fn auto_update_toml() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/test-repo-toml] updating v1.0.0 -> v2.0.0
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
       { filters => filters.clone() },
@@ -1405,14 +1405,14 @@ fn auto_update_toml_with_comment() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/test-repo-toml] updating v1.0.0 -> v2.0.0
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
       { filters => filters.clone() },
@@ -1443,14 +1443,14 @@ fn auto_update_toml_with_comment() -> Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/test-repo-toml] updating v1.0.0 -> v2.0.0
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
       { filters => filters.clone() },
@@ -1505,7 +1505,7 @@ fn auto_update_freeze_toml() -> Result<()> {
         .chain([(r"[a-f0-9]{40}", r"[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("0"), @r"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1554,25 +1554,25 @@ fn auto_update_equal_timestamp_tags_picks_highest_version() -> Result<()> {
     context.git_add(".");
 
     let filters = context.filters();
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/mirror-repo] updating v1.0.3 -> v1.0.5
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/mirror-repo
                 rev: v1.0.5
                 hooks:
                   - id: test-hook
-            "#);
+            ");
         }
     );
 
@@ -1604,25 +1604,25 @@ fn auto_update_equal_timestamp_prefers_semver_over_nonsemver() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/mixed-tags-repo] updating v1.0.0 -> v2.0.0
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/mixed-tags-repo
                 rev: v2.0.0
                 hooks:
                   - id: test-hook
-            "#);
+            ");
         }
     );
 
@@ -1675,25 +1675,25 @@ fn auto_update_mixed_timestamps_with_equal_subgroups() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/mixed-ts-repo] updating v1.0.0 -> v2.0.1
 
     ----- stderr -----
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/mixed-ts-repo
                 rev: v2.0.1
                 hooks:
                   - id: test-hook
-            "#);
+            ");
         }
     );
 
@@ -1738,7 +1738,7 @@ fn auto_update_freeze_toml_with_comment() -> Result<()> {
         .chain([(r"[a-f0-9]{40}", r"[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("0"), @r"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----

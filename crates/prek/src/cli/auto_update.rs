@@ -45,7 +45,7 @@ struct RepoUsage<'a> {
     /// The project whose config contains this repo entry.
     project: &'a Project,
     /// The number of remote repos in that project config.
-    remote_size: usize,
+    remote_count: usize,
     /// The position of this remote repo among the project's remote repos.
     remote_index: usize,
     /// The existing `# frozen:` comment for this repo entry, if present.
@@ -231,7 +231,7 @@ fn collect_repo_sources(workspace: &Workspace) -> Result<Vec<RepoSource<'_>>> {
         FxHashMap::default();
 
     for project in workspace.projects() {
-        let remote_size = project
+        let remote_count = project
             .config()
             .repos
             .iter()
@@ -245,10 +245,10 @@ fn collect_repo_sources(workspace: &Workspace) -> Result<Vec<RepoSource<'_>>> {
             )
         })?;
 
-        if frozen_refs.len() != remote_size {
+        if frozen_refs.len() != remote_count {
             anyhow::bail!(
                 "Found {} remote repos in `{}` but {} `rev:` entries while checking frozen refs",
-                remote_size,
+                remote_count,
                 project.config_file().user_display(),
                 frozen_refs.len()
             );
@@ -280,7 +280,7 @@ fn collect_repo_sources(workspace: &Workspace) -> Result<Vec<RepoSource<'_>>> {
                 });
             target.usages.push(RepoUsage {
                 project,
-                remote_size,
+                remote_count,
                 remote_index,
                 current_frozen: frozen_refs[remote_index].current_frozen.clone(),
                 current_frozen_site: frozen_refs[remote_index].site.clone(),
@@ -356,11 +356,10 @@ fn apply_repo_updates<'a>(
 
                         writeln!(
                             printer.stdout(),
-                            "[{}] updating frozen reference {} -> {} in {}",
+                            "[{}] updating frozen reference {} -> {}",
                             update.target.repo.cyan(),
                             mismatch.current_frozen,
                             replacement,
-                            mismatch.project.config_file().user_display()
                         )?;
 
                         record_project_revision(
@@ -390,7 +389,7 @@ fn apply_repo_updates<'a>(
                         record_project_revision(
                             project_updates,
                             usage.project,
-                            usage.remote_size,
+                            usage.remote_count,
                             usage.remote_index,
                             resolved.revision.clone(),
                         );
@@ -478,7 +477,7 @@ async fn collect_frozen_mismatches<'a>(
 
             Some(FrozenCommentMismatch {
                 project: usage.project,
-                remote_size: usage.remote_size,
+                remote_size: usage.remote_count,
                 remote_index: usage.remote_index,
                 current_frozen: current_frozen.to_string(),
                 frozen_site: usage.current_frozen_site.clone(),
@@ -607,9 +606,14 @@ async fn evaluate_repo_target<'a>(
         });
     };
 
-    let (rev, frozen) = if freeze && let Some(exact) = freeze_revision(repo_path, &rev).await? {
-        debug!("Freezing revision `{rev}` to `{exact}`");
-        (exact, Some(rev))
+    let (rev, frozen) = if freeze {
+        let exact = resolve_revision_to_commit(repo_path, &rev).await?;
+        if rev == exact {
+            (rev, None)
+        } else {
+            debug!("Freezing revision `{rev}` to `{exact}`");
+            (exact, Some(rev))
+        }
     } else {
         (rev, None)
     };
@@ -696,30 +700,26 @@ fn render_frozen_mismatch_warning(
     };
     let title = format!("[{repo}] frozen comment does not match `rev: {current_rev}`");
 
-    let report =
-        if let Some(site) = &mismatch.frozen_site {
-            Level::WARNING
-                .primary_title(title)
-                .element(
-                    Snippet::source(&site.source_line)
-                        .line_start(site.line_number)
-                        .path(mismatch.project.config_file().user_display().to_string())
-                        .annotation(AnnotationKind::Primary.span(site.span.clone()).label(
-                            format!(
-                                "`{}` resolves to a different commit",
-                                mismatch.current_frozen
-                            ),
+    let site = mismatch
+        .frozen_site
+        .as_ref()
+        .expect("frozen comment site must exist when rendering a frozen mismatch warning");
+    let report = Level::WARNING
+        .primary_title(title)
+        .element(
+            Snippet::source(&site.source_line)
+                .line_start(site.line_number)
+                .path(mismatch.project.config_file().user_display().to_string())
+                .annotation(
+                    AnnotationKind::Primary
+                        .span(site.span.clone())
+                        .label(format!(
+                            "`{}` resolves to a different commit",
+                            mismatch.current_frozen
                         )),
-                )
-                .element(Level::NOTE.message(details))
-        } else {
-            Level::WARNING
-                .primary_title(title)
-                .element(Level::NOTE.message(format!(
-                    "in `{}`: {details}",
-                    mismatch.project.config_file().user_display()
-                )))
-        };
+                ),
+        )
+        .element(Level::NOTE.message(details));
 
     let renderer = Renderer::styled().decor_style(DecorStyle::Unicode);
     format!("{}\n", renderer.render(&[report]))
@@ -907,16 +907,6 @@ async fn select_update_revision(
     );
 
     Ok(Some(best))
-}
-
-/// Turns a tag-like revision into an exact commit SHA for `--freeze`.
-async fn freeze_revision(repo_path: &Path, rev: &str) -> Result<Option<String>> {
-    let exact = resolve_revision_to_commit(repo_path, rev).await?;
-    if rev == exact {
-        Ok(None)
-    } else {
-        Ok(Some(exact))
-    }
 }
 
 /// Orders version-like tags from newest to oldest semantic version.
