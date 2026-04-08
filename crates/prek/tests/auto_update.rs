@@ -257,7 +257,7 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
           - repo: {}
             rev: v1.0.0
             hooks:
-              - id: same-hook
+              - id: missing-hook
           - repo: {}
             rev: v2.0.0
             hooks:
@@ -268,29 +268,30 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
 
     let filters = context.filters();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
-    success: true
-    exit_code: 0
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    success: false
+    exit_code: 1
     ----- stdout -----
     [[HOME]/test-repos/repo1] updating v1.0.0 -> v1.1.0
     [[HOME]/test-repos/repo2] already up to date
 
     ----- stderr -----
-    "#);
+    [[HOME]/test-repos/repo1] update failed: Cannot update to rev `v1.1.0`, hook is missing: missing-hook
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
         {
-            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r"
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/repo1
                 rev: v1.1.0
                 hooks:
                   - id: test-hook
               - repo: [HOME]/test-repos/repo1
-                rev: v1.1.0
+                rev: v1.0.0
                 hooks:
-                  - id: same-hook
+                  - id: missing-hook
               - repo: [HOME]/test-repos/repo2
                 rev: v2.0.0
                 hooks:
@@ -702,21 +703,21 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
         .chain([(commit_sha, "[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/frozen-repo] updating [COMMIT_SHA] -> v1.2.0
 
     ----- stderr -----
-    warning: [[HOME]/test-repos/frozen-repo] `# frozen:` comment does not match `rev: [COMMIT_SHA]`
+    warning: [[HOME]/test-repos/frozen-repo] frozen comment does not match `rev: [COMMIT_SHA]`
       ╭▸ .pre-commit-config.yaml:3:62
       │
     3 │     rev: [COMMIT_SHA]  # frozen: v1.0.0
       │                                                              ━━━━━━ `v1.0.0` resolves to a different commit
       │
       ╰ note: no tag points at the configured commit
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
@@ -763,21 +764,21 @@ fn auto_update_updates_mismatched_frozen_comment() -> Result<()> {
         .chain([(commit_sha.as_str(), "[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [[HOME]/test-repos/check-frozen-repo] updating frozen reference v1.0.0 -> v1.1.0 in .pre-commit-config.yaml
 
     ----- stderr -----
-    warning: [[HOME]/test-repos/check-frozen-repo] `# frozen:` comment does not match `rev: [COMMIT_SHA]`
+    warning: [[HOME]/test-repos/check-frozen-repo] frozen comment does not match `rev: [COMMIT_SHA]`
       ╭▸ .pre-commit-config.yaml:3:62
       │
     3 │     rev: [COMMIT_SHA]  # frozen: v1.0.0
       │                                                              ━━━━━━ `v1.0.0` resolves to a different commit
       │
       ╰ note: updating comment to `v1.1.0`
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
@@ -825,20 +826,20 @@ fn auto_update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
         .chain([(commit_sha.as_str(), "[COMMIT_SHA]")])
         .collect::<Vec<_>>();
 
-    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--dry-run"), @r#"
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: [[HOME]/test-repos/check-frozen-dry-run-repo] `# frozen:` comment does not match `rev: [COMMIT_SHA]`
+    warning: [[HOME]/test-repos/check-frozen-dry-run-repo] frozen comment does not match `rev: [COMMIT_SHA]`
       ╭▸ .pre-commit-config.yaml:3:62
       │
     3 │     rev: [COMMIT_SHA]  # frozen: v1.0.0
       │                                                              ━━━━━━ `v1.0.0` resolves to a different commit
       │
       ╰ note: would update comment to `v1.1.0`
-    "#);
+    ");
 
     insta::with_settings!(
         { filters => filters.clone() },
@@ -897,7 +898,7 @@ fn auto_update_updates_mismatched_frozen_comment_toml() -> Result<()> {
     [[HOME]/test-repos/check-frozen-repo-toml] updating frozen reference v1.0.0 -> v1.1.0 in prek.toml
 
     ----- stderr -----
-    warning: [[HOME]/test-repos/check-frozen-repo-toml] `# frozen:` comment does not match `rev: [COMMIT_SHA]`
+    warning: [[HOME]/test-repos/check-frozen-repo-toml] frozen comment does not match `rev: [COMMIT_SHA]`
       ╭▸ prek.toml:3:60
       │
     3 │ rev = "[COMMIT_SHA]" # frozen: v1.0.0
