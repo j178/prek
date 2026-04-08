@@ -12,6 +12,7 @@
   ignorePaths: [
     '.github/workflows/release.yml'
   ],
+  schedule: ["* 0-3 * * 1"],
   prHourlyLimit: 10,
   labels: [
     'internal'
