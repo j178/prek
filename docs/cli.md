@@ -548,6 +548,7 @@ prek auto-update [OPTIONS]
 
 <dl class="cli-reference"><dt id="prek-auto-update--bleeding-edge"><a href="#prek-auto-update--bleeding-edge"><code>--bleeding-edge</code></a></dt><dd><p>Update to the bleeding edge of the default branch instead of the latest tagged version</p>
 </dd><dt id="prek-auto-update--cd"><a href="#prek-auto-update--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
+</dd><dt id="prek-auto-update--check"><a href="#prek-auto-update--check"><code>--check</code></a></dt><dd><p>Alias of <code>--dry-run</code> that exits with status 1 if updates would be made</p>
 </dd><dt id="prek-auto-update--color"><a href="#prek-auto-update--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
 <p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
 <ul>

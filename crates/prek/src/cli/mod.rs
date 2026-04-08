@@ -689,6 +689,7 @@ impl From<Option<Option<PathBuf>>> for SampleConfigTarget {
     }
 }
 
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Args)]
 pub(crate) struct AutoUpdateArgs {
     /// Update to the bleeding edge of the default branch instead of the latest tagged version.
@@ -703,6 +704,9 @@ pub(crate) struct AutoUpdateArgs {
     /// Do not write changes to the config file, only display what would be changed.
     #[arg(long)]
     pub(crate) dry_run: bool,
+    /// Alias of `--dry-run` that exits with status 1 if updates would be made.
+    #[arg(long)]
+    pub(crate) check: bool,
     /// Number of threads to use.
     #[arg(short, long, default_value_t = 0)]
     pub(crate) jobs: usize,
