@@ -519,7 +519,7 @@ fn auto_update_freeze() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/freeze-repo] updating `v1.0.0` -> `[COMMIT_SHA]`
+    [[HOME]/test-repos/freeze-repo] updating `v1.0.0` -> `v1.1.0@[COMMIT_SHA]`
 
     ----- stderr -----
     ");
@@ -595,6 +595,79 @@ fn auto_update_freeze_uses_dereferenced_commit_for_annotated_tags() -> Result<()
     assert!(
         !config.contains(tag_object_sha),
         "expected config to not contain the annotated tag object SHA"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_shared_target_with_different_frozen_comments_displays_sha() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(
+        &context,
+        "shared-target-different-frozen-repo",
+        &["v1.0.0", "v1.1.0"],
+    )?;
+
+    git_cmd(&repo_path)
+        .arg("tag")
+        .arg("v1")
+        .arg("v1.0.0^{}")
+        .assert()
+        .success();
+
+    let old_commit_sha = git_cmd(&repo_path)
+        .args(["rev-parse", "v1.0.0^{}"])
+        .output()?
+        .stdout;
+    let old_commit_sha = str::from_utf8(&old_commit_sha)?.trim().to_string();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: {}  # frozen: v1.0.0
+            hooks:
+              - id: test-hook
+          - repo: {}
+            rev: {}  # frozen: v1
+            hooks:
+              - id: test-hook
+    ", repo_path, old_commit_sha, repo_path, old_commit_sha});
+
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(old_commit_sha.as_str(), "[OLD_COMMIT_SHA]")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/shared-target-different-frozen-repo] updating `[OLD_COMMIT_SHA]` -> `v1.1.0`
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/shared-target-different-frozen-repo
+                rev: v1.1.0
+                hooks:
+                  - id: test-hook
+              - repo: [HOME]/test-repos/shared-target-different-frozen-repo
+                rev: v1.1.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
     );
 
     Ok(())
@@ -707,7 +780,7 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/frozen-repo] updating `[COMMIT_SHA]` -> `v1.2.0`
+    [[HOME]/test-repos/frozen-repo] updating `v1.0.0@[COMMIT_SHA]` -> `v1.2.0`
 
     ----- stderr -----
     warning: [[HOME]/test-repos/frozen-repo] frozen ref `v1.0.0` does not match `[COMMIT_SHA]`
@@ -962,7 +1035,7 @@ fn auto_update_warns_for_invalid_pinned_commit_with_frozen_comment() -> Result<(
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/check-invalid-pinned-frozen-repo] would update `[INVALID_COMMIT]` -> `[COMMIT_SHA]`
+    [[HOME]/test-repos/check-invalid-pinned-frozen-repo] would update `v1.0.0@[INVALID_COMMIT]` -> `v1.1.0@[COMMIT_SHA]`
 
     ----- stderr -----
     warning: [[HOME]/test-repos/check-invalid-pinned-frozen-repo] frozen ref `v1.0.0` does not match `[INVALID_COMMIT]`
@@ -1808,7 +1881,7 @@ fn auto_update_freeze_toml() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/freeze-repo] updating `v1.0.0` -> `[COMMIT_SHA]`
+    [[HOME]/test-repos/freeze-repo] updating `v1.0.0` -> `v1.1.0@[COMMIT_SHA]`
 
     ----- stderr -----
     ");
@@ -2041,7 +2114,7 @@ fn auto_update_freeze_toml_with_comment() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [[HOME]/test-repos/freeze-repo] updating `v1.0.0` -> `[COMMIT_SHA]`
+    [[HOME]/test-repos/freeze-repo] updating `v1.0.0` -> `v1.1.0@[COMMIT_SHA]`
 
     ----- stderr -----
     ");
