@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::fmt::{self, Write};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -38,6 +38,15 @@ struct Revision {
     frozen: Option<String>,
 }
 
+impl fmt::Display for Revision {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.frozen {
+            Some(frozen) => write!(f, "{frozen}@{}", self.rev),
+            None => f.write_str(&self.rev),
+        }
+    }
+}
+
 /// One occurrence of a remote repo in a project config file.
 struct RepoUsage<'a> {
     /// The project whose config contains this repo entry.
@@ -62,6 +71,35 @@ struct RepoTarget<'a> {
     required_hook_ids: Vec<&'a str>,
     /// Every config usage that shares this exact `repo + rev + hook set`.
     usages: Vec<RepoUsage<'a>>,
+}
+
+impl RepoTarget<'_> {
+    /// Formats the configured revision for stdout, using the shared frozen comment when available.
+    fn display_current_rev(&self) -> String {
+        let frozen = if looks_like_sha(self.current_rev) {
+            let mut frozen_refs = self
+                .usages
+                .iter()
+                .map(|usage| usage.current_frozen.as_deref());
+            let Some(first) = frozen_refs.next().flatten() else {
+                return self.current_rev.to_string();
+            };
+
+            if frozen_refs.all(|current| current == Some(first)) {
+                Some(first.to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        Revision {
+            rev: self.current_rev.to_string(),
+            frozen,
+        }
+        .to_string()
+    }
 }
 
 /// One fetched remote repository URL with all configured revisions that use it.
@@ -427,8 +465,8 @@ fn apply_repo_updates<'a>(
                         "[{}] {} `{}` -> `{}`",
                         update.target.repo.cyan(),
                         if dry_run { "would update" } else { "updating" },
-                        update.target.current_rev,
-                        resolved.revision.rev
+                        update.target.display_current_rev(),
+                        resolved.revision,
                     )?;
 
                     for usage in &update.target.usages {
