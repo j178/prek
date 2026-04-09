@@ -789,7 +789,7 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
     3 |     rev: [COMMIT_SHA]  # frozen: v1.0.0
       |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
       |
-      = note: pinned commit `[COMMIT_SHA]` does not exist in the repo
+      = note: pinned commit `[COMMIT_SHA]` is not present in the repo
     ");
 
     insta::with_settings!(
@@ -850,7 +850,7 @@ fn auto_update_updates_mismatched_frozen_comment() -> Result<()> {
     3 |     rev: [COMMIT_SHA]  # frozen: v1.0.0
       |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
       |
-      = note: updating frozen comment to `v1.1.0`
+      = note: pinned commit `[COMMIT_SHA]` is referenced by `v1.1.0`
     ");
 
     insta::with_settings!(
@@ -915,7 +915,7 @@ fn auto_update_updates_unresolvable_frozen_comment() -> Result<()> {
     3 |     rev: [COMMIT_SHA]  # frozen: does-not-exist
       |                                                              ^^^^^^^^^^^^^^ `does-not-exist` could not be resolved
       |
-      = note: updating frozen comment to `v1.1.0`
+      = note: pinned commit `[COMMIT_SHA]` is referenced by `v1.1.0`
     ");
 
     insta::with_settings!(
@@ -980,7 +980,7 @@ fn auto_update_removes_frozen_comment_when_pinned_commit_has_no_tag() -> Result<
     3 |     rev: [COMMIT_SHA]  # frozen: v1.1.0
       |                                                              ^^^^^^ `v1.1.0` resolves to a different commit
       |
-      = note: removing frozen comment because no tag points at the pinned commit
+      = note: no tag points at the pinned commit `[COMMIT_SHA]`
     ");
 
     insta::with_settings!(
@@ -990,6 +990,93 @@ fn auto_update_removes_frozen_comment_when_pinned_commit_has_no_tag() -> Result<
             repos:
               - repo: [HOME]/test-repos/check-remove-frozen-comment-repo
                 rev: [COMMIT_SHA]
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(
+        &context,
+        "check-branch-only-pinned-frozen-repo",
+        &["v1.0.0", "v1.1.0"],
+    )?;
+
+    git_cmd(&repo_path)
+        .arg("checkout")
+        .arg("-b")
+        .arg("side")
+        .arg("v1.0.0^{}")
+        .assert()
+        .success();
+    git_cmd(&repo_path)
+        .arg("commit")
+        .arg("-m")
+        .arg("side")
+        .arg("--allow-empty")
+        .assert()
+        .success();
+    let branch_commit = git_cmd(&repo_path)
+        .args(["rev-parse", "HEAD"])
+        .output()?
+        .stdout;
+    let branch_commit = str::from_utf8(&branch_commit)?.trim().to_string();
+    git_cmd(&repo_path)
+        .arg("checkout")
+        .arg("master")
+        .assert()
+        .success();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: {}  # frozen: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path, branch_commit});
+
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (branch_commit.as_str(), "[BRANCH_ONLY_COMMIT]"),
+            (r"[a-f0-9]{40}", r"[COMMIT_SHA]"),
+        ])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--dry-run"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [[HOME]/test-repos/check-branch-only-pinned-frozen-repo] would update `v1.0.0@[BRANCH_ONLY_COMMIT]` -> `v1.1.0@[COMMIT_SHA]`
+
+    ----- stderr -----
+    warning: [[HOME]/test-repos/check-branch-only-pinned-frozen-repo] frozen ref `v1.0.0` does not match `[BRANCH_ONLY_COMMIT]`
+     --> .pre-commit-config.yaml:3:62
+      |
+    3 |     rev: [BRANCH_ONLY_COMMIT]  # frozen: v1.0.0
+      |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
+      |
+      = note: pinned commit `[BRANCH_ONLY_COMMIT]` is not present in the repo
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/check-branch-only-pinned-frozen-repo
+                rev: [BRANCH_ONLY_COMMIT]  # frozen: v1.0.0
                 hooks:
                   - id: test-hook
             ");
@@ -1044,7 +1131,7 @@ fn auto_update_warns_for_invalid_pinned_commit_with_frozen_comment() -> Result<(
     3 |     rev: [INVALID_COMMIT]  # frozen: v1.0.0
       |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
       |
-      = note: pinned commit `[INVALID_COMMIT]` does not exist in the repo
+      = note: pinned commit `[INVALID_COMMIT]` is not present in the repo
     ");
 
     insta::with_settings!(
@@ -1105,7 +1192,7 @@ fn auto_update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
     3 |     rev: [COMMIT_SHA]  # frozen: v1.0.0
       |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
       |
-      = note: would update frozen comment to `v1.1.0`
+      = note: pinned commit `[COMMIT_SHA]` is referenced by `v1.1.0`
     ");
 
     insta::with_settings!(
@@ -1166,7 +1253,7 @@ fn auto_update_check_fails_for_mismatched_frozen_comment() -> Result<()> {
     3 |     rev: [COMMIT_SHA]  # frozen: v1.0.0
       |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
       |
-      = note: would update frozen comment to `v1.1.0`
+      = note: pinned commit `[COMMIT_SHA]` is referenced by `v1.1.0`
     ");
 
     insta::with_settings!(
@@ -1232,7 +1319,7 @@ fn auto_update_updates_mismatched_frozen_comment_toml() -> Result<()> {
     3 | rev = "[COMMIT_SHA]" # frozen: v1.0.0
       |                                                            ^^^^^^ `v1.0.0` resolves to a different commit
       |
-      = note: updating frozen comment to `v1.1.0`
+      = note: pinned commit `[COMMIT_SHA]` is referenced by `v1.1.0`
     "#);
 
     insta::with_settings!(

@@ -116,7 +116,7 @@ enum FrozenMismatch {
     ReplaceWith(String),
     /// Remove the stale comment because no ref points at the pinned commit.
     Remove,
-    /// Warn only because the pinned commit itself could not be resolved.
+    /// Warn only because the pinned commit is not present in the fetched repository view.
     NoReplacement,
 }
 
@@ -260,7 +260,7 @@ pub(crate) async fn auto_update(
             .then_with(|| a.target.required_hook_ids.cmp(&b.target.required_hook_ids))
     });
 
-    warn_frozen_mismatches(&outcomes, dry_run, printer)?;
+    warn_frozen_mismatches(&outcomes, printer)?;
 
     // Group results by project config file
     #[expect(clippy::mutable_key_type)]
@@ -360,11 +360,7 @@ fn collect_repo_sources(workspace: &Workspace) -> Result<Vec<RepoSource<'_>>> {
 }
 
 /// Emits all frozen-comment warnings before the normal update output.
-fn warn_frozen_mismatches(
-    updates: &[RepoUpdate<'_>],
-    dry_run: bool,
-    printer: Printer,
-) -> Result<()> {
+fn warn_frozen_mismatches(updates: &[RepoUpdate<'_>], printer: Printer) -> Result<()> {
     for update in updates {
         let Ok(resolved) = &update.result else {
             continue;
@@ -377,8 +373,7 @@ fn warn_frozen_mismatches(
                 render_frozen_mismatch_warning(
                     update.target.repo,
                     update.target.current_rev,
-                    mismatch,
-                    dry_run
+                    mismatch
                 )
             )?;
         }
@@ -536,10 +531,8 @@ async fn collect_frozen_mismatches<'a>(
         return Ok(Vec::new());
     }
 
-    let current_rev_is_valid = resolve_revision_to_commit(repo_path, target.current_rev)
-        .await
-        .is_ok();
-    let rev_tags = if current_rev_is_valid {
+    let current_rev_is_present = is_commit_present(repo_path, target.current_rev).await?;
+    let rev_tags = if current_rev_is_present {
         get_tags_pointing_at_revision(tag_timestamps, target.current_rev)
     } else {
         Vec::new()
@@ -566,7 +559,7 @@ async fn collect_frozen_mismatches<'a>(
             };
             let mismatch = select_best_tag(&rev_tags, current_frozen, true).map_or_else(
                 || {
-                    if current_rev_is_valid {
+                    if current_rev_is_present {
                         FrozenMismatch::Remove
                     } else {
                         FrozenMismatch::NoReplacement
@@ -708,16 +701,6 @@ async fn evaluate_repo_target<'a>(
 /// Initializes a temporary git repo and fetches the remote HEAD plus tags.
 async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Result<()> {
     git::init_repo(repo_url, repo_path).await?;
-    git::git_cmd("git config")?
-        .arg("config")
-        .arg("extensions.partialClone")
-        .arg("true")
-        .current_dir(repo_path)
-        .remove_git_envs()
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .await?;
     git::git_cmd("git fetch")?
         .arg("fetch")
         .arg("origin")
@@ -749,6 +732,38 @@ async fn resolve_revision_to_commit(repo_path: &Path, rev: &str) -> Result<Strin
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+/// Returns whether a pinned commit SHA is already present in the refs fetched for `auto-update`.
+///
+/// `auto-update` fetches only `origin/HEAD` and tags, using `--filter=blob:none`. That filter
+/// still downloads commits and trees reachable from those refs, but omits blobs. We intentionally
+/// use `git --no-lazy-fetch cat-file -e` here instead of `rev-parse`: in a partial clone,
+/// `rev-parse` may lazily fetch a missing commit from the promisor remote on demand. On GitHub,
+/// that can make a fork-only "impostor commit" appear to belong to the parent repository.
+///
+/// `auto-update` only selects updates from tags, or from `HEAD` in `--bleeding-edge` mode. It
+/// does not normally update to arbitrary branches, so we currently fetch only those refs here.
+///
+/// So this helper answers a narrower question than "is this SHA valid anywhere on the remote?".
+/// It only checks whether the commit is already available from the refs we fetched for update
+/// selection. That means branch-only commits outside `HEAD` and tags are treated as absent for
+/// now. If that leads to false positives in practice, we can revisit this and fetch branches too.
+async fn is_commit_present(repo_path: &Path, commit: &str) -> Result<bool> {
+    let status = git::git_cmd("git cat-file")?
+        .arg("--no-lazy-fetch")
+        .arg("cat-file")
+        .arg("-e")
+        .arg(format!("{commit}^{{commit}}"))
+        .check(false)
+        .current_dir(repo_path)
+        .remove_git_envs()
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .await?;
+
+    Ok(status.success())
+}
+
 fn get_tags_pointing_at_revision<'a>(
     tag_timestamps: &'a [TagTimestamp],
     rev: &str,
@@ -765,7 +780,6 @@ fn render_frozen_mismatch_warning(
     repo: &str,
     current_rev: &str,
     mismatch: &FrozenCommentMismatch<'_>,
-    dry_run: bool,
 ) -> String {
     let label = match mismatch.reason {
         FrozenMismatchReason::ResolvesToDifferentCommit => {
@@ -780,19 +794,13 @@ fn render_frozen_mismatch_warning(
     };
     let details = match &mismatch.mismatch {
         FrozenMismatch::ReplaceWith(replacement) => {
-            format!(
-                "{} frozen comment to `{replacement}`",
-                if dry_run { "would update" } else { "updating" }
-            )
+            format!("pinned commit `{current_rev}` is referenced by `{replacement}`")
         }
         FrozenMismatch::Remove => {
-            format!(
-                "{} frozen comment because no tag points at the pinned commit",
-                if dry_run { "would remove" } else { "removing" }
-            )
+            format!("no tag points at the pinned commit `{current_rev}`")
         }
         FrozenMismatch::NoReplacement => {
-            format!("pinned commit `{current_rev}` does not exist in the repo")
+            format!("pinned commit `{current_rev}` is not present in the repo")
         }
     };
     let title = format!(
