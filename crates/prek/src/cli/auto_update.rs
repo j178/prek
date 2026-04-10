@@ -2,6 +2,7 @@ use std::fmt::{self, Write};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use annotate_snippets::{AnnotationKind, Level, Renderer, Snippet, renderer::DecorStyle};
@@ -11,6 +12,7 @@ use itertools::Itertools;
 use lazy_regex::regex;
 use owo_colors::OwoColorize;
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
+use prek_consts::env_vars::EnvVars;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use semver::Version;
@@ -116,8 +118,19 @@ enum FrozenMismatch {
     ReplaceWith(String),
     /// Remove the stale comment because no ref points at the pinned commit.
     Remove,
-    /// Warn only because the pinned commit is not present in the fetched repository view.
+    /// Warn only because we cannot safely decide a comment-only fix.
     NoReplacement,
+}
+
+/// Whether the pinned SHA is available from the refs fetched for `auto-update`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CommitPresence {
+    /// The commit is present in the fetched repository view.
+    Present,
+    /// The commit is not present in the fetched repository view.
+    Absent,
+    /// The current Git cannot disable lazy fetch, so presence could not be checked safely.
+    Unknown,
 }
 
 /// Why an existing `# frozen:` comment no longer matches the configured `rev`.
@@ -142,6 +155,8 @@ struct FrozenCommentMismatch<'a> {
     frozen_site: Option<FrozenCommentSite>,
     /// Why the existing frozen reference is stale.
     reason: FrozenMismatchReason,
+    /// Whether the pinned SHA is available in the fetched repository view.
+    current_rev_presence: CommitPresence,
     /// The action to take for this stale comment.
     mismatch: FrozenMismatch,
 }
@@ -531,12 +546,8 @@ async fn collect_frozen_mismatches<'a>(
         return Ok(Vec::new());
     }
 
-    let current_rev_is_present = is_commit_present(repo_path, target.current_rev).await?;
-    let rev_tags = if current_rev_is_present {
-        get_tags_pointing_at_revision(tag_timestamps, target.current_rev)
-    } else {
-        Vec::new()
-    };
+    let current_rev_presence = is_commit_present(repo_path, target.current_rev).await?;
+    let rev_tags = get_tags_pointing_at_revision(tag_timestamps, target.current_rev);
     let mut resolved_frozen_refs = FxHashMap::default();
     for frozen_ref in frozen_refs_to_check {
         let resolved = resolve_revision_to_commit(repo_path, frozen_ref).await.ok();
@@ -558,10 +569,13 @@ async fn collect_frozen_mismatches<'a>(
                 None => FrozenMismatchReason::Unresolvable,
             };
             let mismatch = select_best_tag(&rev_tags, current_frozen, true).map_or_else(
-                || {
-                    if current_rev_is_present {
+                || match current_rev_presence {
+                    CommitPresence::Present => {
+                        // We only remove the stale comment when we can prove the pinned commit is
+                        // present in the fetched repo view and no fetched tag points at it.
                         FrozenMismatch::Remove
-                    } else {
+                    }
+                    CommitPresence::Absent | CommitPresence::Unknown => {
                         FrozenMismatch::NoReplacement
                     }
                 },
@@ -575,6 +589,7 @@ async fn collect_frozen_mismatches<'a>(
                 current_frozen: current_frozen.to_string(),
                 frozen_site: usage.current_frozen_site.clone(),
                 reason,
+                current_rev_presence,
                 mismatch,
             })
         })
@@ -747,21 +762,46 @@ async fn resolve_revision_to_commit(repo_path: &Path, rev: &str) -> Result<Strin
 /// It only checks whether the commit is already available from the refs we fetched for update
 /// selection. That means branch-only commits outside `HEAD` and tags are treated as absent for
 /// now. If that leads to false positives in practice, we can revisit this and fetch branches too.
-async fn is_commit_present(repo_path: &Path, commit: &str) -> Result<bool> {
-    let status = git::git_cmd("git cat-file")?
+///
+/// On older Git versions that do not support `--no-lazy-fetch`, we skip this check entirely and
+/// return `CommitPresence::Unknown` so the caller can avoid presenting inaccurate presence details.
+async fn is_commit_present(repo_path: &Path, commit: &str) -> Result<CommitPresence> {
+    static GIT_SUPPORTS_NO_LAZY_FETCH: OnceLock<bool> = OnceLock::new();
+
+    if matches!(GIT_SUPPORTS_NO_LAZY_FETCH.get(), Some(false)) {
+        return Ok(CommitPresence::Unknown);
+    }
+
+    let output = git::git_cmd("git cat-file")?
         .arg("--no-lazy-fetch")
         .arg("cat-file")
         .arg("-e")
         .arg(format!("{commit}^{{commit}}"))
+        .env(EnvVars::LC_ALL, "C")
         .check(false)
         .current_dir(repo_path)
         .remove_git_envs()
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
+        .output()
         .await?;
 
-    Ok(status.success())
+    if output.status.success() {
+        let _ = GIT_SUPPORTS_NO_LAZY_FETCH.set(true);
+        return Ok(CommitPresence::Present);
+    }
+
+    if no_lazy_fetch_unsupported(&output.stderr) {
+        let _ = GIT_SUPPORTS_NO_LAZY_FETCH.set(false);
+        return Ok(CommitPresence::Unknown);
+    }
+
+    let _ = GIT_SUPPORTS_NO_LAZY_FETCH.set(true);
+    Ok(CommitPresence::Absent)
+}
+
+fn no_lazy_fetch_unsupported(stderr: &[u8]) -> bool {
+    let stderr = String::from_utf8_lossy(stderr);
+    stderr.contains("--no-lazy-fetch") && stderr.contains("unknown option")
 }
 
 fn get_tags_pointing_at_revision<'a>(
@@ -793,15 +833,20 @@ fn render_frozen_mismatch_warning(
         }
     };
     let details = match &mismatch.mismatch {
-        FrozenMismatch::ReplaceWith(replacement) => {
-            format!("pinned commit `{current_rev}` is referenced by `{replacement}`")
+        FrozenMismatch::ReplaceWith(replacement) => Some(format!(
+            "pinned commit `{current_rev}` is referenced by `{replacement}`"
+        )),
+        FrozenMismatch::Remove => Some(format!(
+            "no tag points at the pinned commit `{current_rev}`"
+        )),
+        FrozenMismatch::NoReplacement
+            if matches!(mismatch.current_rev_presence, CommitPresence::Absent) =>
+        {
+            Some(format!(
+                "pinned commit `{current_rev}` is not present in the repo"
+            ))
         }
-        FrozenMismatch::Remove => {
-            format!("no tag points at the pinned commit `{current_rev}`")
-        }
-        FrozenMismatch::NoReplacement => {
-            format!("pinned commit `{current_rev}` is not present in the repo")
-        }
+        FrozenMismatch::NoReplacement => None,
     };
     let title = format!(
         "[{repo}] frozen ref `{}` does not match `{current_rev}`",
@@ -812,15 +857,15 @@ fn render_frozen_mismatch_warning(
         .frozen_site
         .as_ref()
         .expect("frozen comment site must exist when rendering a frozen mismatch warning");
-    let report = Level::WARNING
-        .primary_title(title)
-        .element(
-            Snippet::source(&site.source_line)
-                .line_start(site.line_number)
-                .path(mismatch.project.config_file().user_display().to_string())
-                .annotation(AnnotationKind::Primary.span(site.span.clone()).label(label)),
-        )
-        .element(Level::NOTE.message(details));
+    let mut report = Level::WARNING.primary_title(title).element(
+        Snippet::source(&site.source_line)
+            .line_start(site.line_number)
+            .path(mismatch.project.config_file().user_display().to_string())
+            .annotation(AnnotationKind::Primary.span(site.span.clone()).label(label)),
+    );
+    if let Some(details) = details {
+        report = report.element(Level::NOTE.message(details));
+    }
 
     let renderer = Renderer::styled().decor_style(DecorStyle::Ascii);
     format!("{}\n", renderer.render(&[report]))
@@ -1617,5 +1662,15 @@ mod tests {
         let timestamps = list_tag_metadata(repo).await.unwrap();
         let tags: Vec<&str> = timestamps.iter().map(|tag| tag.tag.as_str()).collect();
         assert_eq!(tags, vec!["alpha", "beta", "gamma"]);
+    }
+
+    #[test]
+    fn test_no_lazy_fetch_unsupported() {
+        assert!(no_lazy_fetch_unsupported(
+            b"unknown option: --no-lazy-fetch\n"
+        ));
+        assert!(!no_lazy_fetch_unsupported(
+            b"fatal: Not a valid object name 1234567890abcdef1234567890abcdef12345678^{commit}\n"
+        ));
     }
 }
