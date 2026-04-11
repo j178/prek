@@ -9,7 +9,7 @@ use tempfile::TempDir;
 use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Value};
 
 use crate::cli::run::Selectors;
-use crate::cli::{ExitStatus, flag};
+use crate::cli::{ExitStatus, ReportLevel, flag};
 use crate::config;
 use crate::git;
 use crate::git::GIT_ROOT;
@@ -223,6 +223,7 @@ pub(crate) async fn try_repo(
         run_args.dry_run,
         refresh,
         run_args.extra,
+        ReportLevel::default(),
         verbose,
         printer,
     )

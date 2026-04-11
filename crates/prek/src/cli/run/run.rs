@@ -49,6 +49,7 @@ pub(crate) async fn run(
     dry_run: bool,
     refresh: bool,
     extra_args: RunExtraArgs,
+    report_level: ReportLevel,
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -208,6 +209,7 @@ pub(crate) async fn run(
         show_diff_on_failure,
         fail_fast,
         dry_run,
+        report_level,
         verbose,
         printer,
     )
@@ -586,6 +588,7 @@ async fn run_hooks(
     show_diff_on_failure: bool,
     fail_fast: Option<bool>,
     dry_run: bool,
+    _report_level: ReportLevel,
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
