@@ -20,7 +20,7 @@ use unicode_width::UnicodeWidthStr;
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter, HookRunReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{CollectOptions, FileFilter, Selectors, collect_files};
-use crate::cli::{ExitStatus, RunExtraArgs};
+use crate::cli::{ExitStatus, ReportLevel, RunExtraArgs};
 use crate::config::{Language, PassFilenames, Stage};
 use crate::fs::CWD;
 use crate::git::GIT_ROOT;
@@ -498,6 +498,7 @@ impl StatusPrinter {
     const DRY_RUN: &'static str = "Dry Run";
     const NO_FILES: &'static str = "(no files to check)";
     const UNIMPLEMENTED: &'static str = "(unimplemented yet)";
+    const EXCLUDED: &'static str = "(excluded by skip)";
 
     fn for_hooks(hooks: &[InstalledHook], printer: Printer) -> Self {
         let name_len = hooks
@@ -535,6 +536,11 @@ impl StatusPrinter {
             ),
             RunStatus::Unimplemented => (
                 Self::UNIMPLEMENTED,
+                Self::SKIPPED.black().on_yellow().to_string(),
+                Self::SKIPPED.width(),
+            ),
+            RunStatus::Skipped => (
+                Self::EXCLUDED,
                 Self::SKIPPED.black().on_yellow().to_string(),
                 Self::SKIPPED.width(),
             ),
@@ -958,13 +964,14 @@ enum RunStatus {
     DryRun,
     NoFiles,
     Unimplemented,
+    Skipped,
 }
 
 impl RunStatus {
     fn as_bool(self) -> bool {
         matches!(
             self,
-            Self::Success | Self::NoFiles | Self::DryRun | Self::Unimplemented
+            Self::Success | Self::NoFiles | Self::DryRun | Self::Unimplemented | Self::Skipped
         )
     }
 
@@ -973,7 +980,18 @@ impl RunStatus {
     }
 
     fn is_skipped(self) -> bool {
-        matches!(self, Self::DryRun | Self::NoFiles | Self::Unimplemented)
+        matches!(self, Self::DryRun | Self::NoFiles | Self::Unimplemented | Self::Skipped)
+    }
+}
+
+impl ReportLevel {
+    fn should_show(self, status: RunStatus) -> bool {
+        match status {
+            RunStatus::Failed => self >= ReportLevel::Fail,
+            RunStatus::NoFiles | RunStatus::Unimplemented => self >= ReportLevel::SkippedNoFiles,
+            RunStatus::Skipped => self >= ReportLevel::Skipped,
+            RunStatus::Success | RunStatus::DryRun => self >= ReportLevel::Passed,
+        }
     }
 }
 
