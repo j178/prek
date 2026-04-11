@@ -588,7 +588,7 @@ async fn run_hooks(
     show_diff_on_failure: bool,
     fail_fast: Option<bool>,
     dry_run: bool,
-    _report_level: ReportLevel,
+    report_level: ReportLevel,
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -632,7 +632,9 @@ async fn run_hooks(
         // If two hooks have the same priority, preserve their original order from the config.
         hooks.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.idx.cmp(&b.idx)));
 
-        if projects_len > 1 || !project.is_root() {
+        if (projects_len > 1 || !project.is_root())
+            && report_level != ReportLevel::Silent
+        {
             reporter.suspend(|| {
                 writeln!(
                     status_printer.printer().stdout(),
@@ -677,6 +679,7 @@ async fn run_hooks(
                     &group_results,
                     verbose,
                     group_modified_files,
+                    report_level,
                 )
             })?;
 
@@ -809,10 +812,16 @@ fn render_priority_group(
     group_results: &[RunResult],
     verbose: bool,
     group_modified_files: bool,
+    report_level: ReportLevel,
 ) -> Result<()> {
     // Only show a special group UI when the group failed due to file modifications.
     // Hooks in a priority group run in parallel, so we can't attribute modifications to a single hook.
-    let show_group_ui = group_modified_files && group_results.len() > 1;
+    let any_visible = group_results
+        .iter()
+        .any(|r| report_level.should_show(r.status));
+
+    let show_group_ui =
+        group_modified_files && group_results.len() > 1 && any_visible;
     let single_hook_modified_files = group_results.len() == 1 && group_modified_files;
     let group_prefix = if show_group_ui {
         format!("{}", "  │ ".dimmed())
@@ -847,6 +856,11 @@ fn render_priority_group(
         } else {
             result.status
         };
+
+        // Skip rendering if below the report level threshold.
+        if !report_level.should_show(status) {
+            continue;
+        }
 
         status_printer.write(&result.hook.name, prefix, status)?;
 
