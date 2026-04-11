@@ -94,11 +94,16 @@ pub(crate) async fn run(
         .init_hooks(store, Some(&reporter))
         .await
         .context("Failed to init hooks")?;
-    let selected_hooks: Vec<_> = hooks
-        .into_iter()
-        .filter(|h| selectors.matches_hook(h))
-        .map(Arc::new)
-        .collect();
+
+    let mut selected_hooks = Vec::new();
+    let mut skipped_by_selector: Vec<Arc<Hook>> = Vec::new();
+    for hook in hooks {
+        if selectors.matches_hook(&hook) {
+            selected_hooks.push(Arc::new(hook));
+        } else {
+            skipped_by_selector.push(Arc::new(hook));
+        }
+    }
 
     selectors.report_unused();
 
@@ -147,6 +152,11 @@ pub(crate) async fn run(
         }
         (hooks, hook_stage)
     };
+
+    let skipped_by_selector: Vec<_> = skipped_by_selector
+        .into_iter()
+        .filter(|h| h.stages.contains(hook_stage))
+        .collect();
 
     if filtered_hooks.is_empty() {
         debug!(
@@ -204,6 +214,7 @@ pub(crate) async fn run(
     run_hooks(
         &workspace,
         &installed_hooks,
+        &skipped_by_selector,
         filenames,
         store,
         show_diff_on_failure,
@@ -516,6 +527,24 @@ impl StatusPrinter {
         Self { printer, columns }
     }
 
+    fn for_hooks_with_skipped(
+        hooks: &[InstalledHook],
+        skipped: &[Arc<Hook>],
+        printer: Printer,
+    ) -> Self {
+        let name_len = hooks
+            .iter()
+            .map(|hook| hook.name.width())
+            .chain(skipped.iter().map(|hook| hook.name.width()))
+            .max()
+            .unwrap_or(0);
+        let columns = std::cmp::max(
+            79,
+            name_len + 3 + Self::NO_FILES.len() + Self::SKIPPED.len(),
+        );
+        Self { printer, columns }
+    }
+
     fn printer(&self) -> Printer {
         self.printer
     }
@@ -583,6 +612,7 @@ impl StatusPrinter {
 async fn run_hooks(
     workspace: &Workspace,
     hooks: &[InstalledHook],
+    skipped_by_selector: &[Arc<Hook>],
     filenames: Vec<PathBuf>,
     store: &Store,
     show_diff_on_failure: bool,
@@ -594,7 +624,7 @@ async fn run_hooks(
 ) -> Result<ExitStatus> {
     debug_assert!(!hooks.is_empty(), "No hooks to run");
 
-    let status_printer = StatusPrinter::for_hooks(hooks, printer);
+    let status_printer = StatusPrinter::for_hooks_with_skipped(hooks, skipped_by_selector, printer);
     let reporter = HookRunReporter::new(printer, status_printer.bar_len());
 
     let mut success = true;
@@ -692,6 +722,21 @@ async fn run_hooks(
 
             if !success && (project_fail_fast || hook_fail_fast) {
                 break 'outer;
+            }
+        }
+
+        // Render selector-skipped hooks for this project, after executed hooks.
+        if report_level.should_show(RunStatus::Skipped) {
+            let mut project_skipped: Vec<_> = skipped_by_selector
+                .iter()
+                .filter(|h| h.project() == project)
+                .collect();
+            project_skipped.sort_by_key(|h| h.idx);
+
+            for hook in project_skipped {
+                reporter.suspend(|| {
+                    status_printer.write(&hook.name, "", RunStatus::Skipped)
+                })?;
             }
         }
     }
