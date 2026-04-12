@@ -218,3 +218,243 @@ fn all_hooks_skipped_multiple_priority_groups() -> Result<()> {
 
     Ok(())
 }
+
+/// `--report-level fail` hides passed and no-files hooks, shows only failures.
+#[test]
+fn report_level_fail_shows_only_failures() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: pass-hook
+                name: pass-hook
+                language: system
+                entry: echo "ok"
+                files: \.txt$
+              - id: fail-hook
+                name: fail-hook
+                language: system
+                entry: python3 -c "import sys; sys.exit(1)"
+                files: \.txt$
+              - id: no-files-hook
+                name: no-files-hook
+                language: system
+                entry: echo "checking"
+                files: \.py$
+    "#});
+
+    cwd.child("file.txt").write_str("content")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--report-level").arg("fail"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fail-hook................................................................Failed
+    - hook id: fail-hook
+    - exit code: 1
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// `--report-level silent` shows no per-hook status lines but still fails.
+#[test]
+fn report_level_silent_no_output_but_exit_code() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: fail-hook
+                name: fail-hook
+                language: system
+                entry: python3 -c "import sys; sys.exit(1)"
+                files: \.txt$
+    "#});
+
+    cwd.child("file.txt").write_str("content")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--report-level").arg("silent"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// `--report-level skipped-no-files` shows failed and no-files hooks, hides passed.
+#[test]
+fn report_level_skipped_no_files() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: pass-hook
+                name: pass-hook
+                language: system
+                entry: echo "ok"
+                files: \.txt$
+              - id: no-files-hook
+                name: no-files-hook
+                language: system
+                entry: echo "checking"
+                files: \.py$
+    "#});
+
+    cwd.child("file.txt").write_str("content")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--report-level").arg("skipped-no-files"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    no-files-hook........................................(no files to check)Skipped
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// `--report-level skipped` shows hooks excluded by --skip.
+#[test]
+fn report_level_skipped_shows_excluded_hooks() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: pass-hook
+                name: pass-hook
+                language: system
+                entry: echo "ok"
+                files: \.txt$
+              - id: skipped-hook
+                name: skipped-hook
+                language: system
+                entry: echo "should be skipped"
+                files: \.txt$
+    "#});
+
+    cwd.child("file.txt").write_str("content")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run()
+        .arg("--skip").arg("skipped-hook")
+        .arg("--report-level").arg("skipped"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    skipped-hook..........................................(excluded by skip)Skipped
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// PREK_REPORT_LEVEL env var works as fallback for --report-level.
+#[test]
+fn report_level_env_var() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: pass-hook
+                name: pass-hook
+                language: system
+                entry: echo "ok"
+                files: \.txt$
+              - id: fail-hook
+                name: fail-hook
+                language: system
+                entry: python3 -c "import sys; sys.exit(1)"
+                files: \.txt$
+    "#});
+
+    cwd.child("file.txt").write_str("content")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().env("PREK_REPORT_LEVEL", "fail"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    fail-hook................................................................Failed
+    - hook id: fail-hook
+    - exit code: 1
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Default behavior (no --report-level flag) matches current behavior.
+#[test]
+fn report_level_default_matches_current_behavior() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: pass-hook
+                name: pass-hook
+                language: system
+                entry: echo "ok"
+                files: \.txt$
+              - id: no-files-hook
+                name: no-files-hook
+                language: system
+                entry: echo "checking"
+                files: \.py$
+    "#});
+
+    cwd.child("file.txt").write_str("content")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pass-hook................................................................Passed
+    no-files-hook........................................(no files to check)Skipped
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}

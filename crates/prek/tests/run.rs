@@ -61,14 +61,16 @@ fn run_basic() -> Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run().arg("trailing-whitespace"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("trailing-whitespace"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     trim trailing whitespace.................................................Passed
+    fix end of files......................................(excluded by skip)Skipped
+    check json............................................(excluded by skip)Skipped
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -375,25 +377,30 @@ fn multiple_hook_ids() {
     context.git_add(".");
 
     // Multiple repeated hook-id (should deduplicate)
-    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("hook1").arg("hook1"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("hook1").arg("hook1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     First Hook...............................................................Passed
+    Second Hook...........................................(excluded by skip)Skipped
+    Shared Hook A.........................................(excluded by skip)Skipped
+    Shared Hook B.........................................(excluded by skip)Skipped
 
     ----- stderr -----
-    "#);
+    ");
 
     // Hook-id that matches multiple hooks (by alias)
-    cmd_snapshot!(context.filters(), context.run().arg("shared-name"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("shared-name"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Shared Hook A............................................................Passed
     Shared Hook B............................................................Passed
+    First Hook............................................(excluded by skip)Skipped
+    Second Hook...........................................(excluded by skip)Skipped
 
     ----- stderr -----
-    "#);
+    ");
 
     // Hook-id matches nothing
     cmd_snapshot!(context.filters(), context.run().arg("nonexistent-hook"), @r"
@@ -420,50 +427,58 @@ fn multiple_hook_ids() {
     ");
 
     // Hook-id matches one hook
-    cmd_snapshot!(context.filters(), context.run().arg("hook2"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("hook2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Second Hook..............................................................Passed
+    First Hook............................................(excluded by skip)Skipped
+    Shared Hook A.........................................(excluded by skip)Skipped
+    Shared Hook B.........................................(excluded by skip)Skipped
 
     ----- stderr -----
-    "#);
+    ");
 
     // Multiple hook-ids with mixed results (some exist, some don't)
-    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("nonexistent").arg("hook2"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("nonexistent").arg("hook2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     First Hook...............................................................Passed
     Second Hook..............................................................Passed
+    Shared Hook A.........................................(excluded by skip)Skipped
+    Shared Hook B.........................................(excluded by skip)Skipped
 
     ----- stderr -----
     warning: selector `nonexistent` did not match any hooks
     ");
 
     // Multiple valid hook-ids
-    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("hook2").arg("nonexistent-hook"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("hook2").arg("nonexistent-hook"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     First Hook...............................................................Passed
     Second Hook..............................................................Passed
+    Shared Hook A.........................................(excluded by skip)Skipped
+    Shared Hook B.........................................(excluded by skip)Skipped
 
     ----- stderr -----
     warning: selector `nonexistent-hook` did not match any hooks
     ");
 
     // Multiple hook-ids with some duplicates and aliases
-    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("shared-name").arg("hook1"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("shared-name").arg("hook1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     First Hook...............................................................Passed
     Shared Hook A............................................................Passed
     Shared Hook B............................................................Passed
+    Second Hook...........................................(excluded by skip)Skipped
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 #[test]
@@ -748,7 +763,7 @@ fn skips() {
     "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run().env("SKIP", "end-of-file-fixer"), @r"
+    cmd_snapshot!(context.filters(), context.run().env("SKIP", "end-of-file-fixer"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -758,17 +773,20 @@ fn skips() {
     check json...............................................................Failed
     - hook id: check-json
     - exit code: 1
+    fix end of files......................................(excluded by skip)Skipped
 
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run().env("SKIP", "trailing-whitespace,end-of-file-fixer"), @r"
+    cmd_snapshot!(context.filters(), context.run().env("SKIP", "trailing-whitespace,end-of-file-fixer"), @"
     success: false
     exit_code: 1
     ----- stdout -----
     check json...............................................................Failed
     - hook id: check-json
     - exit code: 1
+    trailing-whitespace...................................(excluded by skip)Skipped
+    fix end of files......................................(excluded by skip)Skipped
 
     ----- stderr -----
     ");
@@ -901,16 +919,19 @@ fn fallback_to_manual_stage() {
     ----- stdout -----
     manual-only..............................................................Passed
     another-manual...........................................................Passed
+    default-stage.........................................(excluded by skip)Skipped
 
     ----- stderr -----
     ");
 
     // Mixing `pre-push` and manual selectors still runs the manual hook via fallback.
-    cmd_snapshot!(context.filters(), context.run().arg("pre-push").arg("manual-only"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("pre-push").arg("manual-only"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     manual-only..............................................................Passed
+    another-manual........................................(excluded by skip)Skipped
+    default-stage.........................................(excluded by skip)Skipped
 
     ----- stderr -----
     ");
@@ -2399,6 +2420,7 @@ fn selectors_completion() -> Result<()> {
     --show-diff-on-failure	When hooks fail, run `git diff` directly afterward
     --fail-fast	Stop running hooks after the first failure
     --dry-run	Do not run the hooks, but print the hooks that would have been run
+    --report-level	Control which hook statuses are shown in output
     --config	Path to alternate config file
     --cd	Change to directory before running
     --color	Whether to use color in output
