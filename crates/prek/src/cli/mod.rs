@@ -565,7 +565,7 @@ pub(crate) enum ReportLevel {
     Fail,
     /// Show failed hooks and hooks skipped because no files matched or language is unimplemented.
     SkippedNoFiles,
-    /// Show failed, no-files, and hooks excluded by --skip/SKIP/PREK_SKIP.
+    /// Show failed, no-files, and hooks excluded by `--skip`/`SKIP`/`PREK_SKIP`.
     Skipped,
     /// Show failed, skipped, and passed hooks (including dry-run).
     #[default]
