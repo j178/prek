@@ -275,14 +275,14 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
     exit_code: 1
     ----- stdout -----
     [HOME]/test-repos/repo1
-      updating rev `v1.0.0` -> `v1.1.0`
+      line 3: updating rev `v1.0.0` -> `v1.1.0`
 
     [HOME]/test-repos/repo2
       already up to date
 
     ----- stderr -----
     [HOME]/test-repos/repo1
-      update failed: Cannot update to rev `v1.1.0`, hook is missing: missing-hook
+      line 7: update failed: Cannot update to rev `v1.1.0`, hook is missing: missing-hook
     ");
 
     insta::with_settings!(

@@ -191,7 +191,14 @@ enum DisplayEventKind {
     Failure { error: String },
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum DisplayStream {
+    Stdout,
+    Stderr,
+}
+
 struct DisplayEvent<'a> {
+    stream: DisplayStream,
     project: &'a Project,
     repo: &'a str,
     remote_index: usize,
@@ -206,6 +213,8 @@ struct FrozenWarningEvent<'a> {
     remote_index: usize,
     mismatch: &'a FrozenMismatch<'a>,
 }
+
+type RepoOccurrences<'a> = FxHashMap<(&'a Path, &'a str), usize>;
 
 /// Updates remote repo revisions and, when possible, keeps existing `# frozen:` comments in sync.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -443,9 +452,9 @@ fn format_display_event(kind: &DisplayEventKind, dry_run: bool) -> String {
 
 fn write_display_events(
     events: &mut [DisplayEvent<'_>],
+    repo_occurrences: &RepoOccurrences<'_>,
     dry_run: bool,
     printer: Printer,
-    stderr: bool,
 ) -> Result<()> {
     if events.is_empty() {
         return Ok(());
@@ -458,71 +467,70 @@ fn write_display_events(
             .then_with(|| a.remote_index.cmp(&b.remote_index))
     });
 
-    let show_project_headers = events
-        .iter()
-        .map(|event| event.project.config_file())
-        .unique()
-        .count()
-        > 1;
+    for stream in [DisplayStream::Stdout, DisplayStream::Stderr] {
+        let stream_events = events
+            .iter()
+            .filter(|event| event.stream == stream)
+            .collect::<Vec<_>>();
+        if stream_events.is_empty() {
+            continue;
+        }
 
-    let repo_occurrences = events.iter().fold(
-        FxHashMap::<(&Path, &str), usize>::default(),
-        |mut counts, event| {
-            *counts
-                .entry((event.project.config_file(), event.repo))
-                .or_default() += 1;
-            counts
-        },
-    );
+        let show_project_headers = stream_events
+            .iter()
+            .map(|event| event.project.config_file())
+            .unique()
+            .count()
+            > 1;
 
-    let mut current_project: Option<&Path> = None;
-    let mut current_repo: Option<(&Path, &str)> = None;
-    let mut output = String::new();
+        let mut current_project: Option<&Path> = None;
+        let mut current_repo: Option<(&Path, &str)> = None;
+        let mut output = String::new();
 
-    for event in events {
-        let project = event.project.config_file();
-        if show_project_headers && current_project != Some(project) {
-            if current_project.is_some() {
-                writeln!(output)?;
+        for event in stream_events {
+            let project = event.project.config_file();
+            if show_project_headers && current_project != Some(project) {
+                if current_project.is_some() {
+                    writeln!(output)?;
+                }
+                writeln!(
+                    output,
+                    "{}",
+                    format!("[{}]", project.user_display()).yellow().bold()
+                )?;
+                current_project = Some(project);
+                current_repo = None;
             }
+
+            let repo_key = (project, event.repo);
+            if current_repo != Some(repo_key) {
+                if current_repo.is_some() {
+                    writeln!(output)?;
+                }
+                let indent = if show_project_headers { "  " } else { "" };
+                writeln!(output, "{}{}", indent, event.repo.cyan().bold())?;
+                current_repo = Some(repo_key);
+            }
+
+            let indent = if show_project_headers { "    " } else { "  " };
+            let line_prefix = if repo_occurrences[&repo_key] > 1 {
+                format!("{} ", format!("line {}:", event.line_number).dimmed())
+            } else {
+                String::new()
+            };
             writeln!(
                 output,
-                "{}",
-                format!("[{}]", project.user_display()).yellow().bold()
+                "{}{}{}",
+                indent,
+                line_prefix,
+                format_display_event(&event.kind, dry_run)
             )?;
-            current_project = Some(project);
-            current_repo = None;
         }
 
-        let repo_key = (project, event.repo);
-        if current_repo != Some(repo_key) {
-            if current_repo.is_some() {
-                writeln!(output)?;
-            }
-            let indent = if show_project_headers { "  " } else { "" };
-            writeln!(output, "{}{}", indent, event.repo.cyan().bold())?;
-            current_repo = Some(repo_key);
+        match stream {
+            DisplayStream::Stdout => write!(printer.stdout(), "{output}")?,
+            DisplayStream::Stderr => write!(printer.stderr(), "{output}")?,
         }
-
-        let indent = if show_project_headers { "    " } else { "  " };
-        let line_prefix = if repo_occurrences[&repo_key] > 1 {
-            format!("{} ", format!("line {}:", event.line_number).dimmed())
-        } else {
-            String::new()
-        };
-        writeln!(
-            output,
-            "{}{}{}",
-            indent,
-            line_prefix,
-            format_display_event(&event.kind, dry_run)
-        )?;
-    }
-
-    if stderr {
-        write!(printer.stderr(), "{output}")?;
-    } else {
-        write!(printer.stdout(), "{output}")?;
     }
 
     Ok(())
@@ -538,8 +546,7 @@ fn apply_repo_updates<'a>(
 ) -> Result<ApplyRepoUpdatesResult> {
     let mut failure = false;
     let mut has_updates = false;
-    let mut stdout_events = Vec::new();
-    let mut stderr_events = Vec::new();
+    let mut display_events = Vec::new();
 
     for update in updates {
         match update.result {
@@ -554,7 +561,8 @@ fn apply_repo_updates<'a>(
 
                 if is_changed {
                     for usage in &update.target.usages {
-                        stdout_events.push(DisplayEvent {
+                        display_events.push(DisplayEvent {
+                            stream: DisplayStream::Stdout,
                             project: usage.project,
                             repo: update.target.repo,
                             remote_index: usage.remote_index,
@@ -582,7 +590,8 @@ fn apply_repo_updates<'a>(
                     for mismatch in &resolved.frozen_mismatches {
                         match &mismatch.action {
                             FrozenMismatchAction::ReplaceWith(replacement) => {
-                                stdout_events.push(DisplayEvent {
+                                display_events.push(DisplayEvent {
+                                    stream: DisplayStream::Stdout,
                                     project: mismatch.project,
                                     repo: update.target.repo,
                                     remote_index: mismatch.remote_index,
@@ -604,7 +613,8 @@ fn apply_repo_updates<'a>(
                                 );
                             }
                             FrozenMismatchAction::Remove => {
-                                stdout_events.push(DisplayEvent {
+                                display_events.push(DisplayEvent {
+                                    stream: DisplayStream::Stdout,
                                     project: mismatch.project,
                                     repo: update.target.repo,
                                     remote_index: mismatch.remote_index,
@@ -631,7 +641,8 @@ fn apply_repo_updates<'a>(
 
                 if !is_changed && !has_frozen_notice {
                     for usage in &update.target.usages {
-                        stdout_events.push(DisplayEvent {
+                        display_events.push(DisplayEvent {
+                            stream: DisplayStream::Stdout,
                             project: usage.project,
                             repo: update.target.repo,
                             remote_index: usage.remote_index,
@@ -645,7 +656,8 @@ fn apply_repo_updates<'a>(
                 failure = true;
                 let error = e.to_string();
                 for usage in &update.target.usages {
-                    stderr_events.push(DisplayEvent {
+                    display_events.push(DisplayEvent {
+                        stream: DisplayStream::Stderr,
                         project: usage.project,
                         repo: update.target.repo,
                         remote_index: usage.remote_index,
@@ -659,8 +671,17 @@ fn apply_repo_updates<'a>(
         }
     }
 
-    write_display_events(&mut stdout_events, dry_run, printer, false)?;
-    write_display_events(&mut stderr_events, dry_run, printer, true)?;
+    let repo_occurrences =
+        display_events
+            .iter()
+            .fold(RepoOccurrences::default(), |mut counts, event| {
+                *counts
+                    .entry((event.project.config_file(), event.repo))
+                    .or_default() += 1;
+                counts
+            });
+
+    write_display_events(&mut display_events, &repo_occurrences, dry_run, printer)?;
 
     Ok(ApplyRepoUpdatesResult {
         failure,
