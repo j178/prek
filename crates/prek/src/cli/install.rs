@@ -39,11 +39,18 @@ pub(crate) async fn install(
     printer: Printer,
     git_dir: Option<&Path>,
 ) -> Result<ExitStatus> {
-    if git_dir.is_none() && git::has_hooks_path_set().await? {
+    let has_repo_hooks_path = if git_dir.is_none() {
+        git::has_repo_hooks_path_set().await?
+    } else {
+        false
+    };
+
+    if git_dir.is_none() && git::has_hooks_path_set().await? && !has_repo_hooks_path {
         anyhow::bail!(
-            "Cowardly refusing to install hooks with `core.hooksPath` set.\nhint: Run these commands to remove core.hooksPath:\nhint:   {}\nhint:   {}",
-            "git config --unset-all --local core.hooksPath".cyan(),
-            "git config --unset-all --global core.hooksPath".cyan()
+            "Cowardly refusing to install hooks with externally configured `core.hooksPath` set.\nhint: prek honors repo-local and worktree-local `core.hooksPath`.\nhint: Remove or change the global/system setting so Git uses the installed hooks.\nhint: {} only writes shims to `<GIT_DIR>/hooks`; Git keeps using `core.hooksPath` until that config changes.\nhint:   {}\nhint:   {}",
+            "prek install --git-dir <GIT_DIR>".cyan(),
+            "git config --unset-all --global core.hooksPath".cyan(),
+            "git config --unset-all --system core.hooksPath".cyan()
         );
     }
 
@@ -65,7 +72,7 @@ pub(crate) async fn install(
     let hooks_path = if let Some(dir) = git_dir {
         dir.join("hooks")
     } else {
-        git::get_git_common_dir().await?.join("hooks")
+        git::get_git_hooks_dir().await?
     };
     fs_err::create_dir_all(&hooks_path)?;
 
@@ -387,9 +394,26 @@ pub(crate) async fn uninstall(
     hook_types: Vec<HookType>,
     all: bool,
     printer: Printer,
+    git_dir: Option<&Path>,
 ) -> Result<ExitStatus> {
+    if git_dir.is_none()
+        && git::has_hooks_path_set().await?
+        && !git::has_repo_hooks_path_set().await?
+    {
+        anyhow::bail!(
+            "Cowardly refusing to uninstall hooks with externally configured `core.hooksPath` set.\nhint: prek honors repo-local and worktree-local `core.hooksPath`.\nhint: Remove or change the global/system setting first, or use {} to remove shims from `<GIT_DIR>/hooks` explicitly.\nhint:   {}\nhint:   {}",
+            "prek uninstall --git-dir <GIT_DIR>".cyan(),
+            "git config --unset-all --global core.hooksPath".cyan(),
+            "git config --unset-all --system core.hooksPath".cyan()
+        );
+    }
+
     let project = Project::discover(config.as_deref(), &CWD).ok();
-    let hooks_path = git::get_git_common_dir().await?.join("hooks");
+    let hooks_path = if let Some(dir) = git_dir {
+        dir.join("hooks")
+    } else {
+        git::get_git_hooks_dir().await?
+    };
 
     let types: Vec<HookType> = if all {
         HookType::value_variants().to_vec()

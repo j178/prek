@@ -28,6 +28,11 @@ pub(crate) enum Error {
 
     #[error(transparent)]
     UTF8(#[from] Utf8Error),
+
+    #[error(
+        "Git resolved hooks directory to the current directory (`{0}`). Unset `core.hooksPath` or set it to a real directory path."
+    )]
+    InvalidHooksPath(PathBuf),
 }
 
 pub(crate) static GIT: LazyLock<Result<PathBuf, which::Error>> =
@@ -195,6 +200,27 @@ pub(crate) async fn get_git_common_dir() -> Result<PathBuf, Error> {
         Ok(PathBuf::from(
             String::from_utf8_lossy(&output.stdout).trim_ascii(),
         ))
+    }
+}
+
+pub(crate) async fn get_git_hooks_dir() -> Result<PathBuf, Error> {
+    let output = git_cmd("get git hooks dir")?
+        .arg("rev-parse")
+        .arg("--git-path")
+        .arg("hooks")
+        .check(true)
+        .output()
+        .await?;
+    let hooks_dir = if output.stdout.trim_ascii().is_empty() {
+        get_git_common_dir().await?.join("hooks")
+    } else {
+        PathBuf::from(String::from_utf8_lossy(&output.stdout).trim_ascii())
+    };
+    let cleaned = hooks_dir.clean();
+    if cleaned == Path::new(".") && config_value_is_empty(None, "core.hooksPath").await? {
+        Err(Error::InvalidHooksPath(cleaned))
+    } else {
+        Ok(hooks_dir)
     }
 }
 
@@ -560,19 +586,43 @@ pub(crate) async fn clone_repo(
     clone_repo_attempt(rev, path, terminal_prompt).await
 }
 
-pub(crate) async fn has_hooks_path_set() -> Result<bool> {
-    let output = git_cmd("get git hooks path")?
-        .arg("config")
+async fn get_config_value(scope: Option<&str>, key: &str) -> Result<Option<Vec<u8>>, Error> {
+    let mut cmd = git_cmd("get git config value")?;
+    cmd.arg("config").arg("--includes");
+    if let Some(scope) = scope {
+        cmd.arg(scope);
+    }
+    let output = cmd
+        .arg("--null")
         .arg("--get")
-        .arg("core.hooksPath")
+        .arg(key)
         .check(false)
         .output()
         .await?;
-    if output.status.success() {
-        Ok(!output.stdout.trim_ascii().is_empty())
-    } else {
-        Ok(false)
-    }
+    Ok(output.status.success().then_some(output.stdout))
+}
+
+async fn has_config_value(scope: Option<&str>, key: &str) -> Result<bool, Error> {
+    // An empty config value still counts as configured and can affect Git's
+    // path resolution, e.g. `core.hooksPath=` makes `--git-path hooks`
+    // resolve to the current directory.
+    Ok(get_config_value(scope, key).await?.is_some())
+}
+
+async fn config_value_is_empty(scope: Option<&str>, key: &str) -> Result<bool, Error> {
+    Ok(get_config_value(scope, key)
+        .await?
+        .as_deref()
+        .is_some_and(|value| value.strip_suffix(b"\0").unwrap_or(value).is_empty()))
+}
+
+pub(crate) async fn has_hooks_path_set() -> Result<bool, Error> {
+    has_config_value(None, "core.hooksPath").await
+}
+
+pub(crate) async fn has_repo_hooks_path_set() -> Result<bool, Error> {
+    Ok(has_config_value(Some("--local"), "core.hooksPath").await?
+        || has_config_value(Some("--worktree"), "core.hooksPath").await?)
 }
 
 /// Compute the file mode for a newly created file based on `core.sharedRepository`.
