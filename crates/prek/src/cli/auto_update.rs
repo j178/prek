@@ -1,4 +1,4 @@
-use std::fmt::{self, Write};
+use std::fmt::Write;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -40,15 +40,6 @@ struct Revision {
     frozen: Option<String>,
 }
 
-impl fmt::Display for Revision {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.frozen {
-            Some(frozen) => write!(f, "{frozen}@{}", self.rev),
-            None => f.write_str(&self.rev),
-        }
-    }
-}
-
 /// One occurrence of a remote repo in a project config file.
 struct RepoUsage<'a> {
     /// The project whose config contains this repo entry.
@@ -57,6 +48,8 @@ struct RepoUsage<'a> {
     remote_count: usize,
     /// The position of this remote repo among the project's remote repos.
     remote_index: usize,
+    /// The 1-based line number of this repo entry's `rev` setting.
+    rev_line_number: usize,
     /// The existing `# frozen:` comment for this repo entry, if present.
     current_frozen: Option<String>,
     /// The source location of the existing `# frozen:` comment, if present.
@@ -75,35 +68,6 @@ struct RepoTarget<'a> {
     usages: Vec<RepoUsage<'a>>,
 }
 
-impl RepoTarget<'_> {
-    /// Formats the configured revision for stdout, using the shared frozen comment when available.
-    fn display_current_rev(&self) -> String {
-        let frozen = if looks_like_sha(self.current_rev) {
-            let mut frozen_refs = self
-                .usages
-                .iter()
-                .map(|usage| usage.current_frozen.as_deref());
-            let Some(first) = frozen_refs.next().flatten() else {
-                return self.current_rev.to_string();
-            };
-
-            if frozen_refs.all(|current| current == Some(first)) {
-                Some(first.to_string())
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        Revision {
-            rev: self.current_rev.to_string(),
-            frozen,
-        }
-        .to_string()
-    }
-}
-
 /// One fetched remote repository URL with all configured revisions that use it.
 struct RepoSource<'a> {
     /// The remote repository URL.
@@ -113,7 +77,7 @@ struct RepoSource<'a> {
 }
 
 /// The action to take when a `# frozen:` comment no longer matches a SHA `rev`.
-enum FrozenMismatch {
+enum FrozenMismatchAction {
     /// Rewrite the comment to this replacement tag.
     ReplaceWith(String),
     /// Remove the stale comment because no ref points at the pinned commit.
@@ -142,13 +106,15 @@ enum FrozenMismatchReason {
 }
 
 /// One stale `# frozen:` comment found for a specific repo entry.
-struct FrozenCommentMismatch<'a> {
+struct FrozenMismatch<'a> {
     /// The project config that contains this stale comment.
     project: &'a Project,
     /// The number of remote repos in that project config.
     remote_size: usize,
     /// The position of this remote repo among the project's remote repos.
     remote_index: usize,
+    /// The 1-based line number of the `rev` setting that owns this stale comment.
+    rev_line_number: usize,
     /// The current `# frozen:` reference string from config.
     current_frozen: String,
     /// The source location of the current `# frozen:` comment.
@@ -158,7 +124,7 @@ struct FrozenCommentMismatch<'a> {
     /// Whether the pinned SHA is available in the fetched repository view.
     current_rev_presence: CommitPresence,
     /// The action to take for this stale comment.
-    mismatch: FrozenMismatch,
+    action: FrozenMismatchAction,
 }
 
 /// The source location of a `# frozen:` comment value within a config line.
@@ -175,6 +141,8 @@ struct FrozenCommentSite {
 /// Parsed frozen-comment metadata for one `rev` entry in config.
 #[derive(Clone)]
 struct FrozenRef {
+    /// The 1-based line number of the `rev` setting.
+    line_number: usize,
     /// The parsed frozen reference value, if the `rev` line has one.
     current_frozen: Option<String>,
     /// The source location of that frozen reference value, if present.
@@ -196,7 +164,7 @@ struct ResolvedRepoUpdate<'a> {
     /// The revision data that may be written back to config.
     revision: Revision,
     /// Any stale `# frozen:` comments found for this target's usages.
-    frozen_mismatches: Vec<FrozenCommentMismatch<'a>>,
+    frozen_mismatches: Vec<FrozenMismatch<'a>>,
 }
 
 /// The final outcome for one configured `repo + rev + hook set` target.
@@ -214,6 +182,39 @@ struct ApplyRepoUpdatesResult {
     failure: bool,
     has_updates: bool,
 }
+
+enum DisplayEventKind {
+    Update { current: Revision, next: Revision },
+    FrozenUpdate { current: String, next: String },
+    FrozenRemove { current: String },
+    UpToDate,
+    Failure { error: String },
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum DisplayStream {
+    Stdout,
+    Stderr,
+}
+
+struct DisplayEvent<'a> {
+    stream: DisplayStream,
+    project: &'a Project,
+    repo: &'a str,
+    remote_index: usize,
+    line_number: usize,
+    kind: DisplayEventKind,
+}
+
+struct FrozenWarningEvent<'a> {
+    project: &'a Project,
+    repo: &'a str,
+    current_rev: &'a str,
+    remote_index: usize,
+    mismatch: &'a FrozenMismatch<'a>,
+}
+
+type RepoOccurrences<'a> = FxHashMap<(&'a Path, &'a str), usize>;
 
 /// Updates remote repo revisions and, when possible, keeps existing `# frozen:` comments in sync.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -249,7 +250,7 @@ pub(crate) async fn auto_update(
     let sources = repo_sources.iter().filter(|repo_source| {
         filter_repos.is_empty() || filter_repos.iter().any(|repo| repo == repo_source.repo)
     });
-    let mut outcomes: Vec<RepoUpdate<'_>> = futures::stream::iter(sources)
+    let outcomes: Vec<RepoUpdate<'_>> = futures::stream::iter(sources)
         .map(async |repo_source| {
             let progress = reporter.on_update_start(repo_source.repo);
             let result =
@@ -265,15 +266,6 @@ pub(crate) async fn auto_update(
         .collect();
 
     reporter.on_complete();
-
-    // Sort outcomes by repository URL and revision for consistent output order.
-    outcomes.sort_by(|a, b| {
-        a.target
-            .repo
-            .cmp(b.target.repo)
-            .then_with(|| a.target.current_rev.cmp(b.target.current_rev))
-            .then_with(|| a.target.required_hook_ids.cmp(&b.target.required_hook_ids))
-    });
 
     warn_frozen_mismatches(&outcomes, printer)?;
 
@@ -353,6 +345,7 @@ fn collect_repo_sources(workspace: &Workspace) -> Result<Vec<RepoSource<'_>>> {
                 project,
                 remote_count,
                 remote_index,
+                rev_line_number: frozen_refs[remote_index].line_number,
                 current_frozen: frozen_refs[remote_index].current_frozen.clone(),
                 current_frozen_site: frozen_refs[remote_index].site.clone(),
             });
@@ -376,23 +369,170 @@ fn collect_repo_sources(workspace: &Workspace) -> Result<Vec<RepoSource<'_>>> {
 
 /// Emits all frozen-comment warnings before the normal update output.
 fn warn_frozen_mismatches(updates: &[RepoUpdate<'_>], printer: Printer) -> Result<()> {
+    let mut warnings = Vec::new();
+
     for update in updates {
         let Ok(resolved) = &update.result else {
             continue;
         };
 
         for mismatch in &resolved.frozen_mismatches {
-            write!(
-                printer.stderr(),
-                "{}",
-                render_frozen_mismatch_warning(
-                    update.target.repo,
-                    update.target.current_rev,
-                    mismatch
-                )
-            )?;
+            warnings.push(FrozenWarningEvent {
+                project: mismatch.project,
+                repo: update.target.repo,
+                current_rev: update.target.current_rev,
+                remote_index: mismatch.remote_index,
+                mismatch,
+            });
         }
     }
+
+    warnings.sort_by(|a, b| {
+        a.project
+            .idx()
+            .cmp(&b.project.idx())
+            .then_with(|| a.remote_index.cmp(&b.remote_index))
+    });
+
+    for warning in warnings {
+        write!(
+            printer.stderr(),
+            "{}",
+            render_frozen_mismatch_warning(warning.repo, warning.current_rev, warning.mismatch)
+        )?;
+    }
+
+    Ok(())
+}
+
+fn update_verb(dry_run: bool) -> &'static str {
+    if dry_run { "would update" } else { "updating" }
+}
+
+fn remove_verb(dry_run: bool) -> &'static str {
+    if dry_run { "would remove" } else { "removing" }
+}
+
+fn format_revision(rev: &str, frozen: Option<&str>) -> String {
+    match frozen {
+        Some(frozen) => format!(
+            "`{}` {}",
+            rev.cyan(),
+            format!("(frozen: {frozen})").dimmed()
+        ),
+        None => format!("`{}`", rev.cyan()),
+    }
+}
+
+fn format_display_event(kind: &DisplayEventKind, dry_run: bool) -> String {
+    match kind {
+        DisplayEventKind::Update { current, next } => format!(
+            "{} {} -> {}",
+            format!("{} rev", update_verb(dry_run)).green(),
+            format_revision(&current.rev, current.frozen.as_deref()),
+            format_revision(&next.rev, next.frozen.as_deref())
+        ),
+        DisplayEventKind::FrozenUpdate { current, next } => format!(
+            "{} `{}` -> `{}`",
+            format!("{} frozen comment", update_verb(dry_run)).green(),
+            current.cyan(),
+            next.cyan()
+        ),
+        DisplayEventKind::FrozenRemove { current } => format!(
+            "{} `{}`",
+            format!("{} frozen comment", remove_verb(dry_run)).yellow(),
+            current.cyan()
+        ),
+        DisplayEventKind::UpToDate => "already up to date".dimmed().to_string(),
+        DisplayEventKind::Failure { error } => {
+            format!("{} {error}", "update failed:".red())
+        }
+    }
+}
+
+fn write_display_events(
+    events: &mut [DisplayEvent<'_>],
+    repo_occurrences: &RepoOccurrences<'_>,
+    dry_run: bool,
+    printer: Printer,
+) -> Result<()> {
+    if events.is_empty() {
+        return Ok(());
+    }
+
+    events.sort_by(|a, b| {
+        a.project
+            .idx()
+            .cmp(&b.project.idx())
+            .then_with(|| a.remote_index.cmp(&b.remote_index))
+    });
+
+    for stream in [DisplayStream::Stdout, DisplayStream::Stderr] {
+        let stream_events = events
+            .iter()
+            .filter(|event| event.stream == stream)
+            .collect::<Vec<_>>();
+        if stream_events.is_empty() {
+            continue;
+        }
+
+        let show_project_headers = stream_events
+            .iter()
+            .map(|event| event.project.config_file())
+            .unique()
+            .count()
+            > 1;
+
+        let mut current_project: Option<&Path> = None;
+        let mut current_repo: Option<(&Path, &str)> = None;
+        let mut output = String::new();
+
+        for event in stream_events {
+            let project = event.project.config_file();
+            if show_project_headers && current_project != Some(project) {
+                if current_project.is_some() {
+                    writeln!(output)?;
+                }
+                writeln!(
+                    output,
+                    "{}",
+                    format!("[{}]", project.user_display()).yellow().bold()
+                )?;
+                current_project = Some(project);
+                current_repo = None;
+            }
+
+            let repo_key = (project, event.repo);
+            if current_repo != Some(repo_key) {
+                if current_repo.is_some() {
+                    writeln!(output)?;
+                }
+                let indent = if show_project_headers { "  " } else { "" };
+                writeln!(output, "{}{}", indent, event.repo.cyan().bold())?;
+                current_repo = Some(repo_key);
+            }
+
+            let indent = if show_project_headers { "    " } else { "  " };
+            let line_prefix = if repo_occurrences[&repo_key] > 1 {
+                format!("{} ", format!("line {}:", event.line_number).dimmed())
+            } else {
+                String::new()
+            };
+            writeln!(
+                output,
+                "{}{}{}",
+                indent,
+                line_prefix,
+                format_display_event(&event.kind, dry_run)
+            )?;
+        }
+
+        match stream {
+            DisplayStream::Stdout => write!(printer.stdout(), "{output}")?,
+            DisplayStream::Stderr => write!(printer.stderr(), "{output}")?,
+        }
+    }
+
     Ok(())
 }
 
@@ -406,34 +546,61 @@ fn apply_repo_updates<'a>(
 ) -> Result<ApplyRepoUpdatesResult> {
     let mut failure = false;
     let mut has_updates = false;
+    let mut display_events = Vec::new();
 
     for update in updates {
         match update.result {
             Ok(resolved) => {
                 let is_changed = update.target.current_rev != resolved.revision.rev;
-                let has_frozen_updates = resolved
-                    .frozen_mismatches
-                    .iter()
-                    .any(|mismatch| !matches!(mismatch.mismatch, FrozenMismatch::NoReplacement));
+                let has_frozen_updates = resolved.frozen_mismatches.iter().any(|mismatch| {
+                    !matches!(mismatch.action, FrozenMismatchAction::NoReplacement)
+                });
                 let has_frozen_notice = !resolved.frozen_mismatches.is_empty();
 
                 has_updates |= is_changed || has_frozen_updates;
 
-                // If `rev` itself is unchanged, the normal update path below will not rewrite this
-                // repo entry. Still fix stale `# frozen:` comments in update mode so the comment
-                // continues to point at the configured commit SHA.
-                if !dry_run && !is_changed {
+                if is_changed {
+                    for usage in &update.target.usages {
+                        display_events.push(DisplayEvent {
+                            stream: DisplayStream::Stdout,
+                            project: usage.project,
+                            repo: update.target.repo,
+                            remote_index: usage.remote_index,
+                            line_number: usage.rev_line_number,
+                            kind: DisplayEventKind::Update {
+                                current: Revision {
+                                    rev: update.target.current_rev.to_string(),
+                                    frozen: usage.current_frozen.clone(),
+                                },
+                                next: resolved.revision.clone(),
+                            },
+                        });
+                        record_project_revision(
+                            project_updates,
+                            usage.project,
+                            usage.remote_count,
+                            usage.remote_index,
+                            resolved.revision.clone(),
+                        );
+                    }
+                } else {
+                    // If `rev` itself is unchanged, the normal update path above will not rewrite this
+                    // repo entry. Still fix stale `# frozen:` comments in update mode so the comment
+                    // continues to point at the configured commit SHA.
                     for mismatch in &resolved.frozen_mismatches {
-                        match &mismatch.mismatch {
-                            FrozenMismatch::ReplaceWith(replacement) => {
-                                writeln!(
-                                    printer.stdout(),
-                                    "[{}] updating frozen reference `{}` -> `{}`",
-                                    update.target.repo.cyan(),
-                                    mismatch.current_frozen,
-                                    replacement,
-                                )?;
-
+                        match &mismatch.action {
+                            FrozenMismatchAction::ReplaceWith(replacement) => {
+                                display_events.push(DisplayEvent {
+                                    stream: DisplayStream::Stdout,
+                                    project: mismatch.project,
+                                    repo: update.target.repo,
+                                    remote_index: mismatch.remote_index,
+                                    line_number: mismatch.rev_line_number,
+                                    kind: DisplayEventKind::FrozenUpdate {
+                                        current: mismatch.current_frozen.clone(),
+                                        next: replacement.clone(),
+                                    },
+                                });
                                 record_project_revision(
                                     project_updates,
                                     mismatch.project,
@@ -445,14 +612,17 @@ fn apply_repo_updates<'a>(
                                     },
                                 );
                             }
-                            FrozenMismatch::Remove => {
-                                writeln!(
-                                    printer.stdout(),
-                                    "[{}] removing frozen reference `{}`",
-                                    update.target.repo.cyan(),
-                                    mismatch.current_frozen,
-                                )?;
-
+                            FrozenMismatchAction::Remove => {
+                                display_events.push(DisplayEvent {
+                                    stream: DisplayStream::Stdout,
+                                    project: mismatch.project,
+                                    repo: update.target.repo,
+                                    remote_index: mismatch.remote_index,
+                                    line_number: mismatch.rev_line_number,
+                                    kind: DisplayEventKind::FrozenRemove {
+                                        current: mismatch.current_frozen.clone(),
+                                    },
+                                });
                                 record_project_revision(
                                     project_updates,
                                     mismatch.project,
@@ -464,48 +634,54 @@ fn apply_repo_updates<'a>(
                                     },
                                 );
                             }
-                            FrozenMismatch::NoReplacement => {}
+                            FrozenMismatchAction::NoReplacement => {}
                         }
                     }
                 }
 
-                if is_changed {
-                    writeln!(
-                        printer.stdout(),
-                        "[{}] {} `{}` -> `{}`",
-                        update.target.repo.cyan(),
-                        if dry_run { "would update" } else { "updating" },
-                        update.target.display_current_rev(),
-                        resolved.revision,
-                    )?;
-
+                if !is_changed && !has_frozen_notice {
                     for usage in &update.target.usages {
-                        record_project_revision(
-                            project_updates,
-                            usage.project,
-                            usage.remote_count,
-                            usage.remote_index,
-                            resolved.revision.clone(),
-                        );
+                        display_events.push(DisplayEvent {
+                            stream: DisplayStream::Stdout,
+                            project: usage.project,
+                            repo: update.target.repo,
+                            remote_index: usage.remote_index,
+                            line_number: usage.rev_line_number,
+                            kind: DisplayEventKind::UpToDate,
+                        });
                     }
-                } else if !has_frozen_notice {
-                    writeln!(
-                        printer.stdout(),
-                        "[{}] already up to date",
-                        update.target.repo.yellow()
-                    )?;
                 }
             }
             Err(e) => {
                 failure = true;
-                writeln!(
-                    printer.stderr(),
-                    "[{}] update failed: {e}",
-                    update.target.repo.red()
-                )?;
+                let error = e.to_string();
+                for usage in &update.target.usages {
+                    display_events.push(DisplayEvent {
+                        stream: DisplayStream::Stderr,
+                        project: usage.project,
+                        repo: update.target.repo,
+                        remote_index: usage.remote_index,
+                        line_number: usage.rev_line_number,
+                        kind: DisplayEventKind::Failure {
+                            error: error.clone(),
+                        },
+                    });
+                }
             }
         }
     }
+
+    let repo_occurrences =
+        display_events
+            .iter()
+            .fold(RepoOccurrences::default(), |mut counts, event| {
+                *counts
+                    .entry((event.project.config_file(), event.repo))
+                    .or_default() += 1;
+                counts
+            });
+
+    write_display_events(&mut display_events, &repo_occurrences, dry_run, printer)?;
 
     Ok(ApplyRepoUpdatesResult {
         failure,
@@ -532,7 +708,7 @@ async fn collect_frozen_mismatches<'a>(
     repo_path: &Path,
     target: &'a RepoTarget<'a>,
     tag_timestamps: &[TagTimestamp],
-) -> Result<Vec<FrozenCommentMismatch<'a>>> {
+) -> Result<Vec<FrozenMismatch<'a>>> {
     if !(target.current_rev.len() == 40 && looks_like_sha(target.current_rev)) {
         return Ok(Vec::new());
     }
@@ -568,29 +744,27 @@ async fn collect_frozen_mismatches<'a>(
                 Some(_) => FrozenMismatchReason::ResolvesToDifferentCommit,
                 None => FrozenMismatchReason::Unresolvable,
             };
-            let mismatch = select_best_tag(&rev_tags, current_frozen, true).map_or_else(
-                || match current_rev_presence {
-                    CommitPresence::Present => {
-                        // We only remove the stale comment when we can prove the pinned commit is
-                        // present in the fetched repo view and no fetched tag points at it.
-                        FrozenMismatch::Remove
-                    }
+            let action = match select_best_tag(&rev_tags, current_frozen, true) {
+                Some(replacement) => FrozenMismatchAction::ReplaceWith(replacement.to_string()),
+                None => match current_rev_presence {
+                    CommitPresence::Present => FrozenMismatchAction::Remove,
                     CommitPresence::Absent | CommitPresence::Unknown => {
-                        FrozenMismatch::NoReplacement
+                        // The pinned SHA is not present in this repo view, so we cannot prove
+                        // that the stale frozen ref should be replaced or removed.
+                        FrozenMismatchAction::NoReplacement
                     }
                 },
-                |tag: &str| FrozenMismatch::ReplaceWith(tag.to_string()),
-            );
-
-            Some(FrozenCommentMismatch {
+            };
+            Some(FrozenMismatch {
                 project: usage.project,
                 remote_size: usage.remote_count,
                 remote_index: usage.remote_index,
+                rev_line_number: usage.rev_line_number,
                 current_frozen: current_frozen.to_string(),
                 frozen_site: usage.current_frozen_site.clone(),
                 reason,
                 current_rev_presence,
-                mismatch,
+                action,
             })
         })
         .collect())
@@ -819,7 +993,7 @@ fn get_tags_pointing_at_revision<'a>(
 fn render_frozen_mismatch_warning(
     repo: &str,
     current_rev: &str,
-    mismatch: &FrozenCommentMismatch<'_>,
+    mismatch: &FrozenMismatch<'_>,
 ) -> String {
     let label = match mismatch.reason {
         FrozenMismatchReason::ResolvesToDifferentCommit => {
@@ -832,21 +1006,21 @@ fn render_frozen_mismatch_warning(
             format!("`{}` could not be resolved", mismatch.current_frozen)
         }
     };
-    let details = match &mismatch.mismatch {
-        FrozenMismatch::ReplaceWith(replacement) => Some(format!(
+    let details = match &mismatch.action {
+        FrozenMismatchAction::ReplaceWith(replacement) => Some(format!(
             "pinned commit `{current_rev}` is referenced by `{replacement}`"
         )),
-        FrozenMismatch::Remove => Some(format!(
+        FrozenMismatchAction::Remove => Some(format!(
             "no tag points at the pinned commit `{current_rev}`"
         )),
-        FrozenMismatch::NoReplacement
+        FrozenMismatchAction::NoReplacement
             if matches!(mismatch.current_rev_presence, CommitPresence::Absent) =>
         {
             Some(format!(
                 "pinned commit `{current_rev}` is not present in the repo"
             ))
         }
-        FrozenMismatch::NoReplacement => None,
+        FrozenMismatchAction::NoReplacement => None,
     };
     let title = format!(
         "[{repo}] frozen ref `{}` does not match `{current_rev}`",
@@ -874,12 +1048,14 @@ fn render_frozen_mismatch_warning(
 fn parse_frozen_ref(line: &str, line_number: usize) -> FrozenRef {
     let Some(captures) = regex!(r#"#\s*frozen:\s*([^\s#]+)"#).captures(line) else {
         return FrozenRef {
+            line_number,
             current_frozen: None,
             site: None,
         };
     };
     let frozen_match = captures.get(1).expect("capture group 1 must exist");
     FrozenRef {
+        line_number,
         current_frozen: Some(frozen_match.as_str().to_string()),
         site: Some(FrozenCommentSite {
             line_number,
