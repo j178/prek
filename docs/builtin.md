@@ -478,7 +478,7 @@ Protects specific branches from direct commits.
 
 **Supported arguments** (compatible with `pre-commit-hooks`):
 
-- `-b`, `--branch <branch>` (repeatable, default: `main`, `master`)
+- `-b`, `--branch <branch>` (repeatable, default: `main`, `master`, and the branch pointed to by `origin/HEAD`)
 - `-p`, `--pattern <regex>` (repeatable)
 
 **Caveats**
