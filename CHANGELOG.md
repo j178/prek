@@ -43,7 +43,7 @@ $ prek auto-update --check
 ### Bug fixes
 
 - Canonicalize CWD and GIT_ROOT paths ([#1878](https://github.com/j178/prek/pull/1878))
-- Ensure adding quotes for non-string revisions in `auto-update` ([#1936](https://github.com/j178/prek/pull/1936))
+- Ensure quotes are added for non-string revisions in `auto-update` ([#1936](https://github.com/j178/prek/pull/1936))
 
 ### Documentation
 
