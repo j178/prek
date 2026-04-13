@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.3.9
+
+Released on 2026-04-13.
+
+### Highlight
+
+`prek auto-update` is now stricter about pinned revisions and more useful in CI.
+It now keeps `rev` and `# frozen:` comments in sync, can detect
+[impostor commits](https://docs.zizmor.sh/audits/#impostor-commit) when validating pinned SHAs,
+and lets you use `prek auto-update --check` to fail on both available updates and frozen-ref
+mismatches without rewriting the config.
+
+Examples:
+
+```console
+$ prek auto-update
+# updates revs and repairs stale `# frozen:` comments
+
+$ prek auto-update --freeze
+# writes frozen SHAs with matching `# frozen: <tag>` comments
+
+$ prek auto-update --check
+# exits non-zero when updates are available, a `# frozen:` comment is stale,
+# or a pinned SHA does not belong to the fetched upstream refs
+```
+
+### Enhancements
+
+- Check and sync frozen comments during auto-update ([#1896](https://github.com/j178/prek/pull/1896))
+- Handle impostor commits in auto-update ([#1919](https://github.com/j178/prek/pull/1919))
+- Add experimental `language: dotnet` support ([#1871](https://github.com/j178/prek/pull/1871))
+- Honor repo and worktree `core.hooksPath` ([#1892](https://github.com/j178/prek/pull/1892))
+- Add `prek run --no-fail-fast` to override config file ([#1859](https://github.com/j178/prek/pull/1859))
+- Add `forbid-new-submodules` as builtin hook ([#1853](https://github.com/j178/prek/pull/1853))
+- Clean stale patch files in `cache gc` ([#1877](https://github.com/j178/prek/pull/1877))
+- Display auto-update results by config entry ([#1922](https://github.com/j178/prek/pull/1922))
+- Restrict patch directory permissions ([#1876](https://github.com/j178/prek/pull/1876))
+- Show tag names in `auto-update --freeze` output ([#1916](https://github.com/j178/prek/pull/1916))
+- Use a bitset for hook stages ([#1860](https://github.com/j178/prek/pull/1860))
+
+### Bug fixes
+
+- Canonicalize CWD and GIT_ROOT paths ([#1878](https://github.com/j178/prek/pull/1878))
+
+### Documentation
+
+- Update docs for case of hooks modifying files with a non-zero exit code ([#1879](https://github.com/j178/prek/pull/1879))
+
+### Contributors
+
+- @RicardoVercetti
+- @nathanjmcdougall
+- @renovate
+- @sadjow
+- @j178
+
 ## 0.3.8
 
 Released on 2026-03-23.
