@@ -674,7 +674,7 @@ Want to show your project runs on prek? Add our README badge to your docs or rep
 - Add `prek cache size` command ([#1183](https://github.com/j178/prek/pull/1183))
 - Support orphan projects ([#1129](https://github.com/j178/prek/pull/1129))
 - Fallback to `manual` stage for hooks specified directly in command line ([#1185](https://github.com/j178/prek/pull/1185))
-- Make go module cache read-writeable (thus deletable) ([#1164](https://github.com/j178/prek/pull/1164))
+- Make go module cache read-writable (thus deletable) ([#1164](https://github.com/j178/prek/pull/1164))
 - Provide more information when validating configs and manifests ([#1182](https://github.com/j178/prek/pull/1182))
 - Improve error message for invalid number of arguments to hook-impl ([#1196](https://github.com/j178/prek/pull/1196))
 
