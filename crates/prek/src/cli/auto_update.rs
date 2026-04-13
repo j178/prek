@@ -496,7 +496,7 @@ fn write_display_events(
                 writeln!(
                     output,
                     "{}",
-                    format!("[{}]", project.user_display()).yellow().bold()
+                    format!("{}", project.user_display()).yellow().bold()
                 )?;
                 current_project = Some(project);
                 current_repo = None;
