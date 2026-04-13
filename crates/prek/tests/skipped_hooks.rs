@@ -378,7 +378,7 @@ fn report_level_skipped_shows_excluded_hooks() -> Result<()> {
     Ok(())
 }
 
-/// PREK_REPORT_LEVEL env var works as fallback for --report-level.
+/// `PREK_REPORT_LEVEL` env var works as fallback for `--report-level`.
 #[test]
 fn report_level_env_var() -> Result<()> {
     let context = TestContext::new();

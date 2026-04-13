@@ -662,9 +662,7 @@ async fn run_hooks(
         // If two hooks have the same priority, preserve their original order from the config.
         hooks.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.idx.cmp(&b.idx)));
 
-        if (projects_len > 1 || !project.is_root())
-            && report_level != ReportLevel::Silent
-        {
+        if (projects_len > 1 || !project.is_root()) && report_level != ReportLevel::Silent {
             reporter.suspend(|| {
                 writeln!(
                     status_printer.printer().stdout(),
@@ -734,9 +732,7 @@ async fn run_hooks(
             project_skipped.sort_by_key(|h| h.idx);
 
             for hook in project_skipped {
-                reporter.suspend(|| {
-                    status_printer.write(&hook.name, "", RunStatus::Skipped)
-                })?;
+                reporter.suspend(|| status_printer.write(&hook.name, "", RunStatus::Skipped))?;
             }
         }
     }
@@ -865,8 +861,7 @@ fn render_priority_group(
         .iter()
         .any(|r| report_level.should_show(r.status));
 
-    let show_group_ui =
-        group_modified_files && group_results.len() > 1 && any_visible;
+    let show_group_ui = group_modified_files && group_results.len() > 1 && any_visible;
     let single_hook_modified_files = group_results.len() == 1 && group_modified_files;
     let group_prefix = if show_group_ui {
         format!("{}", "  │ ".dimmed())
@@ -1042,7 +1037,10 @@ impl RunStatus {
     }
 
     fn is_skipped(self) -> bool {
-        matches!(self, Self::DryRun | Self::NoFiles | Self::Unimplemented | Self::Skipped)
+        matches!(
+            self,
+            Self::DryRun | Self::NoFiles | Self::Unimplemented | Self::Skipped
+        )
     }
 }
 
