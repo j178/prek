@@ -1535,14 +1535,14 @@ fn auto_update_workspace() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [project-a/.pre-commit-config.yaml]
+    project-a/.pre-commit-config.yaml
       [HOME]/test-repos/workspace-repo1
         updating rev `v1.0.0` -> `v2.0.0`
 
       [HOME]/test-repos/workspace-repo2
         updating rev `v1.0.0` -> `v1.5.0`
 
-    [project-b/.pre-commit-config.yaml]
+    project-b/.pre-commit-config.yaml
       [HOME]/test-repos/workspace-repo2
         updating rev `v1.0.0` -> `v1.5.0`
 
