@@ -39,18 +39,41 @@ pub(crate) async fn install(
     printer: Printer,
     git_dir: Option<&Path>,
 ) -> Result<ExitStatus> {
-    let has_repo_hooks_path = if git_dir.is_none() {
-        git::has_repo_hooks_path_set().await?
-    } else {
-        false
-    };
-
-    if git_dir.is_none() && git::has_hooks_path_set().await? && !has_repo_hooks_path {
+    // Upstream `pre-commit` deliberately refuses to install whenever
+    // `git config core.hooksPath` resolves to a non-empty value. It does not
+    // distinguish whether that effective value comes from local, worktree,
+    // global, or system config. Once Git sees any effective `core.hooksPath`,
+    // it stops consulting `.git/hooks` and runs hooks only from that configured
+    // directory. If the value is external to this repository, "installing
+    // anyway" would mean either writing into a user-managed shared hooks
+    // directory or mutating the user's Git config to point back at this repo.
+    // Both cross the repository's ownership boundary.
+    //
+    // In prek, we keep that safety boundary but narrow the refusal to the
+    // actual unsafe case. Repo-owned `core.hooksPath` values are safe to honor
+    // implicitly when they come from local/worktree scope, including repo
+    // config reached through `include.path` / `includeIf`, because those values
+    // are part of the repository's own Git setup. Only hooksPath values that
+    // resolve entirely from external config still require the explicit
+    // `--git-dir` escape hatch.
+    if git_dir.is_none()
+        && git::has_hooks_path_set().await?
+        && !git::has_repo_hooks_path_set().await?
+    {
         anyhow::bail!(
-            "Cowardly refusing to install hooks with externally configured `core.hooksPath` set.\nhint: prek honors repo-local and worktree-local `core.hooksPath`.\nhint: Remove or change the global/system setting so Git uses the installed hooks.\nhint: {} only writes shims to `<GIT_DIR>/hooks`; Git keeps using `core.hooksPath` until that config changes.\nhint:   {}\nhint:   {}",
-            "prek install --git-dir <GIT_DIR>".cyan(),
+            concat!(
+                "Refusing to install hooks because `core.hooksPath` is configured outside this repository.\n",
+                "\n{} Git will execute hooks from the configured global/system hooks directory, not from this repository's hooks directory.\n",
+                "\n{} Remove the global/system setting, or move `core.hooksPath` into repo scope for this repository instead.\n",
+                "  {}\n",
+                "  {}\n",
+                "  {}\n",
+            ),
+            "note:".yellow().bold(),
+            "hint:".yellow().bold(),
             "git config --unset-all --global core.hooksPath".cyan(),
-            "git config --unset-all --system core.hooksPath".cyan()
+            "git config --unset-all --system core.hooksPath".cyan(),
+            "git config --local core.hooksPath <path>".cyan(),
         );
     }
 
@@ -401,10 +424,19 @@ pub(crate) async fn uninstall(
         && !git::has_repo_hooks_path_set().await?
     {
         anyhow::bail!(
-            "Cowardly refusing to uninstall hooks with externally configured `core.hooksPath` set.\nhint: prek honors repo-local and worktree-local `core.hooksPath`.\nhint: Remove or change the global/system setting first, or use {} to remove shims from `<GIT_DIR>/hooks` explicitly.\nhint:   {}\nhint:   {}",
-            "prek uninstall --git-dir <GIT_DIR>".cyan(),
+            concat!(
+                "Refusing to uninstall hooks because `core.hooksPath` is configured outside this repository.\n",
+                "\n{} Git will execute hooks from the configured global/system hooks directory, not from this repository's hooks directory.\n",
+                "\n{} Remove the global/system setting, or move `core.hooksPath` into repo scope for this repository instead.\n",
+                "  {}\n",
+                "  {}\n",
+                "  {}\n",
+            ),
+            "note:".yellow().bold(),
+            "hint:".yellow().bold(),
             "git config --unset-all --global core.hooksPath".cyan(),
-            "git config --unset-all --system core.hooksPath".cyan()
+            "git config --unset-all --system core.hooksPath".cyan(),
+            "git config --local core.hooksPath <path>".cyan(),
         );
     }
 

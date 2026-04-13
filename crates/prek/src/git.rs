@@ -204,6 +204,11 @@ pub(crate) async fn get_git_common_dir() -> Result<PathBuf, Error> {
 }
 
 pub(crate) async fn get_git_hooks_dir() -> Result<PathBuf, Error> {
+    // Ask Git for the effective hooks directory instead of reconstructing it
+    // ourselves. That lets Git apply the full precedence chain for
+    // `core.hooksPath`, including local/worktree config, linked worktrees, bare
+    // + worktree layouts, and repo-owned config loaded through `include.path`
+    // / `includeIf`.
     let output = git_cmd("get git hooks dir")?
         .arg("rev-parse")
         .arg("--git-path")
@@ -216,7 +221,13 @@ pub(crate) async fn get_git_hooks_dir() -> Result<PathBuf, Error> {
     } else {
         PathBuf::from(String::from_utf8_lossy(&output.stdout).trim_ascii())
     };
+
     let cleaned = hooks_dir.clean();
+    // `core.hooksPath=` is a particularly dangerous case: Git treats it as
+    // configured, but resolves `--git-path hooks` to the current directory. If
+    // we accepted that value, install/uninstall would write or remove hook
+    // shims from the worktree root. Keep the explicit `core.hooksPath=.` case
+    // working, but reject the empty-string variant.
     if cleaned == Path::new(".") && config_value_is_empty(None, "core.hooksPath").await? {
         Err(Error::InvalidHooksPath(cleaned))
     } else {

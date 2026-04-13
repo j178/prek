@@ -29,7 +29,7 @@ Adding `--prepare-hooks` tells prek to do that **and** proactively create the en
 
 If `core.hooksPath` is set in repo-local (`git config --local`) or worktree-local (`git config --worktree`) config, `prek install` and `prek uninstall` will honor it and operate on Git's effective hooks directory.
 
-If `core.hooksPath` is only configured globally or system-wide, prek refuses to install or uninstall by default. That setting may be shared across repositories, so prek avoids mutating a hook location it does not own. In that case, remove or change the global/system `core.hooksPath`. Passing `prek install --git-dir <GIT_DIR>` or `prek uninstall --git-dir <GIT_DIR>` only operates on `<GIT_DIR>/hooks`; Git will keep using the configured `core.hooksPath` until that config changes.
+If `core.hooksPath` is only configured globally or system-wide, prek refuses to install or uninstall by default. That setting may be shared across repositories, so prek avoids mutating a hook location it does not own. In that case, remove or change the global/system `core.hooksPath`.
 
 ## How do I use hooks from private repositories?
 

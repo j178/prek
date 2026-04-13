@@ -417,19 +417,21 @@ fn install_with_git_dir_allows_external_hooks_path_set() {
 
     let mut install = context.install();
     install.env("GIT_CONFIG_GLOBAL", &global_gitconfig);
-    cmd_snapshot!(context.filters(), install, @r#"
+    cmd_snapshot!(context.filters(), install, @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Cowardly refusing to install hooks with externally configured `core.hooksPath` set.
-    hint: prek honors repo-local and worktree-local `core.hooksPath`.
-    hint: Remove or change the global/system setting so Git uses the installed hooks.
-    hint: prek install --git-dir <GIT_DIR> only writes shims to `<GIT_DIR>/hooks`; Git keeps using `core.hooksPath` until that config changes.
-    hint:   git config --unset-all --global core.hooksPath
-    hint:   git config --unset-all --system core.hooksPath
-    "#);
+    error: Refusing to install hooks because `core.hooksPath` is configured outside this repository.
+
+    note: Git will execute hooks from the configured global/system hooks directory, not from this repository's hooks directory.
+
+    hint: Remove the global/system setting, or move `core.hooksPath` into repo scope for this repository instead.
+      git config --unset-all --global core.hooksPath
+      git config --unset-all --system core.hooksPath
+      git config --local core.hooksPath <path>
+    ");
 
     let mut install = context.install();
     install
@@ -460,19 +462,21 @@ fn install_refuses_empty_external_hooks_path_set() {
 
     let mut install = context.install();
     install.env("GIT_CONFIG_GLOBAL", &global_gitconfig);
-    cmd_snapshot!(context.filters(), install, @r#"
+    cmd_snapshot!(context.filters(), install, @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Cowardly refusing to install hooks with externally configured `core.hooksPath` set.
-    hint: prek honors repo-local and worktree-local `core.hooksPath`.
-    hint: Remove or change the global/system setting so Git uses the installed hooks.
-    hint: prek install --git-dir <GIT_DIR> only writes shims to `<GIT_DIR>/hooks`; Git keeps using `core.hooksPath` until that config changes.
-    hint:   git config --unset-all --global core.hooksPath
-    hint:   git config --unset-all --system core.hooksPath
-    "#);
+    error: Refusing to install hooks because `core.hooksPath` is configured outside this repository.
+
+    note: Git will execute hooks from the configured global/system hooks directory, not from this repository's hooks directory.
+
+    hint: Remove the global/system setting, or move `core.hooksPath` into repo scope for this repository instead.
+      git config --unset-all --global core.hooksPath
+      git config --unset-all --system core.hooksPath
+      git config --local core.hooksPath <path>
+    ");
 }
 
 #[test]
@@ -1093,18 +1097,21 @@ fn uninstall_refuses_external_hooks_path_set() {
 
     let mut uninstall = context.uninstall();
     uninstall.env("GIT_CONFIG_GLOBAL", &global_gitconfig);
-    cmd_snapshot!(context.filters(), uninstall, @r#"
+    cmd_snapshot!(context.filters(), uninstall, @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Cowardly refusing to uninstall hooks with externally configured `core.hooksPath` set.
-    hint: prek honors repo-local and worktree-local `core.hooksPath`.
-    hint: Remove or change the global/system setting first, or use prek uninstall --git-dir <GIT_DIR> to remove shims from `<GIT_DIR>/hooks` explicitly.
-    hint:   git config --unset-all --global core.hooksPath
-    hint:   git config --unset-all --system core.hooksPath
-    "#);
+    error: Refusing to uninstall hooks because `core.hooksPath` is configured outside this repository.
+
+    note: Git will execute hooks from the configured global/system hooks directory, not from this repository's hooks directory.
+
+    hint: Remove the global/system setting, or move `core.hooksPath` into repo scope for this repository instead.
+      git config --unset-all --global core.hooksPath
+      git config --unset-all --system core.hooksPath
+      git config --local core.hooksPath <path>
+    ");
 }
 
 #[test]
@@ -1160,18 +1167,21 @@ fn uninstall_refuses_empty_external_hooks_path_set() {
 
     let mut uninstall = context.uninstall();
     uninstall.env("GIT_CONFIG_GLOBAL", &global_gitconfig);
-    cmd_snapshot!(context.filters(), uninstall, @r#"
+    cmd_snapshot!(context.filters(), uninstall, @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Cowardly refusing to uninstall hooks with externally configured `core.hooksPath` set.
-    hint: prek honors repo-local and worktree-local `core.hooksPath`.
-    hint: Remove or change the global/system setting first, or use prek uninstall --git-dir <GIT_DIR> to remove shims from `<GIT_DIR>/hooks` explicitly.
-    hint:   git config --unset-all --global core.hooksPath
-    hint:   git config --unset-all --system core.hooksPath
-    "#);
+    error: Refusing to uninstall hooks because `core.hooksPath` is configured outside this repository.
+
+    note: Git will execute hooks from the configured global/system hooks directory, not from this repository's hooks directory.
+
+    hint: Remove the global/system setting, or move `core.hooksPath` into repo scope for this repository instead.
+      git config --unset-all --global core.hooksPath
+      git config --unset-all --system core.hooksPath
+      git config --local core.hooksPath <path>
+    ");
 }
 
 #[test]
