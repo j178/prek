@@ -417,6 +417,10 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"\b(\d+\.)?\d+(ms|s)\b", "[TIME]"),
     // Strip non-deterministic lock contention warnings from parallel test execution
     (r"(?m)^warning: Waiting to acquire lock.*\n", ""),
+    // Normalize box-drawing characters (group modified-files UI) for portable snapshots
+    ("┌", "?"),
+    ("└", "?"),
+    ("│", "?"),
 ];
 
 #[allow(unused_macros)]

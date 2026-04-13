@@ -419,6 +419,86 @@ fn report_level_env_var() -> Result<()> {
     Ok(())
 }
 
+/// Positional hook selectors must not label other hooks as excluded by skip.
+#[test]
+fn positional_include_does_not_emit_skip_excluded_lines() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: hook-a
+                name: hook-a
+                language: system
+                entry: echo a
+                files: \.txt$
+              - id: hook-b
+                name: hook-b
+                language: system
+                entry: echo b
+                files: \.txt$
+    "});
+
+    cwd.child("file.txt").write_str("content")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("hook-a").arg("--report-level").arg("all"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hook-a...................................................................Passed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+/// Multi-hook parallel formatters: `--report-level fail` still surfaces file-modification failure.
+#[test]
+fn report_level_fail_shows_group_modified_header() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: fmt-a
+                name: fmt-a
+                language: system
+                entry: python3 -c "open('f.txt','a').write('a')"
+                files: \.txt$
+                priority: 0
+              - id: fmt-b
+                name: fmt-b
+                language: system
+                entry: python3 -c "open('f.txt','a').write('b')"
+                files: \.txt$
+                priority: 0
+    "#});
+
+    cwd.child("f.txt").write_str("x")?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--report-level").arg("fail"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    Files were modified by following hooks...................................Failed
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
 /// Default behavior (no --report-level flag) matches current behavior.
 #[test]
 fn report_level_default_matches_current_behavior() -> Result<()> {

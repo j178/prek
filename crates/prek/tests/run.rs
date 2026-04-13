@@ -66,8 +66,6 @@ fn run_basic() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     trim trailing whitespace.................................................Passed
-    fix end of files......................................(excluded by skip)Skipped
-    check json............................................(excluded by skip)Skipped
 
     ----- stderr -----
     ");
@@ -382,9 +380,6 @@ fn multiple_hook_ids() {
     exit_code: 0
     ----- stdout -----
     First Hook...............................................................Passed
-    Second Hook...........................................(excluded by skip)Skipped
-    Shared Hook A.........................................(excluded by skip)Skipped
-    Shared Hook B.........................................(excluded by skip)Skipped
 
     ----- stderr -----
     ");
@@ -396,8 +391,6 @@ fn multiple_hook_ids() {
     ----- stdout -----
     Shared Hook A............................................................Passed
     Shared Hook B............................................................Passed
-    First Hook............................................(excluded by skip)Skipped
-    Second Hook...........................................(excluded by skip)Skipped
 
     ----- stderr -----
     ");
@@ -432,9 +425,6 @@ fn multiple_hook_ids() {
     exit_code: 0
     ----- stdout -----
     Second Hook..............................................................Passed
-    First Hook............................................(excluded by skip)Skipped
-    Shared Hook A.........................................(excluded by skip)Skipped
-    Shared Hook B.........................................(excluded by skip)Skipped
 
     ----- stderr -----
     ");
@@ -446,8 +436,6 @@ fn multiple_hook_ids() {
     ----- stdout -----
     First Hook...............................................................Passed
     Second Hook..............................................................Passed
-    Shared Hook A.........................................(excluded by skip)Skipped
-    Shared Hook B.........................................(excluded by skip)Skipped
 
     ----- stderr -----
     warning: selector `nonexistent` did not match any hooks
@@ -460,8 +448,6 @@ fn multiple_hook_ids() {
     ----- stdout -----
     First Hook...............................................................Passed
     Second Hook..............................................................Passed
-    Shared Hook A.........................................(excluded by skip)Skipped
-    Shared Hook B.........................................(excluded by skip)Skipped
 
     ----- stderr -----
     warning: selector `nonexistent-hook` did not match any hooks
@@ -475,7 +461,6 @@ fn multiple_hook_ids() {
     First Hook...............................................................Passed
     Shared Hook A............................................................Passed
     Shared Hook B............................................................Passed
-    Second Hook...........................................(excluded by skip)Skipped
 
     ----- stderr -----
     ");
@@ -617,15 +602,15 @@ fn priority_group_modified_files_is_group_failure_and_output_is_indented() -> Re
     exit_code: 1
     ----- stdout -----
     Files were modified by following hooks...................................Failed
-      ┌ Modifies File........................................................Passed
-      │ - hook id: modify
-      │ - duration: [TIME]
-      │ Prints Output........................................................Passed
-      │ - hook id: loud
-      │ - duration: [TIME]
-      │
-      │ hello from loud
-      └ No Output............................................................Passed
+      ? Modifies File........................................................Passed
+      ? - hook id: modify
+      ? - duration: [TIME]
+      ? Prints Output........................................................Passed
+      ? - hook id: loud
+      ? - duration: [TIME]
+      ?
+      ? hello from loud
+      ? No Output............................................................Passed
     Later Hook...............................................................Passed
     - hook id: later
     - duration: [TIME]
@@ -716,7 +701,7 @@ fn cjk_hook_name() {
           - repo: local
             hooks:
               - id: trailing-whitespace
-                name: 去除行尾空格
+                name: ??????
                 language: system
                 entry: python3 -V
               - id: end-of-file-fixer
@@ -731,7 +716,7 @@ fn cjk_hook_name() {
     success: true
     exit_code: 0
     ----- stdout -----
-    去除行尾空格.............................................................Passed
+    ??????...................................................................Passed
     fix end of files.........................................................Passed
 
     ----- stderr -----
@@ -919,7 +904,6 @@ fn fallback_to_manual_stage() {
     ----- stdout -----
     manual-only..............................................................Passed
     another-manual...........................................................Passed
-    default-stage.........................................(excluded by skip)Skipped
 
     ----- stderr -----
     ");
@@ -930,8 +914,6 @@ fn fallback_to_manual_stage() {
     exit_code: 0
     ----- stdout -----
     manual-only..............................................................Passed
-    another-manual........................................(excluded by skip)Skipped
-    default-stage.........................................(excluded by skip)Skipped
 
     ----- stderr -----
     ");
@@ -1353,6 +1335,36 @@ fn log_file() {
 
     let log = context.read("log.txt");
     assert_eq!(log, "Fixing files");
+}
+
+/// `log_file` is written even when per-hook console output is suppressed.
+#[test]
+fn log_file_report_level_silent() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'print("Fixing files"); exit(1)'
+                always_run: true
+                log_file: log.txt
+    "#});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--report-level").arg("silent"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    "#);
+
+    assert_eq!(context.read("log.txt"), "Fixing files");
 }
 
 /// Pass pre-commit environment variables to the hook.

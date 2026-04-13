@@ -145,8 +145,6 @@ fn check_useless_excludes_remote() -> anyhow::Result<()> {
     - exit code: 1
 
       The exclude pattern `regex: ^useless/$` for `echo` does not match any files
-    black.................................................(excluded by skip)Skipped
-    echo..................................................(excluded by skip)Skipped
 
     ----- stderr -----
     ");
@@ -267,7 +265,6 @@ fn check_useless_excludes_workspace_paths_are_project_relative() -> anyhow::Resu
     ----- stdout -----
     Running hooks for `app`:
     Check useless excludes...................................................Passed
-    ok....................................................(excluded by skip)Skipped
 
     ----- stderr -----
     ");

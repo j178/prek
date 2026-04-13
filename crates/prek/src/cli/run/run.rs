@@ -19,7 +19,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter, HookRunReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;
-use crate::cli::run::{CollectOptions, FileFilter, Selectors, collect_files};
+use crate::cli::run::{CollectOptions, FileFilter, HookPartition, Selectors, collect_files};
 use crate::cli::{ExitStatus, ReportLevel, RunExtraArgs};
 use crate::config::{Language, PassFilenames, Stage};
 use crate::fs::CWD;
@@ -98,10 +98,10 @@ pub(crate) async fn run(
     let mut selected_hooks = Vec::new();
     let mut skipped_by_selector: Vec<Arc<Hook>> = Vec::new();
     for hook in hooks {
-        if selectors.matches_hook(&hook) {
-            selected_hooks.push(Arc::new(hook));
-        } else {
-            skipped_by_selector.push(Arc::new(hook));
+        match selectors.hook_partition(&hook) {
+            HookPartition::Selected => selected_hooks.push(Arc::new(hook)),
+            HookPartition::SkippedBySkipSelector => skipped_by_selector.push(Arc::new(hook)),
+            HookPartition::NotSelected => {}
         }
     }
 
@@ -857,11 +857,11 @@ fn render_priority_group(
 ) -> Result<()> {
     // Only show a special group UI when the group failed due to file modifications.
     // Hooks in a priority group run in parallel, so we can't attribute modifications to a single hook.
-    let any_visible = group_results
-        .iter()
-        .any(|r| report_level.should_show(r.status));
-
-    let show_group_ui = group_modified_files && group_results.len() > 1 && any_visible;
+    //
+    // When `--report-level` hides successful hooks, we still show this header so a run that fails
+    // only because hooks modified files is diagnosable (see design doc silent-level notes on
+    // exit codes and diffs — this is the multi-hook analogue).
+    let show_group_ui = group_modified_files && group_results.len() > 1;
     let single_hook_modified_files = group_results.len() == 1 && group_modified_files;
     let group_prefix = if show_group_ui {
         format!("{}", "  │ ".dimmed())
@@ -897,14 +897,28 @@ fn render_priority_group(
             result.status
         };
 
-        // Skip rendering if below the report level threshold.
-        if !report_level.should_show(status) {
+        let show_status_on_console = report_level.should_show(status);
+        if show_status_on_console {
+            status_printer.write(&result.hook.name, prefix, status)?;
+        }
+
+        if matches!(status, RunStatus::NoFiles | RunStatus::Unimplemented) {
             continue;
         }
 
-        status_printer.write(&result.hook.name, prefix, status)?;
+        let output = result.output.trim_ascii();
+        if !output.is_empty() {
+            if let Some(file) = result.hook.log_file.as_deref() {
+                let mut file = fs_err::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(file)?;
+                file.write_all(output)?;
+                file.flush()?;
+            }
+        }
 
-        if matches!(status, RunStatus::NoFiles | RunStatus::Unimplemented) {
+        if !show_status_on_console {
             continue;
         }
 
@@ -941,36 +955,24 @@ fn render_priority_group(
                 )?;
             }
 
-            let output = result.output.trim_ascii();
-            if !output.is_empty() {
-                if let Some(file) = result.hook.log_file.as_deref() {
-                    let mut file = fs_err::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(file)?;
-                    file.write_all(output)?;
-                    file.flush()?;
+            if !output.is_empty() && result.hook.log_file.is_none() {
+                if show_group_ui {
+                    writeln!(stdout, "{}", "  │".dimmed())?;
                 } else {
-                    if show_group_ui {
-                        writeln!(stdout, "{}", "  │".dimmed())?;
-                    } else {
-                        writeln!(stdout)?;
-                    }
-                    let text = String::from_utf8_lossy(output);
-                    for line in text.lines() {
-                        if line.is_empty() {
-                            if show_group_ui {
-                                writeln!(stdout, "{}", "  │".dimmed())?;
-                            } else {
-                                writeln!(stdout)?;
-                            }
+                    writeln!(stdout)?;
+                }
+                let text = String::from_utf8_lossy(output);
+                for line in text.lines() {
+                    if line.is_empty() {
+                        if show_group_ui {
+                            writeln!(stdout, "{}", "  │".dimmed())?;
                         } else {
-                            if show_group_ui {
-                                writeln!(stdout, "{group_prefix}{line}")?;
-                            } else {
-                                writeln!(stdout, "  {line}")?;
-                            }
+                            writeln!(stdout)?;
                         }
+                    } else if show_group_ui {
+                        writeln!(stdout, "{group_prefix}{line}")?;
+                    } else {
+                        writeln!(stdout, "  {line}")?;
                     }
                 }
             }
