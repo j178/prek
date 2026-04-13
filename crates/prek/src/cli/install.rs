@@ -39,11 +39,41 @@ pub(crate) async fn install(
     printer: Printer,
     git_dir: Option<&Path>,
 ) -> Result<ExitStatus> {
-    if git_dir.is_none() && git::has_hooks_path_set().await? {
+    // Upstream `pre-commit` deliberately refuses to install whenever
+    // `git config core.hooksPath` resolves to a non-empty value. It does not
+    // distinguish whether that effective value comes from local, worktree,
+    // global, or system config. Once Git sees any effective `core.hooksPath`,
+    // it stops consulting `.git/hooks` and runs hooks only from that configured
+    // directory. If the value is external to this repository, "installing
+    // anyway" would mean either writing into a user-managed shared hooks
+    // directory or mutating the user's Git config to point back at this repo.
+    // Both cross the repository's ownership boundary.
+    //
+    // In prek, we keep that safety boundary but narrow the refusal to the
+    // actual unsafe case. Repo-owned `core.hooksPath` values are safe to honor
+    // implicitly when they come from local/worktree scope, including repo
+    // config reached through `include.path` / `includeIf`, because those values
+    // are part of the repository's own Git setup. Only hooksPath values that
+    // resolve entirely from external config still require the explicit
+    // `--git-dir` escape hatch.
+    if git_dir.is_none()
+        && git::has_hooks_path_set().await?
+        && !git::has_repo_hooks_path_set().await?
+    {
         anyhow::bail!(
-            "Cowardly refusing to install hooks with `core.hooksPath` set.\nhint: Run these commands to remove core.hooksPath:\nhint:   {}\nhint:   {}",
-            "git config --unset-all --local core.hooksPath".cyan(),
-            "git config --unset-all --global core.hooksPath".cyan()
+            concat!(
+                "Refusing to install hooks because `core.hooksPath` is configured outside this repository.\n",
+                "\n{} Git will execute hooks from the configured global/system hooks directory, not from this repository's hooks directory.\n",
+                "\n{} Remove the global/system setting, or move `core.hooksPath` into repo scope for this repository instead.\n",
+                "  {}\n",
+                "  {}\n",
+                "  {}\n",
+            ),
+            "note:".yellow().bold(),
+            "hint:".yellow().bold(),
+            "git config --unset-all --global core.hooksPath".cyan(),
+            "git config --unset-all --system core.hooksPath".cyan(),
+            "git config --local core.hooksPath <path>".cyan(),
         );
     }
 
@@ -65,7 +95,7 @@ pub(crate) async fn install(
     let hooks_path = if let Some(dir) = git_dir {
         dir.join("hooks")
     } else {
-        git::get_git_common_dir().await?.join("hooks")
+        git::get_git_hooks_dir().await?
     };
     fs_err::create_dir_all(&hooks_path)?;
 
@@ -387,9 +417,35 @@ pub(crate) async fn uninstall(
     hook_types: Vec<HookType>,
     all: bool,
     printer: Printer,
+    git_dir: Option<&Path>,
 ) -> Result<ExitStatus> {
+    if git_dir.is_none()
+        && git::has_hooks_path_set().await?
+        && !git::has_repo_hooks_path_set().await?
+    {
+        anyhow::bail!(
+            concat!(
+                "Refusing to uninstall hooks because `core.hooksPath` is configured outside this repository.\n",
+                "\n{} Git will execute hooks from the configured global/system hooks directory, not from this repository's hooks directory.\n",
+                "\n{} Remove the global/system setting, or move `core.hooksPath` into repo scope for this repository instead.\n",
+                "  {}\n",
+                "  {}\n",
+                "  {}\n",
+            ),
+            "note:".yellow().bold(),
+            "hint:".yellow().bold(),
+            "git config --unset-all --global core.hooksPath".cyan(),
+            "git config --unset-all --system core.hooksPath".cyan(),
+            "git config --local core.hooksPath <path>".cyan(),
+        );
+    }
+
     let project = Project::discover(config.as_deref(), &CWD).ok();
-    let hooks_path = git::get_git_common_dir().await?.join("hooks");
+    let hooks_path = if let Some(dir) = git_dir {
+        dir.join("hooks")
+    } else {
+        git::get_git_hooks_dir().await?
+    };
 
     let types: Vec<HookType> = if all {
         HookType::value_variants().to_vec()

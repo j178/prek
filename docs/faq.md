@@ -18,12 +18,18 @@ In short, it installs the Git shims **and** prepares the environments for the ho
 
 It's a little confusing because it refers to two different kinds of hooks:
 
-1. **Git shims** – Scripts placed inside `.git/hooks/`, such as `.git/hooks/pre-commit`, that Git executes during lifecycle events. Both prek and ppc drop a small shim here so Git automatically runs them on `git commit`.
+1. **Git shims** – Scripts placed in Git's effective hooks directory, usually `.git/hooks/` unless `core.hooksPath` points elsewhere. Both prek and ppc drop a small shim here so Git automatically runs them on `git commit`.
 2. **prek-managed hooks** – The tools listed in `.pre-commit-config.yaml`. When prek runs, it executes these hooks and prepares whatever runtime they need (for example, creating a Python virtual environment and installing the hook's dependencies before execution).
 
 Running `prek install` installs the first type: it writes the Git shim so that Git knows to call prek. Which Git shims get installed is determined by `--hook-type` or `default_install_hook_types` in the config file, and defaults to `pre-commit` if neither is set. This is not affected by a hook's `stages` field in the config: `stages` controls when a configured hook may run, not which Git shims `prek install` writes.
 
 Adding `--prepare-hooks` tells prek to do that **and** proactively create the environments and caches required by the hooks that prek manages. That way, the next time Git invokes prek through the shim, the managed hooks are ready to run without additional setup. The older `--install-hooks` spelling remains as an alias.
+
+## How does `prek install` interact with `core.hooksPath` and worktrees?
+
+If `core.hooksPath` is set in repo-local (`git config --local`) or worktree-local (`git config --worktree`) config, `prek install` and `prek uninstall` will honor it and operate on Git's effective hooks directory.
+
+If `core.hooksPath` is only configured globally or system-wide, prek refuses to install or uninstall by default. That setting may be shared across repositories, so prek avoids mutating a hook location it does not own. In that case, remove or change the global/system `core.hooksPath`.
 
 ## How do I use hooks from private repositories?
 
