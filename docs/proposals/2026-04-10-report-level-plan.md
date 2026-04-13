@@ -15,6 +15,7 @@
 ### Task 1: Add `PREK_REPORT_LEVEL` environment variable constant
 
 **Files:**
+
 - Modify: `crates/prek-consts/src/env_vars.rs:20-34`
 
 - [ ] **Step 1: Add the constant**
@@ -42,6 +43,7 @@ git commit -m "feat: add PREK_REPORT_LEVEL env var constant"
 ### Task 2: Define `ReportLevel` enum and add CLI flag
 
 **Files:**
+
 - Modify: `crates/prek/src/cli/mod.rs:436-542`
 
 - [ ] **Step 1: Define the `ReportLevel` enum**
@@ -106,6 +108,7 @@ git commit -m "feat: define ReportLevel enum and --report-level CLI flag"
 ### Task 3: Add `RunStatus::Skipped` variant and `ReportLevel::should_show`
 
 **Files:**
+
 - Modify: `crates/prek/src/cli/run/run.rs:954-978`
 
 - [ ] **Step 1: Add `Skipped` variant to `RunStatus`**
@@ -205,7 +208,9 @@ git commit -m "feat: add RunStatus::Skipped variant and ReportLevel::should_show
 ### Task 4: Thread `report_level` through the call chain
 
 **Files:**
+
 - Modify: `crates/prek/src/main.rs:276-298`
+
 - Modify: `crates/prek/src/cli/run/run.rs:34-54,203-213,575-584`
 
 - [ ] **Step 1: Pass `report_level` from main.rs**
@@ -325,6 +330,7 @@ git commit -m "feat: thread report_level through run call chain"
 ### Task 5: Filter rendering by report level
 
 **Files:**
+
 - Modify: `crates/prek/src/cli/run/run.rs:626-672,797-917`
 
 - [ ] **Step 1: Pass `report_level` to `render_priority_group()`**
@@ -526,6 +532,7 @@ git commit -m "feat: filter hook status rendering by report level"
 ### Task 6: Track and render selector-skipped hooks
 
 **Files:**
+
 - Modify: `crates/prek/src/cli/run/run.rs:92-100,575-686`
 
 - [ ] **Step 1: Partition hooks into selected and skipped**
@@ -667,6 +674,7 @@ git commit -m "feat: track and render selector-skipped hooks"
 ### Task 7: Write integration tests
 
 **Files:**
+
 - Modify: `crates/prek/tests/skipped_hooks.rs`
 
 - [ ] **Step 1: Add test for `--report-level fail`**
@@ -980,10 +988,12 @@ Expected: `--report-level` appears in the help output with the six level options
 - [ ] **Step 4: Manual smoke test**
 
 Create a temporary test project and verify:
+
 ```bash
 # In a temp git repo with a .pre-commit-config.yaml:
 cargo run -p prek -- run --report-level fail
 cargo run -p prek -- run --report-level silent
 cargo run -p prek -- run --report-level skipped --skip some-hook
 ```
+
 Expected: output matches the design spec for each level

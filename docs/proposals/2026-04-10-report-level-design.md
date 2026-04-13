@@ -13,7 +13,7 @@ Add a `--report-level <level>` flag to `prek run` that controls which hook statu
 Six levels, ordered from least to most verbose:
 
 | Level | Shows |
-|---|---|
+| -- | -- |
 | `silent` | No per-hook status lines |
 | `fail` | Failed hooks only |
 | `skipped-no-files` | Failed + hooks skipped because no files matched + unimplemented language hooks |
@@ -26,7 +26,7 @@ Each level is a threshold — a status is displayed if the report level is high 
 ### Status-to-level mapping
 
 | `RunStatus` | Minimum level to display |
-|---|---|
+| -- | -- |
 | `Failed` | `fail` |
 | `NoFiles` | `skipped-no-files` |
 | `Unimplemented` | `skipped-no-files` |
@@ -61,6 +61,7 @@ A new method `ReportLevel::should_show(status: RunStatus) -> bool` gates each `s
 #### `silent` level specifics
 
 When report level is `silent`:
+
 - No per-hook status lines are printed
 - Project headers (`Running hooks for X:`) are also suppressed
 - Exit codes, the "files were modified" diff, and the "unimplemented languages" warning still appear
@@ -86,6 +87,7 @@ The suffix `(excluded by skip)` distinguishes from `(no files to check)` skips. 
 **Flag:** `--report-level <LEVEL>`
 
 Defined in `RunArgs` struct with:
+
 - `value_enum` for clap parsing of the six level names
 - `env = EnvVars::PREK_REPORT_LEVEL` for environment variable fallback
 - `default_value_t = ReportLevel::Passed`
@@ -98,16 +100,16 @@ The existing `-q`/`--quiet` flag controls the `Printer` level (`Quiet`, `Silent`
 
 ## Files to modify
 
-1. **`crates/prek-consts/src/env_vars.rs`** — add `PREK_REPORT_LEVEL` constant
-2. **`crates/prek/src/cli/mod.rs`** — add `report_level` field to `RunArgs`, define `ReportLevel` enum
-3. **`crates/prek/src/cli/run/run.rs`** — main changes:
-   - Add `RunStatus::Skipped` variant
-   - Partition hooks into selected/skipped instead of filtering
-   - Thread `report_level` through `run_hooks()` and `render_priority_group()`
-   - Add `should_show()` gate before `status_printer.write()` calls
-   - Render selector-skipped hooks after executed hooks per project
-   - Suppress project headers and group UI when appropriate for the level
-4. **`crates/prek/src/main.rs`** — pass `report_level` from args to `cli::run()`
+1. `**crates/prek-consts/src/env_vars.rs`\*\* — add `PREK_REPORT_LEVEL` constant
+2. `**crates/prek/src/cli/mod.rs**` — add `report_level` field to `RunArgs`, define `ReportLevel` enum
+3. `**crates/prek/src/cli/run/run.rs**` — main changes:
+    - Add `RunStatus::Skipped` variant
+    - Partition hooks into selected/skipped instead of filtering
+    - Thread `report_level` through `run_hooks()` and `render_priority_group()`
+    - Add `should_show()` gate before `status_printer.write()` calls
+    - Render selector-skipped hooks after executed hooks per project
+    - Suppress project headers and group UI when appropriate for the level
+4. `**crates/prek/src/main.rs**` — pass `report_level` from args to `cli::run()`
 
 ## Testing
 
