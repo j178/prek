@@ -12,25 +12,10 @@ pub(crate) fn serialize_yaml_scalar(value: &str, quote: &str) -> anyhow::Result<
         "'" => Ok(format!("'{}'", escape_single_quoted(value))),
         "\"" => Ok(format!("\"{}\"", escape_double_quoted(value))),
         _ => {
-            if is_simple_plain(value) {
-                Ok(value.to_owned())
-            } else {
-                // Defer to serde-saphyr to select quoting/escaping for non-trivial scalars.
-                let rendered = serde_saphyr::to_string(&value)?;
-                Ok(rendered.trim_end_matches('\n').to_owned())
-            }
+            let rendered = serde_saphyr::to_string(&value)?;
+            Ok(rendered.trim_end_matches('\n').to_owned())
         }
     }
-}
-
-/// Fast-path: allow simple, plain scalars we want to keep unquoted.
-fn is_simple_plain(value: &str) -> bool {
-    if value.is_empty() {
-        return false;
-    }
-    value
-        .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_' | '/' | '+' | '@'))
 }
 
 /// YAML single-quoted strings escape a single quote by doubling it.
@@ -70,7 +55,13 @@ mod tests {
         let rendered = serialize_yaml_scalar("v1.2.3", "\"").unwrap();
         assert_eq!(rendered, "\"v1.2.3\"");
         let rendered = serialize_yaml_scalar("123", "").unwrap();
-        assert_eq!(rendered, "123");
+        assert_eq!(rendered, "\"123\"");
+        let rendered = serialize_yaml_scalar("2", "").unwrap();
+        assert_eq!(rendered, "\"2\"");
+        let rendered = serialize_yaml_scalar("0.49", "").unwrap();
+        assert_eq!(rendered, "\"0.49\"");
+        let rendered = serialize_yaml_scalar("yes", "").unwrap();
+        assert_eq!(rendered, "\"yes\"");
         let rendered = serialize_yaml_scalar("123", "'").unwrap();
         assert_eq!(rendered, "'123'");
         let rendered = serialize_yaml_scalar("123", "\"").unwrap();

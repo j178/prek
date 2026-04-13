@@ -1768,8 +1768,8 @@ fn quoting_float_like_version_number() -> Result<()> {
 
     let repo_path = create_local_git_repo(&context, "test-repo", &["0.49", "0.50"])?;
 
-    // Our serialize by default quotes this floats with single quotes, e.g., '0.49'. Use
-    // a different quotaing style here to validate that this does not create conflicts.
+    // Our serializer will quote these float-like strings by default. Use a different
+    // quoting style here to validate that explicit quotes are still preserved.
     context.write_pre_commit_config(&indoc::formatdoc! {r#"
         repos:
           - repo: {}
@@ -1798,6 +1798,50 @@ fn quoting_float_like_version_number() -> Result<()> {
             repos:
               - repo: [HOME]/test-repos/test-repo
                 rev: "0.50"
+                hooks:
+                  - id: test-hook
+            "#);
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn quoting_float_like_version_number_without_existing_quotes() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(&context, "test-repo", &["v0.19", "0.51"])?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v0.19
+            hooks:
+              - id: test-hook
+    ", repo_path});
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [HOME]/test-repos/test-repo
+      updating rev `v0.19` -> `0.51`
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @r#"
+            repos:
+              - repo: [HOME]/test-repos/test-repo
+                rev: "0.51"
                 hooks:
                   - id: test-hook
             "#);
