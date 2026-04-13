@@ -443,7 +443,7 @@ Detects files staged as regular files whose `HEAD` version is a symlink, which u
 
 #### `check-merge-conflict`
 
-Checks for merge conflict strings.
+Checks for merge conflict markers.
 
 **Supported arguments** (compatible with `pre-commit-hooks`):
 
@@ -453,7 +453,9 @@ Checks for merge conflict strings.
 **Caveats**
 
 - By default, this hook exits successfully when not in a merge/rebase state.
-- Detects common conflict markers only when they appear at the start of a line.
+- Detects conflict markers only when they appear at the start of a line.
+- Detects standard conflict blocks (`<<<<<<<`, `=======`, `>>>>>>>`) and diff3 ancestor markers (`|||||||`).
+- `=======` is only reported when it appears inside a conflict block, which avoids false positives for content such as reStructuredText headings.
 
 ---
 

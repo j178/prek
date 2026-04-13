@@ -1952,6 +1952,86 @@ fn check_merge_conflict_hook() -> Result<()> {
 }
 
 #[test]
+fn check_merge_conflict_ignores_rst_headings() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-merge-conflict
+                args: ['--assume-in-merge']
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("doc.rst").write_str(indoc::indoc! {r"
+        Depends
+        =======
+    "})?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    check for merge conflicts................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn check_merge_conflict_diff3_hook() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: builtin
+            hooks:
+              - id: check-merge-conflict
+                args: ['--assume-in-merge']
+    "});
+
+    let cwd = context.work_dir();
+    cwd.child("diff3.txt").write_str(indoc::indoc! {r"
+        Before conflict
+        <<<<<<< HEAD
+        Our changes
+        ||||||| base
+        Common ancestor
+        =======
+        Their changes
+        >>>>>>> branch
+        After conflict
+    "})?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    check for merge conflicts................................................Failed
+    - hook id: check-merge-conflict
+    - exit code: 1
+
+      diff3.txt:2: Merge conflict string "<<<<<<< " found
+      diff3.txt:4: Merge conflict string "||||||| " found
+      diff3.txt:6: Merge conflict string "=======" found
+      diff3.txt:8: Merge conflict string ">>>>>>> " found
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn check_merge_conflict_without_assume_flag() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
