@@ -602,15 +602,15 @@ fn priority_group_modified_files_is_group_failure_and_output_is_indented() -> Re
     exit_code: 1
     ----- stdout -----
     Files were modified by following hooks...................................Failed
-      ? Modifies File........................................................Passed
-      ? - hook id: modify
-      ? - duration: [TIME]
-      ? Prints Output........................................................Passed
-      ? - hook id: loud
-      ? - duration: [TIME]
-      ?
-      ? hello from loud
-      ? No Output............................................................Passed
+      ┌ Modifies File........................................................Passed
+      │ - hook id: modify
+      │ - duration: [TIME]
+      │ Prints Output........................................................Passed
+      │ - hook id: loud
+      │ - duration: [TIME]
+      │
+      │ hello from loud
+      └ No Output............................................................Passed
     Later Hook...............................................................Passed
     - hook id: later
     - duration: [TIME]
