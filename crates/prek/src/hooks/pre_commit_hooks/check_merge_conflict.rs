@@ -9,13 +9,10 @@ use crate::hook::Hook;
 use crate::hooks::run_concurrent_file_checks;
 use crate::run::CONCURRENCY;
 
-const CONFLICT_PATTERNS: &[&[u8]] = &[
-    b"<<<<<<< ",
-    b"======= ",
-    b"=======\r\n",
-    b"=======\n",
-    b">>>>>>> ",
-];
+const START_PATTERN: &[u8] = b"<<<<<<< ";
+const ANCESTOR_PATTERN: &[u8] = b"||||||| ";
+const END_PATTERN: &[u8] = b">>>>>>> ";
+const SEPARATOR_PATTERNS: &[&[u8]] = &[b"======= ", b"=======\r\n", b"=======\n"];
 
 #[derive(Parser)]
 #[command(disable_help_subcommand = true)]
@@ -68,29 +65,28 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
     let mut output = Vec::new();
     let mut line = Vec::new();
     let mut line_number = 1;
+    let mut in_conflict = false;
+
+    let mut report_conflict = |line_number: usize, pattern: &str| {
+        output.extend(conflict_message(filename, line_number, pattern));
+        code = 1;
+    };
 
     while reader.read_until(b'\n', &mut line).await? != 0 {
-        // Check all patterns
-        for pattern in CONFLICT_PATTERNS {
-            if line.starts_with(pattern) {
-                // Don't trim the pattern - display it as-is (minus any line endings)
-                let pattern_display = if pattern.ends_with(b"\r\n") {
-                    &pattern[..pattern.len() - 2]
-                } else if pattern.ends_with(b"\n") {
-                    &pattern[..pattern.len() - 1]
-                } else {
-                    pattern
-                };
-                let pattern_str = str::from_utf8(pattern_display)
-                    .expect("conflict pattern should be valid UTF-8");
-                let error_message = format!(
-                    "{}:{line_number}: Merge conflict string {pattern_str:?} found\n",
-                    filename.display(),
-                );
-                output.extend(error_message.into_bytes());
-                code = 1;
-                break; // Only report one pattern per line
-            }
+        if line.starts_with(START_PATTERN) {
+            report_conflict(line_number, "<<<<<<< ");
+            in_conflict = true;
+        } else if in_conflict && line.starts_with(ANCESTOR_PATTERN) {
+            report_conflict(line_number, "||||||| ");
+        } else if in_conflict
+            && SEPARATOR_PATTERNS
+                .iter()
+                .any(|pattern| line.starts_with(pattern))
+        {
+            report_conflict(line_number, "=======");
+        } else if line.starts_with(END_PATTERN) {
+            report_conflict(line_number, ">>>>>>> ");
+            in_conflict = false;
         }
 
         line.clear();
@@ -98,6 +94,14 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
     }
 
     Ok((code, output))
+}
+
+fn conflict_message(filename: &Path, line_number: usize, pattern: &str) -> Vec<u8> {
+    format!(
+        "{}:{line_number}: Merge conflict string {pattern:?} found\n",
+        filename.display(),
+    )
+    .into_bytes()
 }
 
 #[cfg(test)]
@@ -142,19 +146,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_conflict_marker_middle() -> Result<()> {
-        let dir = tempdir()?;
-        let content = b"Some content\n======= \nConflicting line\n";
-        let file_path = create_test_file(&dir, "conflict.txt", content).await?;
-        let (code, output) = check_file(Path::new(""), &file_path).await?;
-        assert_eq!(code, 1);
-        assert!(!output.is_empty());
-        let output_str = String::from_utf8_lossy(&output);
-        assert!(output_str.contains("======= "));
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn test_conflict_marker_end() -> Result<()> {
         let dir = tempdir()?;
         let content = b"Some content\n>>>>>>> branch\nMore content\n";
@@ -184,6 +175,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_diff3_conflict_block() -> Result<()> {
+        let dir = tempdir()?;
+        let content = b"Before conflict\n<<<<<<< HEAD\nOur changes\n||||||| base\nCommon ancestor\n=======\nTheir changes\n>>>>>>> branch\nAfter conflict\n";
+        let file_path = create_test_file(&dir, "conflict.txt", content).await?;
+        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(code, 1);
+        assert!(!output.is_empty());
+        let output_str = String::from_utf8_lossy(&output);
+        assert!(output_str.contains("<<<<<<< "));
+        assert!(output_str.contains("||||||| "));
+        assert!(output_str.contains("======="));
+        assert!(output_str.contains(">>>>>>> "));
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_conflict_marker_not_at_start() -> Result<()> {
         let dir = tempdir()?;
         let content = b"Some content <<<<<<< HEAD\n";
@@ -198,7 +205,7 @@ mod tests {
     #[tokio::test]
     async fn test_conflict_marker_crlf() -> Result<()> {
         let dir = tempdir()?;
-        let content = b"Some content\r\n=======\r\nConflicting line\r\n";
+        let content = b"Some content\r\n<<<<<<< HEAD\r\nConflicting line\r\n=======\r\nOther line\r\n>>>>>>> branch\r\n";
         let file_path = create_test_file(&dir, "conflict_crlf.txt", content).await?;
         let (code, output) = check_file(Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
@@ -209,11 +216,47 @@ mod tests {
     #[tokio::test]
     async fn test_conflict_marker_lf() -> Result<()> {
         let dir = tempdir()?;
-        let content = b"Some content\n=======\nConflicting line\n";
+        let content =
+            b"Some content\n<<<<<<< HEAD\nConflicting line\n=======\nOther line\n>>>>>>> branch\n";
         let file_path = create_test_file(&dir, "conflict_lf.txt", content).await?;
         let (code, output) = check_file(Path::new(""), &file_path).await?;
         assert_eq!(code, 1);
         assert!(!output.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_separator_reported_without_conflict_end() -> Result<()> {
+        let dir = tempdir()?;
+        let content = b"Before conflict\n<<<<<<< HEAD\nOur changes\n=======\n";
+        let file_path = create_test_file(&dir, "partial_conflict.txt", content).await?;
+        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(code, 1);
+        let output_str = String::from_utf8_lossy(&output);
+        assert!(output_str.contains("<<<<<<< "));
+        assert!(output_str.contains("======="));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_ancestor_not_reported_without_conflict_start() -> Result<()> {
+        let dir = tempdir()?;
+        let content = b"Before conflict\n||||||| base\n";
+        let file_path = create_test_file(&dir, "partial_conflict.txt", content).await?;
+        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(code, 0);
+        assert!(output.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_rst_heading_is_not_treated_as_conflict() -> Result<()> {
+        let dir = tempdir()?;
+        let content = b"Depends\n=======\n";
+        let file_path = create_test_file(&dir, "doc.rst", content).await?;
+        let (code, output) = check_file(Path::new(""), &file_path).await?;
+        assert_eq!(code, 0);
+        assert!(output.is_empty());
         Ok(())
     }
 
