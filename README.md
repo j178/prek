@@ -340,26 +340,28 @@ prek self update
 
 ### prek is faster
 
-- It is [multiple times faster](https://prek.j178.dev/benchmark/) than `pre-commit` and takes up half the disk space.
-- It redesigned how hook environments and toolchains are managed, they are all shared between hooks, which reduces the disk space usage and speeds up the installation process.
-- Repositories are cloned in parallel, and hooks are installed in parallel if their dependencies are disjoint.
-- Hooks can run in parallel by priority (hooks with the same [`priority`](https://prek.j178.dev/configuration/#priority) may run concurrently), reducing end-to-end runtime.
+- It is [multiple times faster](https://prek.j178.dev/benchmark/) than `pre-commit` while also using less disk space.
+- Hook environments and toolchains are shared across hooks instead of being duplicated per repository, which reduces both install time and cache size.
+- Repositories are fetched in parallel, hook environments are prepared in parallel when their dependencies do not overlap, and hooks can run concurrently by [`priority`](https://prek.j178.dev/configuration/#priority).
 - It uses [`uv`](https://github.com/astral-sh/uv) for creating Python virtualenvs and installing dependencies, which is known for its speed and efficiency.
-- It implements some common hooks in Rust, [built in prek](https://prek.j178.dev/builtin/), which are faster than their Python counterparts.
+- It implements some common hooks in Rust as [builtins](https://prek.j178.dev/builtin/), which are faster than their Python counterparts.
 - It supports `repo: builtin` for offline, zero-setup hooks, which is not available in `pre-commit`.
 
-### prek provides a better user experience
+### prek is easier to work with
 
-- No need to install Python or any other runtime, just download a single binary.
-- No hassle with your Python version or virtual environments, prek automatically installs the required Python version and creates a virtual environment for you.
-- Built-in support for [workspaces](https://prek.j178.dev/workspace/) (or monorepos), each subproject can have its own `.pre-commit-config.yaml` file.
-- [`prek run`](https://prek.j178.dev/cli/#prek-run) has some nifty improvements over `pre-commit run`, such as:
-    - `prek run --directory <dir>` runs hooks for files in the specified directory, no need to use `git ls-files -- <dir> | xargs pre-commit run --files` anymore.
-    - `prek run --last-commit` runs hooks for files changed in the last commit.
-    - `prek run [HOOK] [HOOK]` selects and runs multiple hooks.
-- [`prek list`](https://prek.j178.dev/cli/#prek-list) command lists all available hooks, their ids, and descriptions, providing a better overview of the configured hooks.
-- [`prek auto-update`](https://prek.j178.dev/cli/#prek-auto-update) supports `--cooldown-days` to mitigate open source supply chain attacks.
-- prek provides shell completions for `prek run <hook_id>` command, making it easier to run specific hooks without remembering their ids.
+- No need to install Python or any other runtime just to use `prek`; it is a single binary.
+- `prek` automatically installs the toolchains it needs for supported languages, so you spend less time managing Python versions, Node runtimes, Ruby installs, and similar setup.
+- It supports native [`prek.toml`](https://prek.j178.dev/configuration/) in addition to pre-commit YAML, and [`prek util yaml-to-toml`](https://prek.j178.dev/cli/#prek-util-yaml-to-toml) helps migrate existing configs.
+- Built-in support for [workspaces](https://prek.j178.dev/workspace/) means monorepos can keep separate configs per project and still run everything from one command.
+- [`prek install`](https://prek.j178.dev/cli/#prek-install) and [`prek uninstall`](https://prek.j178.dev/cli/#prek-uninstall) honor repo-local and worktree-local `core.hooksPath`.
+- [`prek run`](https://prek.j178.dev/cli/#prek-run) supports selecting or skipping multiple projects or hooks in workspace mode, instead of only accepting a single optional hook id, and adds quality-of-life improvements such as `--dry-run`, `--directory`, `--last-commit`, and `--no-fail-fast`.
+- [`prek list`](https://prek.j178.dev/cli/#prek-list), [`prek util identify`](https://prek.j178.dev/cli/#prek-util-identify), and [`prek util list-builtins`](https://prek.j178.dev/cli/#prek-util-list-builtins) make it easier to inspect configured hooks, debug file matching, and discover builtins.
+
+### prek includes security-focused safeguards
+
+- [`prek auto-update`](https://prek.j178.dev/cli/#prek-auto-update) supports `--cooldown-days`, so you can keep newly published releases on hold for a cooling-off period before adopting them.
+- [`prek auto-update`](https://prek.j178.dev/cli/#prek-auto-update) validates pinned SHA revisions against the fetched upstream refs, including impostor-commit detection, and keeps `# frozen:` comments in sync with the configured commit.
+- [`prek auto-update --check`](https://prek.j178.dev/cli/#prek-auto-update--check) is useful in CI when you want updates or frozen-reference mismatches to fail the job without rewriting the config.
 
 For more detailed improvements prek offers, take a look at [Difference from pre-commit](https://prek.j178.dev/diff/).
 
