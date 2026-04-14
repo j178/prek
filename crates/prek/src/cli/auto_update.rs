@@ -1484,7 +1484,7 @@ fn render_updated_yaml_config(
         let new_rev = serialize_yaml_scalar(&revision.rev, &caps[3])?;
 
         let comment = if let Some(frozen) = &revision.frozen {
-            format!("  # frozen: {frozen}")
+            format!(" # frozen: {frozen}")
         } else if caps[5].trim_start().starts_with("# frozen:") {
             String::new()
         } else {

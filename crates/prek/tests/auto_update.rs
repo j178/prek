@@ -568,7 +568,7 @@ fn auto_update_freeze() -> Result<()> {
             assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/freeze-repo
-                rev: [COMMIT_SHA]  # frozen: v1.1.0
+                rev: [COMMIT_SHA] # frozen: v1.1.0
                 hooks:
                   - id: test-hook
             ");
@@ -830,7 +830,7 @@ fn auto_update_with_existing_frozen_comment() -> Result<()> {
     warning: [[HOME]/test-repos/frozen-repo] frozen ref `v1.0.0` does not match `[COMMIT_SHA]`
      --> .pre-commit-config.yaml:3:62
       |
-    3 |     rev: [COMMIT_SHA]  # frozen: v1.0.0
+    3 |     rev: [COMMIT_SHA] # frozen: v1.0.0
       |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
       |
       = note: pinned commit `[COMMIT_SHA]` is not present in the repo
@@ -892,7 +892,7 @@ fn auto_update_updates_mismatched_frozen_comment() -> Result<()> {
     warning: [[HOME]/test-repos/check-frozen-repo] frozen ref `v1.0.0` does not match `[COMMIT_SHA]`
      --> .pre-commit-config.yaml:3:62
       |
-    3 |     rev: [COMMIT_SHA]  # frozen: v1.0.0
+    3 |     rev: [COMMIT_SHA] # frozen: v1.0.0
       |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
       |
       = note: pinned commit `[COMMIT_SHA]` is referenced by `v1.1.0`
@@ -904,7 +904,7 @@ fn auto_update_updates_mismatched_frozen_comment() -> Result<()> {
             assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/check-frozen-repo
-                rev: [COMMIT_SHA]  # frozen: v1.1.0
+                rev: [COMMIT_SHA] # frozen: v1.1.0
                 hooks:
                   - id: test-hook
             ");
@@ -958,7 +958,7 @@ fn auto_update_updates_unresolvable_frozen_comment() -> Result<()> {
     warning: [[HOME]/test-repos/check-unresolvable-frozen-repo] frozen ref `does-not-exist` does not match `[COMMIT_SHA]`
      --> .pre-commit-config.yaml:3:62
       |
-    3 |     rev: [COMMIT_SHA]  # frozen: does-not-exist
+    3 |     rev: [COMMIT_SHA] # frozen: does-not-exist
       |                                                              ^^^^^^^^^^^^^^ `does-not-exist` could not be resolved
       |
       = note: pinned commit `[COMMIT_SHA]` is referenced by `v1.1.0`
@@ -970,7 +970,7 @@ fn auto_update_updates_unresolvable_frozen_comment() -> Result<()> {
             assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/check-unresolvable-frozen-repo
-                rev: [COMMIT_SHA]  # frozen: v1.1.0
+                rev: [COMMIT_SHA] # frozen: v1.1.0
                 hooks:
                   - id: test-hook
             ");
@@ -1024,7 +1024,7 @@ fn auto_update_removes_frozen_comment_when_pinned_commit_has_no_tag() -> Result<
     warning: [[HOME]/test-repos/check-remove-frozen-comment-repo] frozen ref `v1.1.0` does not match `[COMMIT_SHA]`
      --> .pre-commit-config.yaml:3:62
       |
-    3 |     rev: [COMMIT_SHA]  # frozen: v1.1.0
+    3 |     rev: [COMMIT_SHA] # frozen: v1.1.0
       |                                                              ^^^^^^ `v1.1.0` resolves to a different commit
       |
       = note: no tag points at the pinned commit `[COMMIT_SHA]`
@@ -1112,7 +1112,7 @@ fn auto_update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Resu
     warning: [[HOME]/test-repos/check-branch-only-pinned-frozen-repo] frozen ref `v1.0.0` does not match `[BRANCH_ONLY_COMMIT]`
      --> .pre-commit-config.yaml:3:62
       |
-    3 |     rev: [BRANCH_ONLY_COMMIT]  # frozen: v1.0.0
+    3 |     rev: [BRANCH_ONLY_COMMIT] # frozen: v1.0.0
       |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
       |
       = note: pinned commit `[BRANCH_ONLY_COMMIT]` is not present in the repo
@@ -1124,7 +1124,7 @@ fn auto_update_warns_for_branch_only_pinned_commit_with_frozen_comment() -> Resu
             assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/check-branch-only-pinned-frozen-repo
-                rev: [BRANCH_ONLY_COMMIT]  # frozen: v1.0.0
+                rev: [BRANCH_ONLY_COMMIT] # frozen: v1.0.0
                 hooks:
                   - id: test-hook
             ");
@@ -1177,7 +1177,7 @@ fn auto_update_warns_for_invalid_pinned_commit_with_frozen_comment() -> Result<(
     warning: [[HOME]/test-repos/check-invalid-pinned-frozen-repo] frozen ref `v1.0.0` does not match `[INVALID_COMMIT]`
      --> .pre-commit-config.yaml:3:62
       |
-    3 |     rev: [INVALID_COMMIT]  # frozen: v1.0.0
+    3 |     rev: [INVALID_COMMIT] # frozen: v1.0.0
       |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
       |
       = note: pinned commit `[INVALID_COMMIT]` is not present in the repo
@@ -1189,7 +1189,7 @@ fn auto_update_warns_for_invalid_pinned_commit_with_frozen_comment() -> Result<(
             assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/check-invalid-pinned-frozen-repo
-                rev: [INVALID_COMMIT]  # frozen: v1.0.0
+                rev: [INVALID_COMMIT] # frozen: v1.0.0
                 hooks:
                   - id: test-hook
             ");
@@ -1240,7 +1240,7 @@ fn auto_update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
     warning: [[HOME]/test-repos/check-frozen-dry-run-repo] frozen ref `v1.0.0` does not match `[COMMIT_SHA]`
      --> .pre-commit-config.yaml:3:62
       |
-    3 |     rev: [COMMIT_SHA]  # frozen: v1.0.0
+    3 |     rev: [COMMIT_SHA] # frozen: v1.0.0
       |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
       |
       = note: pinned commit `[COMMIT_SHA]` is referenced by `v1.1.0`
@@ -1252,7 +1252,7 @@ fn auto_update_dry_run_warns_for_mismatched_frozen_comment() -> Result<()> {
             assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/check-frozen-dry-run-repo
-                rev: [COMMIT_SHA]  # frozen: v1.0.0
+                rev: [COMMIT_SHA] # frozen: v1.0.0
                 hooks:
                   - id: test-hook
             ");
@@ -1303,7 +1303,7 @@ fn auto_update_check_fails_for_mismatched_frozen_comment() -> Result<()> {
     warning: [[HOME]/test-repos/check-frozen-check-repo] frozen ref `v1.0.0` does not match `[COMMIT_SHA]`
      --> .pre-commit-config.yaml:3:62
       |
-    3 |     rev: [COMMIT_SHA]  # frozen: v1.0.0
+    3 |     rev: [COMMIT_SHA] # frozen: v1.0.0
       |                                                              ^^^^^^ `v1.0.0` resolves to a different commit
       |
       = note: pinned commit `[COMMIT_SHA]` is referenced by `v1.1.0`
@@ -1315,7 +1315,7 @@ fn auto_update_check_fails_for_mismatched_frozen_comment() -> Result<()> {
             assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/check-frozen-check-repo
-                rev: [COMMIT_SHA]  # frozen: v1.0.0
+                rev: [COMMIT_SHA] # frozen: v1.0.0
                 hooks:
                   - id: test-hook
             ");
