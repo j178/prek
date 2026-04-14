@@ -176,8 +176,6 @@ fn auto_update_already_up_to_date() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [HOME]/test-repos/up-to-date-repo
-      already up to date
 
     ----- stderr -----
     ");
@@ -194,6 +192,38 @@ fn auto_update_already_up_to_date() -> Result<()> {
             ");
         }
     );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_already_up_to_date_verbose() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(&context, "up-to-date-repo-verbose", &["v1.0.0"])?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters, context.auto_update().arg("-v").arg("--cooldown-days").arg("0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [HOME]/test-repos/up-to-date-repo-verbose
+      already up to date at `v1.0.0`
+
+    ----- stderr -----
+    ");
 
     Ok(())
 }
@@ -231,7 +261,7 @@ fn auto_update_does_not_rewrite_config_when_up_to_date() -> Result<()> {
         .assert()
         .success();
     let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
-    assert!(stdout.contains("already up to date"));
+    assert!(stdout.is_empty());
 
     let after_secs = std::fs::metadata(config_path.path())?
         .modified()?
@@ -276,9 +306,6 @@ fn auto_update_multiple_repos_mixed() -> Result<()> {
     ----- stdout -----
     [HOME]/test-repos/repo1
       line 3: updating rev `v1.0.0` -> `v1.1.0`
-
-    [HOME]/test-repos/repo2
-      already up to date
 
     ----- stderr -----
     [HOME]/test-repos/repo1
@@ -417,9 +444,6 @@ fn auto_update_specific_repos() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [HOME]/test-repos/repo1
-      already up to date
-
     [HOME]/test-repos/repo2
       updating rev `v2.0.0` -> `v2.1.0`
 
@@ -1545,9 +1569,6 @@ fn auto_update_workspace() -> Result<()> {
     project-b/.pre-commit-config.yaml
       [HOME]/test-repos/workspace-repo2
         updating rev `v1.0.0` -> `v1.5.0`
-
-      [HOME]/test-repos/workspace-repo3
-        already up to date
 
     ----- stderr -----
     ");
