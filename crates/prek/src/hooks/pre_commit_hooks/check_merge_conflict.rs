@@ -66,7 +66,6 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
     let mut line = Vec::new();
     let mut line_number = 1;
     let mut in_conflict = false;
-    let mut separator_line_number = None;
 
     let mut report_conflict = |line_number: usize, pattern: &str| {
         output.extend(conflict_message(filename, line_number, pattern));
@@ -77,7 +76,6 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
         if line.starts_with(START_PATTERN) {
             report_conflict(line_number, "<<<<<<< ");
             in_conflict = true;
-            separator_line_number = None;
         } else if in_conflict && line.starts_with(ANCESTOR_PATTERN) {
             report_conflict(line_number, "||||||| ");
         } else if in_conflict
@@ -85,11 +83,8 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
                 .iter()
                 .any(|pattern| line.starts_with(pattern))
         {
-            separator_line_number = Some(line_number);
+            report_conflict(line_number, "=======");
         } else if line.starts_with(END_PATTERN) {
-            if let Some(separator_line_number) = separator_line_number.take() {
-                report_conflict(separator_line_number, "=======");
-            }
             report_conflict(line_number, ">>>>>>> ");
             in_conflict = false;
         }
@@ -100,6 +95,7 @@ async fn check_file(file_base: &Path, filename: &Path) -> Result<(i32, Vec<u8>)>
 
     Ok((code, output))
 }
+
 fn conflict_message(filename: &Path, line_number: usize, pattern: &str) -> Vec<u8> {
     format!(
         "{}:{line_number}: Merge conflict string {pattern:?} found\n",
@@ -230,7 +226,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_separator_not_reported_without_conflict_end() -> Result<()> {
+    async fn test_separator_reported_without_conflict_end() -> Result<()> {
         let dir = tempdir()?;
         let content = b"Before conflict\n<<<<<<< HEAD\nOur changes\n=======\n";
         let file_path = create_test_file(&dir, "partial_conflict.txt", content).await?;
@@ -238,7 +234,7 @@ mod tests {
         assert_eq!(code, 1);
         let output_str = String::from_utf8_lossy(&output);
         assert!(output_str.contains("<<<<<<< "));
-        assert!(!output_str.contains("======="));
+        assert!(output_str.contains("======="));
         Ok(())
     }
 

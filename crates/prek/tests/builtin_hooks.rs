@@ -1907,6 +1907,14 @@ fn check_merge_conflict_hook() -> Result<()> {
         Conflicting line
     "})?;
 
+    cwd.child("partial_separator_conflict.txt")
+        .write_str(indoc::indoc! {r"
+        Some content
+        <<<<<<< HEAD
+        Conflicting line
+        =======
+    "})?;
+
     context.git_add(".");
 
     // First run: hooks should fail due to conflict markers
@@ -1918,10 +1926,12 @@ fn check_merge_conflict_hook() -> Result<()> {
     - hook id: check-merge-conflict
     - exit code: 1
 
-      partial_conflict.txt:2: Merge conflict string "<<<<<<< " found
+      partial_separator_conflict.txt:2: Merge conflict string "<<<<<<< " found
+      partial_separator_conflict.txt:4: Merge conflict string "=======" found
       conflict.txt:2: Merge conflict string "<<<<<<< " found
       conflict.txt:4: Merge conflict string "=======" found
       conflict.txt:6: Merge conflict string ">>>>>>> " found
+      partial_conflict.txt:2: Merge conflict string "<<<<<<< " found
 
     ----- stderr -----
     "#);
@@ -1934,6 +1944,9 @@ fn check_merge_conflict_hook() -> Result<()> {
     "})?;
 
     cwd.child("partial_conflict.txt")
+        .write_str("Some content\nResolved line\n")?;
+
+    cwd.child("partial_separator_conflict.txt")
         .write_str("Some content\nResolved line\n")?;
 
     context.git_add(".");
