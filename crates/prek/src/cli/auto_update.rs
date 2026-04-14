@@ -187,7 +187,7 @@ enum DisplayEventKind {
     Update { current: Revision, next: Revision },
     FrozenUpdate { current: String, next: String },
     FrozenRemove { current: String },
-    UpToDate,
+    UpToDate { current: Revision },
     Failure { error: String },
 }
 
@@ -222,6 +222,7 @@ pub(crate) async fn auto_update(
     store: &Store,
     config: Option<PathBuf>,
     filter_repos: Vec<String>,
+    verbose: bool,
     bleeding_edge: bool,
     freeze: bool,
     jobs: usize,
@@ -272,7 +273,8 @@ pub(crate) async fn auto_update(
     // Group results by project config file
     #[expect(clippy::mutable_key_type)]
     let mut project_updates: ProjectUpdates<'_> = FxHashMap::default();
-    let apply_result = apply_repo_updates(outcomes, dry_run, printer, &mut project_updates)?;
+    let apply_result =
+        apply_repo_updates(outcomes, verbose, dry_run, printer, &mut project_updates)?;
 
     if !dry_run {
         for (project, revisions) in project_updates {
@@ -443,7 +445,11 @@ fn format_display_event(kind: &DisplayEventKind, dry_run: bool) -> String {
             format!("{} frozen comment", remove_verb(dry_run)).yellow(),
             current.cyan()
         ),
-        DisplayEventKind::UpToDate => "already up to date".dimmed().to_string(),
+        DisplayEventKind::UpToDate { current } => format!(
+            "{} {}",
+            "already up to date at".dimmed(),
+            format_revision(&current.rev, current.frozen.as_deref())
+        ),
         DisplayEventKind::Failure { error } => {
             format!("{} {error}", "update failed:".red())
         }
@@ -540,6 +546,7 @@ fn write_display_events(
 #[expect(clippy::mutable_key_type)]
 fn apply_repo_updates<'a>(
     updates: Vec<RepoUpdate<'a>>,
+    verbose: bool,
     dry_run: bool,
     printer: Printer,
     project_updates: &mut ProjectUpdates<'a>,
@@ -639,7 +646,7 @@ fn apply_repo_updates<'a>(
                     }
                 }
 
-                if !is_changed && !has_frozen_notice {
+                if verbose && !is_changed && !has_frozen_notice {
                     for usage in &update.target.usages {
                         display_events.push(DisplayEvent {
                             stream: DisplayStream::Stdout,
@@ -647,7 +654,12 @@ fn apply_repo_updates<'a>(
                             repo: update.target.repo,
                             remote_index: usage.remote_index,
                             line_number: usage.rev_line_number,
-                            kind: DisplayEventKind::UpToDate,
+                            kind: DisplayEventKind::UpToDate {
+                                current: Revision {
+                                    rev: update.target.current_rev.to_string(),
+                                    frozen: usage.current_frozen.clone(),
+                                },
+                            },
                         });
                     }
                 }
