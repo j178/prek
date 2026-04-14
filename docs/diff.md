@@ -35,7 +35,7 @@ For a compatibility-focused command mapping, see [Compatibility with pre-commit]
 - `prek run --dry-run` shows which hooks would run without executing them.
 - `prek run --last-commit` runs hooks on files changed by the last commit.
 - `prek run --directory <DIR>` runs hooks on a specified directory.
-- `prek run --no-fail-fast` lets you override the config file for a single run and continue after failures.
+- `prek run --no-fail-fast` lets you override the configured `fail_fast` setting for a single run and continue after failures.
 
 ### `prek install`
 
