@@ -235,19 +235,10 @@ pub(crate) async fn auto_update(
     // TODO: support selectors?
     let selectors = Selectors::default();
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), true)?;
-
-    let repo_sources = collect_repo_sources(&workspace)?;
     let jobs = if jobs == 0 { *CONCURRENCY } else { jobs };
-    let jobs = jobs
-        .min(if filter_repos.is_empty() {
-            repo_sources.len()
-        } else {
-            filter_repos.len()
-        })
-        .max(1);
-
     let reporter = AutoUpdateReporter::new(printer);
 
+    let repo_sources = collect_repo_sources(&workspace)?;
     let sources = repo_sources.iter().filter(|repo_source| {
         filter_repos.is_empty() || filter_repos.iter().any(|repo| repo == repo_source.repo)
     });
@@ -1102,6 +1093,12 @@ fn read_frozen_refs(path: &Path) -> Result<Vec<FrozenRef>> {
     }
 }
 
+fn inline_comment_spacing(comment: &str) -> Option<&str> {
+    let comment_index = comment.find('#')?;
+    let (spacing, _) = comment.split_at(comment_index);
+    spacing.chars().all(char::is_whitespace).then_some(spacing)
+}
+
 /// Resolves the default branch tip to an exact tag when possible, otherwise to a commit SHA.
 async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<String>> {
     let output = git::git_cmd("git describe")?
@@ -1418,17 +1415,21 @@ fn render_updated_toml_config(
             continue;
         };
 
-        let suffix = value
-            .decor()
-            .suffix()
-            .and_then(|s| s.as_str())
+        let current_suffix = value.decor().suffix().and_then(|s| s.as_str());
+        let frozen_spacing = current_suffix
+            .and_then(inline_comment_spacing)
+            .unwrap_or("  ")
+            .to_string();
+        let suffix = current_suffix
             .filter(|s| !s.trim_start().starts_with("# frozen:"))
             .map(str::to_string);
 
         *value = toml_edit::Value::from(revision.rev.clone());
 
         if let Some(frozen) = &revision.frozen {
-            value.decor_mut().set_suffix(format!(" # frozen: {frozen}"));
+            value
+                .decor_mut()
+                .set_suffix(format!("{frozen_spacing}# frozen: {frozen}"));
         } else if let Some(suffix) = suffix {
             value.decor_mut().set_suffix(suffix);
         }
@@ -1484,7 +1485,10 @@ fn render_updated_yaml_config(
         let new_rev = serialize_yaml_scalar(&revision.rev, &caps[3])?;
 
         let comment = if let Some(frozen) = &revision.frozen {
-            format!("  # frozen: {frozen}")
+            format!(
+                "{}# frozen: {frozen}",
+                inline_comment_spacing(&caps[5]).unwrap_or("  ")
+            )
         } else if caps[5].trim_start().starts_with("# frozen:") {
             String::new()
         } else {
@@ -1860,5 +1864,73 @@ mod tests {
         assert!(!no_lazy_fetch_unsupported(
             b"fatal: Not a valid object name 1234567890abcdef1234567890abcdef12345678^{commit}\n"
         ));
+    }
+
+    #[test]
+    fn test_render_updated_yaml_config_uses_default_spacing_for_new_frozen_comment() {
+        let config = indoc::indoc! {r"
+            repos:
+              - repo: https://example.com/repo
+                rev: v1.0.0
+                hooks:
+                  - id: test-hook
+        "};
+
+        let rendered = render_updated_yaml_config(
+            Path::new(".pre-commit-config.yaml"),
+            config,
+            &[Some(Revision {
+                rev: "abc123".to_string(),
+                frozen: Some("v1.1.0".to_string()),
+            })],
+        )
+        .unwrap();
+
+        assert!(rendered.contains("rev: abc123  # frozen: v1.1.0\n"));
+    }
+
+    #[test]
+    fn test_render_updated_yaml_config_preserves_existing_frozen_comment_spacing() {
+        let config = indoc::indoc! {r"
+            repos:
+              - repo: https://example.com/repo
+                rev: v1.0.0   # frozen: v1.0.0
+                hooks:
+                  - id: test-hook
+        "};
+
+        let rendered = render_updated_yaml_config(
+            Path::new(".pre-commit-config.yaml"),
+            config,
+            &[Some(Revision {
+                rev: "abc123".to_string(),
+                frozen: Some("v1.1.0".to_string()),
+            })],
+        )
+        .unwrap();
+
+        assert!(rendered.contains("rev: abc123   # frozen: v1.1.0\n"));
+    }
+
+    #[test]
+    fn test_render_updated_toml_config_preserves_existing_frozen_comment_spacing() {
+        let config = indoc::indoc! {r#"
+            [[repos]]
+            repo = "https://example.com/repo"
+            rev = "v1.0.0" # frozen: v1.0.0
+            hooks = [{ id = "test-hook" }]
+        "#};
+
+        let rendered = render_updated_toml_config(
+            Path::new("prek.toml"),
+            config,
+            &[Some(Revision {
+                rev: "abc123".to_string(),
+                frozen: Some("v1.1.0".to_string()),
+            })],
+        )
+        .unwrap();
+
+        assert!(rendered.contains(r#"rev = "abc123" # frozen: v1.1.0"#));
     }
 }

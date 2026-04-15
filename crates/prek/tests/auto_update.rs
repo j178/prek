@@ -2095,7 +2095,7 @@ fn auto_update_freeze_toml() -> Result<()> {
             assert_snapshot!(context.read(PREK_TOML), @r#"
             [[repos]]
             repo = "[HOME]/test-repos/freeze-repo"
-            rev = "[COMMIT_SHA]" # frozen: v1.1.0
+            rev = "[COMMIT_SHA]"  # frozen: v1.1.0
             hooks = [
               { id = "test-hook" },
             ]
