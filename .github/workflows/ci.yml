@@ -28,6 +28,7 @@ env:
   JULIA_VERSION: "1.12.4"
   DOTNET_VERSION: "10.0"
   DENO_VERSION: "2"
+  DART_VERSION: "3.10.4"
 
   # Cargo env vars
   CARGO_INCREMENTAL: 0
@@ -413,56 +414,56 @@ jobs:
         include:
           - os: ubuntu-latest
             group: 1
-            languages: bun deno docker
-            filter: test(bun::) or test(deno::) or test(docker::) or test(docker_image::)
+            languages: bun dart deno
+            filter: test(bun::) or test(dart::) or test(deno::)
           - os: ubuntu-latest
             group: 2
-            languages: dotnet golang haskell
-            filter: test(dotnet::) or test(golang::) or test(haskell::)
+            languages: docker dotnet golang
+            filter: test(docker::) or test(docker_image::) or test(dotnet::) or test(golang::)
           - os: ubuntu-latest
             group: 3
-            languages: julia lua node
-            filter: test(julia::) or test(lua::) or test(node::)
+            languages: haskell julia lua
+            filter: test(haskell::) or test(julia::) or test(lua::)
           - os: ubuntu-latest
             group: 4
-            languages: python ruby rust
-            filter: test(python::) or test(ruby::) or test(rust::)
-          - os: ubuntu-latest
-            group: 5
-            languages: swift
-            filter: test(swift::)
-          - os: macos-latest
-            group: 1
-            languages: bun deno dotnet
-            filter: test(bun::) or test(deno::) or test(dotnet::)
-          - os: macos-latest
-            group: 2
-            languages: golang julia lua
-            filter: test(golang::) or test(julia::) or test(lua::)
-          - os: macos-latest
-            group: 3
             languages: node python ruby
             filter: test(node::) or test(python::) or test(ruby::)
-          - os: macos-latest
-            group: 4
+          - os: ubuntu-latest
+            group: 5
             languages: rust swift
             filter: test(rust::) or test(swift::)
-          - os: windows-latest
+          - os: macos-latest
             group: 1
-            languages: bun deno dotnet
-            filter: test(bun::) or test(deno::) or test(dotnet::)
-          - os: windows-latest
+            languages: bun dart deno
+            filter: test(bun::) or test(dart::) or test(deno::)
+          - os: macos-latest
             group: 2
-            languages: golang haskell julia
-            filter: test(golang::) or test(haskell::) or test(julia::)
-          - os: windows-latest
+            languages: dotnet golang julia
+            filter: test(dotnet::) or test(golang::) or test(julia::)
+          - os: macos-latest
             group: 3
             languages: lua node python
             filter: test(lua::) or test(node::) or test(python::)
+          - os: macos-latest
+            group: 4
+            languages: ruby rust swift
+            filter: test(ruby::) or test(rust::) or test(swift::)
+          - os: windows-latest
+            group: 1
+            languages: bun dart deno
+            filter: test(bun::) or test(dart::) or test(deno::)
+          - os: windows-latest
+            group: 2
+            languages: dotnet golang haskell
+            filter: test(dotnet::) or test(golang::) or test(haskell::)
+          - os: windows-latest
+            group: 3
+            languages: julia lua node
+            filter: test(julia::) or test(lua::) or test(node::)
           - os: windows-latest
             group: 4
-            languages: ruby rust
-            filter: test(ruby::) or test(rust::)
+            languages: python ruby rust
+            filter: test(python::) or test(ruby::) or test(rust::)
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -549,6 +550,12 @@ jobs:
         uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
         with:
           deno-version: ${{ env.DENO_VERSION }}
+
+      - name: "Install Dart"
+        if: ${{ contains(format(' {0} ', matrix.languages), ' dart ') }}
+        uses: dart-lang/setup-dart@0a8a0fc875eb934c15d08629302413c671d3f672 # v1.6.5
+        with:
+          sdk: ${{ env.DART_VERSION }}
 
       - name: "Install GHC and Cabal"
         if: ${{ contains(format(' {0} ', matrix.languages), ' haskell ') }}
