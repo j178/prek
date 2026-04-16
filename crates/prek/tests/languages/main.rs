@@ -2,6 +2,7 @@
 mod common;
 
 mod bun;
+mod dart;
 mod deno;
 #[cfg(all(feature = "docker", target_os = "linux"))]
 mod docker;

@@ -16,6 +16,7 @@ use crate::hooks;
 use crate::store::{CacheBucket, Store, ToolBucket};
 
 mod bun;
+mod dart;
 mod deno;
 mod docker;
 mod docker_image;
@@ -36,6 +37,7 @@ mod system;
 pub mod version;
 
 static BUN: bun::Bun = bun::Bun;
+static DART: dart::Dart = dart::Dart;
 static DENO: deno::Deno = deno::Deno;
 static DOCKER: docker::Docker = docker::Docker;
 static DOCKER_IMAGE: docker_image::DockerImage = docker_image::DockerImage;
@@ -133,6 +135,7 @@ impl Language {
         matches!(
             lang,
             Self::Bun
+                | Self::Dart
                 | Self::Deno
                 | Self::Docker
                 | Self::DockerImage
@@ -225,6 +228,7 @@ impl Language {
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook> {
         match self {
+            Self::Dart => DART.install(hook, store, reporter).await,
             Self::Bun => BUN.install(hook, store, reporter).await,
             Self::Deno => DENO.install(hook, store, reporter).await,
             Self::Docker => DOCKER.install(hook, store, reporter).await,
@@ -249,6 +253,7 @@ impl Language {
 
     pub async fn check_health(&self, info: &InstallInfo) -> Result<()> {
         match self {
+            Self::Dart => DART.check_health(info).await,
             Self::Bun => BUN.check_health(info).await,
             Self::Deno => DENO.check_health(info).await,
             Self::Docker => DOCKER.check_health(info).await,
@@ -302,6 +307,7 @@ impl Language {
         }
 
         match self {
+            Self::Dart => DART.run(hook, filenames, store, reporter).await,
             Self::Bun => BUN.run(hook, filenames, store, reporter).await,
             Self::Deno => DENO.run(hook, filenames, store, reporter).await,
             Self::Docker => DOCKER.run(hook, filenames, store, reporter).await,
