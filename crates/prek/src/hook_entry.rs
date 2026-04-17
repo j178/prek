@@ -33,6 +33,10 @@ impl PreparedHookEntry {
     pub(crate) fn argv(&self) -> &[String] {
         &self.argv
     }
+
+    pub(crate) fn argv_mut(&mut self) -> &mut Vec<String> {
+        &mut self.argv
+    }
 }
 
 impl Deref for PreparedHookEntry {
