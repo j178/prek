@@ -307,6 +307,86 @@ fn with_pubspec() -> anyhow::Result<()> {
     ----- stderr -----
     ");
 
+    assert!(
+        !context.work_dir().path().join(".dart_tool").exists(),
+        "Dart hooks should not mutate the checkout with .dart_tool"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn with_pubspec_and_additional_dependencies() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: dart
+                name: dart
+                language: dart
+                entry: dart ./bin/hello.dart
+                additional_dependencies: ["path"]
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "#});
+
+    context
+        .work_dir()
+        .child("pubspec.yaml")
+        .write_str(indoc::indoc! {r#"
+            name: test_package
+            description: A test package
+            version: 1.0.0
+            environment:
+              sdk: '>=2.17.0 <4.0.0'
+        "#})?;
+
+    std::fs::create_dir(context.work_dir().join("bin"))?;
+    std::fs::create_dir(context.work_dir().join("lib"))?;
+    context
+        .work_dir()
+        .child("lib")
+        .child("greeting.dart")
+        .write_str(indoc::indoc! {r#"
+            String greet(String subject) => 'Hello $subject!';
+        "#})?;
+    context
+        .work_dir()
+        .child("bin")
+        .child("hello.dart")
+        .write_str(indoc::indoc! {r#"
+            import 'package:path/path.dart' as p;
+            import 'package:test_package/greeting.dart';
+
+            void main() {
+              print(greet(p.posix.join('Dart', 'Hooks')));
+            }
+        "#})?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    dart.....................................................................Passed
+    - hook id: dart
+    - duration: [TIME]
+
+      Hello Dart/Hooks!
+
+    ----- stderr -----
+    ");
+
+    assert!(
+        !context.work_dir().path().join(".dart_tool").exists(),
+        "Dart hooks should not mutate the checkout with .dart_tool"
+    );
+
     Ok(())
 }
 
@@ -401,6 +481,65 @@ fn additional_dependencies_with_version() {
 
     ----- stderr -----
     ");
+}
+
+#[test]
+fn executable_alias() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: dart
+                name: dart
+                language: dart
+                entry: cli
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "});
+
+    context
+        .work_dir()
+        .child("pubspec.yaml")
+        .write_str(indoc::indoc! {r#"
+            name: aliased_dart_tool
+            environment:
+              sdk: '>=2.17.0 <4.0.0'
+
+            executables:
+              cli: hello
+        "#})?;
+
+    std::fs::create_dir(context.work_dir().join("bin"))?;
+    context
+        .work_dir()
+        .child("bin")
+        .child("hello.dart")
+        .write_str(indoc::indoc! {r#"
+            void main() {
+              print('alias executable works');
+            }
+        "#})?;
+
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    dart.....................................................................Passed
+    - hook id: dart
+    - duration: [TIME]
+
+      alias executable works
+
+    ----- stderr -----
+    ");
+
+    Ok(())
 }
 
 #[test]
