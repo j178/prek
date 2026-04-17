@@ -601,7 +601,7 @@ fn remote_hook() {
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: https://github.com/Lutra-Fs/dart-hooks
-            rev: v1.0.0
+            rev: v1.1.0
             hooks:
               - id: dart-hooks
                 always_run: true
