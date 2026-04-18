@@ -99,6 +99,10 @@ See the guide on [using prek in Docker](integrations.md#docker) for more details
 
 --8<-- "README.md:cargo-install"
 
+## prek skill for agents
+
+--8<-- "README.md:gh-skill-install"
+
 ## Updating
 
 --8<-- "README.md:self-update"

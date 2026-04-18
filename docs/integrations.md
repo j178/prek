@@ -49,3 +49,7 @@ Loaded 1 attestation from GitHub API
 ## GitHub Actions
 
 --8<-- "README.md:github-actions"
+
+## prek skill for agents
+
+--8<-- "README.md:gh-skill-install"

@@ -319,6 +319,21 @@ prek is also available via [`taiki-e/install-action`](https://github.com/taiki-e
 
 </details>
 
+<details>
+<summary>prek skill for agents</summary>
+
+<!-- --8<-- [start: gh-skill-install] -->
+
+To let agents use `prek`, install the `prek` skill with `gh skill` (`v2.90.0+`):
+
+```bash
+gh skill install j178/prek prek
+```
+
+<!-- --8<-- [end: gh-skill-install] -->
+
+</details>
+
 <!-- --8<-- [start: self-update] -->
 
 If installed via the standalone installer, prek can update itself to the latest version:
