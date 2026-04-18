@@ -7,7 +7,7 @@ This page documents common ways to integrate prek into CI and container workflow
 prek publishes two container images:
 
 | Image | Base | Description |
-|-------|------|-------------|
+| -- | -- | -- |
 | `ghcr.io/j178/prek` | `scratch` | Minimal distroless image containing only the prek binary |
 | `ghcr.io/j178/prek-alpine` | `alpine:3.23` | Alpine image with common hook dependencies pre-installed |
 
