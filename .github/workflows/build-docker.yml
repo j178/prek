@@ -15,6 +15,7 @@ on:
 
 env:
   PREK_BASE_IMG: ghcr.io/${{ github.repository_owner }}/prek
+  PREK_ALPINE_IMG: ghcr.io/${{ github.repository_owner }}/prek-alpine
 
 permissions:
   contents: read
@@ -42,7 +43,7 @@ jobs:
           fi
 
   docker-build:
-    name: Build Docker image ghcr.io/j178/prek for ${{ matrix.platform }}
+    name: Build Docker image (${{ matrix.image }}, ${{ matrix.platform }})
     needs: plan
     runs-on: ubuntu-latest
     environment:
@@ -53,6 +54,9 @@ jobs:
         platform:
           - linux/amd64
           - linux/arm64
+        image:
+          - minimal
+          - alpine
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -82,13 +86,21 @@ jobs:
             echo "Releasing ${version}"
           fi
 
+      - name: Set image name
+        run: |
+          if [ "${{ matrix.image }}" = "alpine" ]; then
+            echo "IMAGE_NAME=${PREK_ALPINE_IMG}" >> "$GITHUB_ENV"
+          else
+            echo "IMAGE_NAME=${PREK_BASE_IMG}" >> "$GITHUB_ENV"
+          fi
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
-          images: ${{ env.PREK_BASE_IMG }}
+          images: ${{ env.IMAGE_NAME }}
           # Defining this makes sure the org.opencontainers.image.version OCI label becomes the actual release version and not the branch name
           tags: |
             type=raw,value=dry-run,enable=${{ needs.plan.outputs.publish != 'true' }}
@@ -106,10 +118,11 @@ jobs:
         with:
           context: .
           platforms: ${{ matrix.platform }}
-          cache-from: type=gha,scope=prek-${{ env.PLATFORM_TUPLE }}
-          cache-to: type=gha,mode=min,scope=prek-${{ env.PLATFORM_TUPLE }}
+          target: ${{ matrix.image }}
+          cache-from: type=gha,scope=prek-${{ matrix.image }}-${{ env.PLATFORM_TUPLE }}
+          cache-to: type=gha,mode=min,scope=prek-${{ matrix.image }}-${{ env.PLATFORM_TUPLE }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.PREK_BASE_IMG }},push-by-digest=true,name-canonical=true,push=${{ needs.plan.outputs.publish == 'true' }}
+          outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=${{ needs.plan.outputs.publish == 'true' }}
 
       - name: Export digests
         env:
@@ -121,13 +134,13 @@ jobs:
       - name: Upload digests
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: digests-${{ env.PLATFORM_TUPLE }}
+          name: digests-${{ matrix.image }}-${{ env.PLATFORM_TUPLE }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
 
   docker-publish:
-    name: Publish Docker image (ghcr.io/j178/prek)
+    name: Publish Docker image (${{ matrix.image }})
     runs-on: ubuntu-latest
     environment:
       name: release
@@ -140,12 +153,26 @@ jobs:
       id-token: write
       attestations: write
     if: ${{ needs.plan.outputs.publish == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - minimal
+          - alpine
     steps:
+      - name: Set image name
+        run: |
+          if [ "${{ matrix.image }}" = "alpine" ]; then
+            echo "IMAGE_NAME=${PREK_ALPINE_IMG}" >> "$GITHUB_ENV"
+          else
+            echo "IMAGE_NAME=${PREK_BASE_IMG}" >> "$GITHUB_ENV"
+          fi
+
       - name: Download digests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: /tmp/digests
-          pattern: digests-*
+          pattern: digests-${{ matrix.image }}-*
           merge-multiple: true
 
       - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
@@ -156,7 +183,7 @@ jobs:
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
-          images: ${{ env.PREK_BASE_IMG }}
+          images: ${{ env.IMAGE_NAME }}
           # Order is on purpose such that the label org.opencontainers.image.version has the first pattern with the full version
           tags: |
             type=raw,value=${{ fromJson(inputs.plan).announcement_tag }}
@@ -171,9 +198,6 @@ jobs:
       # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
       - name: Create manifest list and push
         working-directory: /tmp/digests
-        # The jq command expands the docker/metadata json "tags" array entry to `-t tag1 -t tag2 ...` for each tag in the array
-        # The printf will expand the base image with the `<PREK_BASE_IMG>@sha256:<sha256> ...` for each sha256 in the directory
-        # The final command becomes `docker buildx imagetools create -t tag1 -t tag2 ... <PREK_BASE_IMG>@sha256:<sha256_1> <PREK_BASE_IMG>@sha256:<sha256_2> ...`
         run: |
           # shellcheck disable=SC2046
           readarray -t lines <<< "$DOCKER_METADATA_OUTPUT_ANNOTATIONS"; annotations=(); for line in "${lines[@]}"; do annotations+=(--annotation "$line"); done
@@ -181,17 +205,16 @@ jobs:
           docker buildx imagetools create \
             "${annotations[@]}" \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf "${PREK_BASE_IMG}@sha256:%s " *)
+            $(printf "${IMAGE_NAME}@sha256:%s " *)
 
       - name: Export manifest digest
         id: manifest-digest
         env:
-          IMAGE: ${{ env.PREK_BASE_IMG }}
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
           digest="$(
             docker buildx imagetools inspect \
-              "${IMAGE}:${VERSION}" \
+              "${IMAGE_NAME}:${VERSION}" \
               --format '{{json .Manifest}}' \
             | jq -r '.digest'
           )"
@@ -200,5 +223,5 @@ jobs:
       - name: Generate artifact attestation
         uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
         with:
-          subject-name: ${{ env.PREK_BASE_IMG }}
+          subject-name: ${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.manifest-digest.outputs.digest }}
