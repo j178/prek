@@ -943,6 +943,8 @@ pub const EXTENSIONS: phf::Map<&str, TagSet> = phf::phf_map! {
     // ["text", "thrift"]
     "thrift" => TagSet::new(&[255, 257]),
     // ["binary", "image", "tiff"]
+    "tif" => TagSet::new(&[21, 117, 258]),
+    // ["binary", "image", "tiff"]
     "tiff" => TagSet::new(&[21, 117, 258]),
     // ["text", "toml"]
     "toml" => TagSet::new(&[255, 260]),
