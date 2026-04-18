@@ -37,34 +37,12 @@ Use `prek` to:
 - run the same hook ecosystem used by `pre-commit`
 - manage hook runtimes and toolchains for supported languages
 - validate configs, update pinned hook revisions, and inspect configured hooks
-- support both existing `.pre-commit-config.yaml` files and native `prek.toml`
 
 Typical jobs for hooks run by `prek`:
 
 - formatting and linting code
 - validating YAML, JSON, TOML, XML, and similar files
 - preventing merge-conflict markers, private keys, oversized files, and bad line endings
-- enforcing repo policies such as branch protections or executable/shebang consistency
-
-If a repository already uses `.pre-commit-config.yaml`, keep it unless the user asks to migrate. `prek` is intentionally compatible with existing `pre-commit` YAML.
-
-## Prek-specific features to remember
-
-The parts of `prek` that most affect setup and day-to-day use:
-
-- `prek.toml` as a native config format
-- workspace mode for nested project configs
-- `.prekignore` for workspace discovery control
-- `repo: builtin` for offline, zero-setup built-in hooks
-- built-in fast path for supported `pre-commit-hooks`
-- shared toolchains and environments across hooks
-- `uv` integration for Python environments
-- hook `priority` and hook `env`
-- `orphan: true` for nested workspace isolation
-- glob mappings for `files` and `exclude`
-- repo-local and worktree-local `core.hooksPath` support
-
-Also note the constraint from the docs: language support is strong but not full parity in every corner case, so check [Language Support](https://prek.j178.dev/languages/index.md) if the repo depends on less common hook languages or behaviors.
 
 ## Authoring configs
 
