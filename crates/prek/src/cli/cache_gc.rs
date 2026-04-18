@@ -49,7 +49,7 @@ impl RemovalKind {
     }
 }
 
-const STALE_PATCH_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+const STALE_PATCH_RETENTION: Duration = Duration::from_hours(30 * 24);
 
 #[derive(Debug, Clone)]
 struct RemovalItem {

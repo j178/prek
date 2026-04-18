@@ -754,10 +754,7 @@ pub(crate) async fn get_lfs_files(
     let mut lfs_files = FxHashSet::default();
     let read_result = String::from_utf8_lossy(&read_result);
     let mut it = read_result.split_terminator('\0');
-    loop {
-        let (Some(file), Some(_attr), Some(value)) = (it.next(), it.next(), it.next()) else {
-            break;
-        };
+    while let (Some(file), Some(_attr), Some(value)) = (it.next(), it.next(), it.next()) {
         if value == "lfs" {
             lfs_files.insert(PathBuf::from(file));
         }

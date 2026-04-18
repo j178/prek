@@ -379,11 +379,7 @@ fn starts_with(slice: &[String], prefix: &[&str]) -> bool {
 /// Example:
 /// `#!nix-shell -i python3 -p python3` would return `["python3"]`
 fn parse_nix_shebang<R: BufRead>(reader: &mut R, mut cmd: Vec<String>) -> Vec<String> {
-    loop {
-        let Ok(buf) = reader.fill_buf() else {
-            break;
-        };
-
+    while let Ok(buf) = reader.fill_buf() {
         if buf.len() < 2 || &buf[..2] != b"#!" {
             break;
         }

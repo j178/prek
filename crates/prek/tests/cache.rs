@@ -578,12 +578,12 @@ fn cache_gc_removes_stale_patch_files() -> anyhow::Result<()> {
     write_patch_file(
         &old_patch,
         "old patch\n",
-        SystemTime::now() - Duration::from_secs(60 * 24 * 60 * 60),
+        SystemTime::now() - Duration::from_hours(60 * 24),
     )?;
     write_patch_file(
         &recent_patch,
         "recent patch\n",
-        SystemTime::now() - Duration::from_secs(24 * 60 * 60),
+        SystemTime::now() - Duration::from_hours(24),
     )?;
 
     cmd_snapshot!(context.filters(), context.command().args(["cache", "gc", "-v", "--dry-run"]), @"

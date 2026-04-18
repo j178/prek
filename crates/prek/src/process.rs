@@ -520,7 +520,7 @@ impl Display for Cmd {
             write!(f, " {}", arg.to_string_lossy())?;
             len += arg.len() + 1;
             if len > *LOG_TRUNCATE_LIMIT {
-                write!(f, " [...]",)?;
+                write!(f, " [...]")?;
                 break;
             }
         }
