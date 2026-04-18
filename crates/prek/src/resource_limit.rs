@@ -86,7 +86,7 @@ pub fn adjust_open_file_limit() -> Result<u64, OpenFileLimitError> {
     // If hard is unlimited, use MAX_NOFILE_LIMIT.
     let target = hard.unwrap_or(MAX_NOFILE_LIMIT).min(MAX_NOFILE_LIMIT);
 
-    if soft.is_none() || soft.is_some_and(|soft| soft >= target) {
+    if soft.is_none_or(|soft| soft >= target) {
         return Err(OpenFileLimitError::AlreadySufficient {
             current: soft,
             target,

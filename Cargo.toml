@@ -5,7 +5,7 @@ resolver = "3"
 [workspace.package]
 version = "0.3.9"
 edition = "2024"
-rust-version = "1.92.0"
+rust-version = "1.93.0"
 repository = "https://github.com/j178/prek"
 homepage = "https://prek.j178.dev/"
 license = "MIT"
