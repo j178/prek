@@ -26,6 +26,7 @@ repos:
         language: python  # ensures that Renovate can update additional_dependencies
         args: [--number, --compact-tables, --align-semantic-breaks-in-lists]
         additional_dependencies:
+          - mdformat-frontmatter==2.0.10
           - mdformat-mkdocs==5.1.4
           - mdformat-simple-breaks==0.1.0
 
