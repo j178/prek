@@ -28,6 +28,7 @@ env:
   JULIA_VERSION: "1.12.4"
   DOTNET_VERSION: "10.0"
   DENO_VERSION: "2"
+  DART_VERSION: "3.10.4"
 
   # Cargo env vars
   CARGO_INCREMENTAL: 0
@@ -412,6 +413,7 @@ jobs:
           - windows-latest
         language:
           - bun
+          - dart
           - deno
           - docker
           - dotnet
@@ -522,6 +524,12 @@ jobs:
         uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
         with:
           deno-version: ${{ env.DENO_VERSION }}
+
+      - name: "Install Dart"
+        if: ${{ matrix.language == 'dart' }}
+        uses: dart-lang/setup-dart@0a8a0fc875eb934c15d08629302413c671d3f672 # v1.6.5
+        with:
+          sdk: ${{ env.DART_VERSION }}
 
       - name: "Install GHC and Cabal"
         if: ${{ matrix.language == 'haskell' }}

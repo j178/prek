@@ -15,6 +15,10 @@ default-filter = "binary_id(prek::languages) and test(bun::)"
 inherits = "ci-core"
 default-filter = "binary_id(prek::languages) and test(deno::)"
 
+[profile.lang-dart]
+inherits = "ci-core"
+default-filter = "binary_id(prek::languages) and test(dart::)"
+
 [profile.lang-docker]
 inherits = "ci-core"
 default-filter = "binary_id(prek::languages) and (test(docker::) or test(docker_image::))"

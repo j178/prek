@@ -415,6 +415,8 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
     // Time seconds
     (r"\b(\d+\.)?\d+(ms|s)\b", "[TIME]"),
+    // Dart SDK version output (handles Flutter SDK too)
+    (r"Dart SDK version: .*", "Dart SDK version: [VERSION]"),
     // Strip non-deterministic lock contention warnings from parallel test execution
     (r"(?m)^warning: Waiting to acquire lock.*\n", ""),
 ];

@@ -85,6 +85,9 @@ impl EnvVars {
     pub const LUA_PATH: &'static str = "LUA_PATH";
     pub const LUA_CPATH: &'static str = "LUA_CPATH";
 
+    // Dart related
+    pub const PUB_CACHE: &'static str = "PUB_CACHE";
+
     // Ruby related
     pub const PREK_RUBY_MIRROR: &'static str = "PREK_RUBY_MIRROR";
     pub const GEM_HOME: &'static str = "GEM_HOME";
