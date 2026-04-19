@@ -223,6 +223,7 @@ pub(crate) async fn try_repo(
         run_args.dry_run,
         refresh,
         run_args.extra,
+        run_args.report_level,
         verbose,
         printer,
     )

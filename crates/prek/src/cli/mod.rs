@@ -548,8 +548,41 @@ pub(crate) struct RunArgs {
     #[arg(long)]
     pub(crate) dry_run: bool,
 
+    /// Control which hook statuses are shown in output.
+    ///
+    /// Levels from least to most verbose: silent, fail, skipped-no-files,
+    /// skipped, passed, all. Each level includes all statuses from lower levels.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::PREK_REPORT_LEVEL,
+        default_value_t = ReportLevel::Passed,
+    )]
+    pub(crate) report_level: ReportLevel,
+
     #[command(flatten)]
     pub(crate) extra: RunExtraArgs,
+}
+
+/// Controls which hook status lines are displayed during a run.
+///
+/// Levels are ordered from least to most verbose. Each level includes
+/// all statuses from lower levels plus its own.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
+pub(crate) enum ReportLevel {
+    /// Show no per-hook status lines.
+    Silent,
+    /// Show only failed hooks.
+    Fail,
+    /// Show failed hooks and hooks skipped because no files matched or language is unimplemented.
+    SkippedNoFiles,
+    /// Show failed, no-files, and hooks excluded by `--skip`/`SKIP`/`PREK_SKIP`.
+    Skipped,
+    /// Show failed, skipped, and passed hooks (including dry-run).
+    #[default]
+    Passed,
+    /// Show every hook status.
+    All,
 }
 
 #[derive(Debug, Clone, Default, Args)]

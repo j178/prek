@@ -19,8 +19,8 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter, HookRunReporter};
 use crate::cli::run::keeper::WorkTreeKeeper;
-use crate::cli::run::{CollectOptions, FileFilter, Selectors, collect_files};
-use crate::cli::{ExitStatus, RunExtraArgs};
+use crate::cli::run::{CollectOptions, FileFilter, HookPartition, Selectors, collect_files};
+use crate::cli::{ExitStatus, ReportLevel, RunExtraArgs};
 use crate::config::{Language, PassFilenames, Stage};
 use crate::fs::CWD;
 use crate::git::GIT_ROOT;
@@ -49,6 +49,7 @@ pub(crate) async fn run(
     dry_run: bool,
     refresh: bool,
     extra_args: RunExtraArgs,
+    report_level: ReportLevel,
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -93,11 +94,16 @@ pub(crate) async fn run(
         .init_hooks(store, Some(&reporter))
         .await
         .context("Failed to init hooks")?;
-    let selected_hooks: Vec<_> = hooks
-        .into_iter()
-        .filter(|h| selectors.matches_hook(h))
-        .map(Arc::new)
-        .collect();
+
+    let mut selected_hooks = Vec::new();
+    let mut skipped_by_selector: Vec<Arc<Hook>> = Vec::new();
+    for hook in hooks {
+        match selectors.hook_partition(&hook) {
+            HookPartition::Selected => selected_hooks.push(Arc::new(hook)),
+            HookPartition::SkippedBySkipSelector => skipped_by_selector.push(Arc::new(hook)),
+            HookPartition::NotSelected => {}
+        }
+    }
 
     selectors.report_unused();
 
@@ -146,6 +152,11 @@ pub(crate) async fn run(
         }
         (hooks, hook_stage)
     };
+
+    let skipped_by_selector: Vec<_> = skipped_by_selector
+        .into_iter()
+        .filter(|h| h.stages.contains(hook_stage))
+        .collect();
 
     if filtered_hooks.is_empty() {
         debug!(
@@ -203,11 +214,13 @@ pub(crate) async fn run(
     run_hooks(
         &workspace,
         &installed_hooks,
+        &skipped_by_selector,
         filenames,
         store,
         show_diff_on_failure,
         fail_fast,
         dry_run,
+        report_level,
         verbose,
         printer,
     )
@@ -498,6 +511,7 @@ impl StatusPrinter {
     const DRY_RUN: &'static str = "Dry Run";
     const NO_FILES: &'static str = "(no files to check)";
     const UNIMPLEMENTED: &'static str = "(unimplemented yet)";
+    const EXCLUDED: &'static str = "(excluded by skip)";
 
     fn for_hooks(hooks: &[InstalledHook], printer: Printer) -> Self {
         let name_len = hooks
@@ -508,6 +522,24 @@ impl StatusPrinter {
         let columns = std::cmp::max(
             79,
             // Hook name...(no files to check)Skipped
+            name_len + 3 + Self::NO_FILES.len() + Self::SKIPPED.len(),
+        );
+        Self { printer, columns }
+    }
+
+    fn for_hooks_with_skipped(
+        hooks: &[InstalledHook],
+        skipped: &[Arc<Hook>],
+        printer: Printer,
+    ) -> Self {
+        let name_len = hooks
+            .iter()
+            .map(|hook| hook.name.width())
+            .chain(skipped.iter().map(|hook| hook.name.width()))
+            .max()
+            .unwrap_or(0);
+        let columns = std::cmp::max(
+            79,
             name_len + 3 + Self::NO_FILES.len() + Self::SKIPPED.len(),
         );
         Self { printer, columns }
@@ -535,6 +567,11 @@ impl StatusPrinter {
             ),
             RunStatus::Unimplemented => (
                 Self::UNIMPLEMENTED,
+                Self::SKIPPED.black().on_yellow().to_string(),
+                Self::SKIPPED.width(),
+            ),
+            RunStatus::Skipped => (
+                Self::EXCLUDED,
                 Self::SKIPPED.black().on_yellow().to_string(),
                 Self::SKIPPED.width(),
             ),
@@ -575,17 +612,19 @@ impl StatusPrinter {
 async fn run_hooks(
     workspace: &Workspace,
     hooks: &[InstalledHook],
+    skipped_by_selector: &[Arc<Hook>],
     filenames: Vec<PathBuf>,
     store: &Store,
     show_diff_on_failure: bool,
     fail_fast: Option<bool>,
     dry_run: bool,
+    report_level: ReportLevel,
     verbose: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     debug_assert!(!hooks.is_empty(), "No hooks to run");
 
-    let status_printer = StatusPrinter::for_hooks(hooks, printer);
+    let status_printer = StatusPrinter::for_hooks_with_skipped(hooks, skipped_by_selector, printer);
     let reporter = HookRunReporter::new(printer, status_printer.bar_len());
 
     let mut success = true;
@@ -623,7 +662,7 @@ async fn run_hooks(
         // If two hooks have the same priority, preserve their original order from the config.
         hooks.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.idx.cmp(&b.idx)));
 
-        if projects_len > 1 || !project.is_root() {
+        if (projects_len > 1 || !project.is_root()) && report_level != ReportLevel::Silent {
             reporter.suspend(|| {
                 writeln!(
                     status_printer.printer().stdout(),
@@ -668,6 +707,7 @@ async fn run_hooks(
                     &group_results,
                     verbose,
                     group_modified_files,
+                    report_level,
                 )
             })?;
 
@@ -680,6 +720,19 @@ async fn run_hooks(
 
             if !success && (project_fail_fast || hook_fail_fast) {
                 break 'outer;
+            }
+        }
+
+        // Render selector-skipped hooks for this project, after executed hooks.
+        if report_level.should_show(RunStatus::Skipped) {
+            let mut project_skipped: Vec<_> = skipped_by_selector
+                .iter()
+                .filter(|h| h.project() == project)
+                .collect();
+            project_skipped.sort_by_key(|h| h.idx);
+
+            for hook in project_skipped {
+                reporter.suspend(|| status_printer.write(&hook.name, "", RunStatus::Skipped))?;
             }
         }
     }
@@ -800,9 +853,14 @@ fn render_priority_group(
     group_results: &[RunResult],
     verbose: bool,
     group_modified_files: bool,
+    report_level: ReportLevel,
 ) -> Result<()> {
     // Only show a special group UI when the group failed due to file modifications.
     // Hooks in a priority group run in parallel, so we can't attribute modifications to a single hook.
+    //
+    // When `--report-level` hides successful hooks, we still show this header so a run that fails
+    // only because hooks modified files is diagnosable (see design doc silent-level notes on
+    // exit codes and diffs — this is the multi-hook analogue).
     let show_group_ui = group_modified_files && group_results.len() > 1;
     let single_hook_modified_files = group_results.len() == 1 && group_modified_files;
     let group_prefix = if show_group_ui {
@@ -839,9 +897,28 @@ fn render_priority_group(
             result.status
         };
 
-        status_printer.write(&result.hook.name, prefix, status)?;
+        let show_status_on_console = report_level.should_show(status);
+        if show_status_on_console {
+            status_printer.write(&result.hook.name, prefix, status)?;
+        }
 
         if matches!(status, RunStatus::NoFiles | RunStatus::Unimplemented) {
+            continue;
+        }
+
+        let output = result.output.trim_ascii();
+        if !output.is_empty() {
+            if let Some(file) = result.hook.log_file.as_deref() {
+                let mut file = fs_err::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(file)?;
+                file.write_all(output)?;
+                file.flush()?;
+            }
+        }
+
+        if !show_status_on_console {
             continue;
         }
 
@@ -878,36 +955,24 @@ fn render_priority_group(
                 )?;
             }
 
-            let output = result.output.trim_ascii();
-            if !output.is_empty() {
-                if let Some(file) = result.hook.log_file.as_deref() {
-                    let mut file = fs_err::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(file)?;
-                    file.write_all(output)?;
-                    file.flush()?;
+            if !output.is_empty() && result.hook.log_file.is_none() {
+                if show_group_ui {
+                    writeln!(stdout, "{}", "  │".dimmed())?;
                 } else {
-                    if show_group_ui {
-                        writeln!(stdout, "{}", "  │".dimmed())?;
-                    } else {
-                        writeln!(stdout)?;
-                    }
-                    let text = String::from_utf8_lossy(output);
-                    for line in text.lines() {
-                        if line.is_empty() {
-                            if show_group_ui {
-                                writeln!(stdout, "{}", "  │".dimmed())?;
-                            } else {
-                                writeln!(stdout)?;
-                            }
+                    writeln!(stdout)?;
+                }
+                let text = String::from_utf8_lossy(output);
+                for line in text.lines() {
+                    if line.is_empty() {
+                        if show_group_ui {
+                            writeln!(stdout, "{}", "  │".dimmed())?;
                         } else {
-                            if show_group_ui {
-                                writeln!(stdout, "{group_prefix}{line}")?;
-                            } else {
-                                writeln!(stdout, "  {line}")?;
-                            }
+                            writeln!(stdout)?;
                         }
+                    } else if show_group_ui {
+                        writeln!(stdout, "{group_prefix}{line}")?;
+                    } else {
+                        writeln!(stdout, "  {line}")?;
                     }
                 }
             }
@@ -958,13 +1023,14 @@ enum RunStatus {
     DryRun,
     NoFiles,
     Unimplemented,
+    Skipped,
 }
 
 impl RunStatus {
     fn as_bool(self) -> bool {
         matches!(
             self,
-            Self::Success | Self::NoFiles | Self::DryRun | Self::Unimplemented
+            Self::Success | Self::NoFiles | Self::DryRun | Self::Unimplemented | Self::Skipped
         )
     }
 
@@ -973,7 +1039,21 @@ impl RunStatus {
     }
 
     fn is_skipped(self) -> bool {
-        matches!(self, Self::DryRun | Self::NoFiles | Self::Unimplemented)
+        matches!(
+            self,
+            Self::DryRun | Self::NoFiles | Self::Unimplemented | Self::Skipped
+        )
+    }
+}
+
+impl ReportLevel {
+    fn should_show(self, status: RunStatus) -> bool {
+        match status {
+            RunStatus::Failed => self >= ReportLevel::Fail,
+            RunStatus::NoFiles | RunStatus::Unimplemented => self >= ReportLevel::SkippedNoFiles,
+            RunStatus::Skipped => self >= ReportLevel::Skipped,
+            RunStatus::Success | RunStatus::DryRun => self >= ReportLevel::Passed,
+        }
     }
 }
 

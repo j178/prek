@@ -235,7 +235,17 @@ prek run [OPTIONS] [HOOK|PROJECT]...
 </dd><dt id="prek-run--quiet"><a href="#prek-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-run--refresh"><a href="#prek-run--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-run--show-diff-on-failure"><a href="#prek-run--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
+</dd><dt id="prek-run--report-level"><a href="#prek-run--report-level"><code>--report-level</code></a> <i>report-level</i></dt><dd><p>Control which hook statuses are shown in output.</p>
+<p>Levels from least to most verbose: silent, fail, skipped-no-files, skipped, passed, all. Each level includes all statuses from lower levels.</p>
+<p>May also be set with the <code>PREK_REPORT_LEVEL</code> environment variable.</p><p>[default: passed]</p><p>Possible values:</p>
+<ul>
+<li><code>silent</code>:  Show no per-hook status lines</li>
+<li><code>fail</code>:  Show only failed hooks</li>
+<li><code>skipped-no-files</code>:  Show failed hooks and hooks skipped because no files matched or language is unimplemented</li>
+<li><code>skipped</code>:  Show failed, no-files, and hooks excluded by <code>--skip</code>/<code>SKIP</code>/<code>PREK_SKIP</code></li>
+<li><code>passed</code>:  Show failed, skipped, and passed hooks (including dry-run)</li>
+<li><code>all</code>:  Show every hook status</li>
+</ul></dd><dt id="prek-run--show-diff-on-failure"><a href="#prek-run--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
 </dd><dt id="prek-run--skip"><a href="#prek-run--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
 <ul>
@@ -775,7 +785,17 @@ prek try-repo [OPTIONS] <REPO> [HOOK|PROJECT]...
 </dd><dt id="prek-try-repo--quiet"><a href="#prek-try-repo--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-try-repo--refresh"><a href="#prek-try-repo--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
-</dd><dt id="prek-try-repo--rev"><a href="#prek-try-repo--rev"><code>--rev</code></a>, <code>--ref</code> <i>rev</i></dt><dd><p>Manually select a rev to run against, otherwise the <code>HEAD</code> revision will be used</p>
+</dd><dt id="prek-try-repo--report-level"><a href="#prek-try-repo--report-level"><code>--report-level</code></a> <i>report-level</i></dt><dd><p>Control which hook statuses are shown in output.</p>
+<p>Levels from least to most verbose: silent, fail, skipped-no-files, skipped, passed, all. Each level includes all statuses from lower levels.</p>
+<p>May also be set with the <code>PREK_REPORT_LEVEL</code> environment variable.</p><p>[default: passed]</p><p>Possible values:</p>
+<ul>
+<li><code>silent</code>:  Show no per-hook status lines</li>
+<li><code>fail</code>:  Show only failed hooks</li>
+<li><code>skipped-no-files</code>:  Show failed hooks and hooks skipped because no files matched or language is unimplemented</li>
+<li><code>skipped</code>:  Show failed, no-files, and hooks excluded by <code>--skip</code>/<code>SKIP</code>/<code>PREK_SKIP</code></li>
+<li><code>passed</code>:  Show failed, skipped, and passed hooks (including dry-run)</li>
+<li><code>all</code>:  Show every hook status</li>
+</ul></dd><dt id="prek-try-repo--rev"><a href="#prek-try-repo--rev"><code>--rev</code></a>, <code>--ref</code> <i>rev</i></dt><dd><p>Manually select a rev to run against, otherwise the <code>HEAD</code> revision will be used</p>
 </dd><dt id="prek-try-repo--show-diff-on-failure"><a href="#prek-try-repo--show-diff-on-failure"><code>--show-diff-on-failure</code></a></dt><dd><p>When hooks fail, run <code>git diff</code> directly afterward</p>
 </dd><dt id="prek-try-repo--skip"><a href="#prek-try-repo--skip"><code>--skip</code></a> <i>hook|project</i></dt><dd><p>Skip the specified hooks or projects.</p>
 <p>Supports flexible selector syntax:</p>
