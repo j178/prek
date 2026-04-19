@@ -19,6 +19,7 @@ static RESTORE_WORKTREE: Mutex<Option<WorkTreeKeeper>> = Mutex::new(None);
 struct IntentToAddKeeper(Vec<PathBuf>);
 struct WorkingTreeKeeper {
     root: PathBuf,
+    tree: String,
     patch: Option<PathBuf>,
 }
 
@@ -99,7 +100,7 @@ impl WorkingTreeKeeper {
             .arg("--exit-code")
             .arg("--no-color")
             .arg("--no-ext-diff")
-            .arg(tree)
+            .arg(&tree)
             .arg("--")
             .arg(root)
             .check(false)
@@ -111,6 +112,7 @@ impl WorkingTreeKeeper {
             // No non-staged changes
             Ok(Self {
                 root: root.to_path_buf(),
+                tree,
                 patch: None,
             })
         } else if output.status.code() == Some(1) {
@@ -119,6 +121,7 @@ impl WorkingTreeKeeper {
                 // probably git auto crlf behavior quirks
                 Ok(Self {
                     root: root.to_path_buf(),
+                    tree,
                     patch: None,
                 })
             } else {
@@ -146,10 +149,11 @@ impl WorkingTreeKeeper {
 
                 // Clean the working tree
                 debug!("Cleaning working tree");
-                Self::checkout_working_tree(root)?;
+                Self::checkout_working_tree(root, None)?;
 
                 Ok(Self {
                     root: root.to_path_buf(),
+                    tree,
                     patch: Some(patch_path),
                 })
             }
@@ -158,16 +162,26 @@ impl WorkingTreeKeeper {
         }
     }
 
-    fn checkout_working_tree(root: &Path) -> Result<()> {
-        let output = Command::new(GIT.as_ref()?)
-            .arg("-c")
+    /// Check out the working tree to match the index (when `tree` is `None`)
+    /// or to match a specific tree object (when `tree` is `Some`).
+    ///
+    /// When a tree-ish is provided, `git checkout <tree> -- <root>` resets both
+    /// the index entries and the working tree files for paths under `root` to
+    /// match the tree. This is used during rollback to guarantee the index is
+    /// restored to its pre-hook state.
+    fn checkout_working_tree(root: &Path, tree: Option<&str>) -> Result<()> {
+        let mut cmd = Command::new(GIT.as_ref()?);
+        cmd.arg("-c")
             .arg("submodule.recurse=0")
-            .arg("checkout")
-            .arg("--")
+            .arg("checkout");
+        if let Some(tree) = tree {
+            cmd.arg(tree);
+        }
+        cmd.arg("--")
             .arg(root)
             // prevent recursive post-checkout hooks
-            .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
-            .output()?;
+            .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1");
+        let output = cmd.output()?;
         if output.status.success() {
             Ok(())
         } else {
@@ -203,8 +217,12 @@ impl WorkingTreeKeeper {
                 "Stashed changes conflicted with changes made by hook, rolling back the hook changes".red().bold()
             );
 
-            // Discard any changes made by hooks, and try applying the patch again.
-            Self::checkout_working_tree(&self.root)?;
+            // Discard any changes made by hooks and restore the index to its
+            // pre-hook state by checking out the saved tree.  Using the tree
+            // (rather than a bare `git checkout -- <root>`) guarantees both
+            // the index and working tree are reset to their original state,
+            // even if hooks or git internals modified index entries.
+            Self::checkout_working_tree(&self.root, Some(&self.tree))?;
             Self::git_apply(patch)?;
         }
 
