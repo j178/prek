@@ -4,11 +4,16 @@ This page documents common ways to integrate prek into CI and container workflow
 
 ## Docker
 
-prek is published as a distroless container image at:
+prek publishes two container images:
 
-- `ghcr.io/j178/prek`
+| Image | Base | Description |
+| -- | -- | -- |
+| `ghcr.io/j178/prek` | `scratch` | Minimal distroless image containing only the prek binary |
+| `ghcr.io/j178/prek-alpine` | `alpine:3.23` | Alpine image with common hook dependencies pre-installed |
 
-The image is based on `scratch` (no shell, no package manager). It contains the prek binary at `/prek`.
+### Minimal (scratch)
+
+The default image is based on `scratch` (no shell, no package manager). It contains the prek binary at `/prek`.
 
 A common pattern is to copy the binary into your own image:
 
@@ -23,9 +28,17 @@ If you prefer, you can also run the distroless image directly:
 docker run --rm ghcr.io/j178/prek:v0.3.9 --version
 ```
 
+### Alpine
+
+The Alpine image includes `git`, `nodejs`, `npm`, `python3`, and `py3-pip`, covering the most common hook runtimes.
+
+```bash
+docker run --rm ghcr.io/j178/prek-alpine:v0.3.9 --version
+```
+
 ### Verifying Images
 
-Docker images are signed with
+Both images are signed with
 [GitHub Attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations)
 to verify they were built by official prek workflows. Verify using the
 [GitHub CLI](https://cli.github.com/):

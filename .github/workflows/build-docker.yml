@@ -18,6 +18,7 @@ on:
 
 env:
   PREK_BASE_IMG: ghcr.io/${{ github.repository_owner }}/prek
+  PREK_ALPINE_IMG: ghcr.io/${{ github.repository_owner }}/prek-alpine
 
 permissions:
   contents: read
@@ -25,7 +26,7 @@ permissions:
 
 jobs:
   docker-build:
-    name: Build Docker image ghcr.io/j178/prek for ${{ matrix.platform }}
+    name: Build Docker image (${{ matrix.image }}, ${{ matrix.platform }})
     runs-on: ubuntu-latest
     environment:
       name: release
@@ -35,6 +36,9 @@ jobs:
         platform:
           - linux/amd64
           - linux/arm64
+        image:
+          - minimal
+          - alpine
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -69,7 +73,7 @@ jobs:
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
-          images: ${{ env.PREK_BASE_IMG }}
+          images: ${{ matrix.image == 'alpine' && env.PREK_ALPINE_IMG || env.PREK_BASE_IMG }}
           # Defining this makes sure the org.opencontainers.image.version OCI label becomes the actual release version and not the branch name
           tags: |
             type=raw,value=dry-run,enable=${{ inputs.plan == '' || fromJson(inputs.plan).announcement_tag_is_implicit }}
@@ -87,10 +91,11 @@ jobs:
         with:
           context: .
           platforms: ${{ matrix.platform }}
-          cache-from: type=gha,scope=prek-${{ env.PLATFORM_TUPLE }}
-          cache-to: type=gha,mode=min,scope=prek-${{ env.PLATFORM_TUPLE }}
+          target: ${{ matrix.image }}
+          cache-from: type=gha,scope=prek-${{ matrix.image }}-${{ env.PLATFORM_TUPLE }}
+          cache-to: type=gha,mode=min,scope=prek-${{ matrix.image }}-${{ env.PLATFORM_TUPLE }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.PREK_BASE_IMG }},push-by-digest=true,name-canonical=true,push=${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
+          outputs: type=image,name=${{ matrix.image == 'alpine' && env.PREK_ALPINE_IMG || env.PREK_BASE_IMG }},push-by-digest=true,name-canonical=true,push=${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
 
       - name: Export digests
         env:
@@ -102,13 +107,13 @@ jobs:
       - name: Upload digests
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: digests-${{ env.PLATFORM_TUPLE }}
+          name: digests-${{ matrix.image }}-${{ env.PLATFORM_TUPLE }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
 
   docker-publish:
-    name: Publish Docker image (ghcr.io/j178/prek)
+    name: Publish Docker image (${{ matrix.image }})
     runs-on: ubuntu-latest
     environment:
       name: release
@@ -120,12 +125,18 @@ jobs:
       id-token: write
       attestations: write
     if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - minimal
+          - alpine
     steps:
       - name: Download digests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: /tmp/digests
-          pattern: digests-*
+          pattern: digests-${{ matrix.image }}-*
           merge-multiple: true
 
       - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
@@ -136,7 +147,7 @@ jobs:
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
-          images: ${{ env.PREK_BASE_IMG }}
+          images: ${{ matrix.image == 'alpine' && env.PREK_ALPINE_IMG || env.PREK_BASE_IMG }}
           # Order is on purpose such that the label org.opencontainers.image.version has the first pattern with the full version
           tags: |
             type=raw,value=${{ fromJson(inputs.plan).announcement_tag }}
@@ -151,9 +162,8 @@ jobs:
       # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
       - name: Create manifest list and push
         working-directory: /tmp/digests
-        # The jq command expands the docker/metadata json "tags" array entry to `-t tag1 -t tag2 ...` for each tag in the array
-        # The printf will expand the base image with the `<PREK_BASE_IMG>@sha256:<sha256> ...` for each sha256 in the directory
-        # The final command becomes `docker buildx imagetools create -t tag1 -t tag2 ... <PREK_BASE_IMG>@sha256:<sha256_1> <PREK_BASE_IMG>@sha256:<sha256_2> ...`
+        env:
+          IMAGE_NAME: ${{ matrix.image == 'alpine' && env.PREK_ALPINE_IMG || env.PREK_BASE_IMG }}
         run: |
           # shellcheck disable=SC2046
           readarray -t lines <<< "$DOCKER_METADATA_OUTPUT_ANNOTATIONS"; annotations=(); for line in "${lines[@]}"; do annotations+=(--annotation "$line"); done
@@ -161,17 +171,17 @@ jobs:
           docker buildx imagetools create \
             "${annotations[@]}" \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf "${PREK_BASE_IMG}@sha256:%s " *)
+            $(printf "${IMAGE_NAME}@sha256:%s " *)
 
       - name: Export manifest digest
         id: manifest-digest
         env:
-          IMAGE: ${{ env.PREK_BASE_IMG }}
+          IMAGE_NAME: ${{ matrix.image == 'alpine' && env.PREK_ALPINE_IMG || env.PREK_BASE_IMG }}
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
           digest="$(
             docker buildx imagetools inspect \
-              "${IMAGE}:${VERSION}" \
+              "${IMAGE_NAME}:${VERSION}" \
               --format '{{json .Manifest}}' \
             | jq -r '.digest'
           )"
@@ -180,5 +190,5 @@ jobs:
       - name: Generate artifact attestation
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
         with:
-          subject-name: ${{ env.PREK_BASE_IMG }}
+          subject-name: ${{ matrix.image == 'alpine' && env.PREK_ALPINE_IMG || env.PREK_BASE_IMG }}
           subject-digest: ${{ steps.manifest-digest.outputs.digest }}
