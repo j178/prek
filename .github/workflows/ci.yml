@@ -532,7 +532,7 @@ jobs:
 
       - name: "Install Julia"
         if: ${{ matrix.language == 'julia' }}
-        uses: julia-actions/setup-julia@4c0cb0fce8556fdb04a90347310e5db8b1f98fb9 # v2.7.0
+        uses: julia-actions/setup-julia@4a12c5f801ca5ef0458bba44687563ef276522dd # v3.0.0
         with:
           version: ${{ env.JULIA_VERSION }}
 
