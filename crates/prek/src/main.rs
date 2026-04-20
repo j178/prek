@@ -249,9 +249,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.overwrite,
                 args.allow_missing_config,
                 cli.globals.refresh,
-                cli.globals.quiet,
-                cli.globals.verbose,
-                cli.globals.no_progress,
                 printer,
                 args.git_dir.as_deref(),
             )
@@ -422,9 +419,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     args.hook_types,
                     args.no_allow_missing_config,
                     cli.globals.refresh,
-                    cli.globals.quiet,
-                    cli.globals.verbose,
-                    cli.globals.no_progress,
                     printer,
                 )
                 .await
@@ -484,9 +478,6 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.hook_types,
                 args.no_allow_missing_config,
                 cli.globals.refresh,
-                cli.globals.quiet,
-                cli.globals.verbose,
-                cli.globals.no_progress,
                 printer,
             )
             .await
