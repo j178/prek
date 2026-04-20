@@ -661,6 +661,7 @@ async fn run_hooks(
                 file_modified = true;
             }
 
+            reporter.clear_completed();
             reporter.suspend(|| {
                 render_priority_group(
                     printer,

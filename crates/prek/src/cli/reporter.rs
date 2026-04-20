@@ -36,6 +36,8 @@ pub(crate) fn suspend(f: impl FnOnce() + Send + 'static) {
 struct BarState {
     /// A map of progress bars, by ID.
     bars: FxHashMap<usize, ProgressBar>,
+    /// Completed run bars that should stay visible until the current group is rendered.
+    completed: Vec<ProgressBar>,
     /// A monotonic counter for bar IDs.
     id: usize,
 }
@@ -226,13 +228,27 @@ impl HookRunReporter {
     pub fn on_run_complete(&self, id: usize) {
         let progress = {
             let mut state = self.reporter.state.lock().unwrap();
-            state.bars.remove(&id).unwrap()
+            let progress = state.bars.remove(&id).unwrap();
+            state.completed.push(progress.clone());
+            progress
         };
 
         self.reporter.root.inc(1);
 
-        // Clear the running line; final output is printed by the caller.
-        progress.finish_and_clear();
+        // Keep the finished line visible until the group result is rendered.
+        progress.set_position(progress.length().unwrap_or(1));
+        progress.finish();
+    }
+
+    pub fn clear_completed(&self) {
+        let completed = {
+            let mut state = self.reporter.state.lock().unwrap();
+            std::mem::take(&mut state.completed)
+        };
+
+        for progress in completed {
+            self.reporter.children.remove(&progress);
+        }
     }
 
     /// Temporarily suspend progress rendering while emitting normal output.
@@ -243,6 +259,7 @@ impl HookRunReporter {
     }
 
     pub fn on_complete(&self) {
+        self.clear_completed();
         self.reporter.on_complete();
     }
 }
