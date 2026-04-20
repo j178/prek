@@ -16,8 +16,6 @@ use strum::EnumCount;
 
 use crate::fs::Simplified;
 use crate::install_source::InstallSource;
-#[cfg(feature = "schemars")]
-use crate::schema::{schema_repo_builtin, schema_repo_local, schema_repo_meta, schema_repo_remote};
 use crate::version;
 use crate::warn_user;
 use crate::warn_user_once;
@@ -845,9 +843,7 @@ impl TryFrom<RemoteHook> for BuiltinHook {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct RemoteRepo {
-    #[cfg_attr(feature = "schemars", schemars(schema_with = "schema_repo_remote"))]
     pub repo: String,
     pub rev: String,
     #[serde(skip_serializing)]
@@ -890,9 +886,7 @@ impl Display for RemoteRepo {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct LocalRepo {
-    #[cfg_attr(feature = "schemars", schemars(schema_with = "schema_repo_local"))]
     pub repo: String,
     pub hooks: Vec<LocalHook>,
 
@@ -907,9 +901,7 @@ impl Display for LocalRepo {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct MetaRepo {
-    #[cfg_attr(feature = "schemars", schemars(schema_with = "schema_repo_meta"))]
     pub repo: String,
     pub hooks: Vec<MetaHook>,
 
@@ -924,9 +916,7 @@ impl Display for MetaRepo {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct BuiltinRepo {
-    #[cfg_attr(feature = "schemars", schemars(schema_with = "schema_repo_builtin"))]
     pub repo: String,
     pub hooks: Vec<BuiltinHook>,
 

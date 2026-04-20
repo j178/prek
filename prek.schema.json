@@ -413,7 +413,8 @@
           "items": {
             "$ref": "#/definitions/LocalHook"
           }
-        }
+        },
+        "rev": false
       },
       "required": [
         "repo",
@@ -569,7 +570,8 @@
           "items": {
             "$ref": "#/definitions/MetaHook"
           }
-        }
+        },
+        "rev": false
       },
       "required": [
         "repo",
@@ -732,7 +734,8 @@
           "items": {
             "$ref": "#/definitions/BuiltinHook"
           }
-        }
+        },
+        "rev": false
       },
       "required": [
         "repo",

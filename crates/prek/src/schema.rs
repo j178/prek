@@ -1,5 +1,5 @@
 use crate::config::{
-    BuiltinHook, BuiltinRepo, FilePattern, LocalRepo, MetaHook, MetaRepo, PassFilenames,
+    BuiltinHook, BuiltinRepo, FilePattern, LocalHook, LocalRepo, MetaHook, MetaRepo, PassFilenames,
     RemoteHook, RemoteRepo, Repo, Stage, Stages,
 };
 use std::borrow::Cow;
@@ -235,6 +235,65 @@ fn predefined_hook_schema(
     schema
 }
 
+impl schemars::JsonSchema for RemoteRepo {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("RemoteRepo")
+    }
+
+    fn json_schema(schema_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        let hook_schema = schema_gen.subschema_for::<RemoteHook>();
+        schemars::json_schema!({
+            "type": "object",
+            "properties": {
+                "repo": {
+                    "type": "string",
+                    "not": {
+                        "enum": ["local", "meta", "builtin"],
+                    },
+                    "description": "Remote repository location. Must not be `local`, `meta`, or `builtin`.",
+                },
+                "rev": {
+                    "type": "string",
+                },
+                "hooks": {
+                    "type": "array",
+                    "items": hook_schema,
+                    "writeOnly": true,
+                },
+            },
+            "required": ["repo", "rev", "hooks"],
+            "additionalProperties": true,
+        })
+    }
+}
+
+impl schemars::JsonSchema for LocalRepo {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("LocalRepo")
+    }
+
+    fn json_schema(schema_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        let hook_schema = schema_gen.subschema_for::<LocalHook>();
+        schemars::json_schema!({
+            "type": "object",
+            "properties": {
+                "repo": {
+                    "type": "string",
+                    "const": "local",
+                    "description": "Must be `local`.",
+                },
+                "hooks": {
+                    "type": "array",
+                    "items": hook_schema,
+                },
+                "rev": false,
+            },
+            "required": ["repo", "hooks"],
+            "additionalProperties": true,
+        })
+    }
+}
+
 impl schemars::JsonSchema for MetaHook {
     fn schema_name() -> Cow<'static, str> {
         Cow::Borrowed("MetaHook")
@@ -245,6 +304,33 @@ impl schemars::JsonSchema for MetaHook {
 
         let id_schema = schema_gen.subschema_for::<MetaHooks>();
         predefined_hook_schema(schema_gen, "A meta hook predefined in prek.", id_schema)
+    }
+}
+
+impl schemars::JsonSchema for MetaRepo {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("MetaRepo")
+    }
+
+    fn json_schema(schema_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        let hook_schema = schema_gen.subschema_for::<MetaHook>();
+        schemars::json_schema!({
+            "type": "object",
+            "properties": {
+                "repo": {
+                    "type": "string",
+                    "const": "meta",
+                    "description": "Must be `meta`.",
+                },
+                "hooks": {
+                    "type": "array",
+                    "items": hook_schema,
+                },
+                "rev": false,
+            },
+            "required": ["repo", "hooks"],
+            "additionalProperties": true,
+        })
     }
 }
 
@@ -261,44 +347,31 @@ impl schemars::JsonSchema for BuiltinHook {
     }
 }
 
-pub(crate) fn schema_repo_local(
-    _gen: &mut schemars::generate::SchemaGenerator,
-) -> schemars::Schema {
-    schemars::json_schema!({
-        "type": "string",
-        "const": "local",
-        "description": "Must be `local`.",
-    })
-}
+impl schemars::JsonSchema for BuiltinRepo {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("BuiltinRepo")
+    }
 
-pub(crate) fn schema_repo_meta(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
-    schemars::json_schema!({
-        "type": "string",
-        "const": "meta",
-        "description": "Must be `meta`.",
-    })
-}
-
-pub(crate) fn schema_repo_builtin(
-    _gen: &mut schemars::generate::SchemaGenerator,
-) -> schemars::Schema {
-    schemars::json_schema!({
-        "type": "string",
-        "const": "builtin",
-        "description": "Must be `builtin`.",
-    })
-}
-
-pub(crate) fn schema_repo_remote(
-    _gen: &mut schemars::generate::SchemaGenerator,
-) -> schemars::Schema {
-    schemars::json_schema!({
-        "type": "string",
-        "not": {
-            "enum": ["local", "meta", "builtin"],
-        },
-        "description": "Remote repository location. Must not be `local`, `meta`, or `builtin`.",
-    })
+    fn json_schema(schema_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        let hook_schema = schema_gen.subschema_for::<BuiltinHook>();
+        schemars::json_schema!({
+            "type": "object",
+            "properties": {
+                "repo": {
+                    "type": "string",
+                    "const": "builtin",
+                    "description": "Must be `builtin`.",
+                },
+                "hooks": {
+                    "type": "array",
+                    "items": hook_schema,
+                },
+                "rev": false,
+            },
+            "required": ["repo", "hooks"],
+            "additionalProperties": true,
+        })
+    }
 }
 
 impl schemars::JsonSchema for Repo {
