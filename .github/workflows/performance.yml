@@ -35,7 +35,7 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-      - uses: taiki-e/install-action@7a562dfa955aa2e4d5b0fd6ebd57ff9715c07b0b # v2.73.0
+      - uses: taiki-e/install-action@0abfcd587b70a713fdaa7fb502c885e2112acb15 # v2.75.7
         with:
           tool: cargo-bloat
 
@@ -100,7 +100,7 @@ jobs:
           Path("bloat-comparison.txt").write_text(comparison)
 
       - name: Upload bloat results
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           # NOTE: https://github.com/j178/prek-ci-bot uses this artifact name to post comments on PRs.
           # Make sure to update the bot if you rename the artifact.
@@ -152,7 +152,7 @@ jobs:
           cargo build --profile profiling && mv target/profiling/prek "$HYPERFINE_BIN_DIR/$HYPERFINE_HEAD_BINARY"
 
       - name: Install hyperfine
-        uses: taiki-e/install-action@7a562dfa955aa2e4d5b0fd6ebd57ff9715c07b0b # v2.73.0
+        uses: taiki-e/install-action@0abfcd587b70a713fdaa7fb502c885e2112acb15 # v2.75.7
         with:
           tool: hyperfine
 
@@ -163,7 +163,7 @@ jobs:
         run: scripts/hyperfine-run-benchmarks.sh
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           # NOTE: https://github.com/j178/prek-ci-bot uses this artifact name to post comments on PRs.
           # Make sure to update the bot if you rename the artifact.
