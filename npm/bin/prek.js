@@ -99,18 +99,6 @@ function currentLibc() {
   return isMusl() ? "musl" : "glibc";
 }
 
-function matchesLibc(spec, libc) {
-  if (!spec.libc) {
-    return true;
-  }
-  if (process.platform === "android") {
-    // Android uses Bionic, so currentLibc() returns null. The static musl
-    // binary is the compatible package for Termux.
-    return spec.libc === "musl";
-  }
-  return spec.libc === libc;
-}
-
 function pickPlatformPackage() {
   const libc = currentLibc();
   debug(
@@ -125,7 +113,7 @@ function pickPlatformPackage() {
     if (!spec.cpu.includes(process.arch)) {
       return false;
     }
-    if (!matchesLibc(spec, libc)) {
+    if (spec.libc && spec.libc !== libc) {
       return false;
     }
     if (!matchesArmVersion(spec)) {
