@@ -563,6 +563,7 @@ prek auto-update [OPTIONS]
 </dd><dt id="prek-auto-update--cooldown-days"><a href="#prek-auto-update--cooldown-days"><code>--cooldown-days</code></a> <i>days</i></dt><dd><p>Minimum release age (in days) required for a version to be eligible.</p>
 <p>The age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags. A value of <code>0</code> disables this check.</p>
 <p>[default: 0]</p></dd><dt id="prek-auto-update--dry-run"><a href="#prek-auto-update--dry-run"><code>--dry-run</code></a></dt><dd><p>Do not write changes to the config file, only display what would be changed</p>
+</dd><dt id="prek-auto-update--exclude-repo"><a href="#prek-auto-update--exclude-repo"><code>--exclude-repo</code></a> <i>repo</i></dt><dd><p>Do not update this repository. This option may be specified multiple times</p>
 </dd><dt id="prek-auto-update--freeze"><a href="#prek-auto-update--freeze"><code>--freeze</code></a></dt><dd><p>Store &quot;frozen&quot; hashes in <code>rev</code> instead of tag names</p>
 </dd><dt id="prek-auto-update--help"><a href="#prek-auto-update--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-auto-update--jobs"><a href="#prek-auto-update--jobs"><code>--jobs</code></a>, <code>-j</code> <i>jobs</i></dt><dd><p>Number of threads to use</p>

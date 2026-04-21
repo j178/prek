@@ -213,6 +213,7 @@ pub(crate) async fn auto_update(
     store: &Store,
     config: Option<PathBuf>,
     filter_repos: Vec<String>,
+    exclude_repos: Vec<String>,
     verbose: bool,
     bleeding_edge: bool,
     freeze: bool,
@@ -231,7 +232,8 @@ pub(crate) async fn auto_update(
 
     let repo_sources = collect_repo_sources(&workspace)?;
     let sources = repo_sources.iter().filter(|repo_source| {
-        filter_repos.is_empty() || filter_repos.iter().any(|repo| repo == repo_source.repo)
+        (filter_repos.is_empty() || filter_repos.iter().any(|repo| repo == repo_source.repo))
+            && !exclude_repos.iter().any(|repo| repo == repo_source.repo)
     });
     let outcomes: Vec<RepoUpdate<'_>> = futures::stream::iter(sources)
         .map(async |repo_source| {

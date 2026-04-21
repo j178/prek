@@ -471,6 +471,64 @@ fn auto_update_specific_repos() -> Result<()> {
 }
 
 #[test]
+fn auto_update_exclude_repo_skips_fetching_repo() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(&context, "included-repo", &["v1.0.0", "v1.1.0"])?;
+    let missing_repo_path = context
+        .home_dir()
+        .child("test-repos/missing-repo")
+        .to_string_lossy()
+        .to_string();
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+          - repo: {}
+            rev: v9.9.9
+            hooks:
+              - id: another-hook
+    ", repo_path, missing_repo_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--exclude-repo").arg(&missing_repo_path).arg("--cooldown-days").arg("0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [HOME]/test-repos/included-repo
+      updating rev `v1.0.0` -> `v1.1.0`
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/included-repo
+                rev: v1.1.0
+                hooks:
+                  - id: test-hook
+              - repo: [HOME]/test-repos/missing-repo
+                rev: v9.9.9
+                hooks:
+                  - id: another-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
 fn auto_update_bleeding_edge() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
