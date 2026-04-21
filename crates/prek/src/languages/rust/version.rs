@@ -106,6 +106,10 @@ impl RustVersion {
             )
         }
     }
+
+    pub(crate) fn channel(&self) -> Option<Channel> {
+        self.channel
+    }
 }
 
 /// `language_version` field of rust can be one of the following:

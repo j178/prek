@@ -116,13 +116,11 @@ impl RustInstaller {
     }
 
     async fn find_installed(&self, request: &RustRequest) -> Result<RustResult> {
-        let toolchains: Vec<ToolchainInfo> = self.rustup.list_installed_toolchains().await?;
+        let mut toolchains: Vec<ToolchainInfo> = self.rustup.list_installed_toolchains().await?;
 
-        let installed = toolchains
-            .into_iter()
-            .sorted_unstable_by(|a, b| b.version.cmp(&a.version));
+        sort_toolchains(&mut toolchains);
 
-        installed
+        toolchains
             .into_iter()
             .find_map(|info| {
                 let matches = request.matches(&info.version, Some(&info.path));
@@ -139,13 +137,11 @@ impl RustInstaller {
     }
 
     async fn find_system_rust(&self, rust_request: &RustRequest) -> Result<Option<RustResult>> {
-        let toolchains: Vec<ToolchainInfo> = self.rustup.list_system_toolchains().await?;
+        let mut toolchains: Vec<ToolchainInfo> = self.rustup.list_system_toolchains().await?;
 
-        let installed = toolchains
-            .into_iter()
-            .sorted_unstable_by(|a, b| b.version.cmp(&a.version));
+        sort_toolchains(&mut toolchains);
 
-        for info in installed {
+        for info in toolchains {
             let matches = rust_request.matches(&info.version, Some(&info.path));
 
             if matches {
@@ -212,5 +208,79 @@ impl RustInstaller {
 
         let rust = RustResult::from_dir(&toolchain_dir).fill_version().await?;
         Ok(rust)
+    }
+}
+
+fn sort_toolchains(toolchains: &mut [ToolchainInfo]) {
+    fn channel_preference(version: &RustVersion) -> u8 {
+        match version.channel() {
+            Some(Channel::Nightly) => 2,
+            Some(Channel::Beta) => 1,
+            // Exact release toolchains do not carry a channel name.
+            Some(Channel::Stable) | None => 0,
+        }
+    }
+
+    toolchains.sort_unstable_by(|a, b| {
+        channel_preference(&a.version)
+            .cmp(&channel_preference(&b.version))
+            .then_with(|| b.version.cmp(&a.version))
+            .then_with(|| a.name.cmp(&b.name))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn toolchain(name: &str, version: &semver::Version, toolchain_name: &str) -> ToolchainInfo {
+        let path = PathBuf::from("/rustup/toolchains").join(toolchain_name);
+        ToolchainInfo {
+            name: name.to_string(),
+            version: RustVersion::from_path(version, &path),
+            path,
+        }
+    }
+
+    #[test]
+    fn preferred_toolchain_order_prefers_release_over_newer_nightly() {
+        let mut toolchains = vec![
+            toolchain(
+                "nightly-aarch64-apple-darwin",
+                &semver::Version::new(1, 97, 0),
+                "nightly-aarch64-apple-darwin",
+            ),
+            toolchain(
+                "stable-aarch64-apple-darwin",
+                &semver::Version::new(1, 90, 0),
+                "stable-aarch64-apple-darwin",
+            ),
+        ];
+
+        sort_toolchains(&mut toolchains);
+        let selected = toolchains
+            .into_iter()
+            .find(|info| RustRequest::Any.matches(&info.version, Some(&info.path)))
+            .expect("matching toolchain");
+
+        assert_eq!(selected.name, "stable-aarch64-apple-darwin");
+    }
+
+    #[test]
+    fn preferred_toolchain_order_uses_nightly_when_it_is_the_only_candidate() {
+        let mut toolchains = vec![toolchain(
+            "nightly-aarch64-apple-darwin",
+            &semver::Version::new(1, 97, 0),
+            "nightly-aarch64-apple-darwin",
+        )];
+
+        sort_toolchains(&mut toolchains);
+        let selected = toolchains
+            .into_iter()
+            .find(|info| RustRequest::Any.matches(&info.version, Some(&info.path)))
+            .expect("matching toolchain");
+
+        assert_eq!(selected.name, "nightly-aarch64-apple-darwin");
     }
 }

@@ -18,7 +18,7 @@ use crate::languages::LanguageImpl;
 use crate::languages::rust::RustRequest;
 use crate::languages::rust::installer::RustInstaller;
 use crate::languages::rust::rustup::Rustup;
-use crate::languages::rust::version::EXTRA_KEY_CHANNEL;
+use crate::languages::rust::version::{Channel, EXTRA_KEY_CHANNEL};
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
@@ -451,8 +451,8 @@ impl LanguageImpl for Rust {
                 info.with_extra(EXTRA_KEY_CHANNEL, &channel.to_string());
             }
             RustRequest::Any => {
-                // Any resolves to "stable" in resolve_version
-                info.with_extra(EXTRA_KEY_CHANNEL, "stable");
+                let channel = rust.version().channel().unwrap_or(Channel::Stable);
+                info.with_extra(EXTRA_KEY_CHANNEL, &channel.to_string());
             }
             _ => {}
         }
