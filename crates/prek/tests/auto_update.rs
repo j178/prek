@@ -651,7 +651,7 @@ fn auto_update_repo_include_tag_is_repo_specific() -> Result<()> {
 }
 
 #[test]
-fn auto_update_global_and_repo_include_tag_filters_intersect() -> Result<()> {
+fn auto_update_repo_include_tag_overrides_global_include_tag() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
 
@@ -682,7 +682,7 @@ fn auto_update_global_and_repo_include_tag_filters_intersect() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     [HOME]/test-repos/repo-include-tag-intersection
-      updating rev `v1.0.0` -> `v1.1.0`
+      updating rev `v1.0.0` -> `v2.1.0`
 
     ----- stderr -----
     ");
@@ -693,7 +693,7 @@ fn auto_update_global_and_repo_include_tag_filters_intersect() -> Result<()> {
             assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
             repos:
               - repo: [HOME]/test-repos/repo-include-tag-intersection
-                rev: v1.1.0
+                rev: v2.1.0
                 hooks:
                   - id: test-hook
             ");

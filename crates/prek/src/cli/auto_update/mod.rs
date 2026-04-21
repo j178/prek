@@ -167,8 +167,10 @@ impl TagFilters {
         repo_exclude_tag: Vec<String>,
     ) -> Result<Self> {
         Ok(Self {
-            global_include: build_tag_patterns(include_tag, "--include-tag")?,
-            global_exclude: build_tag_patterns(exclude_tag, "--exclude-tag")?,
+            global_include: GlobPatterns::new(include_tag)
+                .context("Invalid --include-tag pattern")?,
+            global_exclude: GlobPatterns::new(exclude_tag)
+                .context("Invalid --exclude-tag pattern")?,
             repo_include: build_repo_tag_patterns(repo_include_tag, "--repo-include-tag")?,
             repo_exclude: build_repo_tag_patterns(repo_exclude_tag, "--repo-exclude-tag")?,
         })
@@ -180,13 +182,18 @@ impl TagFilters {
             .collect()
     }
 
+    /// Returns whether a tag passes include filters for a repository.
+    ///
+    /// Repo-specific include filters override global include filters for that repo.
     fn is_included(&self, repo: &str, tag: &str) -> bool {
-        let repo_include = self.repo_include.get(repo);
-        let matches_global = self.global_include.is_empty() || self.global_include.is_match(tag);
-        let matches_repo = repo_include.is_none_or(|set| set.is_empty() || set.is_match(tag));
-        matches_global && matches_repo
+        if let Some(repo_include) = self.repo_include.get(repo) {
+            return repo_include.is_empty() || repo_include.is_match(tag);
+        }
+
+        self.global_include.is_empty() || self.global_include.is_match(tag)
     }
 
+    /// Returns whether a tag matches any global or repo-specific exclude filter.
     fn is_excluded(&self, repo: &str, tag: &str) -> bool {
         self.global_exclude.is_match(tag)
             || self
@@ -194,10 +201,6 @@ impl TagFilters {
                 .get(repo)
                 .is_some_and(|set| set.is_match(tag))
     }
-}
-
-fn build_tag_patterns(patterns: Vec<String>, option: &str) -> Result<GlobPatterns> {
-    GlobPatterns::new(patterns).with_context(|| format!("Invalid {option} pattern"))
 }
 
 fn build_repo_tag_patterns(
@@ -220,7 +223,12 @@ fn build_repo_tag_patterns(
 
     patterns_by_repo
         .into_iter()
-        .map(|(repo, patterns)| Ok((repo, build_tag_patterns(patterns, option)?)))
+        .map(|(repo, patterns)| {
+            Ok((
+                repo,
+                GlobPatterns::new(patterns).with_context(|| format!("Invalid {option} pattern"))?,
+            ))
+        })
         .collect()
 }
 
@@ -392,7 +400,7 @@ mod tests {
     }
 
     #[test]
-    fn tag_filters_apply_global_and_repo_includes_as_intersection() {
+    fn tag_filters_repo_include_overrides_global_include() {
         let filters = TagFilters::new(
             vec!["v1.*".to_string()],
             Vec::new(),
@@ -404,7 +412,7 @@ mod tests {
 
         assert_eq!(
             filtered_tags(&filters, "https://example.com/repo", &tags),
-            vec!["v1.1.0"]
+            vec!["v1.1.0", "v2.1.0"]
         );
         assert_eq!(
             filtered_tags(&filters, "https://example.com/other", &tags),

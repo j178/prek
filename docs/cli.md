@@ -579,8 +579,10 @@ prek auto-update [OPTIONS]
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-auto-update--refresh"><a href="#prek-auto-update--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-auto-update--repo"><a href="#prek-auto-update--repo"><code>--repo</code></a> <i>repo</i></dt><dd><p>Only update this repository. This option may be specified multiple times</p>
 </dd><dt id="prek-auto-update--repo-exclude-tag"><a href="#prek-auto-update--repo-exclude-tag"><code>--repo-exclude-tag</code></a> <i>repo=pattern</i></dt><dd><p>Ignore tags matching this glob pattern for a repository (<code>&lt;repo&gt;=&lt;pattern&gt;</code>). This option may be specified multiple times.</p>
+<p>Repo-specific exclude filters are added to global <code>--exclude-tag</code> filters; matching either filter excludes the tag for that repository.</p>
 <p>For example, use <code>--repo-exclude-tag https://github.com/example/repo=nightly</code> or <code>--repo-exclude-tag https://github.com/example/repo=*-rc*</code> to skip nightly or prerelease tags for one repository.</p>
 </dd><dt id="prek-auto-update--repo-include-tag"><a href="#prek-auto-update--repo-include-tag"><code>--repo-include-tag</code></a> <i>repo=pattern</i></dt><dd><p>Only consider tags matching this glob pattern for a repository (<code>&lt;repo&gt;=&lt;pattern&gt;</code>). This option may be specified multiple times.</p>
+<p>When set for a repository, this overrides any global <code>--include-tag</code> filters for that repository.</p>
 <p>For example, use <code>--repo-include-tag https://github.com/example/repo=v*</code> to only consider version tags for one repository.</p>
 </dd><dt id="prek-auto-update--verbose"><a href="#prek-auto-update--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-auto-update--version"><a href="#prek-auto-update--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
