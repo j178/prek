@@ -3,6 +3,8 @@
 ## How is `prek` pronounced?
 
 Like "wreck", but with a "p" sound instead of the "w" at the beginning.
+The name comes from saying "pre-commit" and stopping right after the hard "k" sound;
+it can also be read as short for "pre-check".
 
 ## I updated `.prekignore`, why didn't discovery change?
 
