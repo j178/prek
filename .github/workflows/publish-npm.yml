@@ -44,7 +44,7 @@ jobs:
       - name: Build npm packages
         run: |
           printf '%s' "$PLAN" > plan-dist-manifest.json
-          python3 ./scripts/build-npm-packages.py --plan plan-dist-manifest.json --artifacts-dir ./npm-artifacts --out-dir ./npm/.output
+          uv run ./scripts/build-npm-packages.py --plan plan-dist-manifest.json --artifacts-dir ./npm-artifacts --out-dir ./npm/.output
       - name: Publish npm packages
         run: |
           prerelease=$(echo "$PLAN" | jq --raw-output '.announcement_is_prerelease')
