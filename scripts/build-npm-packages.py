@@ -70,7 +70,13 @@ class PlatformSpec:
             "cpu": self.cpu,
             "files": [self.binary_name, "README.md", "LICENSE"],
         }
-        if self.libc is not None:
+        # Only emit package-level libc for Linux-only specs. npm checks this
+        # field before installing optional dependencies and only detects libc
+        # when os == "linux"; Android's libc value is undefined. If the shared
+        # Linux/Android arm64 musl package declared "libc": ["musl"], npm would
+        # reject it on Termux before bin/prek.js can select the static musl
+        # binary. Keep libc in platforms.json for the launcher's matching.
+        if self.libc is not None and self.os == ["linux"]:
             package_json["libc"] = [self.libc]
         return package_json
 
@@ -108,11 +114,13 @@ PLATFORMS = (
         libc="glibc",
     ),
     PlatformSpec(
+        # Android/Termux reports process.platform as "android", but the
+        # statically linked aarch64 Linux musl binary runs there.
         rust_target="aarch64-unknown-linux-musl",
         package_name="@j178/prek-linux-arm64-musl",
         archive_file="prek-aarch64-unknown-linux-musl.tar.gz",
         binary_name="prek",
-        os=["linux"],
+        os=["linux", "android"],
         cpu=["arm64"],
         libc="musl",
     ),
