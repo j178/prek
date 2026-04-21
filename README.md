@@ -415,6 +415,7 @@ GitHub stars are current as of April 15, 2026.
 - [cachix/devenv](https://github.com/cachix/devenv/pull/2304) <sub>6,665 stars</sub>
 - [pyodide/pyodide](https://github.com/pyodide/pyodide/pull/6182) <sub>14,527 stars</sub>
 - [prowler-cloud/prowler](https://github.com/prowler-cloud/prowler/pull/10601) <sub>13,592 stars</sub>
+- [getsentry/sentry](https://github.com/getsentry/sentry/pull/110808) <sub>43,639 stars</sub>
 
 <!-- --8<-- [end: why] -->
 
