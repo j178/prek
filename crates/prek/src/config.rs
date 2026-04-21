@@ -36,7 +36,11 @@ impl GlobPatterns {
         Ok(Self { patterns, set })
     }
 
-    fn is_match(&self, value: &str) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.patterns.is_empty()
+    }
+
+    pub(crate) fn is_match(&self, value: &str) -> bool {
         self.set.is_match(Path::new(value))
     }
 }

@@ -529,6 +529,240 @@ fn auto_update_exclude_repo_skips_fetching_repo() -> Result<()> {
 }
 
 #[test]
+fn auto_update_tag_filters_include_then_exclude() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(
+        &context,
+        "tag-filter-repo",
+        &["v1.0.0", "v1.1.0", "v2.0.0", "nightly"],
+    )?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update()
+        .arg("--include-tag").arg("v1.*")
+        .arg("--include-tag").arg("v2.*")
+        .arg("--exclude-tag").arg("v2.*")
+        .arg("--cooldown-days").arg("0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [HOME]/test-repos/tag-filter-repo
+      updating rev `v1.0.0` -> `v1.1.0`
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/tag-filter-repo
+                rev: v1.1.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_repo_include_tag_is_repo_specific() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo1_path = create_local_git_repo(
+        &context,
+        "repo-include-tag-1",
+        &["v1.0.0", "v1.1.0", "v2.0.0"],
+    )?;
+    let repo2_path = create_local_git_repo(
+        &context,
+        "repo-include-tag-2",
+        &["v1.0.0", "v1.1.0", "v2.0.0"],
+    )?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo1_path, repo2_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+    let repo1_filter = format!("{repo1_path}=v1.*");
+
+    cmd_snapshot!(filters.clone(), context.auto_update()
+        .arg("--jobs").arg("1")
+        .arg("--repo-include-tag").arg(repo1_filter)
+        .arg("--cooldown-days").arg("0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [HOME]/test-repos/repo-include-tag-1
+      updating rev `v1.0.0` -> `v1.1.0`
+
+    [HOME]/test-repos/repo-include-tag-2
+      updating rev `v1.0.0` -> `v2.0.0`
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/repo-include-tag-1
+                rev: v1.1.0
+                hooks:
+                  - id: test-hook
+              - repo: [HOME]/test-repos/repo-include-tag-2
+                rev: v2.0.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_global_and_repo_include_tag_filters_intersect() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(
+        &context,
+        "repo-include-tag-intersection",
+        &["v1.0.0", "v1.1.0", "v2.1.0"],
+    )?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+    let repo_filter = format!("{repo_path}=v*.1.0");
+
+    cmd_snapshot!(filters.clone(), context.auto_update()
+        .arg("--include-tag").arg("v1.*")
+        .arg("--repo-include-tag").arg(repo_filter)
+        .arg("--cooldown-days").arg("0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [HOME]/test-repos/repo-include-tag-intersection
+      updating rev `v1.0.0` -> `v1.1.0`
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/repo-include-tag-intersection
+                rev: v1.1.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_repo_exclude_tag_can_leave_repo_unchanged() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo1_path = create_local_git_repo(&context, "repo-exclude-tag-1", &["v1.0.0", "v2.0.0"])?;
+    let repo2_path = create_local_git_repo(&context, "repo-exclude-tag-2", &["v1.0.0", "v2.0.0"])?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo1_path, repo2_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+    let repo1_filter = format!("{repo1_path}=v2.*");
+
+    cmd_snapshot!(filters.clone(), context.auto_update()
+        .arg("--jobs").arg("1")
+        .arg("--include-tag").arg("v2.*")
+        .arg("--repo-exclude-tag").arg(repo1_filter)
+        .arg("--cooldown-days").arg("0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [HOME]/test-repos/repo-exclude-tag-2
+      updating rev `v1.0.0` -> `v2.0.0`
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/repo-exclude-tag-1
+                rev: v1.0.0
+                hooks:
+                  - id: test-hook
+              - repo: [HOME]/test-repos/repo-exclude-tag-2
+                rev: v2.0.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
 fn auto_update_bleeding_edge() -> Result<()> {
     let context = TestContext::new();
     context.init_project();

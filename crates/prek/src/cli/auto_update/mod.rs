@@ -1,7 +1,7 @@
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures::{StreamExt, TryStreamExt};
 use rustc_hash::FxHashMap;
 
@@ -11,6 +11,7 @@ use crate::cli::auto_update::display::{apply_repo_updates, warn_frozen_mismatche
 use crate::cli::auto_update::source::{collect_repo_sources, evaluate_repo_source};
 use crate::cli::reporter::AutoUpdateReporter;
 use crate::cli::run::Selectors;
+use crate::config::GlobPatterns;
 use crate::fs::CWD;
 use crate::printer::Printer;
 use crate::run::CONCURRENCY;
@@ -141,6 +142,7 @@ struct FrozenRef {
 }
 
 /// A tag reference with the metadata needed for cooldown selection and SHA matching.
+#[derive(Clone)]
 struct TagTimestamp {
     /// The tag name without the `refs/tags/` prefix.
     tag: String,
@@ -148,6 +150,78 @@ struct TagTimestamp {
     timestamp: u64,
     /// The peeled commit SHA the tag ultimately points at.
     commit: String,
+}
+
+struct TagFilters {
+    global_include: GlobPatterns,
+    global_exclude: GlobPatterns,
+    repo_include: FxHashMap<String, GlobPatterns>,
+    repo_exclude: FxHashMap<String, GlobPatterns>,
+}
+
+impl TagFilters {
+    fn new(
+        include_tag: Vec<String>,
+        exclude_tag: Vec<String>,
+        repo_include_tag: Vec<String>,
+        repo_exclude_tag: Vec<String>,
+    ) -> Result<Self> {
+        Ok(Self {
+            global_include: build_tag_patterns(include_tag, "--include-tag")?,
+            global_exclude: build_tag_patterns(exclude_tag, "--exclude-tag")?,
+            repo_include: build_repo_tag_patterns(repo_include_tag, "--repo-include-tag")?,
+            repo_exclude: build_repo_tag_patterns(repo_exclude_tag, "--repo-exclude-tag")?,
+        })
+    }
+
+    fn filter<'a>(&self, repo: &str, tags: &'a [TagTimestamp]) -> Vec<&'a TagTimestamp> {
+        tags.iter()
+            .filter(|tag| self.is_included(repo, &tag.tag) && !self.is_excluded(repo, &tag.tag))
+            .collect()
+    }
+
+    fn is_included(&self, repo: &str, tag: &str) -> bool {
+        let repo_include = self.repo_include.get(repo);
+        let matches_global = self.global_include.is_empty() || self.global_include.is_match(tag);
+        let matches_repo = repo_include.is_none_or(|set| set.is_empty() || set.is_match(tag));
+        matches_global && matches_repo
+    }
+
+    fn is_excluded(&self, repo: &str, tag: &str) -> bool {
+        self.global_exclude.is_match(tag)
+            || self
+                .repo_exclude
+                .get(repo)
+                .is_some_and(|set| set.is_match(tag))
+    }
+}
+
+fn build_tag_patterns(patterns: Vec<String>, option: &str) -> Result<GlobPatterns> {
+    GlobPatterns::new(patterns).with_context(|| format!("Invalid {option} pattern"))
+}
+
+fn build_repo_tag_patterns(
+    values: Vec<String>,
+    option: &str,
+) -> Result<FxHashMap<String, GlobPatterns>> {
+    let mut patterns_by_repo: FxHashMap<String, Vec<String>> = FxHashMap::default();
+    for value in values {
+        let (repo, pattern) = value.rsplit_once('=').ok_or_else(|| {
+            anyhow::anyhow!("Invalid {option} value `{value}`: expected `<repo>=<pattern>`")
+        })?;
+        if repo.is_empty() || pattern.is_empty() {
+            anyhow::bail!("Invalid {option} value `{value}`: expected `<repo>=<pattern>`");
+        }
+        patterns_by_repo
+            .entry(repo.to_string())
+            .or_default()
+            .push(pattern.to_string());
+    }
+
+    patterns_by_repo
+        .into_iter()
+        .map(|(repo, patterns)| Ok((repo, build_tag_patterns(patterns, option)?)))
+        .collect()
 }
 
 /// The successful result of evaluating one configured `repo + rev + hook set` target.
@@ -214,6 +288,10 @@ pub(crate) async fn auto_update(
     config: Option<PathBuf>,
     filter_repos: Vec<String>,
     exclude_repos: Vec<String>,
+    include_tag: Vec<String>,
+    exclude_tag: Vec<String>,
+    repo_include_tag: Vec<String>,
+    repo_exclude_tag: Vec<String>,
     verbose: bool,
     bleeding_edge: bool,
     freeze: bool,
@@ -229,6 +307,8 @@ pub(crate) async fn auto_update(
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), true)?;
     let jobs = if jobs == 0 { *CONCURRENCY } else { jobs };
     let reporter = AutoUpdateReporter::new(printer);
+    let tag_filters =
+        TagFilters::new(include_tag, exclude_tag, repo_include_tag, repo_exclude_tag)?;
 
     let repo_sources = collect_repo_sources(&workspace)?;
     let sources = repo_sources.iter().filter(|repo_source| {
@@ -238,8 +318,14 @@ pub(crate) async fn auto_update(
     let outcomes: Vec<RepoUpdate<'_>> = futures::stream::iter(sources)
         .map(async |repo_source| {
             let progress = reporter.on_update_start(repo_source.repo);
-            let result =
-                evaluate_repo_source(repo_source, bleeding_edge, freeze, cooldown_days).await;
+            let result = evaluate_repo_source(
+                repo_source,
+                bleeding_edge,
+                freeze,
+                cooldown_days,
+                &tag_filters,
+            )
+            .await;
             reporter.on_update_complete(progress);
             result
         })
@@ -272,4 +358,101 @@ pub(crate) async fn auto_update(
         return Ok(ExitStatus::Failure);
     }
     Ok(ExitStatus::Success)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tag(name: &str) -> TagTimestamp {
+        TagTimestamp {
+            tag: name.to_string(),
+            timestamp: 0,
+            commit: String::new(),
+        }
+    }
+
+    fn filtered_tags(filters: &TagFilters, repo: &str, tags: &[TagTimestamp]) -> Vec<String> {
+        filters
+            .filter(repo, tags)
+            .into_iter()
+            .map(|tag| tag.tag.clone())
+            .collect()
+    }
+
+    #[test]
+    fn tag_filters_keep_all_tags_without_filters() {
+        let filters = TagFilters::new(Vec::new(), Vec::new(), Vec::new(), Vec::new()).unwrap();
+        let tags = [tag("v1.0.0"), tag("nightly")];
+
+        assert_eq!(
+            filtered_tags(&filters, "https://example.com/repo", &tags),
+            vec!["v1.0.0", "nightly"]
+        );
+    }
+
+    #[test]
+    fn tag_filters_apply_global_and_repo_includes_as_intersection() {
+        let filters = TagFilters::new(
+            vec!["v1.*".to_string()],
+            Vec::new(),
+            vec!["https://example.com/repo=v*.1.0".to_string()],
+            Vec::new(),
+        )
+        .unwrap();
+        let tags = [tag("v1.0.0"), tag("v1.1.0"), tag("v2.1.0")];
+
+        assert_eq!(
+            filtered_tags(&filters, "https://example.com/repo", &tags),
+            vec!["v1.1.0"]
+        );
+        assert_eq!(
+            filtered_tags(&filters, "https://example.com/other", &tags),
+            vec!["v1.0.0", "v1.1.0"]
+        );
+    }
+
+    #[test]
+    fn tag_filters_apply_excludes_after_includes() {
+        let filters = TagFilters::new(
+            vec!["v*".to_string()],
+            vec!["*-rc*".to_string()],
+            Vec::new(),
+            vec!["https://example.com/repo=v2.*".to_string()],
+        )
+        .unwrap();
+        let tags = [
+            tag("v1.0.0"),
+            tag("v2.0.0"),
+            tag("v3.0.0-rc1"),
+            tag("nightly"),
+        ];
+
+        assert_eq!(
+            filtered_tags(&filters, "https://example.com/repo", &tags),
+            vec!["v1.0.0"]
+        );
+        assert_eq!(
+            filtered_tags(&filters, "https://example.com/other", &tags),
+            vec!["v1.0.0", "v2.0.0"]
+        );
+    }
+
+    #[test]
+    fn tag_filters_reject_invalid_repo_filter_values() {
+        let result = TagFilters::new(
+            Vec::new(),
+            Vec::new(),
+            vec!["https://example.com/repo".to_string()],
+            Vec::new(),
+        );
+
+        match result {
+            Ok(_) => panic!("expected invalid repo tag filter to fail"),
+            Err(err) => assert!(
+                err.to_string().contains("expected `<repo>=<pattern>`"),
+                "{err:#}"
+            ),
+        }
+    }
 }

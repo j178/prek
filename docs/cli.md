@@ -564,8 +564,12 @@ prek auto-update [OPTIONS]
 <p>The age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags. A value of <code>0</code> disables this check.</p>
 <p>[default: 0]</p></dd><dt id="prek-auto-update--dry-run"><a href="#prek-auto-update--dry-run"><code>--dry-run</code></a></dt><dd><p>Do not write changes to the config file, only display what would be changed</p>
 </dd><dt id="prek-auto-update--exclude-repo"><a href="#prek-auto-update--exclude-repo"><code>--exclude-repo</code></a> <i>repo</i></dt><dd><p>Do not update this repository. This option may be specified multiple times</p>
+</dd><dt id="prek-auto-update--exclude-tag"><a href="#prek-auto-update--exclude-tag"><code>--exclude-tag</code></a> <i>pattern</i></dt><dd><p>Ignore tags matching this glob pattern. This option may be specified multiple times.</p>
+<p>For example, use <code>--exclude-tag nightly</code>, <code>--exclude-tag '*-alpha*'</code>, <code>--exclude-tag '*-beta*'</code>, or <code>--exclude-tag '*-rc*'</code> to skip nightly or prerelease tags.</p>
 </dd><dt id="prek-auto-update--freeze"><a href="#prek-auto-update--freeze"><code>--freeze</code></a></dt><dd><p>Store &quot;frozen&quot; hashes in <code>rev</code> instead of tag names</p>
 </dd><dt id="prek-auto-update--help"><a href="#prek-auto-update--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="prek-auto-update--include-tag"><a href="#prek-auto-update--include-tag"><code>--include-tag</code></a> <i>pattern</i></dt><dd><p>Only consider tags matching this glob pattern. This option may be specified multiple times.</p>
+<p>For example, use <code>--include-tag 'v*'</code> to only consider version tags and ignore tags such as <code>nightly</code>.</p>
 </dd><dt id="prek-auto-update--jobs"><a href="#prek-auto-update--jobs"><code>--jobs</code></a>, <code>-j</code> <i>jobs</i></dt><dd><p>Number of threads to use</p>
 <p>[default: 0]</p></dd><dt id="prek-auto-update--log-file"><a href="#prek-auto-update--log-file"><code>--log-file</code></a> <i>log-file</i></dt><dd><p>Write trace logs to the specified file. If not specified, trace logs will be written to <code>$PREK_HOME/prek.log</code></p>
 </dd><dt id="prek-auto-update--no-progress"><a href="#prek-auto-update--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
@@ -574,6 +578,10 @@ prek auto-update [OPTIONS]
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which prek will write no output to stdout.</p>
 <p>May also be set with the <code>PREK_QUIET</code> environment variable.</p></dd><dt id="prek-auto-update--refresh"><a href="#prek-auto-update--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 </dd><dt id="prek-auto-update--repo"><a href="#prek-auto-update--repo"><code>--repo</code></a> <i>repo</i></dt><dd><p>Only update this repository. This option may be specified multiple times</p>
+</dd><dt id="prek-auto-update--repo-exclude-tag"><a href="#prek-auto-update--repo-exclude-tag"><code>--repo-exclude-tag</code></a> <i>repo=pattern</i></dt><dd><p>Ignore tags matching this glob pattern for a repository (<code>&lt;repo&gt;=&lt;pattern&gt;</code>). This option may be specified multiple times.</p>
+<p>For example, use <code>--repo-exclude-tag https://github.com/example/repo=nightly</code> or <code>--repo-exclude-tag https://github.com/example/repo=*-rc*</code> to skip nightly or prerelease tags for one repository.</p>
+</dd><dt id="prek-auto-update--repo-include-tag"><a href="#prek-auto-update--repo-include-tag"><code>--repo-include-tag</code></a> <i>repo=pattern</i></dt><dd><p>Only consider tags matching this glob pattern for a repository (<code>&lt;repo&gt;=&lt;pattern&gt;</code>). This option may be specified multiple times.</p>
+<p>For example, use <code>--repo-include-tag https://github.com/example/repo=v*</code> to only consider version tags for one repository.</p>
 </dd><dt id="prek-auto-update--verbose"><a href="#prek-auto-update--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output</p>
 </dd><dt id="prek-auto-update--version"><a href="#prek-auto-update--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the prek version</p>
 </dd></dl>

@@ -12,7 +12,7 @@ use crate::cli::auto_update::repository::{
 };
 use crate::cli::auto_update::{
     CommitPresence, FrozenMismatch, FrozenMismatchAction, FrozenMismatchReason, RepoSource,
-    RepoTarget, RepoUpdate, RepoUsage, ResolvedRepoUpdate, Revision, TagTimestamp,
+    RepoTarget, RepoUpdate, RepoUsage, ResolvedRepoUpdate, Revision, TagFilters, TagTimestamp,
 };
 use crate::config::{Repo, looks_like_sha};
 use crate::fs::Simplified;
@@ -168,6 +168,7 @@ pub(super) async fn evaluate_repo_source<'a>(
     bleeding_edge: bool,
     freeze: bool,
     cooldown_days: u8,
+    tag_filters: &TagFilters,
 ) -> Result<Vec<RepoUpdate<'a>>> {
     let tmp_dir = tempfile::tempdir()?;
     let repo_path = tmp_dir.path();
@@ -200,6 +201,12 @@ pub(super) async fn evaluate_repo_source<'a>(
         }
     };
 
+    let update_tag_timestamps = tag_filters
+        .filter(repo_source.repo, &tag_timestamps)
+        .into_iter()
+        .cloned()
+        .collect::<Vec<_>>();
+
     let mut updates = Vec::with_capacity(repo_source.targets.len());
     for target in &repo_source.targets {
         let result = evaluate_repo_target(
@@ -209,6 +216,7 @@ pub(super) async fn evaluate_repo_source<'a>(
             freeze,
             cooldown_days,
             &tag_timestamps,
+            &update_tag_timestamps,
         )
         .await;
 
@@ -226,6 +234,7 @@ async fn evaluate_repo_target<'a>(
     freeze: bool,
     cooldown_days: u8,
     tag_timestamps: &[TagTimestamp],
+    update_tag_timestamps: &[TagTimestamp],
 ) -> Result<ResolvedRepoUpdate<'a>> {
     let frozen_mismatches = match collect_frozen_mismatches(repo_path, target, tag_timestamps).await
     {
@@ -244,7 +253,7 @@ async fn evaluate_repo_target<'a>(
         target.current_rev,
         bleeding_edge,
         cooldown_days,
-        tag_timestamps,
+        update_tag_timestamps,
     )
     .await?;
 

@@ -715,6 +715,28 @@ pub(crate) struct AutoUpdateArgs {
     /// Do not update this repository. This option may be specified multiple times.
     #[arg(long, value_name = "REPO")]
     pub(crate) exclude_repo: Vec<String>,
+    /// Only consider tags matching this glob pattern. This option may be specified multiple times.
+    ///
+    /// For example, use `--include-tag 'v*'` to only consider version tags and ignore tags such as `nightly`.
+    #[arg(long, value_name = "PATTERN", conflicts_with = "bleeding_edge")]
+    pub(crate) include_tag: Vec<String>,
+    /// Ignore tags matching this glob pattern. This option may be specified multiple times.
+    ///
+    /// For example, use `--exclude-tag nightly`, `--exclude-tag '*-alpha*'`, `--exclude-tag '*-beta*'`, or `--exclude-tag '*-rc*'` to skip nightly or prerelease tags.
+    #[arg(long, value_name = "PATTERN", conflicts_with = "bleeding_edge")]
+    pub(crate) exclude_tag: Vec<String>,
+    /// Only consider tags matching this glob pattern for a repository (`<repo>=<pattern>`).
+    /// This option may be specified multiple times.
+    ///
+    /// For example, use `--repo-include-tag https://github.com/example/repo=v*` to only consider version tags for one repository.
+    #[arg(long, value_name = "REPO=PATTERN", conflicts_with = "bleeding_edge")]
+    pub(crate) repo_include_tag: Vec<String>,
+    /// Ignore tags matching this glob pattern for a repository (`<repo>=<pattern>`).
+    /// This option may be specified multiple times.
+    ///
+    /// For example, use `--repo-exclude-tag https://github.com/example/repo=nightly` or `--repo-exclude-tag https://github.com/example/repo=*-rc*` to skip nightly or prerelease tags for one repository.
+    #[arg(long, value_name = "REPO=PATTERN", conflicts_with = "bleeding_edge")]
+    pub(crate) repo_exclude_tag: Vec<String>,
     /// Do not write changes to the config file, only display what would be changed.
     #[arg(long)]
     pub(crate) dry_run: bool,
