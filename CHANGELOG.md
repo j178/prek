@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.3.10
+
+Released on 2026-04-21.
+
+### Enhancements
+
+- Disallow rev for non-remote repos in schema ([#1964](https://github.com/j178/prek/pull/1964))
+- Hide up-to-date output in non-verbose mode ([#1942](https://github.com/j178/prek/pull/1942))
+- Improve merge conflict marker detection ([#1937](https://github.com/j178/prek/pull/1937))
+- Keep finished hooks visible ([#1967](https://github.com/j178/prek/pull/1967))
+- Preserve frozen comment spacing in auto-update ([#1945](https://github.com/j178/prek/pull/1945))
+- Reimplement `@j178/prek` npm package ([#1973](https://github.com/j178/prek/pull/1973))
+
+### Bug fixes
+
+- Prefer stable Rust toolchains ([#1974](https://github.com/j178/prek/pull/1974))
+
+### Documentation
+
+- Add `SKILL.md` for prek ([#1950](https://github.com/j178/prek/pull/1950))
+- Document `gh skill install j178/prek prek` to install prek skill for agents ([#1951](https://github.com/j178/prek/pull/1951))
+- Improve compatibility and migration docs ([#1940](https://github.com/j178/prek/pull/1940))
+
+### Other changes
+
+- Sync latest identify tags ([#1947](https://github.com/j178/prek/pull/1947))
+
+### Contributors
+
+- @github-actions
+- @renovate
+- @j178
+
 ## 0.3.9
 
 Released on 2026-04-13.

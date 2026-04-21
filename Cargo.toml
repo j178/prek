@@ -3,7 +3,7 @@ members = ["crates/*"]
 resolver = "3"
 
 [workspace.package]
-version = "0.3.9"
+version = "0.3.10"
 edition = "2024"
 rust-version = "1.93.0"
 repository = "https://github.com/j178/prek"
@@ -11,9 +11,9 @@ homepage = "https://prek.j178.dev/"
 license = "MIT"
 
 [workspace.dependencies]
-prek-consts = { path = "crates/prek-consts", version = "0.3.9" }
-prek-identify = { path = "crates/prek-identify", version = "0.3.9" }
-prek-pty = { path = "crates/prek-pty", version = "0.3.9" }
+prek-consts = { path = "crates/prek-consts", version = "0.3.10" }
+prek-identify = { path = "crates/prek-identify", version = "0.3.10" }
+prek-pty = { path = "crates/prek-pty", version = "0.3.10" }
 
 aho-corasick = { version = "1.1.4" }
 annotate-snippets = { version = "0.12.13" }

@@ -2109,7 +2109,7 @@ dependencies = [
 
 [[package]]
 name = "prek"
-version = "0.3.9"
+version = "0.3.10"
 dependencies = [
  "aho-corasick",
  "annotate-snippets",
@@ -2192,14 +2192,14 @@ dependencies = [
 
 [[package]]
 name = "prek-consts"
-version = "0.3.9"
+version = "0.3.10"
 dependencies = [
  "tracing",
 ]
 
 [[package]]
 name = "prek-identify"
-version = "0.3.9"
+version = "0.3.10"
 dependencies = [
  "anyhow",
  "fs-err",
@@ -2215,7 +2215,7 @@ dependencies = [
 
 [[package]]
 name = "prek-pty"
-version = "0.3.9"
+version = "0.3.10"
 dependencies = [
  "rustix",
  "tokio",
