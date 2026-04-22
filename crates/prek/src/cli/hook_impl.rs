@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::ops::RangeInclusive;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use anstream::eprintln;
@@ -30,14 +30,14 @@ pub(crate) async fn hook_impl(
     includes: Vec<String>,
     skips: Vec<String>,
     hook_type: HookType,
-    hook_dir: PathBuf,
+    hook_dir: Option<PathBuf>,
     skip_on_missing_config: bool,
     script_version: Option<usize>,
     args: Vec<OsString>,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let stdin = read_hook_stdin(hook_type).await?;
-    let legacy_code = run_legacy(hook_type, &hook_dir, &args, &stdin).await?;
+    let legacy_code = run_legacy(hook_type, hook_dir.as_deref(), &args, &stdin).await?;
 
     if script_version != Some(cli::install::CUR_SCRIPT_VERSION) {
         warn_user!(
@@ -160,7 +160,7 @@ async fn read_hook_stdin(hook_type: HookType) -> Result<Vec<u8>> {
 
 async fn run_legacy(
     hook_type: HookType,
-    hook_dir: &std::path::Path,
+    hook_dir: Option<&Path>,
     args: &[OsString],
     stdin: &[u8],
 ) -> Result<u8> {
@@ -171,6 +171,12 @@ async fn run_legacy(
         );
     }
 
+    // `prek hook-impl` without `--hook-dir` is likely invoked from Git 2.54+
+    // config-based hooks, where there is no hook script directory to inspect.
+    // Skip legacy hooks in that case.
+    let Some(hook_dir) = hook_dir else {
+        return Ok(0);
+    };
     let legacy_hook = hook_dir.join(format!("{hook_type}.legacy"));
     let metadata = match fs_err::tokio::metadata(&legacy_hook).await {
         Ok(metadata) => metadata,

@@ -800,7 +800,7 @@ pub(crate) struct HookImplArgs {
     #[arg(long)]
     pub(crate) hook_type: HookType,
     #[arg(long)]
-    pub(crate) hook_dir: PathBuf,
+    pub(crate) hook_dir: Option<PathBuf>,
     #[arg(long)]
     pub(crate) skip_on_missing_config: bool,
     /// The prek version that installs the hook.

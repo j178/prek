@@ -63,6 +63,52 @@ fn hook_impl() {
 }
 
 #[test]
+fn hook_impl_allows_missing_hook_dir() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_pre_commit_config(indoc! { r#"
+        repos:
+        - repo: local
+          hooks:
+           - id: success
+             name: success
+             language: system
+             entry: echo "hook ran successfully"
+             always_run: true
+    "#});
+
+    let legacy_hook = context.work_dir().child(".git/hooks/pre-commit.legacy");
+    legacy_hook.write_str(indoc::indoc! {r#"
+        #!/bin/sh
+        python3 -c 'print("legacy pre-commit ran")'
+        exit 1
+    "#})?;
+    #[cfg(unix)]
+    set_executable(legacy_hook.path())?;
+
+    // Git 2.54+ config-based hooks can invoke `hook-impl` without
+    // `--hook-dir`; without a hook script directory, legacy hooks are skipped.
+    let mut hook_impl = context.command();
+    hook_impl
+        .arg("hook-impl")
+        .arg("--hook-type")
+        .arg("pre-commit")
+        .arg("--script-version")
+        .arg("4");
+
+    cmd_snapshot!(context.filters(), hook_impl, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    success..................................................................Passed
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn hook_impl_pre_push() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
