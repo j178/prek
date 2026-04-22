@@ -99,6 +99,13 @@
       // Pin GitHub Actions to immutable SHAs
       pinDigests: true
     },
+    // rui314/setup-mold publishes tags, but not GitHub releases.
+    {
+      matchManagers: ['github-actions'],
+      matchDepTypes: ['action'],
+      matchDepNames: ['rui314/setup-mold'],
+      overrideDatasource: 'github-tags',
+    },
     {
       groupName: 'pre-commit',
       matchManagers: ['pre-commit'],
