@@ -39,10 +39,11 @@ pub(crate) async fn hook_impl(
     let stdin = read_hook_stdin(hook_type).await?;
     let legacy_code = run_legacy(hook_type, hook_dir.as_deref(), &args, &stdin).await?;
 
-    if script_version != Some(cli::install::CUR_SCRIPT_VERSION) {
+    if let Some(script_version) = script_version
+        && script_version != cli::install::CUR_SCRIPT_VERSION
+    {
         warn_user!(
-            "The installed Git shim `{hook_type}` is outdated (version: {:?}, expected: {}). Please reinstall the Git shims with `prek install`.",
-            script_version.unwrap_or(1),
+            "The installed Git shim `{hook_type}` is outdated (version: {script_version}, expected: {}). Please reinstall the Git shims with `prek install`.",
             cli::install::CUR_SCRIPT_VERSION
         );
     }
