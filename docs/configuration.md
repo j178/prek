@@ -918,11 +918,16 @@ Example:
 
     `env` is a `prek` extension and may not be recognized by upstream `pre-commit`.
 
-Extra environment variables for the hook process.
+Extra runtime environment variables for the hook process.
 
 - Type: map of string to string
 
 Values override the existing process environment (including variables such as `PATH`).
+They are applied when the hook runs, not when `prek` installs or prepares the hook environment.
+
+For remote hooks, `env` may also be set by the hook author in
+`.pre-commit-hooks.yaml`. Values from the project configuration are merged with
+manifest values and override duplicate keys.
 
 For `docker` / `docker_image` hooks, these variables are passed into the container rather than being applied to the container runtime command.
 

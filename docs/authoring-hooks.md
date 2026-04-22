@@ -6,21 +6,58 @@ If you only need to configure hooks in your own project, see [Configuration](con
 ## Manifest file: `.pre-commit-hooks.yaml`
 
 Hook repositories must include a `.pre-commit-hooks.yaml` file at the repo root.
-The manifest is a YAML list of hook definitions. Each hook entry must include:
-
-- `id`: stable identifier used in end-user configs
-- `name`: human-friendly label shown in output
-- `entry`: command to execute
-- `language`: execution environment (for example `python`, `node`, `system`)
+There is no separate `prek` manifest format; `prek` reads the same
+`.pre-commit-hooks.yaml` manifest defined by upstream `pre-commit`. This keeps
+hook repositories compatible with the broader pre-commit ecosystem.
 
 Hooks should exit non-zero on failure (or modify files and exit non-zero for fixers).
 
-Common optional fields include `args`, `files`, `exclude`, `types`, `types_or`,
-`stages`, `pass_filenames`, `description`, `additional_dependencies`, and
-`require_serial`.
+The manifest is a YAML list of hook definitions. `prek` supports these fields in
+each manifest hook:
 
-`prek` follows the upstream pre-commit manifest format. For the full field list
-and semantics, see: [https://pre-commit.com/#new-hooks](https://pre-commit.com/#new-hooks).
+| Field | Required | `prek`-only | Type | Description |
+| -- | -- | -- | -- | -- |
+| `id` | Yes | No | string | Stable identifier used in end-user configs. |
+| `name` | Yes | No | string | Human-friendly label shown in output. |
+| `entry` | Yes | No | string | Command to execute. |
+| `language` | Yes | No | string | Execution environment, for example `python`, `node`, or `system`. |
+| `alias` | No | No | string | Alternate identifier accepted by `prek run`. |
+| `files` | No | No | regex string | Include only matching files. |
+| `exclude` | No | No | regex string | Exclude matching files. |
+| `types` | No | No | list of strings | Require all listed file type tags. |
+| `types_or` | No | No | list of strings | Require at least one listed file type tag. |
+| `exclude_types` | No | No | list of strings | Exclude files with any listed file type tag. |
+| `additional_dependencies` | No | No | list of strings | Extra dependencies installed into managed hook environments. |
+| `args` | No | No | list of strings | Extra arguments appended to `entry` before filenames. |
+| `env` | No | Yes | map of strings | Runtime environment variables for the hook process. |
+| `always_run` | No | No | boolean | Run even when no files match. |
+| `fail_fast` | No | No | boolean | Stop the run immediately if this hook fails. |
+| `pass_filenames` | No | No | boolean or positive integer | Control whether, or how many, matching filenames are passed. |
+| `description` | No | No | string | Free-form metadata shown in listings. |
+| `language_version` | No | No | string | Language/toolchain version request. |
+| `log_file` | No | No | string path | Write hook output to a file when the hook fails or is verbose. |
+| `require_serial` | No | No | boolean | Avoid concurrent invocations of this hook. |
+| `stages` | No | No | list of stage names | Git hook stages where this hook is eligible to run. |
+| `verbose` | No | No | boolean | Print output even when the hook succeeds. |
+| `minimum_prek_version` | No | Yes | version string | Minimum `prek` version required for this hook. |
+
+For fields shared with upstream `pre-commit`, `prek` follows the upstream
+manifest semantics. For the upstream reference, see:
+[https://pre-commit.com/#new-hooks](https://pre-commit.com/#new-hooks).
+
+!!! note "`prek`-only manifest fields"
+
+    `prek`-only fields are accepted by `prek`, but upstream `pre-commit` will not
+    recognize them.
+
+    End-user configuration may also set [`env`](configuration.md#prek-only-env).
+    When both the manifest and end-user config define `env`, the maps are merged
+    and end-user values override duplicate keys.
+
+!!! note "Manifest fields only"
+
+    Project configuration-only fields, such as `priority`, are not manifest hook
+    fields.
 
 Example:
 
