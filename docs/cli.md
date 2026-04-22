@@ -565,7 +565,7 @@ prek auto-update [OPTIONS]
 <p>[default: 0]</p></dd><dt id="prek-auto-update--dry-run"><a href="#prek-auto-update--dry-run"><code>--dry-run</code></a></dt><dd><p>Do not write changes to the config file, only display what would be changed</p>
 </dd><dt id="prek-auto-update--exclude-repo"><a href="#prek-auto-update--exclude-repo"><code>--exclude-repo</code></a> <i>repo</i></dt><dd><p>Do not update this repository. This option may be specified multiple times</p>
 </dd><dt id="prek-auto-update--exclude-tag"><a href="#prek-auto-update--exclude-tag"><code>--exclude-tag</code></a> <i>pattern</i></dt><dd><p>Ignore tags matching this glob pattern. This option may be specified multiple times.</p>
-<p>For example, use <code>--exclude-tag nightly</code>, <code>--exclude-tag '*-alpha*'</code>, <code>--exclude-tag '*-beta*'</code>, or <code>--exclude-tag '*-rc*'</code> to skip nightly or prerelease tags.</p>
+<p>For example, use <code>--exclude-tag nightly</code> to skip a moving tag, or <code>--exclude-tag '*-{alpha,beta,rc}*'</code> to skip common prerelease tags.</p>
 </dd><dt id="prek-auto-update--freeze"><a href="#prek-auto-update--freeze"><code>--freeze</code></a></dt><dd><p>Store &quot;frozen&quot; hashes in <code>rev</code> instead of tag names</p>
 </dd><dt id="prek-auto-update--help"><a href="#prek-auto-update--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-auto-update--include-tag"><a href="#prek-auto-update--include-tag"><code>--include-tag</code></a> <i>pattern</i></dt><dd><p>Only consider tags matching this glob pattern. This option may be specified multiple times.</p>

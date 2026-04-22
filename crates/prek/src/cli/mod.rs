@@ -722,7 +722,8 @@ pub(crate) struct AutoUpdateArgs {
     pub(crate) include_tag: Vec<String>,
     /// Ignore tags matching this glob pattern. This option may be specified multiple times.
     ///
-    /// For example, use `--exclude-tag nightly`, `--exclude-tag '*-alpha*'`, `--exclude-tag '*-beta*'`, or `--exclude-tag '*-rc*'` to skip nightly or prerelease tags.
+    /// For example, use `--exclude-tag nightly` to skip a moving tag, or
+    /// `--exclude-tag '*-{alpha,beta,rc}*'` to skip common prerelease tags.
     #[arg(long, value_name = "PATTERN", conflicts_with = "bleeding_edge")]
     pub(crate) exclude_tag: Vec<String>,
     /// Only consider tags matching this glob pattern for a repository (`<repo>=<pattern>`).

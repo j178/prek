@@ -309,14 +309,14 @@ pub(crate) async fn auto_update(
     cooldown_days: u8,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let tag_filters =
+        TagFilters::new(include_tag, exclude_tag, repo_include_tag, repo_exclude_tag)?;
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     // TODO: support selectors?
     let selectors = Selectors::default();
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), true)?;
     let jobs = if jobs == 0 { *CONCURRENCY } else { jobs };
     let reporter = AutoUpdateReporter::new(printer);
-    let tag_filters =
-        TagFilters::new(include_tag, exclude_tag, repo_include_tag, repo_exclude_tag)?;
 
     let repo_sources = collect_repo_sources(&workspace)?;
     let sources = repo_sources.iter().filter(|repo_source| {
