@@ -187,7 +187,6 @@ fn write_display_events(
 }
 
 /// Applies evaluated repo outcomes, recording config changes and printing stdout/stderr output.
-#[expect(clippy::mutable_key_type)]
 pub(super) fn apply_repo_updates<'a>(
     updates: Vec<RepoUpdate<'a>>,
     verbose: bool,
@@ -342,7 +341,6 @@ pub(super) fn apply_repo_updates<'a>(
     })
 }
 
-#[expect(clippy::mutable_key_type)]
 fn record_project_revision<'a>(
     project_updates: &mut ProjectUpdates<'a>,
     project: &'a crate::workspace::Project,
@@ -351,7 +349,7 @@ fn record_project_revision<'a>(
     revision: Revision,
 ) {
     let revisions = project_updates
-        .entry(project)
+        .entry(project.into())
         .or_insert_with(|| vec![None; remote_size]);
     revisions[remote_index] = Some(revision);
 }

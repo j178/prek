@@ -248,8 +248,27 @@ struct RepoUpdate<'a> {
     result: Result<ResolvedRepoUpdate<'a>>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct ProjectUpdateKey<'a> {
+    config_file: &'a Path,
+}
+
+impl<'a> ProjectUpdateKey<'a> {
+    fn config_file(self) -> &'a Path {
+        self.config_file
+    }
+}
+
+impl<'a> From<&'a Project> for ProjectUpdateKey<'a> {
+    fn from(project: &'a Project) -> Self {
+        Self {
+            config_file: project.config_file(),
+        }
+    }
+}
+
 /// Pending config mutations grouped by project config file.
-type ProjectUpdates<'a> = FxHashMap<&'a Project, Vec<Option<Revision>>>;
+type ProjectUpdates<'a> = FxHashMap<ProjectUpdateKey<'a>, Vec<Option<Revision>>>;
 
 struct ApplyRepoUpdatesResult {
     failure: bool,
@@ -349,7 +368,6 @@ pub(crate) async fn auto_update(
     warn_frozen_mismatches(&outcomes, printer)?;
 
     // Group results by project config file
-    #[expect(clippy::mutable_key_type)]
     let mut project_updates: ProjectUpdates<'_> = FxHashMap::default();
     let apply_result =
         apply_repo_updates(outcomes, verbose, dry_run, printer, &mut project_updates)?;
