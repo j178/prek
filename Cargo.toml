@@ -76,6 +76,7 @@ reqwest = { version = "0.13.2", default-features = false, features = [
 rustc-hash = { version = "2.1.1" }
 rustix = { version = "1.0.8", features = ["pty", "process", "fs", "termios"] }
 same-file = { version = "1.0.6" }
+seahash = { version = "4.1.0" }
 semver = { version = "1.0.24", features = ["serde"] }
 serde = { version = "1.0.210", features = ["derive"] }
 serde_json = { version = "1.0.132", features = [

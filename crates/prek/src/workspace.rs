@@ -270,54 +270,57 @@ impl Project {
     }
 
     /// Initialize remote repositories for the project.
-    #[allow(clippy::mutable_key_type)]
     async fn init_repos(
         &mut self,
         store: &Store,
         reporter: Option<&dyn HookInitReporter>,
     ) -> Result<(), Error> {
-        let mut seen = FxHashSet::default();
+        let repos = {
+            let mut seen = FxHashSet::default();
 
-        // Prepare remote repos in parallel.
-        let remotes_iter = self.config.repos.iter().filter_map(|repo| match repo {
-            // Deduplicate remote repos.
-            config::Repo::Remote(repo) if seen.insert(repo) => Some(repo),
-            _ => None,
-        });
-        let cloned_repos = store.clone_repos(remotes_iter, reporter).await?;
+            // Prepare remote repos in parallel.
+            let remotes_iter = self.config.repos.iter().filter_map(|repo| match repo {
+                // Deduplicate remote repos.
+                config::Repo::Remote(repo) if seen.insert(repo.key()) => Some(repo),
+                _ => None,
+            });
+            let cloned_repos = store.clone_repos(remotes_iter, reporter).await?;
+            let mut remote_repos = FxHashMap::default();
+            for (key, path) in cloned_repos {
+                let repo = Arc::new(Repo::remote(
+                    key.repo().to_string(),
+                    key.rev().to_string(),
+                    path,
+                )?);
+                remote_repos.insert(key, repo);
+            }
 
-        let mut remote_repos = FxHashMap::default();
-        for (repo_config, path) in cloned_repos {
-            let repo = Arc::new(Repo::remote(
-                repo_config.repo.clone(),
-                repo_config.rev.clone(),
-                path,
-            )?);
-            remote_repos.insert(repo_config, repo);
-        }
+            let mut repos = Vec::with_capacity(self.config.repos.len());
 
-        let mut repos = Vec::with_capacity(self.config.repos.len());
-
-        for repo in &self.config.repos {
-            match repo {
-                config::Repo::Remote(repo) => {
-                    let repo = remote_repos.get(repo).expect("repo not found");
-                    repos.push(repo.clone());
-                }
-                config::Repo::Local(repo) => {
-                    let repo = Repo::local(repo.hooks.clone());
-                    repos.push(Arc::new(repo));
-                }
-                config::Repo::Meta(repo) => {
-                    let repo = Repo::meta(repo.hooks.clone());
-                    repos.push(Arc::new(repo));
-                }
-                config::Repo::Builtin(repo) => {
-                    let repo = Repo::builtin(repo.hooks.clone());
-                    repos.push(Arc::new(repo));
+            for repo in &self.config.repos {
+                match repo {
+                    config::Repo::Remote(repo) => {
+                        let key = repo.key();
+                        let repo = remote_repos.get(&key).expect("repo not found");
+                        repos.push(repo.clone());
+                    }
+                    config::Repo::Local(repo) => {
+                        let repo = Repo::local(repo.hooks.clone());
+                        repos.push(Arc::new(repo));
+                    }
+                    config::Repo::Meta(repo) => {
+                        let repo = Repo::meta(repo.hooks.clone());
+                        repos.push(Arc::new(repo));
+                    }
+                    config::Repo::Builtin(repo) => {
+                        let repo = Repo::builtin(repo.hooks.clone());
+                        repos.push(Arc::new(repo));
+                    }
                 }
             }
-        }
+
+            repos
+        };
 
         self.repos = repos;
 
@@ -892,8 +895,7 @@ impl Workspace {
         store: &Store,
         reporter: Option<&dyn HookInitReporter>,
     ) -> Result<(), Error> {
-        #[allow(clippy::mutable_key_type)]
-        let remote_repos = {
+        let project_repos = {
             let mut seen = FxHashSet::default();
 
             // Prepare remote repos in parallel.
@@ -903,49 +905,55 @@ impl Workspace {
                 .flat_map(|proj| proj.config.repos.iter())
                 .filter_map(|repo| match repo {
                     // Deduplicate remote repos.
-                    config::Repo::Remote(repo) if seen.insert(repo) => Some(repo),
+                    config::Repo::Remote(repo) if seen.insert(repo.key()) => Some(repo),
                     _ => None,
                 });
 
             let cloned_repos = store.clone_repos(remotes_iter, reporter).await?;
 
             let mut remote_repos = FxHashMap::default();
-            for (repo_config, path) in cloned_repos {
+            for (key, path) in cloned_repos {
                 let repo = Arc::new(Repo::remote(
-                    repo_config.repo.clone(),
-                    repo_config.rev.clone(),
+                    key.repo().to_string(),
+                    key.rev().to_string(),
                     path,
                 )?);
-                remote_repos.insert(repo_config, repo);
+                remote_repos.insert(key, repo);
             }
 
-            remote_repos
+            self.projects
+                .iter()
+                .map(|project| {
+                    let mut repos = Vec::with_capacity(project.config.repos.len());
+
+                    for repo in &project.config.repos {
+                        match repo {
+                            config::Repo::Remote(repo) => {
+                                let key = repo.key();
+                                let repo = remote_repos.get(&key).expect("repo not found");
+                                repos.push(repo.clone());
+                            }
+                            config::Repo::Local(repo) => {
+                                let repo = Repo::local(repo.hooks.clone());
+                                repos.push(Arc::new(repo));
+                            }
+                            config::Repo::Meta(repo) => {
+                                let repo = Repo::meta(repo.hooks.clone());
+                                repos.push(Arc::new(repo));
+                            }
+                            config::Repo::Builtin(repo) => {
+                                let repo = Repo::builtin(repo.hooks.clone());
+                                repos.push(Arc::new(repo));
+                            }
+                        }
+                    }
+
+                    Ok(repos)
+                })
+                .collect::<Result<Vec<_>, Error>>()?
         };
 
-        for project in &mut self.projects {
-            let mut repos = Vec::with_capacity(project.config.repos.len());
-
-            for repo in &project.config.repos {
-                match repo {
-                    config::Repo::Remote(repo) => {
-                        let repo = remote_repos.get(repo).expect("repo not found");
-                        repos.push(repo.clone());
-                    }
-                    config::Repo::Local(repo) => {
-                        let repo = Repo::local(repo.hooks.clone());
-                        repos.push(Arc::new(repo));
-                    }
-                    config::Repo::Meta(repo) => {
-                        let repo = Repo::meta(repo.hooks.clone());
-                        repos.push(Arc::new(repo));
-                    }
-                    config::Repo::Builtin(repo) => {
-                        let repo = Repo::builtin(repo.hooks.clone());
-                        repos.push(Arc::new(repo));
-                    }
-                }
-            }
-
+        for (project, repos) in zip_eq(self.projects.iter_mut(), project_repos) {
             Arc::get_mut(project).unwrap().repos = repos;
         }
 

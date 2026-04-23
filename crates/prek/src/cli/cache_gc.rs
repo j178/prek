@@ -192,8 +192,14 @@ pub(crate) async fn cache_gc(
         // We do this via config parsing (no clone), so GC won't keep repos for missing configs.
         for repo in &config.repos {
             if let ConfigRepo::Remote(remote) = repo {
-                let key = Store::repo_key(remote);
-                used_repo_keys.insert(key);
+                let key = store
+                    .repo_path(remote)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .map(str::to_string);
+                if let Some(key) = key {
+                    used_repo_keys.insert(key);
+                }
             }
         }
     }

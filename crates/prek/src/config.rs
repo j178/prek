@@ -857,6 +857,22 @@ pub(crate) struct RemoteRepo {
     _unused_keys: BTreeMap<String, serde_json::Value>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct RemoteRepoKey<'a> {
+    repo: &'a str,
+    rev: &'a str,
+}
+
+impl<'a> RemoteRepoKey<'a> {
+    pub(crate) fn repo(self) -> &'a str {
+        self.repo
+    }
+
+    pub(crate) fn rev(self) -> &'a str {
+        self.rev
+    }
+}
+
 impl RemoteRepo {
     pub fn new(repo: String, rev: String, hooks: Vec<RemoteHook>) -> Self {
         Self {
@@ -866,20 +882,12 @@ impl RemoteRepo {
             _unused_keys: BTreeMap::new(),
         }
     }
-}
 
-impl PartialEq for RemoteRepo {
-    fn eq(&self, other: &Self) -> bool {
-        self.repo == other.repo && self.rev == other.rev
-    }
-}
-
-impl Eq for RemoteRepo {}
-
-impl std::hash::Hash for RemoteRepo {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.repo.hash(state);
-        self.rev.hash(state);
+    pub fn key(&self) -> RemoteRepoKey<'_> {
+        RemoteRepoKey {
+            repo: &self.repo,
+            rev: &self.rev,
+        }
     }
 }
 
