@@ -107,12 +107,12 @@ pub(crate) async fn check_hooks_apply(
         let path = relative_path.join(filename);
         let mut project = Project::from_config_file(path.into(), None)?;
         project.with_relative_path(relative_path.to_path_buf());
+        let filter = FileFilter::for_project(input.iter(), &project, None);
 
         let project_hooks = project
             .init_hooks(store, None)
             .await
             .context("Failed to init hooks")?;
-        let filter = FileFilter::for_project(input.iter(), &project, None);
 
         for project_hook in project_hooks {
             if project_hook.always_run || matches!(project_hook.language, Language::Fail) {

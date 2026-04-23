@@ -256,13 +256,12 @@ impl Project {
 
     /// Initialize the project, cloning the repository and preparing hooks.
     pub(crate) async fn init_hooks(
-        &mut self,
+        mut self,
         store: &Store,
         reporter: Option<&dyn HookInitReporter>,
     ) -> Result<Vec<Hook>, Error> {
         self.init_repos(store, reporter).await?;
-        // TODO: avoid clone
-        let project = Arc::new(self.clone());
+        let project = Arc::new(self);
 
         let hooks = project.internal_init_hooks().await?;
 
