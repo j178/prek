@@ -8,7 +8,7 @@ github.setup        j178 prek 0.3.5 v
 github.tarball_from archive
 revision            0
 
-description         A Git hook manager written in Rust, designed as a drop-in alternative to pre-commit.
+description         A fast Git hook manager written in Rust, designed as a drop-in alternative to pre-commit, reimagined.
 long_description    {*}${description}
 
 categories          devel

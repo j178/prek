@@ -304,8 +304,8 @@ def create_wrapper_package(
         "name": "@j178/prek",
         "version": version,
         "description": (
-            "A Git hook manager written in Rust, designed as a drop-in alternative "
-            "to pre-commit."
+            "A fast Git hook manager written in Rust, designed as a drop-in "
+            "alternative to pre-commit, reimagined."
         ),
         "license": "MIT",
         "repository": {

@@ -129,7 +129,7 @@ const STYLES: Styles = Styles::styled()
 #[command(
     name = "prek",
     long_version = crate::version::version(),
-    about = "A Git hook manager written in Rust, designed as a drop-in alternative to pre-commit."
+    about = "A fast Git hook manager written in Rust, designed as a drop-in alternative to pre-commit, reimagined."
 )]
 #[command(
     propagate_version = true,
