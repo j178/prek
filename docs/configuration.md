@@ -877,15 +877,19 @@ When `shell` is omitted, `prek` preserves the default no-shell behavior: it pars
 
 When `shell` is set, `entry` is treated as source for that shell. `prek` writes the source to a temporary script file, runs it with the selected shell adapter, and passes hook `args` followed by matching filenames as script arguments.
 
-`shell` is rejected for language backends that do not run `entry` through the shell-aware entry resolver, and for `repo: meta` and `repo: builtin` hooks.
+!!! note "Unsupported languages"
 
-| Language | Why `shell` is unsupported |
-| -- | -- |
-| `docker`, `docker_image` | `entry` participates in container image or entrypoint selection instead of direct host process execution. |
-| `fail` | `entry` is the failure message body. |
-| `julia`, `rust` | `entry` participates in install/runtime package resolution and is split before execution. |
-| `pygrep` | `entry` is the regex pattern. |
-| `conda`, `coursier`, `dart`, `perl`, `r` | The language backend is not implemented yet. |
+    `shell` is rejected for language backends that do not run `entry` through
+    the shell-aware entry resolver, and for `repo: meta` and `repo: builtin`
+    hooks.
+
+    | Language | Why `shell` is unsupported |
+    | -- | -- |
+    | `docker`, `docker_image` | `entry` participates in container image or entrypoint selection instead of direct host process execution. |
+    | `fail` | `entry` is the failure message body. |
+    | `julia`, `rust` | `entry` participates in install/runtime package resolution and is split before execution. |
+    | `pygrep` | `entry` is the regex pattern. |
+    | `conda`, `coursier`, `dart`, `perl`, `r` | The language backend is not implemented yet. |
 
 | `shell` | Adapter command | Script arguments |
 | -- | -- | -- |

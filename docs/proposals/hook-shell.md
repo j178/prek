@@ -149,20 +149,22 @@ The new hook entry abstraction should provide a single way to build the concrete
 argv for a batch, so managed and unmanaged language backends can opt into shell
 execution consistently.
 
-Backends that still treat `entry` as language-specific data or parse it outside
-the shell-aware resolver should reject `shell` during validation instead of
-silently ignoring it:
+!!! note "Unsupported languages"
 
-| Language | Why `shell` is unsupported |
-| -- | -- |
-| `docker`, `docker_image` | `entry` participates in container image or entrypoint selection instead of direct host process execution. |
-| `fail` | `entry` is the failure message body. |
-| `julia`, `rust` | `entry` participates in install/runtime package resolution and is split before execution. |
-| `pygrep` | `entry` is the regex pattern. |
-| `conda`, `coursier`, `dart`, `perl`, `r` | The language backend is not implemented yet. |
+    Backends that still treat `entry` as language-specific data or parse it
+    outside the shell-aware resolver should reject `shell` during validation
+    instead of silently ignoring it.
 
-Predefined `repo: meta` and `repo: builtin` hooks should reject `shell` as well,
-because their entries are owned by prek.
+    | Language | Why `shell` is unsupported |
+    | -- | -- |
+    | `docker`, `docker_image` | `entry` participates in container image or entrypoint selection instead of direct host process execution. |
+    | `fail` | `entry` is the failure message body. |
+    | `julia`, `rust` | `entry` participates in install/runtime package resolution and is split before execution. |
+    | `pygrep` | `entry` is the regex pattern. |
+    | `conda`, `coursier`, `dart`, `perl`, `r` | The language backend is not implemented yet. |
+
+    Predefined `repo: meta` and `repo: builtin` hooks should reject `shell` as
+    well, because their entries are owned by prek.
 
 `language: script` needs one special rule: when `shell` is unset, the first
 `entry` token remains a repository-relative script path, matching existing
