@@ -129,6 +129,24 @@ impl LanguageImpl for Unimplemented {
 // system: only system version, no env, no additional deps
 
 impl Language {
+    pub(crate) fn supports_shell(self) -> bool {
+        matches!(
+            self,
+            Self::Bun
+                | Self::Deno
+                | Self::Dotnet
+                | Self::Golang
+                | Self::Haskell
+                | Self::Lua
+                | Self::Node
+                | Self::Python
+                | Self::Ruby
+                | Self::Script
+                | Self::Swift
+                | Self::System
+        )
+    }
+
     pub fn supported(lang: Language) -> bool {
         matches!(
             lang,

@@ -266,6 +266,7 @@ impl HookBuilder {
         let HookOptions {
             language_version,
             additional_dependencies,
+            shell,
             ..
         } = &self.hook_spec.options;
 
@@ -305,6 +306,37 @@ impl HookBuilder {
                     hook: self.hook_spec.id.clone(),
                     error: anyhow::anyhow!(
                         "Hook specified `language_version: {language_version}` but the language `{language}` does not support toolchain installation for now",
+                    ),
+                });
+            }
+        }
+
+        if shell.is_some() {
+            match self.repo.as_ref() {
+                Repo::Meta { .. } => {
+                    return Err(Error::Hook {
+                        hook: self.hook_spec.id.clone(),
+                        error: anyhow::anyhow!(
+                            "Hook specified `shell` but meta hooks do not support shell execution",
+                        ),
+                    });
+                }
+                Repo::Builtin { .. } => {
+                    return Err(Error::Hook {
+                        hook: self.hook_spec.id.clone(),
+                        error: anyhow::anyhow!(
+                            "Hook specified `shell` but builtin hooks do not support shell execution",
+                        ),
+                    });
+                }
+                Repo::Remote { .. } | Repo::Local { .. } => {}
+            }
+
+            if !language.supports_shell() {
+                return Err(Error::Hook {
+                    hook: self.hook_spec.id.clone(),
+                    error: anyhow::anyhow!(
+                        "Hook specified `shell` but the language `{language}` does not support shell execution",
                     ),
                 });
             }
@@ -502,6 +534,13 @@ impl HookEntry {
 
     /// Split the entry into a list of commands.
     pub(crate) fn split(&self) -> Result<Vec<String>, Error> {
+        if let Some(shell) = self.shell {
+            panic!(
+                "internal error: attempted to split shell entry `{}` using {shell:?}",
+                self.hook
+            );
+        }
+
         let splits = shlex::split(&self.entry).ok_or_else(|| Error::Hook {
             hook: self.hook.clone(),
             error: anyhow::anyhow!("Failed to parse entry `{}` as commands", &self.entry),
@@ -518,6 +557,10 @@ impl HookEntry {
     /// Get the original entry string.
     pub(crate) fn raw(&self) -> &str {
         &self.entry
+    }
+
+    pub(crate) fn shell(&self) -> Option<Shell> {
+        self.shell
     }
 }
 
@@ -997,7 +1040,7 @@ mod tests {
     use crate::languages::version::LanguageRequest;
     use crate::workspace::Project;
 
-    use super::{Hook, HookBuilder, Repo, bash_argv, cmd_argv, powershell_argv};
+    use super::{Hook, HookBuilder, Repo};
 
     #[tokio::test]
     async fn hook_builder_build_fills_and_merges_attributes() -> Result<()> {

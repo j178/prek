@@ -19,6 +19,7 @@ mod python;
 mod ruby;
 mod rust;
 mod script;
+mod shell;
 mod swift;
 mod system;
 mod unimplemented;

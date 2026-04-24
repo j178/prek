@@ -138,7 +138,7 @@ available through `%*`.
 
 ## Language Interaction
 
-Most language backends already share the same shape:
+Supported language backends already share the same shape:
 
 1. Resolve the hook entry.
 2. Create a process.
@@ -148,6 +148,12 @@ Most language backends already share the same shape:
 The new hook entry abstraction should provide a single way to build the concrete
 argv for a batch, so managed and unmanaged language backends can opt into shell
 execution consistently.
+
+Backends that still treat `entry` as language-specific data or parse it outside
+the shell-aware resolver should reject `shell` during validation instead of
+silently ignoring it. This includes `docker`, `docker_image`, `fail`, `julia`,
+`pygrep`, `rust`, and predefined `repo: meta` and `repo: builtin` hooks in the
+initial implementation.
 
 `language: script` needs one special rule: when `shell` is unset, the first
 `entry` token remains a repository-relative script path, matching existing

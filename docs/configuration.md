@@ -871,10 +871,13 @@ Run `entry` through a predefined shell adapter.
 - Type: one of `sh`, `bash`, `pwsh`, `powershell`, `cmd`
 - Default: `null` (run `entry` directly without a shell)
 - `prek`-only
+- Supported for `bun`, `deno`, `dotnet`, `golang`, `haskell`, `lua`, `node`, `python`, `ruby`, `script`, `swift`, and `system` hooks.
 
 When `shell` is omitted, `prek` preserves the default no-shell behavior: it parses `entry` into argv, invokes the command directly, and appends `args` and matching filenames as process arguments.
 
 When `shell` is set, `entry` is treated as source for that shell. `prek` writes the source to a temporary script file, runs it with the selected shell adapter, and passes hook `args` followed by matching filenames as script arguments.
+
+`shell` is rejected for language backends that do not run `entry` through the shell-aware entry resolver, including `docker`, `docker_image`, `fail`, `julia`, `pygrep`, and `rust`, and for `repo: meta` and `repo: builtin` hooks.
 
 | `shell` | Adapter command | Script arguments |
 | -- | -- | -- |

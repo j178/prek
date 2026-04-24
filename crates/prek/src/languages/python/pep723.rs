@@ -256,6 +256,13 @@ impl ScriptTag {
 /// Effectively, we are implementing a new `python-script` language which works like `script`.
 /// But we don't want to introduce a new language just for this for now.
 pub(crate) async fn extract_pep723_metadata(hook: &mut Hook) -> Result<()> {
+    if hook.entry.shell().is_some() {
+        trace!(
+            "Skipping reading PEP 723 metadata for hook `{hook}` because `shell` treats `entry` as shell source",
+        );
+        return Ok(());
+    }
+
     if !hook.additional_dependencies.is_empty() {
         trace!(
             "Skipping reading PEP 723 metadata for hook `{hook}` because it already has `additional_dependencies`",

@@ -58,8 +58,9 @@ manifest semantics. For the upstream reference, see:
 
     When `shell` is set, `entry` is treated as shell source. Hook `args` and
     filenames are passed as script arguments, so POSIX shell entries should read
-    them with `"$@"`. See [`shell`](configuration.md#shell) for the exact shell
-    adapter commands.
+    them with `"$@"`. `shell` is supported only for language backends that use
+    the shell-aware entry resolver; see [`shell`](configuration.md#shell) for
+    the supported languages and exact shell adapter commands.
 
 !!! note "Manifest fields only"
 
