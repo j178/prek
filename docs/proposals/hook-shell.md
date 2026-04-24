@@ -149,7 +149,16 @@ The new hook entry abstraction should provide a single way to build the concrete
 argv for a batch, so managed and unmanaged language backends can opt into shell
 execution consistently.
 
-!!! note "Unsupported languages"
+`language: script` needs one special rule: when `shell` is unset, the first
+`entry` token remains a repository-relative script path, matching existing
+behavior. When `shell` is set, `entry` is shell source and no repository-relative
+script-path rewriting occurs.
+
+Container-oriented languages may still need backend-specific handling because
+they construct a command for a container runtime rather than directly executing
+the hook command on the host.
+
+??? note "Unsupported languages"
 
     Backends that still treat `entry` as language-specific data or parse it
     outside the shell-aware resolver should reject `shell` during validation
@@ -165,15 +174,6 @@ execution consistently.
 
     Predefined `repo: meta` and `repo: builtin` hooks should reject `shell` as
     well, because their entries are owned by prek.
-
-`language: script` needs one special rule: when `shell` is unset, the first
-`entry` token remains a repository-relative script path, matching existing
-behavior. When `shell` is set, `entry` is shell source and no repository-relative
-script-path rewriting occurs.
-
-Container-oriented languages may still need backend-specific handling because
-they construct a command for a container runtime rather than directly executing
-the hook command on the host.
 
 ## Design Considerations
 

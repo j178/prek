@@ -866,30 +866,20 @@ If `pass_filenames: true`, `prek` appends matching filenames to this command whe
 
 #### `shell`
 
+<a id="prek-only-shell"></a>
+
+!!! note "prek-only"
+
+    `shell` is a `prek` extension and may not be recognized by upstream `pre-commit`.
+
 Run `entry` through a predefined shell adapter.
 
 - Type: one of `sh`, `bash`, `pwsh`, `powershell`, `cmd`
 - Default: `null` (run `entry` directly without a shell)
-- `prek`-only
-- Supported for `bun`, `deno`, `dotnet`, `golang`, `haskell`, `lua`, `node`, `python`, `ruby`, `script`, `swift`, and `system` hooks.
 
 When `shell` is omitted, `prek` preserves the default no-shell behavior: it parses `entry` into argv, invokes the command directly, and appends `args` and matching filenames as process arguments.
 
 When `shell` is set, `entry` is treated as source for that shell. `prek` writes the source to a temporary script file, runs it with the selected shell adapter, and passes hook `args` followed by matching filenames as script arguments.
-
-!!! note "Unsupported languages"
-
-    `shell` is rejected for language backends that do not run `entry` through
-    the shell-aware entry resolver, and for `repo: meta` and `repo: builtin`
-    hooks.
-
-    | Language | Why `shell` is unsupported |
-    | -- | -- |
-    | `docker`, `docker_image` | `entry` participates in container image or entrypoint selection instead of direct host process execution. |
-    | `fail` | `entry` is the failure message body. |
-    | `julia`, `rust` | `entry` participates in install/runtime package resolution and is split before execution. |
-    | `pygrep` | `entry` is the regex pattern. |
-    | `conda`, `coursier`, `dart`, `perl`, `r` | The language backend is not implemented yet. |
 
 | `shell` | Adapter command | Script arguments |
 | -- | -- | -- |
@@ -934,6 +924,20 @@ When `shell` is set, `entry` is treated as source for that shell. `prek` writes 
             shell: bash
             pass_filenames: false
     ```
+
+??? note "Unsupported languages"
+
+    `shell` is rejected for language backends that do not run `entry` through
+    the shell-aware entry resolver, and for `repo: meta` and `repo: builtin`
+    hooks.
+
+    | Language | Why `shell` is unsupported |
+    | -- | -- |
+    | `docker`, `docker_image` | `entry` participates in container image or entrypoint selection instead of direct host process execution. |
+    | `fail` | `entry` is the failure message body. |
+    | `julia`, `rust` | `entry` participates in install/runtime package resolution and is split before execution. |
+    | `pygrep` | `entry` is the regex pattern. |
+    | `conda`, `coursier`, `dart`, `perl`, `r` | The language backend is not implemented yet. |
 
 #### `language`
 
@@ -1191,6 +1195,10 @@ Set `pass_filenames: false` for hooks that don’t accept file arguments (or tha
 Set `pass_filenames: n` (a positive integer) to limit each invocation to at most `n` filenames. When there are more matching files than `n`, `prek` splits them across multiple invocations. Those invocations may run concurrently unless `require_serial: true` is set. This is useful for tools that can only process a limited number of files at once.
 
 Prek will automatically limit the number of filenames to ensure command lines don’t exceed the OS limit, even when `pass_filenames: true`.
+
+!!! note "prek-only"
+
+    `pass_filenames: n` with a positive integer is a `prek` extension. Upstream `pre-commit` only accepts a boolean value.
 
 #### `stages`
 

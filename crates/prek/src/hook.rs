@@ -534,12 +534,10 @@ impl HookEntry {
 
     /// Split the entry into a list of commands.
     pub(crate) fn split(&self) -> Result<Vec<String>, Error> {
-        if let Some(shell) = self.shell {
-            panic!(
-                "internal error: attempted to split shell entry `{}` using {shell:?}",
-                self.hook
-            );
-        }
+        debug_assert!(
+            self.shell.is_none(),
+            "split should not be called for shell entries"
+        );
 
         let splits = shlex::split(&self.entry).ok_or_else(|| Error::Hook {
             hook: self.hook.clone(),

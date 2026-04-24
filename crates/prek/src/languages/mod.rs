@@ -33,7 +33,7 @@ mod rust;
 mod script;
 mod swift;
 mod system;
-pub mod version;
+pub(crate) mod version;
 
 static BUN: bun::Bun = bun::Bun;
 static DENO: deno::Deno = deno::Deno;
@@ -129,34 +129,7 @@ impl LanguageImpl for Unimplemented {
 // system: only system version, no env, no additional deps
 
 impl Language {
-    pub(crate) fn supports_shell(self) -> bool {
-        // Most language backends construct process argv through
-        // `HookEntry::resolve*`, so shell support should be the default. Keep
-        // the rationale for each exception next to the negative match.
-        !matches!(
-            self,
-            // No runner is implemented yet.
-            Self::Conda
-                | Self::Coursier
-                | Self::Dart
-                | Self::Perl
-                | Self::R
-                // `entry` participates in container image or entrypoint
-                // selection, not direct host process execution.
-                | Self::Docker
-                | Self::DockerImage
-                // `entry` is the failure message body.
-                | Self::Fail
-                // `entry` participates in install/runtime package resolution
-                // and is split before execution.
-                | Self::Julia
-                | Self::Rust
-                // `entry` is the regex pattern.
-                | Self::Pygrep
-        )
-    }
-
-    pub fn supported(lang: Language) -> bool {
+    pub(crate) fn supported(lang: Language) -> bool {
         matches!(
             lang,
             Self::Bun
@@ -180,14 +153,38 @@ impl Language {
         )
     }
 
-    pub fn supports_install_env(self) -> bool {
+    pub(crate) fn supports_install_env(self) -> bool {
         !matches!(
             self,
             Self::DockerImage | Self::Fail | Self::Script | Self::System
         )
     }
 
-    pub fn tool_buckets(self) -> &'static [ToolBucket] {
+    pub(crate) fn supports_shell(self) -> bool {
+        !matches!(
+            self,
+            // No runner is implemented yet.
+            Self::Conda
+                | Self::Coursier
+                | Self::Dart
+                | Self::Perl
+                | Self::R
+                // `entry` participates in container image or entrypoint
+                // selection, not direct host process execution.
+                | Self::Docker
+                | Self::DockerImage
+                // `entry` is the failure message body.
+                | Self::Fail
+                // `entry` participates in install/runtime package resolution
+                // and is split before execution.
+                | Self::Julia
+                | Self::Rust
+                // `entry` is the regex pattern.
+                | Self::Pygrep
+        )
+    }
+
+    pub(crate) fn tool_buckets(self) -> &'static [ToolBucket] {
         match self {
             Self::Bun => &[ToolBucket::Bun],
             Self::Deno => &[ToolBucket::Deno],
@@ -201,7 +198,7 @@ impl Language {
         }
     }
 
-    pub fn cache_buckets(self) -> &'static [CacheBucket] {
+    pub(crate) fn cache_buckets(self) -> &'static [CacheBucket] {
         match self {
             Self::Deno => &[CacheBucket::Deno],
             Self::Golang => &[CacheBucket::Go],
@@ -214,7 +211,7 @@ impl Language {
     /// Return whether the language allows specifying the version, e.g. we can install a specific
     /// requested language version.
     /// See <https://pre-commit.com/#overriding-language-version>
-    pub fn supports_language_version(self) -> bool {
+    pub(crate) fn supports_language_version(self) -> bool {
         matches!(
             self,
             Self::Bun
@@ -232,7 +229,7 @@ impl Language {
     ///
     /// For example, Python and Node.js support installing dependencies, while
     /// System and Fail do not.
-    pub fn supports_dependency(self) -> bool {
+    pub(crate) fn supports_dependency(self) -> bool {
         !matches!(
             self,
             Self::DockerImage
@@ -245,7 +242,7 @@ impl Language {
         )
     }
 
-    pub async fn install(
+    pub(crate) async fn install(
         &self,
         hook: Arc<Hook>,
         store: &Store,
@@ -274,7 +271,7 @@ impl Language {
         }
     }
 
-    pub async fn check_health(&self, info: &InstallInfo) -> Result<()> {
+    pub(crate) async fn check_health(&self, info: &InstallInfo) -> Result<()> {
         match self {
             Self::Bun => BUN.check_health(info).await,
             Self::Deno => DENO.check_health(info).await,
@@ -299,7 +296,7 @@ impl Language {
     }
 
     #[instrument(level = "trace", skip_all, fields(hook_id = %hook.id, language = %hook.language))]
-    pub async fn run(
+    pub(crate) async fn run(
         &self,
         hook: &InstalledHook,
         filenames: &[&Path],

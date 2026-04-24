@@ -56,6 +56,9 @@ manifest semantics. For the upstream reference, see:
     config define `env`, the maps are merged and end-user values override
     duplicate keys.
 
+    `pass_filenames: n` with a positive integer is also a `prek` extension.
+    Upstream `pre-commit` only accepts a boolean value.
+
     When `shell` is set, `entry` is treated as shell source. Hook `args` and
     filenames are passed as script arguments, so POSIX shell entries should read
     them with `"$@"`. `shell` is supported only for language backends that use
