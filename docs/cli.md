@@ -552,7 +552,7 @@ prek auto-update [OPTIONS]
 
 <dl class="cli-reference"><dt id="prek-auto-update--bleeding-edge"><a href="#prek-auto-update--bleeding-edge"><code>--bleeding-edge</code></a></dt><dd><p>Update to the bleeding edge of the default branch instead of the latest tagged version</p>
 </dd><dt id="prek-auto-update--cd"><a href="#prek-auto-update--cd"><code>--cd</code></a>, <code>-C</code> <i>dir</i></dt><dd><p>Change to directory before running</p>
-</dd><dt id="prek-auto-update--check"><a href="#prek-auto-update--check"><code>--check</code></a></dt><dd><p>Alias of <code>--dry-run</code> that exits with status 1 if updates would be made</p>
+</dd><dt id="prek-auto-update--check"><a href="#prek-auto-update--check"><code>--check</code></a></dt><dd><p>Alias of <code>--dry-run --exit-code</code></p>
 </dd><dt id="prek-auto-update--color"><a href="#prek-auto-update--color"><code>--color</code></a> <i>color</i></dt><dd><p>Whether to use color in output</p>
 <p>May also be set with the <code>PREK_COLOR</code> environment variable.</p><p>[default: auto]</p><p>Possible values:</p>
 <ul>
@@ -566,6 +566,7 @@ prek auto-update [OPTIONS]
 </dd><dt id="prek-auto-update--exclude-repo"><a href="#prek-auto-update--exclude-repo"><code>--exclude-repo</code></a> <i>repo</i></dt><dd><p>Do not update this repository. This option may be specified multiple times</p>
 </dd><dt id="prek-auto-update--exclude-tag"><a href="#prek-auto-update--exclude-tag"><code>--exclude-tag</code></a> <i>pattern</i></dt><dd><p>Ignore tags matching this glob pattern. This option may be specified multiple times.</p>
 <p>For example, use <code>--exclude-tag nightly</code> to skip a moving tag, or <code>--exclude-tag '*-{alpha,beta,rc}*'</code> to skip common prerelease tags.</p>
+</dd><dt id="prek-auto-update--exit-code"><a href="#prek-auto-update--exit-code"><code>--exit-code</code></a></dt><dd><p>Exit with status 1 if updates are available</p>
 </dd><dt id="prek-auto-update--freeze"><a href="#prek-auto-update--freeze"><code>--freeze</code></a></dt><dd><p>Store &quot;frozen&quot; hashes in <code>rev</code> instead of tag names</p>
 </dd><dt id="prek-auto-update--help"><a href="#prek-auto-update--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="prek-auto-update--include-tag"><a href="#prek-auto-update--include-tag"><code>--include-tag</code></a> <i>pattern</i></dt><dd><p>Only consider tags matching this glob pattern. This option may be specified multiple times.</p>

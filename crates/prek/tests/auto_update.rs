@@ -2075,6 +2075,148 @@ fn auto_update_check() -> Result<()> {
 }
 
 #[test]
+fn auto_update_dry_run_exit_code() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(
+        &context,
+        "dry-run-exit-code-test-repo",
+        &["v1.0.0", "v1.1.0", "v2.0.0"],
+    )?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--dry-run").arg("--exit-code").arg("--cooldown-days").arg("0"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    [HOME]/test-repos/dry-run-exit-code-test-repo
+      would update rev `v1.0.0` -> `v2.0.0`
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/dry-run-exit-code-test-repo
+                rev: v1.0.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_exit_code_updates_config() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(
+        &context,
+        "exit-code-test-repo",
+        &["v1.0.0", "v1.1.0", "v2.0.0"],
+    )?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--exit-code").arg("--cooldown-days").arg("0"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    [HOME]/test-repos/exit-code-test-repo
+      updating rev `v1.0.0` -> `v2.0.0`
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/exit-code-test-repo
+                rev: v2.0.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_exit_code_succeeds_when_up_to_date() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(
+        &context,
+        "exit-code-up-to-date-test-repo",
+        &["v1.0.0", "v2.0.0"],
+    )?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v2.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--exit-code").arg("--cooldown-days").arg("0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/exit-code-up-to-date-test-repo
+                rev: v2.0.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
 fn quoting_float_like_version_number() -> Result<()> {
     let context = TestContext::new();
     context.init_project();

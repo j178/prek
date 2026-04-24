@@ -54,7 +54,7 @@ For a compatibility-focused command mapping, see [Compatibility with pre-commit]
 - `prek auto-update` updates all projects in the workspace to their latest revisions.
 - `prek auto-update` checks updates for the same repository only once, speeding up the process in workspace mode.
 - `prek auto-update` supports `--dry-run` to preview the updates without applying them.
-- `prek auto-update` supports `--check` to exit non-zero when updates are available or frozen-reference mismatches are found, without rewriting the config.
+- `prek auto-update` supports `--exit-code` to exit non-zero when updates are available, and `--check` as an alias for `--dry-run --exit-code`.
 - `prek auto-update` validates pinned SHA revisions against fetched upstream refs, including impostor-commit detection, and keeps stale `# frozen:` comments in sync when it can.
 - `prek auto-update` supports the `--cooldown-days` option to skip releases newer than the specified number of days (based on the tag creation timestamp for annotated tags, or the tagged commit timestamp for lightweight tags).
 - `prek auto-update` supports `--exclude-repo` to skip selected repositories while updating everything else.

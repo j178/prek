@@ -386,7 +386,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.freeze,
                 args.jobs,
                 args.dry_run || args.check,
-                args.check,
+                args.exit_code || args.check,
                 args.cooldown_days,
                 printer,
             )

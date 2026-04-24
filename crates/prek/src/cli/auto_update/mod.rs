@@ -324,7 +324,7 @@ pub(crate) async fn auto_update(
     freeze: bool,
     jobs: usize,
     dry_run: bool,
-    check: bool,
+    exit_code: bool,
     cooldown_days: u8,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -380,7 +380,7 @@ pub(crate) async fn auto_update(
         }
     }
 
-    if apply_result.failure || (check && apply_result.has_updates) {
+    if apply_result.failure || (exit_code && apply_result.has_updates) {
         return Ok(ExitStatus::Failure);
     }
     Ok(ExitStatus::Success)

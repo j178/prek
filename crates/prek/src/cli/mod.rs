@@ -745,7 +745,10 @@ pub(crate) struct AutoUpdateArgs {
     /// Do not write changes to the config file, only display what would be changed.
     #[arg(long)]
     pub(crate) dry_run: bool,
-    /// Alias of `--dry-run` that exits with status 1 if updates would be made.
+    /// Exit with status 1 if updates are available.
+    #[arg(long)]
+    pub(crate) exit_code: bool,
+    /// Alias of `--dry-run --exit-code`.
     #[arg(long)]
     pub(crate) check: bool,
     /// Number of threads to use.
