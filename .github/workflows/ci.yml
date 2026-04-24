@@ -95,10 +95,12 @@ jobs:
             ANY_CODE_CHANGED=true
 
           done <<< "${CHANGED_FILES}"
-          echo "any_code_changed=${ANY_CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
-          echo "cache_changed=${CACHE_CHANGED}" >> "${GITHUB_OUTPUT}"
-          echo "rust_code_changed=${RUST_CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
-          echo "bench_related_changed=${BENCH_RELATED_CHANGED}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "any_code_changed=${ANY_CODE_CHANGED}"
+            echo "cache_changed=${CACHE_CHANGED}"
+            echo "rust_code_changed=${RUST_CODE_CHANGED}"
+            echo "bench_related_changed=${BENCH_RELATED_CHANGED}"
+          } >> "${GITHUB_OUTPUT}"
 
   lint:
     name: "lint"
@@ -398,7 +400,7 @@ jobs:
           files: ${{ env.PREK_WORKSPACE }}/lcov.info
 
   language-tests:
-    name: "language tests | ${{ matrix.language }} | ${{ matrix.os }}"
+    name: "language tests | ${{ matrix.os }} | group ${{ matrix.group }} (${{ matrix.languages }})"
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     timeout-minutes: 15
@@ -406,36 +408,61 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
-        language:
-          - bun
-          - deno
-          - docker
-          - dotnet
-          - golang
-          - haskell
-          - julia
-          - lua
-          - node
-          - python
-          - ruby
-          - rust
-          - swift
-        exclude:
-          # Docker is only available on ubuntu-latest
+        # Keep platform constraints encoded directly in grouped rows:
+        # Docker only runs on Ubuntu, Swift skips Windows, and Haskell skips macOS.
+        include:
+          - os: ubuntu-latest
+            group: 1
+            languages: bun deno docker
+            filter: test(bun::) or test(deno::) or test(docker::) or test(docker_image::)
+          - os: ubuntu-latest
+            group: 2
+            languages: dotnet golang haskell
+            filter: test(dotnet::) or test(golang::) or test(haskell::)
+          - os: ubuntu-latest
+            group: 3
+            languages: julia lua node
+            filter: test(julia::) or test(lua::) or test(node::)
+          - os: ubuntu-latest
+            group: 4
+            languages: python ruby rust
+            filter: test(python::) or test(ruby::) or test(rust::)
+          - os: ubuntu-latest
+            group: 5
+            languages: swift
+            filter: test(swift::)
           - os: macos-latest
-            language: docker
-          - os: windows-latest
-            language: docker
-          # Swift is preinstalled on ubuntu and macOS; Windows requires setup which is slow
-          - os: windows-latest
-            language: swift
-          # GHC is not preinstalled on macOS, and installing it takes a long time
+            group: 1
+            languages: bun deno dotnet
+            filter: test(bun::) or test(deno::) or test(dotnet::)
           - os: macos-latest
-            language: haskell
+            group: 2
+            languages: golang julia lua
+            filter: test(golang::) or test(julia::) or test(lua::)
+          - os: macos-latest
+            group: 3
+            languages: node python ruby
+            filter: test(node::) or test(python::) or test(ruby::)
+          - os: macos-latest
+            group: 4
+            languages: rust swift
+            filter: test(rust::) or test(swift::)
+          - os: windows-latest
+            group: 1
+            languages: bun deno dotnet
+            filter: test(bun::) or test(deno::) or test(dotnet::)
+          - os: windows-latest
+            group: 2
+            languages: golang haskell julia
+            filter: test(golang::) or test(haskell::) or test(julia::)
+          - os: windows-latest
+            group: 3
+            languages: lua node python
+            filter: test(lua::) or test(node::) or test(python::)
+          - os: windows-latest
+            group: 4
+            languages: ruby rust
+            filter: test(ruby::) or test(rust::)
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -465,19 +492,19 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
 
       - name: "Install uv"
-        if: ${{ matrix.language == 'python' }}
+        if: ${{ contains(format(' {0} ', matrix.languages), ' python ') }}
         uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           version: ${{ env.UV_VERSION }}
 
       - name: "Install Python"
-        if: ${{ matrix.language == 'python' }}
+        if: ${{ contains(format(' {0} ', matrix.languages), ' python ') }}
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: "Install Node.js"
-        if: ${{ matrix.language == 'node' }}
+        if: ${{ contains(format(' {0} ', matrix.languages), ' node ') }}
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -486,7 +513,7 @@ jobs:
           cache-dependency-path: LICENSE
 
       - name: "Install Go"
-        if: ${{ matrix.language == 'golang' }}
+        if: ${{ contains(format(' {0} ', matrix.languages), ' golang ') }}
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -494,50 +521,50 @@ jobs:
           cache-dependency-path: LICENSE
 
       - name: "Install Lua"
-        if: ${{ matrix.language == 'lua' }}
+        if: ${{ contains(format(' {0} ', matrix.languages), ' lua ') }}
         uses: leafo/gh-actions-lua@8c9e175e7a3d77e21f809eefbee34a19b858641b # v12
         with:
           luaVersion: ${{ env.LUA_VERSION }}
 
       - name: "Install LuaRocks"
-        if: ${{ matrix.language == 'lua' }}
+        if: ${{ contains(format(' {0} ', matrix.languages), ' lua ') }}
         uses: luarocks/gh-actions-luarocks@7c85eeff60655651b444126f2a78be784e836a0a #v6
         with:
           luaRocksVersion: ${{ env.LUAROCKS_VERSION }}
 
       - name: "Install Ruby"
-        if: ${{ matrix.language == 'ruby' }}
+        if: ${{ contains(format(' {0} ', matrix.languages), ' ruby ') }}
         uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1.301.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
 
       - name: "Install Bun"
-        if: ${{ matrix.language == 'bun' }}
+        if: ${{ contains(format(' {0} ', matrix.languages), ' bun ') }}
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: "Install Deno"
-        if: ${{ matrix.language == 'deno' }}
+        if: ${{ contains(format(' {0} ', matrix.languages), ' deno ') }}
         uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
         with:
           deno-version: ${{ env.DENO_VERSION }}
 
       - name: "Install GHC and Cabal"
-        if: ${{ matrix.language == 'haskell' }}
+        if: ${{ contains(format(' {0} ', matrix.languages), ' haskell ') }}
         uses: haskell-actions/setup@de26526e12bc780fb9d384c1fb61c0bf02e3a40d # v2.10.4
         with:
           ghc-version: ${{ env.GHC_VERSION }}
           cabal-version: ${{ env.CABAL_VERSION }}
 
       - name: "Install Julia"
-        if: ${{ matrix.language == 'julia' }}
+        if: ${{ contains(format(' {0} ', matrix.languages), ' julia ') }}
         uses: julia-actions/setup-julia@4a12c5f801ca5ef0458bba44687563ef276522dd # v3.0.0
         with:
           version: ${{ env.JULIA_VERSION }}
 
       - name: "Install .NET"
-        if: ${{ matrix.language == 'dotnet' }}
+        if: ${{ contains(format(' {0} ', matrix.languages), ' dotnet ') }}
         uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
@@ -555,7 +582,8 @@ jobs:
             --workspace \
             --cargo-profile fast-build \
             --features schemars \
-            --profile lang-${{ matrix.language }}
+            --profile ci-language \
+            -E '${{ matrix.filter }}'
 
       - name: "Run language tests (windows)"
         if: ${{ matrix.os == 'windows-latest' }}
@@ -572,7 +600,8 @@ jobs:
             --workspace `
             --cargo-profile fast-build `
             --features schemars `
-            --profile lang-${{ matrix.language }}
+            --profile ci-language `
+            -E '${{ matrix.filter }}'
 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -633,7 +662,7 @@ jobs:
           MSRV=$(grep -m1 'rust-version' Cargo.toml | sed 's/.*"\([^"]*\)".*/\1/')
           echo "value=$MSRV" >> "$GITHUB_OUTPUT"
       - name: "Install Rust toolchain"
-        run: rustup default ${MSRV}
+        run: rustup default "${MSRV}"
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
       - name: "Install mold"
@@ -641,7 +670,7 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
-      - run: cargo +${MSRV} build --profile no-debug --bin prek
+      - run: cargo +"${MSRV}" build --profile no-debug --bin prek
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
       - run: ./target/no-debug/prek --version

@@ -7,56 +7,11 @@ failure-output = "immediate"
 fail-fast = false
 test-threads = 8
 
-[profile.lang-bun]
+[profile.ci-language]
 inherits = "ci-core"
-default-filter = "binary_id(prek::languages) and test(bun::)"
+default-filter = "binary_id(prek::languages)"
 
-[profile.lang-deno]
-inherits = "ci-core"
-default-filter = "binary_id(prek::languages) and test(deno::)"
-
-[profile.lang-docker]
-inherits = "ci-core"
-default-filter = "binary_id(prek::languages) and (test(docker::) or test(docker_image::))"
-
-[profile.lang-dotnet]
-inherits = "ci-core"
-default-filter = "binary_id(prek::languages) and test(dotnet::)"
-
-[profile.lang-golang]
-inherits = "ci-core"
-default-filter = "binary_id(prek::languages) and test(golang::)"
-
-[profile.lang-haskell]
-inherits = "ci-core"
-default-filter = "binary_id(prek::languages) and test(haskell::)"
-
-[profile.lang-julia]
-inherits = "ci-core"
-default-filter = "binary_id(prek::languages) and test(julia::)"
-
-[profile.lang-lua]
-inherits = "ci-core"
-default-filter = "binary_id(prek::languages) and test(lua::)"
-# LuaRocks can hit a race condition when multiple processes are installing the same package; run Lua tests serially.
+[[profile.ci-language.overrides]]
+# LuaRocks can hit a race condition when multiple processes are installing the same package.
+filter = "test(lua::)"
 threads-required = "num-cpus"
-
-[profile.lang-node]
-inherits = "ci-core"
-default-filter = "binary_id(prek::languages) and test(node::)"
-
-[profile.lang-python]
-inherits = "ci-core"
-default-filter = "binary_id(prek::languages) and test(python::)"
-
-[profile.lang-ruby]
-inherits = "ci-core"
-default-filter = "binary_id(prek::languages) and test(ruby::)"
-
-[profile.lang-rust]
-inherits = "ci-core"
-default-filter = "binary_id(prek::languages) and test(rust::)"
-
-[profile.lang-swift]
-inherits = "ci-core"
-default-filter = "binary_id(prek::languages) and test(swift::)"
