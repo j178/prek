@@ -1116,7 +1116,7 @@ Controls whether `prek` appends the matching filenames to the command line.
 
 Set `pass_filenames: false` for hooks that don’t accept file arguments (or that discover files themselves).
 
-Set `pass_filenames: n` (a positive integer) to limit each invocation to at most `n` filenames. When there are more matching files than `n`, `prek` spawns multiple invocations and runs them in parallel. This is useful for tools that can only process a limited number of files at once.
+Set `pass_filenames: n` (a positive integer) to limit each invocation to at most `n` filenames. When there are more matching files than `n`, `prek` splits them across multiple invocations. Those invocations may run concurrently unless `require_serial: true` is set. This is useful for tools that can only process a limited number of files at once.
 
 Prek will automatically limit the number of filenames to ensure command lines don’t exceed the OS limit, even when `pass_filenames: true`.
 
