@@ -130,20 +130,29 @@ impl LanguageImpl for Unimplemented {
 
 impl Language {
     pub(crate) fn supports_shell(self) -> bool {
-        matches!(
+        // Most language backends construct process argv through
+        // `HookEntry::resolve*`, so shell support should be the default. Keep
+        // the rationale for each exception next to the negative match.
+        !matches!(
             self,
-            Self::Bun
-                | Self::Deno
-                | Self::Dotnet
-                | Self::Golang
-                | Self::Haskell
-                | Self::Lua
-                | Self::Node
-                | Self::Python
-                | Self::Ruby
-                | Self::Script
-                | Self::Swift
-                | Self::System
+            // No runner is implemented yet.
+            Self::Conda
+                | Self::Coursier
+                | Self::Dart
+                | Self::Perl
+                | Self::R
+                // `entry` participates in container image or entrypoint
+                // selection, not direct host process execution.
+                | Self::Docker
+                | Self::DockerImage
+                // `entry` is the failure message body.
+                | Self::Fail
+                // `entry` participates in install/runtime package resolution
+                // and is split before execution.
+                | Self::Julia
+                | Self::Rust
+                // `entry` is the regex pattern.
+                | Self::Pygrep
         )
     }
 

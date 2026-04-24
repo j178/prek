@@ -151,9 +151,18 @@ execution consistently.
 
 Backends that still treat `entry` as language-specific data or parse it outside
 the shell-aware resolver should reject `shell` during validation instead of
-silently ignoring it. This includes `docker`, `docker_image`, `fail`, `julia`,
-`pygrep`, `rust`, and predefined `repo: meta` and `repo: builtin` hooks in the
-initial implementation.
+silently ignoring it:
+
+| Language | Why `shell` is unsupported |
+| -- | -- |
+| `docker`, `docker_image` | `entry` participates in container image or entrypoint selection instead of direct host process execution. |
+| `fail` | `entry` is the failure message body. |
+| `julia`, `rust` | `entry` participates in install/runtime package resolution and is split before execution. |
+| `pygrep` | `entry` is the regex pattern. |
+| `conda`, `coursier`, `dart`, `perl`, `r` | The language backend is not implemented yet. |
+
+Predefined `repo: meta` and `repo: builtin` hooks should reject `shell` as well,
+because their entries are owned by prek.
 
 `language: script` needs one special rule: when `shell` is unset, the first
 `entry` token remains a repository-relative script path, matching existing
