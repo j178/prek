@@ -143,7 +143,7 @@ impl LanguageImpl for Ruby {
         &self,
         hook: &InstalledHook,
         filenames: &[&Path],
-        _store: &Store,
+        store: &Store,
         reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());
@@ -160,7 +160,7 @@ impl LanguageImpl for Ruby {
         let new_path = prepend_paths(&[&gem_bin, ruby_bin]).context("Failed to join PATH")?;
 
         // Resolve entry point
-        let entry = hook.entry.resolve(Some(&new_path))?;
+        let entry = hook.entry.resolve(Some(&new_path), store)?;
 
         // Execute in batches
         let run = async |batch: &[&Path]| {
@@ -187,7 +187,7 @@ impl LanguageImpl for Ruby {
             anyhow::Ok((code, output.stdout))
         };
 
-        let results = run_by_batch(hook, filenames, &entry, run).await?;
+        let results = run_by_batch(hook, filenames, entry.argv(), run).await?;
 
         reporter.on_run_complete(progress);
 

@@ -120,7 +120,7 @@ impl LanguageImpl for Bun {
         &self,
         hook: &InstalledHook,
         filenames: &[&Path],
-        _store: &Store,
+        store: &Store,
         reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());
@@ -130,7 +130,7 @@ impl LanguageImpl for Bun {
         let new_path =
             prepend_paths(&[&bin_dir(env_dir), bun_bin]).context("Failed to join PATH")?;
 
-        let entry = hook.entry.resolve(Some(&new_path))?;
+        let entry = hook.entry.resolve(Some(&new_path), store)?;
         let run = async |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "bun hook")
                 .current_dir(hook.work_dir())
@@ -152,7 +152,7 @@ impl LanguageImpl for Bun {
             anyhow::Ok((code, output.stdout))
         };
 
-        let results = run_by_batch(hook, filenames, &entry, run).await?;
+        let results = run_by_batch(hook, filenames, entry.argv(), run).await?;
 
         reporter.on_run_complete(progress);
 

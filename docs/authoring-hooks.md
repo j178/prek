@@ -20,6 +20,7 @@ each manifest hook:
 | `id` | Yes | No | string | Stable identifier used in end-user configs. |
 | `name` | Yes | No | string | Human-friendly label shown in output. |
 | `entry` | Yes | No | string | Command to execute. |
+| `shell` | No | Yes | string enum | Run `entry` through a predefined shell adapter (`sh`, `bash`, `pwsh`, `powershell`, or `cmd`). |
 | `language` | Yes | No | string | Execution environment, for example `python`, `node`, or `system`. |
 | `alias` | No | No | string | Alternate identifier accepted by `prek run`. |
 | `files` | No | No | regex string | Include only matching files. |
@@ -50,9 +51,15 @@ manifest semantics. For the upstream reference, see:
     `prek`-only fields are accepted by `prek`, but upstream `pre-commit` will not
     recognize them.
 
-    End-user configuration may also set [`env`](configuration.md#prek-only-env).
-    When both the manifest and end-user config define `env`, the maps are merged
-    and end-user values override duplicate keys.
+    End-user configuration may also set [`env`](configuration.md#prek-only-env)
+    and [`shell`](configuration.md#shell). When both the manifest and end-user
+    config define `env`, the maps are merged and end-user values override
+    duplicate keys.
+
+    When `shell` is set, `entry` is treated as shell source. Hook `args` and
+    filenames are passed as script arguments, so POSIX shell entries should read
+    them with `"$@"`. See [`shell`](configuration.md#shell) for the exact shell
+    adapter commands.
 
 !!! note "Manifest fields only"
 

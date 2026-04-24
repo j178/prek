@@ -193,7 +193,7 @@ impl LanguageImpl for Deno {
         let new_path =
             prepend_paths(&[&bin_dir(env_dir), deno_bin_dir]).context("Failed to join PATH")?;
 
-        let entry = hook.entry.resolve(Some(&new_path))?;
+        let entry = hook.entry.resolve(Some(&new_path), store)?;
 
         let run = async |batch: &[&Path]| {
             let mut cmd = Cmd::new(&entry[0], "deno hook");
@@ -218,7 +218,7 @@ impl LanguageImpl for Deno {
             anyhow::Ok((code, output.stdout))
         };
 
-        let results = run_by_batch(hook, filenames, &entry, run).await?;
+        let results = run_by_batch(hook, filenames, entry.argv(), run).await?;
 
         reporter.on_run_complete(progress);
 

@@ -532,6 +532,19 @@ impl<'de> Deserialize<'de> for PassFilenames {
     }
 }
 
+/// A predefined shell adapter used to run hook entries as shell source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(rename_all = "lowercase"))]
+pub(crate) enum Shell {
+    Sh,
+    Bash,
+    Pwsh,
+    Powershell,
+    Cmd,
+}
+
 /// Common hook options.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -575,6 +588,8 @@ pub(crate) struct HookOptions {
     pub language_version: Option<String>,
     /// Write the output of the hook to a file when the hook fails or verbose is enabled.
     pub log_file: Option<String>,
+    /// Run the hook entry through a predefined shell adapter.
+    pub shell: Option<Shell>,
     /// This hook will execute using a single process instead of in parallel.
     /// Default is false.
     pub require_serial: Option<bool>,
@@ -620,6 +635,7 @@ impl HookOptions {
             description,
             language_version,
             log_file,
+            shell,
             require_serial,
             stages,
             verbose,

@@ -9,6 +9,7 @@
 - `prek` decouples hook environments from their repositories, allowing shared toolchains and environments across hooks.
 - `prek` supports `language_version` as a semver specifier and automatically installs the required toolchains.
 - `prek` supports `files` and `exclude` as glob lists (in addition to regex) via `glob` mappings. See [Configuration](configuration.md#top-level-files).
+- `prek` supports a [`shell`](configuration.md#shell) hook option for explicit shell-source execution through predefined adapters such as `bash`, `sh`, and `pwsh`. Upstream `pre-commit` runs `entry` directly; shell behavior must be spelled into `entry` itself.
 - `prek` reports more precise configuration parsing errors, including exact source locations.
 
 ## Workspace mode

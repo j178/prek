@@ -176,7 +176,7 @@ impl LanguageImpl for Swift {
         &self,
         hook: &InstalledHook,
         filenames: &[&Path],
-        _store: &Store,
+        store: &Store,
         reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());
@@ -189,7 +189,7 @@ impl LanguageImpl for Swift {
                 EnvVars::var_os(EnvVars::PATH).unwrap_or_default()
             };
 
-        let entry = hook.entry.resolve(Some(&new_path))?;
+        let entry = hook.entry.resolve(Some(&new_path), store)?;
 
         let run = async |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "swift hook")
@@ -211,7 +211,7 @@ impl LanguageImpl for Swift {
             anyhow::Ok((code, output.stdout))
         };
 
-        let results = run_by_batch(hook, filenames, &entry, run).await?;
+        let results = run_by_batch(hook, filenames, entry.argv(), run).await?;
 
         reporter.on_run_complete(progress);
 

@@ -16,7 +16,7 @@ use tracing::trace;
 
 use crate::config::{
     self, BuiltinHook, Config, FilePattern, HookOptions, Language, LocalHook, ManifestHook,
-    MetaHook, PassFilenames, RemoteHook, Stages, read_manifest,
+    MetaHook, PassFilenames, RemoteHook, Shell, Stages, read_manifest,
 };
 use crate::languages::version::LanguageRequest;
 use crate::languages::{extract_metadata, resolve_command};
@@ -333,6 +333,7 @@ impl HookBuilder {
         let require_serial = options.require_serial.unwrap_or(false);
         let verbose = options.verbose.unwrap_or(false);
         let stages = options.stages.unwrap_or(Stages::ALL);
+        let shell = options.shell;
         let additional_dependencies = options
             .additional_dependencies
             .unwrap_or_default()
@@ -345,7 +346,7 @@ impl HookBuilder {
             error: anyhow::anyhow!(e),
         })?;
 
-        let entry = Entry::new(self.hook_spec.id.clone(), self.hook_spec.entry);
+        let entry = HookEntry::new(self.hook_spec.id.clone(), self.hook_spec.entry, shell);
 
         let priority = self
             .hook_spec
@@ -397,22 +398,106 @@ impl HookBuilder {
     }
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct Entry {
-    hook: String,
-    entry: String,
+#[derive(Debug)]
+pub(crate) struct PreparedHookEntry {
+    argv: Vec<String>,
+    _temp_dir: Option<TempDir>,
 }
 
-impl Entry {
-    pub(crate) fn new(hook: String, entry: String) -> Self {
-        Self { hook, entry }
+impl PreparedHookEntry {
+    fn direct(argv: Vec<String>) -> Self {
+        Self {
+            argv,
+            _temp_dir: None,
+        }
+    }
+
+    fn shell(argv: Vec<String>, temp_dir: TempDir) -> Self {
+        Self {
+            argv,
+            _temp_dir: Some(temp_dir),
+        }
+    }
+
+    pub(crate) fn argv(&self) -> &[String] {
+        &self.argv
+    }
+}
+
+impl Deref for PreparedHookEntry {
+    type Target = [String];
+
+    fn deref(&self) -> &Self::Target {
+        &self.argv
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct HookEntry {
+    hook: String,
+    entry: String,
+    shell: Option<Shell>,
+}
+
+impl HookEntry {
+    pub(crate) fn new(hook: String, entry: String, shell: Option<Shell>) -> Self {
+        Self { hook, entry, shell }
     }
 
     /// Split the entry and resolve the command by parsing its shebang.
-    pub(crate) fn resolve(&self, env_path: Option<&OsStr>) -> Result<Vec<String>, Error> {
+    pub(crate) fn resolve(
+        &self,
+        env_path: Option<&OsStr>,
+        store: &Store,
+    ) -> Result<PreparedHookEntry, Error> {
+        if let Some(shell) = self.shell {
+            return self.resolve_shell(shell, env_path, store);
+        }
+
         let split = self.split()?;
 
-        Ok(resolve_command(split, env_path))
+        Ok(PreparedHookEntry::direct(resolve_command(split, env_path)))
+    }
+
+    /// Resolve a `language: script` entry.
+    ///
+    /// Without `shell`, the first token is a repository-relative script path. With `shell`,
+    /// the entry is shell source and is not rewritten as a script path.
+    pub(crate) fn resolve_script(
+        &self,
+        repo_path: &Path,
+        env_path: Option<&OsStr>,
+        store: &Store,
+    ) -> Result<PreparedHookEntry, Error> {
+        if let Some(shell) = self.shell {
+            return self.resolve_shell(shell, env_path, store);
+        }
+
+        let mut split = self.split()?;
+        let cmd = repo_path.join(&split[0]);
+        split[0] = cmd.to_string_lossy().to_string();
+
+        Ok(PreparedHookEntry::direct(resolve_command(split, env_path)))
+    }
+
+    fn resolve_shell(
+        &self,
+        shell: Shell,
+        env_path: Option<&OsStr>,
+        store: &Store,
+    ) -> Result<PreparedHookEntry, Error> {
+        let temp_dir = tempfile::tempdir_in(store.scratch_path())?;
+        let script_path = temp_dir
+            .path()
+            .join("entry")
+            .with_extension(shell.extension());
+        fs_err::write(&script_path, &self.entry).map_err(|err| Error::Hook {
+            hook: self.hook.clone(),
+            error: anyhow::anyhow!(err).context("Failed to write shell entry script"),
+        })?;
+
+        let argv = resolve_command(shell.argv_for_script(&script_path), env_path);
+        Ok(PreparedHookEntry::shell(argv, temp_dir))
     }
 
     /// Split the entry into a list of commands.
@@ -436,6 +521,68 @@ impl Entry {
     }
 }
 
+impl Shell {
+    fn extension(self) -> &'static str {
+        match self {
+            Self::Sh | Self::Bash => "sh",
+            Self::Pwsh | Self::Powershell => "ps1",
+            Self::Cmd => "cmd",
+        }
+    }
+
+    fn argv_for_script(self, script_path: &Path) -> Vec<String> {
+        let script = script_path.to_string_lossy().to_string();
+        match self {
+            Self::Sh => vec!["sh".to_string(), "-e".to_string(), script],
+            Self::Bash => bash_argv(script),
+            Self::Pwsh => powershell_argv("pwsh", script),
+            Self::Powershell => powershell_argv("powershell", script),
+            Self::Cmd => cmd_argv(script),
+        }
+    }
+}
+
+fn bash_argv(script: String) -> Vec<String> {
+    // Avoid user startup files for deterministic hook behavior. `-e` fails on the first
+    // failing command, and `-o pipefail` makes failing pipeline segments fail the script.
+    const BASH_ARGV_PREFIX: &[&str] = &["bash", "--noprofile", "--norc", "-eo", "pipefail"];
+
+    let mut argv = BASH_ARGV_PREFIX
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    argv.push(script);
+    argv
+}
+
+fn powershell_argv(command: &str, script: String) -> Vec<String> {
+    let mut argv = vec![
+        command.to_string(),
+        // Avoid user profile scripts and prompts in hook execution.
+        "-NoProfile".to_string(),
+        "-NonInteractive".to_string(),
+    ];
+    #[cfg(windows)]
+    // Allow running prek's temporary script without changing the user's execution policy.
+    argv.extend(["-ExecutionPolicy".to_string(), "Bypass".to_string()]);
+    argv.extend(["-File".to_string(), script]);
+    argv
+}
+
+fn cmd_argv(script: String) -> Vec<String> {
+    // `/D` disables AutoRun, `/E:ON` enables command extensions, `/V:OFF` disables
+    // delayed expansion, `/S` normalizes quote handling, `/C` runs and exits, and
+    // `CALL` executes the temporary script while preserving `%*` argument access.
+    const CMD_ARGV_PREFIX: &[&str] = &["cmd", "/D", "/E:ON", "/V:OFF", "/S", "/C", "CALL"];
+
+    let mut argv = CMD_ARGV_PREFIX
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    argv.push(script);
+    argv
+}
+
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct Hook {
@@ -448,7 +595,7 @@ pub(crate) struct Hook {
     pub idx: usize,
     pub id: String,
     pub name: String,
-    pub entry: Entry,
+    pub entry: HookEntry,
     pub language: Language,
     pub alias: String,
     pub files: Option<FilePattern>,
@@ -843,12 +990,14 @@ mod tests {
     use prek_identify::tags;
     use rustc_hash::FxHashMap;
 
-    use crate::config::{Config, HookOptions, Language, PassFilenames, RemoteHook, Stage, Stages};
+    use crate::config::{
+        Config, HookOptions, Language, PassFilenames, RemoteHook, Shell, Stage, Stages,
+    };
     use crate::hook::HookSpec;
     use crate::languages::version::LanguageRequest;
     use crate::workspace::Project;
 
-    use super::{Hook, HookBuilder, Repo};
+    use super::{Hook, HookBuilder, Repo, bash_argv, cmd_argv, powershell_argv};
 
     #[tokio::test]
     async fn hook_builder_build_fills_and_merges_attributes() -> Result<()> {
@@ -872,7 +1021,7 @@ mod tests {
         )?);
         let repo = Arc::new(Repo::Local { hooks: vec![] });
 
-        // Base hook spec (e.g. from a manifest): minimal options, one env var.
+        // Base hook spec (e.g. from a manifest): options that config can merge or override.
         let mut base_env = FxHashMap::default();
         base_env.insert("BASE".to_string(), "1".to_string());
 
@@ -884,6 +1033,7 @@ mod tests {
             priority: None,
             options: HookOptions {
                 env: Some(base_env),
+                shell: Some(Shell::Sh),
                 ..Default::default()
             },
         };
@@ -907,6 +1057,7 @@ mod tests {
                 pass_filenames: Some(PassFilenames::None),
                 verbose: Some(true),
                 description: Some("desc".to_string()),
+                shell: Some(Shell::Bash),
                 ..Default::default()
             },
         };
@@ -952,9 +1103,12 @@ mod tests {
             idx: 7,
             id: "test-hook",
             name: "override-name",
-            entry: Entry {
+            entry: HookEntry {
                 hook: "test-hook",
                 entry: "python3 -c 'print(2)'",
+                shell: Some(
+                    Bash,
+                ),
             },
             language: Python,
             alias: "alias-1",

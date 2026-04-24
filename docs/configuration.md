@@ -55,6 +55,7 @@ They work in both YAML and TOML, but they only matter for compatibility if you s
     - [`repo: builtin`](#prek-only-repo-builtin)
 - Hook-level:
     - [`env`](#prek-only-env)
+    - [`shell`](#shell)
     - [`priority`](#prek-only-priority)
     - [`minimum_prek_version`](#prek-only-minimum-prek-version-hook)
 
@@ -862,6 +863,62 @@ The command line to execute for the hook.
 - Not allowed for `repo: meta` and `repo: builtin`.
 
 If `pass_filenames: true`, `prek` appends matching filenames to this command when running.
+
+#### `shell`
+
+Run `entry` through a predefined shell adapter.
+
+- Type: one of `sh`, `bash`, `pwsh`, `powershell`, `cmd`
+- Default: `null` (run `entry` directly without a shell)
+- `prek`-only
+
+When `shell` is omitted, `prek` preserves the default no-shell behavior: it parses `entry` into argv, invokes the command directly, and appends `args` and matching filenames as process arguments.
+
+When `shell` is set, `entry` is treated as source for that shell. `prek` writes the source to a temporary script file, runs it with the selected shell adapter, and passes hook `args` followed by matching filenames as script arguments.
+
+| `shell` | Adapter command | Script arguments |
+| -- | -- | -- |
+| `bash` | `bash --noprofile --norc -eo pipefail <script>` | `"$@"` |
+| `sh` | `sh -e <script>` | `"$@"` |
+| `pwsh` | `pwsh -NoProfile -NonInteractive -File <script>` | `$args` |
+| `powershell` | `powershell -NoProfile -NonInteractive -File <script>` | `$args` |
+| `cmd` | `cmd /D /E:ON /V:OFF /S /C CALL <script>` | `%*` |
+
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+    hooks = [
+      {
+        id = "test-all",
+        name = "test-all",
+        language = "system",
+        entry = """
+        uv run --python=3.10 --isolated pytest
+        uv run --python=3.11 --isolated pytest
+        """,
+        shell = "bash",
+        pass_filenames = false,
+      },
+    ]
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: test-all
+            name: test-all
+            language: system
+            entry: |
+              uv run --python=3.10 --isolated pytest
+              uv run --python=3.11 --isolated pytest
+            shell: bash
+            pass_filenames: false
+    ```
 
 #### `language`
 

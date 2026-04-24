@@ -7,7 +7,7 @@ use anyhow::Result;
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
-use crate::languages::{LanguageImpl, resolve_command};
+use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
 use crate::store::Store;
@@ -33,7 +33,7 @@ impl LanguageImpl for Script {
         &self,
         hook: &InstalledHook,
         filenames: &[&Path],
-        _store: &Store,
+        store: &Store,
         reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         // For `language: script`, the `entry[0]` is a script path.
@@ -43,11 +43,7 @@ impl LanguageImpl for Script {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let repo_path = hook.repo_path().unwrap_or(hook.work_dir());
-        let mut split = hook.entry.split()?;
-
-        let cmd = repo_path.join(&split[0]);
-        split[0] = cmd.to_string_lossy().to_string();
-        let entry = resolve_command(split, None);
+        let entry = hook.entry.resolve_script(repo_path, None, store)?;
 
         let run = async |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "run script command")
@@ -68,7 +64,7 @@ impl LanguageImpl for Script {
             anyhow::Ok((code, output.stdout))
         };
 
-        let results = run_by_batch(hook, filenames, &entry, run).await?;
+        let results = run_by_batch(hook, filenames, entry.argv(), run).await?;
 
         reporter.on_run_complete(progress);
 

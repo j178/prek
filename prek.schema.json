@@ -286,6 +286,10 @@
           "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
           "type": "string"
         },
+        "shell": {
+          "description": "Run the hook entry through a predefined shell adapter.",
+          "$ref": "#/definitions/Shell"
+        },
         "require_serial": {
           "description": "This hook will execute using a single process instead of in parallel.\nDefault is false.",
           "type": "boolean"
@@ -382,6 +386,17 @@
           "type": "integer",
           "exclusiveMinimum": 0
         }
+      ]
+    },
+    "Shell": {
+      "description": "A predefined shell adapter used to run hook entries as shell source.",
+      "type": "string",
+      "enum": [
+        "sh",
+        "bash",
+        "pwsh",
+        "powershell",
+        "cmd"
       ]
     },
     "Stage": {
@@ -527,6 +542,10 @@
         "log_file": {
           "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
           "type": "string"
+        },
+        "shell": {
+          "description": "Run the hook entry through a predefined shell adapter.",
+          "$ref": "#/definitions/Shell"
         },
         "require_serial": {
           "description": "This hook will execute using a single process instead of in parallel.\nDefault is false.",
@@ -686,6 +705,10 @@
         "log_file": {
           "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
           "type": "string"
+        },
+        "shell": {
+          "description": "Run the hook entry through a predefined shell adapter.",
+          "$ref": "#/definitions/Shell"
         },
         "require_serial": {
           "description": "This hook will execute using a single process instead of in parallel.\nDefault is false.",
@@ -850,6 +873,10 @@
         "log_file": {
           "description": "Write the output of the hook to a file when the hook fails or verbose is enabled.",
           "type": "string"
+        },
+        "shell": {
+          "description": "Run the hook entry through a predefined shell adapter.",
+          "$ref": "#/definitions/Shell"
         },
         "require_serial": {
           "description": "This hook will execute using a single process instead of in parallel.\nDefault is false.",

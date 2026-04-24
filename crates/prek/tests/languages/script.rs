@@ -171,6 +171,47 @@ mod unix {
 
         Ok(())
     }
+
+    #[test]
+    fn script_shell_runs_entry_as_shell_source() -> Result<()> {
+        let context = TestContext::new();
+        context.init_project();
+        context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: shell-script
+                name: shell-script
+                language: script
+                files: ^a\.txt$
+                entry: |
+                  printf 'args:'
+                  for value in "$@"; do
+                    printf ' <%s>' "$value"
+                  done
+                  printf '\n'
+                shell: sh
+                args: [configured]
+                verbose: true
+        "#});
+        context.work_dir().child("a.txt").write_str("a")?;
+        context.git_add(".");
+
+        cmd_snapshot!(context.filters(), context.run(), @r"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        shell-script.............................................................Passed
+        - hook id: shell-script
+        - duration: [TIME]
+
+          args: <configured> <a.txt>
+
+        ----- stderr -----
+        ");
+
+        Ok(())
+    }
 }
 
 /// Test that a script with a shebang line works correctly on Windows.

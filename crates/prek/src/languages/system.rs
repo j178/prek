@@ -32,12 +32,12 @@ impl LanguageImpl for System {
         &self,
         hook: &InstalledHook,
         filenames: &[&Path],
-        _store: &Store,
+        store: &Store,
         reporter: &HookRunReporter,
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());
 
-        let entry = hook.entry.resolve(None)?;
+        let entry = hook.entry.resolve(None, store)?;
 
         let run = async |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "run system command")
@@ -58,7 +58,7 @@ impl LanguageImpl for System {
             anyhow::Ok((code, output.stdout))
         };
 
-        let results = run_by_batch(hook, filenames, &entry, run).await?;
+        let results = run_by_batch(hook, filenames, entry.argv(), run).await?;
 
         reporter.on_run_complete(progress);
 
