@@ -472,7 +472,7 @@ impl LanguageImpl for Rust {
             });
 
         // Use the hook entry as the binary name to find the package, this could be improved by allowing an explicit binary name in the hook config.
-        let hook_entry = hook.entry.split()?;
+        let hook_entry = hook.entry.expect_direct().split()?;
         let hook_bin = &hook_entry[0];
 
         // Install library dependencies and local project

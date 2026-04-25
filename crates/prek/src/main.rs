@@ -35,6 +35,7 @@ mod config;
 mod fs;
 mod git;
 mod hook;
+mod hook_entry;
 mod hooks;
 mod http;
 mod install_source;

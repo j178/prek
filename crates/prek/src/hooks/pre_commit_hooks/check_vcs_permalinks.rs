@@ -27,7 +27,8 @@ struct GithubPermalinkMatcher {
 
 impl GithubPermalinkMatcher {
     fn from_hook(hook: &Hook) -> Result<Self> {
-        let args = Args::try_parse_from(hook.entry.split()?.iter().chain(&hook.args))?;
+        let args =
+            Args::try_parse_from(hook.entry.expect_direct().split()?.iter().chain(&hook.args))?;
         Ok(Self::new(args.additional_github_domains))
     }
 

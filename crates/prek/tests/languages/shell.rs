@@ -185,6 +185,6 @@ fn shell_rejected_for_pygrep() {
     ----- stderr -----
     error: Failed to init hooks
       caused by: Invalid hook `check-todo`
-      caused by: Hook specified `shell` but the language `pygrep` does not support shell execution
+      caused by: Hook specified `shell` but the language `pygrep` does not support shell execution: `entry` is the regex pattern
     ");
 }

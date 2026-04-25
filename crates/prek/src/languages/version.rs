@@ -56,7 +56,15 @@ impl LanguageRequest {
     pub(crate) fn allows_download(&self) -> bool {
         match self {
             LanguageRequest::Any { system_only } => !system_only,
-            _ => true,
+            LanguageRequest::Bun(_)
+            | LanguageRequest::Dotnet(_)
+            | LanguageRequest::Deno(_)
+            | LanguageRequest::Golang(_)
+            | LanguageRequest::Node(_)
+            | LanguageRequest::Python(_)
+            | LanguageRequest::Ruby(_)
+            | LanguageRequest::Rust(_)
+            | LanguageRequest::Semver(_) => true,
         }
     }
 
@@ -87,7 +95,21 @@ impl LanguageRequest {
             Language::Python => Self::Python(request.parse()?),
             Language::Ruby => Self::Ruby(request.parse()?),
             Language::Rust => Self::Rust(request.parse()?),
-            _ => Self::Semver(request.parse()?),
+            Language::Conda
+            | Language::Coursier
+            | Language::Dart
+            | Language::Docker
+            | Language::DockerImage
+            | Language::Fail
+            | Language::Haskell
+            | Language::Julia
+            | Language::Lua
+            | Language::Perl
+            | Language::Pygrep
+            | Language::R
+            | Language::Script
+            | Language::Swift
+            | Language::System => Self::Semver(request.parse()?),
         })
     }
 

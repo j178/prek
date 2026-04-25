@@ -23,7 +23,7 @@ pub(crate) async fn file_contents_sorter(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
-    let args = Args::try_parse_from(hook.entry.split()?.iter().chain(&hook.args))?;
+    let args = Args::try_parse_from(hook.entry.expect_direct().split()?.iter().chain(&hook.args))?;
     let file_base = hook.project().relative_path();
 
     run_concurrent_file_checks(filenames.iter().copied(), *CONCURRENCY, |filename| {
