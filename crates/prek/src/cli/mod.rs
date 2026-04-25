@@ -1226,8 +1226,11 @@ mod _gen {
         };
 
         let reference_string = generate(Cli::command());
-        let filename = "cli.md";
-        let reference_path = PathBuf::from(ROOT_DIR).join("docs").join(filename);
+        let filename = "reference/cli.md";
+        let reference_path = PathBuf::from(ROOT_DIR)
+            .join("docs")
+            .join("reference")
+            .join("cli.md");
 
         match mode {
             Mode::DryRun => {

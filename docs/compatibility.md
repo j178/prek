@@ -46,4 +46,4 @@ If the same config must continue working in upstream `pre-commit`, stay with the
 - glob mappings for `files` and `exclude`
 - workspace mode
 
-See [Configuration](configuration.md) for config-level compatibility details and [Differences](diff.md) for broader behavior and CLI differences.
+See [Configuration](configuration.md) for config format guidance, [Configuration Reference](reference/configuration.md) for key-level details, and [Differences](diff.md) for broader behavior and CLI differences.

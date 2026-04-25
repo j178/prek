@@ -80,7 +80,8 @@ Now every `git commit` will invoke `prek run` for the files included in the comm
 ### 4. Go further
 
 - Explore richer configuration options in the official [pre-commit documentation](https://pre-commit.com/). Every example there works with prek.
-- Check the [configuration reference](./configuration.md) for prek-specific settings.
+- See [Common Workflows](./usage.md) for the commands you will use after setup.
+- Check the [configuration reference](./reference/configuration.md) for prek-specific settings.
 - Browse the [built-in hooks](./builtin.md) and the [difference guide](./diff.md) to see what else you can leverage.
 
 That’s it! You now have automated checks running locally with minimal setup. When you’re ready to dive deeper, the rest of the docs cover advanced workflows, language-specific installers, and more.

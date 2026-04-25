@@ -22,7 +22,7 @@ If `language_version` is `system`, prek skips downloads and requires a system-in
 
 !!! note "prek-only"
 
-    `language_version` is parsed as a version request. For languages that use semver requests, you can specify ranges (for example `^1.2`, `>=1.5, <2.0`). See [Configuration](configuration.md#language_version) for details.
+    `language_version` is parsed as a version request. For languages that use semver requests, you can specify ranges (for example `^1.2`, `>=1.5, <2.0`). See [Configuration Reference](reference/configuration.md#language_version) for details.
 
 Languages with managed toolchain downloads in prek today:
 
@@ -101,7 +101,7 @@ Use `docker` when you need a language runtime that isn’t otherwise supported; 
 !!! note "prek-only"
 
     prek auto-detects the container runtime (Docker, Podman, or [Container](https://github.com/apple/container)) and can be overridden with `PREK_CONTAINER_RUNTIME`.
-    See [Configuration](configuration.md#environment-variables) for details.
+    See [Environment Variable Reference](reference/environment-variables.md) for details.
 
 ### docker_image
 

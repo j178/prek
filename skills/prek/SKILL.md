@@ -20,12 +20,15 @@ Per that file, prefer explicit markdown docs when you need details:
 - [Introduction](https://prek.j178.dev/index.md)
 - [Installation](https://prek.j178.dev/installation/index.md)
 - [Quickstart](https://prek.j178.dev/quickstart/index.md)
+- [Common Workflows](https://prek.j178.dev/usage/index.md)
 - [Configuration](https://prek.j178.dev/configuration/index.md)
-- [CLI](https://prek.j178.dev/cli/index.md)
-- [Built-in Hooks](https://prek.j178.dev/builtin/index.md)
 - [Workspace Mode](https://prek.j178.dev/workspace/index.md)
-- [Differences from pre-commit](https://prek.j178.dev/diff/index.md)
 - [Language Support](https://prek.j178.dev/languages/index.md)
+- [Built-in Hooks](https://prek.j178.dev/builtin/index.md)
+- [CLI Reference](https://prek.j178.dev/reference/cli/index.md)
+- [Configuration Reference](https://prek.j178.dev/reference/configuration/index.md)
+- [Environment Variable Reference](https://prek.j178.dev/reference/environment-variables/index.md)
+- [Differences from pre-commit](https://prek.j178.dev/diff/index.md)
 - [Benchmark](https://prek.j178.dev/benchmark/index.md)
 
 ## What prek is for
@@ -163,6 +166,7 @@ For debugging:
 
 - `prek run -vvv`
 - `PREK_NO_FAST_PATH=1 prek run`: compare builtin fast-path behavior against the standard execution path
+- Check the [Environment Variable Reference](https://prek.j178.dev/reference/environment-variables/index.md) for `PREK_*` controls such as `PREK_HOME`, `PREK_SKIP`, and concurrency limits.
 
 ## Built-in hook guidance
 

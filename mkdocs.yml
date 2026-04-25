@@ -78,13 +78,17 @@ plugins:
           - installation.md
           - quickstart.md
         Usage:
+          - usage.md
           - configuration.md
-          - languages.md
-          - cli.md
-          - builtin.md
           - workspace.md
+          - languages.md
+          - builtin.md
           - integrations.md
           - authoring-hooks.md
+        Reference:
+          - reference/cli.md
+          - reference/configuration.md
+          - reference/environment-variables.md
         Help:
           - debugging.md
           - faq.md
@@ -100,13 +104,17 @@ nav:
     - Installation: installation.md
     - Quickstart: quickstart.md
   - Usage:
+    - Common Workflows: usage.md
     - Configuration: configuration.md
-    - Language Support: languages.md
-    - Commands: cli.md
-    - Built-in Hooks: builtin.md
     - Workspace Mode: workspace.md
+    - Language Support: languages.md
+    - Built-in Hooks: builtin.md
     - Integrations: integrations.md
     - Authoring Hooks: authoring-hooks.md
+  - Reference:
+    - CLI Reference: reference/cli.md
+    - Configuration Reference: reference/configuration.md
+    - Environment Variables: reference/environment-variables.md
   - Help:
     - Debugging: debugging.md
     - FAQ: faq.md
