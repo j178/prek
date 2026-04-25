@@ -31,6 +31,7 @@ impl EnvVars {
     pub const SSL_CERT_DIR: &'static str = "SSL_CERT_DIR";
     pub const PREK_CONTAINER_RUNTIME: &'static str = "PREK_CONTAINER_RUNTIME";
     pub const PREK_QUIET: &'static str = "PREK_QUIET";
+    pub const PREK_REPORT_LEVEL: &'static str = "PREK_REPORT_LEVEL";
     pub const PREK_LOG_TRUNCATE_LIMIT: &'static str = "PREK_LOG_TRUNCATE_LIMIT";
 
     // PREK internal environment variables

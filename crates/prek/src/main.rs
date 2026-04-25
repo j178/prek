@@ -301,6 +301,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.dry_run,
                 cli.globals.refresh,
                 args.extra,
+                args.report_level,
                 cli.globals.verbose > 0,
                 printer,
             )

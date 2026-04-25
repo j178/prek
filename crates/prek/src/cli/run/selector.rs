@@ -131,6 +131,18 @@ impl Selector {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HookPartition {
+    /// Hook runs (not excluded by skip selectors, matches include rules).
+    Selected,
+    /// Hook matches include rules but is excluded by `--skip` / `SKIP` / `PREK_SKIP`.
+    ///
+    /// These hooks are reported as selector-skipped at sufficiently high report levels.
+    SkippedBySkipSelector,
+    /// Hook is not in the run set (for example, not matched by positional hook selectors).
+    NotSelected,
+}
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Selectors {
     includes: Vec<Selector>,
@@ -212,24 +224,38 @@ impl Selectors {
             })
     }
 
-    /// Check if a hook matches any of the selection criteria.
-    pub(crate) fn matches_hook(&self, hook: &Hook) -> bool {
+    fn passes_include_without_marking(includes: &[Selector], hook: &Hook) -> bool {
+        if includes.is_empty() {
+            true
+        } else {
+            includes.iter().any(|include| include.matches_hook(hook))
+        }
+    }
+
+    /// Classify a hook for execution and selector-skipped reporting.
+    ///
+    /// [`Self::matches_hook`] is equivalent to `matches!(partition, HookPartition::Selected)`.
+    pub(crate) fn hook_partition(&self, hook: &Hook) -> HookPartition {
         let mut usage = self.usage.lock().unwrap();
 
-        // Always check every selector to track usage
-        let mut skipped = false;
+        let mut excluded_by_skip = false;
         for (idx, skip) in self.skips.iter().enumerate() {
             if skip.matches_hook(hook) {
                 usage.use_skip(idx);
-                skipped = true;
+                excluded_by_skip = true;
             }
         }
-        if skipped {
-            return false;
+
+        if excluded_by_skip {
+            return if Self::passes_include_without_marking(&self.includes, hook) {
+                HookPartition::SkippedBySkipSelector
+            } else {
+                HookPartition::NotSelected
+            };
         }
 
         if self.includes.is_empty() {
-            return true; // No `includes` mean all hooks are included
+            return HookPartition::Selected;
         }
 
         let mut included = false;
@@ -239,7 +265,17 @@ impl Selectors {
                 included = true;
             }
         }
-        included
+
+        if included {
+            HookPartition::Selected
+        } else {
+            HookPartition::NotSelected
+        }
+    }
+
+    /// Check if a hook matches any of the selection criteria.
+    pub(crate) fn matches_hook(&self, hook: &Hook) -> bool {
+        matches!(self.hook_partition(hook), HookPartition::Selected)
     }
 
     pub(crate) fn matches_hook_id(&self, hook_id: &str) -> bool {

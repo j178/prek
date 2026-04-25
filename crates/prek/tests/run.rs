@@ -61,14 +61,14 @@ fn run_basic() -> Result<()> {
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run().arg("trailing-whitespace"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("trailing-whitespace"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     trim trailing whitespace.................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     Ok(())
 }
@@ -375,17 +375,17 @@ fn multiple_hook_ids() {
     context.git_add(".");
 
     // Multiple repeated hook-id (should deduplicate)
-    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("hook1").arg("hook1"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("hook1").arg("hook1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     First Hook...............................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     // Hook-id that matches multiple hooks (by alias)
-    cmd_snapshot!(context.filters(), context.run().arg("shared-name"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("shared-name"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -393,7 +393,7 @@ fn multiple_hook_ids() {
     Shared Hook B............................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     // Hook-id matches nothing
     cmd_snapshot!(context.filters(), context.run().arg("nonexistent-hook"), @r"
@@ -420,17 +420,17 @@ fn multiple_hook_ids() {
     ");
 
     // Hook-id matches one hook
-    cmd_snapshot!(context.filters(), context.run().arg("hook2"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("hook2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Second Hook..............................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 
     // Multiple hook-ids with mixed results (some exist, some don't)
-    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("nonexistent").arg("hook2"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("nonexistent").arg("hook2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -442,7 +442,7 @@ fn multiple_hook_ids() {
     ");
 
     // Multiple valid hook-ids
-    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("hook2").arg("nonexistent-hook"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("hook2").arg("nonexistent-hook"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -454,7 +454,7 @@ fn multiple_hook_ids() {
     ");
 
     // Multiple hook-ids with some duplicates and aliases
-    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("shared-name").arg("hook1"), @r#"
+    cmd_snapshot!(context.filters(), context.run().arg("hook1").arg("shared-name").arg("hook1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -463,7 +463,7 @@ fn multiple_hook_ids() {
     Shared Hook B............................................................Passed
 
     ----- stderr -----
-    "#);
+    ");
 }
 
 #[test]
@@ -701,7 +701,7 @@ fn cjk_hook_name() {
           - repo: local
             hooks:
               - id: trailing-whitespace
-                name: 去除行尾空格
+                name: ??????
                 language: system
                 entry: python3 -V
               - id: end-of-file-fixer
@@ -716,7 +716,7 @@ fn cjk_hook_name() {
     success: true
     exit_code: 0
     ----- stdout -----
-    去除行尾空格.............................................................Passed
+    ??????...................................................................Passed
     fix end of files.........................................................Passed
 
     ----- stderr -----
@@ -748,7 +748,7 @@ fn skips() {
     "#});
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run().env("SKIP", "end-of-file-fixer"), @r"
+    cmd_snapshot!(context.filters(), context.run().env("SKIP", "end-of-file-fixer"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -758,17 +758,20 @@ fn skips() {
     check json...............................................................Failed
     - hook id: check-json
     - exit code: 1
+    fix end of files......................................(excluded by skip)Skipped
 
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run().env("SKIP", "trailing-whitespace,end-of-file-fixer"), @r"
+    cmd_snapshot!(context.filters(), context.run().env("SKIP", "trailing-whitespace,end-of-file-fixer"), @"
     success: false
     exit_code: 1
     ----- stdout -----
     check json...............................................................Failed
     - hook id: check-json
     - exit code: 1
+    trailing-whitespace...................................(excluded by skip)Skipped
+    fix end of files......................................(excluded by skip)Skipped
 
     ----- stderr -----
     ");
@@ -906,7 +909,7 @@ fn fallback_to_manual_stage() {
     ");
 
     // Mixing `pre-push` and manual selectors still runs the manual hook via fallback.
-    cmd_snapshot!(context.filters(), context.run().arg("pre-push").arg("manual-only"), @r"
+    cmd_snapshot!(context.filters(), context.run().arg("pre-push").arg("manual-only"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1332,6 +1335,36 @@ fn log_file() {
 
     let log = context.read("log.txt");
     assert_eq!(log, "Fixing files");
+}
+
+/// `log_file` is written even when per-hook console output is suppressed.
+#[test]
+fn log_file_report_level_silent() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: trailing-whitespace
+                name: trailing-whitespace
+                language: system
+                entry: python3 -c 'print("Fixing files"); exit(1)'
+                always_run: true
+                log_file: log.txt
+    "#});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.run().arg("--report-level").arg("silent"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    "#);
+
+    assert_eq!(context.read("log.txt"), "Fixing files");
 }
 
 /// Pass pre-commit environment variables to the hook.
@@ -2399,6 +2432,7 @@ fn selectors_completion() -> Result<()> {
     --show-diff-on-failure	When hooks fail, run `git diff` directly afterward
     --fail-fast	Stop running hooks after the first failure
     --dry-run	Do not run the hooks, but print the hooks that would have been run
+    --report-level	Control which hook statuses are shown in output
     --config	Path to alternate config file
     --cd	Change to directory before running
     --color	Whether to use color in output
