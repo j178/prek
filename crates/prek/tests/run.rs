@@ -1421,6 +1421,77 @@ fn staged_files_only() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn stash_conflict_rollback_restores_index_from_saved_tree() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let cwd = context.work_dir();
+    cwd.child("corrupt-index.py").write_str(indoc::indoc! {r#"
+        import pathlib
+        import subprocess
+
+        empty = subprocess.check_output(
+            ["git", "hash-object", "-w", "--stdin"],
+            input=b"",
+        ).decode().strip()
+        subprocess.check_call([
+            "git",
+            "update-index",
+            "--cacheinfo",
+            "100644",
+            empty,
+            "new-file.txt",
+        ])
+        pathlib.Path("new-file.txt").write_text("hook content\n")
+    "#})?;
+    context.write_pre_commit_config(indoc::indoc! {r"
+        repos:
+          - repo: local
+            hooks:
+              - id: corrupt-index
+                name: corrupt-index
+                language: system
+                entry: python3 corrupt-index.py
+                pass_filenames: false
+                always_run: true
+    "});
+    cwd.child("README.md").write_str("initial\n")?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    cwd.child("new-file.txt").write_str("staged content\n")?;
+    context.git_add("new-file.txt");
+    cwd.child("new-file.txt").write_str("unstaged content\n")?;
+
+    let filters: Vec<_> = context
+        .filters()
+        .into_iter()
+        .chain([(r"/\d+-\d+.patch", "/[TIME]-[PID].patch")])
+        .collect();
+
+    cmd_snapshot!(filters, context.run(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    corrupt-index............................................................Failed
+    - hook id: corrupt-index
+    - files were modified by this hook
+
+    ----- stderr -----
+    Unstaged changes detected, stashing unstaged changes to `[HOME]/patches/[TIME]-[PID].patch`
+    Stashed changes conflicted with changes made by hook, rolling back the hook changes
+    Restored working tree changes from `[HOME]/patches/[TIME]-[PID].patch`
+    ");
+
+    let output = git_cmd(cwd).arg("show").arg(":new-file.txt").output()?;
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(String::from_utf8(output.stdout)?, "staged content\n");
+    assert_eq!(context.read("new-file.txt"), "unstaged content\n");
+
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn restore_on_interrupt() -> Result<()> {
