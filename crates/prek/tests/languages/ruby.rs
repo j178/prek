@@ -1263,6 +1263,23 @@ fn auto_download_gem_install_without_gem_on_path() -> anyhow::Result<()> {
     let new_path = remove_bin_from_path("ruby", None)?;
     let new_path = remove_bin_from_path("gem", Some(new_path))?;
 
+    // `remove_bin_from_path` strips the entire directory that contains the
+    // named binary. On Ubuntu CI that directory is `/usr/bin`, which also
+    // happens to hold `git` — and prek shells out to `git`. Restore `git`
+    // via a symlink-only stub directory that explicitly does *not* contain
+    // `ruby` or `gem`.
+    let git_bin = which::which("git").expect("git must be on PATH for tests");
+    let stub_dir = context
+        .home_dir()
+        .parent()
+        .expect("home_dir has a parent")
+        .join("path-stub");
+    fs_err::create_dir_all(&stub_dir)?;
+    std::os::unix::fs::symlink(&git_bin, stub_dir.join("git"))?;
+    let new_path = std::env::join_paths(
+        std::iter::once(stub_dir).chain(std::env::split_paths(&new_path)),
+    )?;
+
     let filters = [(
         // Normalize the WEBrick version (e.g. "1.9.1") so the snapshot is
         // stable as webrick releases new versions.
