@@ -8,7 +8,7 @@ on:
         type: string
 
 env:
-  UV_VERSION: "0.11.6"
+  UV_VERSION: "0.11.7"
 
 jobs:
   publish:
