@@ -1,3 +1,4 @@
+use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -12,7 +13,7 @@ use crate::hook::{Hook, InstallInfo, InstalledHook};
 use crate::languages::LanguageImpl;
 use crate::languages::ruby::RubyRequest;
 use crate::languages::ruby::gem::{build_gemspecs, install_gems};
-use crate::languages::ruby::installer::RubyInstaller;
+use crate::languages::ruby::installer::{RubyInstaller, query_ruby_info};
 use crate::languages::version::LanguageRequest;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
@@ -61,7 +62,8 @@ impl LanguageImpl for Ruby {
         // 3. Create environment directories
         let gem_home = gem_home(&info.env_path);
         fs_err::tokio::create_dir_all(&gem_home).await?;
-        fs_err::tokio::create_dir_all(gem_home.join("bin")).await?;
+        let gem_bin = gem_bin(&info.env_path);
+        fs_err::tokio::create_dir_all(&gem_bin).await?;
 
         // 4. Build gemspecs
         if let Some(repo_path) = hook.repo_path() {
@@ -87,6 +89,11 @@ impl LanguageImpl for Ruby {
         .await
         .context("Failed to install gems")?;
 
+        let gem_bin_ruby = gem_bin.join("ruby").with_extension(EXE_EXTENSION);
+        crate::fs::symlink_or_copy(ruby.ruby_bin(), &gem_bin_ruby)
+            .await
+            .context("Failed to install Ruby executable into gem bin directory")?;
+
         info.persist_env_path();
 
         reporter.on_install_complete(progress);
@@ -98,23 +105,10 @@ impl LanguageImpl for Ruby {
     }
 
     async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        // 1. Verify Ruby executable exists
-        if !info.toolchain.exists() {
-            anyhow::bail!("Ruby executable not found at {}", info.toolchain.display());
-        }
-
-        // 2. Verify it runs and reports correct version
-        let script = "puts RUBY_VERSION";
-        let output = Cmd::new(&info.toolchain, "check ruby version")
-            .arg("-e")
-            .arg(script)
-            .check(true)
-            .output()
-            .await?;
-
-        let version_str = str::from_utf8(&output.stdout)?.trim();
-        let actual_version = semver::Version::parse(version_str)
-            .with_context(|| format!("Failed to parse Ruby version: {version_str}"))?;
+        // 1. Verify Ruby runs and reports correct version
+        let (actual_version, _) = query_ruby_info(&info.toolchain)
+            .await
+            .context("Failed to query Ruby info")?;
 
         if actual_version != info.language_version {
             anyhow::bail!(
@@ -124,16 +118,14 @@ impl LanguageImpl for Ruby {
             );
         }
 
-        // 3. Verify gem home exists
-        let gem_home = gem_home(&info.env_path);
-        if !gem_home.exists() {
-            anyhow::bail!("Gem home directory not found at {}", gem_home.display());
-        }
-
-        // 4. Verify gem bin directory exists
-        let gem_bin = gem_home.join("bin");
-        if !gem_bin.exists() {
-            anyhow::bail!("Gem bin directory not found at {}", gem_bin.display());
+        // 2. Verify gem bin Ruby executable exists
+        let gem_bin = gem_bin(&info.env_path);
+        let gem_bin_ruby = gem_bin.join("ruby").with_extension(EXE_EXTENSION);
+        if !gem_bin_ruby.exists() {
+            anyhow::bail!(
+                "Gem bin Ruby executable not found at {}",
+                gem_bin_ruby.display()
+            );
         }
 
         Ok(())
@@ -152,7 +144,7 @@ impl LanguageImpl for Ruby {
 
         // Prepare PATH
         let gem_home = gem_home(env_dir);
-        let gem_bin = gem_home.join("bin");
+        let gem_bin = gem_bin(env_dir);
         let ruby_bin = hook
             .toolchain_dir()
             .expect("Ruby toolchain should have parent");
@@ -207,4 +199,8 @@ impl LanguageImpl for Ruby {
 /// Get the `GEM_HOME` path for this environment
 fn gem_home(env_path: &Path) -> PathBuf {
     env_path.join("gems")
+}
+
+fn gem_bin(env_path: &Path) -> PathBuf {
+    gem_home(env_path).join("bin")
 }

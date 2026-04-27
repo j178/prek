@@ -1,3 +1,5 @@
+use std::env::consts::EXE_EXTENSION;
+
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 
 use crate::common::{TestContext, cmd_snapshot, git_cmd};
@@ -421,6 +423,19 @@ fn gemspec_workflow() -> anyhow::Result<()> {
 
     ----- stderr -----
     ");
+
+    let gem_bin_ruby = fs_err::read_dir(context.home_dir().join("hooks"))?
+        .filter_map(Result::ok)
+        .find(|e| e.file_name().to_string_lossy().starts_with("ruby-"))
+        .map(|e| e.path().join("gems/bin/ruby").with_extension(EXE_EXTENSION))
+        .expect("No ruby hook directory found");
+    assert!(gem_bin_ruby.exists());
+    #[cfg(unix)]
+    assert!(
+        fs_err::symlink_metadata(gem_bin_ruby)?
+            .file_type()
+            .is_symlink()
+    );
 
     Ok(())
 }

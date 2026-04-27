@@ -532,7 +532,7 @@ fn find_gem_for_ruby(ruby_path: &Path) -> Result<PathBuf> {
 }
 
 /// Query Ruby version and engine
-async fn query_ruby_info(ruby_path: &Path) -> Result<(semver::Version, String)> {
+pub(crate) async fn query_ruby_info(ruby_path: &Path) -> Result<(semver::Version, String)> {
     let script = "puts RUBY_ENGINE; puts RUBY_VERSION";
 
     let output = Cmd::new(ruby_path, "query ruby version")
