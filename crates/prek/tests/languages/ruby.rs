@@ -2,7 +2,7 @@ use std::env::consts::EXE_EXTENSION;
 
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 
-use crate::common::{TestContext, cmd_snapshot, git_cmd, remove_bin_from_path};
+use crate::common::{TestContext, cmd_snapshot, git_cmd};
 
 /// Test basic Ruby hook with system Ruby
 #[test]
@@ -1203,6 +1203,8 @@ fn auto_download() -> anyhow::Result<()> {
 fn auto_download_gem_install_without_gem_on_path() -> anyhow::Result<()> {
     use assert_fs::assert::PathAssert;
     use prek_consts::env_vars::EnvVars;
+
+    use crate::common::remove_bin_from_path;
 
     if !EnvVars::is_set(EnvVars::CI) {
         // Skip when not running in CI: local environments may have
