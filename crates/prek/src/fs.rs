@@ -269,8 +269,12 @@ pub fn relative_to(
 /// Create a symlink to the file, or copy it if symlink creation fails.
 /// Tries symlink first, then falls back to a regular file copy.
 pub(crate) async fn symlink_or_copy(source: &Path, target: &Path) -> anyhow::Result<()> {
-    if target.exists() {
-        fs_err::tokio::remove_file(target).await?;
+    match fs_err::tokio::symlink_metadata(target).await {
+        Ok(_) => {
+            fs_err::tokio::remove_file(target).await?;
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
     }
 
     #[cfg(not(windows))]
@@ -299,8 +303,7 @@ pub(crate) async fn symlink_or_copy(source: &Path, target: &Path) -> anyhow::Res
     #[cfg(windows)]
     {
         // Try Windows symlink API (requires admin privileges)
-        use std::os::windows::fs::symlink_file;
-        match symlink_file(source, target) {
+        match fs_err::tokio::symlink_file(source, target).await {
             Ok(()) => {
                 trace!(
                     "Created Windows symlink from {} to {}",
