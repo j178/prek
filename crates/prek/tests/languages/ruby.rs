@@ -1276,9 +1276,8 @@ fn auto_download_gem_install_without_gem_on_path() -> anyhow::Result<()> {
         .join("path-stub");
     fs_err::create_dir_all(&stub_dir)?;
     std::os::unix::fs::symlink(&git_bin, stub_dir.join("git"))?;
-    let new_path = std::env::join_paths(
-        std::iter::once(stub_dir).chain(std::env::split_paths(&new_path)),
-    )?;
+    let new_path =
+        std::env::join_paths(std::iter::once(stub_dir).chain(std::env::split_paths(&new_path)))?;
 
     let filters = [(
         // Normalize the WEBrick version (e.g. "1.9.1") so the snapshot is
