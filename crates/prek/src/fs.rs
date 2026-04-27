@@ -266,8 +266,8 @@ pub fn relative_to(
     Ok(up.join(stripped))
 }
 
-/// Create a symlink or copy the file on Windows.
-/// Tries symlink first, falls back to copy if symlink fails.
+/// Create a symlink to the file, or copy it if symlink creation fails.
+/// Tries symlink first, then falls back to a regular file copy.
 pub(crate) async fn symlink_or_copy(source: &Path, target: &Path) -> anyhow::Result<()> {
     if target.exists() {
         fs_err::tokio::remove_file(target).await?;
