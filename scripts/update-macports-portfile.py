@@ -155,7 +155,7 @@ def main() -> None:
     portfile.write_text(text, encoding="utf-8")
     print(f"Updated {portfile} for version {version}")
     print("To open a PR with the updated Portfile, run:")
-    print(f"  git clone --depth=1 --branch=main https://github.com/macports/macports-ports.git /tmp/macports-ports")
+    print(f"  git clone --depth=1 --branch=master https://github.com/macports/macports-ports.git /tmp/macports-ports")
     print(f"  cp {portfile} /tmp/macports-ports/devel/prek/Portfile")
     print(f"  cd /tmp/macports-ports")
     print(f"  git add devel/prek/Portfile")
