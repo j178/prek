@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.3.11
+
+Released on 2026-04-27.
+
+### Highlights
+
+Hook entries now have an explicit `shell` option for shell snippets. Set
+`shell: sh`, `bash`, `pwsh`, `powershell`, or `cmd` when an entry should be
+evaluated by that shell; leaving it unset keeps prek's direct argv execution.
+
+`prek auto-update` can now filter tag candidates before choosing an update.
+Both options take glob patterns: use `--include-tag` to only consider matching
+tag names, and `--exclude-tag` to skip matching tags such as moving tags or
+prereleases.
+
+### Enhancements
+
+- Add `auto-update --exclude-repo <repo>` to skip repos ([#1983](https://github.com/j178/prek/pull/1983))
+- Add `auto-update --exit-code` to exit with non-zero on updates ([#2002](https://github.com/j178/prek/pull/2002))
+- Add `auto-update --include-tag <pattern>`/`--exclude-tag <pattern>` to filter tags ([#1984](https://github.com/j178/prek/pull/1984))
+- Adds an explicit `shell` hook option for entries that should run as shell source ([#2004](https://github.com/j178/prek/pull/2004))
+- Make `--hook-dir` optional for hook-impl ([#1989](https://github.com/j178/prek/pull/1989))
+- Skip shim warning when `--script-version` is missing ([#1990](https://github.com/j178/prek/pull/1990))
+
+### Bug fixes
+
+- Install Ruby executable in gem bin ([#2017](https://github.com/j178/prek/pull/2017))
+- Use dedicated Android npm package ([#1982](https://github.com/j178/prek/pull/1982))
+- Use stable repo keys without breaking cached clones ([#1995](https://github.com/j178/prek/pull/1995))
+
+### Documentation
+
+- Explain prek name ([#1980](https://github.com/j178/prek/pull/1980))
+- Clarify `pass_filenames` concurrency docs ([#1999](https://github.com/j178/prek/pull/1999))
+- Reorganize documentation references ([#2005](https://github.com/j178/prek/pull/2005))
+- Clarify hook author manifest env docs ([#1991](https://github.com/j178/prek/pull/1991))
+- docs: add Sentry to users list ([#1981](https://github.com/j178/prek/pull/1981))
+
+### Contributors
+
+- @j178
+
 ## 0.3.10
 
 Released on 2026-04-21.
