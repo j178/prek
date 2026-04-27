@@ -1,10 +1,11 @@
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
 use futures::{StreamExt, TryStreamExt};
 use prek_consts::env_vars::EnvVars;
+use prek_consts::prepend_paths;
 use rand::RngExt;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::debug;
@@ -12,6 +13,21 @@ use tracing::debug;
 use crate::languages::ruby::installer::RubyResult;
 use crate::process::Cmd;
 use crate::run::CONCURRENCY;
+
+/// Build a `PATH` value with the resolved Ruby's bin directory prepended.
+///
+/// `ruby -S gem` searches `$PATH` for the `gem` script. The rv-ruby tarballs
+/// that prek auto-downloads ship `gem` next to `ruby` in the same `bin/`
+/// directory, but that directory is not on the parent process's PATH (e.g.
+/// in a Docker image with no system Ruby). Without prepending it, Ruby errors
+/// with `LoadError: No such file or directory -- gem`.
+fn ruby_path_env(ruby: &RubyResult) -> Result<OsString> {
+    let ruby_bin_dir = ruby
+        .ruby_bin()
+        .parent()
+        .context("Ruby executable should have a parent directory")?;
+    prepend_paths(&[ruby_bin_dir]).context("Failed to join PATH")
+}
 
 /// Find all .gemspec files in a directory
 fn find_gemspecs(dir: &Path) -> Result<Vec<PathBuf>> {
@@ -49,6 +65,7 @@ async fn build_gemspec(ruby: &RubyResult, gemspec_path: &Path) -> Result<PathBuf
         .arg("build")
         .arg(gemspec_path.file_name().unwrap())
         .current_dir(repo_dir)
+        .env(EnvVars::PATH, ruby_path_env(ruby)?)
         .check(true)
         .output()
         .await?;
@@ -84,8 +101,13 @@ pub(crate) async fn build_gemspecs(ruby: &RubyResult, repo_dir: &Path) -> Result
 }
 
 /// Set common gem environment variables for isolation.
-fn gem_env<'a>(cmd: &'a mut Cmd, gem_home: &Path) -> &'a mut Cmd {
-    cmd.env(EnvVars::GEM_HOME, gem_home)
+///
+/// Also prepends the resolved Ruby's bin directory to `$PATH` so that
+/// `ruby -S gem` can find the bundled `gem` script even when no system Ruby
+/// is on PATH.
+fn gem_env<'a>(cmd: &'a mut Cmd, ruby: &RubyResult, gem_home: &Path) -> Result<&'a mut Cmd> {
+    cmd.env(EnvVars::PATH, ruby_path_env(ruby)?)
+        .env(EnvVars::GEM_HOME, gem_home)
         .env(EnvVars::BUNDLE_IGNORE_CONFIG, "1")
         .env_remove(EnvVars::GEM_PATH)
         .env_remove(EnvVars::BUNDLE_GEMFILE);
@@ -97,7 +119,7 @@ fn gem_env<'a>(cmd: &'a mut Cmd, gem_home: &Path) -> &'a mut Cmd {
         cmd.env("MAKEFLAGS", format!("-j{}", *CONCURRENCY));
     }
 
-    cmd
+    Ok(cmd)
 }
 
 /// A gem resolved by `gem install --explain`.
@@ -189,7 +211,7 @@ async fn resolve_gems(
         .arg(gem_home.join("bin"))
         .args(gem_files)
         .args(additional_dependencies);
-    gem_env(&mut cmd, gem_home);
+    gem_env(&mut cmd, ruby, gem_home)?;
 
     let output = cmd.check(true).output().await?;
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -226,7 +248,7 @@ async fn install_single_gem(
         }
     }
 
-    gem_env(&mut cmd, gem_home);
+    gem_env(&mut cmd, ruby, gem_home)?;
     cmd.check(true).output().await?;
     Ok(())
 }
@@ -251,7 +273,7 @@ async fn install_gems_sequential(
         .arg(gem_home.join("bin"))
         .args(gem_files)
         .args(additional_dependencies);
-    gem_env(&mut cmd, gem_home);
+    gem_env(&mut cmd, ruby, gem_home)?;
 
     debug!("Installing gems sequentially to {}", gem_home.display());
     cmd.check(true).output().await?;
