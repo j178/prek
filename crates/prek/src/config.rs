@@ -40,8 +40,8 @@ impl GlobPatterns {
         self.patterns.is_empty()
     }
 
-    pub(crate) fn is_match(&self, value: &str) -> bool {
-        self.set.is_match(Path::new(value))
+    pub(crate) fn is_match(&self, path: &Path) -> bool {
+        self.set.is_match(path)
     }
 }
 
@@ -182,19 +182,22 @@ pub(crate) enum FilePattern {
 }
 
 impl FilePattern {
-    pub(crate) fn new_glob(patterns: Vec<String>) -> Result<Self, globset::Error> {
+    pub(crate) fn glob(patterns: Vec<String>) -> Result<Self, globset::Error> {
         Ok(Self::Glob(GlobPatterns::new(patterns)?))
     }
 
-    pub(crate) fn new_regex(pattern: &str) -> Result<Self, fancy_regex::Error> {
+    pub(crate) fn regex(pattern: &str) -> Result<Self, fancy_regex::Error> {
         Ok(Self::Regex(Regex::new(pattern)?))
     }
 
-    pub(crate) fn is_match(&self, str: &str) -> bool {
+    pub(crate) fn is_match(&self, path: &Path) -> bool {
         match self {
             FilePattern::Never => false,
-            FilePattern::Regex(regex) => regex.is_match(str).unwrap_or(false),
-            FilePattern::Glob(globs) => globs.is_match(str),
+            // Regex patterns are text matchers; globs can match OS paths directly.
+            FilePattern::Regex(regex) => path
+                .to_str()
+                .is_some_and(|path| regex.is_match(path).unwrap_or(false)),
+            FilePattern::Glob(globs) => globs.is_match(path),
         }
     }
 }
@@ -1460,9 +1463,9 @@ mod tests {
             matches!(parsed.files, FilePattern::Regex(_)),
             "expected regex pattern"
         );
-        assert!(parsed.files.is_match("src/main.rs"));
-        assert!(!parsed.files.is_match("other/main.rs"));
-        assert!(parsed.exclude.is_match("target/debug/app"));
+        assert!(parsed.files.is_match(Path::new("src/main.rs")));
+        assert!(!parsed.files.is_match(Path::new("other/main.rs")));
+        assert!(parsed.exclude.is_match(Path::new("target/debug/app")));
 
         let glob_yaml = indoc::indoc! {r"
             files:
@@ -1476,10 +1479,10 @@ mod tests {
             matches!(parsed.files, FilePattern::Glob(_)),
             "expected glob pattern"
         );
-        assert!(parsed.files.is_match("src/lib/main.rs"));
-        assert!(!parsed.files.is_match("src/lib/main.py"));
-        assert!(parsed.exclude.is_match("target/debug/app"));
-        assert!(!parsed.exclude.is_match("src/lib/main.rs"));
+        assert!(parsed.files.is_match(Path::new("src/lib/main.rs")));
+        assert!(!parsed.files.is_match(Path::new("src/lib/main.py")));
+        assert!(parsed.exclude.is_match(Path::new("target/debug/app")));
+        assert!(!parsed.exclude.is_match(Path::new("src/lib/main.rs")));
 
         let glob_list_yaml = indoc::indoc! {r"
             files:
@@ -1493,11 +1496,11 @@ mod tests {
         "};
         let parsed: Wrapper =
             serde_saphyr::from_str(glob_list_yaml).expect("glob list patterns should parse");
-        assert!(parsed.files.is_match("src/lib/main.rs"));
-        assert!(parsed.files.is_match("crates/foo/src/lib.rs"));
-        assert!(!parsed.files.is_match("tests/main.rs"));
-        assert!(parsed.exclude.is_match("target/debug/app"));
-        assert!(parsed.exclude.is_match("dist/app"));
+        assert!(parsed.files.is_match(Path::new("src/lib/main.rs")));
+        assert!(parsed.files.is_match(Path::new("crates/foo/src/lib.rs")));
+        assert!(!parsed.files.is_match(Path::new("tests/main.rs")));
+        assert!(parsed.exclude.is_match(Path::new("target/debug/app")));
+        assert!(parsed.exclude.is_match(Path::new("dist/app")));
     }
 
     #[test]
@@ -1512,24 +1515,24 @@ mod tests {
             pattern.to_string(),
             "glob: [src/**/*.rs, crates/**/src/**/*.rs]"
         );
-        assert!(pattern.is_match("src/main.rs"));
-        assert!(pattern.is_match("crates/foo/src/lib.rs"));
-        assert!(!pattern.is_match("tests/main.rs"));
+        assert!(pattern.is_match(Path::new("src/main.rs")));
+        assert!(pattern.is_match(Path::new("crates/foo/src/lib.rs")));
+        assert!(!pattern.is_match(Path::new("tests/main.rs")));
     }
 
     #[test]
     fn file_pattern_never_matches() {
         let pattern = FilePattern::Never;
-        assert!(!pattern.is_match(""));
-        assert!(!pattern.is_match("foo.txt"));
-        assert!(!pattern.is_match("nested/path.rs"));
+        assert!(!pattern.is_match(Path::new("")));
+        assert!(!pattern.is_match(Path::new("foo.txt")));
+        assert!(!pattern.is_match(Path::new("nested/path.rs")));
     }
 
     #[test]
     fn empty_glob_list_matches_nothing() {
         let pattern = serde_saphyr::from_str::<FilePattern>("glob: []").unwrap();
-        assert!(!pattern.is_match("any/file.rs"));
-        assert!(!pattern.is_match(""));
+        assert!(!pattern.is_match(Path::new("any/file.rs")));
+        assert!(!pattern.is_match(Path::new("")));
     }
 
     #[test]

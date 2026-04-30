@@ -53,8 +53,7 @@ impl MetaHook {
     pub(crate) fn from_id(id: &str) -> Result<Self, ()> {
         let hook_id = MetaHooks::from_str(id).map_err(|_| ())?;
         let config_file_glob =
-            FilePattern::new_glob(CONFIG_FILENAMES.iter().map(ToString::to_string).collect())
-                .unwrap();
+            FilePattern::glob(CONFIG_FILENAMES.iter().map(ToString::to_string).collect()).unwrap();
 
         Ok(match hook_id {
             MetaHooks::CheckHooksApply => MetaHook {
@@ -146,17 +145,13 @@ fn excludes_any(
     }
 
     files.iter().any(|f| {
-        let Some(f) = f.as_ref().to_str() else {
-            return false; // Skip files that cannot be converted to a string
-        };
-
         if let Some(pattern) = &include {
-            if !pattern.is_match(f) {
+            if !pattern.is_match(f.as_ref()) {
                 return false;
             }
         }
         if let Some(pattern) = &exclude {
-            if !pattern.is_match(f) {
+            if !pattern.is_match(f.as_ref()) {
                 return false;
             }
         }
@@ -271,7 +266,7 @@ mod tests {
     use prek_consts::{PRE_COMMIT_CONFIG_YAML, PRE_COMMIT_CONFIG_YML, PREK_TOML};
 
     fn regex_pattern(pattern: &str) -> FilePattern {
-        FilePattern::new_regex(pattern).unwrap()
+        FilePattern::regex(pattern).unwrap()
     }
 
     #[test]
@@ -299,15 +294,15 @@ mod tests {
     fn meta_hook_patterns_cover_config_files() {
         let apply = MetaHook::from_id("check-hooks-apply").expect("known meta hook");
         let apply_files = apply.options.files.as_ref().expect("files should be set");
-        assert!(apply_files.is_match(PRE_COMMIT_CONFIG_YAML));
-        assert!(apply_files.is_match(PRE_COMMIT_CONFIG_YML));
-        assert!(apply_files.is_match(PREK_TOML));
+        assert!(apply_files.is_match(Path::new(PRE_COMMIT_CONFIG_YAML)));
+        assert!(apply_files.is_match(Path::new(PRE_COMMIT_CONFIG_YML)));
+        assert!(apply_files.is_match(Path::new(PREK_TOML)));
 
         let useless = MetaHook::from_id("check-useless-excludes").expect("known meta hook");
         let useless_files = useless.options.files.as_ref().expect("files should be set");
-        assert!(useless_files.is_match(PRE_COMMIT_CONFIG_YAML));
-        assert!(useless_files.is_match(PRE_COMMIT_CONFIG_YML));
-        assert!(useless_files.is_match(PREK_TOML));
+        assert!(useless_files.is_match(Path::new(PRE_COMMIT_CONFIG_YAML)));
+        assert!(useless_files.is_match(Path::new(PRE_COMMIT_CONFIG_YML)));
+        assert!(useless_files.is_match(Path::new(PREK_TOML)));
 
         let identity = MetaHook::from_id("identity").expect("known meta hook");
         assert!(identity.options.files.is_none());

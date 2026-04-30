@@ -86,8 +86,22 @@ pub(crate) fn git_cmd(summary: &str) -> Result<Cmd, Error> {
 fn zsplit(s: &[u8]) -> Result<Vec<PathBuf>, Utf8Error> {
     s.split(|&b| b == b'\0')
         .filter(|slice| !slice.is_empty())
-        .map(|slice| str::from_utf8(slice).map(PathBuf::from))
+        .map(path_from_git_bytes)
         .collect()
+}
+
+#[cfg(unix)]
+#[expect(clippy::unnecessary_wraps)]
+fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt as _;
+
+    Ok(PathBuf::from(OsStr::from_bytes(bytes)))
+}
+
+#[cfg(not(unix))]
+fn path_from_git_bytes(bytes: &[u8]) -> Result<PathBuf, Utf8Error> {
+    str::from_utf8(bytes).map(PathBuf::from)
 }
 
 pub(crate) async fn intent_to_add_files(root: &Path) -> Result<Vec<PathBuf>, Error> {
@@ -859,6 +873,20 @@ pub(crate) fn list_submodules(git_root: &Path) -> Result<Vec<PathBuf>, Error> {
 #[cfg(test)]
 mod tests {
     use super::shared_repository_file_mode;
+    #[cfg(unix)]
+    use super::zsplit;
+
+    #[cfg(unix)]
+    #[test]
+    fn zsplit_preserves_non_utf8_paths() {
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let paths = zsplit(b"normal.py\0bad-\xff.py\0").unwrap();
+
+        assert_eq!(paths.len(), 2);
+        assert_eq!(paths[0].as_os_str().as_bytes(), b"normal.py");
+        assert_eq!(paths[1].as_os_str().as_bytes(), b"bad-\xff.py");
+    }
 
     #[test]
     fn shared_repository_group_mode_matches_git_behavior() {

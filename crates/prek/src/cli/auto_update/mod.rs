@@ -187,19 +187,19 @@ impl TagFilters {
     /// Repo-specific include filters override global include filters for that repo.
     fn is_included(&self, repo: &str, tag: &str) -> bool {
         if let Some(repo_include) = self.repo_include.get(repo) {
-            return repo_include.is_empty() || repo_include.is_match(tag);
+            return repo_include.is_empty() || repo_include.is_match(Path::new(tag));
         }
 
-        self.global_include.is_empty() || self.global_include.is_match(tag)
+        self.global_include.is_empty() || self.global_include.is_match(Path::new(tag))
     }
 
     /// Returns whether a tag matches any global or repo-specific exclude filter.
     fn is_excluded(&self, repo: &str, tag: &str) -> bool {
-        self.global_exclude.is_match(tag)
+        self.global_exclude.is_match(Path::new(tag))
             || self
                 .repo_exclude
                 .get(repo)
-                .is_some_and(|set| set.is_match(tag))
+                .is_some_and(|set| set.is_match(Path::new(tag)))
     }
 }
 

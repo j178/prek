@@ -18,13 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-use std::borrow::Cow;
 use std::io::{BufRead, Read};
 use std::ops::BitOrAssign;
 use std::path::Path;
 
 #[cfg(feature = "serde")]
 use serde::de::{Error as DeError, SeqAccess, Visitor};
+#[cfg(any(feature = "serde", feature = "schemars"))]
+use std::borrow::Cow;
 
 pub mod tags;
 
@@ -300,19 +301,17 @@ pub fn tags_from_path(path: &Path) -> Result<TagSet, Error> {
 
 fn tags_from_filename(filename: &Path) -> TagSet {
     let ext = filename.extension().and_then(|ext| ext.to_str());
-    let filename = filename
+    let mut result = filename
         .file_name()
         .and_then(|name| name.to_str())
-        .expect("Invalid filename");
-
-    let mut result = tags::NAMES
-        .get(filename)
-        .or_else(|| {
-            // Allow e.g. "Dockerfile.xenial" to match "Dockerfile".
-            filename
-                .split('.')
-                .next()
-                .and_then(|name| tags::NAMES.get(name))
+        .and_then(|filename| {
+            tags::NAMES.get(filename).or_else(|| {
+                // Allow e.g. "Dockerfile.xenial" to match "Dockerfile".
+                filename
+                    .split('.')
+                    .next()
+                    .and_then(|name| tags::NAMES.get(name))
+            })
         })
         .copied()
         .unwrap_or_default();
@@ -595,6 +594,17 @@ mod tests {
 
         let tags = super::tags_from_filename(Path::new("Tiltfile.dev"));
         assert_tagset(&tags, &["text", "tiltfile"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tags_from_non_utf8_filename_uses_utf8_extension_when_available() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let tags = super::tags_from_filename(Path::new(OsStr::from_bytes(b"bad-\xff.py")));
+
+        assert_tagset(&tags, &["python", "text"]);
     }
 
     #[test]

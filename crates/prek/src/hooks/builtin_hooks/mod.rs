@@ -164,7 +164,7 @@ impl BuiltinHook {
                         "checks for filenames which cannot be created on Windows.".to_string(),
                     ),
                     files: Some(
-                        FilePattern::new_regex(
+                        FilePattern::regex(
                             check_illegal_windows_names::ILLEGAL_WINDOWS_PATTERN,
                         )
                         .expect("builtin files regex must be valid"),

@@ -27,9 +27,6 @@ impl<'a> FilenameFilter<'a> {
     }
 
     pub(crate) fn filter(&self, filename: &Path) -> bool {
-        let Some(filename) = filename.to_str() else {
-            return false;
-        };
         if let Some(pattern) = &self.include {
             if !pattern.is_match(filename) {
                 return false;
@@ -399,6 +396,10 @@ mod tests {
         FilePattern::Glob(GlobPatterns::new(vec![pattern.to_string()]).unwrap())
     }
 
+    fn regex_pattern(pattern: &str) -> FilePattern {
+        FilePattern::regex(pattern).unwrap()
+    }
+
     #[test]
     fn filename_filter_supports_glob_include_and_exclude() {
         let include = glob_pattern("src/**/*.rs");
@@ -408,5 +409,48 @@ mod tests {
         assert!(filter.filter(Path::new("src/lib/main.rs")));
         assert!(!filter.filter(Path::new("src/lib/ignored.rs")));
         assert!(!filter.filter(Path::new("tests/main.rs")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn filename_filter_allows_non_utf8_paths_without_patterns() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let path = Path::new(OsStr::from_bytes(b"bad-\xff.py"));
+        let filter = FilenameFilter::new(None, None);
+
+        assert!(filter.filter(path));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn filename_filter_matches_non_utf8_paths_with_glob_patterns() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let include = glob_pattern("**/*.py");
+        let exclude = glob_pattern("**/*.py");
+        let path = Path::new(OsStr::from_bytes(b"bad-\xff.py"));
+        let filter = FilenameFilter::new(Some(&include), None);
+
+        assert!(filter.filter(path));
+
+        let filter = FilenameFilter::new(None, Some(&exclude));
+
+        assert!(!filter.filter(path));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn filename_filter_skips_non_utf8_paths_with_regex_include() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let include = regex_pattern(r".*\.py$");
+        let path = Path::new(OsStr::from_bytes(b"bad-\xff.py"));
+        let filter = FilenameFilter::new(Some(&include), None);
+
+        assert!(!filter.filter(path));
     }
 }
