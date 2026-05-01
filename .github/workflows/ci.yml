@@ -522,7 +522,7 @@ jobs:
 
       - name: "Install Lua"
         if: ${{ contains(format(' {0} ', matrix.languages), ' lua ') }}
-        uses: leafo/gh-actions-lua@8c9e175e7a3d77e21f809eefbee34a19b858641b # v12
+        uses: leafo/gh-actions-lua@6919171ccf181b826f44b9bca76307b577217377 # v13.0.0
         with:
           luaVersion: ${{ env.LUA_VERSION }}
 
