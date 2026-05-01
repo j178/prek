@@ -63,7 +63,6 @@ owo-colors = { workspace = true }
 path-clean = { workspace = true }
 quick-xml = { workspace = true }
 rand = { workspace = true }
-rayon = { workspace = true }
 reqwest = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }

@@ -64,7 +64,6 @@ phf = { version = "0.13.1", default-features = false, features = ["macros"] }
 pprof = { version = "0.15.0" }
 quick-xml = { version = "0.39" }
 rand = { version = "0.10.0" }
-rayon = { version = "1.10.0" }
 reqwest = { version = "0.13.2", default-features = false, features = [
   "http2",
   "stream",

@@ -5,7 +5,6 @@ use itertools::{Either, Itertools};
 use path_clean::PathClean;
 use prek_consts::env_vars::EnvVars;
 use prek_identify::{TagSet, tags_from_path};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::FxHashSet;
 use tracing::{debug, error, instrument};
 
@@ -151,7 +150,7 @@ impl<'a> FileFilter<'a> {
         let filter = FileTagFilter::new(types, types_or, exclude_types);
         let filenames: Vec<_> = self
             .filenames
-            .par_iter()
+            .iter()
             .filter(|filename| match tags_from_path(filename) {
                 Ok(tags) => filter.filter(&tags),
                 Err(err) => {
@@ -171,7 +170,7 @@ impl<'a> FileFilter<'a> {
         // Filter by hook `files` and `exclude` patterns.
         let filter = FilenameFilter::new(hook.files.as_ref(), hook.exclude.as_ref());
 
-        let filenames = self.filenames.par_iter().filter(|filename| {
+        let filenames = self.filenames.iter().filter(|filename| {
             // Strip the project-relative prefix before applying hook-level include/exclude patterns.
             if let Ok(relative) = filename.strip_prefix(&self.filename_prefix) {
                 filter.filter(relative)
