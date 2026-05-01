@@ -1,7 +1,7 @@
 # prek
 
 <div align="center">
-  <img width="220" alt="prek" src="/assets/logo.webp" />
+  <img alt="prek" src="/assets/logo.png" />
 </div>
 
 --8<-- "README.md:description"
