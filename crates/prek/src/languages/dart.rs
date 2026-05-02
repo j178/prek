@@ -245,24 +245,28 @@ fn packages_arg_insert_position(entry: &[String], hook_args: &[String]) -> Optio
 
     let dart_index = entry.iter().position(|arg| is_dart_binary(arg))?;
 
-    // Respect an explicit package config from the hook author.
-    if entry
-        .iter()
-        .chain(hook_args)
-        .any(|arg| has_packages_arg(arg))
-    {
-        return None;
-    }
-
-    let (target_index, target) = entry
+    for (index, arg) in entry
         .iter()
         .chain(hook_args)
         .enumerate()
         .skip(dart_index + 1)
-        .find_map(|(index, arg)| (!arg.starts_with('-')).then_some((index, arg)))?;
+    {
+        // Respect an explicit package config only while still parsing Dart VM
+        // options. After `run` or a script target, this may be a hook argument.
+        if has_packages_arg(arg) {
+            return None;
+        }
 
-    // `--packages` is a VM flag, so place it before `run` or a script target.
-    (target == "run" || is_dart_script(target)).then_some(target_index.min(entry.len()))
+        if !arg.starts_with('-') {
+            // `--packages` is a VM flag, so place it before `run` or a script target.
+            if arg != "run" && !is_dart_script(arg) {
+                return None;
+            }
+            return Some(index.min(entry.len()));
+        }
+    }
+
+    None
 }
 
 /// Compile declared package executables into the hook env's `bin` directory.
@@ -445,6 +449,28 @@ mod tests {
                 &strings(&["--packages=custom", "run"])
             ),
             None
+        );
+    }
+
+    #[test]
+    fn packages_arg_insert_position_only_checks_vm_options_for_packages_arg() {
+        assert_eq!(
+            packages_arg_insert_position(&strings(&["dart", "run", "tool.dart", "-p"]), &[]),
+            Some(1)
+        );
+        assert_eq!(
+            packages_arg_insert_position(
+                &strings(&["dart", "tool.dart", "--packages=script-value"]),
+                &[]
+            ),
+            Some(1)
+        );
+        assert_eq!(
+            packages_arg_insert_position(
+                &strings(&["dart"]),
+                &strings(&["run", "tool.dart", "--packages=script-value"])
+            ),
+            Some(1)
         );
     }
 
