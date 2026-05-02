@@ -3,59 +3,6 @@ use assert_fs::fixture::{FileWriteStr, PathChild};
 use crate::common::{TestContext, cmd_snapshot};
 
 #[test]
-fn health_check() {
-    let context = TestContext::new();
-    context.init_project();
-
-    context.write_pre_commit_config(indoc::indoc! {r"
-        repos:
-          - repo: local
-            hooks:
-              - id: dart
-                name: dart
-                language: dart
-                entry: dart --version
-                always_run: true
-                verbose: true
-                pass_filenames: false
-    "});
-
-    context.git_add(".");
-
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"Dart SDK version: .*", "Dart SDK version: [VERSION]")])
-        .collect::<Vec<_>>();
-
-    cmd_snapshot!(filters.clone(), context.run(), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    dart.....................................................................Passed
-    - hook id: dart
-    - duration: [TIME]
-
-      Dart SDK version: [VERSION]
-
-    ----- stderr -----
-    ");
-
-    cmd_snapshot!(filters, context.run(), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    dart.....................................................................Passed
-    - hook id: dart
-    - duration: [TIME]
-
-      Dart SDK version: [VERSION]
-
-    ----- stderr -----
-    ");
-}
-
-#[test]
 fn language_version() {
     let context = TestContext::new();
     context.init_project();

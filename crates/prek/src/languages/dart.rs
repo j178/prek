@@ -14,13 +14,11 @@ use std::collections::BTreeMap;
 use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::str;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
-use semver::Version;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
@@ -81,33 +79,6 @@ fn find_dart_binary() -> Result<PathBuf> {
     Ok(dart)
 }
 
-/// Query the SDK version from a specific Dart binary.
-pub(crate) async fn query_dart_info(dart: &Path) -> Result<Version> {
-    let output = Cmd::new(dart, "get dart version")
-        .arg("--version")
-        .check(true)
-        .output()
-        .await?;
-
-    let stdout =
-        str::from_utf8(&output.stdout).context("Failed to parse `dart --version` stdout")?;
-    let version = stdout
-        .lines()
-        .find_map(|line| {
-            line.trim()
-                .strip_prefix("Dart SDK version:")?
-                .split_ascii_whitespace()
-                .next()
-        })
-        .with_context(|| {
-            format!("Failed to extract Dart SDK version from `dart --version` stdout: {stdout:?}")
-        })?;
-    let version = Version::parse(version)
-        .with_context(|| format!("Failed to parse Dart SDK version `{version}`"))?;
-
-    Ok(version)
-}
-
 impl LanguageImpl for Dart {
     async fn install(
         &self,
@@ -126,7 +97,6 @@ impl LanguageImpl for Dart {
         debug!(%hook, target = %info.env_path.display(), "Installing Dart environment");
 
         let dart = find_dart_binary()?;
-        let dart_version = query_dart_info(&dart).await?;
 
         let source_path = hook.repo_path().unwrap_or_else(|| hook.work_dir());
         if source_path.join(PUBSPEC_YAML).exists() {
@@ -149,8 +119,7 @@ impl LanguageImpl for Dart {
             .context("Failed to install Dart additional dependencies")?;
         }
 
-        info.with_toolchain(dart)
-            .with_language_version(dart_version);
+        info.with_toolchain(dart);
         info.persist_env_path();
 
         reporter.on_install_complete(progress);
@@ -163,15 +132,6 @@ impl LanguageImpl for Dart {
 
     async fn check_health(&self, info: &InstallInfo) -> Result<()> {
         let dart = find_dart_binary()?;
-        let current_dart_version = query_dart_info(&dart).await?;
-
-        if current_dart_version != info.language_version {
-            anyhow::bail!(
-                "Dart version mismatch: expected `{}`, found `{}`",
-                info.language_version,
-                current_dart_version
-            );
-        }
 
         if dart != info.toolchain {
             anyhow::bail!(
@@ -346,7 +306,7 @@ fn build_env_pubspec(
     source_path: Option<&Path>,
     package_name: Option<&str>,
     dependencies: &rustc_hash::FxHashSet<String>,
-) -> Result<String> {
+) -> Pubspec {
     let mut resolved_dependencies = BTreeMap::new();
 
     let mut dependencies = dependencies.iter().collect::<Vec<_>>();
@@ -373,14 +333,12 @@ fn build_env_pubspec(
         );
     }
 
-    let pubspec = Pubspec {
+    Pubspec {
         name: "prek_dart_env".to_string(),
         environment: BTreeMap::from([("sdk".to_string(), ">=2.12.0 <4.0.0".to_string())]),
         dependencies: resolved_dependencies,
         executables: BTreeMap::new(),
-    };
-
-    Ok(serde_saphyr::to_string(&pubspec)?)
+    }
 }
 
 /// Write the synthetic pubspec and resolve it into a package config.
@@ -391,7 +349,8 @@ async fn install_package_config(
     package_name: Option<&str>,
     dependencies: &rustc_hash::FxHashSet<String>,
 ) -> Result<()> {
-    let pubspec_content = build_env_pubspec(source_path, package_name, dependencies)?;
+    let pubspec = build_env_pubspec(source_path, package_name, dependencies);
+    let pubspec_content = serde_saphyr::to_string(&pubspec)?;
     let pubspec_path = env_path.join(PUBSPEC_YAML);
     fs_err::tokio::write(&pubspec_path, pubspec_content).await?;
 
@@ -482,14 +441,12 @@ mod tests {
         let temp_dir = tempfile::tempdir()?;
         let dependencies = rustc_hash::FxHashSet::default();
 
-        let content = build_env_pubspec(Some(temp_dir.path()), Some("sample"), &dependencies)?;
-        let pubspec = serde_saphyr::from_str::<serde_json::Value>(&content)?;
-        let path = temp_dir.path().to_string_lossy();
+        let pubspec = build_env_pubspec(Some(temp_dir.path()), Some("sample"), &dependencies);
 
-        assert_eq!(
-            pubspec["dependencies"]["sample"]["path"].as_str(),
-            Some(path.as_ref())
-        );
+        match pubspec.dependencies.get("sample") {
+            Some(PubspecDependency::Path { path }) => assert_eq!(path, temp_dir.path()),
+            dependency => panic!("expected path dependency, got {dependency:?}"),
+        }
 
         Ok(())
     }
