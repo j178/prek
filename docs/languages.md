@@ -78,9 +78,61 @@ Tracking: [#53](https://github.com/j178/prek/issues/53)
 
 ### dart
 
-**Status in prek:** Not supported yet.
+**Status in prek:** ✅ Supported.
 
-Tracking: [#51](https://github.com/j178/prek/issues/51)
+prek runs Dart hooks with a system-installed `dart` executable.
+
+Dart hooks can run plain Dart commands, repository scripts, or package
+executables:
+
+- `entry: dart --version`
+- `entry: dart ./tool/hook.dart`
+- `entry: dart run bin/hook.dart`
+- `entry: my-package-executable`
+
+If the hook repository contains `pubspec.yaml`, prek uses it to resolve package
+dependencies and declared executables. `additional_dependencies` are supported
+for both package hooks and standalone Dart scripts.
+
+#### `pubspec.yaml` executables
+
+For package hooks, executables declared in `pubspec.yaml` can be used as hook
+entries. The executable key is the command name:
+
+```yaml
+name: my_dart_hooks
+
+executables:
+  my-hook:
+  aliased-hook: tool/main
+```
+
+`my-hook` resolves to `bin/my-hook.dart`. `aliased-hook` resolves to
+`bin/tool/main.dart`. Empty or null executable values use the executable key as
+the entrypoint name, matching Dart's pub behavior.
+
+#### `additional_dependencies`
+
+Use `package` for the latest compatible version or `package:version` to pin a
+version:
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: dart-hook
+        name: Dart hook
+        language: dart
+        entry: dart ./bin/hook.dart
+        additional_dependencies:
+          - path
+          - args:2.7.0
+```
+
+#### `language_version`
+
+Dart does not support managed toolchain installation today. It uses the system
+`dart` executable, and explicit Dart version requests are rejected.
 
 ### docker
 

@@ -190,7 +190,6 @@ impl Language {
     pub(crate) fn shell_support(self) -> ShellSupport {
         match self {
             Self::Bun
-            | Self::Dart
             | Self::Deno
             | Self::Dotnet
             | Self::Golang
@@ -205,6 +204,9 @@ impl Language {
             Self::Conda | Self::Coursier | Self::Perl | Self::R => {
                 ShellSupport::Unsupported("no runner is implemented yet")
             }
+            Self::Dart => ShellSupport::Unsupported(
+                "`--packages` injection requires the resolved argv to contain `dart` directly",
+            ),
             Self::Docker | Self::DockerImage => ShellSupport::Unsupported(
                 "`entry` participates in container image or entrypoint selection",
             ),

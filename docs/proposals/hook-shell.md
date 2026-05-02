@@ -167,10 +167,11 @@ the hook command on the host.
     | Language | Why `shell` is unsupported |
     | -- | -- |
     | `docker`, `docker_image` | `entry` participates in container image or entrypoint selection instead of direct host process execution. |
+    | `dart` | Dart package config injection requires `entry` to resolve to a direct `dart` command. |
     | `fail` | `entry` is the failure message body. |
     | `julia`, `rust` | `entry` participates in install/runtime package resolution and is split before execution. |
     | `pygrep` | `entry` is the regex pattern. |
-    | `conda`, `coursier`, `dart`, `perl`, `r` | The language backend is not implemented yet. |
+    | `conda`, `coursier`, `perl`, `r` | The language backend is not implemented yet. |
 
     Predefined `repo: meta` and `repo: builtin` hooks should reject `shell` as
     well, because their entries are owned by prek.
