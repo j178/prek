@@ -40,9 +40,17 @@ const PUBSPEC_YAML: &str = "pubspec.yaml";
 #[derive(Debug, Deserialize, Serialize)]
 struct Pubspec {
     name: String,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(
+        default,
+        skip_deserializing,
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     environment: BTreeMap<String, String>,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(
+        default,
+        skip_deserializing,
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     dependencies: BTreeMap<String, PubspecDependency>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     executables: BTreeMap<String, PubspecExecutable>,
@@ -404,17 +412,9 @@ async fn install_from_pubspec(
 mod tests {
     use super::*;
     use anyhow::Result;
-    use std::path::PathBuf;
 
     fn strings(values: &[&str]) -> Vec<String> {
         values.iter().map(ToString::to_string).collect()
-    }
-
-    fn pubspec_file(content: &str) -> Result<(tempfile::TempDir, PathBuf)> {
-        let temp_dir = tempfile::tempdir()?;
-        let pubspec_path = temp_dir.path().join(PUBSPEC_YAML);
-        fs_err::write(&pubspec_path, content)?;
-        Ok((temp_dir, pubspec_path))
     }
 
     #[test]
@@ -447,6 +447,30 @@ mod tests {
             Some(PubspecDependency::Path { path }) => assert_eq!(path, temp_dir.path()),
             dependency => panic!("expected path dependency, got {dependency:?}"),
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn pubspec_deserialization_ignores_unread_fields() -> Result<()> {
+        let pubspec: Pubspec = serde_saphyr::from_str(indoc::indoc! {r"
+            name: sample
+            environment:
+              sdk: '>=2.17.0 <4.0.0'
+            dependencies:
+              hosted_dep:
+                hosted: https://pub.dev
+                version: ^1.0.0
+              sdk_dep:
+                sdk: flutter
+            executables:
+              sample:
+        "})?;
+
+        assert_eq!(pubspec.name, "sample");
+        assert!(pubspec.environment.is_empty());
+        assert!(pubspec.dependencies.is_empty());
+        assert!(pubspec.executables.contains_key("sample"));
 
         Ok(())
     }
