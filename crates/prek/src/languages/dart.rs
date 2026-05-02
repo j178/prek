@@ -1,3 +1,17 @@
+//! A Dart package is described by `pubspec.yaml`. The package `name` is what
+//! other packages depend on, `dependencies` are resolved by `dart pub get`, and
+//! `executables` declares command names that map to Dart files under `bin/`.
+//! For executable entries, Dart treats a null value as "use the command name as
+//! the entrypoint"; this module also treats an empty string that way.
+//!
+//! `dart pub get` writes `.dart_tool/package_config.json`, which is the package
+//! resolver map used by the Dart VM. `prek` creates a pubspec in the hook env,
+//! runs `dart pub get` there with `PUB_CACHE` pointed at the env, and passes the
+//! generated package config to hook commands that run `dart run` or direct
+//! `.dart` scripts.
+
+use std::collections::BTreeMap;
+use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::str;
@@ -7,7 +21,7 @@ use anyhow::{Context, Result};
 use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
 use semver::Version;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
@@ -20,48 +34,78 @@ use crate::store::Store;
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Dart;
 
-pub(crate) struct DartInfo {
-    pub(crate) version: Version,
-    pub(crate) executable: PathBuf,
+const PUBSPEC_YAML: &str = "pubspec.yaml";
+
+/// Dart package manifest data from `pubspec.yaml`.
+///
+/// Format reference: <https://dart.dev/tools/pub/pubspec>.
+#[derive(Debug, Deserialize, Serialize)]
+struct Pubspec {
+    name: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    environment: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    dependencies: BTreeMap<String, PubspecDependency>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    executables: BTreeMap<String, PubspecExecutable>,
 }
 
-#[derive(Debug)]
-struct PubspecInfo {
-    package_name: String,
-    executables: Vec<ExecutableInfo>,
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+enum PubspecExecutable {
+    Entrypoint(String),
+    Default,
 }
 
-#[derive(Debug)]
-struct ExecutableInfo {
-    entrypoint: String,
-    output_name: String,
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+enum PubspecDependency {
+    Version(String),
+    Path { path: PathBuf },
 }
 
-pub(crate) async fn query_dart_info() -> Result<DartInfo> {
-    let executable = which::which("dart")
+impl PubspecExecutable {
+    /// Convert Dart's executable shorthand into the entrypoint name under `bin/`.
+    fn into_entrypoint(self, output_name: &str) -> String {
+        match self {
+            Self::Entrypoint(entrypoint) if !entrypoint.is_empty() => entrypoint,
+            Self::Entrypoint(_) | Self::Default => output_name.to_string(),
+        }
+    }
+}
+
+/// Resolve the Dart binary that should own this hook environment.
+fn find_dart_binary() -> Result<PathBuf> {
+    let dart = which::which("dart")
         .context("Failed to locate dart executable. Is Dart installed and available in PATH?")?;
-    debug!("Found dart executable at: {}", executable.display());
+    Ok(dart)
+}
 
-    let stdout = Cmd::new(&executable, "get dart version")
+/// Query the SDK version from a specific Dart binary.
+pub(crate) async fn query_dart_info(dart: &Path) -> Result<Version> {
+    let output = Cmd::new(dart, "get dart version")
         .arg("--version")
         .check(true)
         .output()
-        .await?
-        .stdout;
+        .await?;
 
-    let version = str::from_utf8(&stdout)
-        .context("Failed to parse `dart --version` output as UTF-8")?
+    let stdout =
+        str::from_utf8(&output.stdout).context("Failed to parse `dart --version` stdout")?;
+    let version = stdout
         .lines()
-        .find(|line| line.contains("Dart SDK version:"))
-        .and_then(|line| line.split_whitespace().nth(3))
-        .context("Failed to extract Dart version from output")?
-        .trim();
-    let version = Version::parse(version).context("Failed to parse Dart version")?;
+        .find_map(|line| {
+            line.trim()
+                .strip_prefix("Dart SDK version:")?
+                .split_ascii_whitespace()
+                .next()
+        })
+        .with_context(|| {
+            format!("Failed to extract Dart SDK version from `dart --version` stdout: {stdout:?}")
+        })?;
+    let version = Version::parse(version)
+        .with_context(|| format!("Failed to parse Dart SDK version `{version}`"))?;
 
-    Ok(DartInfo {
-        version,
-        executable,
-    })
+    Ok(version)
 }
 
 impl LanguageImpl for Dart {
@@ -81,35 +125,32 @@ impl LanguageImpl for Dart {
 
         debug!(%hook, target = %info.env_path.display(), "Installing Dart environment");
 
-        let dart_info = query_dart_info()
-            .await
-            .context("Failed to query Dart info")?;
+        let dart = find_dart_binary()?;
+        let dart_version = query_dart_info(&dart).await?;
 
-        let pubspec_source = if let Some(repo_path) = hook.repo_path() {
-            Self::has_pubspec(repo_path).then_some(repo_path)
-        } else {
-            Self::has_pubspec(hook.work_dir()).then_some(hook.work_dir())
-        };
-
-        if let Some(source_path) = pubspec_source {
-            Self::install_from_pubspec(
-                &dart_info.executable,
+        let source_path = hook.repo_path().unwrap_or_else(|| hook.work_dir());
+        if source_path.join(PUBSPEC_YAML).exists() {
+            install_from_pubspec(
+                &dart,
                 &info.env_path,
                 source_path,
                 &hook.additional_dependencies,
             )
             .await?;
         } else if !hook.additional_dependencies.is_empty() {
-            Self::install_additional_dependencies(
-                &dart_info.executable,
+            install_package_config(
+                &dart,
                 &info.env_path,
+                None,
+                None,
                 &hook.additional_dependencies,
             )
-            .await?;
+            .await
+            .context("Failed to install Dart additional dependencies")?;
         }
 
-        info.with_toolchain(dart_info.executable)
-            .with_language_version(dart_info.version);
+        info.with_toolchain(dart)
+            .with_language_version(dart_version);
         info.persist_env_path();
 
         reporter.on_install_complete(progress);
@@ -121,23 +162,22 @@ impl LanguageImpl for Dart {
     }
 
     async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        let current_dart_info = query_dart_info()
-            .await
-            .context("Failed to query current Dart info")?;
+        let dart = find_dart_binary()?;
+        let current_dart_version = query_dart_info(&dart).await?;
 
-        if current_dart_info.version != info.language_version {
+        if current_dart_version != info.language_version {
             anyhow::bail!(
                 "Dart version mismatch: expected `{}`, found `{}`",
                 info.language_version,
-                current_dart_info.version
+                current_dart_version
             );
         }
 
-        if current_dart_info.executable != info.toolchain {
+        if dart != info.toolchain {
             anyhow::bail!(
                 "Dart executable mismatch: expected `{}`, found `{}`",
                 info.toolchain.display(),
-                current_dart_info.executable.display()
+                dart.display()
             );
         }
 
@@ -154,10 +194,21 @@ impl LanguageImpl for Dart {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let env_dir = hook.env_path().expect("Dart must have env path");
-        let new_path = prepend_paths(&[&env_dir.join("bin")]).context("Failed to join PATH")?;
-        let packages_path = Self::package_config_path(env_dir);
+        let bin_path = bin_path(env_dir);
+        let new_path = prepend_paths(&[&bin_path]).context("Failed to join PATH")?;
+        let packages_path = package_config_path(env_dir);
+
         let mut entry = hook.entry.resolve(Some(&new_path), store)?;
-        Self::with_packages_file(entry.argv_mut(), &packages_path);
+        // `dart pub get` writes the hook env's dependency graph here. Inject it
+        // so `dart run` and direct scripts resolve hook deps from this env
+        // instead of the package config in the hook work dir.
+        if packages_path.exists()
+            && let Some(index) = packages_arg_insert_position(entry.argv())
+        {
+            entry
+                .argv_mut()
+                .insert(index, format!("--packages={}", packages_path.display()));
+        }
 
         let run = async |batch: &[&Path]| {
             let mut output = Cmd::new(&entry[0], "run dart command")
@@ -195,256 +246,251 @@ impl LanguageImpl for Dart {
     }
 }
 
-impl Dart {
-    fn package_config_path(env_path: &Path) -> PathBuf {
-        env_path.join(".dart_tool").join("package_config.json")
+/// Return the env directory containing compiled Dart executables.
+fn bin_path(env_path: &Path) -> PathBuf {
+    env_path.join("bin")
+}
+
+/// Return the package config generated by `dart pub get` inside an env.
+fn package_config_path(env_path: &Path) -> PathBuf {
+    env_path.join(".dart_tool").join("package_config.json")
+}
+
+/// Return the argv position where `--packages=...` should be inserted.
+fn packages_arg_insert_position(entry: &[String]) -> Option<usize> {
+    fn is_dart_binary(arg: &str) -> bool {
+        Path::new(arg)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| matches!(name, "dart" | "dart.exe"))
     }
 
-    fn with_packages_file(entry: &mut Vec<String>, packages_path: &Path) {
-        if !packages_path.exists() || entry.is_empty() {
-            return;
-        }
-
-        let Some(dart_index) = entry.iter().position(|arg| {
-            Path::new(arg)
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name == "dart" || name == "dart.exe")
-        }) else {
-            return;
-        };
-        if entry
-            .iter()
-            .any(|arg| arg == "-p" || arg.starts_with("--packages="))
-        {
-            return;
-        }
-
-        let Some(target_index) = entry
-            .iter()
-            .enumerate()
-            .skip(dart_index + 1)
-            .find_map(|(index, arg)| (!arg.starts_with('-')).then_some((index, arg)))
-        else {
-            return;
-        };
-
-        let (_, target) = target_index;
-        if *target != "run"
-            && !Path::new(target)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("dart"))
-        {
-            return;
-        }
-
-        let (index, _) = target_index;
-        entry.insert(index, format!("--packages={}", packages_path.display()));
+    fn has_packages_arg(arg: &str) -> bool {
+        arg == "-p" || arg == "--packages" || arg.starts_with("--packages=")
     }
 
-    fn read_pubspec_info(pubspec_path: &Path) -> Result<PubspecInfo> {
-        let pubspec_content =
-            fs_err::read_to_string(pubspec_path).context("Failed to read pubspec.yaml")?;
-        let pubspec: serde_json::Value =
-            serde_saphyr::from_str(&pubspec_content).context("Failed to parse pubspec.yaml")?;
-
-        let package_name = pubspec
-            .get("name")
-            .and_then(serde_json::Value::as_str)
-            .context("pubspec.yaml must define a package name")?
-            .to_string();
-
-        let executables = match pubspec.get("executables") {
-            None => Vec::new(),
-            Some(executables) => {
-                let executables = executables
-                    .as_object()
-                    .context("pubspec.yaml executables must be a mapping")?;
-
-                executables
-                    .iter()
-                    .map(|(output_name, value)| {
-                        let entrypoint = match value {
-                            serde_json::Value::Null => output_name.clone(),
-                            serde_json::Value::String(entrypoint) if !entrypoint.is_empty() => {
-                                entrypoint.clone()
-                            }
-                            serde_json::Value::String(_) => output_name.clone(),
-                            _ => anyhow::bail!(
-                                "pubspec.yaml executable `{output_name}` must map to a string or null"
-                            ),
-                        };
-
-                        Ok(ExecutableInfo {
-                            entrypoint,
-                            output_name: output_name.clone(),
-                        })
-                    })
-                    .collect::<Result<Vec<_>>>()?
-            }
-        };
-
-        Ok(PubspecInfo {
-            package_name,
-            executables,
-        })
+    fn is_dart_script(arg: &str) -> bool {
+        Path::new(arg)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("dart"))
     }
 
-    async fn compile_executables(
-        dart: &Path,
-        source_path: &Path,
-        bin_out_dir: &Path,
-        packages_path: &Path,
-        executables: &[ExecutableInfo],
-    ) -> Result<()> {
-        if executables.is_empty() {
-            return Ok(());
-        }
+    let dart_index = entry.iter().position(|arg| is_dart_binary(arg))?;
 
-        fs_err::create_dir_all(bin_out_dir).context("Failed to create bin output directory")?;
-
-        for executable in executables {
-            let mut relative_entrypoint = PathBuf::from(&executable.entrypoint);
-            if relative_entrypoint.extension().is_none() {
-                relative_entrypoint.set_extension("dart");
-            }
-            let source_file = source_path.join("bin").join(relative_entrypoint);
-            if !source_file.exists() {
-                debug!(
-                    "Skipping executable '{}': source file not found",
-                    executable.output_name
-                );
-                continue;
-            }
-
-            let output_path = if cfg!(windows) {
-                bin_out_dir.join(format!("{}.exe", executable.output_name))
-            } else {
-                bin_out_dir.join(&executable.output_name)
-            };
-
-            debug!(
-                "Compiling executable '{exe_name}': {source} -> {output}",
-                exe_name = executable.output_name,
-                source = source_file.display(),
-                output = output_path.display(),
-            );
-
-            Cmd::new(dart, "dart compile exe")
-                .arg("compile")
-                .arg("exe")
-                .arg(format!("--packages={}", packages_path.display()))
-                .arg(&source_file)
-                .arg("--output")
-                .arg(&output_path)
-                .check(true)
-                .output()
-                .await
-                .with_context(|| {
-                    format!("Failed to compile executable '{}'", executable.output_name)
-                })?;
-        }
-
-        Ok(())
+    // Respect an explicit package config from the hook author.
+    if entry.iter().any(|arg| has_packages_arg(arg)) {
+        return None;
     }
 
-    fn build_env_pubspec(
-        source_path: Option<&Path>,
-        package_name: Option<&str>,
-        dependencies: &rustc_hash::FxHashSet<String>,
-    ) -> Result<String> {
-        let mut resolved_dependencies = serde_json::Map::new();
+    let (target_index, target) = entry
+        .iter()
+        .enumerate()
+        .skip(dart_index + 1)
+        .find_map(|(index, arg)| (!arg.starts_with('-')).then_some((index, arg)))?;
 
-        for dep in dependencies {
-            if let Some((package, version)) = dep.split_once(':') {
-                resolved_dependencies.insert(package.to_string(), json!(version));
-            } else {
-                resolved_dependencies.insert(dep.clone(), json!("any"));
-            }
-        }
+    // Dart expects `--packages` before the `run` subcommand or script target.
+    (target == "run" || is_dart_script(target)).then_some(target_index)
+}
 
-        if let (Some(source_path), Some(package_name)) = (source_path, package_name) {
-            resolved_dependencies.insert(
-                package_name.to_string(),
-                json!({ "path": source_path.to_string_lossy().to_string() }),
-            );
-        }
-
-        let pubspec = json!({
-            "name": "prek_dart_env",
-            "environment": {
-                "sdk": ">=2.12.0 <4.0.0"
-            },
-            "dependencies": resolved_dependencies,
-        });
-
-        serde_saphyr::to_string(&pubspec).context("Failed to build pubspec.yaml")
+/// Compile declared package executables into the hook env's `bin` directory.
+async fn compile_executables(
+    dart: &Path,
+    source_path: &Path,
+    bin_dir: &Path,
+    packages_path: &Path,
+    executables: BTreeMap<String, PubspecExecutable>,
+) -> Result<()> {
+    if executables.is_empty() {
+        return Ok(());
     }
 
-    async fn install_package_config(
-        dart: &Path,
-        env_path: &Path,
-        source_path: Option<&Path>,
-        package_name: Option<&str>,
-        dependencies: &rustc_hash::FxHashSet<String>,
-    ) -> Result<()> {
-        let pubspec_content = Self::build_env_pubspec(source_path, package_name, dependencies)?;
-        let pubspec_path = env_path.join("pubspec.yaml");
-        fs_err::tokio::write(&pubspec_path, pubspec_content).await?;
+    fs_err::create_dir_all(bin_dir)?;
 
-        Cmd::new(dart, "dart pub get")
-            .current_dir(env_path)
-            .env(EnvVars::PUB_CACHE, env_path)
-            .arg("pub")
-            .arg("get")
+    for (output_name, executable) in executables {
+        let entrypoint = executable.into_entrypoint(&output_name);
+        let mut relative_entrypoint = PathBuf::from(&entrypoint);
+        if relative_entrypoint.extension().is_none() {
+            relative_entrypoint.set_extension("dart");
+        }
+        let source_file = source_path.join("bin").join(relative_entrypoint);
+        if !source_file.exists() {
+            debug!("Skipping executable `{output_name}`: source file not found");
+            continue;
+        }
+
+        let output_path = bin_dir.join(&output_name).with_extension(EXE_EXTENSION);
+
+        debug!(
+            "Compiling executable `{output_name}`: {source} -> {output}",
+            source = source_file.display(),
+            output = output_path.display(),
+        );
+
+        Cmd::new(dart, "dart compile exe")
+            .arg("compile")
+            .arg("exe")
+            .arg(format!("--packages={}", packages_path.display()))
+            .arg(&source_file)
+            .arg("--output")
+            .arg(&output_path)
             .check(true)
             .output()
-            .await
-            .context("Failed to run dart pub get")?;
-
-        Ok(())
+            .await?;
     }
 
-    async fn install_from_pubspec(
-        dart: &Path,
-        env_path: &Path,
-        source_path: &Path,
-        dependencies: &rustc_hash::FxHashSet<String>,
-    ) -> Result<()> {
-        let pubspec_info = Self::read_pubspec_info(&source_path.join("pubspec.yaml"))?;
-        Self::install_package_config(
-            dart,
-            env_path,
-            Some(source_path),
-            Some(&pubspec_info.package_name),
-            dependencies,
-        )
+    Ok(())
+}
+
+/// Build the synthetic pubspec used to resolve the hook's Dart dependencies.
+fn build_env_pubspec(
+    source_path: Option<&Path>,
+    package_name: Option<&str>,
+    dependencies: &rustc_hash::FxHashSet<String>,
+) -> Result<String> {
+    let mut resolved_dependencies = BTreeMap::new();
+
+    let mut dependencies = dependencies.iter().collect::<Vec<_>>();
+    dependencies.sort_unstable();
+
+    for dep in dependencies {
+        if let Some((package, version)) = dep.split_once(':') {
+            resolved_dependencies.insert(
+                package.to_string(),
+                PubspecDependency::Version(version.to_string()),
+            );
+        } else {
+            resolved_dependencies
+                .insert(dep.clone(), PubspecDependency::Version("any".to_string()));
+        }
+    }
+
+    if let (Some(source_path), Some(package_name)) = (source_path, package_name) {
+        resolved_dependencies.insert(
+            package_name.to_string(),
+            PubspecDependency::Path {
+                path: source_path.to_path_buf(),
+            },
+        );
+    }
+
+    let pubspec = Pubspec {
+        name: "prek_dart_env".to_string(),
+        environment: BTreeMap::from([("sdk".to_string(), ">=2.12.0 <4.0.0".to_string())]),
+        dependencies: resolved_dependencies,
+        executables: BTreeMap::new(),
+    };
+
+    Ok(serde_saphyr::to_string(&pubspec)?)
+}
+
+/// Write the synthetic pubspec and resolve it into a package config.
+async fn install_package_config(
+    dart: &Path,
+    env_path: &Path,
+    source_path: Option<&Path>,
+    package_name: Option<&str>,
+    dependencies: &rustc_hash::FxHashSet<String>,
+) -> Result<()> {
+    let pubspec_content = build_env_pubspec(source_path, package_name, dependencies)?;
+    let pubspec_path = env_path.join(PUBSPEC_YAML);
+    fs_err::tokio::write(&pubspec_path, pubspec_content).await?;
+
+    Cmd::new(dart, "dart pub get")
+        .current_dir(env_path)
+        .env(EnvVars::PUB_CACHE, env_path)
+        .arg("pub")
+        .arg("get")
+        .check(true)
+        .output()
         .await?;
 
-        let bin_out_dir = env_path.join("bin");
-        Self::compile_executables(
-            dart,
-            source_path,
-            &bin_out_dir,
-            &Self::package_config_path(env_path),
-            &pubspec_info.executables,
-        )
-        .await?;
+    Ok(())
+}
+
+/// Install a local Dart package hook and compile its declared executables.
+async fn install_from_pubspec(
+    dart: &Path,
+    env_path: &Path,
+    source_path: &Path,
+    dependencies: &rustc_hash::FxHashSet<String>,
+) -> Result<()> {
+    let pubspec_path = source_path.join(PUBSPEC_YAML);
+    let pubspec_content = fs_err::read_to_string(&pubspec_path)?;
+    let pubspec: Pubspec = serde_saphyr::from_str(&pubspec_content)?;
+
+    install_package_config(
+        dart,
+        env_path,
+        Some(source_path),
+        Some(&pubspec.name),
+        dependencies,
+    )
+    .await
+    .context("Failed to install Dart pubspec dependencies")?;
+
+    compile_executables(
+        dart,
+        source_path,
+        &bin_path(env_path),
+        &package_config_path(env_path),
+        pubspec.executables,
+    )
+    .await
+    .context("Failed to compile Dart pubspec executables")?;
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::Result;
+    use std::path::PathBuf;
+
+    fn strings(values: &[&str]) -> Vec<String> {
+        values.iter().map(ToString::to_string).collect()
+    }
+
+    fn pubspec_file(content: &str) -> Result<(tempfile::TempDir, PathBuf)> {
+        let temp_dir = tempfile::tempdir()?;
+        let pubspec_path = temp_dir.path().join(PUBSPEC_YAML);
+        fs_err::write(&pubspec_path, content)?;
+        Ok((temp_dir, pubspec_path))
+    }
+
+    #[test]
+    fn packages_arg_insert_position_inserts_before_dart_run() {
+        let entry = strings(&["/usr/bin/dart", "run", "bin/hook.dart"]);
+
+        assert_eq!(packages_arg_insert_position(&entry), Some(1));
+    }
+
+    #[test]
+    fn packages_arg_insert_position_keeps_existing_packages_arg() {
+        assert_eq!(
+            packages_arg_insert_position(&strings(&["dart", "--packages=custom", "run"])),
+            None
+        );
+        assert_eq!(
+            packages_arg_insert_position(&strings(&["dart", "--packages", "custom", "run"])),
+            None
+        );
+    }
+
+    #[test]
+    fn build_env_pubspec_serializes_path_dependency() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let dependencies = rustc_hash::FxHashSet::default();
+
+        let content = build_env_pubspec(Some(temp_dir.path()), Some("sample"), &dependencies)?;
+        let pubspec = serde_saphyr::from_str::<serde_json::Value>(&content)?;
+        let path = temp_dir.path().to_string_lossy();
+
+        assert_eq!(
+            pubspec["dependencies"]["sample"]["path"].as_str(),
+            Some(path.as_ref())
+        );
 
         Ok(())
-    }
-
-    async fn install_additional_dependencies(
-        dart: &Path,
-        env_path: &Path,
-        dependencies: &rustc_hash::FxHashSet<String>,
-    ) -> Result<()> {
-        Self::install_package_config(dart, env_path, None, None, dependencies)
-            .await
-            .context("Failed to run dart pub get for additional dependencies")
-    }
-
-    fn has_pubspec(repo_path: &Path) -> bool {
-        repo_path.join("pubspec.yaml").exists()
     }
 }

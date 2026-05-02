@@ -1,5 +1,3 @@
-#![allow(clippy::needless_raw_string_hashes)]
-
 use assert_fs::fixture::{FileWriteStr, PathChild};
 
 use crate::common::{TestContext, cmd_snapshot};
@@ -9,7 +7,7 @@ fn health_check() {
     let context = TestContext::new();
     context.init_project();
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -20,11 +18,17 @@ fn health_check() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
+    "});
 
     context.git_add(".");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"Dart SDK version: .*", "Dart SDK version: [VERSION]")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -37,7 +41,7 @@ fn health_check() {
     ----- stderr -----
     ");
 
-    cmd_snapshot!(context.filters(), context.run(), @r"
+    cmd_snapshot!(filters, context.run(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -101,13 +105,13 @@ fn hook_stderr() -> anyhow::Result<()> {
     context
         .work_dir()
         .child("hook.dart")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc::indoc! {r"
             import 'dart:io';
             void main() {
               stderr.writeln('Error from Dart hook');
               exit(1);
             }
-        "#})?;
+        "})?;
 
     context.git_add(".");
 
@@ -146,14 +150,14 @@ fn script_with_files() -> anyhow::Result<()> {
     context
         .work_dir()
         .child("script.dart")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc::indoc! {r"
             import 'dart:io';
             void main(List<String> args) {
               for (var arg in args) {
                 print('Processing file: $arg');
               }
             }
-        "#})?;
+        "})?;
 
     context
         .work_dir()
@@ -207,7 +211,7 @@ fn with_pubspec_and_dependencies() -> anyhow::Result<()> {
     context
         .work_dir()
         .child("pubspec.yaml")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc::indoc! {r"
             environment:
               sdk: '>=2.17.0 <4.0.0'
 
@@ -218,7 +222,7 @@ fn with_pubspec_and_dependencies() -> anyhow::Result<()> {
 
             dependencies:
               ansicolor: ^2.0.1
-        "#})?;
+        "})?;
 
     std::fs::create_dir(context.work_dir().join("bin"))?;
     context
@@ -273,24 +277,24 @@ fn with_pubspec() -> anyhow::Result<()> {
     context
         .work_dir()
         .child("pubspec.yaml")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc::indoc! {r"
             name: test_package
             description: A test package
             version: 1.0.0
             environment:
               sdk: '>=2.17.0 <4.0.0'
-        "#})?;
+        "})?;
 
     std::fs::create_dir(context.work_dir().join("bin"))?;
     context
         .work_dir()
         .child("bin")
         .child("hello.dart")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc::indoc! {r"
             void main() {
               print('Hello from Dart package!');
             }
-        "#})?;
+        "})?;
 
     context.git_add(".");
 
@@ -337,13 +341,13 @@ fn with_pubspec_and_additional_dependencies() -> anyhow::Result<()> {
     context
         .work_dir()
         .child("pubspec.yaml")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc::indoc! {r"
             name: test_package
             description: A test package
             version: 1.0.0
             environment:
               sdk: '>=2.17.0 <4.0.0'
-        "#})?;
+        "})?;
 
     std::fs::create_dir(context.work_dir().join("bin"))?;
     std::fs::create_dir(context.work_dir().join("lib"))?;
@@ -351,21 +355,21 @@ fn with_pubspec_and_additional_dependencies() -> anyhow::Result<()> {
         .work_dir()
         .child("lib")
         .child("greeting.dart")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc::indoc! {r"
             String greet(String subject) => 'Hello $subject!';
-        "#})?;
+        "})?;
     context
         .work_dir()
         .child("bin")
         .child("hello.dart")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc::indoc! {r"
             import 'package:path/path.dart' as p;
             import 'package:test_package/greeting.dart';
 
             void main() {
               print(greet(p.posix.join('Dart', 'Hooks')));
             }
-        "#})?;
+        "})?;
 
     context.git_add(".");
 
@@ -412,13 +416,13 @@ fn additional_dependencies() {
     context
         .work_dir()
         .child("test_path.dart")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc::indoc! {r"
             import 'package:path/path.dart' as p;
             void main() {
               var joined = p.join('foo', 'bar', 'baz.txt');
               print('Joined path: $joined');
             }
-        "#})
+        "})
         .unwrap();
 
     context.git_add(".");
@@ -459,12 +463,12 @@ fn additional_dependencies_with_version() {
     context
         .work_dir()
         .child("test_path.dart")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc::indoc! {r"
             import 'package:path/path.dart' as p;
             void main() {
               print('Using path package');
             }
-        "#})
+        "})
         .unwrap();
 
     context.git_add(".");
@@ -504,25 +508,25 @@ fn executable_alias() -> anyhow::Result<()> {
     context
         .work_dir()
         .child("pubspec.yaml")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc::indoc! {r"
             name: aliased_dart_tool
             environment:
               sdk: '>=2.17.0 <4.0.0'
 
             executables:
               cli: hello
-        "#})?;
+        "})?;
 
     std::fs::create_dir(context.work_dir().join("bin"))?;
     context
         .work_dir()
         .child("bin")
         .child("hello.dart")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc::indoc! {r"
             void main() {
               print('alias executable works');
             }
-        "#})?;
+        "})?;
 
     context.git_add(".");
 
@@ -547,7 +551,7 @@ fn dart_environment() {
     let context = TestContext::new();
     context.init_project();
 
-    context.write_pre_commit_config(indoc::indoc! {r#"
+    context.write_pre_commit_config(indoc::indoc! {r"
         repos:
           - repo: local
             hooks:
@@ -558,12 +562,12 @@ fn dart_environment() {
                 always_run: true
                 verbose: true
                 pass_filenames: false
-    "#});
+    "});
 
     context
         .work_dir()
         .child("env_test.dart")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc::indoc! {r"
             import 'dart:io';
             void main() {
               var pubCache = Platform.environment['PUB_CACHE'];
@@ -573,7 +577,7 @@ fn dart_environment() {
                 print('PUB_CACHE is not set');
               }
             }
-        "#})
+        "})
         .unwrap();
 
     context.git_add(".");
