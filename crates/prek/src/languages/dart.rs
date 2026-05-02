@@ -167,11 +167,11 @@ impl LanguageImpl for Dart {
         let packages_path = package_config_path(env_dir);
 
         let mut entry = hook.entry.resolve(Some(&new_path), store)?;
-        // `dart pub get` writes the hook env's dependency graph here. Inject it
-        // so `dart run` and direct scripts resolve hook deps from this env
-        // instead of the package config in the hook work dir.
+        // `dart pub get` writes the hook env's dependency graph here. Dart's
+        // VM-level `--packages` flag makes `Platform.packageConfig` and package
+        // imports resolve against this env instead of the hook work dir.
         if packages_path.exists()
-            && let Some(index) = packages_arg_insert_position(entry.argv())
+            && let Some(index) = packages_arg_insert_position(entry.argv(), &hook.args)
         {
             entry
                 .argv_mut()
@@ -224,8 +224,8 @@ fn package_config_path(env_path: &Path) -> PathBuf {
     env_path.join(".dart_tool").join("package_config.json")
 }
 
-/// Return the argv position where `--packages=...` should be inserted.
-fn packages_arg_insert_position(entry: &[String]) -> Option<usize> {
+/// Return the `entry` argv position where `--packages=...` should be inserted.
+fn packages_arg_insert_position(entry: &[String], hook_args: &[String]) -> Option<usize> {
     fn is_dart_binary(arg: &str) -> bool {
         Path::new(arg)
             .file_name()
@@ -246,18 +246,23 @@ fn packages_arg_insert_position(entry: &[String]) -> Option<usize> {
     let dart_index = entry.iter().position(|arg| is_dart_binary(arg))?;
 
     // Respect an explicit package config from the hook author.
-    if entry.iter().any(|arg| has_packages_arg(arg)) {
+    if entry
+        .iter()
+        .chain(hook_args)
+        .any(|arg| has_packages_arg(arg))
+    {
         return None;
     }
 
     let (target_index, target) = entry
         .iter()
+        .chain(hook_args)
         .enumerate()
         .skip(dart_index + 1)
         .find_map(|(index, arg)| (!arg.starts_with('-')).then_some((index, arg)))?;
 
-    // Dart expects `--packages` before the `run` subcommand or script target.
-    (target == "run" || is_dart_script(target)).then_some(target_index)
+    // `--packages` is a VM flag, so place it before `run` or a script target.
+    (target == "run" || is_dart_script(target)).then_some(target_index.min(entry.len()))
 }
 
 /// Compile declared package executables into the hook env's `bin` directory.
@@ -421,18 +426,44 @@ mod tests {
     fn packages_arg_insert_position_inserts_before_dart_run() {
         let entry = strings(&["/usr/bin/dart", "run", "bin/hook.dart"]);
 
-        assert_eq!(packages_arg_insert_position(&entry), Some(1));
+        assert_eq!(packages_arg_insert_position(&entry, &[]), Some(1));
     }
 
     #[test]
     fn packages_arg_insert_position_keeps_existing_packages_arg() {
         assert_eq!(
-            packages_arg_insert_position(&strings(&["dart", "--packages=custom", "run"])),
+            packages_arg_insert_position(&strings(&["dart", "--packages=custom", "run"]), &[]),
             None
         );
         assert_eq!(
-            packages_arg_insert_position(&strings(&["dart", "--packages", "custom", "run"])),
+            packages_arg_insert_position(&strings(&["dart", "--packages", "custom", "run"]), &[]),
             None
+        );
+        assert_eq!(
+            packages_arg_insert_position(
+                &strings(&["dart"]),
+                &strings(&["--packages=custom", "run"])
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn packages_arg_insert_position_checks_hook_args() {
+        assert_eq!(
+            packages_arg_insert_position(&strings(&["dart"]), &strings(&["run", "bin/hook.dart"])),
+            Some(1)
+        );
+        assert_eq!(
+            packages_arg_insert_position(&strings(&["dart"]), &strings(&["bin/hook.dart"])),
+            Some(1)
+        );
+        assert_eq!(
+            packages_arg_insert_position(
+                &strings(&["dart", "--enable-asserts"]),
+                &strings(&["run", "bin/hook.dart"])
+            ),
+            Some(2)
         );
     }
 
