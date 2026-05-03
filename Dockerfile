@@ -43,7 +43,19 @@ RUN cp target/$(cat rust_target.txt)/dist/prek /prek
 # TODO: Optimize binary size, with a version that also works when cross compiling
 # RUN strip --strip-all /prek
 
-FROM scratch
+FROM alpine:3.23 AS alpine
+RUN apk add --no-cache \
+  ca-certificates \
+  git \
+  nodejs \
+  npm \
+  python3 \
+  py3-pip
+COPY --from=build /prek /usr/local/bin/prek
+WORKDIR /io
+ENTRYPOINT ["prek"]
+
+FROM scratch AS minimal
 COPY --from=build /prek /
 WORKDIR /io
 ENTRYPOINT ["/prek"]
