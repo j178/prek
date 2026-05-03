@@ -42,6 +42,8 @@ jobs:
     outputs:
       test-code: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.any_code_changed == 'true' || github.ref == 'refs/heads/master') }}
       save-rust-cache: ${{ github.ref == 'refs/heads/master' || steps.changed.outputs.cache_changed == 'true' }}
+      language-test-matrix: ${{ steps.nextest.outputs.language-test-matrix }}
+      ci-core-filter: ${{ steps.nextest.outputs.ci-core-filter }}
       # Run benchmarks if Rust code or benchmark-related files changed
       run-bench: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.rust_code_changed == 'true' || steps.changed.outputs.bench_related_changed == 'true' || github.ref == 'refs/heads/master') }}
     steps:
@@ -102,6 +104,12 @@ jobs:
             echo "rust_code_changed=${RUST_CODE_CHANGED}"
             echo "bench_related_changed=${BENCH_RELATED_CHANGED}"
           } >> "${GITHUB_OUTPUT}"
+
+      - name: "Generate nextest filters"
+        id: nextest
+        shell: bash
+        run: |
+          python3 scripts/generate_ci_matrix.py --group-size 4 --github-output >> "${GITHUB_OUTPUT}"
 
   lint:
     name: "lint"
@@ -319,7 +327,8 @@ jobs:
             --workspace \
             --cargo-profile fast-build \
             --profile ci-core \
-            --features schemars
+            --features schemars \
+            -E '${{ needs.plan.outputs.ci-core-filter }}'
 
       - name: "Upload coverage reports to Codecov"
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
@@ -390,7 +399,8 @@ jobs:
             --workspace `
             --cargo-profile fast-build `
             --features schemars `
-            --profile ci-core
+            --profile ci-core `
+            -E '${{ needs.plan.outputs.ci-core-filter }}'
 
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -408,62 +418,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix:
-        # Keep platform constraints encoded directly in grouped rows:
-        # Docker only runs on Ubuntu, Swift skips Windows, and Haskell skips macOS.
-        include:
-          - os: ubuntu-latest
-            group: 1
-            languages: bun dart deno
-            filter: test(bun::) or test(dart::) or test(deno::)
-          - os: ubuntu-latest
-            group: 2
-            languages: docker dotnet golang
-            filter: test(docker::) or test(docker_image::) or test(dotnet::) or test(golang::)
-          - os: ubuntu-latest
-            group: 3
-            languages: haskell julia lua
-            filter: test(haskell::) or test(julia::) or test(lua::)
-          - os: ubuntu-latest
-            group: 4
-            languages: node python ruby
-            filter: test(node::) or test(python::) or test(ruby::)
-          - os: ubuntu-latest
-            group: 5
-            languages: rust swift
-            filter: test(rust::) or test(swift::)
-          - os: macos-latest
-            group: 1
-            languages: bun dart deno
-            filter: test(bun::) or test(dart::) or test(deno::)
-          - os: macos-latest
-            group: 2
-            languages: dotnet golang julia
-            filter: test(dotnet::) or test(golang::) or test(julia::)
-          - os: macos-latest
-            group: 3
-            languages: lua node python
-            filter: test(lua::) or test(node::) or test(python::)
-          - os: macos-latest
-            group: 4
-            languages: ruby rust swift
-            filter: test(ruby::) or test(rust::) or test(swift::)
-          - os: windows-latest
-            group: 1
-            languages: bun dart deno
-            filter: test(bun::) or test(dart::) or test(deno::)
-          - os: windows-latest
-            group: 2
-            languages: dotnet golang haskell
-            filter: test(dotnet::) or test(golang::) or test(haskell::)
-          - os: windows-latest
-            group: 3
-            languages: julia lua node
-            filter: test(julia::) or test(lua::) or test(node::)
-          - os: windows-latest
-            group: 4
-            languages: python ruby rust
-            filter: test(python::) or test(ruby::) or test(rust::)
+      matrix: ${{ fromJSON(needs.plan.outputs.language-test-matrix) }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:

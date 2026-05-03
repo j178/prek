@@ -1,8 +1,4 @@
 [profile.ci-core]
-# Exclude heavy language-specific integration tests from the main CI runs.
-# Keep this as a deny-list so new language test modules run in ci-core until
-# they are deliberately moved to the language-test matrix.
-default-filter = "not binary_id(prek::languages) or (binary_id(prek::languages) and not (test(bun::) or test(dart::) or test(deno::) or test(docker::) or test(docker_image::) or test(dotnet::) or test(golang::) or test(haskell::) or test(julia::) or test(lua::) or test(node::) or test(python::) or test(ruby::) or test(rust::) or test(swift::)))"
 status-level = "skip"
 final-status-level = "slow"
 failure-output = "immediate"
