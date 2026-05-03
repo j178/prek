@@ -4,9 +4,9 @@
 # Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a local
 # artifacts job within `cargo-dist`.
 #
-# Adapted from https://github.com/astral-sh/uv/blob/main/.github/workflows/build-binaries.yml
+# Adapted from https://github.com/astral-sh/uv/blob/main/.github/workflows/build-release-binaries.yml
 
-name: "Build binaries"
+name: "Build release binaries"
 
 on:
   workflow_call:
@@ -14,12 +14,6 @@ on:
       plan:
         required: true
         type: string
-  pull_request:
-    paths:
-      # When we change pyproject.toml, we want to ensure that the maturin builds still work.
-      - pyproject.toml
-      # And when we change this workflow itself...
-      - .github/workflows/build-binaries.yml
 
 permissions:
   contents: read

@@ -45,7 +45,7 @@ targets = [
   "i686-pc-windows-msvc",
 ]
 # Local artifacts jobs to run in CI
-local-artifacts-jobs = ["./build-binaries", "./build-docker"]
+local-artifacts-jobs = ["./build-release-binaries", "./build-docker"]
 # Publish jobs to run in CI
 publish-jobs = ["./publish-crates", "./publish-pypi", "./publish-npm"]
 # Post-announce jobs to run in CI
