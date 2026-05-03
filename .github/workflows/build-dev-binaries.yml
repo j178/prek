@@ -1,0 +1,135 @@
+name: "Build dev binaries"
+
+on:
+  workflow_call:
+    inputs:
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
+
+permissions: {}
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  build-binary-msrv:
+    name: "build binary | msrv"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Read MSRV from Cargo.toml"
+        id: msrv
+        run: |
+          MSRV=$(grep -m1 'rust-version' Cargo.toml | sed 's/.*"\([^"]*\)".*/\1/')
+          echo "value=$MSRV" >> "$GITHUB_OUTPUT"
+
+      - name: "Install Rust toolchain"
+        run: rustup default "${MSRV}"
+        env:
+          MSRV: ${{ steps.msrv.outputs.value }}
+
+      - name: "Install mold"
+        uses: rui314/setup-mold@9c9c13bf4c3f1adef0cc596abc155580bcb04444 # v1
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - run: cargo +"${MSRV}" build --profile no-debug --bin prek
+        env:
+          MSRV: ${{ steps.msrv.outputs.value }}
+
+      - run: ./target/no-debug/prek --version
+
+  build-binary-linux-libc:
+    name: "build binary | linux libc"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: rui314/setup-mold@9c9c13bf4c3f1adef0cc596abc155580bcb04444 # v1
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Build"
+        run: cargo build --profile no-debug --bin prek
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: prek-linux-libc-${{ github.sha }}
+          path: |
+            ./target/no-debug/prek
+          retention-days: 1
+
+  build-binary-macos-aarch64:
+    name: "build binary | macos aarch64"
+    timeout-minutes: 10
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Build"
+        run: cargo build --profile no-debug --bin prek
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: prek-macos-aarch64-${{ github.sha }}
+          path: |
+            ./target/no-debug/prek
+          retention-days: 1
+
+  build-binary-windows-x86_64:
+    name: "build binary | windows x86_64"
+    timeout-minutes: 10
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: ${{ env.PREK_WORKSPACE }}
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Build"
+        working-directory: ${{ env.PREK_WORKSPACE }}
+        run: cargo build --profile no-debug --bin prek
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: prek-windows-x86_64-${{ github.sha }}
+          path: |
+            ${{ env.PREK_WORKSPACE }}/target/no-debug/prek.exe
+          retention-days: 1

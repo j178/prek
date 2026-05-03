@@ -15,8 +15,7 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -143,7 +142,6 @@ jobs:
           path: |
             *.tar.gz
             *.sha256
-
 
   linux:
     runs-on: ubuntu-latest

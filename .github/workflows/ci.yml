@@ -82,6 +82,7 @@ jobs:
             [[ "$file" =~ ^\.github/workflows/.*\.ya?ml$ ]] && workflow_changed=1
             [[ "$file" == ".github/workflows/ci.yml" ]] && ci_workflow_changed=1
             [[ "$file" == ".github/workflows/build-release-binaries.yml" || "$file" == ".github/workflows/release.yml" ]] && release_workflow_changed=1
+            [[ "$file" == "dist-workspace.toml" ]] && release_config_changed=1
             [[ "$file" == ".github/zizmor.yml" ]] && zizmor_config_changed=1
             [[ "$file" == "Dockerfile" ]] && dockerfile_changed=1
             [[ "$file" == ".github/workflows/build-docker.yml" ]] && docker_workflow_changed=1
@@ -94,8 +95,8 @@ jobs:
           [[ $rust_code_changed || $rust_deps_changed || $rust_config_changed ]] && any_rust_changed=1
           [[ $rust_deps_changed || $rust_config_changed || $workflow_changed ]] && cache_relevant_changed=1
           [[ $bench_workflow_changed || $bench_scripts_changed ]] && bench_related_changed=1
-          [[ $python_config_changed || $rust_deps_changed || $rust_config_changed || $release_workflow_changed || $ci_workflow_changed ]] && release_build_changed=1
-          [[ $python_config_changed || $rust_deps_changed || $rust_config_changed || $dockerfile_changed || $docker_workflow_changed || $ci_workflow_changed ]] && docker_build_changed=1
+          [[ $python_config_changed || $rust_deps_changed || $rust_config_changed || $release_workflow_changed || $release_config_changed || $ci_workflow_changed ]] && release_build_changed=1
+          [[ $python_config_changed || $rust_deps_changed || $rust_config_changed || $release_config_changed || $dockerfile_changed || $docker_workflow_changed || $ci_workflow_changed ]] && docker_build_changed=1
 
           [[ ! $has_skip_label && ($any_code_changed || $on_master_branch) ]] && test_code=1
           [[ $on_master_branch || $cache_relevant_changed ]] && save_rust_cache=1
@@ -121,7 +122,6 @@ jobs:
           python3 scripts/generate_ci_matrix.py --group-size 4 --github-output >> "${GITHUB_OUTPUT}"
 
   lint:
-    name: "lint"
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
@@ -138,10 +138,9 @@ jobs:
           PREK_SKIP: cargo-fmt,cargo-clippy
 
   check-release:
-    name: "check release"
     needs: plan
     timeout-minutes: 10
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -159,8 +158,7 @@ jobs:
           echo "dist plan completed successfully"
           cat plan-dist-manifest.json
 
-  zizmor:
-    name: "zizmor"
+  check-zizmor:
     needs: plan
     if: ${{ needs.plan.outputs.run-zizmor == 'true' }}
     uses: ./.github/workflows/zizmor.yml
@@ -169,18 +167,14 @@ jobs:
       security-events: write
 
   build-release-binaries:
-    name: "build release binaries"
     needs: plan
     if: ${{ needs.plan.outputs.build-release-binaries == 'true' }}
     uses: ./.github/workflows/build-release-binaries.yml
     with:
       # CI has no cargo-dist manifest; release.yml passes the real plan when publishing.
       plan: ""
-    permissions:
-      contents: read
 
   build-docker:
-    name: "build docker"
     needs: plan
     if: ${{ needs.plan.outputs.build-docker == 'true' }}
     uses: ./.github/workflows/build-docker.yml
@@ -189,6 +183,9 @@ jobs:
       plan: ""
     permissions:
       contents: read
+      id-token: write
+      packages: write
+      attestations: write
 
   cargo-clippy-linux:
     name: "cargo clippy | ubuntu"
@@ -246,7 +243,7 @@ jobs:
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     timeout-minutes: 10
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -652,121 +649,37 @@ jobs:
         working-directory: cpython
         run: cargo run -p prek -- --all-files
 
-  build-binary-msrv:
+  build-dev-binaries:
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
-    name: "build binary | msrv"
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    uses: ./.github/workflows/build-dev-binaries.yml
+    with:
+      save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
+
+  required-checks-passed:
+    name: "all required jobs passed"
+    if: always()
+    needs:
+      - lint
+      - check-release
+      - check-zizmor
+      - cargo-clippy-linux
+      - cargo-clippy-windows
+      - cargo-shear
+      - cargo-test-without-uv
+      - cargo-test
+      - cargo-test-windows
+      - language-tests
+      - ecosystem-cpython
+      - build-dev-binaries
+    runs-on: ubuntu-slim
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-      - name: "Read MSRV from Cargo.toml"
-        id: msrv
+      - name: "Check required jobs passed"
         run: |
-          MSRV=$(grep -m1 'rust-version' Cargo.toml | sed 's/.*"\([^"]*\)".*/\1/')
-          echo "value=$MSRV" >> "$GITHUB_OUTPUT"
-      - name: "Install Rust toolchain"
-        run: rustup default "${MSRV}"
+          failing=$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"')
+          if [ -n "$failing" ]; then
+            echo "$failing"
+            exit 1
+          fi
         env:
-          MSRV: ${{ steps.msrv.outputs.value }}
-      - name: "Install mold"
-        uses: rui314/setup-mold@9c9c13bf4c3f1adef0cc596abc155580bcb04444 # v1
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
-      - run: cargo +"${MSRV}" build --profile no-debug --bin prek
-        env:
-          MSRV: ${{ steps.msrv.outputs.value }}
-      - run: ./target/no-debug/prek --version
-
-  build-binary-linux-libc:
-    needs: plan
-    if: ${{ needs.plan.outputs.test-code == 'true' }}
-    timeout-minutes: 10
-    runs-on: ubuntu-latest
-    name: "build binary | linux libc"
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - uses: rui314/setup-mold@9c9c13bf4c3f1adef0cc596abc155580bcb04444 # v1
-
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
-
-      - name: "Build"
-        run: cargo build --profile no-debug --bin prek
-
-      - name: "Upload binary"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: prek-linux-libc-${{ github.sha }}
-          path: |
-            ./target/no-debug/prek
-          retention-days: 1
-
-  build-binary-macos-aarch64:
-    needs: plan
-    if: ${{ needs.plan.outputs.test-code == 'true' }}
-    timeout-minutes: 10
-    runs-on: macos-latest
-    name: "build binary | macos aarch64"
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
-
-      - name: "Build"
-        run: cargo build --profile no-debug --bin prek
-
-      - name: "Upload binary"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: prek-macos-aarch64-${{ github.sha }}
-          path: |
-            ./target/no-debug/prek
-          retention-days: 1
-
-  build-binary-windows-x86_64:
-    needs: plan
-    if: ${{ needs.plan.outputs.test-code == 'true' }}
-    timeout-minutes: 10
-    runs-on: windows-latest
-    name: "build binary | windows x86_64"
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Setup Dev Drive
-        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
-
-      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
-      - name: Copy Git Repo to Dev Drive
-        run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:PREK_WORKSPACE" -Recurse
-
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          workspaces: ${{ env.PREK_WORKSPACE }}
-          save-if: ${{ needs.plan.outputs.save-rust-cache == 'true' }}
-
-      - name: "Build"
-        working-directory: ${{ env.PREK_WORKSPACE }}
-        run: cargo build --profile no-debug --bin prek
-
-      - name: "Upload binary"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: prek-windows-x86_64-${{ github.sha }}
-          path: |
-            ${{ env.PREK_WORKSPACE }}/target/no-debug/prek.exe
-          retention-days: 1
+          NEEDS_JSON: ${{ toJSON(needs) }}
