@@ -150,7 +150,6 @@ impl TestContext {
     }
 
     pub fn command(&self) -> Command {
-        let config_home = self.home_dir.child("config");
         let mut cmd = if EnvVars::is_set(EnvVars::PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT) {
             // Run the original pre-commit to check compatibility.
             let mut cmd = Command::new("pre-commit");
@@ -170,11 +169,10 @@ impl TestContext {
             cmd
         };
 
-        cmd.env("HOME", &**self.home_dir())
-            .env("USERPROFILE", &**self.home_dir())
-            .env("XDG_CONFIG_HOME", config_home.path())
-            .env("APPDATA", config_home.path())
-            .env("LOCALAPPDATA", &**self.home_dir());
+        cmd.env(
+            EnvVars::PREK_INTERNAL__USER_CONFIG_PATH,
+            self.user_config_path().path(),
+        );
 
         // Disable git autocrlf to avoid line ending issues in tests.
         cmd.env("GIT_CONFIG_COUNT", "1")
@@ -184,15 +182,21 @@ impl TestContext {
         cmd
     }
 
-    pub fn write_global_config(&self, content: &str) {
+    fn user_config_path(&self) -> ChildPath {
+        self.home_dir
+            .child("config")
+            .child("prek")
+            .child("prek.toml")
+    }
+
+    pub fn write_user_config(&self, content: &str) {
         let config_dir = self.home_dir.child("config").child("prek");
         config_dir
             .create_dir_all()
-            .expect("Failed to create global config directory");
-        config_dir
-            .child("prek.toml")
+            .expect("Failed to create user config directory");
+        self.user_config_path()
             .write_str(content)
-            .expect("Failed to write global config");
+            .expect("Failed to write user config");
     }
 
     pub fn run(&self) -> Command {

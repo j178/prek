@@ -4,11 +4,16 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use etcetera::BaseStrategy;
+use prek_consts::env_vars::EnvVars;
 use serde::Deserialize;
 
 use crate::cli::AutoUpdateArgs;
 
 fn user_config_path() -> Option<PathBuf> {
+    if let Some(path) = EnvVars::var_os(EnvVars::PREK_INTERNAL__USER_CONFIG_PATH) {
+        return Some(PathBuf::from(path));
+    }
+
     etcetera::choose_base_strategy()
         .ok()
         .map(|strategy| strategy.config_dir().join("prek").join("prek.toml"))

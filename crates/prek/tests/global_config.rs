@@ -35,7 +35,7 @@ fn global_config_missing_file_uses_defaults() {
 #[test]
 fn global_config_applies_cooldown_days() {
     let context = TestContext::new();
-    context.write_global_config(indoc::indoc! {r"
+    context.write_user_config(indoc::indoc! {r"
         [auto_update]
         cooldown_days = 3
     "});
@@ -69,7 +69,7 @@ fn global_config_applies_cooldown_days() {
 #[test]
 fn global_config_cli_args_override_file() {
     let context = TestContext::new();
-    context.write_global_config(indoc::indoc! {r"
+    context.write_user_config(indoc::indoc! {r"
         [auto_update]
         cooldown_days = 3
     "});
@@ -110,7 +110,7 @@ fn global_config_cli_args_override_file() {
 #[test]
 fn global_config_ignores_unknown_options() {
     let context = TestContext::new();
-    context.write_global_config(indoc::indoc! {r#"
+    context.write_user_config(indoc::indoc! {r#"
         future_option = true
 
         [auto_update]
@@ -147,7 +147,7 @@ fn global_config_ignores_unknown_options() {
 #[test]
 fn global_config_invalid_file_reports_parse_error() {
     let context = TestContext::new();
-    context.write_global_config(indoc::indoc! {r#"
+    context.write_user_config(indoc::indoc! {r#"
         [auto_update]
         cooldown_days = "soon"
     "#});

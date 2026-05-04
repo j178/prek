@@ -35,6 +35,7 @@ impl EnvVars {
 
     // PREK internal environment variables
     pub const PREK_INTERNAL__TEST_DIR: &'static str = "PREK_INTERNAL__TEST_DIR";
+    pub const PREK_INTERNAL__USER_CONFIG_PATH: &'static str = "PREK_INTERNAL__USER_CONFIG_PATH";
     pub const PREK_INTERNAL__SORT_FILENAMES: &'static str = "PREK_INTERNAL__SORT_FILENAMES";
     pub const PREK_INTERNAL__SKIP_POST_CHECKOUT: &'static str = "PREK_INTERNAL__SKIP_POST_CHECKOUT";
     pub const PREK_INTERNAL__RUN_ORIGINAL_PRE_COMMIT: &'static str =
