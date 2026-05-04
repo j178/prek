@@ -11,7 +11,7 @@ This page documents the configuration keys that `prek` understands.
 
 This file stores user-level `prek` settings and does not define project hooks.
 
-### `auto-update.cooldown-days`
+### `auto_update.cooldown_days`
 
 Default cooldown for `prek auto-update`.
 
@@ -20,8 +20,8 @@ Default cooldown for `prek auto-update`.
 - CLI override: `prek auto-update --cooldown-days <DAYS>`
 
 ```toml
-[auto-update]
-cooldown-days = 7
+[auto_update]
+cooldown_days = 7
 ```
 
 The age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags. A value of `0` disables the cooldown check.

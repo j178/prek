@@ -73,14 +73,14 @@ impl Deref for FilesystemOptions {
 
 /// Options as represented in the global `prek.toml` file.
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
+#[serde(default, deny_unknown_fields, rename_all = "snake_case")]
 pub(crate) struct Options {
     auto_update: Option<AutoUpdateOptions>,
 }
 
 /// Options for the `auto-update` command.
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
+#[serde(default, deny_unknown_fields, rename_all = "snake_case")]
 struct AutoUpdateOptions {
     cooldown_days: Option<u8>,
 }

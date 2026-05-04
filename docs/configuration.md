@@ -36,8 +36,8 @@ This file is for user-level `prek` settings, not hook definitions. Project hooks
 The first supported global setting is the default cooldown for `prek auto-update`:
 
 ```toml
-[auto-update]
-cooldown-days = 7
+[auto_update]
+cooldown_days = 7
 ```
 
 `prek auto-update --cooldown-days <DAYS>` overrides this value for a single command invocation.

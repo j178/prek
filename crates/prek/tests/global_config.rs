@@ -36,8 +36,8 @@ fn global_config_missing_file_uses_defaults() {
 fn global_config_applies_cooldown_days() {
     let context = TestContext::new();
     context.write_global_config(indoc::indoc! {r"
-        [auto-update]
-        cooldown-days = 3
+        [auto_update]
+        cooldown_days = 3
     "});
 
     cmd_snapshot!(context.filters(), context.auto_update().arg("--show-settings"), @"
@@ -70,8 +70,8 @@ fn global_config_applies_cooldown_days() {
 fn global_config_cli_args_override_file() {
     let context = TestContext::new();
     context.write_global_config(indoc::indoc! {r"
-        [auto-update]
-        cooldown-days = 3
+        [auto_update]
+        cooldown_days = 3
     "});
 
     cmd_snapshot!(
@@ -111,8 +111,8 @@ fn global_config_cli_args_override_file() {
 fn global_config_invalid_file_reports_parse_error() {
     let context = TestContext::new();
     context.write_global_config(indoc::indoc! {r#"
-        [auto-update]
-        cooldown-days = "soon"
+        [auto_update]
+        cooldown_days = "soon"
     "#});
 
     cmd_snapshot!(context.filters(), context.auto_update().arg("--show-settings"), @r#"
@@ -138,7 +138,7 @@ fn global_config_invalid_file_reports_parse_error() {
     error: Failed to parse global config `[HOME]/config/prek/prek.toml`
       caused by: TOML parse error at line 2, column 17
       |
-    2 | cooldown-days = "soon"
+    2 | cooldown_days = "soon"
       |                 ^^^^^^
     invalid type: string "soon", expected u8
     "#);

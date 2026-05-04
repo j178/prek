@@ -757,7 +757,7 @@ pub(crate) struct AutoUpdateArgs {
     /// Minimum release age (in days) required for a version to be eligible.
     ///
     /// The age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags.
-    /// Defaults to `auto-update.cooldown-days` in the global config, or `0` when unset.
+    /// Defaults to `auto_update.cooldown_days` in the global config, or `0` when unset.
     /// A value of `0` disables this check.
     #[arg(long, value_name = "DAYS", conflicts_with = "bleeding_edge")]
     pub(crate) cooldown_days: Option<u8>,
