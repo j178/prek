@@ -2,6 +2,30 @@
 
 This page documents the configuration keys that `prek` understands.
 
+## Global config file
+
+`prek` reads an optional user-level global config from:
+
+- Linux and macOS: `~/.config/prek/prek.toml` (or `$XDG_CONFIG_HOME/prek/prek.toml` when `XDG_CONFIG_HOME` is set)
+- Windows: `%APPDATA%\prek\prek.toml`
+
+This file stores user-level `prek` settings and does not define project hooks.
+
+### `auto-update.cooldown-days`
+
+Default cooldown for `prek auto-update`.
+
+- Type: integer days
+- Default: `0`
+- CLI override: `prek auto-update --cooldown-days <DAYS>`
+
+```toml
+[auto-update]
+cooldown-days = 7
+```
+
+The age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags. A value of `0` disables the cooldown check.
+
 ## Top-level keys
 
 ### `repos` (required)

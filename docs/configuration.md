@@ -24,6 +24,24 @@ Both formats are first-class and will be supported long-term. They describe the 
           - id: trailing-whitespace
     ```
 
+## Global configuration
+
+`prek` also reads an optional user-level global config from the platform config directory:
+
+- Linux and macOS: `~/.config/prek/prek.toml` (or `$XDG_CONFIG_HOME/prek/prek.toml` when `XDG_CONFIG_HOME` is set)
+- Windows: `%APPDATA%\prek\prek.toml`
+
+This file is for user-level `prek` settings, not hook definitions. Project hooks still live in the project config files described below.
+
+The first supported global setting is the default cooldown for `prek auto-update`:
+
+```toml
+[auto-update]
+cooldown-days = 7
+```
+
+`prek auto-update --cooldown-days <DAYS>` overrides this value for a single command invocation.
+
 ## Pre-commit compatibility
 
 `prek` is **fully compatible** with [`pre-commit`](https://pre-commit.com/) YAML configs, so your existing `.pre-commit-config.yaml` files work unchanged.
