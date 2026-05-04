@@ -269,9 +269,7 @@ But if `foo/bar` is itself a project (has its own config), files under `foo/bar`
 
 Use [`prek validate-config`](reference/cli.md#prek-validate-config) to validate one or more config files.
 
-If you want IDE completion / validation, prek provides a JSON Schema at [https://prek.j178.dev/docs/prek.schema.json](https://prek.j178.dev/docs/prek.schema.json).
-
-And the schema is also submitted to the [JSON Schema Store](https://www.schemastore.org/prek.json), so some editors may pick it up automatically.
+If you want IDE completion / validation, prek publishes a JSON Schema through the [JSON Schema Store](https://www.schemastore.org/prek.json), so some editors may pick it up automatically.
 
 That schema tracks what `prek` accepts today, but `prek` also intentionally tolerates unknown keys for forward compatibility.
 
