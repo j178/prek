@@ -7,8 +7,6 @@ use etcetera::BaseStrategy;
 use prek_consts::env_vars::EnvVars;
 use serde::Deserialize;
 
-use crate::cli::AutoUpdateArgs;
-
 fn user_config_path() -> Option<PathBuf> {
     if let Some(path) = EnvVars::var_os(EnvVars::PREK_INTERNAL__USER_CONFIG_PATH) {
         return Some(PathBuf::from(path));
@@ -97,14 +95,18 @@ pub(crate) struct AutoUpdateSettings {
 }
 
 impl AutoUpdateSettings {
-    pub(crate) fn resolve(args: &AutoUpdateArgs, filesystem: Option<&FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        cli_cooldown_days: Option<u8>,
+        filesystem: Option<&FilesystemOptions>,
+        project_cooldown_days: Option<u8>,
+    ) -> Self {
         Self {
-            cooldown_days: args
-                .cooldown_days
+            cooldown_days: cli_cooldown_days
+                .or(project_cooldown_days)
                 .or_else(|| {
                     filesystem
                         .and_then(|fs| fs.auto_update.as_ref())
-                        .and_then(|au| au.cooldown_days)
+                        .and_then(|options| options.cooldown_days)
                 })
                 .unwrap_or_default(),
         }

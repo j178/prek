@@ -26,7 +26,7 @@ use crate::cli::{
 use crate::cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use crate::printer::Printer;
 use crate::run::USE_COLOR;
-use crate::settings::{AutoUpdateSettings, FilesystemOptions};
+use crate::settings::FilesystemOptions;
 use crate::store::Store;
 
 mod archive;
@@ -376,8 +376,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Command::SampleConfig(args) => cli::sample_config(args.file.into(), args.format, printer),
         Command::AutoUpdate(args) => {
             let filesystem = FilesystemOptions::user()?;
-            let settings = AutoUpdateSettings::resolve(&args, filesystem.as_ref());
-            show_settings!(settings);
+            show_settings!(args);
 
             cli::auto_update(
                 &store,
@@ -394,7 +393,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.jobs,
                 args.dry_run || args.check,
                 args.exit_code || args.check,
-                settings.cooldown_days,
+                args.cooldown_days,
+                filesystem,
                 printer,
             )
             .await

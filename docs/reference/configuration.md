@@ -11,7 +11,7 @@ This page documents the configuration keys that `prek` understands.
 
 This file stores user-level `prek` settings and does not define project hooks.
 
-### `auto_update.cooldown_days`
+### Global `auto_update.cooldown_days`
 
 Default cooldown for `prek auto-update`.
 
@@ -26,7 +26,38 @@ cooldown_days = 7
 
 The age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags. A value of `0` disables the cooldown check.
 
+Project configs can also set `auto_update.cooldown_days`. The effective precedence is:
+
+1. `prek auto-update --cooldown-days <DAYS>`
+2. project config
+3. user-level global config
+4. default `0`
+
 ## Top-level keys
+
+### `auto_update.cooldown_days`
+
+Project default cooldown for `prek auto-update`.
+
+- Type: integer days
+- Default: inherited from the user-level global config, or `0`
+- CLI override: `prek auto-update --cooldown-days <DAYS>`
+
+=== "prek.toml"
+
+    ```toml
+    [auto_update]
+    cooldown_days = 7
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    auto_update:
+      cooldown_days: 7
+    ```
+
+In workspace mode, this setting is scoped to the project config file that defines it. If two projects use the same repo URL with different cooldown settings, `prek auto-update` fetches the repo once but evaluates each project with its own cooldown.
 
 ### `repos` (required)
 

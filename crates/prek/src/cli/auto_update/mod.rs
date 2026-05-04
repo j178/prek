@@ -15,6 +15,7 @@ use crate::config::GlobPatterns;
 use crate::fs::CWD;
 use crate::printer::Printer;
 use crate::run::CONCURRENCY;
+use crate::settings::FilesystemOptions;
 use crate::store::Store;
 use crate::workspace::{Project, Workspace};
 
@@ -54,6 +55,8 @@ struct RepoTarget<'a> {
     repo: &'a str,
     /// The currently configured `rev` for this target.
     current_rev: &'a str,
+    /// The resolved cooldown window to apply when selecting an update for this target.
+    cooldown_days: u8,
     /// The sorted hook ids that must still exist after updating this target.
     required_hook_ids: Vec<&'a str>,
     /// Every config usage that shares this exact `repo + rev + hook set`.
@@ -325,19 +328,21 @@ pub(crate) async fn auto_update(
     jobs: usize,
     dry_run: bool,
     exit_code: bool,
-    cooldown_days: u8,
+    cooldown_days: Option<u8>,
+    filesystem: Option<FilesystemOptions>,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let tag_filters =
-        TagFilters::new(include_tag, exclude_tag, repo_include_tag, repo_exclude_tag)?;
     let workspace_root = Workspace::find_root(config.as_deref(), &CWD)?;
     // TODO: support selectors?
     let selectors = Selectors::default();
     let workspace = Workspace::discover(store, workspace_root, config, Some(&selectors), true)?;
+
+    let tag_filters =
+        TagFilters::new(include_tag, exclude_tag, repo_include_tag, repo_exclude_tag)?;
     let jobs = if jobs == 0 { *CONCURRENCY } else { jobs };
     let reporter = AutoUpdateReporter::new(printer);
 
-    let repo_sources = collect_repo_sources(&workspace)?;
+    let repo_sources = collect_repo_sources(&workspace, cooldown_days, filesystem.as_ref())?;
     let sources = repo_sources.iter().filter(|repo_source| {
         (filter_repos.is_empty() || filter_repos.iter().any(|repo| repo == repo_source.repo))
             && !exclude_repos.iter().any(|repo| repo == repo_source.repo)
@@ -345,14 +350,8 @@ pub(crate) async fn auto_update(
     let outcomes: Vec<RepoUpdate<'_>> = futures::stream::iter(sources)
         .map(async |repo_source| {
             let progress = reporter.on_update_start(repo_source.repo);
-            let result = evaluate_repo_source(
-                repo_source,
-                bleeding_edge,
-                freeze,
-                cooldown_days,
-                &tag_filters,
-            )
-            .await;
+            let result =
+                evaluate_repo_source(repo_source, bleeding_edge, freeze, &tag_filters).await;
             reporter.on_update_complete(progress);
             result
         })

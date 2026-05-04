@@ -40,7 +40,23 @@ The first supported global setting is the default cooldown for `prek auto-update
 cooldown_days = 7
 ```
 
-`prek auto-update --cooldown-days <DAYS>` overrides this value for a single command invocation.
+Project config can also define the same setting, scoped to that project:
+
+=== "prek.toml"
+
+    ```toml
+    [auto_update]
+    cooldown_days = 7
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    auto_update:
+      cooldown_days: 7
+    ```
+
+`prek auto-update --cooldown-days <DAYS>` overrides both project and global config for a single command invocation.
 
 ## Pre-commit compatibility
 
@@ -58,6 +74,7 @@ These entries are implemented by `prek` and are not part of the documented upstr
 They work in both YAML and TOML, but they only matter for compatibility if you share a YAML config with upstream `pre-commit`.
 
 - Top-level:
+    - [`auto_update.cooldown_days`](reference/configuration.md#auto_updatecooldown_days)
     - [`minimum_prek_version`](reference/configuration.md#prek-only-minimum-prek-version-config)
     - [`orphan`](reference/configuration.md#prek-only-orphan)
 - Repo type:

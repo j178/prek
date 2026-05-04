@@ -1117,6 +1117,14 @@ where
     })
 }
 
+/// Controls how `prek auto-update` selects eligible releases.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub(crate) struct AutoUpdateOptions {
+    pub(crate) cooldown_days: Option<u8>,
+}
+
 // TODO: warn sensible regex
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1129,6 +1137,8 @@ where
     schemars(extend("x-tombi-toml-version" = "v1.1.0")),
 )]
 pub(crate) struct Config {
+    /// Default settings for `prek auto-update` in this project.
+    pub auto_update: Option<AutoUpdateOptions>,
     pub repos: Vec<Repo>,
     /// A list of `--hook-types` which will be used by default when running `prek install`.
     /// Default is `[pre-commit]`.

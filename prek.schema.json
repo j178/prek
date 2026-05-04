@@ -5,6 +5,10 @@
   "description": "The configuration file for prek, a git hook manager written in Rust.",
   "type": "object",
   "properties": {
+    "auto_update": {
+      "description": "Default settings for `prek auto-update` in this project.",
+      "$ref": "#/definitions/AutoUpdateOptions"
+    },
     "repos": {
       "type": "array",
       "items": {
@@ -129,6 +133,17 @@
   "additionalProperties": true,
   "x-tombi-toml-version": "v1.1.0",
   "definitions": {
+    "AutoUpdateOptions": {
+      "description": "Controls how `prek auto-update` selects eligible releases.",
+      "type": "object",
+      "properties": {
+        "cooldown_days": {
+          "type": "integer",
+          "maximum": 255,
+          "minimum": 0
+        }
+      }
+    },
     "Repo": {
       "description": "A repository of hooks, which can be remote, local, meta, or builtin.",
       "type": "object",

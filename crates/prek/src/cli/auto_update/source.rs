@@ -16,14 +16,32 @@ use crate::cli::auto_update::{
 };
 use crate::config::{Repo, looks_like_sha};
 use crate::fs::Simplified;
+use crate::settings::{AutoUpdateSettings, FilesystemOptions};
 use crate::workspace::Workspace;
 
+type RepoTargetKey<'a> = (&'a str, Vec<&'a str>, u8);
+type RepoTargetsByKey<'a> = FxHashMap<RepoTargetKey<'a>, RepoTarget<'a>>;
+type RepoSourcesByRepo<'a> = FxHashMap<&'a str, RepoTargetsByKey<'a>>;
+
 /// Collects the configured remote repos grouped by fetch source, revision, and hook set.
-pub(super) fn collect_repo_sources(workspace: &Workspace) -> Result<Vec<RepoSource<'_>>> {
-    let mut repo_sources: FxHashMap<&str, FxHashMap<(&str, Vec<&str>), RepoTarget<'_>>> =
-        FxHashMap::default();
+pub(super) fn collect_repo_sources<'a>(
+    workspace: &'a Workspace,
+    cli_cooldown_days: Option<u8>,
+    filesystem: Option<&FilesystemOptions>,
+) -> Result<Vec<RepoSource<'a>>> {
+    let mut repo_sources: RepoSourcesByRepo<'a> = FxHashMap::default();
 
     for project in workspace.projects() {
+        let settings = AutoUpdateSettings::resolve(
+            cli_cooldown_days,
+            filesystem,
+            project
+                .config()
+                .auto_update
+                .as_ref()
+                .and_then(|options| options.cooldown_days),
+        );
+        let cooldown_days = settings.cooldown_days;
         let remote_count = project
             .config()
             .repos
@@ -64,10 +82,15 @@ pub(super) fn collect_repo_sources(workspace: &Workspace) -> Result<Vec<RepoSour
             let target = repo_sources
                 .entry(remote_repo.repo.as_str())
                 .or_default()
-                .entry((remote_repo.rev.as_str(), required_hook_ids.clone()))
+                .entry((
+                    remote_repo.rev.as_str(),
+                    required_hook_ids.clone(),
+                    cooldown_days,
+                ))
                 .or_insert_with(|| RepoTarget {
                     repo: remote_repo.repo.as_str(),
                     current_rev: remote_repo.rev.as_str(),
+                    cooldown_days,
                     required_hook_ids,
                     usages: Vec::new(),
                 });
@@ -90,6 +113,7 @@ pub(super) fn collect_repo_sources(workspace: &Workspace) -> Result<Vec<RepoSour
             targets.sort_by(|a, b| {
                 a.current_rev
                     .cmp(b.current_rev)
+                    .then_with(|| a.cooldown_days.cmp(&b.cooldown_days))
                     .then_with(|| a.required_hook_ids.cmp(&b.required_hook_ids))
             });
             RepoSource { repo, targets }
@@ -167,7 +191,6 @@ pub(super) async fn evaluate_repo_source<'a>(
     repo_source: &'a RepoSource<'a>,
     bleeding_edge: bool,
     freeze: bool,
-    cooldown_days: u8,
     tag_filters: &TagFilters,
 ) -> Result<Vec<RepoUpdate<'a>>> {
     let tmp_dir = tempfile::tempdir()?;
@@ -214,7 +237,6 @@ pub(super) async fn evaluate_repo_source<'a>(
             target,
             bleeding_edge,
             freeze,
-            cooldown_days,
             &tag_timestamps,
             &update_tag_timestamps,
         )
@@ -232,7 +254,6 @@ async fn evaluate_repo_target<'a>(
     target: &'a RepoTarget<'a>,
     bleeding_edge: bool,
     freeze: bool,
-    cooldown_days: u8,
     tag_timestamps: &[TagTimestamp],
     update_tag_timestamps: &[TagTimestamp],
 ) -> Result<ResolvedRepoUpdate<'a>> {
@@ -252,7 +273,7 @@ async fn evaluate_repo_target<'a>(
         repo_path,
         target.current_rev,
         bleeding_edge,
-        cooldown_days,
+        target.cooldown_days,
         update_tag_timestamps,
     )
     .await?;

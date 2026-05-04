@@ -1902,6 +1902,111 @@ fn auto_update_workspace() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn auto_update_workspace_same_repo_uses_project_cooldown() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+    context.write_user_config(indoc::indoc! {r"
+        [auto_update]
+        cooldown_days = 1
+    "});
+
+    let repo_path =
+        create_local_git_repo(&context, "workspace-cooldown-repo", &["v1.0.0", "v1.1.0"])?;
+    git_cmd(&repo_path)
+        .arg("commit")
+        .arg("-m")
+        .arg("Release v2.0.0")
+        .arg("--allow-empty")
+        .assert()
+        .success();
+    git_cmd(&repo_path)
+        .arg("tag")
+        .arg("v2.0.0")
+        .arg("-m")
+        .arg("v2.0.0")
+        .assert()
+        .success();
+
+    context.setup_workspace(
+        &["project-a", "project-b"],
+        "repos: []", // Minimal valid config for root
+    )?;
+
+    context
+        .work_dir()
+        .child("project-a/.pre-commit-config.yaml")
+        .write_str(&indoc::formatdoc! {r"
+        auto_update:
+          cooldown_days: 0
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path})?;
+
+    context
+        .work_dir()
+        .child("project-b/.pre-commit-config.yaml")
+        .write_str(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v1.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path})?;
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project-a/.pre-commit-config.yaml
+      [HOME]/test-repos/workspace-cooldown-repo
+        updating rev `v1.0.0` -> `v2.0.0`
+
+    project-b/.pre-commit-config.yaml
+      [HOME]/test-repos/workspace-cooldown-repo
+        updating rev `v1.0.0` -> `v1.1.0`
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read("project-a/.pre-commit-config.yaml"), @"
+            auto_update:
+              cooldown_days: 0
+            repos:
+              - repo: [HOME]/test-repos/workspace-cooldown-repo
+                rev: v2.0.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read("project-b/.pre-commit-config.yaml"), @"
+            repos:
+              - repo: [HOME]/test-repos/workspace-cooldown-repo
+                rev: v1.1.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
 // When multiple tags point to the same object, prek prefers a tag that:
 // - contains a dot (e.g., a SemVer-like tag), and
 // - is most similar to the current revision, as measured by Levenshtein distance.

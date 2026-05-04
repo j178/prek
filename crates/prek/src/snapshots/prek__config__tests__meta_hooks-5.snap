@@ -3,6 +3,7 @@ source: crates/prek/src/config.rs
 expression: result
 ---
 Config {
+    auto_update: None,
     repos: [
         Meta(
             MetaRepo {
