@@ -108,6 +108,43 @@ fn global_config_cli_args_override_file() {
 }
 
 #[test]
+fn global_config_ignores_unknown_options() {
+    let context = TestContext::new();
+    context.write_global_config(indoc::indoc! {r#"
+        future_option = true
+
+        [auto_update]
+        cooldown_days = 3
+        future_option = "ignored"
+    "#});
+
+    cmd_snapshot!(context.filters(), context.auto_update().arg("--show-settings"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalArgs {
+        config: None,
+        cd: None,
+        color: Auto,
+        refresh: false,
+        help: (),
+        no_progress: false,
+        quiet: 0,
+        verbose: 0,
+        log_file: None,
+        no_log_file: false,
+        version: (),
+        show_settings: true,
+    }
+    AutoUpdateSettings {
+        cooldown_days: 3,
+    }
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
 fn global_config_invalid_file_reports_parse_error() {
     let context = TestContext::new();
     context.write_global_config(indoc::indoc! {r#"

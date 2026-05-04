@@ -73,14 +73,14 @@ impl Deref for FilesystemOptions {
 
 /// Options as represented in the global `prek.toml` file.
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default, deny_unknown_fields, rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 pub(crate) struct Options {
     auto_update: Option<AutoUpdateOptions>,
 }
 
 /// Options for the `auto-update` command.
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default, deny_unknown_fields, rename_all = "snake_case")]
+#[serde(default, rename_all = "snake_case")]
 struct AutoUpdateOptions {
     cooldown_days: Option<u8>,
 }
@@ -92,14 +92,14 @@ pub(crate) struct AutoUpdateSettings {
 }
 
 impl AutoUpdateSettings {
-    pub(crate) fn resolve(args: &AutoUpdateArgs, filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(args: &AutoUpdateArgs, filesystem: Option<&FilesystemOptions>) -> Self {
         Self {
             cooldown_days: args
                 .cooldown_days
                 .or_else(|| {
                     filesystem
-                        .and_then(|fs| fs.auto_update.clone())
-                        .and_then(|fs| fs.cooldown_days)
+                        .and_then(|fs| fs.auto_update.as_ref())
+                        .and_then(|au| au.cooldown_days)
                 })
                 .unwrap_or_default(),
         }

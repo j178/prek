@@ -376,7 +376,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         Command::SampleConfig(args) => cli::sample_config(args.file.into(), args.format, printer),
         Command::AutoUpdate(args) => {
             let filesystem = FilesystemOptions::user()?;
-            let settings = AutoUpdateSettings::resolve(&args, filesystem);
+            let settings = AutoUpdateSettings::resolve(&args, filesystem.as_ref());
             show_settings!(settings);
 
             cli::auto_update(
