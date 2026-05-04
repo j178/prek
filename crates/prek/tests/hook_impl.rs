@@ -571,6 +571,81 @@ fn workspace_hook_impl_root() -> anyhow::Result<()> {
 }
 
 #[test]
+fn workspace_commit_msg_hook_receives_message_file_for_each_project() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let config = indoc! {r#"
+    default_install_hook_types:
+      - commit-msg
+    repos:
+      - repo: local
+        hooks:
+        - id: commit-msg-args
+          name: Commit Msg Args
+          language: python
+          entry: python -c 'import os, pathlib, sys; print("cwd:", os.getcwd()); print("args:", sys.argv[1:]); assert len(sys.argv) == 2; assert pathlib.Path(sys.argv[1]).is_file()'
+          stages: [commit-msg]
+          always_run: true
+          verbose: true
+    "#};
+
+    context.setup_workspace(&["template"], config)?;
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/commit-msg`
+
+    ----- stderr -----
+    ");
+
+    let mut commit = git_cmd(context.work_dir());
+    commit
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
+        .arg("commit")
+        .arg("-m")
+        .arg("feat: initial");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([("[a-f0-9]{7}", "abc1234")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, commit, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [master (root-commit) abc1234] feat: initial
+     2 files changed, 24 insertions(+)
+     create mode 100644 .pre-commit-config.yaml
+     create mode 100644 template/.pre-commit-config.yaml
+
+    ----- stderr -----
+    Running hooks for `template`:
+    Commit Msg Args..........................................................Passed
+    - hook id: commit-msg-args
+    - duration: [TIME]
+
+      cwd: [TEMP_DIR]/template
+      args: ['../.git/COMMIT_EDITMSG']
+
+    Running hooks for `.`:
+    Commit Msg Args..........................................................Passed
+    - hook id: commit-msg-args
+    - duration: [TIME]
+
+      cwd: [TEMP_DIR]/
+      args: ['.git/COMMIT_EDITMSG']
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
     let context = TestContext::new();
     let cwd = context.work_dir();

@@ -1,4 +1,4 @@
-pub(crate) use filter::{CollectOptions, FileFilter, collect_files};
+pub(crate) use filter::{CollectOptions, FileFilter, RunInput, collect_files, collect_run_input};
 pub(crate) use run::{install_hooks, run};
 pub(crate) use selector::{SelectorSource, Selectors};
 

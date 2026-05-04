@@ -225,10 +225,15 @@ impl CollectOptions {
     }
 }
 
-/// Get all filenames to run hooks on.
-/// Returns a list of file paths relative to the workspace root.
-#[instrument(level = "trace", skip_all)]
-pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<Vec<PathBuf>> {
+pub(crate) enum RunInput {
+    /// File paths relative to the workspace root.
+    Files(Vec<PathBuf>),
+    /// Absolute path to the Git message file passed by `commit-msg` and `prepare-commit-msg`.
+    MessageFile(PathBuf),
+}
+
+/// Get hook input for the selected stage.
+pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Result<RunInput> {
     let CollectOptions {
         hook_stage,
         from_ref,
@@ -239,6 +244,47 @@ pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<V
         commit_msg_filename,
     } = opts;
 
+    if matches!(hook_stage, Stage::PrepareCommitMsg | Stage::CommitMsg) {
+        let path = commit_msg_filename.expect("commit_msg_filename should be set");
+        return Ok(RunInput::MessageFile(GIT_ROOT.as_ref()?.join(path)));
+    }
+
+    collect_workspace_files(
+        root,
+        hook_stage,
+        from_ref,
+        to_ref,
+        all_files,
+        files,
+        directories,
+    )
+    .await
+    .map(RunInput::Files)
+}
+
+/// Get workspace filenames to run hooks on.
+/// Returns a list of file paths relative to the workspace root.
+pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<Vec<PathBuf>> {
+    match collect_run_input(root, opts).await? {
+        RunInput::Files(files) => Ok(files),
+        // This compatibility API can only return workspace-relative files.
+        // Git message files are hook arguments, not workspace files, and are
+        // handled through `RunInput` by the main runner.
+        RunInput::MessageFile(_) => Ok(vec![]),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+#[instrument(level = "trace", skip_all)]
+async fn collect_workspace_files(
+    root: &Path,
+    hook_stage: Stage,
+    from_ref: Option<String>,
+    to_ref: Option<String>,
+    all_files: bool,
+    files: Vec<String>,
+    directories: Vec<String>,
+) -> Result<Vec<PathBuf>> {
     let git_root = GIT_ROOT.as_ref()?;
 
     // The workspace root relative to the git root.
@@ -259,7 +305,6 @@ pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<V
         all_files,
         files,
         directories,
-        commit_msg_filename,
     )
     .await?;
 
@@ -300,16 +345,9 @@ async fn collect_files_from_args(
     all_files: bool,
     files: Vec<String>,
     directories: Vec<String>,
-    commit_msg_filename: Option<String>,
 ) -> Result<Vec<PathBuf>> {
     if !hook_stage.operate_on_files() {
         return Ok(vec![]);
-    }
-
-    if hook_stage == Stage::PrepareCommitMsg || hook_stage == Stage::CommitMsg {
-        let path = commit_msg_filename.expect("commit_msg_filename should be set");
-        let path = adjust_relative_path(&path, git_root)?;
-        return Ok(vec![path]);
     }
 
     if let (Some(from_ref), Some(to_ref)) = (from_ref, to_ref) {
