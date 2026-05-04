@@ -42,16 +42,14 @@ async fn check_file(
         return Ok((0, Vec::new()));
     }
 
-    let options = serde_saphyr::Options {
-        budget: Some(serde_saphyr::Budget {
+    let options = serde_saphyr::options! {
+        budget: serde_saphyr::budget! {
             // `check-yaml` is a syntax/structure validator, not a service parsing
             // untrusted YAML at runtime. Keep the absolute caps, but allow
             // high-reuse anchors that are common in compose-style files.
             enforce_alias_anchor_ratio: false,
-            ..Default::default()
-        }),
+        },
         ignore_binary_tag_for_string: true,
-        ..Default::default()
     };
     if allow_multi_docs {
         if let Err(e) = serde_saphyr::from_slice_multiple_with_options::<serde_json::Value>(
