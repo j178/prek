@@ -7,7 +7,7 @@ use itertools::Itertools;
 use prek_consts::CONFIG_FILENAMES;
 
 use crate::cli::reporter::HookRunReporter;
-use crate::cli::run::{CollectOptions, ProjectFiles, collect_files};
+use crate::cli::run::{CollectOptions, FileTagCache, ProjectFiles, collect_files};
 use crate::config::{self, FilePattern, HookOptions, Language, MetaHook};
 use crate::hook::Hook;
 use crate::store::Store;
@@ -101,6 +101,7 @@ pub(crate) async fn check_hooks_apply(
 
     let mut code = 0;
     let mut output = Vec::new();
+    let mut tag_cache = FileTagCache::default();
 
     for filename in filenames {
         let path = relative_path.join(filename);
@@ -118,7 +119,7 @@ pub(crate) async fn check_hooks_apply(
                 continue;
             }
 
-            let filenames = project_files.for_hook(&project_hook);
+            let filenames = project_files.for_hook(&project_hook, &mut tag_cache);
 
             if filenames.is_empty() {
                 code = 1;
@@ -177,6 +178,7 @@ pub(crate) async fn check_useless_excludes(
 
     let mut code = 0;
     let mut output = Vec::new();
+    let mut tag_cache = FileTagCache::default();
 
     for filename in filenames {
         let path = relative_path.join(filename);
@@ -212,6 +214,7 @@ pub(crate) async fn check_useless_excludes(
                     opts.types.as_ref(),
                     opts.types_or.as_ref(),
                     opts.exclude_types.as_ref(),
+                    &mut tag_cache,
                 );
 
                 // `filtered_files` is workspace-relative (it includes the project prefix).

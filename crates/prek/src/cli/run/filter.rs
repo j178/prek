@@ -1,4 +1,3 @@
-use std::cell::OnceCell;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -6,7 +5,7 @@ use itertools::{Either, Itertools};
 use path_clean::PathClean;
 use prek_consts::env_vars::EnvVars;
 use prek_identify::{TagSet, tags_from_path};
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, error, instrument};
 
 use crate::config::{FilePattern, Stage};
@@ -103,15 +102,14 @@ impl<'a> HookFileFilter<'a> {
         tags.is_some_and(|tags| self.tags.matches(tags))
     }
 
-    fn matches_project_file(&self, file: &ProjectFile<'_>) -> bool {
-        self.matches_filename(file.hook_path) && self.matches_tags(file.tags())
+    fn matches_project_file(&self, file: &ProjectFile<'_>, tag_cache: &mut FileTagCache) -> bool {
+        self.matches_filename(file.hook_path) && self.matches_tags(file.tags(tag_cache))
     }
 }
 
 struct ProjectFile<'a> {
     workspace_path: &'a Path,
     hook_path: &'a Path,
-    tags: OnceCell<Option<TagSet>>,
 }
 
 impl<'a> ProjectFile<'a> {
@@ -119,28 +117,33 @@ impl<'a> ProjectFile<'a> {
         Self {
             workspace_path,
             hook_path,
-            tags: OnceCell::new(),
         }
     }
 
-    fn tags(&self) -> Option<&TagSet> {
-        cached_tags(&self.tags, self.workspace_path)
+    fn tags<'cache>(&self, tag_cache: &'cache mut FileTagCache) -> Option<&'cache TagSet> {
+        tag_cache.tags(self.workspace_path)
     }
 }
 
-pub(crate) fn cached_tags<'a>(
-    cache: &'a OnceCell<Option<TagSet>>,
-    path: &Path,
-) -> Option<&'a TagSet> {
-    cache
-        .get_or_init(|| match tags_from_path(path) {
-            Ok(tags) => Some(tags),
-            Err(err) => {
-                error!(filename = ?path.display(), error = %err, "Failed to get tags");
-                None
-            }
-        })
-        .as_ref()
+#[derive(Default)]
+pub(crate) struct FileTagCache {
+    tags_by_path: FxHashMap<PathBuf, Option<TagSet>>,
+}
+
+impl FileTagCache {
+    pub(crate) fn tags(&mut self, path: &Path) -> Option<&TagSet> {
+        if !self.tags_by_path.contains_key(path) {
+            let tags = match tags_from_path(path) {
+                Ok(tags) => Some(tags),
+                Err(err) => {
+                    error!(filename = ?path.display(), error = %err, "Failed to get tags");
+                    None
+                }
+            };
+            self.tags_by_path.insert(path.to_path_buf(), tags);
+        }
+        self.tags_by_path.get(path).and_then(Option::as_ref)
+    }
 }
 
 pub(crate) struct ProjectFiles<'a> {
@@ -211,37 +214,31 @@ impl<'a> ProjectFiles<'a> {
         types: Option<&TagSet>,
         types_or: Option<&TagSet>,
         exclude_types: Option<&TagSet>,
+        tag_cache: &mut FileTagCache,
     ) -> Vec<&Path> {
         let tag_filter = FileTagFilter::new(types, types_or, exclude_types);
-        let filenames: Vec<_> = self
-            .files
-            .iter()
-            .filter_map(|file| {
-                if tag_filter.matches(file.tags()?) {
-                    Some(file.workspace_path)
-                } else {
-                    None
+        let mut filenames = Vec::new();
+        for file in &self.files {
+            if let Some(tags) = file.tags(tag_cache) {
+                if tag_filter.matches(tags) {
+                    filenames.push(file.workspace_path);
                 }
-            })
-            .collect();
-
+            }
+        }
         filenames
     }
 
     /// Filter filenames by file patterns and tags for a specific hook.
     #[instrument(level = "trace", skip_all, fields(hook = ?hook.id))]
-    pub(crate) fn for_hook(&self, hook: &Hook) -> Vec<&Path> {
+    pub(crate) fn for_hook(&self, hook: &Hook, tag_cache: &mut FileTagCache) -> Vec<&Path> {
         let hook_filter = HookFileFilter::new(hook);
-        self.files
-            .iter()
-            .filter_map(|file| {
-                if hook_filter.matches_project_file(file) {
-                    Some(file.hook_path)
-                } else {
-                    None
-                }
-            })
-            .collect()
+        let mut filenames = Vec::new();
+        for file in &self.files {
+            if hook_filter.matches_project_file(file, tag_cache) {
+                filenames.push(file.hook_path);
+            }
+        }
+        filenames
     }
 }
 
