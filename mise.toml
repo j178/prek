@@ -71,5 +71,6 @@ description = "Prepare for a release"
 run = """
 git checkout -b bump
 uv run --group dev rooster release
-prek run mdformat --files CHANGELOG.md
+prek run mdformat --files CHANGELOG.md || true
+uv lock
 """

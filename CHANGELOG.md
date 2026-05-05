@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.3.12
+
+Released on 2026-05-05.
+
+### Highlights
+
+`auto_update.cooldown_days` is now available in both the user-level global
+config (`~/.config/prek/prek.toml` on Linux and macOS, or
+`$XDG_CONFIG_HOME/prek/prek.toml` when set; `%APPDATA%\prek\prek.toml` on
+Windows) and project config. Set a user default for `prek auto-update`, then
+override it per project when a repository needs a different update cadence.
+
+```toml
+[auto_update]
+cooldown_days = 7
+```
+
+### Enhancements
+
+- Add global auto-update cooldown config ([#2041](https://github.com/j178/prek/pull/2041))
+- Add project auto-update cooldown config ([#2044](https://github.com/j178/prek/pull/2044))
+- Support `language: dart` ([#1146](https://github.com/j178/prek/pull/1146))
+
+### Bug fixes
+
+- Pass commit message file to workspace hooks ([#2043](https://github.com/j178/prek/pull/2043))
+- Preserve non-UTF8 filenames from git ([#2023](https://github.com/j178/prek/pull/2023))
+- ruby: put resolved Ruby's bin dir on `$PATH` for `gem` invocations ([#2021](https://github.com/j178/prek/pull/2021))
+
+### Documentation
+
+- Update docs with the new logo and icon ([#2025](https://github.com/j178/prek/pull/2025))
+- Point schema docs to SchemaStore ([#2039](https://github.com/j178/prek/pull/2039))
+
+### Contributors
+
+- @j178
+- @xiaoyanli-lyft
+- @Lutra-Fs
+
 ## 0.3.11
 
 Released on 2026-04-27.
