@@ -1,3 +1,4 @@
+use std::cell::OnceCell;
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -6,11 +7,11 @@ use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
 use futures::stream::{FuturesUnordered, StreamExt};
-use mea::once::OnceCell;
 use mea::semaphore::Semaphore;
 use owo_colors::OwoColorize;
 use prek_consts::env_vars::EnvVars;
 use prek_consts::{PRE_COMMIT_CONFIG_YAML, PREK_TOML};
+use prek_identify::TagSet;
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -18,6 +19,7 @@ use tracing::{debug, trace, warn};
 use unicode_width::UnicodeWidthStr;
 
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter, HookRunReporter};
+use crate::cli::run::filter::{HookFileFilter, cached_tags};
 use crate::cli::run::keeper::WorkTreeKeeper;
 use crate::cli::run::{CollectOptions, FileFilter, RunInput, Selectors, collect_run_input};
 use crate::cli::{ExitStatus, RunExtraArgs};
@@ -266,14 +268,14 @@ fn set_env_vars(from_ref: Option<&String>, to_ref: Option<&String>, args: &RunEx
 #[derive(Debug)]
 struct LazyInstallInfo {
     info: Arc<InstallInfo>,
-    health: OnceCell<bool>,
+    health: mea::once::OnceCell<bool>,
 }
 
 impl LazyInstallInfo {
     fn new(info: Arc<InstallInfo>) -> Self {
         Self {
             info,
-            health: OnceCell::new(),
+            health: mea::once::OnceCell::new(),
         }
     }
 
@@ -572,7 +574,11 @@ impl StatusPrinter {
 
 enum ProjectHookInput<'a> {
     Files(FileFilter<'a>),
-    MessageFile(PathBuf),
+    MessageFile {
+        absolute_path: &'a Path,
+        hook_arg: PathBuf,
+        tags: OnceCell<Option<TagSet>>,
+    },
 }
 
 impl<'a> ProjectHookInput<'a> {
@@ -587,27 +593,40 @@ impl<'a> ProjectHookInput<'a> {
                 project,
                 consumed_files,
             ))),
-            RunInput::MessageFile(path) => Ok(Self::MessageFile(fs::normalize_path(
-                fs::relative_to(path, project.path())?,
-            ))),
+            RunInput::MessageFile(path) => Ok(Self::MessageFile {
+                absolute_path: path,
+                hook_arg: fs::normalize_path(fs::relative_to(path, project.path())?),
+                tags: OnceCell::new(),
+            }),
         }
     }
 
     fn len(&self) -> usize {
         match self {
             Self::Files(filter) => filter.len(),
-            Self::MessageFile(_) => 1,
+            Self::MessageFile { .. } => 1,
         }
     }
 
     fn for_hook(&self, hook: &Hook) -> Vec<&Path> {
         match self {
             Self::Files(filter) => filter.for_hook(hook),
-            Self::MessageFile(path) => {
-                // `commit-msg` and `prepare-commit-msg` receive Git's message file, which is not
-                // a workspace file. The `files`/`exclude`/`types` filters are workspace-file
-                // selectors, so they do not apply to this hook argument.
-                vec![path.as_path()]
+            Self::MessageFile {
+                absolute_path,
+                hook_arg,
+                tags,
+            } => {
+                // `commit-msg` and `prepare-commit-msg` receive Git's special message file,
+                // which can live outside a project root, so it bypasses project ownership
+                // filtering. Hook-level `files`/`exclude`/`types` filters still apply.
+                let hook_filter = HookFileFilter::new(hook);
+                if hook_filter.matches_filename(hook_arg)
+                    && hook_filter.matches_tags(cached_tags(tags, absolute_path))
+                {
+                    vec![hook_arg.as_path()]
+                } else {
+                    vec![]
+                }
             }
         }
     }

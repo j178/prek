@@ -646,6 +646,56 @@ fn workspace_commit_msg_hook_receives_message_file_for_each_project() -> anyhow:
 }
 
 #[test]
+fn commit_msg_builtin_hook_respects_message_file_filters() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config(indoc! {r"
+    default_install_hook_types:
+      - commit-msg
+    repos:
+      - repo: builtin
+        hooks:
+        - id: check-json
+    "});
+    context.git_add(".");
+
+    cmd_snapshot!(context.filters(), context.install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    prek installed at `.git/hooks/commit-msg`
+
+    ----- stderr -----
+    ");
+
+    let mut commit = git_cmd(context.work_dir());
+    commit
+        .env(EnvVars::PREK_HOME, &**context.home_dir())
+        .arg("commit")
+        .arg("-m")
+        .arg("dummy");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([("[a-f0-9]{7}", "abc1234")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters, commit, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [master (root-commit) abc1234] dummy
+     1 file changed, 6 insertions(+)
+     create mode 100644 .pre-commit-config.yaml
+
+    ----- stderr -----
+    check json...........................................(no files to check)Skipped
+    ");
+}
+
+#[test]
 fn workspace_hook_impl_subdirectory() -> anyhow::Result<()> {
     let context = TestContext::new();
     let cwd = context.work_dir();
