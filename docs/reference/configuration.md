@@ -15,7 +15,7 @@ This file stores user-level `prek` settings and does not define project hooks.
 
 Default cooldown for `prek auto-update`.
 
-- Type: integer days
+- Type: integer days, `0` to `255`
 - Default: `0`
 - CLI override: `prek auto-update --cooldown-days <DAYS>`
 
@@ -39,7 +39,7 @@ Project configs can also set `auto_update.cooldown_days`. The effective preceden
 
 Project default cooldown for `prek auto-update`.
 
-- Type: integer days
+- Type: integer days, `0` to `255`
 - Default: inherited from the user-level global config, or `0`
 - CLI override: `prek auto-update --cooldown-days <DAYS>`
 

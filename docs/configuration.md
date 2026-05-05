@@ -57,6 +57,7 @@ Project config can also define the same setting, scoped to that project:
     ```
 
 `prek auto-update --cooldown-days <DAYS>` overrides both project and global config for a single command invocation.
+The cooldown value must be between `0` and `255` days, inclusive; `0` disables the cooldown check.
 
 In workspace mode, project-level `auto_update` settings are not inherited by nested projects. The setting only affects the project config file that defines it; sub-projects use their own `auto_update` setting, then the user-level global config, then the default.
 

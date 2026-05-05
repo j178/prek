@@ -758,7 +758,7 @@ pub(crate) struct AutoUpdateArgs {
     ///
     /// The age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags.
     /// Defaults to `auto_update.cooldown_days` in the project or global config, or `0` when unset.
-    /// A value of `0` disables this check.
+    /// Valid values are `0` through `255`; `0` disables this check.
     #[arg(long, value_name = "DAYS", conflicts_with = "bleeding_edge")]
     pub(crate) cooldown_days: Option<u8>,
 }
