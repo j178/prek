@@ -411,6 +411,7 @@ GitHub stars are current as of April 15, 2026.
 - [pyodide/pyodide](https://github.com/pyodide/pyodide/pull/6182) <sub>14,527 stars</sub>
 - [prowler-cloud/prowler](https://github.com/prowler-cloud/prowler/pull/10601) <sub>13,592 stars</sub>
 - [getsentry/sentry](https://github.com/getsentry/sentry/pull/110808) <sub>43,639 stars</sub>
+- [godotengine/godot](https://github.com/godotengine/godot/pull/119150) <sub>110,312 stars</sub>
 
 <!-- --8<-- [end: why] -->
 
