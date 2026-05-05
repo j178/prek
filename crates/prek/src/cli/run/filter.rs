@@ -143,14 +143,13 @@ pub(crate) fn cached_tags<'a>(
         .as_ref()
 }
 
-pub(crate) struct FileFilter<'a> {
+pub(crate) struct ProjectFiles<'a> {
     files: Vec<ProjectFile<'a>>,
 }
 
-impl<'a> FileFilter<'a> {
-    /// Create a `FileFilter` for a project by filtering the input filenames with the project's relative path and include/exclude patterns.
+impl<'a> ProjectFiles<'a> {
+    /// Create project-owned files after applying the project's relative path and include/exclude patterns.
     /// `filenames` are paths relative to the workspace root.
-    #[instrument(level = "trace", skip_all, fields(project = %project))]
     pub(crate) fn for_project<I>(
         filenames: I,
         project: &Project,

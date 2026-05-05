@@ -7,7 +7,7 @@ use itertools::Itertools;
 use prek_consts::CONFIG_FILENAMES;
 
 use crate::cli::reporter::HookRunReporter;
-use crate::cli::run::{CollectOptions, FileFilter, collect_files};
+use crate::cli::run::{CollectOptions, ProjectFiles, collect_files};
 use crate::config::{self, FilePattern, HookOptions, Language, MetaHook};
 use crate::hook::Hook;
 use crate::store::Store;
@@ -106,7 +106,7 @@ pub(crate) async fn check_hooks_apply(
         let path = relative_path.join(filename);
         let mut project = Project::from_config_file(path.into(), None)?;
         project.with_relative_path(relative_path.to_path_buf());
-        let filter = FileFilter::for_project(input.iter(), &project, None);
+        let project_files = ProjectFiles::for_project(input.iter(), &project, None);
 
         let project_hooks = project
             .init_hooks(store, None)
@@ -118,7 +118,7 @@ pub(crate) async fn check_hooks_apply(
                 continue;
             }
 
-            let filenames = filter.for_hook(&project_hook);
+            let filenames = project_files.for_hook(&project_hook);
 
             if filenames.is_empty() {
                 code = 1;
@@ -168,7 +168,7 @@ pub(crate) async fn check_useless_excludes(
     // `collect_files` returns paths relative to the hook's project root.
     // The meta hook itself runs from the workspace root, so we build both:
     // - `input_project`: for matching `files`/`exclude` patterns (project-relative)
-    // - `input_workspace`: for `FileFilter` (workspace-relative)
+    // - `input_workspace`: for `ProjectFiles` (workspace-relative)
     let input_project = collect_files(hook.work_dir(), CollectOptions::all_files()).await?;
     let input_workspace: Vec<_> = input_project
         .iter()
@@ -197,7 +197,7 @@ pub(crate) async fn check_useless_excludes(
             )?;
         }
 
-        let filter = FileFilter::for_project(input_workspace.iter(), &project, None);
+        let project_files = ProjectFiles::for_project(input_workspace.iter(), &project, None);
 
         for repo in &config.repos {
             let hooks_iter: Box<dyn Iterator<Item = (&String, &HookOptions)>> = match repo {
@@ -208,7 +208,7 @@ pub(crate) async fn check_useless_excludes(
             };
 
             for (hook_id, opts) in hooks_iter {
-                let filtered_files = filter.by_type(
+                let filtered_files = project_files.by_type(
                     opts.types.as_ref(),
                     opts.types_or.as_ref(),
                     opts.exclude_types.as_ref(),

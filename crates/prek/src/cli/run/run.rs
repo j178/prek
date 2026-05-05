@@ -21,7 +21,7 @@ use unicode_width::UnicodeWidthStr;
 use crate::cli::reporter::{HookInitReporter, HookInstallReporter, HookRunReporter};
 use crate::cli::run::filter::{HookFileFilter, cached_tags};
 use crate::cli::run::keeper::WorkTreeKeeper;
-use crate::cli::run::{CollectOptions, FileFilter, RunInput, Selectors, collect_run_input};
+use crate::cli::run::{CollectOptions, ProjectFiles, RunInput, Selectors, collect_run_input};
 use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, PassFilenames, Stage};
 use crate::fs::CWD;
@@ -573,7 +573,7 @@ impl StatusPrinter {
 }
 
 enum ProjectHookInput<'a> {
-    Files(FileFilter<'a>),
+    Files(ProjectFiles<'a>),
     MessageFile {
         absolute_path: &'a Path,
         hook_arg: PathBuf,
@@ -588,7 +588,7 @@ impl<'a> ProjectHookInput<'a> {
         consumed_files: Option<&mut FxHashSet<&'a Path>>,
     ) -> Result<Self> {
         match input {
-            RunInput::Files(files) => Ok(Self::Files(FileFilter::for_project(
+            RunInput::Files(files) => Ok(Self::Files(ProjectFiles::for_project(
                 files.iter(),
                 project,
                 consumed_files,
@@ -603,14 +603,14 @@ impl<'a> ProjectHookInput<'a> {
 
     fn len(&self) -> usize {
         match self {
-            Self::Files(filter) => filter.len(),
+            Self::Files(project_files) => project_files.len(),
             Self::MessageFile { .. } => 1,
         }
     }
 
     fn for_hook(&self, hook: &Hook) -> Vec<&Path> {
         match self {
-            Self::Files(filter) => filter.for_hook(hook),
+            Self::Files(project_files) => project_files.for_hook(hook),
             Self::MessageFile {
                 absolute_path,
                 hook_arg,
