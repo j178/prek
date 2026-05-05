@@ -58,6 +58,8 @@ Project config can also define the same setting, scoped to that project:
 
 `prek auto-update --cooldown-days <DAYS>` overrides both project and global config for a single command invocation.
 
+In workspace mode, project-level `auto_update` settings are not inherited by nested projects. The setting only affects the project config file that defines it; sub-projects use their own `auto_update` setting, then the user-level global config, then the default.
+
 ## Pre-commit compatibility
 
 `prek` is **fully compatible** with [`pre-commit`](https://pre-commit.com/) YAML configs, so your existing `.pre-commit-config.yaml` files work unchanged.

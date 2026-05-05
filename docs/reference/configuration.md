@@ -57,7 +57,7 @@ Project default cooldown for `prek auto-update`.
       cooldown_days: 7
     ```
 
-In workspace mode, this setting is scoped to the project config file that defines it. If two projects use the same repo URL with different cooldown settings, `prek auto-update` fetches the repo once but evaluates each project with its own cooldown.
+In workspace mode, this setting is scoped to the project config file that defines it. It applies only to that project and is not inherited by nested projects. Sub-projects use their own `auto_update` setting, then the user-level global config, then the default. If two projects use the same repo URL with different cooldown settings, `prek auto-update` fetches the repo once but evaluates each project with its own cooldown.
 
 ### `repos` (required)
 
