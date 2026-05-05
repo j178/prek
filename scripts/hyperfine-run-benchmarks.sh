@@ -66,7 +66,7 @@ close_section() {
 # Hyperfine's JSON has results[0] = reference and results[1] = current.
 # A ratio > 1 means current is slower (regression), < 1 means faster (improvement).
 check_variance() {
-  local cmd="$1"
+  local label="$1"
   local num_results
   num_results=$(jq '.results | length' "$OUT_JSON")
 
@@ -83,10 +83,10 @@ check_variance() {
   if (( $(echo "${pct#-} > 10" | bc -l) )); then
     if (( $(echo "$ratio < 1" | bc -l) )); then
       improvement_count=$((improvement_count + 1))
-      write_line "✅  Performance improvement for \`$cmd\`: ${pct#-}% faster"
+      write_line "✅  Performance improvement for \`$label\`: ${pct#-}% faster"
     else
       regression_count=$((regression_count + 1))
-      write_line "⚠️  Warning: Performance regression for \`$cmd\`: ${pct}% slower"
+      write_line "⚠️  Warning: Performance regression for \`$label\`: ${pct}% slower"
     fi
   fi
 }
@@ -97,8 +97,7 @@ benchmark() {
   local runs="${3:-30}"
   local setup="${4:-}"
   local prepare="${5:-}"
-  local check_change="${6:-false}"
-  local label_suffix="${7:-}"
+  local label_suffix="${6:-}"
   local label="prek $cmd"
   local -a hyperfine_args=(-i -N -w "$warmup" -r "$runs" --export-markdown "$OUT_MD" --export-json "$OUT_JSON")
 
@@ -122,9 +121,7 @@ benchmark() {
   fi
   cat "$OUT_MD" >> "$REPORT_BODY"
   write_blank_line
-  if [ "$check_change" = "true" ]; then
-    check_variance "$cmd"
-  fi
+  check_variance "$label"
 }
 
 create_meta_workspace() {
@@ -188,7 +185,6 @@ for cmd in "${CMDS[@]}"; do
   else
     benchmark "$cmd" 3 50
   fi
-  check_variance "$cmd"
 done
 
 # Benchmark builtin hooks in test directory
@@ -196,12 +192,12 @@ cd "$TARGET_WORKSPACE"
 
 # Cold vs warm benchmarks before polluting cache
 write_section "Cold vs Warm Runs" "Comparing first run (cold) vs subsequent runs (warm cache):"
-benchmark "run --all-files" 0 10 "rm -rf ~/.cache/prek" "git checkout -- ." false "(cold - no cache)"
-benchmark "run --all-files" 3 20 "" "git checkout -- ." false "(warm - with cache)"
+benchmark "run --all-files" 0 10 "rm -rf ~/.cache/prek" "git checkout -- ." "(cold - no cache)"
+benchmark "run --all-files" 3 20 "" "git checkout -- ." "(warm - with cache)"
 
 # Full benchmark suite with cache warmed up
 write_section "Full Hook Suite" "Running the builtin hook suite on the benchmark workspace:"
-benchmark "run --all-files" 3 50 "" "git checkout -- ." true "(full builtin hook suite)"
+benchmark "run --all-files" 3 50 "" "git checkout -- ." "(full builtin hook suite)"
 
 # Individual hook performance
 write_section "Individual Hook Performance" "Benchmarking each hook individually on the test repo:"
@@ -223,19 +219,19 @@ done
 
 # Installation performance
 write_section "Installation Performance" "Benchmarking hook installation (fast path hooks skip Python setup):"
-benchmark "install-hooks" 1 5 "rm -rf ~/.cache/prek/hooks ~/.cache/prek/repos" "" false "(cold - no cache)"
-benchmark "install-hooks" 1 5 "" "" false "(warm - with cache)"
+benchmark "install-hooks" 1 5 "rm -rf ~/.cache/prek/hooks ~/.cache/prek/repos" "" "(cold - no cache)"
+benchmark "install-hooks" 1 5 "" "" "(warm - with cache)"
 
 # File filtering/scoping performance
 write_section "File Filtering/Scoping Performance" "Testing different file selection modes:"
 
 git add -A
-benchmark "run" 3 20 "" "sh -c 'git checkout -- . && git add -A'" false "(staged files only)"
-benchmark "run --files '*.json'" 3 20 "" "" false "(specific file type)"
+benchmark "run" 3 20 "" "sh -c 'git checkout -- . && git add -A'" "(staged files only)"
+benchmark "run --files '*.json'" 3 20 "" "" "(specific file type)"
 
 # Workspace discovery & initialization
 write_section "Workspace Discovery & Initialization" "Benchmarking hook discovery and initialization overhead:"
-benchmark "run --dry-run --all-files" 3 20 "" "" false "(measures init overhead)"
+benchmark "run --dry-run --all-files" 3 20 "" "" "(measures init overhead)"
 
 # Meta hooks performance
 write_section "Meta Hooks Performance" "Benchmarking meta hooks separately:"
