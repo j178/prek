@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.13
+
+Released on 2026-05-06.
+
+### Bug fixes
+
+- Respect hook filters for message files ([#2049](https://github.com/j178/prek/pull/2049))
+
+### Documentation
+
+- Add Godot Engine to users in README ([#2047](https://github.com/j178/prek/pull/2047))
+
+### Contributors
+
+- @j178
+- @Calinou
+
 ## 0.3.12
 
 Released on 2026-05-05.

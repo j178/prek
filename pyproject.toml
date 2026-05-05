@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "prek"
-version = "0.3.12"
+version = "0.3.13"
 description = "A fast Git hook manager written in Rust, designed as a drop-in alternative to pre-commit, reimagined."
 authors = [{ name = "j178", email = "hi@j178.dev" }]
 requires-python = ">=3.8"
