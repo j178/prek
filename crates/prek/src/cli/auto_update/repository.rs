@@ -175,11 +175,7 @@ pub(super) async fn list_tag_metadata(repo: &Path) -> Result<Vec<TagTimestamp>> 
             let peeled = parts.next().unwrap_or_default().trim_ascii();
             let ts: u64 = ts_str.parse().ok()?;
             let commit = if peeled.is_empty() { object } else { peeled };
-            Some(TagTimestamp {
-                tag: tag.to_string(),
-                timestamp: ts,
-                commit: commit.to_string(),
-            })
+            Some(TagTimestamp::new(tag.to_string(), ts, commit.to_string()))
         })
         .collect();
 
@@ -189,16 +185,15 @@ pub(super) async fn list_tag_metadata(repo: &Path) -> Result<Vec<TagTimestamp>> 
 }
 
 fn compare_tag_metadata(tag_a: &TagTimestamp, tag_b: &TagTimestamp) -> Ordering {
-    tag_b.timestamp.cmp(&tag_a.timestamp).then_with(|| {
-        let ver_a = Version::parse(tag_a.tag.strip_prefix('v').unwrap_or(&tag_a.tag));
-        let ver_b = Version::parse(tag_b.tag.strip_prefix('v').unwrap_or(&tag_b.tag));
-        match (ver_a, ver_b) {
-            (Ok(a), Ok(b)) => b.cmp(&a).then_with(|| tag_a.tag.cmp(&tag_b.tag)),
-            (Ok(_), Err(_)) => Ordering::Less,
-            (Err(_), Ok(_)) => Ordering::Greater,
-            (Err(_), Err(_)) => tag_a.tag.cmp(&tag_b.tag),
-        }
-    })
+    tag_b
+        .timestamp
+        .cmp(&tag_a.timestamp)
+        .then_with(|| match (&tag_a.version, &tag_b.version) {
+            (Some(a), Some(b)) => b.cmp(a).then_with(|| tag_a.tag.cmp(&tag_b.tag)),
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (None, None) => tag_a.tag.cmp(&tag_b.tag),
+        })
 }
 
 async fn current_tag_metadata<'a>(
