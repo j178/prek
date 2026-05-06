@@ -280,8 +280,8 @@ async fn evaluate_repo_target<'a>(
     )
     .await?;
 
-    let rev = match rev {
-        RevisionSelection::Update(rev) => rev,
+    let (rev, skipped_downgrade) = match rev {
+        RevisionSelection::Update(rev) => (rev, None),
         RevisionSelection::Unchanged => {
             debug!("No suitable revision found for repo `{}`", target.repo);
             return Ok(ResolvedRepoUpdate {
@@ -295,14 +295,7 @@ async fn evaluate_repo_target<'a>(
         }
         RevisionSelection::SkippedDowngrade(skipped_downgrade) => {
             debug!("Skipping downgrade candidate for repo `{}`", target.repo);
-            return Ok(ResolvedRepoUpdate {
-                revision: Revision {
-                    rev: target.current_rev.to_string(),
-                    frozen: None,
-                },
-                skipped_downgrade: Some(skipped_downgrade),
-                frozen_mismatches,
-            });
+            (target.current_rev.to_string(), Some(skipped_downgrade))
         }
     };
 
@@ -322,7 +315,7 @@ async fn evaluate_repo_target<'a>(
 
     Ok(ResolvedRepoUpdate {
         revision: Revision { rev, frozen },
-        skipped_downgrade: None,
+        skipped_downgrade,
         frozen_mismatches,
     })
 }

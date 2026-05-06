@@ -280,6 +280,59 @@ fn auto_update_cooldown_does_not_downgrade_current_rev() -> Result<()> {
 }
 
 #[test]
+fn auto_update_freeze_still_freezes_skipped_cooldown_downgrade() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo_with_tag_ages(
+        &context,
+        "freeze-cooldown-downgrade-repo",
+        &[("v0.9.25", 8), ("v0.10.2", 2), ("v0.10.3", 1)],
+    )?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v0.10.2
+            hooks:
+              - id: test-hook
+    ", repo_path});
+
+    context.git_add(".");
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"[a-f0-9]{40}", r"[COMMIT_SHA]")])
+        .collect::<Vec<_>>();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--freeze").arg("--cooldown-days").arg("7"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [HOME]/test-repos/freeze-cooldown-downgrade-repo
+      updating rev `v0.10.2` -> `[COMMIT_SHA]` (frozen: v0.10.2)
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/freeze-cooldown-downgrade-repo
+                rev: [COMMIT_SHA]  # frozen: v0.10.2
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
 fn auto_update_already_up_to_date_verbose() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
