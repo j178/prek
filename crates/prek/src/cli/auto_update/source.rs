@@ -12,7 +12,8 @@ use crate::cli::auto_update::repository::{
 };
 use crate::cli::auto_update::{
     CommitPresence, FrozenMismatch, FrozenMismatchAction, FrozenMismatchReason, RepoSource,
-    RepoTarget, RepoUpdate, RepoUsage, ResolvedRepoUpdate, Revision, TagFilters, TagTimestamp,
+    RepoTarget, RepoUpdate, RepoUsage, ResolvedRepoUpdate, Revision, RevisionSelection, TagFilters,
+    TagTimestamp,
 };
 use crate::config::{Repo, looks_like_sha};
 use crate::fs::Simplified;
@@ -274,19 +275,35 @@ async fn evaluate_repo_target<'a>(
         target.current_rev,
         bleeding_edge,
         target.cooldown_days,
+        tag_timestamps,
         update_tag_timestamps,
     )
     .await?;
 
-    let Some(rev) = rev else {
-        debug!("No suitable revision found for repo `{}`", target.repo);
-        return Ok(ResolvedRepoUpdate {
-            revision: Revision {
-                rev: target.current_rev.to_string(),
-                frozen: None,
-            },
-            frozen_mismatches,
-        });
+    let rev = match rev {
+        RevisionSelection::Update(rev) => rev,
+        RevisionSelection::Unchanged => {
+            debug!("No suitable revision found for repo `{}`", target.repo);
+            return Ok(ResolvedRepoUpdate {
+                revision: Revision {
+                    rev: target.current_rev.to_string(),
+                    frozen: None,
+                },
+                skipped_downgrade: None,
+                frozen_mismatches,
+            });
+        }
+        RevisionSelection::SkippedDowngrade(skipped_downgrade) => {
+            debug!("Skipping downgrade candidate for repo `{}`", target.repo);
+            return Ok(ResolvedRepoUpdate {
+                revision: Revision {
+                    rev: target.current_rev.to_string(),
+                    frozen: None,
+                },
+                skipped_downgrade: Some(skipped_downgrade),
+                frozen_mismatches,
+            });
+        }
     };
 
     let (rev, frozen) = if freeze {
@@ -305,6 +322,7 @@ async fn evaluate_repo_target<'a>(
 
     Ok(ResolvedRepoUpdate {
         revision: Revision { rev, frozen },
+        skipped_downgrade: None,
         frozen_mismatches,
     })
 }

@@ -34,8 +34,46 @@ fn create_local_git_repo_with_timestamps(
     tags: &[&str],
     timestamp_step_secs: u64,
 ) -> Result<String> {
+    let mut timestamp = BASE_TIMESTAMP;
+    let tags = tags
+        .iter()
+        .map(|tag| {
+            timestamp += timestamp_step_secs;
+            (*tag, timestamp)
+        })
+        .collect::<Vec<_>>();
+    let tip_timestamp = timestamp + timestamp_step_secs;
+
+    create_local_git_repo_with_tag_timestamps(context, repo_name, &tags, tip_timestamp)
+}
+
+fn create_local_git_repo_with_tag_ages(
+    context: &TestContext,
+    repo_name: &str,
+    tags: &[(&str, u64)],
+) -> Result<String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_secs();
+    let tags = tags
+        .iter()
+        .map(|(tag, days_ago)| (*tag, now.saturating_sub(days_ago * 86400)))
+        .collect::<Vec<_>>();
+
+    create_local_git_repo_with_tag_timestamps(context, repo_name, &tags, now)
+}
+
+fn create_local_git_repo_with_tag_timestamps(
+    context: &TestContext,
+    repo_name: &str,
+    tags: &[(&str, u64)],
+    tip_timestamp: u64,
+) -> Result<String> {
     let repo_dir = context.home_dir().child(format!("test-repos/{repo_name}"));
     repo_dir.create_dir_all()?;
+    let initial_timestamp = tags
+        .first()
+        .map_or(BASE_TIMESTAMP, |(_, timestamp)| timestamp.saturating_sub(1));
 
     git_cmd(&repo_dir)
         .arg("-c")
@@ -60,20 +98,17 @@ fn create_local_git_repo_with_timestamps(
 
     git_cmd(&repo_dir).arg("add").arg(".").assert().success();
 
-    let mut timestamp = BASE_TIMESTAMP;
-
     git_cmd(&repo_dir)
         .arg("commit")
         .arg("-m")
         .arg("Initial commit")
-        .env("GIT_AUTHOR_DATE", format!("{timestamp} +0000"))
-        .env("GIT_COMMITTER_DATE", format!("{timestamp} +0000"))
+        .env("GIT_AUTHOR_DATE", format!("{initial_timestamp} +0000"))
+        .env("GIT_COMMITTER_DATE", format!("{initial_timestamp} +0000"))
         .assert()
         .success();
 
     // Create tags
-    for tag in tags {
-        timestamp += timestamp_step_secs;
+    for (tag, timestamp) in tags {
         git_cmd(&repo_dir)
             .arg("commit")
             .arg("-m")
@@ -94,15 +129,14 @@ fn create_local_git_repo_with_timestamps(
             .success();
     }
 
-    timestamp += timestamp_step_secs;
     // Add an extra commit to the tip
     git_cmd(&repo_dir)
         .arg("commit")
         .arg("-m")
         .arg("tip")
         .arg("--allow-empty")
-        .env("GIT_AUTHOR_DATE", format!("{timestamp} +0000"))
-        .env("GIT_COMMITTER_DATE", format!("{timestamp} +0000"))
+        .env("GIT_AUTHOR_DATE", format!("{tip_timestamp} +0000"))
+        .env("GIT_COMMITTER_DATE", format!("{tip_timestamp} +0000"))
         .assert()
         .success();
 
@@ -187,6 +221,55 @@ fn auto_update_already_up_to_date() -> Result<()> {
             repos:
               - repo: [HOME]/test-repos/up-to-date-repo
                 rev: v1.0.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn auto_update_cooldown_does_not_downgrade_current_rev() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo_with_tag_ages(
+        &context,
+        "cooldown-downgrade-repo",
+        &[("v0.9.25", 8), ("v0.10.2", 2), ("v0.10.3", 1)],
+    )?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v0.10.2
+            hooks:
+              - id: test-hook
+    ", repo_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update().arg("--cooldown-days").arg("7"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [HOME]/test-repos/cooldown-downgrade-repo
+      keeping current rev `v0.10.2`; 7-day cooldown would select older rev `v0.9.25`
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/cooldown-downgrade-repo
+                rev: v0.10.2
                 hooks:
                   - id: test-hook
             ");

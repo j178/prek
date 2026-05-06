@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::OnceLock;
@@ -11,7 +13,7 @@ use rustc_hash::FxHashSet;
 use semver::Version;
 use tracing::{debug, trace};
 
-use crate::cli::auto_update::{CommitPresence, TagTimestamp};
+use crate::cli::auto_update::{CommitPresence, RevisionSelection, SkippedDowngrade, TagTimestamp};
 use crate::{config, git};
 
 /// Initializes a temporary git repo and fetches the remote HEAD plus tags.
@@ -181,25 +183,53 @@ pub(super) async fn list_tag_metadata(repo: &Path) -> Result<Vec<TagTimestamp>> 
         })
         .collect();
 
-    tags.sort_by(|tag_a, tag_b| {
-        tag_b.timestamp.cmp(&tag_a.timestamp).then_with(|| {
-            let ver_a = Version::parse(tag_a.tag.strip_prefix('v').unwrap_or(&tag_a.tag));
-            let ver_b = Version::parse(tag_b.tag.strip_prefix('v').unwrap_or(&tag_b.tag));
-            match (ver_a, ver_b) {
-                (Ok(a), Ok(b)) => b.cmp(&a).then_with(|| tag_a.tag.cmp(&tag_b.tag)),
-                (Ok(_), Err(_)) => std::cmp::Ordering::Less,
-                (Err(_), Ok(_)) => std::cmp::Ordering::Greater,
-                (Err(_), Err(_)) => tag_a.tag.cmp(&tag_b.tag),
-            }
-        })
-    });
+    tags.sort_by(compare_tag_metadata);
 
     Ok(tags)
 }
 
-/// Selects the revision string that `auto-update` should write for one fetched repo target.
+fn compare_tag_metadata(tag_a: &TagTimestamp, tag_b: &TagTimestamp) -> Ordering {
+    tag_b.timestamp.cmp(&tag_a.timestamp).then_with(|| {
+        let ver_a = Version::parse(tag_a.tag.strip_prefix('v').unwrap_or(&tag_a.tag));
+        let ver_b = Version::parse(tag_b.tag.strip_prefix('v').unwrap_or(&tag_b.tag));
+        match (ver_a, ver_b) {
+            (Ok(a), Ok(b)) => b.cmp(&a).then_with(|| tag_a.tag.cmp(&tag_b.tag)),
+            (Ok(_), Err(_)) => Ordering::Less,
+            (Err(_), Ok(_)) => Ordering::Greater,
+            (Err(_), Err(_)) => tag_a.tag.cmp(&tag_b.tag),
+        }
+    })
+}
+
+async fn current_tag_metadata<'a>(
+    repo_path: &Path,
+    current_rev: &str,
+    tag_timestamps: &'a [TagTimestamp],
+) -> Option<&'a TagTimestamp> {
+    if let Some(tag) = tag_timestamps.iter().find(|tag| tag.tag == current_rev) {
+        return Some(tag);
+    }
+
+    let current_commit = if current_rev.len() == 40 && config::looks_like_sha(current_rev) {
+        Cow::Borrowed(current_rev)
+    } else {
+        Cow::Owned(
+            resolve_revision_to_commit(repo_path, current_rev)
+                .await
+                .ok()?,
+        )
+    };
+
+    tag_timestamps
+        .iter()
+        .filter(|tag| tag.commit.eq_ignore_ascii_case(current_commit.as_ref()))
+        .min_by(|tag_a, tag_b| compare_tag_metadata(tag_a, tag_b))
+}
+
+/// Selects the revision action that `auto-update` should take for one fetched repo target.
 ///
 /// In normal mode this chooses the newest tag that satisfies the cooldown window.
+/// If that tag sorts older than the currently pinned tag, the current revision is kept.
 /// In bleeding-edge mode it resolves `FETCH_HEAD` instead.
 pub(super) async fn select_update_revision(
     repo_path: &Path,
@@ -207,22 +237,27 @@ pub(super) async fn select_update_revision(
     bleeding_edge: bool,
     cooldown_days: u8,
     tag_timestamps: &[TagTimestamp],
-) -> Result<Option<String>> {
+    update_tag_timestamps: &[TagTimestamp],
+) -> Result<RevisionSelection> {
     if bleeding_edge {
-        return resolve_bleeding_edge(repo_path).await;
+        return Ok(match resolve_bleeding_edge(repo_path).await? {
+            Some(rev) => RevisionSelection::Update(rev),
+            None => RevisionSelection::Unchanged,
+        });
     }
 
     let cutoff_secs = u64::from(cooldown_days) * 86400;
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let cutoff = now.saturating_sub(cutoff_secs);
 
-    let left = match tag_timestamps.binary_search_by(|tag| tag.timestamp.cmp(&cutoff).reverse()) {
-        Ok(i) | Err(i) => i,
-    };
+    let left =
+        match update_tag_timestamps.binary_search_by(|tag| tag.timestamp.cmp(&cutoff).reverse()) {
+            Ok(i) | Err(i) => i,
+        };
 
-    let Some(target_tag) = tag_timestamps.get(left) else {
+    let Some(target_tag) = update_tag_timestamps.get(left) else {
         trace!("No tags meet cooldown cutoff {cutoff_secs}s");
-        return Ok(None);
+        return Ok(RevisionSelection::Unchanged);
     };
 
     debug!(
@@ -230,7 +265,22 @@ pub(super) async fn select_update_revision(
         target_tag.tag, target_tag.timestamp
     );
 
-    let tags = get_tags_pointing_at_revision(tag_timestamps, &target_tag.commit);
+    if let Some(current_tag) = current_tag_metadata(repo_path, current_rev, tag_timestamps).await
+        && !current_tag.commit.eq_ignore_ascii_case(&target_tag.commit)
+        && compare_tag_metadata(current_tag, target_tag).is_lt()
+    {
+        debug!(
+            "Skipping candidate tag `{}` because current tag `{}` sorts newer",
+            target_tag.tag, current_tag.tag
+        );
+        return Ok(RevisionSelection::SkippedDowngrade(SkippedDowngrade {
+            current: current_rev.to_string(),
+            candidate: target_tag.tag.clone(),
+            cooldown_days,
+        }));
+    }
+
+    let tags = get_tags_pointing_at_revision(update_tag_timestamps, &target_tag.commit);
     let best = select_best_tag(&tags, current_rev, false)
         .unwrap_or(target_tag.tag.as_str())
         .to_string();
@@ -239,7 +289,7 @@ pub(super) async fn select_update_revision(
         target_tag.tag
     );
 
-    Ok(Some(best))
+    Ok(RevisionSelection::Update(best))
 }
 
 /// Orders version-like tags from newest to oldest semantic version.
@@ -344,6 +394,7 @@ mod tests {
     use super::{
         list_tag_metadata, no_lazy_fetch_unsupported, resolve_bleeding_edge, select_update_revision,
     };
+    use crate::cli::auto_update::{RevisionSelection, SkippedDowngrade};
     use crate::git;
     use crate::process::Cmd;
     use std::path::Path;
@@ -554,6 +605,9 @@ mod tests {
         let tmp = setup_test_repo().await;
         let repo = tmp.path();
 
+        create_backdated_commit(repo, "current", 10).await;
+        create_lightweight_tag(repo, "v1.0.0").await;
+
         create_backdated_commit(repo, "candidate", 5).await;
         create_lightweight_tag(repo, "v2.0.0-rc1").await;
         create_lightweight_tag(repo, "totally-different").await;
@@ -562,11 +616,39 @@ mod tests {
         create_lightweight_tag(repo, "v2.0.0").await;
 
         let tag_timestamps = list_tag_metadata(repo).await.unwrap();
-        let rev = select_update_revision(repo, "v2.0.0", false, 3, &tag_timestamps)
-            .await
-            .unwrap();
+        let rev =
+            select_update_revision(repo, "v1.0.0", false, 3, &tag_timestamps, &tag_timestamps)
+                .await
+                .unwrap();
 
-        assert_eq!(rev, Some("v2.0.0-rc1".to_string()));
+        assert_eq!(rev, RevisionSelection::Update("v2.0.0-rc1".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_select_update_revision_skips_cooldown_downgrade() {
+        let tmp = setup_test_repo().await;
+        let repo = tmp.path();
+
+        create_backdated_commit(repo, "candidate", 5).await;
+        create_lightweight_tag(repo, "v2.0.0-rc1").await;
+
+        create_backdated_commit(repo, "current", 1).await;
+        create_lightweight_tag(repo, "v2.0.0").await;
+
+        let tag_timestamps = list_tag_metadata(repo).await.unwrap();
+        let rev =
+            select_update_revision(repo, "v2.0.0", false, 3, &tag_timestamps, &tag_timestamps)
+                .await
+                .unwrap();
+
+        assert_eq!(
+            rev,
+            RevisionSelection::SkippedDowngrade(SkippedDowngrade {
+                current: "v2.0.0".to_string(),
+                candidate: "v2.0.0-rc1".to_string(),
+                cooldown_days: 3
+            })
+        );
     }
 
     #[tokio::test]
@@ -581,15 +663,16 @@ mod tests {
         create_lightweight_tag(repo, "v1.1.0").await;
 
         let tag_timestamps = list_tag_metadata(repo).await.unwrap();
-        let rev = select_update_revision(repo, "v1.1.0", false, 5, &tag_timestamps)
-            .await
-            .unwrap();
+        let rev =
+            select_update_revision(repo, "v1.1.0", false, 5, &tag_timestamps, &tag_timestamps)
+                .await
+                .unwrap();
 
-        assert_eq!(rev, None);
+        assert_eq!(rev, RevisionSelection::Unchanged);
     }
 
     #[tokio::test]
-    async fn test_select_update_revision_picks_oldest_eligible_bucket() {
+    async fn test_select_update_revision_skips_older_eligible_bucket() {
         let tmp = setup_test_repo().await;
         let repo = tmp.path();
 
@@ -603,11 +686,19 @@ mod tests {
         create_lightweight_tag(repo, "v1.2.0").await;
 
         let tag_timestamps = list_tag_metadata(repo).await.unwrap();
-        let rev = select_update_revision(repo, "v1.2.0", false, 5, &tag_timestamps)
-            .await
-            .unwrap();
+        let rev =
+            select_update_revision(repo, "v1.2.0", false, 5, &tag_timestamps, &tag_timestamps)
+                .await
+                .unwrap();
 
-        assert_eq!(rev, Some("v1.0.0".to_string()));
+        assert_eq!(
+            rev,
+            RevisionSelection::SkippedDowngrade(SkippedDowngrade {
+                current: "v1.2.0".to_string(),
+                candidate: "v1.0.0".to_string(),
+                cooldown_days: 5
+            })
+        );
     }
 
     #[tokio::test]
@@ -620,11 +711,18 @@ mod tests {
         create_lightweight_tag(repo, "v1.0.0").await;
 
         let tag_timestamps = list_tag_metadata(repo).await.unwrap();
-        let rev = select_update_revision(repo, "moving-tag", false, 1, &tag_timestamps)
-            .await
-            .unwrap();
+        let rev = select_update_revision(
+            repo,
+            "moving-tag",
+            false,
+            1,
+            &tag_timestamps,
+            &tag_timestamps,
+        )
+        .await
+        .unwrap();
 
-        assert_eq!(rev, Some("v1.0.0".to_string()));
+        assert_eq!(rev, RevisionSelection::Update("v1.0.0".to_string()));
     }
 
     #[tokio::test]
@@ -638,11 +736,12 @@ mod tests {
         create_lightweight_tag(repo, "v2.0.0").await;
 
         let tag_timestamps = list_tag_metadata(repo).await.unwrap();
-        let rev = select_update_revision(repo, "v1.2.3", false, 1, &tag_timestamps)
-            .await
-            .unwrap();
+        let rev =
+            select_update_revision(repo, "v1.2.3", false, 1, &tag_timestamps, &tag_timestamps)
+                .await
+                .unwrap();
 
-        assert_eq!(rev, Some("v1.2.0".to_string()));
+        assert_eq!(rev, RevisionSelection::Update("v1.2.0".to_string()));
     }
 
     #[tokio::test]

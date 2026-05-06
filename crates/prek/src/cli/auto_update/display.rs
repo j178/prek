@@ -78,6 +78,17 @@ fn format_display_event(kind: &DisplayEventKind, dry_run: bool) -> String {
             format_revision(&current.rev, current.frozen.as_deref()),
             format_revision(&next.rev, next.frozen.as_deref())
         ),
+        DisplayEventKind::SkippedDowngrade {
+            current,
+            candidate,
+            cooldown_days,
+        } => format!(
+            "{} `{}`; {} `{}`",
+            "keeping current rev".yellow(),
+            current.cyan(),
+            format!("{cooldown_days}-day cooldown would select older rev").dimmed(),
+            candidate.cyan()
+        ),
         DisplayEventKind::FrozenUpdate { current, next } => format!(
             "{} `{}` -> `{}`",
             format!("{} frozen comment", update_verb(dry_run)).green(),
@@ -206,6 +217,7 @@ pub(super) fn apply_repo_updates<'a>(
                     !matches!(mismatch.action, FrozenMismatchAction::NoReplacement)
                 });
                 let has_frozen_notice = !resolved.frozen_mismatches.is_empty();
+                let has_skip_notice = resolved.skipped_downgrade.is_some();
 
                 has_updates |= is_changed || has_frozen_updates;
 
@@ -234,6 +246,23 @@ pub(super) fn apply_repo_updates<'a>(
                         );
                     }
                 } else {
+                    if let Some(skipped) = &resolved.skipped_downgrade {
+                        for usage in &update.target.usages {
+                            display_events.push(DisplayEvent {
+                                stream: DisplayStream::Stdout,
+                                project: usage.project,
+                                repo: update.target.repo,
+                                remote_index: usage.remote_index,
+                                line_number: usage.rev_line_number,
+                                kind: DisplayEventKind::SkippedDowngrade {
+                                    current: skipped.current.clone(),
+                                    candidate: skipped.candidate.clone(),
+                                    cooldown_days: skipped.cooldown_days,
+                                },
+                            });
+                        }
+                    }
+
                     for mismatch in &resolved.frozen_mismatches {
                         match &mismatch.action {
                             FrozenMismatchAction::ReplaceWith(replacement) => {
@@ -286,7 +315,7 @@ pub(super) fn apply_repo_updates<'a>(
                     }
                 }
 
-                if verbose && !is_changed && !has_frozen_notice {
+                if verbose && !is_changed && !has_frozen_notice && !has_skip_notice {
                     for usage in &update.target.usages {
                         display_events.push(DisplayEvent {
                             stream: DisplayStream::Stdout,

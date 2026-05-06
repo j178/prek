@@ -32,34 +32,7 @@ Both formats are first-class and will be supported long-term. They describe the 
 - Windows: `%APPDATA%\prek\prek.toml`
 
 This file is for user-level `prek` settings, not hook definitions. Project hooks still live in the project config files described below.
-
-The first supported global setting is the default cooldown for `prek auto-update`:
-
-```toml
-[auto_update]
-cooldown_days = 7
-```
-
-Project config can also define the same setting, scoped to that project:
-
-=== "prek.toml"
-
-    ```toml
-    [auto_update]
-    cooldown_days = 7
-    ```
-
-=== ".pre-commit-config.yaml"
-
-    ```yaml
-    auto_update:
-      cooldown_days: 7
-    ```
-
-`prek auto-update --cooldown-days <DAYS>` overrides both project and global config for a single command invocation.
-The cooldown value must be between `0` and `255` days, inclusive; `0` disables the cooldown check.
-
-In workspace mode, project-level `auto_update` settings are not inherited by nested projects. The setting only affects the project config file that defines it; sub-projects use their own `auto_update` setting, then the user-level global config, then the default.
+For the supported global settings, see the [configuration reference](reference/configuration.md#global-auto_updatecooldown_days).
 
 ## Pre-commit compatibility
 

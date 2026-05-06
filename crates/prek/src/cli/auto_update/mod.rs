@@ -155,6 +155,26 @@ struct TagTimestamp {
     commit: String,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+struct SkippedDowngrade {
+    /// The configured revision that was kept.
+    current: String,
+    /// The candidate tag that was rejected.
+    candidate: String,
+    /// The cooldown window used to select the candidate tag.
+    cooldown_days: u8,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum RevisionSelection {
+    /// No eligible revision was found.
+    Unchanged,
+    /// Update to this revision.
+    Update(String),
+    /// Keep the current revision because the candidate sorts older.
+    SkippedDowngrade(SkippedDowngrade),
+}
+
 struct TagFilters {
     global_include: GlobPatterns,
     global_exclude: GlobPatterns,
@@ -239,6 +259,8 @@ fn build_repo_tag_patterns(
 struct ResolvedRepoUpdate<'a> {
     /// The revision data that may be written back to config.
     revision: Revision,
+    /// A candidate revision that was not selected because it would move backward.
+    skipped_downgrade: Option<SkippedDowngrade>,
     /// Any stale `# frozen:` comments found for this target's usages.
     frozen_mismatches: Vec<FrozenMismatch<'a>>,
 }
@@ -279,11 +301,28 @@ struct ApplyRepoUpdatesResult {
 }
 
 enum DisplayEventKind {
-    Update { current: Revision, next: Revision },
-    FrozenUpdate { current: String, next: String },
-    FrozenRemove { current: String },
-    UpToDate { current: Revision },
-    Failure { error: String },
+    Update {
+        current: Revision,
+        next: Revision,
+    },
+    SkippedDowngrade {
+        current: String,
+        candidate: String,
+        cooldown_days: u8,
+    },
+    FrozenUpdate {
+        current: String,
+        next: String,
+    },
+    FrozenRemove {
+        current: String,
+    },
+    UpToDate {
+        current: Revision,
+    },
+    Failure {
+        error: String,
+    },
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]

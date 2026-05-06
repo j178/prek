@@ -13,11 +13,11 @@ This file stores user-level `prek` settings and does not define project hooks.
 
 ### Global `auto_update.cooldown_days`
 
-Default cooldown for `prek auto-update`.
+Default cooldown for [`prek auto-update`](cli.md#prek-auto-update).
 
 - Type: integer days, `0` to `255`
 - Default: `0`
-- CLI override: `prek auto-update --cooldown-days <DAYS>`
+- CLI override: [`prek auto-update --cooldown-days <DAYS>`](cli.md#prek-auto-update)
 
 ```toml
 [auto_update]
@@ -26,38 +26,18 @@ cooldown_days = 7
 
 The age is computed from the tag creation timestamp for annotated tags, or from the tagged commit timestamp for lightweight tags. A value of `0` disables the cooldown check.
 
-Project configs can also set `auto_update.cooldown_days`. The effective precedence is:
+!!! tip "Cooldowns never downgrade"
 
-1. `prek auto-update --cooldown-days <DAYS>`
+    If the current `rev` is newer than the latest cooldown-eligible tag, [`prek auto-update`](cli.md#prek-auto-update) keeps the current `rev` instead of downgrading it.
+
+Project configs can also set [`auto_update.cooldown_days`](#auto_updatecooldown_days). The effective precedence is:
+
+1. [`prek auto-update --cooldown-days <DAYS>`](cli.md#prek-auto-update)
 2. project config
 3. user-level global config
 4. default `0`
 
 ## Top-level keys
-
-### `auto_update.cooldown_days`
-
-Project default cooldown for `prek auto-update`.
-
-- Type: integer days, `0` to `255`
-- Default: inherited from the user-level global config, or `0`
-- CLI override: `prek auto-update --cooldown-days <DAYS>`
-
-=== "prek.toml"
-
-    ```toml
-    [auto_update]
-    cooldown_days = 7
-    ```
-
-=== ".pre-commit-config.yaml"
-
-    ```yaml
-    auto_update:
-      cooldown_days: 7
-    ```
-
-In workspace mode, this setting is scoped to the project config file that defines it. It applies only to that project and is not inherited by nested projects. Sub-projects use their own `auto_update` setting, then the user-level global config, then the default. If two projects use the same repo URL with different cooldown settings, `prek auto-update` fetches the repo once but evaluates each project with its own cooldown.
 
 ### `repos` (required)
 
@@ -170,7 +150,7 @@ Global *exclude* regex applied before hook-level filtering.
 
 !!! note "prek-only globs"
 
-    Like `files`, `exclude` supports `glob` (single glob or glob list) as a `prek` extension.
+    Like [`files`](#top-level-files), `exclude` supports `glob` (single glob or glob list) as a `prek` extension.
     For glob syntax details, see the [globset documentation](https://docs.rs/globset/latest/globset/#syntax).
 
 Examples:
@@ -241,7 +221,7 @@ This is a global default; individual hooks can also set `fail_fast`.
 
 ### `default_language_version`
 
-Map a language name to the default `language_version` used by hooks of that language.
+Map a language name to the default [`language_version`](#language_version) used by hooks of that language.
 
 - Type: map
 - Default: none (hooks fall back to `language_version: default`)
@@ -263,11 +243,11 @@ Example:
       node: "20"
     ```
 
-`prek` treats `language_version` as a version request (often a semver-like selector) and may install toolchains automatically. See [Difference from pre-commit](../diff.md).
+`prek` treats [`language_version`](#language_version) as a version request (often a semver-like selector) and may install toolchains automatically. See [Difference from pre-commit](../diff.md).
 
 ### `default_stages`
 
-Default `stages` used when a hook does not specify its own.
+Default [`stages`](#stages) used when a hook does not specify its own.
 
 - Type: list of stage names
 - Default: all stages
@@ -288,13 +268,13 @@ Allowed values:
 
 ### `default_install_hook_types`
 
-Default Git shim name(s) installed by `prek install` when you don’t pass `--hook-type`.
+Default Git shim name(s) installed by [`prek install`](cli.md#prek-install) when you don’t pass `--hook-type`.
 
 - Type: list of `--hook-type` values
 - Default: `[pre-commit]`
 
 This controls which Git shims are installed (for example `pre-commit` vs `pre-push`).
-It is separate from a hook’s `stages`, which controls when a particular hook is eligible to run.
+It is separate from a hook’s [`stages`](#stages), which controls when a particular hook is eligible to run.
 
 Allowed values:
 
@@ -308,6 +288,34 @@ Allowed values:
 - `post-rewrite`
 - `pre-merge-commit`
 - `pre-rebase`
+
+### `auto_update.cooldown_days`
+
+!!! note "prek-only"
+
+    This top-level key is a `prek` extension and is not recognized by upstream `pre-commit`.
+
+Project default cooldown for [`prek auto-update`](cli.md#prek-auto-update).
+
+- Type: integer days, `0` to `255`
+- Default: inherited from the user-level global config, or `0`
+- CLI override: [`prek auto-update --cooldown-days <DAYS>`](cli.md#prek-auto-update)
+
+=== "prek.toml"
+
+    ```toml
+    [auto_update]
+    cooldown_days = 7
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    auto_update:
+      cooldown_days: 7
+    ```
+
+In workspace mode, this setting is scoped to the project config file that defines it. It applies only to that project and is not inherited by nested projects. Sub-projects use their own `auto_update` setting, then the user-level global config, then the default. If two projects use the same repo URL with different cooldown settings, [`prek auto-update`](cli.md#prek-auto-update) fetches the repo once but evaluates each project with its own cooldown.
 
 ### `minimum_prek_version`
 
@@ -444,7 +452,7 @@ Example:
 Notes:
 
 - For reproducibility, prefer immutable pins (tags or commit SHAs).
-- `prek auto-update` can help update `rev` values.
+- [`prek auto-update`](cli.md#prek-auto-update) can help update [`rev`](#rev) values.
 
 ### `repo: local`
 
@@ -502,7 +510,7 @@ Restrictions:
 - `entry` is not allowed.
 - `language` (if set) must be `system`.
 
-You may still configure normal hook options such as `files`, `exclude`, `stages`, etc.
+You may still configure normal hook options such as [`files`](#hook-files-exclude), [`exclude`](#hook-files-exclude), [`stages`](#stages), etc.
 
 Example:
 
@@ -574,7 +582,7 @@ For a remote repo, the hook entry must include:
 
 - `id` (required): selects the hook from the repository
 
-All other hook keys are optional overrides (for example `args`, `files`, `exclude`, `stages`, …).
+All other hook keys are optional overrides (for example [`args`](#args), [`files`](#hook-files-exclude), [`exclude`](#hook-files-exclude), [`stages`](#stages), …).
 
 !!! note "Advanced overrides"
 
@@ -585,7 +593,7 @@ All other hook keys are optional overrides (for example `args`, `files`, `exclud
 
 For `repo: local`, the hook entry is a full definition and must include:
 
-- `id` (required): stable identifier used by `prek run <id>` and selectors
+- `id` (required): stable identifier used by [`prek run <id>`](cli.md#prek-run) and selectors
 - `name` (required): label shown in output
 - `entry` (required): command to execute
 - `language` (required): how `prek` sets up and runs the hook
@@ -593,7 +601,7 @@ For `repo: local`, the hook entry is a full definition and must include:
 ### Builtin/meta hook selection
 
 For `repo: builtin` and `repo: meta`, the hook entry must include `id`.
-You can optionally provide `name` and normal hook options (filters, stages, etc), but not `entry`.
+You can optionally provide `name` and normal hook options (filters, [`stages`](#stages), etc), but not `entry`.
 
 ## Common hook options
 
@@ -606,7 +614,7 @@ The stable identifier of the hook.
 - For remote hooks, this must match a hook id defined by the remote repository.
 - For local hooks, you choose it.
 
-`id` is also used for CLI selection (for example `prek run <id>` and `PREK_SKIP`).
+`id` is also used for CLI selection (for example [`prek run <id>`](cli.md#prek-run) and [`PREK_SKIP`](environment-variables.md#prek_skip)).
 
 !!! note "Hook ids containing `:`"
 
@@ -631,7 +639,7 @@ The command line to execute for the hook.
 - Optional override for remote hooks.
 - Not allowed for `repo: meta` and `repo: builtin`.
 
-If `pass_filenames: true`, `prek` appends matching filenames to this command when running.
+If [`pass_filenames`](#pass_filenames) is `true`, `prek` appends matching filenames to this command when running.
 
 ### `shell`
 
@@ -646,9 +654,9 @@ Run `entry` through a predefined shell adapter.
 - Type: one of `sh`, `bash`, `pwsh`, `powershell`, `cmd`
 - Default: `null` (run `entry` directly without a shell)
 
-When `shell` is omitted, `prek` preserves the default no-shell behavior: it parses `entry` into argv, invokes the command directly, and appends `args` and matching filenames as process arguments.
+When `shell` is omitted, `prek` preserves the default no-shell behavior: it parses `entry` into argv, invokes the command directly, and appends [`args`](#args) and matching filenames as process arguments.
 
-When `shell` is set, `entry` is treated as source for that shell. `prek` writes the source to a temporary script file, runs it with the selected shell adapter, and passes hook `args` followed by matching filenames as script arguments.
+When `shell` is set, `entry` is treated as source for that shell. `prek` writes the source to a temporary script file, runs it with the selected shell adapter, and passes hook [`args`](#args) followed by matching filenames as script arguments.
 
 | `shell` | Adapter command | Script arguments |
 | -- | -- | -- |
@@ -719,7 +727,7 @@ How `prek` should run the hook (and whether it should create a managed environme
 
 Common values include `system`, `python`, `node`, `rust`, `golang`, `ruby`, and `docker`.
 
-See [Language Support](../languages.md) for per-language behavior, supported values, and `language_version` details.
+See [Language Support](../languages.md) for per-language behavior, supported values, and [`language_version`](#language_version) details.
 
 !!! note "Language name aliases"
 
@@ -732,7 +740,7 @@ See [Language Support](../languages.md) for per-language behavior, supported val
 
 An alternate identifier for selecting the hook from the CLI.
 
-If set, you can run the hook via either `prek run <id>` or `prek run <alias>`.
+If set, you can run the hook via either [`prek run <id>`](cli.md#prek-run) or [`prek run <alias>`](cli.md#prek-run).
 
 ### `args`
 
@@ -811,6 +819,8 @@ Example:
             pass_filenames: false
     ```
 
+<a id="hook-files-exclude"></a>
+
 ### `files` / `exclude`
 
 Filters applied to candidate filenames.
@@ -833,7 +843,7 @@ File-type filters based on [`identify`](https://pre-commit.com/#filtering-files-
 
     Use [`prek util identify <path>`](cli.md#prek-util-identify) to see how prek tags a file when you’re troubleshooting `types` filters.
 
-Compared to regex-only filtering (`files` / `exclude`), tag-based filtering is often easier and more robust:
+Compared to regex-only filtering ([`files` / `exclude`](#hook-files-exclude)), tag-based filtering is often easier and more robust:
 
 - tags can match by **file extension** *and* by **shebang** (for extensionless scripts)
 - you can easily exclude things like **symlinks** or **binary files**
@@ -852,7 +862,7 @@ Common tags include:
 
 How these combine:
 
-- `files` / `exclude`, `types`, and `types_or` are combined with **AND**.
+- [`files` / `exclude`](#hook-files-exclude), `types`, and `types_or` are combined with **AND**.
 - Tags within `types` are combined with **AND**.
 - Tags within `types_or` are combined with **OR**.
 
@@ -917,7 +927,7 @@ Examples:
             types_or: [javascript, jsx, ts, tsx]
     ```
 
-If you need to match a path pattern that doesn’t align with a hook’s default `types` (common when reusing an existing hook in a nonstandard way), override it back to “all files” and use `files`:
+If you need to match a path pattern that doesn’t align with a hook’s default `types` (common when reusing an existing hook in a nonstandard way), override it back to “all files” and use [`files`](#hook-files-exclude):
 
 === "prek.toml"
 
@@ -962,7 +972,7 @@ Controls whether `prek` appends the matching filenames to the command line.
 
 Set `pass_filenames: false` for hooks that don’t accept file arguments (or that discover files themselves).
 
-Set `pass_filenames: n` (a positive integer) to limit each invocation to at most `n` filenames. When there are more matching files than `n`, `prek` splits them across multiple invocations. Those invocations may run concurrently unless `require_serial: true` is set. This is useful for tools that can only process a limited number of files at once.
+Set `pass_filenames: n` (a positive integer) to limit each invocation to at most `n` filenames. When there are more matching files than `n`, `prek` splits them across multiple invocations. Those invocations may run concurrently unless [`require_serial`](#require_serial) is `true`. This is useful for tools that can only process a limited number of files at once.
 
 Prek will automatically limit the number of filenames to ensure command lines don’t exceed the OS limit, even when `pass_filenames: true`.
 
@@ -991,7 +1001,7 @@ Allowed values:
 - `pre-rebase`
 - `prepare-commit-msg`
 
-When you run `prek run --hook-stage <stage>`, only hooks configured for that stage are considered.
+When you run [`prek run --hook-stage <stage>`](cli.md#prek-run), only hooks configured for that stage are considered.
 
 ### `require_serial`
 
@@ -1097,7 +1107,7 @@ Example:
 
 !!! note "`require_serial` is different"
 
-    `require_serial: true` prevents concurrent invocations of the *same hook*.
+    [`require_serial`](#require_serial) set to `true` prevents concurrent invocations of the *same hook*.
     It does not prevent other hooks from running alongside it; use a unique `priority` if you need exclusivity.
 
 ### `fail_fast`
@@ -1135,7 +1145,7 @@ Choose the language/toolchain version request for this hook.
 - Type: string
 - Default: `default`
 
-If not set, `prek` may use `default_language_version` for the hook’s language.
+If not set, `prek` may use [`default_language_version`](#default_language_version) for the hook’s language.
 
 !!! note "prek-only"
 
