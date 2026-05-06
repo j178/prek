@@ -381,37 +381,37 @@ prek is pretty new, but it is already being used or recommended by some projects
 GitHub stars are current as of April 15, 2026.
 
 - [apache/airflow](https://github.com/apache/airflow/issues/44995) <sub>45,050 stars</sub>
-- [python/cpython](https://github.com/python/cpython/issues/143148) <sub>72,330 stars</sub>
-- [pdm-project/pdm](https://github.com/pdm-project/pdm/pull/3593) <sub>8,553 stars</sub>
-- [fastapi/fastapi](https://github.com/fastapi/fastapi/pull/14572) <sub>97,209 stars</sub>
-- [fastapi/typer](https://github.com/fastapi/typer/pull/1453) <sub>19,210 stars</sub>
-- [fastapi/asyncer](https://github.com/fastapi/asyncer/pull/437) <sub>2,407 stars</sub>
-- [astral-sh/ruff](https://github.com/astral-sh/ruff/pull/22505) <sub>47,070 stars</sub>
-- [astral-sh/ty](https://github.com/astral-sh/ty/pull/2469) <sub>18,308 stars</sub>
-- [openclaw/openclaw](https://github.com/openclaw/openclaw/pull/1720) <sub>357,512 stars</sub>
-- [home-assistant/core](https://github.com/home-assistant/core/pull/160427) <sub>86,029 stars</sub>
-- [python-telegram-bot/python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot/pull/5142) <sub>29,025 stars</sub>
-- [DetachHead/basedpyright](https://github.com/DetachHead/basedpyright/pull/1413) <sub>3,267 stars</sub>
-- [OpenLineage/OpenLineage](https://github.com/OpenLineage/OpenLineage/pull/3965) <sub>2,406 stars</sub>
-- [authlib/authlib](https://github.com/authlib/authlib/pull/804) <sub>5,271 stars</sub>
-- [django/djangoproject.com](https://github.com/django/djangoproject.com/pull/2252) <sub>1,994 stars</sub>
-- [Future-House/paper-qa](https://github.com/Future-House/paper-qa/pull/1098) <sub>8,377 stars</sub>
-- [Goldziher/kreuzberg](https://github.com/Goldziher/kreuzberg/pull/142) <sub>7,550 stars</sub>
-- [python-attrs/attrs](https://github.com/python-attrs/attrs/commit/c95b177682e76a63478d29d040f9cb36a8d31915) <sub>5,770 stars</sub>
-- [jlowin/fastmcp](https://github.com/jlowin/fastmcp/pull/2309) <sub>24,539 stars</sub>
 - [apache/iggy](https://github.com/apache/iggy/pull/2383) <sub>4,116 stars</sub>
 - [apache/lucene](https://github.com/apache/lucene/pull/15629) <sub>3,401 stars</sub>
-- [jcrist/msgspec](https://github.com/jcrist/msgspec/pull/918) <sub>3,692 stars</sub>
-- [MoonshotAI/kimi-cli](https://github.com/MoonshotAI/kimi-cli/pull/535) <sub>7,800 stars</sub>
-- [simple-icons/simple-icons](https://github.com/simple-icons/simple-icons/pull/14245) <sub>24,873 stars</sub>
 - [ast-grep/ast-grep](https://github.com/ast-grep/ast-grep.github.io/commit/e30818144b2967a7f9172c8cf2f4596bba219bf5) <sub>13,413 stars</sub>
-- [commitizen-tools/commitizen](https://github.com/commitizen-tools/commitizen) <sub>3,377 stars</sub>
-- [cocoindex-io/cocoindex](https://github.com/cocoindex-io/cocoindex/pull/1564) <sub>6,865 stars</sub>
+- [astral-sh/ruff](https://github.com/astral-sh/ruff/pull/22505) <sub>47,070 stars</sub>
+- [astral-sh/ty](https://github.com/astral-sh/ty/pull/2469) <sub>18,308 stars</sub>
+- [authlib/authlib](https://github.com/authlib/authlib/pull/804) <sub>5,271 stars</sub>
 - [cachix/devenv](https://github.com/cachix/devenv/pull/2304) <sub>6,665 stars</sub>
-- [pyodide/pyodide](https://github.com/pyodide/pyodide/pull/6182) <sub>14,527 stars</sub>
-- [prowler-cloud/prowler](https://github.com/prowler-cloud/prowler/pull/10601) <sub>13,592 stars</sub>
+- [cocoindex-io/cocoindex](https://github.com/cocoindex-io/cocoindex/pull/1564) <sub>6,865 stars</sub>
+- [commitizen-tools/commitizen](https://github.com/commitizen-tools/commitizen) <sub>3,377 stars</sub>
+- [DetachHead/basedpyright](https://github.com/DetachHead/basedpyright/pull/1413) <sub>3,267 stars</sub>
+- [django/djangoproject.com](https://github.com/django/djangoproject.com/pull/2252) <sub>1,994 stars</sub>
+- [fastapi/asyncer](https://github.com/fastapi/asyncer/pull/437) <sub>2,407 stars</sub>
+- [fastapi/fastapi](https://github.com/fastapi/fastapi/pull/14572) <sub>97,209 stars</sub>
+- [fastapi/typer](https://github.com/fastapi/typer/pull/1453) <sub>19,210 stars</sub>
+- [Future-House/paper-qa](https://github.com/Future-House/paper-qa/pull/1098) <sub>8,377 stars</sub>
 - [getsentry/sentry](https://github.com/getsentry/sentry/pull/110808) <sub>43,639 stars</sub>
 - [godotengine/godot](https://github.com/godotengine/godot/pull/119150) <sub>110,312 stars</sub>
+- [Goldziher/kreuzberg](https://github.com/Goldziher/kreuzberg/pull/142) <sub>7,550 stars</sub>
+- [home-assistant/core](https://github.com/home-assistant/core/pull/160427) <sub>86,029 stars</sub>
+- [jcrist/msgspec](https://github.com/jcrist/msgspec/pull/918) <sub>3,692 stars</sub>
+- [jlowin/fastmcp](https://github.com/jlowin/fastmcp/pull/2309) <sub>24,539 stars</sub>
+- [MoonshotAI/kimi-cli](https://github.com/MoonshotAI/kimi-cli/pull/535) <sub>7,800 stars</sub>
+- [openclaw/openclaw](https://github.com/openclaw/openclaw/pull/1720) <sub>357,512 stars</sub>
+- [OpenLineage/OpenLineage](https://github.com/OpenLineage/OpenLineage/pull/3965) <sub>2,406 stars</sub>
+- [pdm-project/pdm](https://github.com/pdm-project/pdm/pull/3593) <sub>8,553 stars</sub>
+- [prowler-cloud/prowler](https://github.com/prowler-cloud/prowler/pull/10601) <sub>13,592 stars</sub>
+- [pyodide/pyodide](https://github.com/pyodide/pyodide/pull/6182) <sub>14,527 stars</sub>
+- [python-attrs/attrs](https://github.com/python-attrs/attrs/commit/c95b177682e76a63478d29d040f9cb36a8d31915) <sub>5,770 stars</sub>
+- [python-telegram-bot/python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot/pull/5142) <sub>29,025 stars</sub>
+- [python/cpython](https://github.com/python/cpython/issues/143148) <sub>72,330 stars</sub>
+- [simple-icons/simple-icons](https://github.com/simple-icons/simple-icons/pull/14245) <sub>24,873 stars</sub>
 
 <!-- --8<-- [end: why] -->
 
