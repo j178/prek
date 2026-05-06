@@ -260,7 +260,9 @@ pub(super) async fn select_update_revision(
         target_tag.tag, target_tag.timestamp
     );
 
-    if let Some(current_tag) = current_tag_metadata(repo_path, current_rev, tag_timestamps).await
+    if cooldown_days > 0
+        && let Some(current_tag) =
+            current_tag_metadata(repo_path, current_rev, tag_timestamps).await
         && !current_tag.commit.eq_ignore_ascii_case(&target_tag.commit)
         && compare_tag_metadata(current_tag, target_tag).is_lt()
     {

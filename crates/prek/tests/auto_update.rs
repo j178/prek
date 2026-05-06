@@ -665,6 +665,57 @@ fn auto_update_tag_filters_include_then_exclude() -> Result<()> {
 }
 
 #[test]
+fn auto_update_tag_filters_can_select_older_track_without_cooldown() -> Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let repo_path = create_local_git_repo(
+        &context,
+        "tag-filter-older-track",
+        &["v1.0.0", "v1.1.0", "v2.0.0"],
+    )?;
+
+    context.write_pre_commit_config(&indoc::formatdoc! {r"
+        repos:
+          - repo: {}
+            rev: v2.0.0
+            hooks:
+              - id: test-hook
+    ", repo_path});
+
+    context.git_add(".");
+
+    let filters = context.filters();
+
+    cmd_snapshot!(filters.clone(), context.auto_update()
+        .arg("--include-tag").arg("v1.*")
+        .arg("--cooldown-days").arg("0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [HOME]/test-repos/tag-filter-older-track
+      updating rev `v2.0.0` -> `v1.1.0`
+
+    ----- stderr -----
+    ");
+
+    insta::with_settings!(
+        { filters => filters.clone() },
+        {
+            assert_snapshot!(context.read(PRE_COMMIT_CONFIG_YAML), @"
+            repos:
+              - repo: [HOME]/test-repos/tag-filter-older-track
+                rev: v1.1.0
+                hooks:
+                  - id: test-hook
+            ");
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
 fn auto_update_repo_include_tag_is_repo_specific() -> Result<()> {
     let context = TestContext::new();
     context.init_project();
