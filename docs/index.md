@@ -1,7 +1,10 @@
 # prek
 
 <div align="center">
-  <img alt="prek" src="/assets/logo.png" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="/assets/logo-dark.png">
+    <img alt="prek" src="/assets/logo.png" />
+  </picture>
 </div>
 
 --8<-- "README.md:description"
