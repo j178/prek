@@ -2,12 +2,12 @@ use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_identify::{TagSet, tags};
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use thiserror::Error;
@@ -19,9 +19,13 @@ use crate::config::{
 };
 use crate::hook_entry::HookEntry;
 use crate::languages::version::LanguageRequest;
-use crate::languages::{ShellSupport, extract_metadata};
+use crate::languages::{HookMetadata, ShellSupport, extract_metadata};
 use crate::store::Store;
 use crate::workspace::Project;
+
+mod env_spec;
+
+pub(crate) use env_spec::{HookEnvSpec, PythonUvEnv};
 
 #[derive(Error, Debug)]
 pub(crate) enum Error {
@@ -265,38 +269,9 @@ impl HookBuilder {
         let language = self.hook_spec.language;
         let HookOptions {
             language_version,
-            additional_dependencies,
             shell,
             ..
         } = &self.hook_spec.options;
-
-        let additional_dependencies = additional_dependencies
-            .as_ref()
-            .map_or(&[][..], |deps| deps.as_slice());
-
-        if !additional_dependencies.is_empty() {
-            if !language.supports_install_env() {
-                return Err(Error::Hook {
-                    hook: self.hook_spec.id.clone(),
-                    error: anyhow::anyhow!(
-                        "Hook specified `additional_dependencies: {}` but the language `{}` does not install an environment",
-                        additional_dependencies.join(", "),
-                        language,
-                    ),
-                });
-            }
-
-            if !language.supports_dependency() {
-                return Err(Error::Hook {
-                    hook: self.hook_spec.id.clone(),
-                    error: anyhow::anyhow!(
-                        "Hook specified `additional_dependencies: {}` but the language `{}` does not support installing dependencies for now",
-                        additional_dependencies.join(", "),
-                        language,
-                    ),
-                });
-            }
-        }
 
         if !language.supports_language_version() {
             if let Some(language_version) = language_version
@@ -349,10 +324,21 @@ impl HookBuilder {
     pub(crate) async fn build(mut self) -> Result<Hook, Error> {
         self.hook_spec.apply_project_defaults(self.project.config());
 
+        let remote_repo_dependency = self
+            .hook_spec
+            .language
+            .supports_install_env()
+            .then(|| match self.repo.as_ref() {
+                Repo::Remote { .. } => Some(self.repo.to_string()),
+                Repo::Local { .. } | Repo::Meta { .. } | Repo::Builtin { .. } => None,
+            })
+            .flatten();
+
         self.check()?;
 
         let options = self.hook_spec.options;
         let language_version = options.language_version.unwrap_or_default();
+        let uv = options.uv;
         let alias = options.alias.unwrap_or_default();
         let args = options.args.unwrap_or_default();
         let env = options.env.unwrap_or_default();
@@ -366,17 +352,19 @@ impl HookBuilder {
         let verbose = options.verbose.unwrap_or(false);
         let stages = options.stages.unwrap_or(Stages::ALL);
         let shell = options.shell;
-        let additional_dependencies = options
+        let mut additional_dependencies = options
             .additional_dependencies
             .unwrap_or_default()
             .into_iter()
             .collect::<FxHashSet<_>>();
 
-        let language_request = LanguageRequest::parse(self.hook_spec.language, &language_version)
-            .map_err(|e| Error::Hook {
-            hook: self.hook_spec.id.clone(),
-            error: anyhow::anyhow!(e),
-        })?;
+        let mut language_request =
+            LanguageRequest::parse(self.hook_spec.language, &language_version).map_err(|e| {
+                Error::Hook {
+                    hook: self.hook_spec.id.clone(),
+                    error: anyhow::anyhow!(e),
+                }
+            })?;
 
         let entry = HookEntry::new(self.hook_spec.id.clone(), self.hook_spec.entry, shell);
 
@@ -385,10 +373,44 @@ impl HookBuilder {
             .priority
             .unwrap_or(u32::try_from(self.idx).expect("idx too large"));
 
-        let mut hook = Hook {
-            dependencies: OnceLock::new(),
+        let mut metadata = HookMetadata {
+            id: &self.hook_spec.id,
+            language: self.hook_spec.language,
+            entry: &entry,
+            repo_path: self.repo.path(),
+            work_dir: self.project.path(),
+            additional_dependencies: &mut additional_dependencies,
+            language_request: &mut language_request,
+        };
+
+        if let Err(err) = extract_metadata(&mut metadata).await {
+            if err
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|e| e.kind() != std::io::ErrorKind::NotFound)
+            {
+                trace!(
+                    "Failed to extract metadata from entry for hook `{}`: {err}",
+                    self.hook_spec.id
+                );
+            }
+        }
+
+        let env_spec = HookEnvSpec::resolve(
+            self.hook_spec.language,
+            &additional_dependencies,
+            uv.as_ref(),
+            self.project.path(),
+            remote_repo_dependency.as_deref(),
+        )
+        .map_err(|e| Error::Hook {
+            hook: self.hook_spec.id.clone(),
+            error: e,
+        })?;
+
+        Ok(Hook {
             project: self.project,
             repo: self.repo,
+            env_spec,
             idx: self.idx,
             id: self.hook_spec.id,
             name: self.hook_spec.name,
@@ -415,18 +437,7 @@ impl HookBuilder {
             description: options.description,
             log_file: options.log_file,
             minimum_prek_version: options.minimum_prek_version,
-        };
-
-        if let Err(err) = extract_metadata(&mut hook).await {
-            if err
-                .downcast_ref::<std::io::Error>()
-                .is_some_and(|e| e.kind() != std::io::ErrorKind::NotFound)
-            {
-                trace!("Failed to extract metadata from entry for hook `{hook}`: {err}");
-            }
-        }
-
-        Ok(hook)
+        })
     }
 }
 
@@ -435,8 +446,7 @@ impl HookBuilder {
 pub(crate) struct Hook {
     project: Arc<Project>,
     repo: Arc<Repo>,
-    // Cached computed dependencies.
-    dependencies: OnceLock<FxHashSet<String>>,
+    env_spec: HookEnvSpec,
 
     /// The index of the hook defined in the configuration file.
     pub idx: usize,
@@ -513,12 +523,11 @@ impl Hook {
     /// For remote hooks, the repo URL is included to avoid reusing an environment created
     /// from a different remote repository.
     pub(crate) fn env_key_dependencies(&self) -> &FxHashSet<String> {
-        if !self.is_remote() {
-            return &self.additional_dependencies;
-        }
-        self.dependencies.get_or_init(|| {
-            env_key_dependencies(&self.additional_dependencies, Some(&self.repo.to_string()))
-        })
+        self.env_spec.dependencies()
+    }
+
+    pub(crate) fn python_uv_env(&self) -> Option<&PythonUvEnv> {
+        self.env_spec.python_uv()
     }
 
     /// Returns a lightweight view of the hook environment identity used for reusing installs.
@@ -567,25 +576,6 @@ pub(crate) struct HookEnvKeyRef<'a> {
     pub(crate) language_request: &'a LanguageRequest,
 }
 
-/// Builds the dependency set used to identify a hook environment.
-///
-/// For remote hooks, `remote_repo_dependency` is included so environments from different
-/// repositories are not reused accidentally.
-fn env_key_dependencies(
-    additional_dependencies: &FxHashSet<String>,
-    remote_repo_dependency: Option<&str>,
-) -> FxHashSet<String> {
-    let mut deps = FxHashSet::with_capacity_and_hasher(
-        additional_dependencies.len() + usize::from(remote_repo_dependency.is_some()),
-        FxBuildHasher,
-    );
-    deps.extend(additional_dependencies.iter().cloned());
-    if let Some(dep) = remote_repo_dependency {
-        deps.insert(dep.to_string());
-    }
-    deps
-}
-
 /// Shared matching logic between a computed hook env key (owned or borrowed) and an installed
 /// environment described by [`InstallInfo`].
 fn matches_install_info(
@@ -607,6 +597,7 @@ impl HookEnvKey {
         config: &Config,
         mut hook_spec: HookSpec,
         remote_repo_dependency: Option<&str>,
+        project_root: &Path,
     ) -> Result<Option<Self>> {
         let language = hook_spec.language;
         if !language.supports_install_env() {
@@ -615,10 +606,13 @@ impl HookEnvKey {
 
         hook_spec.apply_project_defaults(config);
         hook_spec.options.language_version.get_or_insert_default();
-        hook_spec
+        let additional_dependencies = hook_spec
             .options
             .additional_dependencies
-            .get_or_insert_default();
+            .get_or_insert_default()
+            .iter()
+            .cloned()
+            .collect::<FxHashSet<_>>();
 
         let request = hook_spec.options.language_version.as_deref().unwrap_or("");
         let language_request = LanguageRequest::parse(language, request).with_context(|| {
@@ -628,13 +622,14 @@ impl HookEnvKey {
             )
         })?;
 
-        let additional_dependencies: FxHashSet<String> = hook_spec
-            .options
-            .additional_dependencies
-            .as_ref()
-            .map_or_else(FxHashSet::default, |deps| deps.iter().cloned().collect());
-
-        let dependencies = env_key_dependencies(&additional_dependencies, remote_repo_dependency);
+        let env_spec = HookEnvSpec::resolve(
+            language,
+            &additional_dependencies,
+            hook_spec.options.uv.as_ref(),
+            project_root,
+            remote_repo_dependency,
+        )?;
+        let dependencies = env_spec.dependencies().clone();
 
         Ok(Some(Self {
             language,
@@ -838,7 +833,8 @@ mod tests {
     use rustc_hash::FxHashMap;
 
     use crate::config::{
-        Config, HookOptions, Language, PassFilenames, RemoteHook, Shell, Stage, Stages,
+        Config, HookOptions, Language, PassFilenames, PythonUvLockMode, PythonUvOptions,
+        RemoteHook, Shell, Stage, Stages,
     };
     use crate::hook::HookSpec;
     use crate::languages::version::LanguageRequest;
@@ -945,8 +941,8 @@ mod tests {
             repo: Local {
                 hooks: [],
             },
-            dependencies: OnceLock(
-                <uninit>,
+            env_spec: Dependencies(
+                {},
             ),
             idx: 7,
             id: "test-hook",
@@ -1140,6 +1136,145 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn hook_builder_rejects_uv_options_for_non_python_uv_language() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join(PRE_COMMIT_CONFIG_YAML);
+        fs_err::write(&config_path, "repos: []\n")?;
+
+        let project = Arc::new(Project::from_config_file(
+            Cow::Borrowed(&config_path),
+            None,
+        )?);
+        let repo = Arc::new(Repo::Local { hooks: vec![] });
+
+        let hook_spec = HookSpec {
+            id: "test-hook".to_string(),
+            name: "test-hook".to_string(),
+            entry: "python -c 'print(1)'".to_string(),
+            language: Language::Python,
+            priority: None,
+            options: HookOptions {
+                uv: Some(PythonUvOptions::default()),
+                ..Default::default()
+            },
+        };
+
+        let err = HookBuilder::new(project, repo, hook_spec, 0)
+            .build()
+            .await
+            .unwrap_err();
+
+        let super::Error::Hook { error, .. } = err else {
+            panic!("expected hook error");
+        };
+        assert_eq!(
+            error.to_string(),
+            "Hook specified `uv` options but the language `python` is not `python_uv`"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn hook_builder_rejects_python_uv_additional_dependencies() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join(PRE_COMMIT_CONFIG_YAML);
+        fs_err::write(&config_path, "repos: []\n")?;
+
+        let project = Arc::new(Project::from_config_file(
+            Cow::Borrowed(&config_path),
+            None,
+        )?);
+        let repo = Arc::new(Repo::Local { hooks: vec![] });
+
+        let hook_spec = HookSpec {
+            id: "test-hook".to_string(),
+            name: "test-hook".to_string(),
+            entry: "ty check .".to_string(),
+            language: Language::PythonUv,
+            priority: None,
+            options: HookOptions {
+                additional_dependencies: Some(vec!["ty".to_string()]),
+                ..Default::default()
+            },
+        };
+
+        let err = HookBuilder::new(project, repo, hook_spec, 0)
+            .build()
+            .await
+            .unwrap_err();
+
+        let super::Error::Hook { error, .. } = err else {
+            panic!("expected hook error");
+        };
+        assert_eq!(
+            error.to_string(),
+            "`language: python_uv` does not install `additional_dependencies`; add Python packages to a uv dependency group and update `uv.lock` instead"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn hook_builder_python_uv_env_key_tracks_lockfile_content() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join(PRE_COMMIT_CONFIG_YAML);
+        fs_err::write(&config_path, "repos: []\n")?;
+        fs_err::write(
+            temp.path().join("pyproject.toml"),
+            "[project]\nname = \"example\"\nversion = \"0.1.0\"\n",
+        )?;
+        fs_err::write(temp.path().join("uv.lock"), "version = 1\n")?;
+
+        let project = Arc::new(Project::from_config_file(
+            Cow::Borrowed(&config_path),
+            None,
+        )?);
+        let repo = Arc::new(Repo::Local { hooks: vec![] });
+
+        let hook_spec = HookSpec {
+            id: "ty".to_string(),
+            name: "ty".to_string(),
+            entry: "ty check .".to_string(),
+            language: Language::PythonUv,
+            priority: None,
+            options: HookOptions {
+                uv: Some(PythonUvOptions {
+                    dependency_groups: Some(vec![
+                        "typecheck".to_string(),
+                        "lint".to_string(),
+                        "typecheck".to_string(),
+                    ]),
+                    extras: Some(vec!["typed".to_string(), "cli".to_string()]),
+                    install_project: Some(false),
+                    lock_mode: Some(PythonUvLockMode::Frozen),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        };
+
+        let hook = HookBuilder::new(project.clone(), repo.clone(), hook_spec.clone(), 0)
+            .build()
+            .await?;
+        let uv = hook.python_uv_env().expect("python_uv env");
+        assert_eq!(uv.dependency_groups, ["lint", "typecheck"]);
+        assert_eq!(uv.extras, ["cli", "typed"]);
+        assert!(!uv.install_project);
+        assert_eq!(uv.lock_mode, PythonUvLockMode::Frozen);
+        let first_dependencies = hook.env_key_dependencies().clone();
+
+        fs_err::write(temp.path().join("uv.lock"), "version = 2\n")?;
+
+        let hook = HookBuilder::new(project, repo, hook_spec, 0)
+            .build()
+            .await?;
+        assert_ne!(first_dependencies, *hook.env_key_dependencies());
+
+        Ok(())
+    }
+
     /// Set up a temporary directory with a minimal `.pre-commit-config.yaml`
     /// and a `remote-repo` subdirectory.
     fn setup_python_hook_test() -> Result<(tempfile::TempDir, Arc<Project>)> {
@@ -1195,6 +1330,13 @@ mod tests {
         print("hello")
     "#};
 
+    static PEP723_SCRIPT_WITH_DEPENDENCIES: &str = indoc::indoc! {r#"
+        # /// script
+        # dependencies = ["pyecho-cli"]
+        # ///
+        print("hello")
+    "#};
+
     #[tokio::test]
     async fn hook_builder_python_pep723_overrides_user_and_pyproject() -> Result<()> {
         let (temp, project) = setup_python_hook_test()?;
@@ -1211,6 +1353,19 @@ mod tests {
             hook.language_request,
             LanguageRequest::parse(Language::Python, ">=3.11")?
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn hook_builder_python_pep723_dependencies_are_env_key_dependencies() -> Result<()> {
+        let (temp, project) = setup_python_hook_test()?;
+        let repo_path = temp.path().join("remote-repo");
+        fs_err::write(repo_path.join("hook.py"), PEP723_SCRIPT_WITH_DEPENDENCIES)?;
+
+        let hook = build_python_hook(project, repo_path, None).await?;
+
+        assert!(hook.additional_dependencies.contains("pyecho-cli"));
+        assert!(hook.env_key_dependencies().contains("pyecho-cli"));
         Ok(())
     }
 

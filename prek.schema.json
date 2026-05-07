@@ -77,6 +77,9 @@
         "python": {
           "type": "string"
         },
+        "python_uv": {
+          "type": "string"
+        },
         "r": {
           "type": "string"
         },
@@ -324,6 +327,10 @@
         "minimum_prek_version": {
           "description": "The minimum version of prek required to run this hook.",
           "type": "string"
+        },
+        "uv": {
+          "description": "Language-specific options for `language: python_uv`.",
+          "$ref": "#/definitions/PythonUvOptions"
         }
       },
       "required": [
@@ -351,6 +358,7 @@
         "perl",
         "pygrep",
         "python",
+        "python_uv",
         "r",
         "ruby",
         "rust",
@@ -428,6 +436,48 @@
         "pre-push",
         "pre-rebase",
         "prepare-commit-msg"
+      ]
+    },
+    "PythonUvOptions": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "description": "The uv project directory. Defaults to the project configuration directory.",
+          "type": "string"
+        },
+        "lockfile": {
+          "description": "The uv lockfile path. Defaults to `<project>/uv.lock`.",
+          "type": "string"
+        },
+        "dependency_groups": {
+          "description": "Dependency groups to install into the managed hook environment.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "extras": {
+          "description": "Project extras to install into the managed hook environment.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "install_project": {
+          "description": "Whether to install the current project into the managed hook environment.",
+          "type": "boolean"
+        },
+        "lock_mode": {
+          "description": "Whether uv should check lockfile freshness or use it as-is.",
+          "$ref": "#/definitions/PythonUvLockMode"
+        }
+      }
+    },
+    "PythonUvLockMode": {
+      "type": "string",
+      "enum": [
+        "locked",
+        "frozen"
       ]
     },
     "LocalRepo": {
@@ -581,6 +631,10 @@
         "minimum_prek_version": {
           "description": "The minimum version of prek required to run this hook.",
           "type": "string"
+        },
+        "uv": {
+          "description": "Language-specific options for `language: python_uv`.",
+          "$ref": "#/definitions/PythonUvOptions"
         }
       },
       "required": [
@@ -744,6 +798,10 @@
         "minimum_prek_version": {
           "description": "The minimum version of prek required to run this hook.",
           "type": "string"
+        },
+        "uv": {
+          "description": "Language-specific options for `language: python_uv`.",
+          "$ref": "#/definitions/PythonUvOptions"
         }
       },
       "required": [
@@ -912,6 +970,10 @@
         "minimum_prek_version": {
           "description": "The minimum version of prek required to run this hook.",
           "type": "string"
+        },
+        "uv": {
+          "description": "Language-specific options for `language: python_uv`.",
+          "$ref": "#/definitions/PythonUvOptions"
         }
       },
       "required": [

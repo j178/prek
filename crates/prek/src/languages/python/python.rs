@@ -13,6 +13,7 @@ use serde::Deserialize;
 use tracing::{debug, trace};
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
+use crate::config::PythonUvLockMode;
 use crate::hook::InstalledHook;
 use crate::hook::{Hook, InstallInfo};
 use crate::languages::LanguageImpl;
@@ -26,6 +27,9 @@ use crate::store::{Store, ToolBucket};
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Python;
+
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct PythonUv;
 
 pub(crate) struct PythonInfo {
     pub(crate) version: semver::Version,
@@ -235,6 +239,73 @@ impl LanguageImpl for Python {
     }
 }
 
+impl LanguageImpl for PythonUv {
+    async fn install(
+        &self,
+        hook: Arc<Hook>,
+        store: &Store,
+        reporter: &HookInstallReporter,
+    ) -> Result<InstalledHook> {
+        let progress = reporter.on_install_start(&hook);
+
+        let uv_dir = store.tools_path(ToolBucket::Uv);
+        let uv = Uv::install(store, &uv_dir)
+            .await
+            .context("Failed to install uv")?;
+
+        let mut info = InstallInfo::new(
+            hook.language,
+            hook.env_key_dependencies().clone(),
+            &store.hooks_dir(),
+        )?;
+
+        debug!(%hook, target = %info.env_path.display(), "Installing python_uv environment");
+
+        Python::create_venv(&uv, store, &info, &hook.language_request)
+            .await
+            .context("Failed to create Python virtual environment")?;
+
+        let uv_env = hook
+            .python_uv_env()
+            .expect("python_uv hook must have uv env options");
+        Python::sync_project_environment_command(&uv, store, &info.env_path, uv_env)
+            .output()
+            .await
+            .context("Failed to sync uv project environment")?;
+
+        let python = python_exec(&info.env_path);
+        let python_info = query_python_info(&python)
+            .await
+            .context("Failed to query Python info")?;
+
+        info.with_language_version(python_info.version)
+            .with_toolchain(python_info.python_exec);
+
+        info.persist_env_path();
+
+        reporter.on_install_complete(progress);
+
+        Ok(InstalledHook::Installed {
+            hook,
+            info: Arc::new(info),
+        })
+    }
+
+    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
+        Python.check_health(info).await
+    }
+
+    async fn run(
+        &self,
+        hook: &InstalledHook,
+        filenames: &[&Path],
+        store: &Store,
+        reporter: &HookRunReporter,
+    ) -> Result<(i32, Vec<u8>)> {
+        Python.run(hook, filenames, store, reporter).await
+    }
+}
+
 fn to_uv_python_request(request: &LanguageRequest) -> Option<String> {
     match request {
         LanguageRequest::Any { .. } => None,
@@ -273,6 +344,46 @@ impl Python {
         Self::remove_uv_python_override_envs(&mut cmd)
             // Remove GIT environment variables that may leak from git hooks (e.g., in worktrees).
             // These can break packages using setuptools_scm for file discovery.
+            .remove_git_envs()
+            .check(true);
+        cmd
+    }
+
+    fn sync_project_environment_command(
+        uv: &Uv,
+        store: &Store,
+        env_path: &Path,
+        uv_env: &crate::hook::PythonUvEnv,
+    ) -> Cmd {
+        let mut cmd = uv.cmd("uv sync", store);
+        cmd.arg("sync")
+            .arg("--project")
+            .arg(&uv_env.project)
+            .arg("--active")
+            .arg("--no-default-groups")
+            .env(EnvVars::VIRTUAL_ENV, env_path)
+            .current_dir(&uv_env.project);
+
+        match uv_env.lock_mode {
+            PythonUvLockMode::Locked => {
+                cmd.arg("--locked");
+            }
+            PythonUvLockMode::Frozen => {
+                cmd.arg("--frozen");
+            }
+        }
+
+        for group in &uv_env.dependency_groups {
+            cmd.arg("--group").arg(group);
+        }
+        for extra in &uv_env.extras {
+            cmd.arg("--extra").arg(extra);
+        }
+        if !uv_env.install_project {
+            cmd.arg("--no-install-project");
+        }
+
+        Self::remove_uv_python_override_envs(&mut cmd)
             .remove_git_envs()
             .check(true);
         cmd
@@ -401,8 +512,8 @@ mod tests {
     use rustc_hash::FxHashSet;
 
     use super::Python;
-    use crate::config::Language;
-    use crate::hook::InstallInfo;
+    use crate::config::{Language, PythonUvLockMode, PythonUvOptions};
+    use crate::hook::{InstallInfo, PythonUvEnv};
     use crate::languages::python::uv::Uv;
     use crate::languages::version::LanguageRequest;
     use crate::store::Store;
@@ -431,6 +542,12 @@ mod tests {
             .collect()
     }
 
+    fn args(cmd: &crate::process::Cmd) -> Vec<String> {
+        cmd.get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect()
+    }
+
     #[test]
     fn create_venv_command_removes_uv_system_python_override() {
         let (_temp, uv, store, info) = setup_test_install();
@@ -454,5 +571,58 @@ mod tests {
         assert_eq!(envs.get(EnvVars::UV_PYTHON), Some(&None));
         assert_eq!(envs.get(EnvVars::UV_MANAGED_PYTHON), Some(&None));
         assert_eq!(envs.get(EnvVars::UV_NO_MANAGED_PYTHON), Some(&None));
+    }
+
+    #[test]
+    fn sync_project_environment_command_targets_managed_venv() {
+        let temp = tempfile::tempdir().expect("create tempdir");
+        fs_err::write(
+            temp.path().join("pyproject.toml"),
+            "[project]\nname = \"example\"\nversion = \"0.1.0\"\n",
+        )
+        .expect("write pyproject");
+        fs_err::write(temp.path().join("uv.lock"), "version = 1\n").expect("write lockfile");
+
+        let uv_env = PythonUvEnv::resolve(
+            &PythonUvOptions {
+                dependency_groups: Some(vec!["typecheck".to_string()]),
+                extras: Some(vec!["typed".to_string()]),
+                install_project: Some(false),
+                lock_mode: Some(PythonUvLockMode::Frozen),
+                ..Default::default()
+            },
+            temp.path(),
+        )
+        .expect("resolve python_uv env");
+
+        let uv = Uv::new(PathBuf::from("uv"));
+        let store = Store::from_path(temp.path().join("store"));
+        let env_path = temp.path().join("managed-venv");
+        let cmd = Python::sync_project_environment_command(&uv, &store, &env_path, &uv_env);
+
+        assert_eq!(
+            args(&cmd),
+            [
+                "sync",
+                "--project",
+                temp.path().canonicalize().unwrap().to_str().unwrap(),
+                "--active",
+                "--no-default-groups",
+                "--frozen",
+                "--group",
+                "typecheck",
+                "--extra",
+                "typed",
+                "--no-install-project",
+            ]
+        );
+
+        let envs = env_map(&cmd);
+        assert_eq!(
+            envs.get(EnvVars::VIRTUAL_ENV),
+            Some(&Some(env_path.to_string_lossy().into_owned()))
+        );
+        assert_eq!(envs.get(EnvVars::UV_SYSTEM_PYTHON), Some(&None));
+        assert_eq!(cmd.get_current_dir(), Some(uv_env.project.as_path()));
     }
 }

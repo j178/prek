@@ -29,7 +29,7 @@ use memchr::memmem::Finder;
 use serde::Deserialize;
 use tracing::trace;
 
-use crate::hook::Hook;
+use crate::languages::HookMetadata;
 use crate::languages::version::LanguageRequest;
 
 static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
@@ -255,24 +255,24 @@ impl ScriptTag {
 /// First part of `entry` must be a file path to the Python script.
 /// Effectively, we are implementing a new `python-script` language which works like `script`.
 /// But we don't want to introduce a new language just for this for now.
-pub(crate) async fn extract_pep723_metadata(hook: &mut Hook) -> Result<()> {
-    if hook.entry.shell().is_some() {
+pub(crate) async fn extract_pep723_metadata(metadata: &mut HookMetadata<'_>) -> Result<()> {
+    if metadata.entry.shell().is_some() {
         trace!(
-            "Skipping reading PEP 723 metadata for hook `{hook}` because `shell` treats `entry` as shell source",
+            "Skipping reading PEP 723 metadata for hook `{metadata}` because `shell` treats `entry` as shell source",
         );
         return Ok(());
     }
 
-    if !hook.additional_dependencies.is_empty() {
+    if !metadata.additional_dependencies.is_empty() {
         trace!(
-            "Skipping reading PEP 723 metadata for hook `{hook}` because it already has `additional_dependencies`",
+            "Skipping reading PEP 723 metadata for hook `{metadata}` because it already has `additional_dependencies`",
         );
         return Ok(());
     }
 
-    let repo_path = hook.repo_path().unwrap_or(hook.work_dir());
+    let repo_path = metadata.repo_path.unwrap_or(metadata.work_dir);
 
-    let split = hook.entry.expect_direct().split()?;
+    let split = metadata.entry.expect_direct().split()?;
     let file = repo_path.join(&split[0]);
 
     let Some(script) = Pep723Script::read(&file).await? else {
@@ -280,15 +280,15 @@ pub(crate) async fn extract_pep723_metadata(hook: &mut Hook) -> Result<()> {
     };
 
     if let Some(dependencies) = script.metadata.dependencies {
-        hook.additional_dependencies = dependencies.into_iter().collect();
+        *metadata.additional_dependencies = dependencies.into_iter().collect();
     }
     if let Some(language_request) = script.metadata.requires_python {
-        if !hook.language_request.is_any() {
+        if !metadata.language_request.is_any() {
             trace!(
                 "`language_version` is ignored because `requires_python` is specified in the PEP 723 metadata"
             );
         }
-        hook.language_request = LanguageRequest::parse(hook.language, &language_request)?;
+        *metadata.language_request = LanguageRequest::parse(metadata.language, &language_request)?;
     }
 
     Ok(())

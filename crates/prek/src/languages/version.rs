@@ -92,7 +92,7 @@ impl LanguageRequest {
             Language::Deno => Self::Deno(request.parse()?),
             Language::Golang => Self::Golang(request.parse()?),
             Language::Node => Self::Node(request.parse()?),
-            Language::Python => Self::Python(request.parse()?),
+            Language::Python | Language::PythonUv => Self::Python(request.parse()?),
             Language::Ruby => Self::Ruby(request.parse()?),
             Language::Rust => Self::Rust(request.parse()?),
             Language::Conda

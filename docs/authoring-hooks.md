@@ -31,6 +31,7 @@ each manifest hook:
 | `additional_dependencies` | No | No | list of strings | Extra dependencies installed into managed hook environments. |
 | `args` | No | No | list of strings | Extra arguments appended to `entry` before filenames. |
 | `env` | No | Yes | map of strings | Runtime environment variables for the hook process. |
+| `uv` | No | Yes | object | Project sync options for `language: python_uv`. |
 | `always_run` | No | No | boolean | Run even when no files match. |
 | `fail_fast` | No | No | boolean | Stop the run immediately if this hook fails. |
 | `pass_filenames` | No | No | boolean or positive integer | Control whether, or how many, matching filenames are passed. |

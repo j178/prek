@@ -186,7 +186,7 @@ pub(crate) async fn cache_gc(
         };
         kept_configs.insert(config_path);
 
-        used_env_keys.extend(hook_env_keys_from_config(store, &config));
+        used_env_keys.extend(hook_env_keys_from_config(store, &config, config_path));
 
         // Mark repos referenced by this config (if present in store).
         // We do this via config parsing (no clone), so GC won't keep repos for missing configs.
@@ -350,8 +350,13 @@ fn print_removed_details(printer: Printer, verb: &str, removal: &Removal) -> Res
     Ok(())
 }
 
-fn hook_env_keys_from_config(store: &Store, config: &config::Config) -> Vec<HookEnvKey> {
+fn hook_env_keys_from_config(
+    store: &Store,
+    config: &config::Config,
+    config_path: &Path,
+) -> Vec<HookEnvKey> {
     let mut keys = Vec::new();
+    let project_root = config_path.parent().unwrap_or_else(|| Path::new("."));
 
     for repo_config in &config.repos {
         match repo_config {
@@ -383,7 +388,12 @@ fn hook_env_keys_from_config(store: &Store, config: &config::Config) -> Vec<Hook
                     let mut hook_spec = manifest_hook.clone();
                     hook_spec.apply_remote_hook_overrides(hook_config);
 
-                    match HookEnvKey::from_hook_spec(config, hook_spec, Some(&remote_dep)) {
+                    match HookEnvKey::from_hook_spec(
+                        config,
+                        hook_spec,
+                        Some(&remote_dep),
+                        project_root,
+                    ) {
                         Ok(Some(key)) => keys.push(key),
                         Ok(None) => {}
                         Err(err) => {
@@ -395,7 +405,7 @@ fn hook_env_keys_from_config(store: &Store, config: &config::Config) -> Vec<Hook
             ConfigRepo::Local(repo_config) => {
                 for hook in &repo_config.hooks {
                     let hook_spec = HookSpec::from(hook.clone());
-                    match HookEnvKey::from_hook_spec(config, hook_spec, None) {
+                    match HookEnvKey::from_hook_spec(config, hook_spec, None, project_root) {
                         Ok(Some(key)) => keys.push(key),
                         Ok(None) => {}
                         Err(err) => {

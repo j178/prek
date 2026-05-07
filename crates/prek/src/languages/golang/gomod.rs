@@ -5,7 +5,7 @@ use anyhow::Result;
 use tracing::trace;
 
 use crate::config::Language;
-use crate::hook::Hook;
+use crate::languages::HookMetadata;
 use crate::languages::version::LanguageRequest;
 
 fn parse_go_mod_directives(contents: &str) -> (Option<String>, Option<String>) {
@@ -104,19 +104,19 @@ async fn extract_go_mod_language_request(repo_path: &Path) -> Result<Option<Stri
     Ok(choose_language_version_from_go_mod(contents))
 }
 
-pub(crate) async fn extract_go_mod_metadata(hook: &mut Hook) -> Result<()> {
+pub(crate) async fn extract_go_mod_metadata(metadata: &mut HookMetadata<'_>) -> Result<()> {
     // Respect an explicitly configured `language_version`.
-    if !hook.language_request.is_any() {
-        trace!(hook = %hook, "Skipping go.mod metadata extraction because language_version is already configured");
+    if !metadata.language_request.is_any() {
+        trace!(hook = %metadata, "Skipping go.mod metadata extraction because language_version is already configured");
         return Ok(());
     }
 
-    let Some(repo_path) = hook.repo_path() else {
+    let Some(repo_path) = metadata.repo_path else {
         return Ok(());
     };
 
     let Some(req_str) = extract_go_mod_language_request(repo_path).await? else {
-        trace!(hook = %hook, "No go or toolchain directive found in go.mod");
+        trace!(hook = %metadata, "No go or toolchain directive found in go.mod");
         return Ok(());
     };
 
@@ -128,8 +128,8 @@ pub(crate) async fn extract_go_mod_metadata(hook: &mut Hook) -> Result<()> {
         }
     };
 
-    trace!(hook = %hook, version = %req_str, "Using go.mod-derived language_version");
-    hook.language_request = req;
+    trace!(hook = %metadata, version = %req_str, "Using go.mod-derived language_version");
+    *metadata.language_request = req;
 
     Ok(())
 }

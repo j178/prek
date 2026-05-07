@@ -27,6 +27,7 @@ If `language_version` is `system`, prek skips downloads and requires a system-in
 Languages with managed toolchain downloads in prek today:
 
 - [Python](#python)
+- [Python uv project sync](#python_uv)
 - [Node](#node)
 - [Bun](#bun)
 - [Deno](#deno)
@@ -375,6 +376,45 @@ main()
 - If `additional_dependencies` is specified in `.pre-commit-config.yaml`, script metadata will be ignored
 - When both `language_version` (in config) and `requires-python` (in script) are set, `language_version` takes precedence
 - Only `dependencies` and `requires-python` fields are supported; other metadata like `tool.uv` is ignored
+
+### python_uv
+
+**Status in prek:** ✅ Supported.
+
+`python_uv` creates a prek-managed clean virtual environment, then syncs it from the project's `uv.lock` and selected uv dependency groups or extras. It is intended for project-aware tools such as type checkers that need the project's declared dependency closure without using the user's active `.venv`.
+
+Unlike `language: python`, `python_uv` does not install the remote hook repository or `additional_dependencies`. Python packages must be declared in the uv project and locked in `uv.lock`.
+
+Example:
+
+```yaml
+repos:
+  - repo: https://github.com/astral-sh/ty-pre-commit
+    rev: v0.1.0
+    hooks:
+      - id: ty
+        language: python_uv
+        entry: ty check .
+        pass_filenames: false
+        uv:
+          project: .
+          dependency_groups: [typecheck]
+          install_project: true
+          lock_mode: locked
+```
+
+#### `uv`
+
+Supported hook options:
+
+- `project`: uv project directory. Defaults to the directory containing the prek config.
+- `lockfile`: uv lockfile path. Defaults to `<project>/uv.lock`; currently only the project's default `uv.lock` is supported.
+- `dependency_groups`: dependency groups to sync. Defaults to `[]`.
+- `extras`: extras to sync. Defaults to `[]`.
+- `install_project`: install the current project. Defaults to `true`.
+- `lock_mode`: `locked` or `frozen`. Defaults to `locked`.
+
+prek syncs with `--no-default-groups`, so `dependency_groups` is the exact group set for the hook environment.
 
 ### r
 

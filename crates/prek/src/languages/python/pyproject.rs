@@ -6,7 +6,7 @@ use serde::Deserialize;
 use tracing::trace;
 
 use crate::config::Language;
-use crate::hook::Hook;
+use crate::languages::HookMetadata;
 use crate::languages::version::LanguageRequest;
 
 #[derive(Debug, Deserialize)]
@@ -43,21 +43,21 @@ async fn extract_pyproject_requires_python(repo_path: &Path) -> Result<Option<St
 ///
 /// Only acts when `language_request` is still `Any` (i.e. no explicit
 /// `language_version` was configured by the user).
-pub(crate) async fn extract_pyproject_metadata(hook: &mut Hook) -> Result<()> {
-    if !hook.language_request.is_any() {
+pub(crate) async fn extract_pyproject_metadata(metadata: &mut HookMetadata<'_>) -> Result<()> {
+    if !metadata.language_request.is_any() {
         trace!(
-            hook = %hook,
+            hook = %metadata,
             "Skipping pyproject.toml metadata extraction because language_version is already configured",
         );
         return Ok(());
     }
 
-    let Some(repo_path) = hook.repo_path() else {
+    let Some(repo_path) = metadata.repo_path else {
         return Ok(());
     };
 
     let Some(req_str) = extract_pyproject_requires_python(repo_path).await? else {
-        trace!(hook = %hook, "No requires-python found in pyproject.toml");
+        trace!(hook = %metadata, "No requires-python found in pyproject.toml");
         return Ok(());
     };
 
@@ -69,8 +69,8 @@ pub(crate) async fn extract_pyproject_metadata(hook: &mut Hook) -> Result<()> {
         }
     };
 
-    trace!(hook = %hook, version = %req_str, "Using pyproject.toml-derived language_version");
-    hook.language_request = req;
+    trace!(hook = %metadata, version = %req_str, "Using pyproject.toml-derived language_version");
+    *metadata.language_request = req;
 
     Ok(())
 }
