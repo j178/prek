@@ -353,7 +353,7 @@ impl Python {
         uv: &Uv,
         store: &Store,
         env_path: &Path,
-        uv_env: &crate::hook::PythonUvEnv,
+        uv_env: &crate::hook_env::PythonUvEnv,
     ) -> Cmd {
         let mut cmd = uv.cmd("uv sync", store);
         cmd.arg("sync")
@@ -513,7 +513,8 @@ mod tests {
 
     use super::Python;
     use crate::config::{Language, PythonUvLockMode, PythonUvOptions};
-    use crate::hook::{InstallInfo, PythonUvEnv};
+    use crate::hook::InstallInfo;
+    use crate::hook_env::PythonUvEnv;
     use crate::languages::python::uv::Uv;
     use crate::languages::version::LanguageRequest;
     use crate::store::Store;

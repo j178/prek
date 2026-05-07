@@ -18,14 +18,11 @@ use crate::config::{
     MetaHook, PassFilenames, RemoteHook, Stages, read_manifest,
 };
 use crate::hook_entry::HookEntry;
+use crate::hook_env::{HookEnvSpec, PythonUvEnv};
 use crate::languages::version::LanguageRequest;
 use crate::languages::{HookMetadata, ShellSupport, extract_metadata};
 use crate::store::Store;
 use crate::workspace::Project;
-
-mod env_spec;
-
-pub(crate) use env_spec::{HookEnvSpec, PythonUvEnv};
 
 #[derive(Error, Debug)]
 pub(crate) enum Error {
