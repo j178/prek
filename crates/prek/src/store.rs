@@ -15,7 +15,7 @@ use tracing::{debug, warn};
 use crate::config::{RemoteRepo, RemoteRepoKey};
 use crate::fs::LockedFile;
 use crate::git::{self, TerminalPrompt};
-use crate::hook::InstallInfo;
+use crate::hook::InstalledHookEnv;
 use crate::run::CONCURRENCY;
 use crate::warn_user;
 use crate::workspace::{HookInitReporter, WorkspaceCache};
@@ -288,7 +288,7 @@ impl Store {
     }
 
     /// Returns installed hooks in the store.
-    pub(crate) async fn installed_hooks(&self) -> Vec<Arc<InstallInfo>> {
+    pub(crate) async fn installed_hooks(&self) -> Vec<Arc<InstalledHookEnv>> {
         let Ok(dirs) = fs_err::read_dir(self.hooks_dir()) else {
             return vec![];
         };
@@ -302,14 +302,14 @@ impl Store {
                         return None;
                     }
                 };
-                let info = match InstallInfo::from_env_path(&path).await {
-                    Ok(info) => info,
+                let env = match InstalledHookEnv::from_path(&path).await {
+                    Ok(env) => env,
                     Err(err) => {
                         warn!(%err, path = %path.display(), "Skipping invalid installed hook");
                         return None;
                     }
                 };
-                Some(info)
+                Some(env)
             })
             .buffer_unordered(*CONCURRENCY);
 

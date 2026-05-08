@@ -9,7 +9,7 @@ use semver::Version;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
-use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::hook::{Hook, InstalledHook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
@@ -63,13 +63,13 @@ impl LanguageImpl for Lua {
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
 
-        let mut info = InstallInfo::new(
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
 
-        debug!(%hook, target = %info.env_path.display(), "Installing Lua environment");
+        debug!(%hook, target = %env.env_path.display(), "Installing Lua environment");
 
         // Check lua and luarocks are installed.
         let lua_info = query_lua_info().await.context("Failed to query Lua info")?;
@@ -77,45 +77,45 @@ impl LanguageImpl for Lua {
         // Install dependencies for the remote repository.
         if let Some(repo_path) = hook.repo_path() {
             if let Some(rockspec) = Self::get_rockspec_file(repo_path) {
-                Self::install_rockspec(&info.env_path, repo_path, &rockspec).await?;
+                Self::install_rockspec(&env.env_path, repo_path, &rockspec).await?;
             }
         }
 
         // Install additional dependencies.
         for dep in &hook.additional_dependencies {
-            Self::install_dependency(&info.env_path, dep).await?;
+            Self::install_dependency(&env.env_path, dep).await?;
         }
 
-        info.with_toolchain(lua_info.executable)
+        env.with_toolchain(lua_info.executable)
             .with_language_version(lua_info.version);
 
-        info.persist_env_path();
+        env.persist();
 
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
+    async fn check_health(&self, env: &InstalledHookEnv) -> Result<()> {
         let current_lua_info = query_lua_info()
             .await
             .context("Failed to query current Lua info")?;
 
-        if current_lua_info.version != info.language_version {
+        if current_lua_info.version != env.language_version {
             anyhow::bail!(
                 "Lua version mismatch: expected `{}`, found `{}`",
-                info.language_version,
+                env.language_version,
                 current_lua_info.version
             );
         }
 
-        if current_lua_info.executable != info.toolchain {
+        if current_lua_info.executable != env.toolchain {
             anyhow::bail!(
                 "Lua executable mismatch: expected `{}`, found `{}`",
-                info.toolchain.display(),
+                env.toolchain.display(),
                 current_lua_info.executable.display()
             );
         }
@@ -137,8 +137,8 @@ impl LanguageImpl for Lua {
         let entry = hook.entry.resolve(Some(&new_path), store)?;
 
         let version = &hook
-            .install_info()
-            .expect("Lua must have install info")
+            .installed_env()
+            .expect("Lua hook must have an installed environment")
             .language_version;
         // version without patch, e.g. 5.4
         let version = format!("{}.{}", version.major, version.minor);

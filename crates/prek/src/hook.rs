@@ -1,3 +1,53 @@
+//! Hook model and conversion pipeline.
+//!
+//! This module contains the runtime hook types. Configuration parsing lives in
+//! `config`, and language-specific install/run behavior lives in `languages`;
+//! this module is the boundary that turns parsed configuration into executable
+//! hooks and records the managed environments those hooks use.
+//!
+//! The main concepts are:
+//!
+//! - `HookSpec`: a normalized hook definition loaded from one repo source. It
+//!   is still configuration-shaped: remote manifest hooks, local hooks, meta
+//!   hooks, and builtin hooks are all converted into this common form before
+//!   project defaults and runtime metadata are applied.
+//! - `HookBuilder`: combines a `HookSpec` with its `Project`, `Repo`, project
+//!   defaults, entry metadata, language-version request, and environment spec.
+//!   It is a short-lived builder used only while resolving configuration.
+//! - `Hook`: the resolved runtime hook. It owns the data needed to match files,
+//!   install dependencies, and run the entry. A `Hook` is not proof that an
+//!   environment exists; it only carries the request and identity needed to find
+//!   or create one.
+//! - `HookEnvSpec`: the resolved install input for a hook environment. It keeps
+//!   language-specific install settings, such as `python_uv` project options,
+//!   next to the exact environment identity derived from those settings.
+//! - `HookEnvIdentity`: the exact, persisted identity of environment contents.
+//!   It is precise only once the language is fixed; language-version matching is
+//!   checked separately against the installed environment's actual version.
+//! - `InstalledHookEnv`: metadata for an environment that was actually created
+//!   and persisted in `.prek-hook.json`, including the concrete toolchain,
+//!   language version, env path, and `HookEnvIdentity`.
+//! - `InstalledHook`: a runtime `Hook` paired with its `InstalledHookEnv`, or a
+//!   hook that does not need managed installation.
+//!
+//! The normal lifecycle is:
+//!
+//! 1. Config/manifest hook -> `HookSpec`.
+//! 2. `HookBuilder` applies defaults, extracts metadata, resolves
+//!    `HookEnvSpec`, and produces a `Hook`.
+//! 3. Installation matches `Hook::env_request()` against stored
+//!    `InstalledHookEnv` records, checking both exact identity and language
+//!    version satisfaction.
+//! 4. If no stored environment satisfies the request, the language installer
+//!    creates a new environment, fills an `InstalledHookEnv`, persists it, and
+//!    returns `InstalledHook::Installed`.
+//! 5. Running hooks only sees `InstalledHook`, so language implementations can
+//!    rely on installation metadata when a managed environment is required.
+//!
+//! Keep in mind that `HookEnvIdentity` answers "same environment contents?",
+//! while `HookEnvRequest` answers "can this installed environment satisfy this
+//! hook?". The latter includes the language and language-version request.
+
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
@@ -18,7 +68,9 @@ use crate::config::{
     MetaHook, PassFilenames, RemoteHook, Stages, read_manifest,
 };
 use crate::hook_entry::HookEntry;
-use crate::hook_env::{HookEnvKey, HookEnvSpec, PythonUvEnv};
+use crate::hook_env::{
+    HookEnvIdentity, HookEnvIdentityRef, HookEnvRequestRef, HookEnvSpec, PythonUvEnv,
+};
 use crate::languages::version::LanguageRequest;
 use crate::languages::{HookMetadata, ShellSupport, extract_metadata};
 use crate::store::Store;
@@ -321,15 +373,14 @@ impl HookBuilder {
     pub(crate) async fn build(mut self) -> Result<Hook, Error> {
         self.hook_spec.apply_project_defaults(self.project.config());
 
-        let remote_repo_dependency = self
-            .hook_spec
-            .language
-            .supports_install_env()
-            .then(|| match self.repo.as_ref() {
+        let remote_repo_dependency = if self.hook_spec.language.supports_install_env() {
+            match self.repo.as_ref() {
                 Repo::Remote { .. } => Some(self.repo.to_string()),
                 Repo::Local { .. } | Repo::Meta { .. } | Repo::Builtin { .. } => None,
-            })
-            .flatten();
+            }
+        } else {
+            None
+        };
 
         self.check()?;
 
@@ -515,12 +566,30 @@ impl Hook {
         matches!(&*self.repo, Repo::Remote { .. })
     }
 
-    /// Dependencies used to identify whether an existing hook environment can be reused.
+    /// Exact identity used to decide whether an installed environment can be reused.
+    pub(crate) fn env_identity(&self) -> HookEnvIdentityRef<'_> {
+        self.env_spec.identity()
+    }
+
+    /// Environment request used to find a reusable installed environment.
     ///
-    /// For remote hooks, the repo URL is included to avoid reusing an environment created
-    /// from a different remote repository.
-    pub(crate) fn env_key_dependencies(&self) -> &FxHashSet<String> {
-        self.env_spec.dependencies()
+    /// This includes a version request, so it is intentionally broader than the
+    /// exact persisted environment identity.
+    pub(crate) fn env_request(&self) -> HookEnvRequestRef<'_> {
+        HookEnvRequestRef {
+            language: self.language,
+            identity: self.env_identity(),
+            language_request: &self.language_request,
+        }
+    }
+
+    /// Returns whether two hooks may try to reuse the same managed environment.
+    ///
+    /// The language version request is deliberately not part of this grouping:
+    /// it is a selector checked against the installed environment's actual
+    /// version, so two different requests may still be satisfied by one install.
+    pub(crate) fn shares_env_identity_with(&self, other: &Self) -> bool {
+        self.language == other.language && self.env_identity() == other.env_identity()
     }
 
     pub(crate) fn python_uv_env(&self) -> Option<&PythonUvEnv> {
@@ -546,7 +615,7 @@ impl Hook {
 pub(crate) enum InstalledHook {
     Installed {
         hook: Arc<Hook>,
-        info: Arc<InstallInfo>,
+        env: Arc<InstalledHookEnv>,
     },
     NoNeedInstall(Arc<Hook>),
 }
@@ -575,7 +644,7 @@ impl InstalledHook {
     /// Get the path to the environment where the hook is installed.
     pub(crate) fn env_path(&self) -> Option<&Path> {
         match self {
-            InstalledHook::Installed { info, .. } => Some(&info.env_path),
+            InstalledHook::Installed { env, .. } => Some(&env.env_path),
             InstalledHook::NoNeedInstall(_) => None,
         }
     }
@@ -583,41 +652,41 @@ impl InstalledHook {
     /// Get the directory the toolchain is installed in.
     pub(crate) fn toolchain_dir(&self) -> Option<&Path> {
         match self {
-            InstalledHook::Installed { info, .. } => info.toolchain.parent(),
+            InstalledHook::Installed { env, .. } => env.toolchain.parent(),
             InstalledHook::NoNeedInstall(_) => None,
         }
     }
 
-    /// Get the install info of the hook if it is installed.
-    pub(crate) fn install_info(&self) -> Option<&InstallInfo> {
+    /// Get the installed hook environment metadata if this hook is installed.
+    pub(crate) fn installed_env(&self) -> Option<&InstalledHookEnv> {
         match self {
-            InstalledHook::Installed { info, .. } => Some(info),
+            InstalledHook::Installed { env, .. } => Some(env),
             InstalledHook::NoNeedInstall(_) => None,
         }
     }
 
     /// Mark the hook as installed in the environment.
     pub(crate) async fn mark_as_installed(&self, _store: &Store) -> Result<()> {
-        let Some(info) = self.install_info() else {
+        let Some(env) = self.installed_env() else {
             return Ok(());
         };
 
-        let content =
-            serde_json::to_string_pretty(info).context("Failed to serialize install info")?;
+        let content = serde_json::to_string_pretty(env)
+            .context("Failed to serialize installed hook environment metadata")?;
 
-        fs_err::tokio::write(info.env_path.join(HOOK_MARKER), content)
+        fs_err::tokio::write(env.env_path.join(HOOK_MARKER), content)
             .await
-            .context("Failed to write install info")?;
+            .context("Failed to write installed hook environment metadata")?;
 
         Ok(())
     }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub(crate) struct InstallInfo {
+pub(crate) struct InstalledHookEnv {
     pub(crate) language: Language,
     pub(crate) language_version: semver::Version,
-    pub(crate) dependencies: FxHashSet<String>,
+    pub(crate) identity: HookEnvIdentity,
     pub(crate) env_path: PathBuf,
     pub(crate) toolchain: PathBuf,
     extra: FxHashMap<String, String>,
@@ -625,12 +694,12 @@ pub(crate) struct InstallInfo {
     temp_dir: Option<TempDir>,
 }
 
-impl Clone for InstallInfo {
+impl Clone for InstalledHookEnv {
     fn clone(&self) -> Self {
         Self {
             language: self.language,
             language_version: self.language_version.clone(),
-            dependencies: self.dependencies.clone(),
+            identity: self.identity.clone(),
             env_path: self.env_path.clone(),
             toolchain: self.toolchain.clone(),
             extra: self.extra.clone(),
@@ -639,10 +708,10 @@ impl Clone for InstallInfo {
     }
 }
 
-impl InstallInfo {
+impl InstalledHookEnv {
     pub(crate) fn new(
         language: Language,
-        dependencies: FxHashSet<String>,
+        identity: HookEnvIdentity,
         hooks_dir: &Path,
     ) -> Result<Self, Error> {
         let env_path = tempfile::Builder::new()
@@ -652,7 +721,7 @@ impl InstallInfo {
 
         Ok(Self {
             language,
-            dependencies,
+            identity,
             env_path: env_path.path().to_path_buf(),
             language_version: semver::Version::new(0, 0, 0),
             toolchain: PathBuf::new(),
@@ -661,17 +730,17 @@ impl InstallInfo {
         })
     }
 
-    pub(crate) fn persist_env_path(&mut self) {
+    pub(crate) fn persist(&mut self) {
         if let Some(temp_dir) = self.temp_dir.take() {
             self.env_path = temp_dir.keep();
         }
     }
 
-    pub(crate) async fn from_env_path(path: &Path) -> Result<Self> {
+    pub(crate) async fn from_path(path: &Path) -> Result<Self> {
         let content = fs_err::tokio::read_to_string(path.join(HOOK_MARKER)).await?;
-        let info: InstallInfo = serde_json::from_str(&content)?;
+        let env: InstalledHookEnv = serde_json::from_str(&content)?;
 
-        Ok(info)
+        Ok(env)
     }
 
     pub(crate) async fn check_health(&self) -> Result<()> {
@@ -697,26 +766,16 @@ impl InstallInfo {
         self.extra.get(key)
     }
 
-    /// Returns whether this installed environment can be reused for the hook.
+    /// Returns whether this installed environment satisfies the normalized hook
+    /// environment request.
     ///
-    /// Used when a fully resolved hook is available, such as install reuse
-    /// checks before running a hook.
-    pub(crate) fn matches(&self, hook: &Hook) -> bool {
-        hook.language.supports_install_env()
-            && self.language == hook.language
-            && self.dependencies == *hook.env_key_dependencies()
-            && hook.language_request.satisfied_by(self)
-    }
-
-    /// Returns whether this installed environment matches the normalized hook
-    /// environment key.
-    ///
-    /// Used when only the normalized key is available, such as cache GC scanning
+    /// Used when only the normalized request is available, such as cache GC scanning
     /// configured hooks without building full hook instances.
-    pub(crate) fn matches_env_key(&self, key: &HookEnvKey) -> bool {
-        self.language == key.language
-            && self.dependencies == key.dependencies
-            && key.language_request.satisfied_by(self)
+    pub(crate) fn satisfies(&self, request: HookEnvRequestRef<'_>) -> bool {
+        request.language.supports_install_env()
+            && self.language == request.language
+            && HookEnvIdentityRef::from(&self.identity) == request.identity
+            && request.language_request.satisfied_by(self)
     }
 }
 
@@ -736,6 +795,7 @@ mod tests {
         RemoteHook, Shell, Stage, Stages,
     };
     use crate::hook::HookSpec;
+    use crate::hook_env::{HookEnvIdentity, HookEnvIdentityRef};
     use crate::languages::version::LanguageRequest;
     use crate::workspace::Project;
 
@@ -841,7 +901,10 @@ mod tests {
                 hooks: [],
             },
             env_spec: Dependencies(
-                {},
+                DependencyEnvIdentity {
+                    dependencies: {},
+                    remote_repo: None,
+                },
             ),
             idx: 7,
             id: "test-hook",
@@ -1116,7 +1179,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hook_builder_python_uv_env_key_tracks_lockfile_content() -> Result<()> {
+    async fn hook_builder_python_uv_identity_tracks_lockfile_content() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let config_path = temp.path().join(PRE_COMMIT_CONFIG_YAML);
         fs_err::write(&config_path, "repos: []\n")?;
@@ -1162,14 +1225,71 @@ mod tests {
         assert_eq!(uv.extras, ["cli", "typed"]);
         assert!(!uv.install_project);
         assert_eq!(uv.lock_mode, PythonUvLockMode::Frozen);
-        let first_dependencies = hook.env_key_dependencies().clone();
+        let first_identity = HookEnvIdentity::from(hook.env_identity());
 
         fs_err::write(temp.path().join("uv.lock"), "version = 2\n")?;
 
         let hook = HookBuilder::new(project, repo, hook_spec, 0)
             .build()
             .await?;
-        assert_ne!(first_dependencies, *hook.env_key_dependencies());
+        assert_ne!(
+            HookEnvIdentityRef::from(&first_identity),
+            hook.env_identity()
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn hook_builder_python_uv_identity_preserves_group_boundaries() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join(PRE_COMMIT_CONFIG_YAML);
+        fs_err::write(&config_path, "repos: []\n")?;
+        fs_err::write(
+            temp.path().join("pyproject.toml"),
+            "[project]\nname = \"example\"\nversion = \"0.1.0\"\n",
+        )?;
+        fs_err::write(temp.path().join("uv.lock"), "version = 1\n")?;
+
+        let project = Arc::new(Project::from_config_file(
+            Cow::Borrowed(&config_path),
+            None,
+        )?);
+        let repo = Arc::new(Repo::Local { hooks: vec![] });
+
+        let hook_spec = |dependency_groups| HookSpec {
+            id: "ty".to_string(),
+            name: "ty".to_string(),
+            entry: "ty check .".to_string(),
+            language: Language::PythonUv,
+            priority: None,
+            options: HookOptions {
+                uv: Some(PythonUvOptions {
+                    dependency_groups: Some(dependency_groups),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        };
+
+        let joined = HookBuilder::new(
+            project.clone(),
+            repo.clone(),
+            hook_spec(vec!["a,b".to_string()]),
+            0,
+        )
+        .build()
+        .await?;
+        let split = HookBuilder::new(
+            project,
+            repo,
+            hook_spec(vec!["a".to_string(), "b".to_string()]),
+            0,
+        )
+        .build()
+        .await?;
+
+        assert_ne!(joined.env_identity(), split.env_identity());
 
         Ok(())
     }
@@ -1256,7 +1376,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hook_builder_python_pep723_dependencies_are_env_key_dependencies() -> Result<()> {
+    async fn hook_builder_python_pep723_dependencies_are_env_identity_dependencies() -> Result<()> {
         let (temp, project) = setup_python_hook_test()?;
         let repo_path = temp.path().join("remote-repo");
         fs_err::write(repo_path.join("hook.py"), PEP723_SCRIPT_WITH_DEPENDENCIES)?;
@@ -1264,7 +1384,10 @@ mod tests {
         let hook = build_python_hook(project, repo_path, None).await?;
 
         assert!(hook.additional_dependencies.contains("pyecho-cli"));
-        assert!(hook.env_key_dependencies().contains("pyecho-cli"));
+        let HookEnvIdentityRef::Dependencies(identity) = hook.env_identity() else {
+            panic!("expected dependency identity");
+        };
+        assert!(identity.dependencies.contains("pyecho-cli"));
         Ok(())
     }
 

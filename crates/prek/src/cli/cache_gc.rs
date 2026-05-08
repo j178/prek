@@ -14,8 +14,8 @@ use tracing::{debug, trace, warn};
 use crate::cli::ExitStatus;
 use crate::cli::cache_size::{dir_size_bytes, human_readable_bytes};
 use crate::config::{self, Error as ConfigError, Repo as ConfigRepo, load_config};
-use crate::hook::{HOOK_MARKER, HookSpec, InstallInfo, Repo as HookRepo};
-use crate::hook_env::HookEnvKey;
+use crate::hook::{HOOK_MARKER, HookSpec, InstalledHookEnv, Repo as HookRepo};
+use crate::hook_env::{HookEnvIdentity, HookEnvRequest};
 use crate::printer::Printer;
 use crate::store::{CacheBucket, REPO_MARKER, Store, ToolBucket};
 
@@ -160,7 +160,7 @@ pub(crate) async fn cache_gc(
     let mut used_tools: FxHashSet<ToolBucket> = FxHashSet::default();
     let mut used_tool_versions: FxHashMap<ToolBucket, FxHashSet<String>> = FxHashMap::default();
     let mut used_cache: FxHashSet<CacheBucket> = FxHashSet::default();
-    let mut used_env_keys: Vec<HookEnvKey> = Vec::new();
+    let mut used_env_requests: Vec<HookEnvRequest> = Vec::new();
 
     // Always keep Prek's own cache.
     used_cache.insert(CacheBucket::Prek);
@@ -187,7 +187,7 @@ pub(crate) async fn cache_gc(
         };
         kept_configs.insert(config_path);
 
-        used_env_keys.extend(hook_env_keys_from_config(store, &config, config_path));
+        used_env_requests.extend(hook_env_requests_from_config(store, &config, config_path));
 
         // Mark repos referenced by this config (if present in store).
         // We do this via config parsing (no clone), so GC won't keep repos for missing configs.
@@ -206,17 +206,20 @@ pub(crate) async fn cache_gc(
     }
 
     // Mark tools/caches from hook languages.
-    for key in &used_env_keys {
-        used_tools.extend(key.language.tool_buckets());
-        used_cache.extend(key.language.cache_buckets());
+    for request in &used_env_requests {
+        used_tools.extend(request.language.tool_buckets());
+        used_cache.extend(request.language.cache_buckets());
     }
 
     // Mark hook environments by matching already-installed env metadata.
     // While doing this, try to derive the specific tool *version* directories in use from
-    // `InstallInfo.toolchain` (which is persisted in `.prek-hook.json`).
-    for info in &installed {
-        if used_env_keys.iter().any(|key| info.matches_env_key(key)) {
-            if let Some(dir) = info
+    // `InstalledHookEnv.toolchain` (which is persisted in `.prek-hook.json`).
+    for env in &installed {
+        if used_env_requests
+            .iter()
+            .any(|request| env.satisfies(request.into()))
+        {
+            if let Some(dir) = env
                 .env_path
                 .file_name()
                 .and_then(|s| s.to_str())
@@ -225,7 +228,7 @@ pub(crate) async fn cache_gc(
                 used_hook_env_dirs.insert(dir);
             }
 
-            mark_tool_versions_from_install_info(store, info, &mut used_tool_versions);
+            mark_tool_versions_from_installed_env(store, env, &mut used_tool_versions);
         }
     }
 
@@ -351,12 +354,12 @@ fn print_removed_details(printer: Printer, verb: &str, removal: &Removal) -> Res
     Ok(())
 }
 
-fn hook_env_keys_from_config(
+fn hook_env_requests_from_config(
     store: &Store,
     config: &config::Config,
     config_path: &Path,
-) -> Vec<HookEnvKey> {
-    let mut keys = Vec::new();
+) -> Vec<HookEnvRequest> {
+    let mut requests = Vec::new();
     let project_root = config_path.parent().unwrap_or_else(|| Path::new("."));
 
     for repo_config in &config.repos {
@@ -389,16 +392,16 @@ fn hook_env_keys_from_config(
                     let mut hook_spec = manifest_hook.clone();
                     hook_spec.apply_remote_hook_overrides(hook_config);
 
-                    match HookEnvKey::from_hook_spec(
+                    match HookEnvRequest::from_hook_spec(
                         config,
                         hook_spec,
                         Some(&remote_dep),
                         project_root,
                     ) {
-                        Ok(Some(key)) => keys.push(key),
+                        Ok(Some(request)) => requests.push(request),
                         Ok(None) => {}
                         Err(err) => {
-                            warn!(hook = %hook_config.id, repo = %remote_dep, %err, "Failed to compute hook env key, skipping");
+                            warn!(hook = %hook_config.id, repo = %remote_dep, %err, "Failed to compute hook env request, skipping");
                         }
                     }
                 }
@@ -406,11 +409,11 @@ fn hook_env_keys_from_config(
             ConfigRepo::Local(repo_config) => {
                 for hook in &repo_config.hooks {
                     let hook_spec = HookSpec::from(hook.clone());
-                    match HookEnvKey::from_hook_spec(config, hook_spec, None, project_root) {
-                        Ok(Some(key)) => keys.push(key),
+                    match HookEnvRequest::from_hook_spec(config, hook_spec, None, project_root) {
+                        Ok(Some(request)) => requests.push(request),
                         Ok(None) => {}
                         Err(err) => {
-                            warn!(hook = %hook.id, %err, "Failed to compute hook env key, skipping");
+                            warn!(hook = %hook.id, %err, "Failed to compute hook env request, skipping");
                         }
                     }
                 }
@@ -419,20 +422,20 @@ fn hook_env_keys_from_config(
         }
     }
 
-    keys
+    requests
 }
 
-fn mark_tool_versions_from_install_info(
+fn mark_tool_versions_from_installed_env(
     store: &Store,
-    info: &InstallInfo,
+    env: &InstalledHookEnv,
     used_tool_versions: &mut FxHashMap<ToolBucket, FxHashSet<String>>,
 ) {
-    // NOTE: `InstallInfo.toolchain` is typically the executable path (e.g.
+    // NOTE: `InstalledHookEnv.toolchain` is typically the executable path (e.g.
     // tools/go/1.24.0/bin/go). We keep the first path component under the tool bucket.
     // If we can't recognize it, we do nothing (and GC will keep all versions).
-    for bucket in info.language.tool_buckets() {
+    for bucket in env.language.tool_buckets() {
         let bucket_root = store.tools_path(*bucket);
-        if let Some(version) = tool_version_dir_name(&bucket_root, &info.toolchain) {
+        if let Some(version) = tool_version_dir_name(&bucket_root, &env.toolchain) {
             used_tool_versions
                 .entry(*bucket)
                 .or_default()
@@ -710,13 +713,13 @@ fn sweep_stale_patch_files(root: &Path, dry_run: bool, collect_names: bool) -> R
 fn label_for_entry(
     kind: RemovalKind,
     repo_marker: Option<&RepoMarker>,
-    hook_marker: Option<&InstallInfo>,
+    hook_marker: Option<&InstalledHookEnv>,
 ) -> Option<String> {
     match kind {
         RemovalKind::Repos => repo_marker.map(|repo| format!("{}@{}", repo.repo, repo.rev)),
-        RemovalKind::HookEnvs => hook_marker.map(|info| {
+        RemovalKind::HookEnvs => hook_marker.map(|env| {
             // Keep this short; more info goes in detail lines.
-            format!("{} env", info.language.as_ref())
+            format!("{} env", env.language.as_ref())
         }),
         _ => None,
     }
@@ -725,14 +728,14 @@ fn label_for_entry(
 fn detail_lines_for_entry(
     kind: RemovalKind,
     _repo_marker: Option<&RepoMarker>,
-    hook_marker: Option<&InstallInfo>,
+    hook_marker: Option<&InstalledHookEnv>,
 ) -> Vec<String> {
     const MAX_VALUE_CHARS: usize = 140;
 
     match kind {
         RemovalKind::Repos => vec![],
         RemovalKind::HookEnvs => {
-            let Some(info) = hook_marker else {
+            let Some(env) = hook_marker else {
                 return Vec::new();
             };
 
@@ -740,21 +743,32 @@ fn detail_lines_for_entry(
             lines.push(format!(
                 "{}: {} ({})",
                 "language".dimmed().bold(),
-                info.language.as_ref(),
-                info.language_version
+                env.language.as_ref(),
+                env.language_version
             ));
 
-            let (repo_dep, deps) = split_repo_dependency(&info.dependencies);
-            if let Some(repo_dep) = repo_dep {
-                lines.push(format!(
-                    "{}: {}",
-                    "repo".dimmed().bold(),
-                    truncate_end(&repo_dep, MAX_VALUE_CHARS)
-                ));
-            }
-            if !deps.is_empty() {
-                let deps_str = format_dependency_list(&deps, 6, MAX_VALUE_CHARS);
-                lines.push(format!("{}: {deps_str}", "deps".dimmed().bold()));
+            match &env.identity {
+                HookEnvIdentity::Dependencies(identity) => {
+                    if let Some(repo) = &identity.remote_repo {
+                        lines.push(format!(
+                            "{}: {}",
+                            "repo".dimmed().bold(),
+                            truncate_end(repo, MAX_VALUE_CHARS)
+                        ));
+                    }
+                    if !identity.dependencies.is_empty() {
+                        let deps = identity.dependencies.iter().cloned().collect::<Vec<_>>();
+                        let deps_str = format_dependency_list(&deps, 6, MAX_VALUE_CHARS);
+                        lines.push(format!("{}: {deps_str}", "deps".dimmed().bold()));
+                    }
+                }
+                HookEnvIdentity::PythonUv(identity) => {
+                    lines.push(format!(
+                        "{}: {}",
+                        "python_uv".dimmed().bold(),
+                        truncate_end(&identity.fingerprint, MAX_VALUE_CHARS)
+                    ));
+                }
             }
             lines
         }
@@ -776,7 +790,7 @@ fn read_repo_marker(root: &Path) -> Option<RepoMarker> {
     serde_json::from_str(&content).ok()
 }
 
-fn read_hook_marker(root: &Path) -> Option<InstallInfo> {
+fn read_hook_marker(root: &Path) -> Option<InstalledHookEnv> {
     let content = fs_err::read_to_string(root.join(HOOK_MARKER)).ok()?;
     serde_json::from_str(&content).ok()
 }
@@ -791,30 +805,6 @@ fn truncate_end(s: &str, max_chars: usize) -> String {
         .collect::<String>();
     out.push('…');
     out
-}
-
-fn split_repo_dependency(deps: &FxHashSet<String>) -> (Option<String>, Vec<String>) {
-    // Best-effort: the remote repo dependency is typically `repo@rev`.
-    // Prefer URL-like values to avoid accidentally treating PEP508 deps as repo identifiers.
-    let mut repo_dep: Option<String> = None;
-    let mut rest = Vec::new();
-
-    for dep in deps {
-        if repo_dep.is_none()
-            && dep.contains('@')
-            && (dep.contains("://")
-                || dep.starts_with('/')
-                || dep.starts_with("..")
-                || dep.starts_with('.'))
-        {
-            repo_dep = Some(dep.clone());
-        } else {
-            rest.push(dep.clone());
-        }
-    }
-
-    rest.sort_unstable();
-    (repo_dep, rest)
 }
 
 fn format_dependency_list(deps: &[String], max_items: usize, max_chars: usize) -> String {
@@ -852,33 +842,6 @@ mod tests {
         // 3 unicode scalar values.
         assert_eq!(truncate_end("ééé", 3), "ééé");
         assert_eq!(truncate_end("ééé", 2), "é…");
-    }
-
-    #[test]
-    fn split_repo_dependency_prefers_url_like_repo_at_rev() {
-        let mut deps = FxHashSet::default();
-        deps.insert("requests==2.32.0".to_string());
-        deps.insert("black==24.1.0".to_string());
-        deps.insert("https://github.com/pre-commit/pre-commit-hooks@v1.0.0".to_string());
-
-        let (repo_dep, rest) = split_repo_dependency(&deps);
-
-        assert_eq!(
-            repo_dep.as_deref(),
-            Some("https://github.com/pre-commit/pre-commit-hooks@v1.0.0")
-        );
-        assert_eq!(rest, vec!["black==24.1.0", "requests==2.32.0"]);
-    }
-
-    #[test]
-    fn split_repo_dependency_returns_none_when_no_repo_like_dep() {
-        let mut deps = FxHashSet::default();
-        deps.insert("requests==2.32.0".to_string());
-        deps.insert("black==24.1.0".to_string());
-
-        let (repo_dep, rest) = split_repo_dependency(&deps);
-        assert!(repo_dep.is_none());
-        assert_eq!(rest, vec!["black==24.1.0", "requests==2.32.0"]);
     }
 
     #[test]

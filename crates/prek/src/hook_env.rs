@@ -1,24 +1,28 @@
-use std::hash::Hasher;
+use std::collections::BTreeSet;
+use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use rustc_hash::{FxBuildHasher, FxHashSet};
+use rustc_hash::FxHashSet;
+use serde::{Deserialize, Serialize};
 
 use crate::config::{Config, Language, PythonUvLockMode, PythonUvOptions};
 use crate::hook::HookSpec;
 use crate::languages::version::LanguageRequest;
 
-/// Resolved description of the environment a hook installs into and reuses.
+/// Resolved installer inputs for a hook environment.
 ///
-/// A hook environment is identified by the language runtime request plus this
-/// language-specific dependency set. The spec is the single source of truth for
-/// environment reuse, cache GC, and installer inputs; it does not perform
-/// installation itself.
+/// This keeps language-specific installation data, such as `python_uv` project
+/// settings, next to the exact identity used for environment reuse. It does not
+/// perform installation itself.
 #[derive(Debug, Clone)]
 pub(crate) enum HookEnvSpec {
-    Dependencies(FxHashSet<String>),
-    PythonUv(PythonUvEnv),
+    Dependencies(DependencyEnvIdentity),
+    PythonUv {
+        env: PythonUvEnv,
+        identity: PythonUvEnvIdentity,
+    },
 }
 
 impl HookEnvSpec {
@@ -38,7 +42,8 @@ impl HookEnvSpec {
 
             let default_uv = PythonUvOptions::default();
             let uv = uv.unwrap_or(&default_uv);
-            Ok(Self::PythonUv(PythonUvEnv::resolve(uv, project_root)?))
+            let (env, identity) = PythonUvEnv::resolve(uv, project_root)?;
+            Ok(Self::PythonUv { env, identity })
         } else {
             if uv.is_some() {
                 anyhow::bail!(
@@ -48,37 +53,130 @@ impl HookEnvSpec {
 
             validate_additional_dependencies(language, additional_dependencies)?;
 
-            Ok(Self::Dependencies(env_key_dependencies(
+            Ok(Self::Dependencies(DependencyEnvIdentity::new(
                 additional_dependencies,
                 remote_repo_dependency,
             )))
         }
     }
 
-    pub(crate) fn dependencies(&self) -> &FxHashSet<String> {
+    pub(crate) fn identity(&self) -> HookEnvIdentityRef<'_> {
         match self {
-            Self::Dependencies(dependencies) => dependencies,
-            Self::PythonUv(env) => env.dependencies(),
+            Self::Dependencies(identity) => HookEnvIdentityRef::Dependencies(identity),
+            Self::PythonUv { identity, .. } => HookEnvIdentityRef::PythonUv(identity),
         }
     }
 
     pub(crate) fn python_uv(&self) -> Option<&PythonUvEnv> {
         match self {
             Self::Dependencies(_) => None,
-            Self::PythonUv(env) => Some(env),
+            Self::PythonUv { env, .. } => Some(env),
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct HookEnvKey {
+/// Exact, persisted identity of an installed hook environment.
+///
+/// Unlike [`HookEnvRequest`], this is not a selector: two identities are either
+/// equal or they describe different environment contents. It intentionally
+/// separates install-time dependencies from other language-specific fingerprints
+/// such as `python_uv` lockfile state.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+pub(crate) enum HookEnvIdentity {
+    Dependencies(DependencyEnvIdentity),
+    PythonUv(PythonUvEnvIdentity),
+}
+
+impl HookEnvIdentity {
+    #[cfg(test)]
+    pub(crate) fn empty_dependencies() -> Self {
+        Self::Dependencies(DependencyEnvIdentity::new(&FxHashSet::default(), None))
+    }
+}
+
+/// Borrowed view of an environment identity.
+///
+/// Use this for matching and grouping. Convert to [`HookEnvIdentity`] only when
+/// the identity must outlive the resolved hook, such as when writing install
+/// metadata or collecting cache-GC requests.
+#[derive(Debug, Clone, Copy, Hash)]
+pub(crate) enum HookEnvIdentityRef<'a> {
+    Dependencies(&'a DependencyEnvIdentity),
+    PythonUv(&'a PythonUvEnvIdentity),
+}
+
+impl From<HookEnvIdentityRef<'_>> for HookEnvIdentity {
+    fn from(identity: HookEnvIdentityRef<'_>) -> Self {
+        match identity {
+            HookEnvIdentityRef::Dependencies(identity) => Self::Dependencies(identity.clone()),
+            HookEnvIdentityRef::PythonUv(identity) => Self::PythonUv(identity.clone()),
+        }
+    }
+}
+
+impl<'a> From<&'a HookEnvIdentity> for HookEnvIdentityRef<'a> {
+    fn from(identity: &'a HookEnvIdentity) -> Self {
+        match identity {
+            HookEnvIdentity::Dependencies(identity) => Self::Dependencies(identity),
+            HookEnvIdentity::PythonUv(identity) => Self::PythonUv(identity),
+        }
+    }
+}
+
+impl Eq for HookEnvIdentityRef<'_> {}
+
+impl<'a, 'b> PartialEq<HookEnvIdentityRef<'b>> for HookEnvIdentityRef<'a> {
+    fn eq(&self, other: &HookEnvIdentityRef<'b>) -> bool {
+        match (self, other) {
+            (Self::Dependencies(left), HookEnvIdentityRef::Dependencies(right)) => left == right,
+            (Self::PythonUv(left), HookEnvIdentityRef::PythonUv(right)) => left == right,
+            _ => false,
+        }
+    }
+}
+
+/// Identity for languages whose environment is determined by dependency specs.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub(crate) struct DependencyEnvIdentity {
+    /// User-provided dependency specs that affect the managed hook environment.
+    pub(crate) dependencies: BTreeSet<String>,
+    /// Remote hook repository identity, included because the repository package
+    /// itself is installed into many language environments.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) remote_repo: Option<String>,
+}
+
+impl DependencyEnvIdentity {
+    fn new(additional_dependencies: &FxHashSet<String>, remote_repo: Option<&str>) -> Self {
+        Self {
+            dependencies: additional_dependencies.iter().cloned().collect(),
+            remote_repo: remote_repo.map(str::to_string),
+        }
+    }
+}
+
+/// Identity for `language: python_uv` environments.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub(crate) struct PythonUvEnvIdentity {
+    /// Versioned digest of uv project inputs that affect `uv sync`.
+    pub(crate) fingerprint: String,
+}
+
+/// Environment lookup request derived from hook configuration.
+///
+/// This is not an exact key: `language_request` may be a range or `default`,
+/// so an installed environment satisfies the request only after checking its
+/// actual language version.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct HookEnvRequest {
     pub(crate) language: Language,
-    pub(crate) dependencies: FxHashSet<String>,
+    pub(crate) identity: HookEnvIdentity,
     pub(crate) language_request: LanguageRequest,
 }
 
-impl HookEnvKey {
-    /// Compute the key used to match an installed hook environment.
+impl HookEnvRequest {
+    /// Compute the environment request used to find reusable installed envs.
     ///
     /// Returns `Ok(None)` if this hook does not install an environment.
     pub(crate) fn from_hook_spec(
@@ -117,13 +215,34 @@ impl HookEnvKey {
             project_root,
             remote_repo_dependency,
         )?;
-        let dependencies = env_spec.dependencies().clone();
+        let identity = env_spec.identity().into();
 
         Ok(Some(Self {
             language,
-            dependencies,
+            identity,
             language_request,
         }))
+    }
+}
+
+/// Borrowed environment lookup request.
+///
+/// This avoids cloning exact identity data when a resolved hook is only being
+/// compared against installed environments.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct HookEnvRequestRef<'a> {
+    pub(crate) language: Language,
+    pub(crate) identity: HookEnvIdentityRef<'a>,
+    pub(crate) language_request: &'a LanguageRequest,
+}
+
+impl<'a> From<&'a HookEnvRequest> for HookEnvRequestRef<'a> {
+    fn from(request: &'a HookEnvRequest) -> Self {
+        Self {
+            language: request.language,
+            identity: HookEnvIdentityRef::from(&request.identity),
+            language_request: &request.language_request,
+        }
     }
 }
 
@@ -135,13 +254,15 @@ pub(crate) struct PythonUvEnv {
     pub(crate) extras: Vec<String>,
     pub(crate) install_project: bool,
     pub(crate) lock_mode: PythonUvLockMode,
-    dependencies: FxHashSet<String>,
 }
 
 impl PythonUvEnv {
     const SCHEMA_VERSION: &'static str = "python_uv_v1";
 
-    pub(crate) fn resolve(options: &PythonUvOptions, project_root: &Path) -> Result<Self> {
+    pub(crate) fn resolve(
+        options: &PythonUvOptions,
+        project_root: &Path,
+    ) -> Result<(Self, PythonUvEnvIdentity)> {
         let project = options.project.as_deref().map_or_else(
             || project_root.to_path_buf(),
             |path| resolve_path(project_root, path),
@@ -195,7 +316,7 @@ impl PythonUvEnv {
         let install_project = options.install_project.unwrap_or(true);
         let lock_mode = options.lock_mode.unwrap_or_default();
 
-        let dependencies = python_uv_env_key_dependencies(
+        let identity = python_uv_env_identity(
             &project,
             &lockfile,
             &pyproject,
@@ -205,39 +326,18 @@ impl PythonUvEnv {
             lock_mode,
         )?;
 
-        Ok(Self {
-            project,
-            lockfile,
-            dependency_groups,
-            extras,
-            install_project,
-            lock_mode,
-            dependencies,
-        })
+        Ok((
+            Self {
+                project,
+                lockfile,
+                dependency_groups,
+                extras,
+                install_project,
+                lock_mode,
+            },
+            identity,
+        ))
     }
-
-    fn dependencies(&self) -> &FxHashSet<String> {
-        &self.dependencies
-    }
-}
-
-/// Builds the dependency set used to identify a hook environment.
-///
-/// For remote hooks, `remote_repo_dependency` is included so environments from different
-/// repositories are not reused accidentally.
-fn env_key_dependencies(
-    additional_dependencies: &FxHashSet<String>,
-    remote_repo_dependency: Option<&str>,
-) -> FxHashSet<String> {
-    let mut deps = FxHashSet::with_capacity_and_hasher(
-        additional_dependencies.len() + usize::from(remote_repo_dependency.is_some()),
-        FxBuildHasher,
-    );
-    deps.extend(additional_dependencies.iter().cloned());
-    if let Some(dep) = remote_repo_dependency {
-        deps.insert(dep.to_string());
-    }
-    deps
 }
 
 fn validate_additional_dependencies(
@@ -267,7 +367,7 @@ fn validate_additional_dependencies(
     Ok(())
 }
 
-fn python_uv_env_key_dependencies(
+fn python_uv_env_identity(
     project: &Path,
     lockfile: &Path,
     pyproject: &Path,
@@ -275,26 +375,48 @@ fn python_uv_env_key_dependencies(
     extras: &[String],
     install_project: bool,
     lock_mode: PythonUvLockMode,
-) -> Result<FxHashSet<String>> {
-    let mut dependencies = FxHashSet::default();
-    dependencies.insert(format!("schema={}", PythonUvEnv::SCHEMA_VERSION));
-    dependencies.insert(format!("project={}", project.display()));
-    dependencies.insert(format!("lockfile={}", lockfile.display()));
-    dependencies.insert(format!("lockfile_hash={}", hash_file(lockfile)?));
-    dependencies.insert(format!("pyproject_hash={}", hash_file(pyproject)?));
-    dependencies.insert(format!("dependency_groups={}", dependency_groups.join(",")));
-    dependencies.insert(format!("extras={}", extras.join(",")));
-    dependencies.insert(format!("install_project={install_project}"));
-    dependencies.insert(format!("lock_mode={lock_mode:?}"));
+) -> Result<PythonUvEnvIdentity> {
+    let key = PythonUvEnvCacheKey {
+        schema: PythonUvEnv::SCHEMA_VERSION,
+        source: PythonUvEnvSourceCacheKey::UvLock {
+            project,
+            lockfile,
+            lockfile_hash: hash_file_contents(lockfile)?,
+            pyproject_hash: hash_file_contents(pyproject)?,
+            uv_toml_hash: hash_optional_file(&project.join("uv.toml"))?,
+            python_version_file_hash: hash_optional_file(&project.join(".python-version"))?,
+        },
+        dependency_groups,
+        extras,
+        install_project,
+        lock_mode,
+    };
 
-    push_optional_file_hash(&mut dependencies, "uv_toml_hash", &project.join("uv.toml"))?;
-    push_optional_file_hash(
-        &mut dependencies,
-        "python_version_file_hash",
-        &project.join(".python-version"),
-    )?;
+    Ok(PythonUvEnvIdentity {
+        fingerprint: format!("{}:{}", PythonUvEnv::SCHEMA_VERSION, hash_digest(&key)),
+    })
+}
 
-    Ok(dependencies)
+#[derive(Hash)]
+struct PythonUvEnvCacheKey<'a> {
+    schema: &'static str,
+    source: PythonUvEnvSourceCacheKey<'a>,
+    dependency_groups: &'a [String],
+    extras: &'a [String],
+    install_project: bool,
+    lock_mode: PythonUvLockMode,
+}
+
+#[derive(Hash)]
+enum PythonUvEnvSourceCacheKey<'a> {
+    UvLock {
+        project: &'a Path,
+        lockfile: &'a Path,
+        lockfile_hash: u64,
+        pyproject_hash: u64,
+        uv_toml_hash: Option<u64>,
+        python_version_file_hash: Option<u64>,
+    },
 }
 
 fn format_dependencies(dependencies: &FxHashSet<String>) -> String {
@@ -316,25 +438,23 @@ fn canonicalize_string_list(values: &mut Vec<String>) {
     values.dedup();
 }
 
-fn push_optional_file_hash(
-    dependencies: &mut FxHashSet<String>,
-    key: &str,
-    path: &Path,
-) -> Result<()> {
-    match hash_file(path) {
-        Ok(hash) => {
-            dependencies.insert(format!("{key}={hash}"));
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => return Err(err.into()),
+fn hash_optional_file(path: &Path) -> Result<Option<u64>> {
+    match hash_file_contents(path) {
+        Ok(hash) => Ok(Some(hash)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err.into()),
     }
-
-    Ok(())
 }
 
-fn hash_file(path: &Path) -> io::Result<String> {
+fn hash_file_contents(path: &Path) -> io::Result<u64> {
     let mut file = fs_err::File::open(path)?;
     let mut hasher = seahash::SeaHasher::new();
     io::copy(&mut file, &mut hasher)?;
-    Ok(format!("{:016x}", hasher.finish()))
+    Ok(hasher.finish())
+}
+
+fn hash_digest<T: Hash + ?Sized>(value: &T) -> String {
+    let mut hasher = seahash::SeaHasher::new();
+    value.hash(&mut hasher);
+    hex::encode(hasher.finish().to_le_bytes())
 }

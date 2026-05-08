@@ -5,7 +5,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
-use crate::hook::InstallInfo;
+use crate::hook::InstalledHookEnv;
 use crate::languages::version::{Error, try_into_u64_slice};
 
 #[derive(Debug, Clone)]
@@ -214,9 +214,9 @@ impl NodeRequest {
         }
     }
 
-    pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
-        let version = &install_info.language_version;
-        let tls = install_info
+    pub(crate) fn satisfied_by(&self, installed_env: &InstalledHookEnv) -> bool {
+        let version = &installed_env.language_version;
+        let tls = installed_env
             .get_extra(EXTRA_KEY_LTS)
             .and_then(|s| serde_json::from_str(s).ok())
             .unwrap_or(Lts::NotLts);
@@ -226,7 +226,7 @@ impl NodeRequest {
                 version: version.clone(),
                 lts: tls,
             },
-            Some(install_info.toolchain.as_ref()),
+            Some(installed_env.toolchain.as_ref()),
         )
     }
 
@@ -256,8 +256,7 @@ impl NodeRequest {
 mod tests {
     use super::{EXTRA_KEY_LTS, NodeRequest};
     use crate::config::Language;
-    use crate::hook::InstallInfo;
-    use rustc_hash::FxHashSet;
+    use crate::hook::InstalledHookEnv;
     use std::path::PathBuf;
     use std::str::FromStr;
 
@@ -310,45 +309,48 @@ mod tests {
     #[test]
     fn test_node_request_satisfied_by() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::new(Language::Node, FxHashSet::default(), temp_dir.path())?;
-        install_info
+        let mut installed_env = InstalledHookEnv::new(
+            Language::Node,
+            crate::hook_env::HookEnvIdentity::empty_dependencies(),
+            temp_dir.path(),
+        )?;
+        installed_env
             .with_language_version(semver::Version::new(12, 18, 3))
             .with_toolchain(PathBuf::from("/usr/bin/node"))
             .with_extra(EXTRA_KEY_LTS, "\"Argon\"");
 
         let request = NodeRequest::Major(12);
-        assert!(request.satisfied_by(&install_info));
+        assert!(request.satisfied_by(&installed_env));
 
         let request = NodeRequest::MajorMinor(12, 18);
-        assert!(request.satisfied_by(&install_info));
+        assert!(request.satisfied_by(&installed_env));
 
         let request = NodeRequest::MajorMinorPatch(12, 18, 3);
-        assert!(request.satisfied_by(&install_info));
+        assert!(request.satisfied_by(&installed_env));
 
         let request = NodeRequest::Lts;
-        assert!(request.satisfied_by(&install_info));
+        assert!(request.satisfied_by(&installed_env));
 
         let request = NodeRequest::CodeName("Argon".to_string());
-        assert!(request.satisfied_by(&install_info));
+        assert!(request.satisfied_by(&installed_env));
 
         let request = NodeRequest::CodeName("argon".to_string());
-        assert!(request.satisfied_by(&install_info));
+        assert!(request.satisfied_by(&installed_env));
 
         let request = NodeRequest::CodeName("Boron".to_string());
-        assert!(!request.satisfied_by(&install_info));
+        assert!(!request.satisfied_by(&installed_env));
 
         let request = NodeRequest::Path(PathBuf::from("/usr/bin/node"));
-        assert!(request.satisfied_by(&install_info));
+        assert!(request.satisfied_by(&installed_env));
 
         let request = NodeRequest::Path(PathBuf::from("/usr/bin/nodejs"));
-        assert!(!request.satisfied_by(&install_info));
+        assert!(!request.satisfied_by(&installed_env));
 
         let request = NodeRequest::Range(semver::VersionReq::parse(">=12.18").unwrap());
-        assert!(request.satisfied_by(&install_info));
+        assert!(request.satisfied_by(&installed_env));
 
         let request = NodeRequest::Range(semver::VersionReq::parse(">=13.0").unwrap());
-        assert!(!request.satisfied_by(&install_info));
+        assert!(!request.satisfied_by(&installed_env));
 
         Ok(())
     }

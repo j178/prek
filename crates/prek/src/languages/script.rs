@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::InstalledHook;
-use crate::hook::{Hook, InstallInfo};
+use crate::hook::{Hook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
@@ -25,7 +25,7 @@ impl LanguageImpl for Script {
         Ok(InstalledHook::NoNeedInstall(hook))
     }
 
-    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
+    async fn check_health(&self, _env: &InstalledHookEnv) -> Result<()> {
         Ok(())
     }
 

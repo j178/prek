@@ -9,7 +9,7 @@ use semver::Version;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
-use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::hook::{Hook, InstalledHook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
@@ -92,13 +92,13 @@ impl LanguageImpl for Swift {
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
 
-        let mut info = InstallInfo::new(
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
 
-        debug!(%hook, target = %info.env_path.display(), "Installing Swift environment");
+        debug!(%hook, target = %env.env_path.display(), "Installing Swift environment");
 
         // Query swift info
         let swift_info = query_swift_info()
@@ -109,7 +109,7 @@ impl LanguageImpl for Swift {
         if let Some(repo_path) = hook.repo_path() {
             if repo_path.join("Package.swift").exists() {
                 debug!(%hook, "Building Swift package");
-                let build_path = build_dir(&info.env_path);
+                let build_path = build_dir(&env.env_path);
                 Cmd::new("swift", "swift build")
                     .arg("build")
                     .arg("-c")
@@ -141,31 +141,31 @@ impl LanguageImpl for Swift {
                     .trim()
                     .to_string();
                 debug!(%hook, %bin_path, "Swift bin path");
-                info.with_extra(BIN_PATH_KEY, &bin_path);
+                env.with_extra(BIN_PATH_KEY, &bin_path);
             } else {
                 debug!(%hook, "No Package.swift found, skipping build");
             }
         }
 
-        info.with_toolchain(swift_info.executable)
+        env.with_toolchain(swift_info.executable)
             .with_language_version(swift_info.version);
 
-        info.persist_env_path();
+        env.persist();
 
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
+    async fn check_health(&self, env: &InstalledHookEnv) -> Result<()> {
         // Verify swift still exists at the stored path
-        if !info.toolchain.exists() {
+        if !env.toolchain.exists() {
             anyhow::bail!(
                 "Swift executable no longer exists at: {}",
-                info.toolchain.display()
+                env.toolchain.display()
             );
         }
 
@@ -181,9 +181,9 @@ impl LanguageImpl for Swift {
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());
 
-        // Get bin path from install info if a package was built
+        // Get bin path from the installed environment metadata if a package was built.
         let new_path =
-            if let Some(bin_path) = hook.install_info().and_then(|i| i.get_extra(BIN_PATH_KEY)) {
+            if let Some(bin_path) = hook.installed_env().and_then(|i| i.get_extra(BIN_PATH_KEY)) {
                 prepend_paths(&[Path::new(bin_path)]).context("Failed to join PATH")?
             } else {
                 EnvVars::var_os(EnvVars::PATH).unwrap_or_default()

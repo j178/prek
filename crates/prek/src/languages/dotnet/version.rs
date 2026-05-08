@@ -10,7 +10,7 @@ use std::fmt::Display;
 use std::ops::Deref;
 use std::str::FromStr;
 
-use crate::hook::InstallInfo;
+use crate::hook::InstalledHookEnv;
 use crate::languages::version::{Error, try_into_u64_slice};
 
 /// A parsed `.NET SDK` version.
@@ -209,8 +209,8 @@ impl DotnetRequest {
     }
 
     /// Returns whether a persisted installation satisfies this request.
-    pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
-        let version = DotnetVersion(install_info.language_version.clone());
+    pub(crate) fn satisfied_by(&self, installed_env: &InstalledHookEnv) -> bool {
+        let version = DotnetVersion(installed_env.language_version.clone());
         self.matches(&version)
     }
 
@@ -229,8 +229,6 @@ impl DotnetRequest {
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
-
-    use rustc_hash::FxHashSet;
 
     use super::*;
     use crate::config::Language;
@@ -388,36 +386,40 @@ mod tests {
     #[test]
     fn test_satisfied_by() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::new(Language::Dotnet, FxHashSet::default(), temp_dir.path())?;
-        install_info
+        let mut installed_env = InstalledHookEnv::new(
+            Language::Dotnet,
+            crate::hook_env::HookEnvIdentity::empty_dependencies(),
+            temp_dir.path(),
+        )?;
+        installed_env
             .with_language_version(semver::Version::new(8, 0, 100))
             .with_toolchain(PathBuf::from("/usr/share/dotnet/dotnet"));
 
-        assert!(DotnetRequest::Any.satisfied_by(&install_info));
-        assert!(DotnetRequest::Channel(DotnetChannel::Version(8, 0)).satisfied_by(&install_info));
+        assert!(DotnetRequest::Any.satisfied_by(&installed_env));
+        assert!(DotnetRequest::Channel(DotnetChannel::Version(8, 0)).satisfied_by(&installed_env));
         assert!(
-            DotnetRequest::Channel(DotnetChannel::FeatureBand(8, 0, 1)).satisfied_by(&install_info)
+            DotnetRequest::Channel(DotnetChannel::FeatureBand(8, 0, 1))
+                .satisfied_by(&installed_env)
         );
         assert!(
             !DotnetRequest::Channel(DotnetChannel::FeatureBand(8, 0, 2))
-                .satisfied_by(&install_info)
+                .satisfied_by(&installed_env)
         );
-        assert!(DotnetRequest::Channel(DotnetChannel::Lts).satisfied_by(&install_info));
-        assert!(!DotnetRequest::Channel(DotnetChannel::Sts).satisfied_by(&install_info));
-        assert!(DotnetRequest::Exact(8, 0, 100).satisfied_by(&install_info));
-        assert!(!DotnetRequest::Exact(8, 0, 101).satisfied_by(&install_info));
-        assert!(!DotnetRequest::Channel(DotnetChannel::Version(9, 0)).satisfied_by(&install_info));
+        assert!(DotnetRequest::Channel(DotnetChannel::Lts).satisfied_by(&installed_env));
+        assert!(!DotnetRequest::Channel(DotnetChannel::Sts).satisfied_by(&installed_env));
+        assert!(DotnetRequest::Exact(8, 0, 100).satisfied_by(&installed_env));
+        assert!(!DotnetRequest::Exact(8, 0, 101).satisfied_by(&installed_env));
+        assert!(!DotnetRequest::Channel(DotnetChannel::Version(9, 0)).satisfied_by(&installed_env));
 
         // Test through LanguageRequest dispatch
         let req = LanguageRequest::parse(Language::Dotnet, "8").unwrap();
-        assert!(req.satisfied_by(&install_info));
+        assert!(req.satisfied_by(&installed_env));
         let req = LanguageRequest::parse(Language::Dotnet, "9").unwrap();
-        assert!(!req.satisfied_by(&install_info));
+        assert!(!req.satisfied_by(&installed_env));
         let req = LanguageRequest::parse(Language::Dotnet, "lts").unwrap();
-        assert!(req.satisfied_by(&install_info));
+        assert!(req.satisfied_by(&installed_env));
         let req = LanguageRequest::parse(Language::Dotnet, "sts").unwrap();
-        assert!(!req.satisfied_by(&install_info));
+        assert!(!req.satisfied_by(&installed_env));
 
         Ok(())
     }

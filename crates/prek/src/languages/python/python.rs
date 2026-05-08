@@ -15,7 +15,7 @@ use tracing::{debug, trace};
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::config::PythonUvLockMode;
 use crate::hook::InstalledHook;
-use crate::hook::{Hook, InstallInfo};
+use crate::hook::{Hook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::languages::python::PythonRequest;
 use crate::languages::python::uv::Uv;
@@ -111,21 +111,21 @@ impl LanguageImpl for Python {
             .await
             .context("Failed to install uv")?;
 
-        let mut info = InstallInfo::new(
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
 
-        debug!(%hook, target = %info.env_path.display(), "Installing environment");
+        debug!(%hook, target = %env.env_path.display(), "Installing environment");
 
         // Create venv (auto download Python if needed)
-        Self::create_venv(&uv, store, &info, &hook.language_request)
+        Self::create_venv(&uv, store, &env, &hook.language_request)
             .await
             .context("Failed to create Python virtual environment")?;
 
         // Install dependencies
-        let mut pip_install = Self::pip_install_command(&uv, store, &info.env_path);
+        let mut pip_install = Self::pip_install_command(&uv, store, &env.env_path);
 
         if let Some(repo_path) = hook.repo_path() {
             trace!(
@@ -152,34 +152,34 @@ impl LanguageImpl for Python {
             debug!("No dependencies to install");
         }
 
-        let python = python_exec(&info.env_path);
+        let python = python_exec(&env.env_path);
         let python_info = query_python_info(&python)
             .await
             .context("Failed to query Python info")?;
 
-        info.with_language_version(python_info.version)
+        env.with_language_version(python_info.version)
             .with_toolchain(python_info.python_exec);
 
-        info.persist_env_path();
+        env.persist();
 
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        let python = python_exec(&info.env_path);
+    async fn check_health(&self, env: &InstalledHookEnv) -> Result<()> {
+        let python = python_exec(&env.env_path);
         let python_info = query_python_info_cached(&python)
             .await
             .context("Failed to query Python info")?;
 
-        if python_info.version != info.language_version {
+        if python_info.version != env.language_version {
             anyhow::bail!(
                 "Python version mismatch: expected {}, found {}",
-                info.language_version,
+                env.language_version,
                 python_info.version
             );
         }
@@ -253,46 +253,46 @@ impl LanguageImpl for PythonUv {
             .await
             .context("Failed to install uv")?;
 
-        let mut info = InstallInfo::new(
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
 
-        debug!(%hook, target = %info.env_path.display(), "Installing python_uv environment");
+        debug!(%hook, target = %env.env_path.display(), "Installing python_uv environment");
 
-        Python::create_venv(&uv, store, &info, &hook.language_request)
+        Python::create_venv(&uv, store, &env, &hook.language_request)
             .await
             .context("Failed to create Python virtual environment")?;
 
         let uv_env = hook
             .python_uv_env()
             .expect("python_uv hook must have uv env options");
-        Python::sync_project_environment_command(&uv, store, &info.env_path, uv_env)
+        Python::sync_project_environment_command(&uv, store, &env.env_path, uv_env)
             .output()
             .await
             .context("Failed to sync uv project environment")?;
 
-        let python = python_exec(&info.env_path);
+        let python = python_exec(&env.env_path);
         let python_info = query_python_info(&python)
             .await
             .context("Failed to query Python info")?;
 
-        info.with_language_version(python_info.version)
+        env.with_language_version(python_info.version)
             .with_toolchain(python_info.python_exec);
 
-        info.persist_env_path();
+        env.persist();
 
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        Python.check_health(info).await
+    async fn check_health(&self, env: &InstalledHookEnv) -> Result<()> {
+        Python.check_health(env).await
     }
 
     async fn run(
@@ -392,11 +392,11 @@ impl Python {
     async fn create_venv(
         uv: &Uv,
         store: &Store,
-        info: &InstallInfo,
+        env: &InstalledHookEnv,
         python_request: &LanguageRequest,
     ) -> Result<()> {
         // Try creating venv without downloads first
-        match Self::create_venv_command(uv, store, info, python_request, false, false)
+        match Self::create_venv_command(uv, store, env, python_request, false, false)
             .check(true)
             .output()
             .await
@@ -404,7 +404,7 @@ impl Python {
             Ok(_) => {
                 debug!(
                     "Venv created successfully with no downloads: `{}`",
-                    info.env_path.display()
+                    env.env_path.display()
                 );
                 Ok(())
             }
@@ -419,9 +419,9 @@ impl Python {
 
                     debug!(
                         "Retrying venv creation with managed Python downloads: `{}`",
-                        info.env_path.display()
+                        env.env_path.display()
                     );
-                    Self::create_venv_command(uv, store, info, python_request, true, true)
+                    Self::create_venv_command(uv, store, env, python_request, true, true)
                         .check(true)
                         .output()
                         .await?;
@@ -431,7 +431,7 @@ impl Python {
                 Err(e.into())
             }
             Err(e) => {
-                debug!("Failed to create venv `{}`: {e}", info.env_path.display());
+                debug!("Failed to create venv `{}`: {e}", env.env_path.display());
                 Err(e.into())
             }
         }
@@ -440,14 +440,14 @@ impl Python {
     fn create_venv_command(
         uv: &Uv,
         store: &Store,
-        info: &InstallInfo,
+        env: &InstalledHookEnv,
         python_request: &LanguageRequest,
         set_install_dir: bool,
         allow_downloads: bool,
     ) -> Cmd {
         let mut cmd = uv.cmd("create venv", store);
         cmd.arg("venv")
-            .arg(&info.env_path)
+            .arg(&env.env_path)
             .args(["--python-preference", "managed"])
             // Avoid discovering a project or workspace
             .arg("--no-project")
@@ -509,27 +509,30 @@ mod tests {
     use std::path::PathBuf;
 
     use prek_consts::env_vars::EnvVars;
-    use rustc_hash::FxHashSet;
 
     use super::Python;
     use crate::config::{Language, PythonUvLockMode, PythonUvOptions};
-    use crate::hook::InstallInfo;
+    use crate::hook::InstalledHookEnv;
     use crate::hook_env::PythonUvEnv;
     use crate::languages::python::uv::Uv;
     use crate::languages::version::LanguageRequest;
     use crate::store::Store;
 
-    fn setup_test_install() -> (tempfile::TempDir, Uv, Store, InstallInfo) {
+    fn setup_test_install() -> (tempfile::TempDir, Uv, Store, InstalledHookEnv) {
         let temp = tempfile::tempdir().expect("create tempdir");
         let hooks_dir = temp.path().join("hooks");
         fs_err::create_dir_all(&hooks_dir).expect("create hooks dir");
 
-        let info = InstallInfo::new(Language::Python, FxHashSet::default(), &hooks_dir)
-            .expect("create install info");
+        let env = InstalledHookEnv::new(
+            Language::Python,
+            crate::hook_env::HookEnvIdentity::empty_dependencies(),
+            &hooks_dir,
+        )
+        .expect("create installed hook environment");
         let store = Store::from_path(temp.path().join("store"));
         let uv = Uv::new(PathBuf::from("uv"));
 
-        (temp, uv, store, info)
+        (temp, uv, store, env)
     }
 
     fn env_map(cmd: &crate::process::Cmd) -> HashMap<String, Option<String>> {
@@ -551,9 +554,9 @@ mod tests {
 
     #[test]
     fn create_venv_command_removes_uv_system_python_override() {
-        let (_temp, uv, store, info) = setup_test_install();
+        let (_temp, uv, store, env) = setup_test_install();
         let request = LanguageRequest::Any { system_only: false };
-        let cmd = Python::create_venv_command(&uv, &store, &info, &request, false, false);
+        let cmd = Python::create_venv_command(&uv, &store, &env, &request, false, false);
         let envs = env_map(&cmd);
 
         assert_eq!(envs.get(EnvVars::UV_SYSTEM_PYTHON), Some(&None));
@@ -564,8 +567,8 @@ mod tests {
 
     #[test]
     fn pip_install_command_removes_uv_system_python_override() {
-        let (_temp, uv, store, info) = setup_test_install();
-        let cmd = Python::pip_install_command(&uv, &store, &info.env_path);
+        let (_temp, uv, store, env) = setup_test_install();
+        let cmd = Python::pip_install_command(&uv, &store, &env.env_path);
         let envs = env_map(&cmd);
 
         assert_eq!(envs.get(EnvVars::UV_SYSTEM_PYTHON), Some(&None));
@@ -584,7 +587,7 @@ mod tests {
         .expect("write pyproject");
         fs_err::write(temp.path().join("uv.lock"), "version = 1\n").expect("write lockfile");
 
-        let uv_env = PythonUvEnv::resolve(
+        let (uv_env, _) = PythonUvEnv::resolve(
             &PythonUvOptions {
                 dependency_groups: Some(vec!["typecheck".to_string()]),
                 extras: Some(vec!["typed".to_string()]),

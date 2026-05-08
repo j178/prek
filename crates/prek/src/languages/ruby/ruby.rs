@@ -9,7 +9,7 @@ use prek_consts::prepend_paths;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
-use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::hook::{Hook, InstalledHook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::languages::ruby::RubyRequest;
 use crate::languages::ruby::gem::{build_gemspecs, install_gems};
@@ -46,23 +46,23 @@ impl LanguageImpl for Ruby {
             .await
             .context("Failed to install Ruby")?;
 
-        // 2. Create InstallInfo
-        let mut info = InstallInfo::new(
+        // 2. Create InstalledHookEnv
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
 
-        info.with_toolchain(ruby.ruby_bin().to_path_buf())
+        env.with_toolchain(ruby.ruby_bin().to_path_buf())
             .with_language_version(ruby.version().clone());
 
         // Store Ruby engine in metadata
-        info.with_extra("ruby_engine", ruby.engine());
+        env.with_extra("ruby_engine", ruby.engine());
 
         // 3. Create environment directories
-        let gem_home = gem_home(&info.env_path);
+        let gem_home = gem_home(&env.env_path);
         fs_err::tokio::create_dir_all(&gem_home).await?;
-        let gem_bin = gem_bin(&info.env_path);
+        let gem_bin = gem_bin(&env.env_path);
         fs_err::tokio::create_dir_all(&gem_bin).await?;
 
         // 4. Build gemspecs
@@ -94,32 +94,32 @@ impl LanguageImpl for Ruby {
             .await
             .context("Failed to install Ruby executable into gem bin directory")?;
 
-        info.persist_env_path();
+        env.persist();
 
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
+    async fn check_health(&self, env: &InstalledHookEnv) -> Result<()> {
         // 1. Verify Ruby runs and reports correct version
-        let (actual_version, _) = query_ruby_info(&info.toolchain)
+        let (actual_version, _) = query_ruby_info(&env.toolchain)
             .await
             .context("Failed to query Ruby info")?;
 
-        if actual_version != info.language_version {
+        if actual_version != env.language_version {
             anyhow::bail!(
                 "Ruby version mismatch: expected {}, found {}",
-                info.language_version,
+                env.language_version,
                 actual_version
             );
         }
 
         // 2. Verify gem bin Ruby executable exists
-        let gem_bin = gem_bin(&info.env_path);
+        let gem_bin = gem_bin(&env.env_path);
         let gem_bin_ruby = gem_bin.join("ruby").with_extension(EXE_EXTENSION);
         if !gem_bin_ruby.exists() {
             anyhow::bail!(

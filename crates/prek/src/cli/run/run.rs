@@ -26,7 +26,7 @@ use crate::cli::{ExitStatus, RunExtraArgs};
 use crate::config::{Language, PassFilenames, Stage};
 use crate::fs::CWD;
 use crate::git::GIT_ROOT;
-use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
+use crate::hook::{Hook, InstalledHook, InstalledHookEnv, Repo};
 use crate::printer::Printer;
 use crate::run::{CONCURRENCY, USE_COLOR};
 use crate::store::Store;
@@ -266,37 +266,33 @@ fn set_env_vars(from_ref: Option<&String>, to_ref: Option<&String>, args: &RunEx
 }
 
 #[derive(Debug)]
-struct LazyInstallInfo {
-    info: Arc<InstallInfo>,
+struct LazyInstalledHookEnv {
+    env: Arc<InstalledHookEnv>,
     health: mea::once::OnceCell<bool>,
 }
 
-impl LazyInstallInfo {
-    fn new(info: Arc<InstallInfo>) -> Self {
+impl LazyInstalledHookEnv {
+    fn new(env: Arc<InstalledHookEnv>) -> Self {
         Self {
-            info,
+            env,
             health: mea::once::OnceCell::new(),
         }
     }
 
-    fn matches(&self, hook: &Hook) -> bool {
-        self.info.matches(hook)
-    }
-
-    fn info(&self) -> Arc<InstallInfo> {
-        self.info.clone()
+    fn env(&self) -> Arc<InstalledHookEnv> {
+        self.env.clone()
     }
 
     async fn ensure_healthy(&self) -> bool {
-        let info = self.info.clone();
+        let env = self.env.clone();
         *self
             .health
-            .get_or_init(async move || match info.check_health().await {
+            .get_or_init(async move || match env.check_health().await {
                 Ok(()) => true,
                 Err(err) => {
                     warn!(
                         %err,
-                        path = %info.env_path.display(),
+                        path = %env.env_path.display(),
                         "Skipping unhealthy installed hook"
                     );
                     false
@@ -319,7 +315,7 @@ pub async fn install_hooks(
             .installed_hooks()
             .await
             .into_iter()
-            .map(LazyInstallInfo::new)
+            .map(LazyInstalledHookEnv::new)
             .collect::<Vec<_>>(),
     );
 
@@ -362,34 +358,34 @@ pub async fn install_hooks(
                         continue;
                     }
 
-                    let mut matched_info = None;
+                    let mut matched_env = None;
 
                     for env in &newly_installed {
-                        if let InstalledHook::Installed { info, .. } = env {
-                            if info.matches(&hook) {
-                                matched_info = Some(info.clone());
+                        if let InstalledHook::Installed { env, .. } = env {
+                            if env.satisfies(hook.env_request()) {
+                                matched_env = Some(env.clone());
                                 break;
                             }
                         }
                     }
 
-                    if matched_info.is_none() {
+                    if matched_env.is_none() {
                         for env in store_hooks.iter() {
-                            if env.matches(&hook) {
+                            if env.env.satisfies(hook.env_request()) {
                                 if env.ensure_healthy().await {
-                                    matched_info = Some(env.info());
+                                    matched_env = Some(env.env());
                                     break;
                                 }
                             }
                         }
                     }
 
-                    if let Some(info) = matched_info {
+                    if let Some(env) = matched_env {
                         debug!(
                             "Found installed environment for hook `{hook}` at `{}`",
-                            info.env_path.display()
+                            env.env_path.display()
                         );
-                        hook_envs.push(InstalledHook::Installed { hook, info });
+                        hook_envs.push(InstalledHook::Installed { hook, env });
                         continue;
                     }
 
@@ -407,8 +403,8 @@ pub async fn install_hooks(
                         .with_context(|| format!("Failed to mark hook `{hook}` as installed"))?;
 
                     match &installed_hook {
-                        InstalledHook::Installed { info, .. } => {
-                            debug!("Installed hook `{hook}` in `{}`", info.env_path.display());
+                        InstalledHook::Installed { env, .. } => {
+                            debug!("Installed hook `{hook}` in `{}`", env.env_path.display());
                         }
                         InstalledHook::NoNeedInstall { .. } => {
                             debug!("Hook `{hook}` does not need installation");
@@ -439,7 +435,7 @@ pub async fn install_hooks(
     Ok(result)
 }
 
-/// Partition hooks into groups where hooks in the same group have same dependencies.
+/// Partition hooks into groups that can contend for the same managed environment.
 /// Hooks in different groups can be installed in parallel.
 fn partition_hooks(hooks: &[Arc<Hook>]) -> Vec<Vec<Arc<Hook>>> {
     if hooks.is_empty() {
@@ -462,8 +458,7 @@ fn partition_hooks(hooks: &[Arc<Hook>]) -> Vec<Vec<Arc<Hook>>> {
         current_group.push(index);
 
         for i in 0..hooks.len() {
-            if !visited[i] && hooks[index].env_key_dependencies() == hooks[i].env_key_dependencies()
-            {
+            if !visited[i] && hooks[index].shares_env_identity_with(&hooks[i]) {
                 dfs(i, hooks, visited, current_group);
             }
         }

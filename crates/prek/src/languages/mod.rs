@@ -13,7 +13,7 @@ use tracing::{instrument, trace};
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::config::Language;
 use crate::fs::CWD;
-use crate::hook::{Hook, InstallInfo, InstalledHook, Repo};
+use crate::hook::{Hook, InstalledHook, InstalledHookEnv, Repo};
 use crate::hook_entry::HookEntry;
 use crate::hooks;
 use crate::languages::version::LanguageRequest;
@@ -48,7 +48,7 @@ trait LanguageImpl {
         reporter: &HookInstallReporter,
     ) -> Result<InstalledHook>;
 
-    async fn check_health(&self, info: &InstallInfo) -> Result<()>;
+    async fn check_health(&self, env: &InstalledHookEnv) -> Result<()>;
 
     async fn run(
         &self,
@@ -97,7 +97,7 @@ impl LanguageImpl for Unimplemented {
         Ok(InstalledHook::NoNeedInstall(hook))
     }
 
-    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
+    async fn check_health(&self, _env: &InstalledHookEnv) -> Result<()> {
         Ok(())
     }
 
@@ -377,30 +377,30 @@ impl Language {
         }
     }
 
-    pub(crate) async fn check_health(&self, info: &InstallInfo) -> Result<()> {
+    pub(crate) async fn check_health(&self, env: &InstalledHookEnv) -> Result<()> {
         match self {
-            Self::Dart => dart::Dart.check_health(info).await,
-            Self::Bun => bun::Bun.check_health(info).await,
-            Self::Deno => deno::Deno.check_health(info).await,
-            Self::Docker => docker::Docker.check_health(info).await,
-            Self::DockerImage => docker_image::DockerImage.check_health(info).await,
-            Self::Dotnet => dotnet::Dotnet.check_health(info).await,
-            Self::Fail => fail::Fail.check_health(info).await,
-            Self::Golang => golang::Golang.check_health(info).await,
-            Self::Haskell => haskell::Haskell.check_health(info).await,
-            Self::Julia => julia::Julia.check_health(info).await,
-            Self::Lua => lua::Lua.check_health(info).await,
-            Self::Node => node::Node.check_health(info).await,
-            Self::Pygrep => pygrep::Pygrep.check_health(info).await,
-            Self::Python => python::Python.check_health(info).await,
-            Self::PythonUv => python::PythonUv.check_health(info).await,
-            Self::Ruby => ruby::Ruby.check_health(info).await,
-            Self::Rust => rust::Rust.check_health(info).await,
-            Self::Script => script::Script.check_health(info).await,
-            Self::Swift => swift::Swift.check_health(info).await,
-            Self::System => system::System.check_health(info).await,
+            Self::Dart => dart::Dart.check_health(env).await,
+            Self::Bun => bun::Bun.check_health(env).await,
+            Self::Deno => deno::Deno.check_health(env).await,
+            Self::Docker => docker::Docker.check_health(env).await,
+            Self::DockerImage => docker_image::DockerImage.check_health(env).await,
+            Self::Dotnet => dotnet::Dotnet.check_health(env).await,
+            Self::Fail => fail::Fail.check_health(env).await,
+            Self::Golang => golang::Golang.check_health(env).await,
+            Self::Haskell => haskell::Haskell.check_health(env).await,
+            Self::Julia => julia::Julia.check_health(env).await,
+            Self::Lua => lua::Lua.check_health(env).await,
+            Self::Node => node::Node.check_health(env).await,
+            Self::Pygrep => pygrep::Pygrep.check_health(env).await,
+            Self::Python => python::Python.check_health(env).await,
+            Self::PythonUv => python::PythonUv.check_health(env).await,
+            Self::Ruby => ruby::Ruby.check_health(env).await,
+            Self::Rust => rust::Rust.check_health(env).await,
+            Self::Script => script::Script.check_health(env).await,
+            Self::Swift => swift::Swift.check_health(env).await,
+            Self::System => system::System.check_health(env).await,
             Self::Conda | Self::Coursier | Self::Perl | Self::R => {
-                Unimplemented.check_health(info).await
+                Unimplemented.check_health(env).await
             }
         }
     }

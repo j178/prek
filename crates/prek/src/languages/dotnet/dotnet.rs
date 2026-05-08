@@ -8,7 +8,7 @@ use prek_consts::prepend_paths;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
-use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::hook::{Hook, InstalledHook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::languages::dotnet::DotnetRequest;
 use crate::languages::dotnet::installer::{DotnetInstaller, DotnetResult};
@@ -57,13 +57,13 @@ impl LanguageImpl for Dotnet {
             .await
             .context("Failed to install dotnet SDK")?;
 
-        let mut info = InstallInfo::new(
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
 
-        let tools_dir = tools_dir(&info.env_path);
+        let tools_dir = tools_dir(&env.env_path);
 
         debug!(
             path = %tools_dir.display(),
@@ -76,32 +76,32 @@ impl LanguageImpl for Dotnet {
             }
         }
 
-        info.with_language_version((**dotnet.version()).clone())
+        env.with_language_version((**dotnet.version()).clone())
             .with_toolchain(dotnet.dotnet().to_path_buf());
 
-        info.persist_env_path();
+        env.persist();
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        let current_version = DotnetResult::from_executable(info.toolchain.clone())
+    async fn check_health(&self, env: &InstalledHookEnv) -> Result<()> {
+        let current_version = DotnetResult::from_executable(env.toolchain.clone())
             .fill_version()
             .await
             .context("Failed to query current dotnet info")?;
 
         // Only check major.minor for compatibility
-        if current_version.version().major != info.language_version.major
-            || current_version.version().minor != info.language_version.minor
+        if current_version.version().major != env.language_version.major
+            || current_version.version().minor != env.language_version.minor
         {
             anyhow::bail!(
                 "dotnet version mismatch: expected `{}.{}`, found `{}.{}`",
-                info.language_version.major,
-                info.language_version.minor,
+                env.language_version.major,
+                env.language_version.minor,
                 current_version.version().major,
                 current_version.version().minor
             );
@@ -122,8 +122,8 @@ impl LanguageImpl for Dotnet {
         let env_dir = hook.env_path().expect("dotnet hook must have env path");
         let tools_dir = tools_dir(env_dir);
         let dotnet = &hook
-            .install_info()
-            .expect("dotnet hook must have install info")
+            .installed_env()
+            .expect("dotnet hook must have an installed environment")
             .toolchain;
         let dotnet_root = resolve_dotnet_root(dotnet).context("Failed to resolve DOTNET_ROOT")?;
 

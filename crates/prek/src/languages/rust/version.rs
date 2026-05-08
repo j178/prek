@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::str::FromStr;
 
-use crate::hook::InstallInfo;
+use crate::hook::InstalledHookEnv;
 use crate::languages::version::{Error, try_into_u64_slice};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -189,26 +189,26 @@ impl RustRequest {
         }
     }
 
-    pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
+    pub(crate) fn satisfied_by(&self, installed_env: &InstalledHookEnv) -> bool {
         match self {
             RustRequest::Any => {
                 // Any request accepts any valid installation, or specifically "stable"
-                install_info
+                installed_env
                     .get_extra(EXTRA_KEY_CHANNEL)
                     .is_some_and(|ch| ch == "stable")
-                    || install_info.language_version.major > 0
+                    || installed_env.language_version.major > 0
             }
             RustRequest::Channel(requested_channel) => {
-                let channel = install_info
+                let channel = installed_env
                     .get_extra(EXTRA_KEY_CHANNEL)
                     .and_then(|ch| Channel::from_str(ch).ok());
                 channel.as_ref().is_some_and(|ch| ch == requested_channel)
             }
             _ => {
-                let version = &install_info.language_version;
+                let version = &installed_env.language_version;
                 self.matches(
                     &RustVersion::from_version(version),
-                    Some(install_info.toolchain.as_ref()),
+                    Some(installed_env.toolchain.as_ref()),
                 )
             }
         }
@@ -239,8 +239,7 @@ impl RustRequest {
 mod tests {
     use super::*;
     use crate::config::Language;
-    use crate::hook::InstallInfo;
-    use rustc_hash::FxHashSet;
+    use crate::hook::InstalledHookEnv;
     use std::path::PathBuf;
     use std::str::FromStr;
 
@@ -312,31 +311,34 @@ mod tests {
     }
 
     #[test]
-    fn test_request_satisfied_by_install_info() -> anyhow::Result<()> {
+    fn test_request_satisfied_by_installed_env() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let toolchain_path = temp_dir.path().join("rust-toolchain");
         std::fs::write(&toolchain_path, b"")?;
 
-        let mut install_info =
-            InstallInfo::new(Language::Rust, FxHashSet::default(), temp_dir.path())?;
-        install_info
+        let mut installed_env = InstalledHookEnv::new(
+            Language::Rust,
+            crate::hook_env::HookEnvIdentity::empty_dependencies(),
+            temp_dir.path(),
+        )?;
+        installed_env
             .with_language_version(semver::Version::new(1, 71, 0))
             .with_toolchain(toolchain_path.clone());
 
-        assert!(RustRequest::Any.satisfied_by(&install_info));
-        assert!(RustRequest::Major(1).satisfied_by(&install_info));
-        assert!(RustRequest::MajorMinor(1, 71).satisfied_by(&install_info));
-        assert!(RustRequest::MajorMinorPatch(1, 71, 0).satisfied_by(&install_info));
-        assert!(!RustRequest::MajorMinorPatch(1, 71, 1).satisfied_by(&install_info));
+        assert!(RustRequest::Any.satisfied_by(&installed_env));
+        assert!(RustRequest::Major(1).satisfied_by(&installed_env));
+        assert!(RustRequest::MajorMinor(1, 71).satisfied_by(&installed_env));
+        assert!(RustRequest::MajorMinorPatch(1, 71, 0).satisfied_by(&installed_env));
+        assert!(!RustRequest::MajorMinorPatch(1, 71, 1).satisfied_by(&installed_env));
 
         let req = RustRequest::Range(
             semver::VersionReq::parse(">=1.70, <1.72")?,
             ">=1.70, <1.72".into(),
         );
-        assert!(req.satisfied_by(&install_info));
+        assert!(req.satisfied_by(&installed_env));
 
         let req = RustRequest::Range(semver::VersionReq::parse(">=1.72")?, ">=1.72".into());
-        assert!(!req.satisfied_by(&install_info));
+        assert!(!req.satisfied_by(&installed_env));
 
         Ok(())
     }
@@ -344,17 +346,20 @@ mod tests {
     #[test]
     fn test_satisfied_by_channel() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::new(Language::Rust, FxHashSet::default(), temp_dir.path())?;
-        install_info
+        let mut installed_env = InstalledHookEnv::new(
+            Language::Rust,
+            crate::hook_env::HookEnvIdentity::empty_dependencies(),
+            temp_dir.path(),
+        )?;
+        installed_env
             .with_language_version(semver::Version::new(1, 75, 0))
             .with_toolchain(PathBuf::from("/some/path"))
             .with_extra(EXTRA_KEY_CHANNEL, "stable");
 
         // Channel request should match when extra is set
-        assert!(RustRequest::Channel(Channel::Stable).satisfied_by(&install_info));
-        assert!(!RustRequest::Channel(Channel::Nightly).satisfied_by(&install_info));
-        assert!(!RustRequest::Channel(Channel::Beta).satisfied_by(&install_info));
+        assert!(RustRequest::Channel(Channel::Stable).satisfied_by(&installed_env));
+        assert!(!RustRequest::Channel(Channel::Nightly).satisfied_by(&installed_env));
+        assert!(!RustRequest::Channel(Channel::Beta).satisfied_by(&installed_env));
 
         Ok(())
     }
@@ -362,15 +367,18 @@ mod tests {
     #[test]
     fn test_satisfied_by_any_with_stable_channel() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::new(Language::Rust, FxHashSet::default(), temp_dir.path())?;
-        install_info
+        let mut installed_env = InstalledHookEnv::new(
+            Language::Rust,
+            crate::hook_env::HookEnvIdentity::empty_dependencies(),
+            temp_dir.path(),
+        )?;
+        installed_env
             .with_language_version(semver::Version::new(1, 75, 0))
             .with_toolchain(PathBuf::from("/some/path"))
             .with_extra("rust_channel", "stable");
 
         // Any request should match stable channel
-        assert!(RustRequest::Any.satisfied_by(&install_info));
+        assert!(RustRequest::Any.satisfied_by(&installed_env));
 
         Ok(())
     }
@@ -378,14 +386,17 @@ mod tests {
     #[test]
     fn test_satisfied_by_any_without_channel() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::new(Language::Rust, FxHashSet::default(), temp_dir.path())?;
-        install_info
+        let mut installed_env = InstalledHookEnv::new(
+            Language::Rust,
+            crate::hook_env::HookEnvIdentity::empty_dependencies(),
+            temp_dir.path(),
+        )?;
+        installed_env
             .with_language_version(semver::Version::new(1, 75, 0))
             .with_toolchain(PathBuf::from("/some/path"));
         // No channel set - should still match Any if version > 0
 
-        assert!(RustRequest::Any.satisfied_by(&install_info));
+        assert!(RustRequest::Any.satisfied_by(&installed_env));
 
         Ok(())
     }

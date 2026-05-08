@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::collections::BTreeSet;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -14,7 +13,7 @@ use prek_consts::env_vars::EnvVars;
 use tracing::{trace, warn};
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
-use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::hook::{Hook, InstalledHook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::{USE_COLOR, run_by_batch};
@@ -318,13 +317,12 @@ static CONTAINER_RUNTIME: LazyLock<ContainerRuntimeInfo> =
     LazyLock::new(ContainerRuntimeInfo::detect_runtime);
 
 impl Docker {
-    fn docker_tag(info: &InstallInfo) -> String {
+    fn docker_tag(env: &InstalledHookEnv) -> String {
         let mut hasher = DefaultHasher::new();
 
-        info.language.hash(&mut hasher);
-        info.language_version.hash(&mut hasher);
-        let deps = info.dependencies.iter().collect::<BTreeSet<&String>>();
-        deps.hash(&mut hasher);
+        env.language.hash(&mut hasher);
+        env.language_version.hash(&mut hasher);
+        env.identity.hash(&mut hasher);
 
         let digest = hex::encode(hasher.finish().to_le_bytes());
         format!("prek-{digest}")
@@ -332,14 +330,14 @@ impl Docker {
 
     async fn build_docker_image(
         hook: &Hook,
-        install_info: &InstallInfo,
+        installed_env: &InstalledHookEnv,
         pull: bool,
     ) -> Result<String> {
         let Some(src) = hook.repo_path() else {
             anyhow::bail!("Language `docker` cannot work with `local` repository");
         };
 
-        let tag = Self::docker_tag(install_info);
+        let tag = Self::docker_tag(installed_env);
         let mut cmd = Cmd::new(CONTAINER_RUNTIME.cmd(), "build docker image");
         let cmd = cmd
             .arg("build")
@@ -434,27 +432,27 @@ impl LanguageImpl for Docker {
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
 
-        let mut info = InstallInfo::new(
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
 
-        Docker::build_docker_image(&hook, &info, true)
+        Docker::build_docker_image(&hook, &env, true)
             .await
             .context("Failed to build docker image")?;
 
-        info.persist_env_path();
+        env.persist();
 
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
+    async fn check_health(&self, _env: &InstalledHookEnv) -> Result<()> {
         Ok(())
     }
 
@@ -476,7 +474,7 @@ impl LanguageImpl for Docker {
 
         let docker_tag = Docker::build_docker_image(
             hook,
-            hook.install_info().expect("Docker env must be installed"),
+            hook.installed_env().expect("Docker env must be installed"),
             false,
         )
         .await
