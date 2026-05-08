@@ -93,6 +93,26 @@ impl HookEnvIdentity {
     pub(crate) fn empty_dependencies() -> Self {
         Self::Dependencies(DependencyEnvIdentity::new(&FxHashSet::default(), None))
     }
+
+    pub(crate) fn from_legacy_dependencies(dependencies: &BTreeSet<String>) -> Self {
+        Self::Dependencies(DependencyEnvIdentity::from_legacy_dependencies(
+            dependencies,
+        ))
+    }
+
+    pub(crate) fn satisfies(&self, request: HookEnvIdentityRef<'_>) -> bool {
+        HookEnvIdentityRef::from(self) == request
+    }
+
+    pub(crate) fn legacy_dependencies_satisfy(
+        dependencies: &BTreeSet<String>,
+        request: HookEnvIdentityRef<'_>,
+    ) -> bool {
+        match request {
+            HookEnvIdentityRef::Dependencies(identity) => identity.matches_legacy(dependencies),
+            HookEnvIdentityRef::PythonUv(_) => false,
+        }
+    }
 }
 
 /// Borrowed view of an environment identity.
@@ -126,7 +146,7 @@ impl<'a> From<&'a HookEnvIdentity> for HookEnvIdentityRef<'a> {
 
 impl Eq for HookEnvIdentityRef<'_> {}
 
-impl<'a, 'b> PartialEq<HookEnvIdentityRef<'b>> for HookEnvIdentityRef<'a> {
+impl<'b> PartialEq<HookEnvIdentityRef<'b>> for HookEnvIdentityRef<'_> {
     fn eq(&self, other: &HookEnvIdentityRef<'b>) -> bool {
         match (self, other) {
             (Self::Dependencies(left), HookEnvIdentityRef::Dependencies(right)) => left == right,
@@ -154,6 +174,52 @@ impl DependencyEnvIdentity {
             remote_repo: remote_repo.map(str::to_string),
         }
     }
+
+    fn from_legacy_dependencies(dependencies: &BTreeSet<String>) -> Self {
+        let remote_repo = dependencies
+            .iter()
+            .find(|dependency| is_legacy_remote_repo_dependency(dependency))
+            .cloned();
+        let mut dependencies = dependencies.clone();
+        if let Some(remote_repo) = &remote_repo {
+            dependencies.remove(remote_repo);
+        }
+
+        Self {
+            dependencies,
+            remote_repo,
+        }
+    }
+
+    // Match an old `.prek-hook.json` dependency set without trusting the
+    // lossy split performed by `from_legacy_dependencies`.
+    //
+    // Older markers stored both user dependencies and the remote repo marker in
+    // one flat list. When reading them, we build a best-effort structured
+    // identity for display and future serialization, but reuse decisions should
+    // still preserve the old exact-list semantics.
+    fn matches_legacy(&self, legacy_dependencies: &BTreeSet<String>) -> bool {
+        let expected_len = self.dependencies.len() + usize::from(self.remote_repo.is_some());
+        legacy_dependencies.len() == expected_len
+            && self
+                .dependencies
+                .iter()
+                .all(|dependency| legacy_dependencies.contains(dependency))
+            && self
+                .remote_repo
+                .as_ref()
+                .is_none_or(|remote_repo| legacy_dependencies.contains(remote_repo))
+    }
+}
+
+fn is_legacy_remote_repo_dependency(dependency: &str) -> bool {
+    !dependency.contains(" @ ")
+        && dependency.contains('@')
+        && (dependency.contains("://")
+            || dependency.starts_with("git@")
+            || dependency.starts_with('/')
+            || dependency.starts_with("..")
+            || dependency.starts_with('.'))
 }
 
 /// Identity for `language: python_uv` environments.

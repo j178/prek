@@ -49,6 +49,7 @@
 //! hook?". The latter includes the language and language-version request.
 
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -58,7 +59,8 @@ use anyhow::{Context, Result};
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
 use prek_identify::{TagSet, tags};
 use rustc_hash::{FxHashMap, FxHashSet};
-use serde::{Deserialize, Serialize};
+use serde::de;
+use serde::{Deserialize, Deserializer, Serialize};
 use tempfile::TempDir;
 use thiserror::Error;
 use tracing::trace;
@@ -682,7 +684,7 @@ impl InstalledHook {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize)]
 pub(crate) struct InstalledHookEnv {
     pub(crate) language: Language,
     pub(crate) language_version: semver::Version,
@@ -690,6 +692,8 @@ pub(crate) struct InstalledHookEnv {
     pub(crate) env_path: PathBuf,
     pub(crate) toolchain: PathBuf,
     extra: FxHashMap<String, String>,
+    #[serde(skip, default)]
+    legacy_dependencies: Option<BTreeSet<String>>,
     #[serde(skip, default)]
     temp_dir: Option<TempDir>,
 }
@@ -703,8 +707,66 @@ impl Clone for InstalledHookEnv {
             env_path: self.env_path.clone(),
             toolchain: self.toolchain.clone(),
             extra: self.extra.clone(),
+            legacy_dependencies: self.legacy_dependencies.clone(),
             temp_dir: None,
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for InstalledHookEnv {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Wire {
+            language: Language,
+            language_version: semver::Version,
+            identity: Option<HookEnvIdentity>,
+            dependencies: Option<BTreeSet<String>>,
+            env_path: PathBuf,
+            toolchain: PathBuf,
+            #[serde(default)]
+            extra: FxHashMap<String, String>,
+        }
+
+        let Wire {
+            language,
+            language_version,
+            identity,
+            dependencies,
+            env_path,
+            toolchain,
+            extra,
+        } = Wire::deserialize(deserializer)?;
+
+        // Older `.prek-hook.json` files stored the environment identity as a
+        // top-level `dependencies` list. Keep the original list for matching:
+        // a legacy remote repo marker and a PEP 508 direct URL dependency are
+        // ambiguous without the hook config that produced the environment.
+        let (identity, legacy_dependencies) = match (identity, dependencies) {
+            (Some(identity), _) => (identity, None),
+            (None, Some(dependencies)) => (
+                HookEnvIdentity::from_legacy_dependencies(&dependencies),
+                Some(dependencies),
+            ),
+            (None, None) => {
+                return Err(de::Error::custom(
+                    "missing field `identity` or legacy field `dependencies`",
+                ));
+            }
+        };
+
+        Ok(Self {
+            language,
+            language_version,
+            identity,
+            env_path,
+            toolchain,
+            extra,
+            legacy_dependencies,
+            temp_dir: None,
+        })
     }
 }
 
@@ -726,6 +788,7 @@ impl InstalledHookEnv {
             language_version: semver::Version::new(0, 0, 0),
             toolchain: PathBuf::new(),
             extra: FxHashMap::default(),
+            legacy_dependencies: None,
             temp_dir: Some(env_path),
         })
     }
@@ -772,16 +835,24 @@ impl InstalledHookEnv {
     /// Used when only the normalized request is available, such as cache GC scanning
     /// configured hooks without building full hook instances.
     pub(crate) fn satisfies(&self, request: HookEnvRequestRef<'_>) -> bool {
-        request.language.supports_install_env()
-            && self.language == request.language
-            && HookEnvIdentityRef::from(&self.identity) == request.identity
-            && request.language_request.satisfied_by(self)
+        if !request.language.supports_install_env() || self.language != request.language {
+            return false;
+        }
+
+        let identity_satisfied = if let Some(dependencies) = &self.legacy_dependencies {
+            HookEnvIdentity::legacy_dependencies_satisfy(dependencies, request.identity)
+        } else {
+            self.identity.satisfies(request.identity)
+        };
+
+        identity_satisfied && request.language_request.satisfied_by(self)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::collections::BTreeSet;
     use std::path::PathBuf;
     use std::sync::Arc;
 
@@ -795,11 +866,110 @@ mod tests {
         RemoteHook, Shell, Stage, Stages,
     };
     use crate::hook::HookSpec;
-    use crate::hook_env::{HookEnvIdentity, HookEnvIdentityRef};
+    use crate::hook_env::{
+        DependencyEnvIdentity, HookEnvIdentity, HookEnvIdentityRef, HookEnvRequestRef,
+    };
     use crate::languages::version::LanguageRequest;
     use crate::workspace::Project;
 
-    use super::{Hook, HookBuilder, Repo};
+    use super::{Hook, HookBuilder, InstalledHookEnv, Repo};
+
+    fn legacy_installed_env(dependencies: &[&str]) -> Result<InstalledHookEnv> {
+        let temp = tempfile::tempdir()?;
+        let content = serde_json::json!({
+            "language": "python",
+            "language_version": "3.12.0",
+            "dependencies": dependencies,
+            "env_path": temp.path(),
+            "toolchain": "/usr/bin/python3",
+            "extra": {},
+        });
+
+        Ok(serde_json::from_value(content)?)
+    }
+
+    fn python_env_request<'a>(
+        identity: &'a DependencyEnvIdentity,
+        language_request: &'a LanguageRequest,
+    ) -> HookEnvRequestRef<'a> {
+        HookEnvRequestRef {
+            language: Language::Python,
+            identity: HookEnvIdentityRef::Dependencies(identity),
+            language_request,
+        }
+    }
+
+    #[test]
+    fn installed_hook_env_reads_legacy_dependencies_marker() -> Result<()> {
+        let remote_repo = "https://example.com/hooks@v1.0.0";
+        let env = legacy_installed_env(&["dep1", remote_repo])?;
+        let HookEnvIdentity::Dependencies(identity) = &env.identity else {
+            panic!("expected dependency identity");
+        };
+
+        assert_eq!(identity.remote_repo.as_deref(), Some(remote_repo));
+        assert_eq!(identity.dependencies, BTreeSet::from(["dep1".to_string()]));
+        assert_eq!(
+            env.legacy_dependencies.as_ref(),
+            Some(&BTreeSet::from([
+                "dep1".to_string(),
+                remote_repo.to_string()
+            ]))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn installed_hook_env_serializes_legacy_marker_as_identity() -> Result<()> {
+        let env = legacy_installed_env(&["dep1"])?;
+        let value = serde_json::to_value(&env)?;
+
+        assert!(value.get("dependencies").is_none());
+        assert_eq!(
+            value
+                .get("identity")
+                .and_then(|identity| identity.get("kind")),
+            Some(&serde_json::json!("dependencies"))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn installed_hook_env_legacy_dependencies_satisfy_remote_request() -> Result<()> {
+        let remote_repo = "https://example.com/hooks@v1.0.0";
+        let env = legacy_installed_env(&["dep1", remote_repo])?;
+        let identity = DependencyEnvIdentity {
+            dependencies: BTreeSet::from(["dep1".to_string()]),
+            remote_repo: Some(remote_repo.to_string()),
+        };
+        let language_request = LanguageRequest::parse(Language::Python, "3.12")?;
+
+        assert!(env.satisfies(python_env_request(&identity, &language_request)));
+
+        Ok(())
+    }
+
+    #[test]
+    fn installed_hook_env_legacy_dependencies_keep_direct_url_dependencies() -> Result<()> {
+        let direct_url = "sample @ https://example.com/sample-1.0.0.whl";
+        let env = legacy_installed_env(&[direct_url])?;
+        let HookEnvIdentity::Dependencies(env_identity) = &env.identity else {
+            panic!("expected dependency identity");
+        };
+        let identity = DependencyEnvIdentity {
+            dependencies: BTreeSet::from([direct_url.to_string()]),
+            remote_repo: None,
+        };
+        let language_request = LanguageRequest::parse(Language::Python, "3.12")?;
+
+        assert_eq!(env_identity.remote_repo, None);
+        assert_eq!(env_identity.dependencies, identity.dependencies);
+        assert!(env.satisfies(python_env_request(&identity, &language_request)));
+
+        Ok(())
+    }
 
     #[tokio::test]
     async fn hook_builder_build_fills_and_merges_attributes() -> Result<()> {
