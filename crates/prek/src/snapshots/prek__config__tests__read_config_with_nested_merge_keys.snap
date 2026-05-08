@@ -42,6 +42,7 @@ Config {
                             ),
                             verbose: None,
                             minimum_prek_version: None,
+                            uv: None,
                             _unused_keys: {},
                         },
                     },

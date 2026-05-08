@@ -75,17 +75,17 @@ impl Display for HookMetadata<'_> {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
-#[error("Language `{0}` is not implemented yet")]
-struct UnimplementedError(String);
-
-struct Unimplemented;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ShellSupport {
     Supported,
     Unsupported(&'static str),
 }
+
+#[derive(thiserror::Error, Debug)]
+#[error("Language `{0}` is not implemented yet")]
+struct UnimplementedError(String);
+
+struct Unimplemented;
 
 impl LanguageImpl for Unimplemented {
     async fn install(

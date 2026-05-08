@@ -14,7 +14,8 @@ use tracing::{debug, trace, warn};
 use crate::cli::ExitStatus;
 use crate::cli::cache_size::{dir_size_bytes, human_readable_bytes};
 use crate::config::{self, Error as ConfigError, Repo as ConfigRepo, load_config};
-use crate::hook::{HOOK_MARKER, HookEnvKey, HookSpec, InstallInfo, Repo as HookRepo};
+use crate::hook::{HOOK_MARKER, HookSpec, InstallInfo, Repo as HookRepo};
+use crate::hook_env::HookEnvKey;
 use crate::printer::Printer;
 use crate::store::{CacheBucket, REPO_MARKER, Store, ToolBucket};
 
@@ -214,7 +215,7 @@ pub(crate) async fn cache_gc(
     // While doing this, try to derive the specific tool *version* directories in use from
     // `InstallInfo.toolchain` (which is persisted in `.prek-hook.json`).
     for info in &installed {
-        if used_env_keys.iter().any(|k| k.matches_install_info(info)) {
+        if used_env_keys.iter().any(|key| info.matches_env_key(key)) {
             if let Some(dir) = info
                 .env_path
                 .file_name()
