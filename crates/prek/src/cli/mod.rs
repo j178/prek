@@ -3,13 +3,14 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::builder::styling::{AnsiColor, Effects};
-use clap::builder::{ArgPredicate, Styles};
+use clap::builder::{ArgPredicate, PathBufValueParser, Styles, TypedValueParser};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueHint};
 use clap_complete::engine::ArgValueCompleter;
 use prek_consts::env_vars::EnvVars;
 use serde::{Deserialize, Serialize};
 
 use crate::config::{HookType, Language, Stage};
+use crate::fs::expand_tilde;
 
 mod auto_update;
 mod cache_clean;
@@ -155,7 +156,12 @@ pub(crate) struct Cli {
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct GlobalArgs {
     /// Path to alternate config file.
-    #[arg(global = true, short, long)]
+    #[arg(
+        global = true,
+        short,
+        long,
+        value_parser = PathBufValueParser::new().map(expand_tilde),
+    )]
     pub(crate) config: Option<PathBuf>,
 
     /// Change to directory before running.
@@ -165,6 +171,7 @@ pub(crate) struct GlobalArgs {
         long,
         value_name = "DIR",
         value_hint = ValueHint::DirPath,
+        value_parser = PathBufValueParser::new().map(expand_tilde),
     )]
     pub(crate) cd: Option<PathBuf>,
 
@@ -205,7 +212,13 @@ pub(crate) struct GlobalArgs {
 
     /// Write trace logs to the specified file.
     /// If not specified, trace logs will be written to `$PREK_HOME/prek.log`.
-    #[arg(global = true, long, value_name = "LOG_FILE", value_hint = ValueHint::FilePath)]
+    #[arg(
+        global = true,
+        long,
+        value_name = "LOG_FILE",
+        value_hint = ValueHint::FilePath,
+        value_parser = PathBufValueParser::new().map(expand_tilde),
+    )]
     pub(crate) log_file: Option<PathBuf>,
 
     /// Do not write trace logs to a log file.
@@ -346,7 +359,12 @@ pub(crate) struct InstallArgs {
     /// refuses to install shims while `core.hooksPath` is configured outside the repo.
     /// It only writes shims to `<GIT_DIR>/hooks`; Git will keep using
     /// `core.hooksPath` until that config changes.
-    #[arg(long, value_name = "GIT_DIR", value_hint = ValueHint::DirPath)]
+    #[arg(
+        long,
+        value_name = "GIT_DIR",
+        value_hint = ValueHint::DirPath,
+        value_parser = PathBufValueParser::new().map(expand_tilde),
+    )]
     pub(crate) git_dir: Option<PathBuf>,
 }
 
@@ -411,7 +429,12 @@ pub(crate) struct UninstallArgs {
     /// refuses to modify shims while `core.hooksPath` is configured outside the repo.
     /// It only removes shims from `<GIT_DIR>/hooks`; Git may still use the configured
     /// `core.hooksPath` until that config changes.
-    #[arg(long, value_name = "GIT_DIR", value_hint = ValueHint::DirPath)]
+    #[arg(
+        long,
+        value_name = "GIT_DIR",
+        value_hint = ValueHint::DirPath,
+        value_parser = PathBufValueParser::new().map(expand_tilde),
+    )]
     pub(crate) git_dir: Option<PathBuf>,
 }
 

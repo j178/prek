@@ -13,7 +13,7 @@ use thiserror::Error;
 use tracing::{debug, warn};
 
 use crate::config::{RemoteRepo, RemoteRepoKey};
-use crate::fs::LockedFile;
+use crate::fs::{LockedFile, expand_tilde};
 use crate::git::{self, TerminalPrompt};
 use crate::hook::InstallInfo;
 use crate::run::CONCURRENCY;
@@ -51,16 +51,6 @@ pub enum Error {
     },
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
-}
-
-/// Expand a path starting with `~` to the user's home directory.
-fn expand_tilde(path: PathBuf) -> PathBuf {
-    if let Ok(stripped) = path.strip_prefix("~") {
-        if let Some(home) = std::env::home_dir() {
-            return home.join(stripped);
-        }
-    }
-    path
 }
 
 pub(crate) const REPO_MARKER: &str = ".prek-repo.json";

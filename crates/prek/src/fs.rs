@@ -53,6 +53,16 @@ static LOCK_WARNING_PATHS: LazyLock<Mutex<FxHashSet<PathBuf>>> = LazyLock::new(D
 static FORCE_CROSS_PROCESS_LOCK_WARNING_FOR: LazyLock<Mutex<FxHashSet<PathBuf>>> =
     LazyLock::new(Default::default);
 
+/// Expand a path starting with `~` to the user's home directory.
+pub(crate) fn expand_tilde(path: PathBuf) -> PathBuf {
+    if let Ok(stripped) = path.strip_prefix("~") {
+        if let Some(home) = std::env::home_dir() {
+            return home.join(stripped);
+        }
+    }
+    path
+}
+
 /// A file lock that is automatically released when dropped.
 #[derive(Debug)]
 pub struct LockedFile {
