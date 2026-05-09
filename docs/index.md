@@ -22,6 +22,7 @@
 - New to `prek`: start with [Installation](installation.md), then follow the [Quickstart](quickstart.md).
 - Already set up: use [Common Workflows](usage.md) for the commands you run day to day.
 - Writing config: read [Configuration](configuration.md), then use the [Configuration Reference](reference/configuration.md) for exact keys.
+- Looking for setup patterns: browse the [Cookbook](cookbook.md).
 - Working in a monorepo: see [Workspace Mode](workspace.md).
 - Looking for flags or environment variables: use the [CLI Reference](reference/cli.md) and [Environment Variable Reference](reference/environment-variables.md).
 

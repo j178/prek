@@ -21,6 +21,7 @@ Per that file, prefer explicit markdown docs when you need details:
 - [Installation](https://prek.j178.dev/installation/index.md)
 - [Quickstart](https://prek.j178.dev/quickstart/index.md)
 - [Common Workflows](https://prek.j178.dev/usage/index.md)
+- [Cookbook](https://prek.j178.dev/cookbook/index.md)
 - [Configuration](https://prek.j178.dev/configuration/index.md)
 - [Workspace Mode](https://prek.j178.dev/workspace/index.md)
 - [Language Support](https://prek.j178.dev/languages/index.md)
