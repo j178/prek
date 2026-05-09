@@ -9,10 +9,22 @@ This is useful when you want a personal `prek` hook that works across repositori
 
 Choose the Git hook event you want to run on, for example `pre-commit`, then register a global config-based hook:
 
-```bash
-git config --global hook.prek-pre-commit.event pre-commit
-git config --global hook.prek-pre-commit.command 'prek hook-impl --hook-type pre-commit --skip-on-missing-config --'
-```
+=== "git config command"
+
+    ```bash
+    git config --global hook.prek-pre-commit.event pre-commit
+    git config --global hook.prek-pre-commit.command 'prek hook-impl --hook-type pre-commit --skip-on-missing-config --'
+    ```
+
+=== "gitconfig file"
+
+    Edit your global Git config directly, for example in `~/.gitconfig`:
+
+    ```gitconfig
+    [hook "prek-pre-commit"]
+        event = pre-commit
+        command = prek hook-impl --hook-type pre-commit --skip-on-missing-config --
+    ```
 
 The config has three moving parts:
 
@@ -20,15 +32,11 @@ The config has three moving parts:
 - `hook.<friendly-name>.command`: the command Git runs for that event.
 - `<friendly-name>`: a user-defined name for this configured hook. Keep it unique in your Git config.
 
-Keep `--skip-on-missing-config` in the command so repositories without a `prek.toml` or `.pre-commit-config.yaml` do not fail ordinary Git operations.
-Keep the trailing `--` so Git-provided hook arguments, such as a `commit-msg` filename or `pre-push` remote name and URL, are forwarded to `prek hook-impl` instead of being parsed as hook selectors.
+!!! tip "Keep these command options"
 
-To configure a different event, replace both occurrences of `pre-commit`:
+    Keep `--skip-on-missing-config` in the command so repositories without a `prek.toml` or `.pre-commit-config.yaml` do not fail ordinary Git operations.
 
-```bash
-git config --global hook.<friendly-name>.event <event>
-git config --global hook.<friendly-name>.command 'prek hook-impl --hook-type <event> --skip-on-missing-config --'
-```
+    Keep the trailing `--` so Git-provided hook arguments, such as a `commit-msg` filename or `pre-push` remote name and URL, are forwarded to `prek hook-impl` instead of being parsed as hook selectors.
 
 By default, `prek hook-impl` discovers the current repository's config.
 If you want one global hook config to run in every repository, pass that config explicitly:
