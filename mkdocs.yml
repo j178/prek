@@ -84,6 +84,7 @@ plugins:
           - languages.md
           - builtin.md
           - integrations.md
+          - cookbook.md
           - authoring-hooks.md
         Reference:
           - reference/cli.md
@@ -110,6 +111,7 @@ nav:
     - Language Support: languages.md
     - Built-in Hooks: builtin.md
     - Integrations: integrations.md
+    - Cookbook: cookbook.md
     - Authoring Hooks: authoring-hooks.md
   - Reference:
     - CLI Reference: reference/cli.md
