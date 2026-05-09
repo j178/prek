@@ -11,7 +11,7 @@ Choose the Git hook event you want to run on, for example `pre-commit`, then reg
 
 ```bash
 git config --global hook.prek-pre-commit.event pre-commit
-git config --global hook.prek-pre-commit.command 'prek hook-impl --hook-type pre-commit --skip-on-missing-config'
+git config --global hook.prek-pre-commit.command 'prek hook-impl --hook-type pre-commit --skip-on-missing-config --'
 ```
 
 The config has three moving parts:
@@ -21,19 +21,20 @@ The config has three moving parts:
 - `<friendly-name>`: a user-defined name for this configured hook. Keep it unique in your Git config.
 
 Keep `--skip-on-missing-config` in the command so repositories without a `prek.toml` or `.pre-commit-config.yaml` do not fail ordinary Git operations.
+Keep the trailing `--` so Git-provided hook arguments, such as a `commit-msg` filename or `pre-push` remote name and URL, are forwarded to `prek hook-impl` instead of being parsed as hook selectors.
 
 To configure a different event, replace both occurrences of `pre-commit`:
 
 ```bash
 git config --global hook.<friendly-name>.event <event>
-git config --global hook.<friendly-name>.command 'prek hook-impl --hook-type <event> --skip-on-missing-config'
+git config --global hook.<friendly-name>.command 'prek hook-impl --hook-type <event> --skip-on-missing-config --'
 ```
 
 By default, `prek hook-impl` discovers the current repository's config.
 If you want one global hook config to run in every repository, pass that config explicitly:
 
 ```bash
-git config --global hook.<friendly-name>.command 'prek hook-impl --hook-type <event> --config <config-file>'
+git config --global hook.<friendly-name>.command 'prek hook-impl --hook-type <event> --config <config-file> --'
 ```
 
 For example, a global config file at `~/.config/prek/global-hooks.toml` can run gitleaks in every repository:
@@ -49,5 +50,5 @@ Then point the global Git hook at that config:
 
 ```bash
 git config --global hook.gitleaks.event pre-commit
-git config --global hook.gitleaks.command 'prek hook-impl --hook-type pre-commit --config ~/.config/prek/global-hooks.toml'
+git config --global hook.gitleaks.command 'prek hook-impl --hook-type pre-commit --config ~/.config/prek/global-hooks.toml --'
 ```
