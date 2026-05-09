@@ -113,14 +113,17 @@ impl TestContext {
 
     /// Generate an escaped regex pattern for the given path.
     fn path_pattern(path: impl AsRef<Path>) -> String {
+        let separator = r"(\\\\|\\|\/)";
         format!(
             // Trim the trailing separator for cross-platform directories filters
-            r"{}\\?/?",
+            r"{}{}?",
             regex::escape(&path.as_ref().display().to_string())
                 // Make separators platform-agnostic because on Windows we will display
-                // paths with Unix-style separators sometimes
-                .replace('/', r"(\\|\/)")
-                .replace(r"\\", r"(\\|\/)")
+                // paths with Unix-style separators sometimes. `PathBuf` debug output
+                // escapes backslash separators, so match those as well.
+                .replace('/', separator)
+                .replace(r"\\", separator),
+            separator,
         )
     }
 
@@ -429,7 +432,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     // File sizes
     (r"(\s|\()(\d+\.)?\d+\s?([KMGTPE]i)?B", "$1[SIZE]"),
     // Rewrite Windows output to Unix output
-    (r"\\([\w\d]|\.\.|\.)", "/$1"),
+    (r"\\{1,2}([\w\d]|\.\.|\.)", "/$1"),
     // The exact message is host language dependent
     (
         r"Caused by: .* \(os error 2\)",
