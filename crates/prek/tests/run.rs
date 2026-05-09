@@ -1300,6 +1300,76 @@ fn subdirectory() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn global_path_options_expand_tilde() -> Result<()> {
+    let context = TestContext::new();
+    let cd = context.home_dir().child("project");
+    cd.create_dir_all()?;
+
+    cmd_snapshot!(context.filters(), context
+        .command()
+        .arg("--show-settings")
+        .arg("--config=~/prek.toml")
+        .arg("--cd=~/project")
+        .env("HOME", context.home_dir().path())
+        .env("USERPROFILE", context.home_dir().path()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalArgs {
+        config: Some(
+            "[HOME]/prek.toml",
+        ),
+        cd: Some(
+            "[HOME]/project",
+        ),
+        color: Auto,
+        refresh: false,
+        help: (),
+        no_progress: false,
+        quiet: 0,
+        verbose: 0,
+        log_file: None,
+        no_log_file: false,
+        version: (),
+        show_settings: true,
+    }
+    RunArgs {
+        includes: [],
+        skips: [],
+        all_files: false,
+        files: [],
+        directory: [],
+        from_ref: None,
+        to_ref: None,
+        last_commit: false,
+        stage: None,
+        show_diff_on_failure: false,
+        fail_fast: false,
+        no_fail_fast: false,
+        dry_run: false,
+        extra: RunExtraArgs {
+            remote_branch: None,
+            local_branch: None,
+            pre_rebase_upstream: None,
+            pre_rebase_branch: None,
+            commit_msg_filename: None,
+            prepare_commit_message_source: None,
+            commit_object_name: None,
+            remote_name: None,
+            remote_url: None,
+            checkout_type: None,
+            is_squash_merge: false,
+            rewrite_command: None,
+        },
+    }
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
 /// Test hook `log_file` option.
 #[test]
 fn log_file() {
