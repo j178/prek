@@ -14,6 +14,14 @@ git config --global hook.prek-pre-commit.event pre-commit
 git config --global hook.prek-pre-commit.command 'prek hook-impl --hook-type pre-commit --skip-on-missing-config --'
 ```
 
+Or edit your global Git config directly, for example in `~/.gitconfig`:
+
+```gitconfig
+[hook "prek-pre-commit"]
+	event = pre-commit
+	command = prek hook-impl --hook-type pre-commit --skip-on-missing-config --
+```
+
 The config has three moving parts:
 
 - `hook.<friendly-name>.event`: the Git hook event to listen for, such as `pre-commit`, `pre-push`, or `commit-msg`.
