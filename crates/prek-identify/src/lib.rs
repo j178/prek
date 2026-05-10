@@ -317,12 +317,9 @@ fn tags_from_filename(filename: &Path) -> TagSet {
         .unwrap_or_default();
 
     if let Some(ext) = ext {
-        // Check if extension is already lowercase to avoid allocation
-        if ext.chars().all(|c| c.is_ascii_lowercase()) {
-            if let Some(tags) = tags::EXTENSIONS.get(ext) {
-                result |= tags;
-            }
-        } else {
+        if let Some(tags) = tags::EXTENSIONS.get(ext) {
+            result |= tags;
+        } else if ext.as_bytes().iter().any(u8::is_ascii_uppercase) {
             let ext_lower = ext.to_ascii_lowercase();
             if let Some(tags) = tags::EXTENSIONS.get(ext_lower.as_str()) {
                 result |= tags;
