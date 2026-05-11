@@ -9,7 +9,7 @@ use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::InstalledHook;
-use crate::hook::{Hook, InstallInfo};
+use crate::hook::{Hook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::languages::node::NodeRequest;
 use crate::languages::node::installer::{NodeInstaller, NodeResult, bin_dir, lib_dir};
@@ -52,20 +52,20 @@ impl LanguageImpl for Node {
             .await
             .context("Failed to install node")?;
 
-        let mut info = InstallInfo::new(
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
 
         let lts = serde_json::to_string(&node.version().lts).context("Failed to serialize LTS")?;
-        info.with_toolchain(node.node().to_path_buf());
-        info.with_language_version(node.version().version.clone());
-        info.with_extra(EXTRA_KEY_LTS, &lts);
+        env.with_toolchain(node.node().to_path_buf());
+        env.with_language_version(node.version().version.clone());
+        env.with_extra(EXTRA_KEY_LTS, &lts);
 
         // 2. Create env
-        let bin_dir = bin_dir(&info.env_path);
-        let lib_dir = lib_dir(&info.env_path);
+        let bin_dir = bin_dir(&env.env_path);
+        let lib_dir = lib_dir(&env.env_path);
         fs_err::tokio::create_dir_all(&bin_dir).await?;
         fs_err::tokio::create_dir_all(&lib_dir).await?;
 
@@ -98,7 +98,7 @@ impl LanguageImpl for Node {
                 .arg("--install-links")
                 .args(&*deps)
                 .env(EnvVars::PATH, new_path)
-                .env(EnvVars::NPM_CONFIG_PREFIX, &info.env_path)
+                .env(EnvVars::NPM_CONFIG_PREFIX, &env.env_path)
                 .env_remove(EnvVars::NPM_CONFIG_USERCONFIG)
                 .env(EnvVars::NODE_PATH, &lib_dir)
                 .check(true)
@@ -106,26 +106,26 @@ impl LanguageImpl for Node {
                 .await?;
         }
 
-        info.persist_env_path();
+        env.persist();
 
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        let node = NodeResult::from_executables(info.toolchain.clone(), PathBuf::new())
+    async fn check_health(&self, env: &InstalledHookEnv) -> Result<()> {
+        let node = NodeResult::from_executables(env.toolchain.clone(), PathBuf::new())
             .fill_version()
             .await
             .context("Failed to query node version")?;
 
-        if node.version().version != info.language_version {
+        if node.version().version != env.language_version {
             anyhow::bail!(
                 "Node version mismatch: expected {}, found {}",
-                info.language_version,
+                env.language_version,
                 node.version().version
             );
         }

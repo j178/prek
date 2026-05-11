@@ -8,7 +8,7 @@ use tokio::io::AsyncWriteExt;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
-use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::hook::{Hook, InstalledHook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::languages::python::{Uv, python_exec, query_python_info_cached};
 use crate::process::Cmd;
@@ -154,25 +154,25 @@ impl LanguageImpl for Pygrep {
             anyhow::bail!("Failed to find or install a Python interpreter for `pygrep`.");
         };
 
-        let mut info = InstallInfo::new(
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
-        info.with_toolchain(python);
+        env.with_toolchain(python);
 
-        info.persist_env_path();
+        env.persist();
 
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        query_python_info_cached(&info.toolchain)
+    async fn check_health(&self, env: &InstalledHookEnv) -> Result<()> {
+        query_python_info_cached(&env.toolchain)
             .await
             .context("Failed to query Python info")?;
 
@@ -188,7 +188,7 @@ impl LanguageImpl for Pygrep {
     ) -> Result<(i32, Vec<u8>)> {
         let progress = reporter.on_run_start(hook, filenames.len());
 
-        let info = hook.install_info().expect("Pygrep hook must be installed");
+        let env = hook.installed_env().expect("Pygrep hook must be installed");
 
         let cache = store.cache_path(CacheBucket::Python);
         fs_err::tokio::create_dir_all(&cache).await?;
@@ -199,7 +199,7 @@ impl LanguageImpl for Pygrep {
             .context("Failed to write Python script")?;
 
         let args = Args::parse(&hook.args).context("Failed to parse `args`")?;
-        let mut cmd = Cmd::new(&info.toolchain, "python script")
+        let mut cmd = Cmd::new(&env.toolchain, "python script")
             .current_dir(hook.work_dir())
             .envs(&hook.env)
             .arg("-I") // Isolate mode.

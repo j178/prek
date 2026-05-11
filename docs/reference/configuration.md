@@ -1206,6 +1206,70 @@ Extra dependencies for hooks that run inside a managed environment (for example 
 
 If you set this for a language that doesn’t support dependency installation, `prek` fails with a configuration error.
 
+`language: python_uv` does not support `additional_dependencies`; add Python packages to a uv dependency group and update `uv.lock` instead.
+
+### `uv`
+
+<a id="prek-only-uv"></a>
+
+!!! note "prek-only"
+
+    `uv` is a `prek` extension for `language: python_uv`.
+
+Configure how `python_uv` builds the prek-managed hook environment from a uv project.
+
+- Type: object
+- Valid only when `language = "python_uv"`
+
+Fields:
+
+- `project`: uv project directory. Defaults to the directory containing the prek config.
+- `lockfile`: uv lockfile path. Defaults to `<project>/uv.lock`; currently only the project's default `uv.lock` is supported.
+- `dependency_groups`: dependency groups to sync. Defaults to `[]`.
+- `extras`: extras to sync. Defaults to `[]`.
+- `install_project`: install the current project. Defaults to `true`.
+- `lock_mode`: `locked` or `frozen`. Defaults to `locked`.
+
+Example:
+
+=== "prek.toml"
+
+    ```toml
+    [[repos]]
+    repo = "local"
+
+    [[repos.hooks]]
+    id = "ty"
+    name = "ty"
+    entry = "ty check ."
+    language = "python_uv"
+    pass_filenames = false
+
+    [repos.hooks.uv]
+    project = "."
+    dependency_groups = ["typecheck"]
+    install_project = true
+    lock_mode = "locked"
+    ```
+
+=== ".pre-commit-config.yaml"
+
+    ```yaml
+    repos:
+      - repo: local
+        hooks:
+          - id: ty
+            name: ty
+            entry: ty check .
+            language: python_uv
+            pass_filenames: false
+            uv:
+              project: .
+              dependency_groups: [typecheck]
+              install_project: true
+              lock_mode: locked
+    ```
+
 ### `minimum_prek_version`
 
 <a id="prek-only-minimum-prek-version-hook"></a>

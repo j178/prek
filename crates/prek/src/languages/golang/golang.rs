@@ -8,7 +8,7 @@ use prek_consts::env_vars::EnvVars;
 use prek_consts::prepend_paths;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
-use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::hook::{Hook, InstalledHook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::languages::golang::GoRequest;
 use crate::languages::golang::installer::GoInstaller;
@@ -43,16 +43,16 @@ impl LanguageImpl for Golang {
             .await
             .context("Failed to install go")?;
 
-        let mut info = InstallInfo::new(
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
-        info.with_toolchain(go.bin().to_path_buf())
+        env.with_toolchain(go.bin().to_path_buf())
             .with_language_version(go.version().deref().clone());
 
         // 2. Create environment
-        fs_err::tokio::create_dir_all(bin_dir(&info.env_path)).await?;
+        fs_err::tokio::create_dir_all(bin_dir(&env.env_path)).await?;
 
         // 3. Install dependencies
         // go: ~/.cache/prek/tools/go/1.24.0/bin/go
@@ -71,14 +71,14 @@ impl LanguageImpl for Golang {
                 let mut cmd = go.cmd("go install");
                 cmd.arg("install")
                     .env(EnvVars::GOTOOLCHAIN, "local")
-                    .env(EnvVars::GOBIN, bin_dir(&info.env_path));
+                    .env(EnvVars::GOBIN, bin_dir(&env.env_path));
                 cmd
             } else {
                 let mut cmd = go.cmd("go install");
                 cmd.arg("install")
                     .env(EnvVars::GOTOOLCHAIN, "local")
                     .env(EnvVars::GOROOT, go_root)
-                    .env(EnvVars::GOBIN, bin_dir(&info.env_path))
+                    .env(EnvVars::GOBIN, bin_dir(&env.env_path))
                     .env(EnvVars::GOFLAGS, "-modcacherw")
                     .env(EnvVars::GOPATH, &go_cache);
                 cmd
@@ -103,17 +103,17 @@ impl LanguageImpl for Golang {
             cmd.arg(dep).remove_git_envs().check(true).output().await?;
         }
 
-        info.persist_env_path();
+        env.persist();
 
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, _info: &InstallInfo) -> anyhow::Result<()> {
+    async fn check_health(&self, _env: &InstalledHookEnv) -> anyhow::Result<()> {
         Ok(())
     }
 

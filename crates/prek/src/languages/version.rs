@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use crate::config::Language;
-use crate::hook::InstallInfo;
+use crate::hook::InstalledHookEnv;
 use crate::languages::bun::BunRequest;
 use crate::languages::deno::DenoRequest;
 use crate::languages::dotnet::DotnetRequest;
@@ -92,7 +92,7 @@ impl LanguageRequest {
             Language::Deno => Self::Deno(request.parse()?),
             Language::Golang => Self::Golang(request.parse()?),
             Language::Node => Self::Node(request.parse()?),
-            Language::Python => Self::Python(request.parse()?),
+            Language::Python | Language::PythonUv => Self::Python(request.parse()?),
             Language::Ruby => Self::Ruby(request.parse()?),
             Language::Rust => Self::Rust(request.parse()?),
             Language::Conda
@@ -113,18 +113,18 @@ impl LanguageRequest {
         })
     }
 
-    pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
+    pub(crate) fn satisfied_by(&self, installed_env: &InstalledHookEnv) -> bool {
         match self {
             LanguageRequest::Any { .. } => true,
-            LanguageRequest::Bun(req) => req.satisfied_by(install_info),
-            LanguageRequest::Dotnet(req) => req.satisfied_by(install_info),
-            LanguageRequest::Deno(req) => req.satisfied_by(install_info),
-            LanguageRequest::Golang(req) => req.satisfied_by(install_info),
-            LanguageRequest::Node(req) => req.satisfied_by(install_info),
-            LanguageRequest::Python(req) => req.satisfied_by(install_info),
-            LanguageRequest::Ruby(req) => req.satisfied_by(install_info),
-            LanguageRequest::Rust(req) => req.satisfied_by(install_info),
-            LanguageRequest::Semver(req) => req.satisfied_by(install_info),
+            LanguageRequest::Bun(req) => req.satisfied_by(installed_env),
+            LanguageRequest::Dotnet(req) => req.satisfied_by(installed_env),
+            LanguageRequest::Deno(req) => req.satisfied_by(installed_env),
+            LanguageRequest::Golang(req) => req.satisfied_by(installed_env),
+            LanguageRequest::Node(req) => req.satisfied_by(installed_env),
+            LanguageRequest::Python(req) => req.satisfied_by(installed_env),
+            LanguageRequest::Ruby(req) => req.satisfied_by(installed_env),
+            LanguageRequest::Rust(req) => req.satisfied_by(installed_env),
+            LanguageRequest::Semver(req) => req.satisfied_by(installed_env),
         }
     }
 }
@@ -143,8 +143,8 @@ impl FromStr for SemverRequest {
 }
 
 impl SemverRequest {
-    fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
-        self.0.matches(&install_info.language_version)
+    fn satisfied_by(&self, installed_env: &InstalledHookEnv) -> bool {
+        self.0.matches(&installed_env.language_version)
     }
 }
 

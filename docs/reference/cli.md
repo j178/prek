@@ -343,6 +343,7 @@ prek list [OPTIONS] [HOOK|PROJECT]...
 <li><code>perl</code></li>
 <li><code>pygrep</code></li>
 <li><code>python</code></li>
+<li><code>python-uv</code></li>
 <li><code>r</code></li>
 <li><code>ruby</code></li>
 <li><code>rust</code></li>

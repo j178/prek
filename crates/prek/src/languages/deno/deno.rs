@@ -8,7 +8,7 @@ use prek_consts::prepend_paths;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
-use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::hook::{Hook, InstalledHook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::languages::deno::DenoRequest;
 use crate::languages::deno::installer::{DenoInstaller, DenoResult, bin_dir};
@@ -78,17 +78,17 @@ impl LanguageImpl for Deno {
             .await
             .context("Failed to install deno")?;
 
-        let mut info = InstallInfo::new(
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
 
-        info.with_toolchain(deno.deno().to_path_buf());
-        info.with_language_version((**deno.version()).clone());
+        env.with_toolchain(deno.deno().to_path_buf());
+        env.with_language_version((**deno.version()).clone());
 
         // 2. Create env
-        let env_bin_dir = bin_dir(&info.env_path);
+        let env_bin_dir = bin_dir(&env.env_path);
         fs_err::tokio::create_dir_all(&env_bin_dir).await?;
 
         // Relative install targets in `additional_dependencies` are resolved by Deno
@@ -136,7 +136,7 @@ impl LanguageImpl for Deno {
                 .arg("--global")
                 .arg("--force")
                 .arg("--root")
-                .arg(&info.env_path);
+                .arg(&env.env_path);
 
             if let Some(name) = name {
                 install_cmd.arg("--name").arg(name);
@@ -150,26 +150,26 @@ impl LanguageImpl for Deno {
                 .with_context(|| format!("Failed to install deno dependency `{spec}`"))?;
         }
 
-        info.persist_env_path();
+        env.persist();
 
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        let deno = DenoResult::from_executable(info.toolchain.clone())
+    async fn check_health(&self, env: &InstalledHookEnv) -> Result<()> {
+        let deno = DenoResult::from_executable(env.toolchain.clone())
             .fill_version()
             .await
             .context("Failed to query deno version")?;
 
-        if **deno.version() != info.language_version {
+        if **deno.version() != env.language_version {
             anyhow::bail!(
                 "Deno version mismatch: expected {}, found {}",
-                info.language_version,
+                env.language_version,
                 deno.version()
             );
         }
@@ -187,8 +187,8 @@ impl LanguageImpl for Deno {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let deno_cache_dir = store.cache_path(CacheBucket::Deno);
-        let info = hook.install_info().expect("Deno must be installed");
-        let env_dir = &info.env_path;
+        let env = hook.installed_env().expect("Deno must be installed");
+        let env_dir = &env.env_path;
         let deno_bin_dir = hook.toolchain_dir().expect("Deno must have toolchain dir");
         let new_path =
             prepend_paths(&[&bin_dir(env_dir), deno_bin_dir]).context("Failed to join PATH")?;

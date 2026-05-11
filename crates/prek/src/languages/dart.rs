@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
-use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::hook::{Hook, InstalledHook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
@@ -96,13 +96,13 @@ impl LanguageImpl for Dart {
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
 
-        let mut info = InstallInfo::new(
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
 
-        debug!(%hook, target = %info.env_path.display(), "Installing Dart environment");
+        debug!(%hook, target = %env.env_path.display(), "Installing Dart environment");
 
         let dart = find_dart_binary()?;
 
@@ -110,7 +110,7 @@ impl LanguageImpl for Dart {
         if source_path.join(PUBSPEC_YAML).exists() {
             install_from_pubspec(
                 &dart,
-                &info.env_path,
+                &env.env_path,
                 source_path,
                 &hook.additional_dependencies,
             )
@@ -118,7 +118,7 @@ impl LanguageImpl for Dart {
         } else if !hook.additional_dependencies.is_empty() {
             install_package_config(
                 &dart,
-                &info.env_path,
+                &env.env_path,
                 None,
                 None,
                 &hook.additional_dependencies,
@@ -127,24 +127,24 @@ impl LanguageImpl for Dart {
             .context("Failed to install Dart additional dependencies")?;
         }
 
-        info.with_toolchain(dart);
-        info.persist_env_path();
+        env.with_toolchain(dart);
+        env.persist();
 
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
+    async fn check_health(&self, env: &InstalledHookEnv) -> Result<()> {
         let dart = find_dart_binary()?;
 
-        if dart != info.toolchain {
+        if dart != env.toolchain {
             anyhow::bail!(
                 "Dart executable mismatch: expected `{}`, found `{}`",
-                info.toolchain.display(),
+                env.toolchain.display(),
                 dart.display()
             );
         }

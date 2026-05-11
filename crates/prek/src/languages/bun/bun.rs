@@ -9,7 +9,7 @@ use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
 use crate::hook::InstalledHook;
-use crate::hook::{Hook, InstallInfo};
+use crate::hook::{Hook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::languages::bun::BunRequest;
 use crate::languages::bun::installer::{BunInstaller, BunResult, bin_dir, lib_dir};
@@ -51,19 +51,19 @@ impl LanguageImpl for Bun {
             .await
             .context("Failed to install bun")?;
 
-        let mut info = InstallInfo::new(
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
 
-        info.with_toolchain(bun.bun().to_path_buf());
+        env.with_toolchain(bun.bun().to_path_buf());
         // BunVersion implements Deref<Target = semver::Version>, so we clone the inner version
-        info.with_language_version((**bun.version()).clone());
+        env.with_language_version((**bun.version()).clone());
 
         // 2. Create env
-        let bin_dir = bin_dir(&info.env_path);
-        let lib_dir = lib_dir(&info.env_path);
+        let bin_dir = bin_dir(&env.env_path);
+        let lib_dir = lib_dir(&env.env_path);
         fs_err::tokio::create_dir_all(&bin_dir).await?;
         fs_err::tokio::create_dir_all(&lib_dir).await?;
 
@@ -83,32 +83,32 @@ impl LanguageImpl for Bun {
                 .arg("-g")
                 .args(&*deps)
                 .env(EnvVars::PATH, new_path)
-                .env(EnvVars::BUN_INSTALL, &info.env_path)
+                .env(EnvVars::BUN_INSTALL, &env.env_path)
                 .check(true)
                 .output()
                 .await?;
         }
 
-        info.persist_env_path();
+        env.persist();
 
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, info: &InstallInfo) -> Result<()> {
-        let bun = BunResult::from_executable(info.toolchain.clone())
+    async fn check_health(&self, env: &InstalledHookEnv) -> Result<()> {
+        let bun = BunResult::from_executable(env.toolchain.clone())
             .fill_version()
             .await
             .context("Failed to query bun version")?;
 
-        if **bun.version() != info.language_version {
+        if **bun.version() != env.language_version {
             anyhow::bail!(
                 "Bun version mismatch: expected {}, found {}",
-                info.language_version,
+                env.language_version,
                 bun.version()
             );
         }

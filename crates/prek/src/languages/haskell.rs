@@ -9,7 +9,7 @@ use prek_consts::prepend_paths;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
-use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::hook::{Hook, InstalledHook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
@@ -31,15 +31,15 @@ impl LanguageImpl for Haskell {
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
 
-        let mut info = InstallInfo::new(
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
 
-        debug!(%hook, target = %info.env_path.display(), "Installing Haskell environment");
+        debug!(%hook, target = %env.env_path.display(), "Installing Haskell environment");
 
-        let bin_dir = info.env_path.join("bin");
+        let bin_dir = env.env_path.join("bin");
         fs_err::tokio::create_dir_all(&bin_dir).await?;
 
         // Identify packages: *.cabal files in repo + additional_dependencies
@@ -94,17 +94,17 @@ impl LanguageImpl for Haskell {
             .await
             .context("Failed to install haskell dependencies")?;
 
-        info.persist_env_path();
+        env.persist();
 
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
+    async fn check_health(&self, _env: &InstalledHookEnv) -> Result<()> {
         Ok(())
     }
 

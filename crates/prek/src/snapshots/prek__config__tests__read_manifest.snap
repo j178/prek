@@ -42,6 +42,7 @@ Manifest {
                 stages: None,
                 verbose: None,
                 minimum_prek_version: None,
+                uv: None,
                 _unused_keys: {
                     "minimum_pre_commit_version": String("2.9.2"),
                 },
@@ -85,6 +86,7 @@ Manifest {
                 stages: None,
                 verbose: None,
                 minimum_prek_version: None,
+                uv: None,
                 _unused_keys: {
                     "minimum_pre_commit_version": String("2.9.2"),
                 },
@@ -131,6 +133,7 @@ Manifest {
                 stages: None,
                 verbose: None,
                 minimum_prek_version: None,
+                uv: None,
                 _unused_keys: {
                     "minimum_pre_commit_version": String("2.9.2"),
                 },

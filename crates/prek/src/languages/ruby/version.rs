@@ -2,7 +2,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use crate::hook::InstallInfo;
+use crate::hook::InstalledHookEnv;
 use crate::languages::version::{Error, try_into_u64_slice};
 
 /// Ruby version request parsed from `language_version` field
@@ -122,10 +122,10 @@ impl RubyRequest {
     /// Check if this request is satisfied by the given Ruby installation
     ///
     /// This is used at runtime to verify an installation meets the requirements.
-    pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
+    pub(crate) fn satisfied_by(&self, installed_env: &InstalledHookEnv) -> bool {
         self.matches(
-            &install_info.language_version,
-            Some(&install_info.toolchain),
+            &installed_env.language_version,
+            Some(&installed_env.toolchain),
         )
     }
 }
@@ -134,7 +134,6 @@ impl RubyRequest {
 mod tests {
     use super::*;
     use crate::config::Language;
-    use rustc_hash::FxHashSet;
 
     #[test]
     fn test_parse_ruby_request() {
@@ -179,36 +178,42 @@ mod tests {
     #[test]
     fn test_version_matching() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::new(Language::Ruby, FxHashSet::default(), temp_dir.path())?;
-        install_info
+        let mut installed_env = InstalledHookEnv::new(
+            Language::Ruby,
+            crate::hook_env::HookEnvIdentity::empty_dependencies(),
+            temp_dir.path(),
+        )?;
+        installed_env
             .with_language_version(semver::Version::new(3, 3, 6))
             .with_toolchain(PathBuf::from("/usr/bin/ruby"));
 
-        assert!(RubyRequest::Any.satisfied_by(&install_info));
-        assert!(RubyRequest::Exact(3, 3, 6).satisfied_by(&install_info));
-        assert!(RubyRequest::MajorMinor(3, 3).satisfied_by(&install_info));
-        assert!(RubyRequest::Major(3).satisfied_by(&install_info));
-        assert!(!RubyRequest::Exact(3, 3, 7).satisfied_by(&install_info));
-        assert!(!RubyRequest::Exact(3, 2, 6).satisfied_by(&install_info));
+        assert!(RubyRequest::Any.satisfied_by(&installed_env));
+        assert!(RubyRequest::Exact(3, 3, 6).satisfied_by(&installed_env));
+        assert!(RubyRequest::MajorMinor(3, 3).satisfied_by(&installed_env));
+        assert!(RubyRequest::Major(3).satisfied_by(&installed_env));
+        assert!(!RubyRequest::Exact(3, 3, 7).satisfied_by(&installed_env));
+        assert!(!RubyRequest::Exact(3, 2, 6).satisfied_by(&installed_env));
 
         // Test path matching
-        assert!(RubyRequest::Path(PathBuf::from("/usr/bin/ruby")).satisfied_by(&install_info));
-        assert!(!RubyRequest::Path(PathBuf::from("/usr/bin/ruby3.2")).satisfied_by(&install_info));
+        assert!(RubyRequest::Path(PathBuf::from("/usr/bin/ruby")).satisfied_by(&installed_env));
+        assert!(!RubyRequest::Path(PathBuf::from("/usr/bin/ruby3.2")).satisfied_by(&installed_env));
 
         // Test range matching
         let req = semver::VersionReq::parse(">=3.2, <4.0")?;
         assert!(
-            RubyRequest::Range(req.clone(), ">=3.2, <4.0".to_string()).satisfied_by(&install_info)
+            RubyRequest::Range(req.clone(), ">=3.2, <4.0".to_string()).satisfied_by(&installed_env)
         );
 
         let temp_dir = tempfile::tempdir()?;
-        let mut install_info =
-            InstallInfo::new(Language::Ruby, FxHashSet::default(), temp_dir.path())?;
-        install_info
+        let mut installed_env = InstalledHookEnv::new(
+            Language::Ruby,
+            crate::hook_env::HookEnvIdentity::empty_dependencies(),
+            temp_dir.path(),
+        )?;
+        installed_env
             .with_language_version(semver::Version::new(3, 1, 0))
             .with_toolchain(PathBuf::from("/usr/bin/ruby3.1"));
-        assert!(!RubyRequest::Range(req, ">=3.2, <4.0".to_string()).satisfied_by(&install_info));
+        assert!(!RubyRequest::Range(req, ">=3.2, <4.0".to_string()).satisfied_by(&installed_env));
 
         Ok(())
     }

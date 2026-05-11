@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::error::Error as _;
 use std::fmt::Display;
 use std::ops::RangeInclusive;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use fancy_regex::Regex;
@@ -262,6 +262,7 @@ pub enum Language {
     Perl,
     Pygrep,
     Python,
+    PythonUv,
     R,
     Ruby,
     Rust,
@@ -548,6 +549,56 @@ pub(crate) enum Shell {
     Cmd,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub(crate) enum PythonUvLockMode {
+    #[default]
+    Locked,
+    Frozen,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub(crate) struct PythonUvOptions {
+    /// The uv project directory. Defaults to the project configuration directory.
+    pub project: Option<PathBuf>,
+    /// The uv lockfile path. Defaults to `<project>/uv.lock`.
+    pub lockfile: Option<PathBuf>,
+    /// Dependency groups to install into the managed hook environment.
+    pub dependency_groups: Option<Vec<String>>,
+    /// Project extras to install into the managed hook environment.
+    pub extras: Option<Vec<String>>,
+    /// Whether to install the current project into the managed hook environment.
+    pub install_project: Option<bool>,
+    /// Whether uv should check lockfile freshness or use it as-is.
+    pub lock_mode: Option<PythonUvLockMode>,
+}
+
+impl PythonUvOptions {
+    pub(crate) fn update(&mut self, other: &Self) {
+        macro_rules! update_if_some {
+            ($($field:ident),* $(,)?) => {
+                $(
+                if other.$field.is_some() {
+                    self.$field.clone_from(&other.$field);
+                }
+                )*
+            };
+        }
+
+        update_if_some!(
+            project,
+            lockfile,
+            dependency_groups,
+            extras,
+            install_project,
+            lock_mode,
+        );
+    }
+}
+
 /// Common hook options.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -606,6 +657,8 @@ pub(crate) struct HookOptions {
     /// The minimum version of prek required to run this hook.
     #[serde(deserialize_with = "deserialize_and_validate_minimum_version", default)]
     pub minimum_prek_version: Option<String>,
+    /// Language-specific options for `language: python_uv`.
+    pub uv: Option<PythonUvOptions>,
 
     #[serde(skip_serializing, flatten)]
     pub _unused_keys: BTreeMap<String, serde_json::Value>,
@@ -644,6 +697,14 @@ impl HookOptions {
             verbose,
             minimum_prek_version,
         );
+
+        if let Some(other_uv) = &other.uv {
+            if let Some(self_uv) = &mut self.uv {
+                self_uv.update(other_uv);
+            } else {
+                self.uv.clone_from(&other.uv);
+            }
+        }
 
         // Merge environment variables.
         if let Some(other_env) = &other.env {
@@ -1887,6 +1948,53 @@ mod tests {
         "};
         let result = serde_saphyr::from_str::<Config>(yaml);
         insta::assert_debug_snapshot!(result);
+    }
+
+    #[test]
+    fn python_uv_options() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let config_path = dir.path().join("prek.toml");
+        fs_err::write(
+            &config_path,
+            indoc::indoc! {r#"
+            [[repos]]
+            repo = "local"
+
+            [[repos.hooks]]
+            id = "ty"
+            name = "ty"
+            entry = "ty check ."
+            language = "python_uv"
+
+            [repos.hooks.uv]
+            project = "."
+            lockfile = "uv.lock"
+            dependency_groups = ["typecheck"]
+            extras = ["typed"]
+            install_project = false
+            lock_mode = "frozen"
+        "#},
+        )?;
+
+        let config = read_config(&config_path)?;
+        let Repo::Local(repo) = &config.repos[0] else {
+            panic!("expected local repo");
+        };
+        let hook = &repo.hooks[0];
+        assert_eq!(hook.language, Language::PythonUv);
+
+        let uv = hook.options.uv.as_ref().expect("uv options");
+        assert_eq!(uv.project.as_deref(), Some(Path::new(".")));
+        assert_eq!(uv.lockfile.as_deref(), Some(Path::new("uv.lock")));
+        assert_eq!(
+            uv.dependency_groups.as_deref(),
+            Some(["typecheck".to_string()].as_slice())
+        );
+        assert_eq!(uv.extras.as_deref(), Some(["typed".to_string()].as_slice()));
+        assert_eq!(uv.install_project, Some(false));
+        assert_eq!(uv.lock_mode, Some(PythonUvLockMode::Frozen));
+
+        Ok(())
     }
 
     #[test]

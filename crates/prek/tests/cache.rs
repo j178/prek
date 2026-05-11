@@ -52,16 +52,21 @@ fn cache_gc_verbose_shows_removed_entries() {
             &serde_json::to_string_pretty(&json!({
                 "language": "python",
                 "language_version": "3.12.0",
-                "dependencies": [
-                    "https://example.com/repo@v1.0.0",
-                    "dep1",
-                    "dep2",
-                    "dep3",
-                    "dep4",
-                    "dep5",
-                    "dep6",
-                    "dep7",
-                ],
+                "identity": {
+                    "kind": "dependencies",
+                    "data": {
+                        "dependencies": [
+                            "dep1",
+                            "dep2",
+                            "dep3",
+                            "dep4",
+                            "dep5",
+                            "dep6",
+                            "dep7",
+                        ],
+                        "remote_repo": "https://example.com/repo@v1.0.0",
+                    },
+                },
                 "env_path": home.child("hooks/hook-env-dead").path(),
                 "toolchain": "/usr/bin/python3",
                 "extra": {},
@@ -323,7 +328,12 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
     let marker_py = json!({
         "language": "python",
         "language_version": "3.12.0",
-        "dependencies": [],
+        "identity": {
+            "kind": "dependencies",
+            "data": {
+                "dependencies": [],
+            },
+        },
         "env_path": env_py.path(),
         "toolchain": py_keep.child("bin/python").path(),
         "extra": {},
@@ -335,7 +345,12 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
     let marker_node = json!({
         "language": "node",
         "language_version": "22.0.0",
-        "dependencies": [],
+        "identity": {
+            "kind": "dependencies",
+            "data": {
+                "dependencies": [],
+            },
+        },
         "env_path": env_node.path(),
         "toolchain": node_keep.child("bin/node").path(),
         "extra": {},
@@ -347,7 +362,12 @@ fn cache_gc_prunes_unused_tool_versions() -> anyhow::Result<()> {
     let marker_go = json!({
         "language": "golang",
         "language_version": "1.24.0",
-        "dependencies": [],
+        "identity": {
+            "kind": "dependencies",
+            "data": {
+                "dependencies": [],
+            },
+        },
         "env_path": env_go.path(),
         "toolchain": go_keep.child("bin/go").path(),
         "extra": {},
@@ -433,7 +453,12 @@ fn cache_gc_prunes_tool_versions_without_positive_identification() -> anyhow::Re
     let marker_py = json!({
         "language": "python",
         "language_version": "3.12.0",
-        "dependencies": [],
+        "identity": {
+            "kind": "dependencies",
+            "data": {
+                "dependencies": [],
+            },
+        },
         "env_path": env_py.path(),
         "toolchain": "/usr/bin/python3",
         "extra": {},

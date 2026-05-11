@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use serde::Deserialize;
 
-use crate::hook::InstallInfo;
+use crate::hook::InstalledHookEnv;
 use crate::languages::version::{Error, try_into_u64_slice};
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -105,11 +105,11 @@ impl DenoRequest {
         }
     }
 
-    pub(crate) fn satisfied_by(&self, install_info: &InstallInfo) -> bool {
-        let version = &install_info.language_version;
+    pub(crate) fn satisfied_by(&self, installed_env: &InstalledHookEnv) -> bool {
+        let version = &installed_env.language_version;
         self.matches(
             &DenoVersion(version.clone()),
-            Some(install_info.toolchain.as_ref()),
+            Some(installed_env.toolchain.as_ref()),
         )
     }
 

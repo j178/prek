@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
-use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::hook::{Hook, InstalledHook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::run_by_batch;
@@ -24,15 +24,15 @@ impl LanguageImpl for Julia {
     ) -> Result<InstalledHook> {
         let progress = reporter.on_install_start(&hook);
 
-        let mut info = InstallInfo::new(
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
 
-        debug!(%hook, target = %info.env_path.display(), "Installing Julia environment");
+        debug!(%hook, target = %env.env_path.display(), "Installing Julia environment");
 
-        fs_err::tokio::create_dir_all(&info.env_path).await?;
+        fs_err::tokio::create_dir_all(&env.env_path).await?;
         let search_path = hook.repo_path().unwrap_or_else(|| hook.work_dir());
 
         let find_src = |names: &[&str]| {
@@ -43,7 +43,7 @@ impl LanguageImpl for Julia {
         };
 
         // Copy Project.toml if exists
-        let project_dest = info.env_path.join("Project.toml");
+        let project_dest = env.env_path.join("Project.toml");
         if let Some(src) = find_src(&["JuliaProject.toml", "Project.toml"]) {
             fs_err::tokio::copy(src, project_dest).await?;
         } else {
@@ -53,7 +53,7 @@ impl LanguageImpl for Julia {
 
         // Copy Manifest.toml (lock) if exists
         if let Some(src) = find_src(&["JuliaManifest.toml", "Manifest.toml"]) {
-            fs_err::tokio::copy(src, info.env_path.join("Manifest.toml")).await?;
+            fs_err::tokio::copy(src, env.env_path.join("Manifest.toml")).await?;
         }
 
         let julia_code = indoc::indoc! {r"
@@ -67,7 +67,7 @@ impl LanguageImpl for Julia {
         Cmd::new("julia", "instantiate julia environment")
             .current_dir(search_path)
             .arg("--startup-file=no")
-            .arg(format!("--project={}", info.env_path.display()))
+            .arg(format!("--project={}", env.env_path.display()))
             .arg("-e")
             .arg(julia_code)
             .arg("--")
@@ -77,17 +77,17 @@ impl LanguageImpl for Julia {
             .await
             .context("Failed to instantiate Julia environment")?;
 
-        info.persist_env_path();
+        env.persist();
 
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, _info: &InstallInfo) -> Result<()> {
+    async fn check_health(&self, _env: &InstalledHookEnv) -> Result<()> {
         Cmd::new("julia", "check julia version")
             .arg("--version")
             .check(true)

@@ -13,7 +13,7 @@ use prek_consts::prepend_paths;
 use tracing::debug;
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
-use crate::hook::{Hook, InstallInfo, InstalledHook};
+use crate::hook::{Hook, InstalledHook, InstalledHookEnv};
 use crate::languages::LanguageImpl;
 use crate::languages::rust::RustRequest;
 use crate::languages::rust::installer::RustInstaller;
@@ -243,7 +243,7 @@ async fn copy_binaries(release_dir: &Path, dest_bin_dir: &Path) -> anyhow::Resul
 async fn install_local_project(
     hook_binary: &str,
     repo_path: &Path,
-    info: &InstallInfo,
+    env: &InstalledHookEnv,
     lib_deps: &[&String],
     cargo: &Path,
     cargo_home: &Path,
@@ -286,7 +286,7 @@ async fn install_local_project(
         // For packages without lib deps, use `cargo install` directly
         Cmd::new(cargo, "install local")
             .args(["install", "--bins", "--root"])
-            .arg(&info.env_path)
+            .arg(&env.env_path)
             .args(["--path", ".", "--locked"])
             .current_dir(&package_dir)
             .env(EnvVars::PATH, new_path)
@@ -297,7 +297,7 @@ async fn install_local_project(
             .await?;
     } else {
         // For packages with lib deps, copy manifest, modify, build and copy binaries
-        let manifest_dir = info.env_path.join("manifest");
+        let manifest_dir = env.env_path.join("manifest");
         fs_err::tokio::create_dir_all(&manifest_dir).await?;
 
         // Copy Cargo.toml
@@ -347,7 +347,7 @@ async fn install_local_project(
 
         // Build using cargo build with --manifest-path pointing to modified manifest
         // but source files come from original package_dir
-        let target_dir = info.env_path.join("target");
+        let target_dir = env.env_path.join("target");
         let mut cmd = Cmd::new(cargo, "build local with deps");
         cmd.args(["build", "--bins", "--release"])
             .arg("--manifest-path")
@@ -369,7 +369,7 @@ async fn install_local_project(
             .await?;
 
         // Copy compiled binaries to the bin directory
-        copy_binaries(&target_dir.join("release"), &bin_dir(&info.env_path)).await?;
+        copy_binaries(&target_dir.join("release"), &bin_dir(&env.env_path)).await?;
 
         // Clean up manifest and target directories
         fs_err::tokio::remove_dir_all(&manifest_dir).await?;
@@ -381,7 +381,7 @@ async fn install_local_project(
 
 async fn install_cli_dependency(
     cli_dep: &str,
-    info: &InstallInfo,
+    env: &InstalledHookEnv,
     cargo: &Path,
     cargo_home: &Path,
     new_path: &OsStr,
@@ -390,7 +390,7 @@ async fn install_cli_dependency(
 
     let mut cmd = Cmd::new(cargo, "install cli dep");
     cmd.args(["install", "--bins", "--root"])
-        .arg(&info.env_path)
+        .arg(&env.env_path)
         .args(dep.to_cargo_args())
         .arg("--locked");
 
@@ -437,28 +437,28 @@ impl LanguageImpl for Rust {
         // Add toolchain bin to PATH, for cargo to use correct rustc
         let new_path = prepend_paths(&[&rustc_bin]).context("Failed to join PATH")?;
 
-        let mut info = InstallInfo::new(
+        let mut env = InstalledHookEnv::new(
             hook.language,
-            hook.env_key_dependencies().clone(),
+            hook.env_identity().into(),
             &store.hooks_dir(),
         )?;
-        info.with_toolchain(rust.toolchain().to_path_buf())
+        env.with_toolchain(rust.toolchain().to_path_buf())
             .with_language_version(rust.version().deref().clone());
 
         // Store the channel name for cache matching
         match version {
             RustRequest::Channel(channel) => {
-                info.with_extra(EXTRA_KEY_CHANNEL, &channel.to_string());
+                env.with_extra(EXTRA_KEY_CHANNEL, &channel.to_string());
             }
             RustRequest::Any => {
                 let channel = rust.version().channel().unwrap_or(Channel::Stable);
-                info.with_extra(EXTRA_KEY_CHANNEL, &channel.to_string());
+                env.with_extra(EXTRA_KEY_CHANNEL, &channel.to_string());
             }
             _ => {}
         }
 
         // 2. Create environment
-        fs_err::tokio::create_dir_all(bin_dir(&info.env_path)).await?;
+        fs_err::tokio::create_dir_all(bin_dir(&env.env_path)).await?;
 
         // 3. Install dependencies
         // Split dependencies by cli: prefix
@@ -480,7 +480,7 @@ impl LanguageImpl for Rust {
             install_local_project(
                 hook_bin,
                 repo,
-                &info,
+                &env,
                 &lib_deps,
                 &cargo,
                 &cargo_home,
@@ -491,20 +491,20 @@ impl LanguageImpl for Rust {
 
         // Install CLI dependencies
         for cli_dep in cli_deps {
-            install_cli_dependency(cli_dep, &info, &cargo, &cargo_home, &new_path).await?;
+            install_cli_dependency(cli_dep, &env, &cargo, &cargo_home, &new_path).await?;
         }
 
-        info.persist_env_path();
+        env.persist();
 
         reporter.on_install_complete(progress);
 
         Ok(InstalledHook::Installed {
             hook,
-            info: Arc::new(info),
+            env: Arc::new(env),
         })
     }
 
-    async fn check_health(&self, _info: &InstallInfo) -> anyhow::Result<()> {
+    async fn check_health(&self, _env: &InstalledHookEnv) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -518,11 +518,11 @@ impl LanguageImpl for Rust {
         let progress = reporter.on_run_start(hook, filenames.len());
 
         let env_dir = hook.env_path().expect("Rust hook must have env path");
-        let info = hook.install_info().expect("Rust hook must be installed");
+        let env = hook.installed_env().expect("Rust hook must be installed");
 
         let rust_bin = bin_dir(env_dir);
         let cargo_home = store.cache_path(CacheBucket::Cargo);
-        let rustc_bin = bin_dir(&info.toolchain);
+        let rustc_bin = bin_dir(&env.toolchain);
 
         let new_path = prepend_paths(&[&rust_bin, &rustc_bin]).context("Failed to join PATH")?;
 
