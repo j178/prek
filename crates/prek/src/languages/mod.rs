@@ -249,6 +249,7 @@ impl Language {
         match self {
             Self::Deno => &[CacheBucket::Deno],
             Self::Golang => &[CacheBucket::Go],
+            Self::Node => &[CacheBucket::Npm],
             Self::Python | Self::Pygrep => &[CacheBucket::Uv, CacheBucket::Python],
             Self::Rust => &[CacheBucket::Cargo],
             Self::Bun
@@ -262,7 +263,6 @@ impl Language {
             | Self::Haskell
             | Self::Julia
             | Self::Lua
-            | Self::Node
             | Self::Perl
             | Self::R
             | Self::Ruby
