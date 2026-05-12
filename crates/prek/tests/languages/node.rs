@@ -1,5 +1,5 @@
 use assert_fs::assert::PathAssert;
-use assert_fs::fixture::PathChild;
+use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use prek_consts::env_vars::EnvVars;
 
 use crate::common::{TestContext, cmd_snapshot, remove_bin_from_path};
@@ -194,6 +194,94 @@ fn additional_dependencies() {
 
     ----- stderr -----
     ");
+}
+
+/// Test that lowercase npm config inherited from `npm exec` cannot redirect installs.
+#[test]
+fn additional_dependencies_ignore_inherited_npm_config_prefix() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    let package_dir = context.work_dir().child("prefix-fixture");
+    package_dir.create_dir_all()?;
+    package_dir
+        .child("package.json")
+        .write_str(indoc::indoc! {r#"
+        {
+          "name": "prek-prefix-fixture",
+          "version": "1.0.0",
+          "bin": {
+            "prek-prefix-fixture": "cli.js"
+          }
+        }
+    "#})?;
+    let cli = package_dir.child("cli.js");
+    cli.write_str(indoc::indoc! {r#"
+        #!/usr/bin/env node
+        console.log("prefix fixture ok")
+    "#})?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut permissions = fs_err::metadata(cli.path())?.permissions();
+        permissions.set_mode(0o755);
+        fs_err::set_permissions(cli.path(), permissions)?;
+    }
+
+    context.write_pre_commit_config(indoc::indoc! {r#"
+        repos:
+          - repo: local
+            hooks:
+              - id: node
+                name: node
+                language: node
+                entry: prek-prefix-fixture
+                additional_dependencies: ["./prefix-fixture"]
+                always_run: true
+                verbose: true
+                pass_filenames: false
+    "#});
+
+    context.git_add(".");
+
+    let fake_prefix = context.home_dir().child("fake-prefix");
+    fake_prefix.create_dir_all()?;
+    let global_npmrc = fake_prefix.child("global-npmrc");
+    let user_npmrc = fake_prefix.child("user-npmrc");
+    global_npmrc.write_str("prefix=${HOME}/global-npmrc-prefix\n")?;
+    user_npmrc.write_str("//registry.example.test/:_authToken=fake-token\n")?;
+
+    cmd_snapshot!(
+        context.filters(),
+        context
+            .run()
+            .env("npm_config_prefix", fake_prefix.path())
+            .env("npm_config_global_prefix", fake_prefix.path())
+            .env("npm_config_local_prefix", fake_prefix.path())
+            .env("npm_config_globalconfig", global_npmrc.path())
+            .env("npm_config_userconfig", user_npmrc.path())
+            .env("npm_config_cache", fake_prefix.child("cache").path()),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    node.....................................................................Passed
+    - hook id: node
+    - duration: [TIME]
+
+      prefix fixture ok
+
+    ----- stderr -----
+    "#
+    );
+
+    fake_prefix
+        .child("lib")
+        .child("node_modules")
+        .assert(predicates::path::missing());
+
+    Ok(())
 }
 
 /// Test that npm install works without system node in PATH.

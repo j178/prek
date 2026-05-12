@@ -61,8 +61,6 @@ impl EnvVars {
     pub const UV_NO_MANAGED_PYTHON: &'static str = "UV_NO_MANAGED_PYTHON";
 
     // Node/Npm related
-    pub const NPM_CONFIG_USERCONFIG: &'static str = "NPM_CONFIG_USERCONFIG";
-    pub const NPM_CONFIG_PREFIX: &'static str = "NPM_CONFIG_PREFIX";
     pub const NODE_PATH: &'static str = "NODE_PATH";
 
     // Bun related
