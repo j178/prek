@@ -1922,6 +1922,8 @@ fn restore_on_interrupt() -> Result<()> {
     let handle = std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(1));
         #[allow(clippy::cast_possible_wrap)]
+        // SAFETY: kill is a standard POSIX function and child_id is a valid
+        // process ID.
         unsafe {
             libc::kill(child_id as i32, libc::SIGINT)
         };

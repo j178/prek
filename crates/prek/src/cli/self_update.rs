@@ -57,10 +57,6 @@ pub(crate) async fn self_update(
 ) -> Result<ExitStatus> {
     let mut updater = AxoUpdater::new_for("prek");
     if enabled!(tracing::Level::DEBUG) {
-        // SAFETY: This is called early in the command execution. We use a
-        // single-threaded Tokio runtime, and while a Ctrl-C handler thread
-        // may exist, it does not access the environment.
-        unsafe { env::set_var("INSTALLER_PRINT_VERBOSE", "1") };
         updater.enable_installer_output();
     } else {
         updater.disable_installer_output();

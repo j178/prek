@@ -584,6 +584,42 @@ mod tests {
     use target_lexicon::Triple;
     use tempfile::TempDir;
 
+    /// Mutex to serialize tests that mutate `PREK_RUBY_MIRROR`.
+    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// RAII guard that serializes env var access and restores the original value on drop.
+    /// Holds the `ENV_MUTEX` lock for its lifetime, so tests using this guard run
+    /// sequentially. Ensures cleanup even if a test panics.
+    struct EnvVarGuard {
+        key: &'static str,
+        saved: Option<String>,
+        _lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl EnvVarGuard {
+        fn new(key: &'static str) -> Self {
+            let lock = ENV_MUTEX
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let saved = EnvVars::var(key).ok();
+            Self {
+                key,
+                saved,
+                _lock: lock,
+            }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.saved {
+                // SAFETY: We use a mutex to ensure that only one test is
+                // mutating the environment at a time.
+                Some(v) => unsafe { std::env::set_var(self.key, v) },
+                None => unsafe { std::env::remove_var(self.key) },
+            }
+        }
+    }
     #[test]
     fn test_ruby_request_display() {
         assert_eq!(RubyRequest::Any.to_string(), "any");
@@ -652,6 +688,84 @@ mod tests {
         let error = ruby_not_found_error(&RubyRequest::Any, "Another reason.");
         assert!(error.contains("any"));
         assert!(error.contains("Another reason."));
+    }
+
+    #[test]
+    fn test_rv_ruby_urls_default() {
+        let _guard = EnvVarGuard::new(EnvVars::PREK_RUBY_MIRROR);
+        // SAFETY: EnvVarGuard ensures that this test runs in isolation and
+        // that the environment is restored afterwards.
+        unsafe { std::env::remove_var(EnvVars::PREK_RUBY_MIRROR) };
+
+        let (api_url, api_is_github) = rv_ruby_api_url();
+        assert_eq!(
+            api_url,
+            "https://api.github.com/repos/spinel-coop/rv-ruby/releases/latest"
+        );
+        assert!(api_is_github);
+
+        let (dl_url, dl_is_github) = rv_ruby_download_base();
+        assert_eq!(
+            dl_url,
+            format!("{RV_RUBY_DEFAULT_URL}/releases/latest/download")
+        );
+        assert!(dl_is_github);
+    }
+
+    #[test]
+    fn test_rv_ruby_urls_github_mirror() {
+        // A github.com mirror: API URL is rewritten, download URL uses web URL.
+        let _guard = EnvVarGuard::new(EnvVars::PREK_RUBY_MIRROR);
+        // SAFETY: EnvVarGuard ensures that this test runs in isolation and
+        // that the environment is restored afterwards.
+        unsafe {
+            std::env::set_var(
+                EnvVars::PREK_RUBY_MIRROR,
+                "https://github.com/myorg/vetted-rubies",
+            );
+        }
+
+        let (api_url, api_is_github) = rv_ruby_api_url();
+        assert_eq!(
+            api_url,
+            "https://api.github.com/repos/myorg/vetted-rubies/releases/latest"
+        );
+        assert!(api_is_github);
+
+        let (dl_url, dl_is_github) = rv_ruby_download_base();
+        assert_eq!(
+            dl_url,
+            "https://github.com/myorg/vetted-rubies/releases/latest/download"
+        );
+        assert!(dl_is_github);
+    }
+
+    #[test]
+    fn test_rv_ruby_urls_non_github_mirror() {
+        // A non-github mirror: both URLs use the mirror as-is, is_github is false.
+        let _guard = EnvVarGuard::new(EnvVars::PREK_RUBY_MIRROR);
+        // SAFETY: EnvVarGuard ensures that this test runs in isolation and
+        // that the environment is restored afterwards.
+        unsafe {
+            std::env::set_var(
+                EnvVars::PREK_RUBY_MIRROR,
+                "https://my-mirror.example.com/rv-ruby",
+            );
+        }
+
+        let (api_url, api_is_github) = rv_ruby_api_url();
+        assert_eq!(
+            api_url,
+            "https://my-mirror.example.com/rv-ruby/releases/latest"
+        );
+        assert!(!api_is_github);
+
+        let (dl_url, dl_is_github) = rv_ruby_download_base();
+        assert_eq!(
+            dl_url,
+            "https://my-mirror.example.com/rv-ruby/releases/latest/download"
+        );
+        assert!(!dl_is_github);
     }
 
     #[test]
