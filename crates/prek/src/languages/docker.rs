@@ -1,3 +1,4 @@
+use fs_err as fs;
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::collections::hash_map::DefaultHasher;

@@ -1,3 +1,4 @@
+use fs_err as fs;
 use std::env::consts::EXE_EXTENSION;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;

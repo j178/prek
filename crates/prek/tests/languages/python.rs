@@ -482,6 +482,7 @@ fn git_env_vars_not_leaked_to_pip_install() -> anyhow::Result<()> {
 #[test]
 #[cfg(unix)]
 fn health_check_with_symlinked_toolchain() -> anyhow::Result<()> {
+    use fs_err::os::unix::fs::symlink;
     use prek_consts::prepend_paths;
 
     let context = TestContext::new();
