@@ -113,6 +113,10 @@ fn write_trimmed_output_section(
     Ok(())
 }
 
+pub(crate) static INHERITED_ENV_VARS: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::BTreeMap<String, String>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::BTreeMap::new()));
+
 /// A fancier Command, see the crate's top-level docs!
 pub struct Cmd {
     /// The inner Command, in case you need to access it
@@ -134,7 +138,9 @@ fn write_output_chunk(output: &mut Vec<u8>, sink: &mut impl OutputSink, chunk: &
 impl Cmd {
     /// Create a new Command with an additional "summary" of what this is trying to do
     pub fn new(command: impl AsRef<OsStr>, summary: impl Into<String>) -> Self {
-        let inner = tokio::process::Command::new(command);
+        let mut inner = tokio::process::Command::new(command);
+        let envs = INHERITED_ENV_VARS.lock().unwrap();
+        inner.envs(&*envs);
         Self {
             summary: summary.into(),
             inner,

@@ -277,50 +277,49 @@ fn uses_only_message_file_input(hook: &Hook) -> bool {
 
 // `pre-commit` sets these environment variables for other git hooks.
 fn set_env_vars(from_ref: Option<&String>, to_ref: Option<&String>, args: &RunExtraArgs) {
-    unsafe {
-        std::env::set_var("PRE_COMMIT", "1");
+    let mut envs = crate::process::INHERITED_ENV_VARS.lock().unwrap();
+    envs.insert("PRE_COMMIT".to_string(), "1".to_string());
 
-        if let Some(source) = &args.prepare_commit_message_source {
-            std::env::set_var("PRE_COMMIT_COMMIT_MSG_SOURCE", source);
-        }
-        if let Some(object) = &args.commit_object_name {
-            std::env::set_var("PRE_COMMIT_COMMIT_OBJECT_NAME", object);
-        }
-        if let Some(from_ref) = from_ref {
-            std::env::set_var("PRE_COMMIT_ORIGIN", from_ref);
-            std::env::set_var("PRE_COMMIT_FROM_REF", from_ref);
-        }
-        if let Some(to_ref) = to_ref {
-            std::env::set_var("PRE_COMMIT_SOURCE", to_ref);
-            std::env::set_var("PRE_COMMIT_TO_REF", to_ref);
-        }
-        if let Some(upstream) = &args.pre_rebase_upstream {
-            std::env::set_var("PRE_COMMIT_PRE_REBASE_UPSTREAM", upstream);
-        }
-        if let Some(branch) = &args.pre_rebase_branch {
-            std::env::set_var("PRE_COMMIT_PRE_REBASE_BRANCH", branch);
-        }
-        if let Some(branch) = &args.local_branch {
-            std::env::set_var("PRE_COMMIT_LOCAL_BRANCH", branch);
-        }
-        if let Some(branch) = &args.remote_branch {
-            std::env::set_var("PRE_COMMIT_REMOTE_BRANCH", branch);
-        }
-        if let Some(name) = &args.remote_name {
-            std::env::set_var("PRE_COMMIT_REMOTE_NAME", name);
-        }
-        if let Some(url) = &args.remote_url {
-            std::env::set_var("PRE_COMMIT_REMOTE_URL", url);
-        }
-        if let Some(checkout) = &args.checkout_type {
-            std::env::set_var("PRE_COMMIT_CHECKOUT_TYPE", checkout);
-        }
-        if args.is_squash_merge {
-            std::env::set_var("PRE_COMMIT_SQUASH_MERGE", "1");
-        }
-        if let Some(command) = &args.rewrite_command {
-            std::env::set_var("PRE_COMMIT_REWRITE_COMMAND", command);
-        }
+    if let Some(source) = &args.prepare_commit_message_source {
+        envs.insert("PRE_COMMIT_COMMIT_MSG_SOURCE".to_string(), source.clone());
+    }
+    if let Some(object) = &args.commit_object_name {
+        envs.insert("PRE_COMMIT_COMMIT_OBJECT_NAME".to_string(), object.clone());
+    }
+    if let Some(from_ref) = from_ref {
+        envs.insert("PRE_COMMIT_ORIGIN".to_string(), from_ref.clone());
+        envs.insert("PRE_COMMIT_FROM_REF".to_string(), from_ref.clone());
+    }
+    if let Some(to_ref) = to_ref {
+        envs.insert("PRE_COMMIT_SOURCE".to_string(), to_ref.clone());
+        envs.insert("PRE_COMMIT_TO_REF".to_string(), to_ref.clone());
+    }
+    if let Some(upstream) = &args.pre_rebase_upstream {
+        envs.insert("PRE_COMMIT_PRE_REBASE_UPSTREAM".to_string(), upstream.clone());
+    }
+    if let Some(branch) = &args.pre_rebase_branch {
+        envs.insert("PRE_COMMIT_PRE_REBASE_BRANCH".to_string(), branch.clone());
+    }
+    if let Some(branch) = &args.local_branch {
+        envs.insert("PRE_COMMIT_LOCAL_BRANCH".to_string(), branch.clone());
+    }
+    if let Some(branch) = &args.remote_branch {
+        envs.insert("PRE_COMMIT_REMOTE_BRANCH".to_string(), branch.clone());
+    }
+    if let Some(name) = &args.remote_name {
+        envs.insert("PRE_COMMIT_REMOTE_NAME".to_string(), name.clone());
+    }
+    if let Some(url) = &args.remote_url {
+        envs.insert("PRE_COMMIT_REMOTE_URL".to_string(), url.clone());
+    }
+    if let Some(checkout) = &args.checkout_type {
+        envs.insert("PRE_COMMIT_CHECKOUT_TYPE".to_string(), checkout.clone());
+    }
+    if args.is_squash_merge {
+        envs.insert("PRE_COMMIT_SQUASH_MERGE".to_string(), "1".to_string());
+    }
+    if let Some(command) = &args.rewrite_command {
+        envs.insert("PRE_COMMIT_REWRITE_COMMAND".to_string(), command.clone());
     }
 }
 

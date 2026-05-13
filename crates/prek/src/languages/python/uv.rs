@@ -87,7 +87,9 @@ fn get_wheel_platform_tag() -> Result<String> {
 }
 
 fn get_uv_version(uv_path: &Path) -> Result<Version> {
-    let output = Command::new(uv_path)
+    let mut cmd = Command::new(uv_path);
+    cmd.envs(&*crate::process::INHERITED_ENV_VARS.lock().unwrap());
+    let output = cmd
         .arg("--version")
         .output()
         .context("Failed to execute uv")?;

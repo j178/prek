@@ -69,7 +69,7 @@ impl From<Pty> for std::os::fd::OwnedFd {
         let raw_fd = nix_ptymaster.as_raw_fd();
         std::mem::forget(nix_ptymaster);
 
-        // Safety: nix::pty::PtyMaster is required to contain a valid file
+        // SAFETY: nix::pty::PtyMaster is required to contain a valid file
         // descriptor, and we ensured that the file descriptor will remain
         // valid by skipping the drop implementation for nix::pty::PtyMaster
         unsafe { Self::from_raw_fd(raw_fd) }
@@ -80,7 +80,7 @@ impl std::os::fd::AsFd for Pty {
     fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
         let raw_fd = self.0.as_raw_fd();
 
-        // Safety: nix::pty::PtyMaster is required to contain a valid file
+        // SAFETY: nix::pty::PtyMaster is required to contain a valid file
         // descriptor, and it is owned by self
         unsafe { std::os::fd::BorrowedFd::borrow_raw(raw_fd) }
     }
@@ -148,15 +148,10 @@ impl Pts {
     }
 
     pub fn session_leader(&self) -> impl FnMut() -> std::io::Result<()> + use<> {
-        let pts_fd = self.0.as_raw_fd();
+        let pts_fd = self.0.try_clone().expect("failed to clone pts fd");
         move || {
             rustix::process::setsid()?;
-            // SAFETY: pts_fd is a valid file descriptor because it's owned
-            // by Pts, which must remain valid for the duration of the
-            // session leader setup (typically in pre_exec).
-            rustix::process::ioctl_tiocsctty(unsafe {
-                std::os::fd::BorrowedFd::borrow_raw(pts_fd)
-            })?;
+            rustix::process::ioctl_tiocsctty(&pts_fd)?;
             Ok(())
         }
     }

@@ -428,7 +428,9 @@ pub(crate) async fn write_tree() -> Result<String, Error> {
 #[instrument(level = "trace")]
 pub(crate) fn get_root() -> Result<PathBuf, Error> {
     let git = GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?;
-    let output = std::process::Command::new(git)
+    let mut cmd = std::process::Command::new(git);
+    cmd.envs(&*crate::process::INHERITED_ENV_VARS.lock().unwrap());
+    let output = cmd
         .arg("rev-parse")
         .arg("--show-toplevel")
         .output()?;
@@ -915,7 +917,9 @@ pub(crate) fn list_submodules(git_root: &Path) -> Result<Vec<PathBuf>, Error> {
     }
 
     let git = GIT.as_ref().map_err(|&e| Error::GitNotFound(e))?;
-    let output = std::process::Command::new(git)
+    let mut cmd = std::process::Command::new(git);
+    cmd.envs(&*crate::process::INHERITED_ENV_VARS.lock().unwrap());
+    let output = cmd
         .current_dir(git_root)
         .arg("config")
         .arg("--file")

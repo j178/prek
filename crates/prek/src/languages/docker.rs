@@ -159,7 +159,9 @@ impl RuntimeKind {
         match self {
             RuntimeKind::AppleContainer => Ok(false),
             RuntimeKind::Docker => {
-                let output = Command::new(self.cmd())
+                let mut cmd = Command::new(self.cmd());
+                cmd.envs(&*crate::process::INHERITED_ENV_VARS.lock().unwrap());
+                let output = cmd
                     .arg("info")
                     .arg("--format")
                     .arg("'{{ .SecurityOptions }}'")
@@ -169,7 +171,9 @@ impl RuntimeKind {
                 Ok(stdout.contains("name=rootless"))
             }
             RuntimeKind::Podman => {
-                let output = Command::new(self.cmd())
+                let mut cmd = Command::new(self.cmd());
+                cmd.envs(&*crate::process::INHERITED_ENV_VARS.lock().unwrap());
+                let output = cmd
                     .arg("info")
                     .arg("--format")
                     .arg("{{ .Host.Security.Rootless -}}")
@@ -191,7 +195,9 @@ impl RuntimeKind {
         let container_id = current_container_id()?;
         trace!(?container_id, "In Docker container");
 
-        let output = Command::new(self.cmd())
+        let mut cmd = Command::new(self.cmd());
+        cmd.envs(&*crate::process::INHERITED_ENV_VARS.lock().unwrap());
+        let output = cmd
             .arg("inspect")
             .arg("--format")
             .arg("'{{json .Mounts}}'")

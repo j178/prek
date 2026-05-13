@@ -211,7 +211,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     if EnvVars::is_set(EnvVars::GIT_DIR) && !EnvVars::is_set(EnvVars::GIT_WORK_TREE) {
         let cwd = std::env::current_dir().context("Failed to get current directory")?;
         debug!("Setting {} to `{}`", EnvVars::GIT_WORK_TREE, cwd.display());
-        unsafe { std::env::set_var(EnvVars::GIT_WORK_TREE, cwd) }
+        crate::process::INHERITED_ENV_VARS
+            .lock()
+            .unwrap()
+            .insert(EnvVars::GIT_WORK_TREE.to_string(), cwd.to_string_lossy().to_string());
     }
 
     if let Some(dir) = cli.globals.cd.as_ref() {

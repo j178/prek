@@ -59,8 +59,9 @@ impl IntentToAddRestorer {
     fn restore(&self) -> Result<()> {
         // Restore the intent-to-add changes.
         if !self.0.is_empty() {
-            Command::new(GIT.as_ref()?)
-                .arg("add")
+            let mut cmd = Command::new(GIT.as_ref()?);
+            cmd.envs(&*crate::process::INHERITED_ENV_VARS.lock().unwrap());
+            cmd.arg("add")
                 .arg("--intent-to-add")
                 .arg("--")
                 // TODO: xargs
@@ -156,7 +157,9 @@ impl UnstagedChangesRestorer {
     }
 
     fn checkout_working_tree(root: &Path) -> Result<()> {
-        let output = Command::new(GIT.as_ref()?)
+        let mut cmd = Command::new(GIT.as_ref()?);
+        cmd.envs(&*crate::process::INHERITED_ENV_VARS.lock().unwrap());
+        let output = cmd
             .arg("-c")
             .arg("submodule.recurse=0")
             .arg("checkout")
@@ -175,7 +178,9 @@ impl UnstagedChangesRestorer {
     }
 
     fn git_apply(patch: &Path) -> Result<()> {
-        let output = Command::new(GIT.as_ref()?)
+        let mut cmd = Command::new(GIT.as_ref()?);
+        cmd.envs(&*crate::process::INHERITED_ENV_VARS.lock().unwrap());
+        let output = cmd
             .arg("apply")
             .arg("--whitespace=nowarn")
             .arg(patch)
