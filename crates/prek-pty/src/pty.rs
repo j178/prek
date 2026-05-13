@@ -28,6 +28,8 @@ impl Pty {
     /// # Errors
     /// Returns an error if it fails to be registered with the async runtime.
     pub unsafe fn from_fd(fd: std::os::fd::OwnedFd) -> crate::Result<Self> {
+        // SAFETY: The caller must ensure that the provided file descriptor
+        // is valid, represents a PTY master, and is put into nonblocking mode.
         Ok(Self(tokio::io::unix::AsyncFd::new(unsafe {
             crate::sys::Pty::from_fd(fd)
         })?))
@@ -135,6 +137,8 @@ impl Pts {
     /// child end of a pty.
     #[must_use]
     pub unsafe fn from_fd(fd: std::os::fd::OwnedFd) -> Self {
+        // SAFETY: The caller must ensure that the provided file descriptor
+        // is valid, open, and belongs to the child end of a pty.
         Self(unsafe { crate::sys::Pts::from_fd(fd) })
     }
 
