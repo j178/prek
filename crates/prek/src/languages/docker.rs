@@ -382,8 +382,8 @@ impl Docker {
         #[cfg(unix)]
         {
             let add_user_args = |cmd: &mut Cmd| {
-                let uid = unsafe { libc::geteuid() };
-                let gid = unsafe { libc::getegid() };
+                let uid = rustix::process::geteuid();
+                let gid = rustix::process::getegid();
                 cmd.arg("--user").arg(format!("{uid}:{gid}"));
             };
 
