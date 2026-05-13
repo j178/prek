@@ -155,7 +155,7 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
 
     // Set up a bare remote repository
     let remote_repo_path = context.home_dir().join("remote.git");
-    std::fs::create_dir_all(&remote_repo_path)?;
+    fs_err::create_dir_all(&remote_repo_path)?;
 
     let mut init_remote = git_cmd(&remote_repo_path);
     init_remote
@@ -321,7 +321,7 @@ fn hook_impl_pre_push_runs_legacy_and_prek() -> anyhow::Result<()> {
     set_executable(legacy_hook.path())?;
 
     let remote_repo_path = context.home_dir().join("remote.git");
-    std::fs::create_dir_all(&remote_repo_path)?;
+    fs_err::create_dir_all(&remote_repo_path)?;
 
     let mut init_remote = git_cmd(&remote_repo_path);
     init_remote

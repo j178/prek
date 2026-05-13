@@ -71,7 +71,7 @@ fn sample_config() -> anyhow::Result<()> {
     "##);
 
     let child = context.work_dir().join("child");
-    std::fs::create_dir(&child)?;
+    fs_err::create_dir(&child)?;
 
     cmd_snapshot!(context.filters(), context.sample_config().current_dir(&*child).arg("-f").arg("sample.yaml"), @r#"
     success: true

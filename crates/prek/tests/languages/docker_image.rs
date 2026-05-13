@@ -98,9 +98,9 @@ fn docker_image_does_not_resolve_entry() -> Result<()> {
     let alpine_stub = bin_dir.child("alpine");
     alpine_stub.write_str("#!/bin/sh\necho host\n")?;
 
-    let mut perms = std::fs::metadata(alpine_stub.path())?.permissions();
+    let mut perms = fs_err::metadata(alpine_stub.path())?.permissions();
     perms.set_mode(0o755);
-    std::fs::set_permissions(alpine_stub.path(), perms)?;
+    fs_err::set_permissions(alpine_stub.path(), perms)?;
 
     Command::new("docker")
         .args(["pull", "docker.io/library/alpine:latest"])

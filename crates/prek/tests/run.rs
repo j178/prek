@@ -2409,8 +2409,8 @@ fn write_pre_commit_config(path: &Path, hooks: &[(&str, &str)]) -> Result<()> {
         yaml.push_str(&hook);
     }
 
-    std::fs::create_dir_all(path)?;
-    std::fs::write(path.join(PRE_COMMIT_CONFIG_YAML), yaml)?;
+    fs_err::create_dir_all(path)?;
+    fs_err::write(path.join(PRE_COMMIT_CONFIG_YAML), yaml)?;
 
     Ok(())
 }

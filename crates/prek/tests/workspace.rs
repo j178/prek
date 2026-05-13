@@ -1122,7 +1122,7 @@ fn submodule_discovery() -> Result<()> {
 
     // 3. Test that current directory is in the submodule without .pre-commit-config
     // Remove the config file in the submodule
-    std::fs::remove_file(submodule_path.join(".pre-commit-config.yaml"))?;
+    fs_err::remove_file(submodule_path.join(".pre-commit-config.yaml"))?;
     submodule_context.git_add(".");
     submodule_context.git_commit("Remove config");
 

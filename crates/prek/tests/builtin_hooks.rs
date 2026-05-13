@@ -1533,13 +1533,13 @@ fn check_symlinks_hook_unix() -> Result<()> {
     cwd.child("target.txt").write_str("target content")?;
 
     // Create valid symlink
-    std::os::unix::fs::symlink(
+    fs_err::os::unix::fs::symlink(
         cwd.child("target.txt").path(),
         cwd.child("valid_link.txt").path(),
     )?;
 
     // Create broken symlink
-    std::os::unix::fs::symlink(
+    fs_err::os::unix::fs::symlink(
         cwd.child("nonexistent.txt").path(),
         cwd.child("broken_link.txt").path(),
     )?;
@@ -1561,7 +1561,7 @@ fn check_symlinks_hook_unix() -> Result<()> {
     ");
 
     // Remove broken symlink
-    std::fs::remove_file(cwd.child("broken_link.txt").path())?;
+    fs_err::remove_file(cwd.child("broken_link.txt").path())?;
     context.git_add(".");
 
     // Second run: should pass
@@ -1597,13 +1597,13 @@ fn check_symlinks_hook_windows() -> Result<()> {
     cwd.child("target.txt").write_str("target content")?;
 
     // Try to create valid symlink (may fail without admin/developer mode)
-    let valid_link_result = std::os::windows::fs::symlink_file(
+    let valid_link_result = fs_err::os::windows::fs::symlink_file(
         cwd.child("target.txt").path(),
         cwd.child("valid_link.txt").path(),
     );
 
     // Try to create broken symlink (may fail without admin/developer mode)
-    let broken_link_result = std::os::windows::fs::symlink_file(
+    let broken_link_result = fs_err::os::windows::fs::symlink_file(
         cwd.child("nonexistent.txt").path(),
         cwd.child("broken_link.txt").path(),
     );
@@ -1631,7 +1631,7 @@ fn check_symlinks_hook_windows() -> Result<()> {
     "#);
 
     // Remove broken symlink
-    std::fs::remove_file(cwd.child("broken_link.txt").path())?;
+    fs_err::remove_file(cwd.child("broken_link.txt").path())?;
     context.git_add(".");
 
     // Second run: should pass
@@ -1658,7 +1658,7 @@ fn destroyed_symlinks_hook() -> Result<()> {
     let source = TestContext::new();
     source.init_project();
 
-    std::os::unix::fs::symlink(
+    fs_err::os::unix::fs::symlink(
         TEST_SYMLINK_TARGET,
         source.work_dir().child(TEST_SYMLINK).path(),
     )?;
@@ -2542,15 +2542,15 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
     cwd.child("empty.sh").touch()?;
 
     // Mark scripts as executable
-    std::fs::set_permissions(
+    fs_err::set_permissions(
         cwd.child("script_with_shebang.sh").path(),
         std::fs::Permissions::from_mode(0o755),
     )?;
-    std::fs::set_permissions(
+    fs_err::set_permissions(
         cwd.child("script_without_shebang.sh").path(),
         std::fs::Permissions::from_mode(0o755),
     )?;
-    std::fs::set_permissions(
+    fs_err::set_permissions(
         cwd.child("empty.sh").path(),
         std::fs::Permissions::from_mode(0o755),
     )?;
@@ -2581,7 +2581,7 @@ fn check_executables_have_shebangs_hook() -> Result<()> {
     // Fix the files: remove executable bit or add shebang
     cwd.child("script_without_shebang.sh")
         .write_str("#!/bin/sh\necho fixed\n")?;
-    std::fs::set_permissions(
+    fs_err::set_permissions(
         cwd.child("empty.sh").path(),
         std::fs::Permissions::from_mode(0o644),
     )?;
@@ -2684,19 +2684,19 @@ fn check_executables_have_shebangs_various_cases() -> Result<()> {
         .write_str("##!/bin/bash\necho bad\n")?;
 
     // Mark scripts as executable
-    std::fs::set_permissions(
+    fs_err::set_permissions(
         cwd.child("partial_shebang.sh").path(),
         std::fs::Permissions::from_mode(0o755),
     )?;
-    std::fs::set_permissions(
+    fs_err::set_permissions(
         cwd.child("shebang_with_space.sh").path(),
         std::fs::Permissions::from_mode(0o755),
     )?;
-    std::fs::set_permissions(
+    fs_err::set_permissions(
         cwd.child("whitespace.sh").path(),
         std::fs::Permissions::from_mode(0o755),
     )?;
-    std::fs::set_permissions(
+    fs_err::set_permissions(
         cwd.child("invalid_shebang.sh").path(),
         std::fs::Permissions::from_mode(0o755),
     )?;
@@ -2839,7 +2839,7 @@ fn check_shebang_scripts_are_executable() -> Result<()> {
         .write_str("#!/bin/sh\necho hi\n")?;
 
     #[cfg(unix)]
-    std::fs::set_permissions(
+    fs_err::set_permissions(
         cwd.child("script_exec.sh").path(),
         std::fs::Permissions::from_mode(0o755),
     )?;
@@ -2867,7 +2867,7 @@ fn check_shebang_scripts_are_executable() -> Result<()> {
     ");
 
     #[cfg(unix)]
-    std::fs::set_permissions(
+    fs_err::set_permissions(
         cwd.child("script.sh").path(),
         std::fs::Permissions::from_mode(0o755),
     )?;
@@ -3232,7 +3232,7 @@ fn builtin_hooks_ignore_system_path_binaries() -> Result<()> {
 
     let fake_binary = fake_bin_dir.child("trailing-whitespace-fixer");
     fake_binary.write_str("#!/usr/bin/python3\n# fake binary\n")?;
-    std::fs::set_permissions(fake_binary.path(), std::fs::Permissions::from_mode(0o755))?;
+    fs_err::set_permissions(fake_binary.path(), std::fs::Permissions::from_mode(0o755))?;
 
     context.write_pre_commit_config(indoc::indoc! {r"
         repos:

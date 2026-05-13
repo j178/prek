@@ -637,7 +637,7 @@ fn write_patch_file(path: &ChildPath, content: &str, modified: SystemTime) -> an
     let parent = path.path().parent().expect("patch file has parent");
     fs_err::create_dir_all(parent)?;
     fs_err::write(path.path(), content)?;
-    std::fs::OpenOptions::new()
+    fs_err::OpenOptions::new()
         .write(true)
         .open(path.path())?
         .set_modified(modified)?;
