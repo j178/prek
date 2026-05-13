@@ -405,7 +405,7 @@ async fn collect_files_from_args(
         // For `types: [directory]`, `pre-commit` passes the directory names to the hook directly.
         let (exists, non_exists): (FxHashSet<_>, Vec<_>) =
             files.into_iter().partition_map(|filename| {
-                if std::fs::exists(&filename).unwrap_or(false) {
+                if fs_err::exists(&filename).unwrap_or(false) {
                     Either::Left(filename)
                 } else {
                     Either::Right(filename)

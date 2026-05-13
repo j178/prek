@@ -59,7 +59,7 @@ mod tests {
         let dir = tempdir()?;
         let target = create_test_file(&dir, "target.txt", b"content").await?;
         let link_path = dir.path().join("link.txt");
-        tokio::fs::symlink(&target, &link_path).await?;
+        fs_err::tokio::symlink(&target, &link_path).await?;
 
         let (code, output) = check_file(Path::new(""), &link_path).await?;
         assert_eq!(code, 0);
@@ -73,7 +73,7 @@ mod tests {
         let dir = tempdir()?;
         let link_path = dir.path().join("broken_link.txt");
         let nonexistent = dir.path().join("nonexistent.txt");
-        tokio::fs::symlink(&nonexistent, &link_path).await?;
+        fs_err::tokio::symlink(&nonexistent, &link_path).await?;
 
         let (code, output) = check_file(Path::new(""), &link_path).await?;
         assert_eq!(code, 1);
@@ -91,7 +91,10 @@ mod tests {
         let link_path = dir.path().join("link.txt");
 
         // Windows requires different APIs for file vs directory symlinks
-        if tokio::fs::symlink_file(&target, &link_path).await.is_err() {
+        if fs_err::tokio::symlink_file(&target, &link_path)
+            .await
+            .is_err()
+        {
             // Skipping test: insufficient permissions for symlink creation on Windows
             return Ok(());
         }
@@ -111,7 +114,7 @@ mod tests {
 
         // On Windows, symlink creation might require admin privileges
         // If this fails in CI, the test will be skipped
-        if tokio::fs::symlink_file(&nonexistent, &link_path)
+        if fs_err::tokio::symlink_file(&nonexistent, &link_path)
             .await
             .is_err()
         {
@@ -133,7 +136,7 @@ mod tests {
         let dir = tempdir()?;
         let target = create_test_file(&dir, "target.txt", b"content").await?;
         let link_path = dir.path().join("link.txt");
-        tokio::fs::symlink(&target, &link_path).await?;
+        fs_err::tokio::symlink(&target, &link_path).await?;
 
         let (code, output) = check_file(Path::new(""), &link_path).await?;
         assert_eq!(code, 0);
@@ -147,7 +150,7 @@ mod tests {
         let dir = tempdir()?;
         let link_path = dir.path().join("broken_link.txt");
         let nonexistent = dir.path().join("nonexistent.txt");
-        tokio::fs::symlink(&nonexistent, &link_path).await?;
+        fs_err::tokio::symlink(&nonexistent, &link_path).await?;
 
         let (code, output) = check_file(Path::new(""), &link_path).await?;
         assert_eq!(code, 1);

@@ -459,7 +459,7 @@ async fn search_version_managers(request: &RubyRequest) -> Option<RubyResult> {
 /// Search a version manager directory for Ruby installations
 #[cfg(not(target_os = "windows"))]
 async fn search_ruby_installations(dir: &Path, request: &RubyRequest) -> Option<RubyResult> {
-    let entries = std::fs::read_dir(dir).ok()?;
+    let entries = fs_err::read_dir(dir).ok()?;
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -555,7 +555,7 @@ pub(crate) async fn query_ruby_info(ruby_path: &Path) -> Result<(semver::Version
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use fs_err as fs;
     use std::str::FromStr;
     use target_lexicon::Triple;
     use tempfile::TempDir;

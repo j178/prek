@@ -578,8 +578,8 @@ mod tests {
     fn create_test_workspace() -> anyhow::Result<MockFileSystem> {
         let temp_dir = TempDir::new()?;
 
-        std::fs::create_dir_all(temp_dir.path().join("src"))?;
-        std::fs::create_dir_all(temp_dir.path().join("src/backend"))?;
+        fs_err::create_dir_all(temp_dir.path().join("src"))?;
+        fs_err::create_dir_all(temp_dir.path().join("src/backend"))?;
 
         Ok(MockFileSystem {
             current_dir: temp_dir,

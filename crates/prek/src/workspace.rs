@@ -442,7 +442,7 @@ impl WorkspaceCache {
         let mut config_files = Vec::new();
 
         for project in projects {
-            if let Ok(metadata) = std::fs::metadata(&project.config_path) {
+            if let Ok(metadata) = fs_err::metadata(&project.config_path) {
                 config_files.push(CachedConfigFile {
                     path: project.config_path.clone(),
                     modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
@@ -475,7 +475,7 @@ impl WorkspaceCache {
 
         // Check if all config files still exist and haven't been modified
         for cached_file in &self.config_files {
-            if let Ok(metadata) = std::fs::metadata(&cached_file.path) {
+            if let Ok(metadata) = fs_err::metadata(&cached_file.path) {
                 let current_modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
                 let current_size = metadata.len();
 
@@ -528,20 +528,20 @@ impl WorkspaceCache {
         }
         let cache_path = Self::cache_path(store, workspace_root);
 
-        match std::fs::read_to_string(&cache_path) {
+        match fs_err::read_to_string(&cache_path) {
             Ok(content) => match serde_json::from_str::<Self>(&content) {
                 Ok(cache) => {
                     if cache.version == Self::CURRENT_VERSION && cache.is_valid() {
                         Some(cache)
                     } else {
                         // Invalid cache, remove it
-                        let _ = std::fs::remove_file(&cache_path);
+                        let _ = fs_err::remove_file(&cache_path);
                         None
                     }
                 }
                 Err(e) => {
                     debug!("Failed to deserialize cache: {}", e);
-                    let _ = std::fs::remove_file(&cache_path);
+                    let _ = fs_err::remove_file(&cache_path);
                     None
                 }
             },
@@ -559,11 +559,11 @@ impl WorkspaceCache {
 
         // Create cache directory if it doesn't exist
         if let Some(parent) = cache_path.parent() {
-            std::fs::create_dir_all(parent)?;
+            fs_err::create_dir_all(parent)?;
         }
 
         let content = serde_json::to_string_pretty(self)?;
-        std::fs::write(&cache_path, content)?;
+        fs_err::write(&cache_path, content)?;
         Ok(())
     }
 

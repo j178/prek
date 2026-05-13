@@ -1,5 +1,4 @@
 use std::env::consts::EXE_EXTENSION;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, LazyLock};

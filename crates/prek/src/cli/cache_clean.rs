@@ -136,7 +136,7 @@ fn remove_symlink(path: &Path, file_type: FileType) -> io::Result<()> {
 /// Go sets the permissions to read-only by default.
 #[cfg(not(windows))]
 pub fn fix_permissions<P: AsRef<Path>>(path: P) -> io::Result<()> {
-    use std::fs;
+    use fs_err as fs;
     use std::os::unix::fs::PermissionsExt;
 
     let path = path.as_ref();
@@ -236,7 +236,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn rm_rf_counts_symlink_entries() -> anyhow::Result<()> {
-        use std::os::unix::fs::symlink;
+        use fs_err::os::unix::fs::symlink;
 
         let temp = TempDir::new()?;
         let cache_root = temp.path().join("cache");
