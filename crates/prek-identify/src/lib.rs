@@ -242,7 +242,7 @@ pub enum Error {
 
 /// Identify tags for a file at the given path.
 pub fn tags_from_path(path: &Path) -> Result<TagSet, Error> {
-    let metadata = std::fs::symlink_metadata(path)?;
+    let metadata = fs_err::symlink_metadata(path)?;
     if metadata.is_dir() {
         return Ok(tags::TAG_SET_DIRECTORY);
     } else if metadata.is_symlink() {
@@ -414,7 +414,7 @@ fn parse_nix_shebang<R: BufRead>(reader: &mut R, mut cmd: Vec<String>) -> Vec<St
 }
 
 pub fn parse_shebang(path: &Path) -> Result<Vec<String>, ShebangError> {
-    let file = std::fs::File::open(path)?;
+    let file = fs_err::File::open(path)?;
     let mut reader = std::io::BufReader::new(file);
     let mut line = String::new();
     reader.read_line(&mut line)?;
@@ -518,7 +518,7 @@ mod tests {
         let src = dir.path().join("source.txt");
         let dest = dir.path().join("link.txt");
         fs_err::File::create(&src)?;
-        std::os::unix::fs::symlink(&src, &dest)?;
+        fs_err::os::unix::fs::symlink(&src, &dest)?;
 
         let tags = super::tags_from_path(dir.path())?;
         assert_tagset(&tags, &["directory"]);
