@@ -57,6 +57,8 @@ pub(crate) async fn self_update(
 ) -> Result<ExitStatus> {
     let mut updater = AxoUpdater::new_for("prek");
     if enabled!(tracing::Level::DEBUG) {
+        // SAFETY: We are in the command execution phase and there are no other
+        // threads running that could be concurrently accessing the environment.
         unsafe { env::set_var("INSTALLER_PRINT_VERBOSE", "1") };
         updater.enable_installer_output();
     } else {
