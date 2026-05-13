@@ -23,6 +23,8 @@ impl Pty {
     }
 
     pub unsafe fn from_fd(fd: std::os::fd::OwnedFd) -> Self {
+        // SAFETY: The caller must ensure that the provided file descriptor
+        // is valid and represents a PTY master.
         Self(fd)
     }
 
@@ -125,6 +127,8 @@ pub struct Pts(std::os::fd::OwnedFd);
 
 impl Pts {
     pub unsafe fn from_fd(fd: std::os::fd::OwnedFd) -> Self {
+        // SAFETY: The caller must ensure that the provided file descriptor
+        // is valid and represents a PTY slave.
         Self(fd)
     }
 
@@ -146,6 +150,9 @@ impl Pts {
         let pts_fd = self.0.as_raw_fd();
         move || {
             rustix::process::setsid()?;
+            // SAFETY: pts_fd is a valid file descriptor because it's owned
+            // by Pts, which must remain valid for the duration of the
+            // session leader setup (typically in pre_exec).
             rustix::process::ioctl_tiocsctty(unsafe {
                 std::os::fd::BorrowedFd::borrow_raw(pts_fd)
             })?;
