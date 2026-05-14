@@ -1,5 +1,4 @@
-#![allow(clippy::module_name_repetitions)]
-use std::io::Write as _;
+use std::io::Write;
 
 type AsyncPty = tokio::io::unix::AsyncFd<crate::sys::Pty>;
 

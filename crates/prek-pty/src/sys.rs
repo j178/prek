@@ -1,8 +1,8 @@
+use std::os::fd::AsRawFd;
+use std::os::fd::FromRawFd;
+use std::os::unix::ffi::OsStrExt;
+
 use fs_err::os::unix::fs::OpenOptionsExt as _;
-use std::os::{
-    fd::{AsRawFd as _, FromRawFd as _},
-    unix::prelude::OsStrExt as _,
-};
 
 #[derive(Debug)]
 pub struct Pty(std::os::fd::OwnedFd);

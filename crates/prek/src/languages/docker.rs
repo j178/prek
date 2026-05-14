@@ -1,4 +1,3 @@
-use fs_err as fs;
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::collections::hash_map::DefaultHasher;
@@ -35,7 +34,7 @@ enum Error {
 /// Check if the current process is running inside a Docker container.
 /// see <https://stackoverflow.com/questions/23513045/how-to-check-if-a-process-is-running-inside-docker-container>
 fn is_in_docker() -> bool {
-    if fs::metadata("/.dockerenv").is_ok() || fs::metadata("/run/.containerenv").is_ok() {
+    if fs_err::metadata("/.dockerenv").is_ok() || fs_err::metadata("/run/.containerenv").is_ok() {
         return true;
     }
     false
@@ -65,7 +64,7 @@ fn current_container_id_from_paths(
 }
 
 fn container_id_from_cgroup_v1(cgroup: impl AsRef<Path>) -> Result<String> {
-    let content = fs::read_to_string(cgroup).context("Failed to read cgroup v1 info")?;
+    let content = fs_err::read_to_string(cgroup).context("Failed to read cgroup v1 info")?;
     content
         .lines()
         .find_map(parse_id_from_line)
@@ -100,7 +99,8 @@ fn parse_id_from_line(line: &str) -> Option<String> {
 }
 
 fn container_id_from_cgroup_v2(mount_info: impl AsRef<Path>) -> Result<String> {
-    let content = fs::read_to_string(mount_info).context("Failed to read cgroup v2 mount info")?;
+    let content =
+        fs_err::read_to_string(mount_info).context("Failed to read cgroup v2 mount info")?;
     regex!(r".*/(containers|overlay-containers)/([0-9a-f]{64})/.*")
         .captures(&content)
         .and_then(|caps| caps.get(2))

@@ -136,11 +136,10 @@ fn remove_symlink(path: &Path, file_type: FileType) -> io::Result<()> {
 /// Go sets the permissions to read-only by default.
 #[cfg(not(windows))]
 pub fn fix_permissions<P: AsRef<Path>>(path: P) -> io::Result<()> {
-    use fs_err as fs;
     use std::os::unix::fs::PermissionsExt;
 
     let path = path.as_ref();
-    let metadata = fs::metadata(path)?;
+    let metadata = fs_err::metadata(path)?;
 
     let mut permissions = metadata.permissions();
     let current_mode = permissions.mode();
@@ -148,11 +147,11 @@ pub fn fix_permissions<P: AsRef<Path>>(path: P) -> io::Result<()> {
     // Add write permissions for owner, group, and others
     let new_mode = current_mode | 0o222;
     permissions.set_mode(new_mode);
-    fs::set_permissions(path, permissions)?;
+    fs_err::set_permissions(path, permissions)?;
 
     // If it's a directory, recursively process its contents
     if metadata.is_dir() {
-        let entries = fs::read_dir(path)?;
+        let entries = fs_err::read_dir(path)?;
         for entry in entries {
             let entry = entry?;
             fix_permissions(entry.path())?;
