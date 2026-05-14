@@ -179,7 +179,7 @@ fn get_hook_types(
             .filter(|p| p.exists());
         if let Some(path) = config.into_iter().chain(fallbacks).next() {
             match load_config(path) {
-                Ok(cfg) => cfg.default_install_hook_types.clone().unwrap_or_default(),
+                Ok(cfg) => cfg.default_install_hook_types.unwrap_or_default(),
                 Err(err) => {
                     err.warn_parse_error();
                     vec![]

@@ -216,10 +216,7 @@ mod tests {
         assert!(!PythonRequest::MajorMinorPatch(3, 12, 2).satisfied_by(&install_info));
 
         let range_req = semver::VersionReq::parse(">=3.12").unwrap();
-        assert!(
-            PythonRequest::Range(range_req.clone(), ">=3.12".to_string())
-                .satisfied_by(&install_info)
-        );
+        assert!(PythonRequest::Range(range_req, ">=3.12".to_string()).satisfied_by(&install_info));
 
         let range_req = semver::VersionReq::parse(">=4.0").unwrap();
         assert!(!PythonRequest::Range(range_req, ">=4.0".to_string()).satisfied_by(&install_info));

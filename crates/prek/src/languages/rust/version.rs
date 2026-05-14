@@ -318,7 +318,7 @@ mod tests {
             InstallInfo::new(Language::Rust, FxHashSet::default(), temp_dir.path())?;
         install_info
             .with_language_version(semver::Version::new(1, 71, 0))
-            .with_toolchain(toolchain_path.clone());
+            .with_toolchain(toolchain_path);
 
         assert!(RustRequest::Any.satisfied_by(&install_info));
         assert!(RustRequest::Major(1).satisfied_by(&install_info));
