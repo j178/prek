@@ -385,7 +385,7 @@ fn auto_update_does_not_rewrite_config_when_up_to_date() -> Result<()> {
 
     let config_path = context.work_dir().child(PRE_COMMIT_CONFIG_YAML);
 
-    let before_secs = std::fs::metadata(config_path.path())?
+    let before_secs = fs_err::metadata(config_path.path())?
         .modified()?
         .duration_since(UNIX_EPOCH)?
         .as_secs();
@@ -399,7 +399,7 @@ fn auto_update_does_not_rewrite_config_when_up_to_date() -> Result<()> {
     let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
     assert!(stdout.is_empty());
 
-    let after_secs = std::fs::metadata(config_path.path())?
+    let after_secs = fs_err::metadata(config_path.path())?
         .modified()?
         .duration_since(UNIX_EPOCH)?
         .as_secs();

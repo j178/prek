@@ -171,7 +171,7 @@ fn with_pubspec_and_dependencies() -> anyhow::Result<()> {
               ansicolor: ^2.0.1
         "})?;
 
-    std::fs::create_dir(context.work_dir().join("bin"))?;
+    fs_err::create_dir(context.work_dir().join("bin"))?;
     context
         .work_dir()
         .child("bin")
@@ -232,7 +232,7 @@ fn with_pubspec() -> anyhow::Result<()> {
               sdk: '>=2.17.0 <4.0.0'
         "})?;
 
-    std::fs::create_dir(context.work_dir().join("bin"))?;
+    fs_err::create_dir(context.work_dir().join("bin"))?;
     context
         .work_dir()
         .child("bin")
@@ -296,8 +296,8 @@ fn with_pubspec_and_additional_dependencies() -> anyhow::Result<()> {
               sdk: '>=2.17.0 <4.0.0'
         "})?;
 
-    std::fs::create_dir(context.work_dir().join("bin"))?;
-    std::fs::create_dir(context.work_dir().join("lib"))?;
+    fs_err::create_dir(context.work_dir().join("bin"))?;
+    fs_err::create_dir(context.work_dir().join("lib"))?;
     context
         .work_dir()
         .child("lib")
@@ -464,7 +464,7 @@ fn executable_alias() -> anyhow::Result<()> {
               cli: hello
         "})?;
 
-    std::fs::create_dir(context.work_dir().join("bin"))?;
+    fs_err::create_dir(context.work_dir().join("bin"))?;
     context
         .work_dir()
         .child("bin")

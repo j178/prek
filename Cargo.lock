@@ -2217,6 +2217,7 @@ dependencies = [
 name = "prek-pty"
 version = "0.3.13"
 dependencies = [
+ "fs-err",
  "rustix",
  "tokio",
 ]

@@ -3,7 +3,6 @@
 #![cfg(unix)]
 
 mod error;
-#[allow(clippy::module_inception)]
 mod pty;
 mod sys;
 mod types;

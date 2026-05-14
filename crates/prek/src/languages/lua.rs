@@ -212,7 +212,7 @@ impl Lua {
     }
 
     fn get_rockspec_file(root_path: &Path) -> Option<PathBuf> {
-        if let Ok(entries) = std::fs::read_dir(root_path) {
+        if let Ok(entries) = fs_err::read_dir(root_path) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().and_then(|s| s.to_str()) == Some("rockspec") {

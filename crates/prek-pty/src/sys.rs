@@ -1,7 +1,8 @@
-use std::os::{
-    fd::{AsRawFd as _, FromRawFd as _},
-    unix::prelude::{OpenOptionsExt as _, OsStrExt as _},
-};
+use std::os::fd::AsRawFd;
+use std::os::fd::FromRawFd;
+use std::os::unix::ffi::OsStrExt;
+
+use fs_err::os::unix::fs::OpenOptionsExt as _;
 
 #[derive(Debug)]
 pub struct Pty(std::os::fd::OwnedFd);
@@ -34,7 +35,7 @@ impl Pty {
     }
 
     pub fn pts(&self) -> crate::Result<Pts> {
-        Ok(Pts(std::fs::OpenOptions::new()
+        Ok(Pts(fs_err::OpenOptions::new()
             .read(true)
             .write(true)
             .custom_flags(rustix::fs::OFlags::NOCTTY.bits().try_into().unwrap())

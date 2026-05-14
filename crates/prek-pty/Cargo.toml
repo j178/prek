@@ -9,6 +9,7 @@ license = { workspace = true }
 
 [dependencies]
 rustix = { workspace = true }
+fs-err = { workspace = true }
 tokio = { workspace = true }
 
 [lints]

@@ -1,5 +1,4 @@
 use std::env::consts::EXE_EXTENSION;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, LazyLock};
@@ -84,7 +83,7 @@ async fn query_python_info(python: &Path) -> Result<PythonInfo, PythonInfoError>
 pub(crate) async fn query_python_info_cached(
     python: &Path,
 ) -> Result<Arc<PythonInfo>, PythonInfoError> {
-    let python = fs::canonicalize(python).unwrap_or_else(|_| python.to_path_buf());
+    let python = fs_err::canonicalize(python).unwrap_or_else(|_| python.to_path_buf());
     PYTHON_INFO_CACHE
         .try_compute(python.clone(), async move || {
             let info = query_python_info(&python).await?;

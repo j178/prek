@@ -618,7 +618,7 @@ fn install_uses_standard_permissions_by_default() {
 
     // Verify hook permissions are 0o755 (standard)
     let hook_path = context.work_dir().join(".git/hooks/pre-commit");
-    let metadata = std::fs::metadata(&hook_path).unwrap();
+    let metadata = fs_err::metadata(&hook_path).unwrap();
     let mode = metadata.permissions().mode() & 0o777;
     assert_eq!(
         mode, 0o755,
@@ -645,7 +645,7 @@ fn install_uses_group_permissions_for_shared_repository() {
 
     // Verify hook permissions are 0o775 (group-writable)
     let hook_path = context.work_dir().join(".git/hooks/pre-commit");
-    let metadata = std::fs::metadata(&hook_path).unwrap();
+    let metadata = fs_err::metadata(&hook_path).unwrap();
     let mode = metadata.permissions().mode() & 0o777;
     assert_eq!(
         mode, 0o775,
@@ -670,7 +670,7 @@ fn install_uses_explicit_shared_repository_mode() {
     context.install().assert().success();
 
     let hook_path = context.work_dir().join(".git/hooks/pre-commit");
-    let metadata = std::fs::metadata(&hook_path).unwrap();
+    let metadata = fs_err::metadata(&hook_path).unwrap();
     let mode = metadata.permissions().mode() & 0o777;
     assert_eq!(
         mode, 0o750,

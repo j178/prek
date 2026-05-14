@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn resolve_dotnet_root_uses_canonicalized_parent_for_symlink() -> anyhow::Result<()> {
         use assert_fs::fixture::{PathChild, PathCreateDir};
-        use std::os::unix::fs::symlink;
+        use fs_err::os::unix::fs::symlink;
 
         let temp_dir = assert_fs::TempDir::new()?;
         let real_root = temp_dir.child("real");

@@ -315,7 +315,7 @@ mod tests {
     fn test_request_satisfied_by_install_info() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let toolchain_path = temp_dir.path().join("rust-toolchain");
-        std::fs::write(&toolchain_path, b"")?;
+        fs_err::write(&toolchain_path, b"")?;
 
         let mut install_info =
             InstallInfo::new(Language::Rust, FxHashSet::default(), temp_dir.path())?;

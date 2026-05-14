@@ -102,7 +102,7 @@ mod tests {
     #[tokio::test]
     async fn file_has_shebang_detects_valid_shebang() -> Result<(), anyhow::Error> {
         let file = NamedTempFile::new()?;
-        tokio::fs::write(file.path(), b"#!/bin/sh\necho hi\n").await?;
+        fs_err::tokio::write(file.path(), b"#!/bin/sh\necho hi\n").await?;
 
         assert!(file_has_shebang(file.path()).await?);
         Ok(())
@@ -111,7 +111,7 @@ mod tests {
     #[tokio::test]
     async fn file_has_shebang_rejects_non_shebang_prefixes() -> Result<(), anyhow::Error> {
         let file = NamedTempFile::new()?;
-        tokio::fs::write(file.path(), b"##!/bin/sh\n").await?;
+        fs_err::tokio::write(file.path(), b"##!/bin/sh\n").await?;
 
         assert!(!file_has_shebang(file.path()).await?);
         Ok(())

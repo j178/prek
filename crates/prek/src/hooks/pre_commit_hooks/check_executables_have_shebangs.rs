@@ -113,7 +113,7 @@ mod tests {
     #[tokio::test]
     async fn test_os_check_shebangs_with_shebang() -> Result<(), anyhow::Error> {
         let file = NamedTempFile::new()?;
-        tokio::fs::write(file.path(), b"#!/bin/bash\necho ok\n").await?;
+        fs_err::tokio::write(file.path(), b"#!/bin/bash\necho ok\n").await?;
         let files = vec![file.path()];
         let (code, output) = os_check_shebangs(Path::new(""), &files).await?;
         assert_eq!(code, 0);
@@ -125,7 +125,7 @@ mod tests {
     #[tokio::test]
     async fn test_os_check_shebangs_without_shebang() -> Result<(), anyhow::Error> {
         let file = NamedTempFile::new()?;
-        tokio::fs::write(file.path(), b"echo ok\n").await?;
+        fs_err::tokio::write(file.path(), b"echo ok\n").await?;
         let files = vec![file.path()];
         let (code, output) = os_check_shebangs(Path::new(""), &files).await?;
         assert_eq!(code, 1);

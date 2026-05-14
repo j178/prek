@@ -31,7 +31,7 @@ fn identify_text_with_missing_paths() -> anyhow::Result<()> {
     hello.py: file, non-executable, python, text
 
     ----- stderr -----
-    error: missing.py: No such file or directory (os error 2)
+    error: missing.py: failed to query metadata of symlink `missing.py`: No such file or directory (os error 2)
     "
     );
 
@@ -81,7 +81,7 @@ fn identify_json_with_missing_paths() -> anyhow::Result<()> {
     ]
 
     ----- stderr -----
-    error: missing.py: No such file or directory (os error 2)
+    error: missing.py: failed to query metadata of symlink `missing.py`: No such file or directory (os error 2)
     "#);
 
     Ok(())
