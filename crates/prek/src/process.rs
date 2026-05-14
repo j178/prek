@@ -258,7 +258,16 @@ impl Cmd {
                 }
                 status = child.wait() => {
                     let status = status?;
-                    drain_ready_pty(&mut pty, &mut stdout, &mut buffer).await?;
+                    loop {
+                        match pty.try_read(&mut buffer) {
+                            Ok(0) => break,
+                            Ok(n) => stdout.extend_from_slice(&buffer[..n]),
+                            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
+                            // Linux reports PTY master EOF as EIO after all slave handles close.
+                            Err(err) if err.raw_os_error() == Some(libc::EIO) => break,
+                            Err(err) => return Err(Error::PtySetup(err)),
+                        }
+                    }
                     break status;
                 }
             }
@@ -288,26 +297,6 @@ impl Cmd {
         })?;
         self.maybe_check_status(status)?;
         Ok(status)
-    }
-}
-
-#[cfg(not(windows))]
-async fn drain_ready_pty(
-    pty: &mut prek_pty::Pty,
-    stdout: &mut Vec<u8>,
-    buffer: &mut [u8; 4096],
-) -> Result<(), Error> {
-    use tokio::io::AsyncReadExt;
-    use tokio::time::{Duration, timeout};
-
-    loop {
-        match timeout(Duration::from_millis(20), pty.read(buffer)).await {
-            Ok(Ok(0)) => return Ok(()),
-            Ok(Ok(n)) => stdout.extend_from_slice(&buffer[..n]),
-            Err(_) => return Ok(()),
-            Ok(Err(err)) if err.kind() == std::io::ErrorKind::WouldBlock => return Ok(()),
-            Ok(Err(err)) => return Err(Error::PtySetup(err)),
-        }
     }
 }
 
