@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.4.0
+
+Released on 2026-05-14.
+
+### Breaking changes
+
+These are narrow cleanup breaks in behavior that was either temporary or never worked correctly. Most users should not need to change anything.
+
+- Generated hook scripts no longer preserve `-q`, `-v`, or `--no-progress` passed to `prek install`. This only affects users who expected those global flags to be baked into installed hooks. ([#1966](https://github.com/j178/prek/pull/1966))
+- `language_version` no longer accepts direct executable paths. Use `language_version: system` for a system toolchain, or use a supported version request instead. This path form did not work reliably before, so existing working configs should be unaffected. ([#1831](https://github.com/j178/prek/pull/1831))
+
+### Enhancements
+
+- Expand tilde in `--config`, `--cd`, `--log-file` and `--git-dir` ([#2063](https://github.com/j178/prek/pull/2063))
+- Prevent auto-update cooldown downgrades ([#2055](https://github.com/j178/prek/pull/2055))
+- Use managed npm cache for node hooks ([#2075](https://github.com/j178/prek/pull/2075))
+
+### Bug fixes
+
+- Fix npm config env overrides for node hooks ([#2074](https://github.com/j178/prek/pull/2074))
+
+### Documentation
+
+- Add cookbook page for enabling Git 2.54 config-based global hooks ([#2061](https://github.com/j178/prek/pull/2061))
+
+### Contributors
+
+- @j178
+
 ## 0.3.13
 
 Released on 2026-05-06.
