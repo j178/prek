@@ -2,13 +2,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use itertools::{Either, Itertools};
-use path_clean::PathClean;
 use prek_consts::env_vars::EnvVars;
 use prek_identify::{TagSet, tags_from_path};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, error, instrument};
 
 use crate::config::{FilePattern, Stage};
+use crate::fs::PathClean;
 use crate::git::GIT_ROOT;
 use crate::hook::Hook;
 use crate::workspace::Project;

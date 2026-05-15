@@ -8,10 +8,11 @@ use crate::warn_user;
 
 use anyhow::anyhow;
 use itertools::Itertools;
-use path_clean::PathClean;
 use prek_consts::env_vars::EnvVars;
 use rustc_hash::FxHashSet;
 use tracing::trace;
+
+use crate::fs::PathClean;
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
