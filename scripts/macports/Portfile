@@ -215,7 +215,6 @@ cargo.crates \
     lazy-regex-proc_macros           3.6.0  4de9c1e1439d8b7b3061b2d209809f447ca33241733d9a3c01eabf2dc8d94358 \
     lazy_static                      1.5.0  bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe \
     leb128fmt                        0.1.0  09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2 \
-    levenshtein                      1.0.5  db13adb97ab515a3691f56e4dbab09283d0b86cb45abd991d8634a9d6f501760 \
     libc                           0.2.185  52ff2c0fe9bc6cb6b14a0592c2ff4fa9ceb83eea9db979b0487cd054946a2b8f \
     liblzma                          0.4.6  b6033b77c21d1f56deeae8014eb9fbe7bdf1765185a6c508b5ca82eeaed7f899 \
     liblzma-sys                      0.4.6  1a60851d15cd8c5346eca4ab8babff585be2ae4bc8097c067291d3ffe2add3b6 \
