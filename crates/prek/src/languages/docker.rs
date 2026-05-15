@@ -8,8 +8,8 @@ use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
 use anyhow::{Context, Result};
-use lazy_regex::regex;
 use prek_consts::env_vars::EnvVars;
+use regex::Regex;
 use tracing::{trace, warn};
 
 use crate::cli::reporter::{HookInstallReporter, HookRunReporter};
@@ -18,6 +18,11 @@ use crate::languages::LanguageImpl;
 use crate::process::Cmd;
 use crate::run::{USE_COLOR, run_by_batch};
 use crate::store::Store;
+
+static CGROUP_V2_CONTAINER_ID_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r".*/(containers|overlay-containers)/([0-9a-f]{64})/.*")
+        .expect("cgroup v2 container id regex must be valid")
+});
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Docker;
@@ -101,7 +106,7 @@ fn parse_id_from_line(line: &str) -> Option<String> {
 fn container_id_from_cgroup_v2(mount_info: impl AsRef<Path>) -> Result<String> {
     let content =
         fs_err::read_to_string(mount_info).context("Failed to read cgroup v2 mount info")?;
-    regex!(r".*/(containers|overlay-containers)/([0-9a-f]{64})/.*")
+    CGROUP_V2_CONTAINER_ID_RE
         .captures(&content)
         .and_then(|caps| caps.get(2))
         .map(|m| m.as_str().to_owned())
