@@ -58,7 +58,6 @@ liblzma = { version = "0.4.5", features = ["static"] }
 mea = { version = "0.6.3" }
 memchr = { version = "2.7.5" }
 owo-colors = { version = "4.1.0" }
-path-clean = { version = "1.0.1" }
 phf = { version = "0.13.1", default-features = false, features = ["macros"] }
 pprof = { version = "0.15.0" }
 quick-xml = { version = "0.39" }

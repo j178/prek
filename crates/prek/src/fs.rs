@@ -21,7 +21,7 @@
 // SOFTWARE.
 
 use std::fmt::Display;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -393,9 +393,74 @@ impl<T: AsRef<Path>> Simplified for T {
     }
 }
 
+/// Clean a path lexically, without touching the filesystem.
+pub(crate) trait PathClean {
+    fn clean(&self) -> PathBuf;
+}
+
+impl PathClean for Path {
+    fn clean(&self) -> PathBuf {
+        clean_path(self)
+    }
+}
+
+impl PathClean for PathBuf {
+    fn clean(&self) -> PathBuf {
+        clean_path(self)
+    }
+}
+
+fn clean_path(path: impl AsRef<Path>) -> PathBuf {
+    let mut out = Vec::new();
+
+    for component in path.as_ref().components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => match out.last() {
+                Some(Component::RootDir) => {}
+                Some(Component::Normal(_)) => {
+                    out.pop();
+                }
+                None | Some(Component::CurDir | Component::ParentDir | Component::Prefix(_)) => {
+                    out.push(component);
+                }
+            },
+            component => out.push(component),
+        }
+    }
+
+    if out.is_empty() {
+        PathBuf::from(".")
+    } else {
+        out.iter().collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::path::{Path, PathBuf};
     use std::time::Duration;
+
+    #[test]
+    fn path_clean() {
+        use super::PathClean;
+
+        let cases = [
+            ("", "."),
+            (".", "."),
+            ("./test/./path", "test/path"),
+            ("test/path/..", "test"),
+            ("test/path/../../..", ".."),
+            ("test/path/../../../..", "../.."),
+            ("../test/..", ".."),
+            ("/../test", "/test"),
+            ("/test/path/../../../..", "/"),
+        ];
+
+        for (input, expected) in cases {
+            assert_eq!(Path::new(input).clean(), PathBuf::from(expected), "{input}");
+        }
+    }
 
     #[tokio::test]
     #[cfg(unix)]

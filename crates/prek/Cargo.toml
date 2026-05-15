@@ -59,7 +59,6 @@ liblzma = { workspace = true }
 mea = { workspace = true }
 memchr = { workspace = true }
 owo-colors = { workspace = true }
-path-clean = { workspace = true }
 quick-xml = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
