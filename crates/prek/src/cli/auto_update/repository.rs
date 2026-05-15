@@ -323,13 +323,48 @@ pub(super) fn select_best_tag<'a>(
     };
 
     candidates.sort_by(|tag_a, tag_b| {
-        levenshtein::levenshtein(tag_a, current_ref)
-            .cmp(&levenshtein::levenshtein(tag_b, current_ref))
+        levenshtein_distance(tag_a, current_ref)
+            .cmp(&levenshtein_distance(tag_b, current_ref))
             .then_with(|| compare_tag_versions_desc(tag_a, tag_b))
             .then_with(|| tag_a.cmp(tag_b))
     });
 
     candidates.into_iter().next()
+}
+
+fn levenshtein_distance(a: &str, b: &str) -> usize {
+    if a == b {
+        return 0;
+    }
+
+    let a_len = a.chars().count();
+    let b_len = b.chars().count();
+
+    if a_len == 0 {
+        return b_len;
+    }
+
+    if b_len == 0 {
+        return a_len;
+    }
+
+    let mut row = (0..=a_len).collect::<Vec<_>>();
+
+    for (b_index, b_char) in b.chars().enumerate() {
+        let mut previous = row[0];
+        row[0] = b_index + 1;
+
+        for (a_index, a_char) in a.chars().enumerate() {
+            let deletion = row[a_index + 1] + 1;
+            let insertion = row[a_index] + 1;
+            let substitution = previous + usize::from(a_char != b_char);
+
+            previous = row[a_index + 1];
+            row[a_index + 1] = deletion.min(insertion).min(substitution);
+        }
+    }
+
+    row[a_len]
 }
 
 /// Checks out the candidate manifest and verifies all configured hook ids still exist.
@@ -389,7 +424,8 @@ pub(super) async fn checkout_and_validate_manifest(
 #[cfg(test)]
 mod tests {
     use super::{
-        list_tag_metadata, no_lazy_fetch_unsupported, resolve_bleeding_edge, select_update_revision,
+        levenshtein_distance, list_tag_metadata, no_lazy_fetch_unsupported, resolve_bleeding_edge,
+        select_best_tag, select_update_revision,
     };
     use crate::cli::auto_update::{RevisionSelection, SkippedDowngrade};
     use crate::git;
@@ -462,6 +498,23 @@ mod tests {
             .args(["-c", "commit.gpgsign=false"])
             .args(["-c", "tag.gpgsign=false"]);
         cmd
+    }
+
+    #[test]
+    fn test_levenshtein_distance() {
+        assert_eq!(levenshtein_distance("", ""), 0);
+        assert_eq!(levenshtein_distance("", "v1.0.0"), 6);
+        assert_eq!(levenshtein_distance("v1.0.0", "v1.1.0"), 1);
+        assert_eq!(levenshtein_distance("v1.0.0", "foo-v1.1.0"), 5);
+        assert_eq!(levenshtein_distance("v1.0.0", "v1.0.0"), 0);
+        assert_eq!(levenshtein_distance("mañana", "manana"), 1);
+    }
+
+    #[test]
+    fn test_select_best_tag_prefers_closest_tag() {
+        let tags = ["v1.1.0", "foo-v1.1.0", "v1"];
+
+        assert_eq!(select_best_tag(&tags, "v1.0.0", false), Some("v1.1.0"));
     }
 
     async fn create_commit(repo: &Path, message: &str) {
