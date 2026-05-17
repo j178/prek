@@ -12,7 +12,7 @@ use prek_consts::env_vars::EnvVars;
 use prek_consts::{PRE_COMMIT_CONFIG_YAML, PREK_TOML};
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use tracing::{debug, trace, warn};
 use unicode_width::UnicodeWidthStr;
 
@@ -606,9 +606,23 @@ impl<'a> ProjectHookInput<'a> {
         }
     }
 
-    fn for_hook(&self, hook: &Hook, tag_cache: &mut FileTagCache) -> Vec<&Path> {
+    fn for_hook<'input>(
+        &'input self,
+        hook: &Hook,
+        tag_cache: &mut FileTagCache<'a>,
+    ) -> HookRunInput<'input>
+    where
+        'a: 'input,
+    {
         match self {
-            Self::Files(project_files) => project_files.for_hook(hook, tag_cache),
+            Self::Files(project_files) => match hook.pass_filenames {
+                PassFilenames::None => HookRunInput::matched_without_filenames(
+                    project_files.has_match_for_hook(hook, tag_cache),
+                ),
+                PassFilenames::All | PassFilenames::Limited(_) => {
+                    HookRunInput::with_filenames(project_files.for_hook(hook, tag_cache))
+                }
+            },
             Self::MessageFile {
                 absolute_path,
                 hook_arg,
@@ -620,11 +634,38 @@ impl<'a> ProjectHookInput<'a> {
                 if hook_filter.matches_filename(hook_arg)
                     && hook_filter.matches_tags(tag_cache.tags(absolute_path))
                 {
-                    vec![hook_arg.as_path()]
+                    match hook.pass_filenames {
+                        PassFilenames::None => HookRunInput::matched_without_filenames(true),
+                        PassFilenames::All | PassFilenames::Limited(_) => {
+                            HookRunInput::with_filenames(vec![hook_arg.as_path()])
+                        }
+                    }
                 } else {
-                    vec![]
+                    HookRunInput::matched_without_filenames(false)
                 }
             }
+        }
+    }
+}
+
+struct HookRunInput<'a> {
+    has_matching_files: bool,
+    filenames: Vec<&'a Path>,
+}
+
+impl<'a> HookRunInput<'a> {
+    fn with_filenames(filenames: Vec<&'a Path>) -> Self {
+        let has_matching_files = !filenames.is_empty();
+        Self {
+            has_matching_files,
+            filenames,
+        }
+    }
+
+    fn matched_without_filenames(has_matching_files: bool) -> Self {
+        Self {
+            has_matching_files,
+            filenames: Vec::new(),
         }
     }
 }
@@ -651,7 +692,8 @@ async fn run_hooks(
 
     // Group hooks by project to run them in order of their depth in the workspace.
     #[allow(clippy::mutable_key_type)]
-    let mut project_to_hooks: FxHashMap<&Project, Vec<InstalledHook>> = FxHashMap::default();
+    let mut project_to_hooks: FxHashMap<&Project, Vec<InstalledHook>> =
+        FxHashMap::with_capacity_and_hasher(hooks.len(), FxBuildHasher);
     for hook in hooks {
         project_to_hooks
             .entry(hook.project())
@@ -834,14 +876,17 @@ impl Iterator for PriorityGroupRanges<'_> {
     }
 }
 
-async fn run_priority_group(
+async fn run_priority_group<'input, 'paths>(
     group_hooks: Vec<InstalledHook>,
-    input: &ProjectHookInput<'_>,
-    tag_cache: &mut FileTagCache,
+    input: &'input ProjectHookInput<'paths>,
+    tag_cache: &mut FileTagCache<'paths>,
     store: &Store,
     dry_run: bool,
     reporter: &HookRunReporter,
-) -> Result<Vec<RunResult>> {
+) -> Result<Vec<RunResult>>
+where
+    'paths: 'input,
+{
     debug!(
         "Running priority group with priority {} with concurrency {}: {:?}",
         group_hooks[0].priority,
@@ -851,13 +896,14 @@ async fn run_priority_group(
 
     let mut results = futures::stream::iter(group_hooks)
         .map(|hook| {
-            let filenames = input.for_hook(&hook, tag_cache);
+            let hook_input = input.for_hook(&hook, tag_cache);
             trace!(
-                "Files for hook `{}` after filtered: {}",
+                matched = hook_input.has_matching_files,
+                filenames = hook_input.filenames.len(),
+                "Files for hook `{}` after filtering",
                 hook.id,
-                filenames.len()
             );
-            run_hook(hook, filenames, store, dry_run, reporter)
+            run_hook(hook, hook_input, store, dry_run, reporter)
         })
         .buffer_unordered(*CONCURRENCY);
 
@@ -1073,12 +1119,12 @@ impl RunResult {
 
 async fn run_hook(
     hook: InstalledHook,
-    mut filenames: Vec<&Path>,
+    mut input: HookRunInput<'_>,
     store: &Store,
     dry_run: bool,
     reporter: &HookRunReporter,
 ) -> Result<RunResult> {
-    if filenames.is_empty() && !hook.always_run {
+    if !input.has_matching_files && !hook.always_run {
         return Ok(RunResult::from_status(hook, RunStatus::NoFiles));
     }
     if !Language::supported(hook.language) {
@@ -1088,8 +1134,8 @@ async fn run_hook(
 
     let filenames = match hook.pass_filenames {
         PassFilenames::All | PassFilenames::Limited(_) => {
-            shuffle(&mut filenames);
-            filenames
+            shuffle(&mut input.filenames);
+            input.filenames
         }
         PassFilenames::None => vec![],
     };
