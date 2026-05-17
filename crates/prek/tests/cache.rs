@@ -836,3 +836,36 @@ fn cache_gc_dry_run_does_not_remove_entries() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn cache_corruption_recovery() {
+    let context = TestContext::new();
+    context.init_project();
+
+    context.write_pre_commit_config("repos:\n  - repo: https://github.com/pre-commit/pre-commit-hooks\n    rev: v4.4.0\n    hooks:\n      - id: trailing-whitespace");
+
+    // First run populates the cache
+    let status = context.run().status().unwrap();
+    assert!(status.success());
+
+    // Corrupt the cache store by overwriting the marker file
+    let repos_dir = context.home_dir().join("repos");
+    if let Ok(entries) = std::fs::read_dir(&repos_dir) {
+        for entry in entries.flatten() {
+            let marker_path = entry.path().join(".prek-repo.json");
+            if marker_path.exists() {
+                std::fs::write(&marker_path, "{ corrupted }").unwrap();
+            }
+        }
+    }
+
+    // Next run should recover (by invalidating the cache and re-fetching)
+    cmd_snapshot!(context.filters(), context.run(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    trim trailing whitespace.............................(no files to check)Skipped
+
+    ----- stderr -----
+    ");
+}
