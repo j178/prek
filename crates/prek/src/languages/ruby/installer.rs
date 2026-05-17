@@ -589,6 +589,8 @@ mod tests {
     impl Drop for EnvVarGuard {
         fn drop(&mut self) {
             match &self.saved {
+                // SAFETY: We use a mutex to ensure that only one test is
+                // mutating the environment at a time.
                 Some(v) => unsafe { std::env::set_var(self.key, v) },
                 None => unsafe { std::env::remove_var(self.key) },
             }
@@ -668,6 +670,8 @@ mod tests {
     #[test]
     fn test_rv_ruby_urls_default() {
         let _guard = EnvVarGuard::new(EnvVars::PREK_RUBY_MIRROR);
+        // SAFETY: EnvVarGuard ensures that this test runs in isolation and
+        // that the environment is restored afterwards.
         unsafe { std::env::remove_var(EnvVars::PREK_RUBY_MIRROR) };
 
         let (api_url, api_is_github) = rv_ruby_api_url();
@@ -689,6 +693,8 @@ mod tests {
     fn test_rv_ruby_urls_github_mirror() {
         // A github.com mirror: API URL is rewritten, download URL uses web URL.
         let _guard = EnvVarGuard::new(EnvVars::PREK_RUBY_MIRROR);
+        // SAFETY: EnvVarGuard ensures that this test runs in isolation and
+        // that the environment is restored afterwards.
         unsafe {
             std::env::set_var(
                 EnvVars::PREK_RUBY_MIRROR,
@@ -715,6 +721,8 @@ mod tests {
     fn test_rv_ruby_urls_non_github_mirror() {
         // A non-github mirror: both URLs use the mirror as-is, is_github is false.
         let _guard = EnvVarGuard::new(EnvVars::PREK_RUBY_MIRROR);
+        // SAFETY: EnvVarGuard ensures that this test runs in isolation and
+        // that the environment is restored afterwards.
         unsafe {
             std::env::set_var(
                 EnvVars::PREK_RUBY_MIRROR,

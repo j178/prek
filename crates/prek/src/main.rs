@@ -210,6 +210,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     if EnvVars::is_set(EnvVars::GIT_DIR) && !EnvVars::is_set(EnvVars::GIT_WORK_TREE) {
         let cwd = std::env::current_dir().context("Failed to get current directory")?;
         debug!("Setting {} to `{}`", EnvVars::GIT_WORK_TREE, cwd.display());
+        // SAFETY: We are in the initialization phase and there are no other
+        // threads running that could be concurrently accessing the environment.
         unsafe { std::env::set_var(EnvVars::GIT_WORK_TREE, cwd) }
     }
 
