@@ -12,6 +12,12 @@
 - `prek` supports a [`shell`](reference/configuration.md#shell) hook option for explicit shell-source execution through predefined adapters such as `bash`, `sh`, and `pwsh`. Upstream `pre-commit` runs `entry` directly; shell behavior must be spelled into `entry` itself.
 - `prek` reports more precise configuration parsing errors, including exact source locations.
 
+## Behavioral divergences
+
+These differences intentionally change upstream behavior instead of adding a compatible superset.
+
+- File identification gives recognized extensions precedence over loose filename-prefix matches. For example, `makefile.png` is treated as a PNG image, while upstream `identify` also gives it `makefile` and `text` tags. Exact filename matches such as `Cargo.toml` still keep their name-specific tags.
+
 ## Workspace mode
 
 `prek` supports workspace mode, allowing you to run hooks for multiple projects in a single command. Each subproject can keep its own `prek.toml` or `.pre-commit-config.yaml` file.

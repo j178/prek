@@ -300,34 +300,48 @@ pub fn tags_from_path(path: &Path) -> Result<TagSet, Error> {
 }
 
 fn tags_from_filename(filename: &Path) -> TagSet {
-    let ext = filename.extension().and_then(|ext| ext.to_str());
-    let mut result = filename
-        .file_name()
-        .and_then(|name| name.to_str())
-        .and_then(|filename| {
-            tags::NAMES.get(filename).or_else(|| {
-                // Allow e.g. "Dockerfile.xenial" to match "Dockerfile".
-                filename
-                    .split('.')
-                    .next()
-                    .and_then(|name| tags::NAMES.get(name))
-            })
-        })
-        .copied()
-        .unwrap_or_default();
+    let extension_tags = tags_from_extension(filename);
+    let Some(filename) = filename.file_name().and_then(|name| name.to_str()) else {
+        return extension_tags;
+    };
 
-    if let Some(ext) = ext {
-        if let Some(tags) = tags::EXTENSIONS.get(ext) {
-            result |= tags;
-        } else if ext.as_bytes().iter().any(u8::is_ascii_uppercase) {
-            let ext_lower = ext.to_ascii_lowercase();
-            if let Some(tags) = tags::EXTENSIONS.get(ext_lower.as_str()) {
-                result |= tags;
-            }
+    // Exact filename matches keep their name-specific tags even when the
+    // extension is also recognized, e.g. "Cargo.toml" or "CMakeLists.txt".
+    let mut result = tags::NAMES.get(filename).copied().unwrap_or_default();
+    // If an extension matches, do not fall back to matching the filename prefix:
+    // "makefile.png" matches "png", so it should not also match "makefile".
+    result |= &extension_tags;
+    if !result.is_empty() {
+        return result;
+    }
+
+    // Allow e.g. "Dockerfile.xenial" to match "Dockerfile", but only when
+    // the real extension is unknown.
+    filename
+        .split('.')
+        .next()
+        .and_then(|name| tags::NAMES.get(name))
+        .copied()
+        .unwrap_or_default()
+}
+
+fn tags_from_extension(filename: &Path) -> TagSet {
+    let Some(ext) = filename.extension().and_then(|ext| ext.to_str()) else {
+        return TagSet::default();
+    };
+
+    if let Some(tags) = tags::EXTENSIONS.get(ext) {
+        return *tags;
+    }
+
+    if ext.as_bytes().iter().any(u8::is_ascii_uppercase) {
+        let ext_lower = ext.to_ascii_lowercase();
+        if let Some(tags) = tags::EXTENSIONS.get(ext_lower.as_str()) {
+            return *tags;
         }
     }
 
-    result
+    TagSet::default()
 }
 
 fn tags_from_interpreter(interpreter: &str) -> TagSet {
@@ -591,6 +605,27 @@ mod tests {
 
         let tags = super::tags_from_filename(Path::new("Tiltfile.dev"));
         assert_tagset(&tags, &["text", "tiltfile"]);
+    }
+
+    #[test]
+    fn tags_from_filename_prefers_known_extension_over_name_prefix() {
+        let tags = super::tags_from_filename(Path::new("makefile.png"));
+
+        assert_tagset(&tags, &["binary", "image", "png"]);
+    }
+
+    #[test]
+    fn tags_from_filename_falls_back_to_name_prefix_for_unknown_extension() {
+        let tags = super::tags_from_filename(Path::new("Dockerfile.xenial"));
+
+        assert_tagset(&tags, &["dockerfile", "text"]);
+    }
+
+    #[test]
+    fn tags_from_filename_keeps_exact_name_tags_with_known_extension() {
+        let tags = super::tags_from_filename(Path::new("CMakeLists.txt"));
+
+        assert_tagset(&tags, &["cmake", "plain-text", "text"]);
     }
 
     #[cfg(unix)]
