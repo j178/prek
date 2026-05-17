@@ -1,8 +1,9 @@
 use std::path::Path;
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
-use lazy_regex::regex;
+use regex::Regex;
 use toml_edit::DocumentMut;
 
 use crate::fs::Simplified;
@@ -10,8 +11,24 @@ use crate::yaml::serialize_yaml_scalar;
 
 use super::{FrozenCommentSite, FrozenRef, Revision};
 
+static FROZEN_REF_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"#\s*frozen:\s*([^\s#]+)").expect("frozen ref regex must be valid")
+});
+
+static TOML_REV_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s*rev\s*=").expect("TOML rev regex must be valid"));
+
+static YAML_REV_LINE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"^\s+rev:\s*['"]?[^\s#]+.*$"#).expect("YAML rev line regex must be valid")
+});
+
+static YAML_REV_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"^(\s+)rev:(\s*)(['"]?)([^\s#]+)(.*)(\r?\n)$"#)
+        .expect("YAML rev regex must be valid")
+});
+
 fn parse_frozen_ref(line: &str, line_number: usize) -> FrozenRef {
-    let Some(captures) = regex!(r#"#\s*frozen:\s*([^\s#]+)"#).captures(line) else {
+    let Some(captures) = FROZEN_REF_RE.captures(line) else {
         return FrozenRef {
             line_number,
             current_frozen: None,
@@ -37,21 +54,15 @@ pub(super) fn read_frozen_refs(path: &Path) -> Result<Vec<FrozenRef>> {
         Some(ext) if ext.eq_ignore_ascii_case("toml") => Ok(content
             .lines()
             .enumerate()
-            .filter(|(_, line)| regex!(r#"^\s*rev\s*="#).is_match(line))
+            .filter(|(_, line)| TOML_REV_RE.is_match(line))
             .map(|(index, line)| parse_frozen_ref(line, index + 1))
             .collect()),
-        _ => {
-            let rev_regex = regex!(r#"^\s+rev:\s*['"]?[^\s#]+(?P<comment>.*)$"#);
-            Ok(content
-                .lines()
-                .enumerate()
-                .filter_map(|(index, line)| {
-                    rev_regex
-                        .captures(line)
-                        .map(|_| parse_frozen_ref(line, index + 1))
-                })
-                .collect())
-        }
+        _ => Ok(content
+            .lines()
+            .enumerate()
+            .filter(|(_, line)| YAML_REV_LINE_RE.is_match(line))
+            .map(|(index, line)| parse_frozen_ref(line, index + 1))
+            .collect()),
     }
 }
 
@@ -171,13 +182,11 @@ pub(super) fn render_updated_yaml_config(
         .map(ToString::to_string)
         .collect::<Vec<_>>();
 
-    let rev_regex = regex!(r#"^(\s+)rev:(\s*)(['"]?)([^\s#]+)(.*)(\r?\n)$"#);
-
     let rev_lines = lines
         .iter()
         .enumerate()
         .filter_map(|(line_no, line)| {
-            if rev_regex.is_match(line) {
+            if YAML_REV_RE.is_match(line) {
                 Some(line_no)
             } else {
                 None
@@ -199,7 +208,7 @@ pub(super) fn render_updated_yaml_config(
             continue;
         };
 
-        let caps = rev_regex
+        let caps = YAML_REV_RE
             .captures(&lines[*line_no])
             .context("Failed to capture rev line")?;
 

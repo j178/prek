@@ -51,7 +51,6 @@ indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 json5 = { workspace = true }
-lazy-regex = { workspace = true }
 globset = { workspace = true }
 # Enable static linking for liblzma
 # This is required for the `xz` feature in `async-compression`
@@ -61,6 +60,7 @@ memchr = { workspace = true }
 owo-colors = { workspace = true }
 quick-xml = { workspace = true }
 rand = { workspace = true }
+regex = { workspace = true }
 reqwest = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
@@ -108,7 +108,6 @@ insta-cmd = { workspace = true }
 markdown = { workspace = true }
 predicates = { workspace = true }
 pretty_assertions = { workspace = true }
-regex = { workspace = true }
 tempfile = { workspace = true }
 textwrap = { workspace = true }
 
