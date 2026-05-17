@@ -790,6 +790,29 @@ pub(crate) async fn rev_exists(rev: &str) -> Result<bool, Error> {
     Ok(output.status.success())
 }
 
+/// Check if `ancestor` is an ancestor of `commit`.
+pub(crate) async fn is_ancestor(ancestor: &str, commit: &str) -> Result<bool, Error> {
+    let mut cmd = git_cmd("check commit ancestry")?;
+    let status = cmd
+        .arg("merge-base")
+        .arg("--is-ancestor")
+        .arg(ancestor)
+        .arg(commit)
+        .check(false)
+        .status()
+        .await?;
+
+    if status.success() {
+        return Ok(true);
+    }
+    if status.code() == Some(1) {
+        return Ok(false);
+    }
+
+    cmd.check_status(status)?;
+    Ok(false)
+}
+
 /// Get commits that are ancestors of the given commit but not in the specified remote
 pub(crate) async fn get_ancestors_not_in_remote(
     local_sha: &str,

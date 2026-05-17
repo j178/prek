@@ -227,6 +227,141 @@ fn hook_impl_pre_push() -> anyhow::Result<()> {
 }
 
 #[test]
+fn hook_impl_pre_push_force_push_after_rebase() -> anyhow::Result<()> {
+    let context = TestContext::new();
+    context.init_project();
+
+    // Regression test for https://github.com/j178/prek/issues/2088.
+    // The hook fails after printing its filenames so the assertion can inspect
+    // the exact file set selected by the pre-push range calculation.
+    context.write_pre_commit_config(indoc! { r"
+        repos:
+        - repo: local
+          hooks:
+           - id: filenames
+             name: filenames
+             language: system
+             entry: python3 print_filenames.py
+             stages: [ pre-push ]
+    "});
+    context
+        .work_dir()
+        .child("print_filenames.py")
+        .write_str(indoc! { r"
+            import sys
+
+            for filename in sys.argv[1:]:
+                print(filename)
+
+            raise SystemExit(1)
+        "})?;
+    context.git_add(".");
+    context.git_commit("Initial commit");
+
+    let remote_repo_path = context.home_dir().join("remote.git");
+    fs_err::create_dir_all(&remote_repo_path)?;
+
+    let mut init_remote = git_cmd(&remote_repo_path);
+    init_remote
+        .arg("-c")
+        .arg("init.defaultBranch=master")
+        .arg("init")
+        .arg("--bare");
+    init_remote.output()?.assert().success();
+
+    let mut add_remote = git_cmd(context.work_dir());
+    add_remote
+        .arg("remote")
+        .arg("add")
+        .arg("origin")
+        .arg(&remote_repo_path);
+    add_remote.output()?.assert().success();
+
+    let mut push_master = git_cmd(context.work_dir());
+    push_master.arg("push").arg("origin").arg("master");
+    push_master.output()?.assert().success();
+
+    // Create and push a feature branch so the remote has an old feature tip.
+    // This old tip is what Git passes to pre-push as remote_sha during the
+    // later force-push.
+    let mut checkout_feature = git_cmd(context.work_dir());
+    checkout_feature.arg("checkout").arg("-b").arg("feature");
+    checkout_feature.output()?.assert().success();
+
+    context
+        .work_dir()
+        .child("feature.txt")
+        .write_str("feature")?;
+    context.git_add(".");
+    context.git_commit("Add feature file");
+
+    let mut push_feature = git_cmd(context.work_dir());
+    push_feature.arg("push").arg("origin").arg("feature");
+    push_feature.output()?.assert().success();
+
+    // Move master forward with an unrelated file. After the feature branch is
+    // rebased onto this commit, main.txt must not appear in the pre-push file
+    // list because it is default-branch churn, not a feature-branch change.
+    context.git_checkout("master");
+    context.work_dir().child("main.txt").write_str("main")?;
+    context.git_add(".");
+    context.git_commit("Update master");
+
+    let mut push_master = git_cmd(context.work_dir());
+    push_master.arg("push").arg("origin").arg("master");
+    push_master.output()?.assert().success();
+
+    let mut fetch_origin = git_cmd(context.work_dir());
+    fetch_origin.arg("fetch").arg("origin");
+    fetch_origin.output()?.assert().success();
+
+    context.git_checkout("feature");
+
+    // Rebase rewrites the feature commit, so the old remote feature tip still
+    // exists locally but is no longer an ancestor of the new local feature tip.
+    // That is the #2088 shape that used to make old_remote...new_local include
+    // unrelated master changes.
+    let mut rebase = git_cmd(context.work_dir());
+    rebase.arg("rebase").arg("origin/master");
+    rebase.output()?.assert().success();
+
+    context
+        .install()
+        .arg("--hook-type")
+        .arg("pre-push")
+        .output()?
+        .assert()
+        .success();
+
+    let mut push_cmd = git_cmd(context.work_dir());
+    push_cmd
+        .arg("push")
+        .arg("--force")
+        .arg("origin")
+        .arg("feature")
+        .env(EnvVars::PREK_HOME, &**context.home_dir());
+
+    // The correct range is origin/master...feature after the rebase, so only
+    // feature.txt should be passed to hooks. If the old remote feature tip were
+    // used as from_ref, this would also include main.txt.
+    cmd_snapshot!(context.filters(), push_cmd, @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    filenames................................................................Failed
+    - hook id: filenames
+    - exit code: 1
+
+      feature.txt
+
+    ----- stderr -----
+    error: failed to push some refs to '[HOME]/remote.git'
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn hook_impl_runs_legacy_hook() -> anyhow::Result<()> {
     let context = TestContext::new();
     context.init_project();
