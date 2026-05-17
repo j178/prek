@@ -133,22 +133,14 @@ fn run_glob_patterns_with_multiple_hooks() -> Result<()> {
 fn run_in_non_git_repo() {
     let context = TestContext::new();
 
-    let mut filters = context.filters();
-    filters.push((r"exit code: ", "exit status: "));
-
-    cmd_snapshot!(filters, context.run(), @r"
+    cmd_snapshot!(context.filters(), context.run(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Command `get git root` exited with an error:
-
-    [status]
-    exit status: 128
-
-    [stderr]
-    fatal: not a git repository (or any of the parent directories): .git
+    error: Git operation failed
+      caused by: Could not find a git repository in '.' or in any of its parents
     ");
 }
 
@@ -1695,19 +1687,7 @@ fn init_nonexistent_repo() {
         "});
     context.git_add(".");
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"exit code: ", "exit status: "),
-            // Normalize Git error message to handle environment-specific variations
-            (
-                r"fatal: unable to access 'https://notexistentatallnevergonnahappen\.com/nonexistent/repo/':.*",
-                r"fatal: unable to access 'https://notexistentatallnevergonnahappen.com/nonexistent/repo/': [error]"
-            ),
-        ])
-        .collect::<Vec<_>>();
-
-    cmd_snapshot!(filters, context.run(), @"
+    cmd_snapshot!(context.filters(), context.run(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1715,13 +1695,9 @@ fn init_nonexistent_repo() {
     ----- stderr -----
     error: Failed to init hooks
       caused by: Failed to clone repo `https://notexistentatallnevergonnahappen.com/nonexistent/repo`
-      caused by: Command `git full clone` exited with an error:
-
-    [status]
-    exit status: 128
-
-    [stderr]
-    fatal: unable to access 'https://notexistentatallnevergonnahappen.com/nonexistent/repo/': [error]
+      caused by: Git operation failed
+      caused by: An IO error occurred when talking to the server
+      caused by: error sending request for url (https://notexistentatallnevergonnahappen.com/nonexistent/repo/info/refs?service=git-upload-pack)
     ");
 }
 
@@ -2363,10 +2339,7 @@ fn git_commit_a_currently_fails_when_hook_writes_to_temp_git_index() -> Result<(
         .into_iter()
         .chain([
             (r"\[master \w{7}\]", r"[master COMMIT]"),
-            (
-                r"fatal: unable to read [0-9a-f]{40}",
-                "fatal: unable to read [HASH]",
-            ),
+            (r"object with id [0-9a-f]{40}", "object with id [HASH]"),
         ])
         .collect::<Vec<_>>();
 
@@ -2376,13 +2349,8 @@ fn git_commit_a_currently_fails_when_hook_writes_to_temp_git_index() -> Result<(
     ----- stdout -----
 
     ----- stderr -----
-    error: Command `git diff` exited with an error:
-
-    [status]
-    exit status: 128
-
-    [stderr]
-    fatal: unable to read [HASH]
+    error: Git operation failed
+      caused by: An object with id [HASH] could not be found
     "
     );
 

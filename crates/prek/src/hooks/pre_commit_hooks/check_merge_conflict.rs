@@ -30,7 +30,7 @@ pub(crate) async fn check_merge_conflict(
     let args = Args::try_parse_from(hook.entry.expect_direct().split()?.iter().chain(&hook.args))?;
 
     // Check if we're in a merge state or assuming merge
-    if !args.assume_in_merge && !is_in_merge().await? {
+    if !args.assume_in_merge && !is_in_merge()? {
         return Ok((0, Vec::new()));
     }
 
@@ -40,9 +40,9 @@ pub(crate) async fn check_merge_conflict(
     .await
 }
 
-async fn is_in_merge() -> Result<bool> {
+fn is_in_merge() -> Result<bool> {
     // Change directory temporarily or ensure we're in the right directory
-    let git_dir = get_git_dir().await?;
+    let git_dir = get_git_dir()?;
 
     // Check if MERGE_MSG exists
     let merge_msg_exists = git_dir.join("MERGE_MSG").exists();

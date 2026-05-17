@@ -10,6 +10,7 @@ use prek_consts::env_vars::EnvVars;
 use rustc_hash::{FxHashMap, FxHashSet};
 use seahash::SeaHasher;
 use thiserror::Error;
+use tokio::task;
 use tracing::{debug, warn};
 
 use crate::config::{RemoteRepo, RemoteRepoKey};
@@ -20,17 +21,13 @@ use crate::run::CONCURRENCY;
 use crate::warn_user;
 use crate::workspace::{HookInitReporter, WorkspaceCache};
 
-struct PendingClone<'a> {
-    repo: &'a RemoteRepo,
-}
-
-enum FirstClonePass<'a> {
-    Ready {
+enum InitialCloneOutcome<'a> {
+    Cloned {
         repo: &'a RemoteRepo,
         temp: tempfile::TempDir,
         progress: Option<usize>,
     },
-    AuthFailed {
+    NeedsAuth {
         repo: &'a RemoteRepo,
         error: git::Error,
         progress: Option<usize>,
@@ -49,6 +46,8 @@ pub enum Error {
         #[source]
         error: git::Error,
     },
+    #[error("Failed to join git clone task")]
+    CloneTask(#[source] tokio::task::JoinError),
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
 }
@@ -106,23 +105,36 @@ impl Store {
         Ok(self)
     }
 
-    async fn clone_repo_to_temp(
+    async fn clone_remote_repo_to_scratch(
         &self,
         repo: &RemoteRepo,
         terminal_prompt: TerminalPrompt,
-    ) -> Result<tempfile::TempDir, git::Error> {
-        let temp = tempfile::tempdir_in(self.scratch_path())?;
-        debug!(
-            target = %temp.path().display(),
-            %repo,
-            ?terminal_prompt,
-            "Cloning repo"
-        );
-        git::clone_repo(&repo.repo, &repo.rev, temp.path(), terminal_prompt).await?;
-        Ok(temp)
+    ) -> Result<tempfile::TempDir, Error> {
+        let repo_url = repo.repo.clone();
+        let rev = repo.rev.clone();
+        let scratch_path = self.scratch_path();
+
+        task::spawn_blocking(move || {
+            let temp = tempfile::tempdir_in(scratch_path)?;
+            debug!(
+                target = %temp.path().display(),
+                repo = %repo_url,
+                rev = %rev,
+                ?terminal_prompt,
+                "Cloning repo"
+            );
+            git::clone_repo_at_rev(&repo_url, &rev, temp.path(), terminal_prompt)?;
+            Ok(temp)
+        })
+        .await
+        .map_err(Error::CloneTask)?
+        .map_err(|error| Error::CloneRepo {
+            repo: repo.repo.clone(),
+            error,
+        })
     }
 
-    async fn persist_cloned_repo(
+    async fn promote_scratch_repo(
         &self,
         repo: &RemoteRepo,
         temp: tempfile::TempDir,
@@ -144,7 +156,7 @@ impl Store {
     /// The first pass runs in parallel with terminal prompts disabled. Repositories that fail
     /// with an authentication error are retried afterwards, sequentially, with terminal prompts
     /// enabled so the user can provide credentials for one repository at a time.
-    pub(crate) async fn clone_repos<'a>(
+    pub(crate) async fn clone_remote_repos<'a>(
         &self,
         repos: impl IntoIterator<Item = &'a RemoteRepo>,
         reporter: Option<&dyn HookInitReporter>,
@@ -159,57 +171,53 @@ impl Store {
                 continue;
             }
 
-            pending.push(PendingClone { repo });
+            pending.push(repo);
         }
 
         let mut auth_failed = Vec::new();
         let mut tasks = futures::stream::iter(pending)
-            .map(async |pending| {
-                let progress =
-                    reporter.map(|reporter| reporter.on_clone_start(&format!("{}", pending.repo)));
+            .map(async |repo| {
+                let progress = reporter.map(|reporter| reporter.on_clone_start(&format!("{repo}")));
                 match self
-                    .clone_repo_to_temp(pending.repo, TerminalPrompt::Disabled)
+                    .clone_remote_repo_to_scratch(repo, TerminalPrompt::Disabled)
                     .await
                 {
-                    Ok(temp) => Ok(FirstClonePass::Ready {
-                        repo: pending.repo,
+                    Ok(temp) => Ok(InitialCloneOutcome::Cloned {
+                        repo,
                         temp,
                         progress,
                     }),
-                    Err(err) if git::is_auth_error(&err) => {
+                    Err(Error::CloneRepo { error, .. }) if git::is_auth_error(&error) => {
                         warn!(
-                            repo = %pending.repo.repo,
-                            ?err,
+                            repo = %repo.repo,
+                            ?error,
                             "Clone failed with authentication error and terminal prompts disabled"
                         );
-                        Ok(FirstClonePass::AuthFailed {
-                            repo: pending.repo,
-                            error: err,
+                        Ok(InitialCloneOutcome::NeedsAuth {
+                            repo,
+                            error,
                             progress,
                         })
                     }
-                    Err(err) => Err(Error::CloneRepo {
-                        repo: pending.repo.repo.clone(),
-                        error: err,
-                    }),
+                    Err(err) => Err(err),
                 }
             })
             .buffer_unordered(*CONCURRENCY);
 
         while let Some(result) = tasks.next().await {
             match result? {
-                FirstClonePass::Ready {
+                InitialCloneOutcome::Cloned {
                     repo,
                     temp,
                     progress,
                 } => {
-                    let path = self.persist_cloned_repo(repo, temp).await?;
+                    let path = self.promote_scratch_repo(repo, temp).await?;
                     if let (Some(reporter), Some(progress)) = (reporter, progress) {
                         reporter.on_clone_complete(progress);
                     }
                     cloned.insert(repo.key(), path);
                 }
-                FirstClonePass::AuthFailed {
+                InitialCloneOutcome::NeedsAuth {
                     repo,
                     error,
                     progress,
@@ -247,13 +255,9 @@ impl Store {
                 repo.repo
             );
             let temp = self
-                .clone_repo_to_temp(repo, TerminalPrompt::Enabled)
-                .await
-                .map_err(|error| Error::CloneRepo {
-                    repo: repo.repo.clone(),
-                    error,
-                })?;
-            let path = self.persist_cloned_repo(repo, temp).await?;
+                .clone_remote_repo_to_scratch(repo, TerminalPrompt::Enabled)
+                .await?;
+            let path = self.promote_scratch_repo(repo, temp).await?;
             cloned.insert(repo.key(), path);
         }
 
@@ -261,13 +265,15 @@ impl Store {
     }
 
     /// Clone a single remote repository into the store.
-    pub(crate) async fn clone_repo(
+    pub(crate) async fn clone_remote_repo(
         &self,
         repo: &RemoteRepo,
         reporter: Option<&dyn HookInitReporter>,
     ) -> Result<PathBuf, Error> {
         let repo_key = repo.key();
-        let cloned = self.clone_repos(std::iter::once(repo), reporter).await?;
+        let cloned = self
+            .clone_remote_repos(std::iter::once(repo), reporter)
+            .await?;
         cloned
             .get(&repo_key)
             .cloned()

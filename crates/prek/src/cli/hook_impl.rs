@@ -115,7 +115,7 @@ pub(crate) async fn hook_impl(
         );
     }
 
-    let Some(run_args) = to_run_args(hook_type, &args, &stdin).await? else {
+    let Some(run_args) = to_run_args(hook_type, &args, &stdin)? else {
         return Ok(legacy_code.into());
     };
 
@@ -224,11 +224,7 @@ async fn run_legacy(
         .unwrap_or(1))
 }
 
-async fn to_run_args(
-    hook_type: HookType,
-    args: &[OsString],
-    stdin: &[u8],
-) -> Result<Option<RunArgs>> {
+fn to_run_args(hook_type: HookType, args: &[OsString], stdin: &[u8]) -> Result<Option<RunArgs>> {
     let mut run_args = RunArgs::default();
 
     match hook_type {
@@ -237,7 +233,7 @@ async fn to_run_args(
             run_args.extra.remote_name = Some(args[0].to_string_lossy().into_owned());
             run_args.extra.remote_url = Some(args[1].to_string_lossy().into_owned());
 
-            if let Some(push_info) = parse_pre_push_info(&args[0].to_string_lossy(), stdin).await? {
+            if let Some(push_info) = parse_pre_push_info(&args[0].to_string_lossy(), stdin)? {
                 run_args.from_ref = push_info.from_ref;
                 run_args.to_ref = push_info.to_ref;
                 run_args.all_files = push_info.all_files;
@@ -291,7 +287,7 @@ struct PushInfo {
     local_branch: Option<String>,
 }
 
-async fn parse_pre_push_info(remote_name: &str, stdin: &[u8]) -> Result<Option<PushInfo>> {
+fn parse_pre_push_info(remote_name: &str, stdin: &[u8]) -> Result<Option<PushInfo>> {
     let buffer = String::from_utf8_lossy(stdin);
 
     for line in buffer.lines() {
@@ -312,8 +308,8 @@ async fn parse_pre_push_info(remote_name: &str, stdin: &[u8]) -> Result<Option<P
             continue;
         }
 
-        if !remote_sha.bytes().all(|b| b == b'0') && git::rev_exists(remote_sha).await? {
-            if git::is_ancestor(remote_sha, local_sha).await? {
+        if !remote_sha.bytes().all(|b| b == b'0') && git::revision_exists(remote_sha)? {
+            if git::commit_is_ancestor(remote_sha, local_sha)? {
                 // Normal update to an existing remote ref: the previous remote tip is
                 // an ancestor of the new local tip, so diff exactly the newly pushed range.
                 return Ok(Some(PushInfo {
@@ -332,7 +328,7 @@ async fn parse_pre_push_info(remote_name: &str, stdin: &[u8]) -> Result<Option<P
 
         // New remote ref, missing old remote object, or rebased force-push: find the
         // commits reachable from the local tip that this remote cannot already reach.
-        let ancestors = git::get_ancestors_not_in_remote(local_sha, remote_name).await?;
+        let ancestors = git::commits_not_reachable_from_remote(local_sha, remote_name)?;
         if ancestors.is_empty() {
             // The local tip is already reachable from the remote, so this line does
             // not introduce files that need pre-push checks.
@@ -340,7 +336,7 @@ async fn parse_pre_push_info(remote_name: &str, stdin: &[u8]) -> Result<Option<P
         }
 
         let first_ancestor = &ancestors[0];
-        let roots = git::get_root_commits(local_sha).await?;
+        let roots = git::root_commits_reachable_from(local_sha)?;
 
         if roots.contains(first_ancestor) {
             // The first commit being pushed is a root commit. There is no parent to
@@ -353,11 +349,10 @@ async fn parse_pre_push_info(remote_name: &str, stdin: &[u8]) -> Result<Option<P
                 local_branch: Some(local_branch.to_string()),
             }));
         }
-
         // Use the parent of the first remote-unknown commit as the diff base. For
         // rebased force-pushes, this usually resolves to the updated default branch
         // base, matching the files a pull request would show.
-        if let Some(source) = git::get_parent_commit(first_ancestor).await? {
+        if let Some(source) = git::parent_commit(first_ancestor)? {
             return Ok(Some(PushInfo {
                 from_ref: Some(source),
                 to_ref: Some(local_sha.to_string()),

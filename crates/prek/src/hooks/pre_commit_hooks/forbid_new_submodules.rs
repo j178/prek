@@ -1,5 +1,4 @@
-use std::borrow::Cow;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use itertools::Itertools;
 use prek_consts::env_vars::EnvVars;
@@ -11,32 +10,14 @@ pub(crate) async fn forbid_new_submodules(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>), anyhow::Error> {
-    let diff_arg = if let (Ok(from_ref), Ok(to_ref)) = (
+    let new_submodules = if let (Ok(from_ref), Ok(to_ref)) = (
         EnvVars::var("PRE_COMMIT_FROM_REF"),
         EnvVars::var("PRE_COMMIT_TO_REF"),
     ) {
-        Cow::Owned(format!("{from_ref}...{to_ref}"))
+        git::added_submodules_between_refs(hook.work_dir(), &from_ref, &to_ref, filenames)?
     } else {
-        Cow::Borrowed("--staged")
+        git::added_submodules_in_index(hook.work_dir(), filenames)?
     };
-
-    let stdout = git::git_cmd("git diff")?
-        .current_dir(hook.work_dir())
-        .arg("diff")
-        .arg("--relative")
-        .arg("--diff-filter=A")
-        .arg("--no-ext-diff")
-        .arg("--raw")
-        .arg("-z")
-        .arg(diff_arg.as_ref())
-        .arg("--")
-        .args(filenames)
-        .check(true)
-        .output()
-        .await?
-        .stdout;
-
-    let new_submodules = collect_new_submodules(&stdout);
     if new_submodules.is_empty() {
         Ok((0, Vec::new()))
     } else {
@@ -45,10 +26,10 @@ pub(crate) async fn forbid_new_submodules(
     }
 }
 
-fn render_message(new_submodules: &[&str]) -> String {
+fn render_message(new_submodules: &[PathBuf]) -> String {
     let mut message = new_submodules
         .iter()
-        .map(|filename| format!("{filename}: new submodule introduced"))
+        .map(|filename| format!("{}: new submodule introduced", filename.display()))
         .join("\n");
 
     message.push_str("\n\n");
@@ -91,6 +72,8 @@ fn collect_new_submodules(stdout: &[u8]) -> Vec<&str> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     #[test]
     fn collect_new_submodules_ignores_non_submodules() {
         let stdout = b":000000 100644 0000000 abcdef1 A\0.gitmodules\0";
@@ -113,7 +96,10 @@ mod tests {
 
     #[test]
     fn render_message() {
-        let message = super::render_message(&["project2/sub module", "vendor/dep"]);
+        let message = super::render_message(&[
+            PathBuf::from("project2/sub module"),
+            PathBuf::from("vendor/dep"),
+        ]);
 
         assert_eq!(
             message,

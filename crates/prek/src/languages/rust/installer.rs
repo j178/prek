@@ -111,7 +111,7 @@ impl RustInstaller {
         }
 
         // Install new toolchain
-        let toolchain = self.resolve_version(request).await?;
+        let toolchain = Self::resolve_version(request)?;
         self.download(&toolchain).await
     }
 
@@ -159,7 +159,7 @@ impl RustInstaller {
         Ok(None)
     }
 
-    async fn resolve_version(&self, req: &RustRequest) -> Result<RustVersion> {
+    fn resolve_version(req: &RustRequest) -> Result<RustVersion> {
         match req {
             RustRequest::Any => Ok(RustVersion::from_channel(Channel::Stable)),
             RustRequest::Channel(ch) => Ok(RustVersion::from_channel(*ch)),
@@ -168,24 +168,16 @@ impl RustInstaller {
             | RustRequest::MajorMinor(_, _)
             | RustRequest::MajorMinorPatch(_, _, _)
             | RustRequest::Range(_, _) => {
-                let output = crate::git::git_cmd("list rust tags")?
-                    .arg("ls-remote")
-                    .arg("--tags")
-                    .arg("https://github.com/rust-lang/rust")
-                    .output()
-                    .await?
-                    .stdout;
-                let versions: Vec<RustVersion> = str::from_utf8(&output)?
-                    .lines()
-                    .filter_map(|line| {
-                        let tag = line.split('\t').nth(1)?;
-                        let tag = tag.strip_prefix("refs/tags/")?;
-                        Version::parse(tag)
-                            .ok()
-                            .map(|v| RustVersion::from_version(&v))
-                    })
-                    .sorted_unstable_by(|a, b| b.cmp(a))
-                    .collect();
+                let versions: Vec<RustVersion> =
+                    crate::git::list_remote_tags("https://github.com/rust-lang/rust")?
+                        .into_iter()
+                        .filter_map(|line| {
+                            Version::parse(&line)
+                                .ok()
+                                .map(|v| RustVersion::from_version(&v))
+                        })
+                        .sorted_unstable_by(|a, b| b.cmp(a))
+                        .collect();
 
                 let version = versions
                     .into_iter()

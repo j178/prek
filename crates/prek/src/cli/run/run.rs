@@ -74,7 +74,7 @@ pub(crate) async fn run(
     let should_stash = !all_files && files.is_empty() && directories.is_empty();
 
     // Check if we have unresolved merge conflict files and fail fast.
-    if should_stash && git::has_unmerged_paths().await? {
+    if should_stash && git::has_unmerged_paths()? {
         anyhow::bail!("You have unmerged paths. Resolve them before running prek");
     }
 
@@ -84,7 +84,7 @@ pub(crate) async fn run(
         Workspace::discover(store, workspace_root, config, Some(&selectors), refresh)?;
 
     if should_stash {
-        workspace.check_configs_staged().await?;
+        workspace.check_configs_staged()?;
     }
 
     let reporter = HookInitReporter::new(printer);
@@ -171,9 +171,7 @@ pub(crate) async fn run(
     let mut _guard = None;
     if should_stash {
         _guard = Some(
-            WorkTreeKeeper::clean(store, workspace.root())
-                .await
-                .context("Failed to clean work tree")?,
+            WorkTreeKeeper::clean(store, workspace.root()).context("Failed to clean work tree")?,
         );
     }
 
@@ -736,7 +734,7 @@ async fn run_hooks(
             })?;
             first = false;
         }
-        let mut prev_diff = git::get_diff(project.path()).await?;
+        let mut prev_diff = git::worktree_change_signature(project.path())?;
 
         let project_fail_fast = fail_fast.or(project.config().fail_fast).unwrap_or(false);
 
@@ -758,7 +756,7 @@ async fn run_hooks(
             // Check if any files were modified by this group of hooks.
             let all_skipped = group_results.iter().all(|r| r.status.is_skipped());
             let group_modified_files = if !all_skipped {
-                let curr_diff = git::get_diff(project.path()).await?;
+                let curr_diff = git::worktree_change_signature(project.path())?;
                 let group_modified_files = curr_diff != prev_diff;
                 prev_diff = curr_diff;
                 group_modified_files
@@ -820,23 +818,11 @@ async fn run_hooks(
         }
 
         writeln!(printer.stdout_important(), "All changes made by hooks:")?;
-
-        let color = if *USE_COLOR {
-            "--color=always"
-        } else {
-            "--color=never"
-        };
-        git::git_cmd("git diff")?
-            .arg("--no-pager")
-            .arg("diff")
-            .arg("--no-ext-diff")
-            .arg(color)
-            .arg("--")
-            .arg(workspace.root())
-            .check(true)
-            .spawn()?
-            .wait()
-            .await?;
+        write!(
+            printer.stdout_important(),
+            "{}",
+            git::worktree_diff(workspace.root(), *USE_COLOR)?
+        )?;
     }
 
     if success {

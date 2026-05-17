@@ -119,7 +119,7 @@ impl BunInstaller {
             anyhow::bail!("No suitable system Bun version found and downloads are disabled");
         }
 
-        let resolved_version = self.resolve_version(request).await?;
+        let resolved_version = Self::resolve_version(request)?;
         trace!(version = %resolved_version, "Downloading bun");
 
         self.download(store, &resolved_version).await
@@ -158,12 +158,9 @@ impl BunInstaller {
             .context("No installed bun version matches the request")
     }
 
-    async fn resolve_version(&self, req: &BunRequest) -> Result<BunVersion> {
+    fn resolve_version(req: &BunRequest) -> Result<BunVersion> {
         // Latest versions come first, so we can find the latest matching version.
-        let versions = self
-            .list_remote_versions()
-            .await
-            .context("Failed to list remote versions")?;
+        let versions = Self::list_remote_versions().context("Failed to list remote versions")?;
         let version = versions
             .into_iter()
             .find(|version| req.matches(version))
@@ -172,27 +169,12 @@ impl BunInstaller {
     }
 
     /// List all versions of Bun available on GitHub releases.
-    async fn list_remote_versions(&self) -> Result<Vec<BunVersion>> {
-        let output = git::git_cmd("list bun tags")?
-            .arg("ls-remote")
-            .arg("--tags")
-            .arg("https://github.com/oven-sh/bun")
-            .output()
-            .await?
-            .stdout;
-        let output_str = str::from_utf8(&output)?;
-
-        let versions: Vec<BunVersion> = output_str
-            .lines()
+    fn list_remote_versions() -> Result<Vec<BunVersion>> {
+        let versions: Vec<BunVersion> = git::list_remote_tags("https://github.com/oven-sh/bun")?
+            .into_iter()
             .filter_map(|line| {
-                let reference = line.split('\t').nth(1)?;
-                if reference.ends_with("^{}") {
-                    return None;
-                }
-
-                let tag = reference.strip_prefix("refs/tags/")?;
                 // Tags are in format "bun-v1.1.0".
-                let tag = tag.strip_prefix("bun-v")?;
+                let tag = line.strip_prefix("bun-v")?;
                 BunVersion::from_str(tag).ok()
             })
             .sorted_unstable_by(|a, b| b.cmp(a))

@@ -43,6 +43,12 @@ etcetera = { version = "0.11.0" }
 fancy-regex = { version = "0.18.0" }
 fs-err = { version = "3.3.0", features = ["tokio"] }
 futures = { version = "0.3.31" }
+gix = { version = "0.83.0", features = [
+  "blocking-http-transport-reqwest-rust-tls",
+  "blocking-network-client",
+  "tree-editor",
+  "worktree-mutation",
+] }
 hex = { version = "0.4.3" }
 http = { version = "1.1.0" }
 ignore = { version = "0.4.23" }

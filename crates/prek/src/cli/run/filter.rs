@@ -407,7 +407,7 @@ async fn collect_files_from_args(
     }
 
     if let (Some(from_ref), Some(to_ref)) = (from_ref, to_ref) {
-        let files = git::get_changed_files(&from_ref, &to_ref, workspace_root).await?;
+        let files = git::get_changed_files(&from_ref, &to_ref, workspace_root)?;
         debug!(
             "Files changed between {} and {}: {}",
             from_ref,
@@ -451,7 +451,7 @@ async fn collect_files_from_args(
 
         for dir in directories {
             let dir = adjust_relative_path(&dir, git_root)?;
-            let dir_files = git::ls_files(git_root, &dir).await?;
+            let dir_files = git::ls_files(git_root, &dir)?;
             for file in dir_files {
                 let file = fs::normalize_path(file);
                 exists.insert(file);
@@ -463,18 +463,23 @@ async fn collect_files_from_args(
     }
 
     if all_files {
-        let files = git::ls_files(git_root, workspace_root).await?;
+        let files = git::ls_files(git_root, workspace_root)?;
         debug!("All files in the workspace: {}", files.len());
         return Ok(files);
     }
 
-    if git::is_in_merge_conflict().await? {
-        let files = git::get_conflicted_files(workspace_root).await?;
+    if git::is_in_merge_conflict()? {
+        let mut files = git::get_conflicted_files(workspace_root)
+            .await?
+            .into_iter()
+            .collect::<FxHashSet<_>>();
+        files.extend(git::get_staged_files(workspace_root)?);
+        let files = files.into_iter().collect::<Vec<_>>();
         debug!("Conflicted files: {}", files.len());
         return Ok(files);
     }
 
-    let files = git::get_staged_files(workspace_root).await?;
+    let files = git::get_staged_files(workspace_root)?;
     debug!("Staged files: {}", files.len());
 
     Ok(files)

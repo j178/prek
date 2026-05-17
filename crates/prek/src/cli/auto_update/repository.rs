@@ -1,62 +1,82 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::path::Path;
-use std::process::Stdio;
-use std::sync::OnceLock;
+use std::sync::atomic::AtomicBool;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use prek_consts::PRE_COMMIT_HOOKS_YAML;
-use prek_consts::env_vars::EnvVars;
 use rustc_hash::FxHashSet;
 use semver::Version;
 use tracing::{debug, trace};
 
 use crate::cli::auto_update::{CommitPresence, RevisionSelection, SkippedDowngrade, TagTimestamp};
-use crate::{config, git};
+use crate::config;
+
+fn open_repo(repo_path: &Path) -> Result<gix::Repository> {
+    Ok(gix::open(repo_path)?)
+}
+
+fn tag_name(reference: &gix::Reference<'_>) -> String {
+    String::from_utf8_lossy(reference.name().shorten()).into_owned()
+}
+
+fn exact_tag_for_id(repo: &gix::Repository, id: gix::ObjectId) -> Result<Option<String>> {
+    for reference in repo.references()?.tags()?.peeled()? {
+        let mut reference = reference.map_err(anyhow::Error::from_boxed)?;
+        if reference.peel_to_id()?.detach() == id {
+            return Ok(Some(tag_name(&reference)));
+        }
+    }
+    Ok(None)
+}
 
 /// Initializes a temporary git repo and fetches the remote HEAD plus tags.
 pub(super) async fn setup_and_fetch_repo(repo_url: &str, repo_path: &Path) -> Result<()> {
-    git::init_repo(repo_url, repo_path).await?;
-    git::git_cmd("git fetch")?
-        .arg("fetch")
-        .arg("origin")
-        .arg("HEAD")
-        .arg("--quiet")
-        .arg("--filter=blob:none")
-        .arg("--tags")
-        .current_dir(repo_path)
-        .remove_git_envs()
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .await?;
+    let should_interrupt = AtomicBool::new(false);
+    let mut repo = gix::init(repo_path)?;
+    let mut config = repo.config_snapshot_mut();
+    // Auto-update fetch repos are disposable; disabling reflogs avoids requiring
+    // a configured committer just to move temporary remote-tracking refs.
+    config.append_config(
+        ["protocol.version=2", "core.logAllRefUpdates=false"],
+        gix::config::Source::Api,
+    )?;
+    config.commit()?;
+
+    let remote = repo
+        .remote_at(repo_url)?
+        .with_fetch_tags(gix::remote::fetch::Tags::All)
+        .with_refspecs(
+            ["+HEAD:refs/remotes/origin/HEAD"],
+            gix::remote::Direction::Fetch,
+        )?;
+    remote
+        .connect(gix::remote::Direction::Fetch)?
+        .prepare_fetch(
+            gix::progress::Discard,
+            gix::remote::ref_map::Options::default(),
+        )?
+        .with_write_packed_refs_only(true)
+        .receive(gix::progress::Discard, &should_interrupt)?;
 
     Ok(())
 }
 
 /// Resolves any revision-like string to the underlying commit SHA.
 pub(super) async fn resolve_revision_to_commit(repo_path: &Path, rev: &str) -> Result<String> {
-    let output = git::git_cmd("git rev-parse")?
-        .arg("rev-parse")
-        .arg(format!("{rev}^{{}}"))
-        .check(true)
-        .current_dir(repo_path)
-        .remove_git_envs()
-        .output()
-        .await?;
-
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    let repo = open_repo(repo_path)?;
+    let spec = format!("{rev}^{{}}");
+    Ok(repo.rev_parse_single(spec.as_str())?.detach().to_string())
 }
 
 /// Returns whether a pinned commit SHA is already present in the refs fetched for `auto-update`.
 ///
 /// `auto-update` fetches only `origin/HEAD` and tags, using `--filter=blob:none`. That filter
 /// still downloads commits and trees reachable from those refs, but omits blobs. We intentionally
-/// use `git --no-lazy-fetch cat-file -e` here instead of `rev-parse`: in a partial clone,
-/// `rev-parse` may lazily fetch a missing commit from the promisor remote on demand. On GitHub,
-/// that can make a fork-only "impostor commit" appear to belong to the parent repository.
+/// inspect the local object database after resolving the commit-ish so update reporting stays tied
+/// to refs that were fetched for selection.
 ///
 /// `auto-update` only selects updates from tags, or from `HEAD` in `--bleeding-edge` mode. It
 /// does not normally update to arbitrary branches, so we currently fetch only those refs here.
@@ -66,40 +86,17 @@ pub(super) async fn resolve_revision_to_commit(repo_path: &Path, rev: &str) -> R
 /// selection. That means branch-only commits outside `HEAD` and tags are treated as absent for
 /// now. If that leads to false positives in practice, we can revisit this and fetch branches too.
 ///
-/// On older Git versions that do not support `--no-lazy-fetch`, we skip this check entirely and
-/// return `CommitPresence::Unknown` so the caller can avoid presenting inaccurate presence details.
 pub(super) async fn is_commit_present(repo_path: &Path, commit: &str) -> Result<CommitPresence> {
-    static GIT_SUPPORTS_NO_LAZY_FETCH: OnceLock<bool> = OnceLock::new();
-
-    if matches!(GIT_SUPPORTS_NO_LAZY_FETCH.get(), Some(false)) {
-        return Ok(CommitPresence::Unknown);
+    let repo = open_repo(repo_path)?;
+    let spec = format!("{commit}^{{commit}}");
+    let Ok(id) = repo.rev_parse_single(spec.as_str()) else {
+        return Ok(CommitPresence::Absent);
+    };
+    if repo.find_commit(id).is_ok() {
+        Ok(CommitPresence::Present)
+    } else {
+        Ok(CommitPresence::Absent)
     }
-
-    let output = git::git_cmd("git cat-file")?
-        .arg("--no-lazy-fetch")
-        .arg("cat-file")
-        .arg("-e")
-        .arg(format!("{commit}^{{commit}}"))
-        .env(EnvVars::LC_ALL, "C")
-        .check(false)
-        .current_dir(repo_path)
-        .remove_git_envs()
-        .stdout(Stdio::null())
-        .output()
-        .await?;
-
-    if output.status.success() {
-        let _ = GIT_SUPPORTS_NO_LAZY_FETCH.set(true);
-        return Ok(CommitPresence::Present);
-    }
-
-    if no_lazy_fetch_unsupported(&output.stderr) {
-        let _ = GIT_SUPPORTS_NO_LAZY_FETCH.set(false);
-        return Ok(CommitPresence::Unknown);
-    }
-
-    let _ = GIT_SUPPORTS_NO_LAZY_FETCH.set(true);
-    Ok(CommitPresence::Absent)
 }
 
 pub(super) fn no_lazy_fetch_unsupported(stderr: &[u8]) -> bool {
@@ -119,30 +116,18 @@ pub(super) fn get_tags_pointing_at_revision<'a>(
 }
 
 /// Resolves the default branch tip to an exact tag when possible, otherwise to a commit SHA.
-pub(super) async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<String>> {
-    let output = git::git_cmd("git describe")?
-        .arg("describe")
-        .arg("FETCH_HEAD")
-        .arg("--tags")
-        .arg("--exact-match")
-        .check(false)
-        .current_dir(repo_path)
-        .remove_git_envs()
-        .output()
-        .await?;
-    let rev = if output.status.success() {
-        String::from_utf8_lossy(&output.stdout).trim().to_string()
+pub(super) fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<String>> {
+    let repo = open_repo(repo_path)?;
+    let fetch_head = repo
+        .rev_parse_single("FETCH_HEAD")
+        .or_else(|_| repo.rev_parse_single("refs/remotes/origin/HEAD"))
+        .or_else(|_| repo.head_id())?
+        .detach();
+    let rev = if let Some(tag) = exact_tag_for_id(&repo, fetch_head)? {
+        tag
     } else {
-        debug!("No matching tag for `FETCH_HEAD`, using rev-parse instead");
-        let output = git::git_cmd("git rev-parse")?
-            .arg("rev-parse")
-            .arg("FETCH_HEAD")
-            .check(true)
-            .current_dir(repo_path)
-            .remove_git_envs()
-            .output()
-            .await?;
-        String::from_utf8_lossy(&output.stdout).trim().to_string()
+        debug!("No matching tag for `FETCH_HEAD`, using commit id instead");
+        fetch_head.to_string()
     };
 
     debug!("Resolved `FETCH_HEAD` to `{rev}`");
@@ -154,30 +139,24 @@ pub(super) async fn resolve_bleeding_edge(repo_path: &Path) -> Result<Option<Str
 /// Within groups of tags sharing the same timestamp, semver-parseable tags
 /// are sorted highest version first; non-semver tags sort after them.
 pub(super) async fn list_tag_metadata(repo: &Path) -> Result<Vec<TagTimestamp>> {
-    let output = git::git_cmd("git for-each-ref")?
-        .arg("for-each-ref")
-        .arg("--sort=-creatordate")
-        .arg("--format=%(refname:lstrip=2)\t%(creatordate:unix)\t%(objectname)\t%(*objectname)")
-        .arg("refs/tags")
-        .check(true)
-        .current_dir(repo)
-        .remove_git_envs()
-        .output()
-        .await?;
-
-    let mut tags: Vec<TagTimestamp> = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter_map(|line| {
-            let mut parts = line.split('\t');
-            let tag = parts.next()?.trim_ascii();
-            let ts_str = parts.next()?.trim_ascii();
-            let object = parts.next()?.trim_ascii();
-            let peeled = parts.next().unwrap_or_default().trim_ascii();
-            let ts: u64 = ts_str.parse().ok()?;
-            let commit = if peeled.is_empty() { object } else { peeled };
-            Some(TagTimestamp::new(tag.to_string(), ts, commit.to_string()))
-        })
-        .collect();
+    let repo = open_repo(repo)?;
+    let mut tags = Vec::new();
+    for reference in repo.references()?.tags()? {
+        let mut reference = reference.map_err(anyhow::Error::from_boxed)?;
+        let tag = tag_name(&reference);
+        let object = repo.find_object(reference.id())?;
+        let timestamp = if object.kind == gix::objs::Kind::Tag {
+            object
+                .try_into_tag()?
+                .tagger()?
+                .map(|tagger| tagger.seconds())
+                .unwrap_or_default()
+        } else {
+            object.try_into_commit()?.time()?.seconds
+        };
+        let commit = reference.peel_to_id()?.detach().to_string();
+        tags.push(TagTimestamp::new(tag, timestamp.cast_unsigned(), commit));
+    }
 
     tags.sort_by(compare_tag_metadata);
 
@@ -235,7 +214,7 @@ pub(super) async fn select_update_revision(
     update_tag_timestamps: &[TagTimestamp],
 ) -> Result<RevisionSelection> {
     if bleeding_edge {
-        return Ok(match resolve_bleeding_edge(repo_path).await? {
+        return Ok(match resolve_bleeding_edge(repo_path)? {
             Some(rev) => RevisionSelection::Update(rev),
             None => RevisionSelection::Unchanged,
         });
@@ -373,30 +352,17 @@ pub(super) async fn checkout_and_validate_manifest(
     rev: &str,
     required_hook_ids: &[&str],
 ) -> Result<()> {
-    if cfg!(windows) {
-        git::git_cmd("git show")?
-            .arg("show")
-            .arg(format!("{rev}:{PRE_COMMIT_HOOKS_YAML}"))
-            .current_dir(repo_path)
-            .remove_git_envs()
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .await?;
-    }
-
-    git::git_cmd("git checkout")?
-        .arg("checkout")
-        .arg("--quiet")
-        .arg(rev)
-        .arg("--")
-        .arg(PRE_COMMIT_HOOKS_YAML)
-        .current_dir(repo_path)
-        .remove_git_envs()
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .await?;
+    let repo = open_repo(repo_path)?;
+    let tree_id = repo
+        .find_commit(repo.rev_parse_single(format!("{rev}^{{commit}}").as_str())?)
+        .context("Failed to resolve candidate revision to a commit")?
+        .tree_id()?;
+    let tree = repo.find_tree(tree_id)?;
+    let manifest_entry = tree
+        .find_entry(PRE_COMMIT_HOOKS_YAML)
+        .with_context(|| format!("`{PRE_COMMIT_HOOKS_YAML}` not found at rev `{rev}`"))?;
+    let manifest = manifest_entry.object()?.try_into_blob()?.data.clone();
+    fs_err::tokio::write(repo_path.join(PRE_COMMIT_HOOKS_YAML), manifest).await?;
 
     let manifest = config::read_manifest(&repo_path.join(PRE_COMMIT_HOOKS_YAML))?;
     let new_hook_ids = manifest
@@ -614,7 +580,7 @@ mod tests {
             .await
             .unwrap();
 
-        let rev = resolve_bleeding_edge(repo).await.unwrap();
+        let rev = resolve_bleeding_edge(repo).unwrap();
         assert_eq!(rev, Some("v1.2.3".to_string()));
     }
 
@@ -634,7 +600,7 @@ mod tests {
             .await
             .unwrap();
 
-        let rev = resolve_bleeding_edge(repo).await.unwrap();
+        let rev = resolve_bleeding_edge(repo).unwrap();
 
         let head = git::git_cmd("git rev-parse")
             .unwrap()

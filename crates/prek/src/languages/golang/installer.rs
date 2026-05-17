@@ -132,9 +132,7 @@ impl GoInstaller {
             anyhow::bail!("No suitable system Go version found and downloads are disabled");
         }
 
-        let resolved_version = self
-            .resolve_version(request)
-            .await
+        let resolved_version = Self::resolve_version(request)
             .with_context(|| format!("Failed to resolve go version `{request}`"))?;
         trace!(version = %resolved_version, "Installing go");
 
@@ -175,20 +173,11 @@ impl GoInstaller {
             .context("No installed go version matches the request")
     }
 
-    async fn resolve_version(&self, req: &GoRequest) -> Result<GoVersion> {
-        let output = git::git_cmd("list go tags")?
-            .arg("ls-remote")
-            .arg("--tags")
-            .arg("https://github.com/golang/go")
-            .output()
-            .await?
-            .stdout;
-        let output_str = str::from_utf8(&output)?;
-        let versions: Vec<GoVersion> = output_str
-            .lines()
+    fn resolve_version(req: &GoRequest) -> Result<GoVersion> {
+        let versions: Vec<GoVersion> = git::list_remote_tags("https://github.com/golang/go")?
+            .into_iter()
             .filter_map(|line| {
-                let tag = line.split('\t').nth(1)?;
-                let tag = tag.strip_prefix("refs/tags/go")?;
+                let tag = line.strip_prefix("go")?;
                 GoVersion::from_str(tag).ok()
             })
             .sorted_unstable_by(|a, b| b.cmp(a))

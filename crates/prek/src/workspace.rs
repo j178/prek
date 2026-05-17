@@ -283,7 +283,7 @@ impl Project {
                 config::Repo::Remote(repo) if seen.insert(repo.key()) => Some(repo),
                 _ => None,
             });
-            let cloned_repos = store.clone_repos(remotes_iter, reporter).await?;
+            let cloned_repos = store.clone_remote_repos(remotes_iter, reporter).await?;
             let mut remote_repos = FxHashMap::default();
             for (key, path) in cloned_repos {
                 let repo = Arc::new(Repo::remote(
@@ -908,7 +908,7 @@ impl Workspace {
                     _ => None,
                 });
 
-            let cloned_repos = store.clone_repos(remotes_iter, reporter).await?;
+            let cloned_repos = store.clone_remote_repos(remotes_iter, reporter).await?;
 
             let mut remote_repos = FxHashMap::default();
             for (key, path) in cloned_repos {
@@ -979,13 +979,13 @@ impl Workspace {
     }
 
     /// Check if all configuration files are staged in git.
-    pub(crate) async fn check_configs_staged(&self) -> Result<()> {
+    pub(crate) fn check_configs_staged(&self) -> Result<()> {
         let config_files = self
             .projects
             .iter()
             .map(|project| project.config_file())
             .collect::<Vec<_>>();
-        let non_staged = git::files_not_staged(&config_files).await?;
+        let non_staged = git::files_not_staged(&config_files)?;
 
         let git_root = GIT_ROOT.as_ref()?;
         if !non_staged.is_empty() {

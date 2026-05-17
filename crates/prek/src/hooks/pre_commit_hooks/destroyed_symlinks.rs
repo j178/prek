@@ -1,5 +1,5 @@
 use std::io::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str;
 
 use anyhow::{Context, Result};
@@ -13,16 +13,8 @@ const PERMS_LINK: u32 = 0o120_000;
 const PERMS_NONEXIST: u32 = 0;
 
 pub(crate) async fn destroyed_symlinks(hook: &Hook, filenames: &[&Path]) -> Result<(i32, Vec<u8>)> {
-    let status_output = git_status_output(hook.work_dir()).await?;
-    let entries = status_output
-        .split(|&byte| byte == b'\0')
-        .filter_map(|entry| match parse_ordinary_changed_entry(entry) {
-            Ok(Some(entry)) => Some(Ok(entry)),
-            Ok(None) => None,
-            Err(err) => Some(Err(err)),
-        });
-
-    let destroyed_links = find_destroyed_symlinks(hook, filenames, entries).await?;
+    let entries = git::staged_changed_entries(hook.work_dir())?;
+    let destroyed_links = find_destroyed_symlinks(hook, filenames, entries)?;
     if destroyed_links.is_empty() {
         return Ok((0, Vec::new()));
     }
@@ -51,27 +43,11 @@ pub(crate) async fn destroyed_symlinks(hook: &Hook, filenames: &[&Path]) -> Resu
     Ok((1, output))
 }
 
-async fn git_status_output(work_dir: &Path) -> Result<Vec<u8>> {
-    Ok(git::git_cmd("git status")?
-        .current_dir(work_dir)
-        .arg("status")
-        .arg("--porcelain=v2")
-        .arg("-z")
-        // Query the whole project with a single pathspec to avoid one-argv-entry-per-file
-        // command lines that can exceed the platform limit for very large commits.
-        .arg("--")
-        .arg(".")
-        .check(true)
-        .output()
-        .await?
-        .stdout)
-}
-
-async fn find_destroyed_symlinks<'a>(
+fn find_destroyed_symlinks(
     hook: &Hook,
     filenames: &[&Path],
-    entries: impl IntoIterator<Item = Result<OrdinaryChangedEntry<'a>>>,
-) -> Result<Vec<&'a Path>> {
+    entries: impl IntoIterator<Item = git::StagedChangedEntry>,
+) -> Result<Vec<PathBuf>> {
     if filenames.is_empty() {
         return Ok(Vec::new());
     }
@@ -81,7 +57,6 @@ async fn find_destroyed_symlinks<'a>(
     let mut destroyed_links = Vec::new();
 
     for entry in entries {
-        let entry = entry?;
         // `git status -z` reports paths relative to the repository root, so strip the project
         // prefix before comparing against the requested filenames.
         let Ok(entry_path) = entry.path.strip_prefix(relative_prefix) else {
@@ -101,8 +76,8 @@ async fn find_destroyed_symlinks<'a>(
             continue;
         }
 
-        if is_destroyed_symlink(hook.work_dir(), &entry).await? {
-            destroyed_links.push(entry_path);
+        if is_destroyed_symlink(hook.work_dir(), &entry)? {
+            destroyed_links.push(entry_path.to_path_buf());
         }
     }
 
@@ -112,21 +87,21 @@ async fn find_destroyed_symlinks<'a>(
 // `1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>`
 // See: https://git-scm.com/docs/git-status#_changed_tracked_entries
 #[derive(Debug, PartialEq, Eq)]
-struct OrdinaryChangedEntry<'a> {
+pub(crate) struct OrdinaryChangedEntry {
     // `<mH>`: The octal file mode in HEAD.
-    head_mode: u32,
+    pub(crate) head_mode: u32,
     // `<mI>`: The octal file mode in the index.
-    index_mode: u32,
+    pub(crate) index_mode: u32,
     // `<hH>`: The object name in HEAD.
-    head_hash: &'a str,
+    pub(crate) head_hash: String,
     // `<hI>`: The object name in the index.
-    index_hash: &'a str,
+    pub(crate) index_hash: String,
     // `<path>`: The pathname, reported relative to the repository root when
     // using `git status --porcelain=v2 -z`.
-    path: &'a Path,
+    pub(crate) path: PathBuf,
 }
 
-fn parse_ordinary_changed_entry(line: &[u8]) -> Result<Option<OrdinaryChangedEntry<'_>>> {
+fn parse_ordinary_changed_entry(line: &[u8]) -> Result<Option<OrdinaryChangedEntry>> {
     if line.is_empty() {
         return Ok(None);
     }
@@ -150,9 +125,9 @@ fn parse_ordinary_changed_entry(line: &[u8]) -> Result<Option<OrdinaryChangedEnt
     let head_mode = parse_mode(next_field()?)?;
     let index_mode = parse_mode(next_field()?)?;
     let _mode_worktree = next_field()?;
-    let head_hash = str::from_utf8(next_field()?)?;
-    let index_hash = str::from_utf8(next_field()?)?;
-    let path = Path::new(str::from_utf8(next_field()?)?);
+    let head_hash = str::from_utf8(next_field()?)?.to_string();
+    let index_hash = str::from_utf8(next_field()?)?.to_string();
+    let path = PathBuf::from(str::from_utf8(next_field()?)?);
 
     Ok(Some(OrdinaryChangedEntry {
         head_mode,
@@ -163,7 +138,7 @@ fn parse_ordinary_changed_entry(line: &[u8]) -> Result<Option<OrdinaryChangedEnt
     }))
 }
 
-async fn is_destroyed_symlink(work_dir: &Path, entry: &OrdinaryChangedEntry<'_>) -> Result<bool> {
+fn is_destroyed_symlink(work_dir: &Path, entry: &git::StagedChangedEntry) -> Result<bool> {
     // If the staged blob is byte-for-byte identical to the old symlink blob, we
     // already know this is a destroyed symlink: the path used to be stored as a
     // symlink target and is now staged as a regular file with the same contents.
@@ -171,8 +146,8 @@ async fn is_destroyed_symlink(work_dir: &Path, entry: &OrdinaryChangedEntry<'_>)
         return Ok(true);
     }
 
-    let index_size = git_object_size(work_dir, entry.index_hash).await?;
-    let head_size = git_object_size(work_dir, entry.head_hash).await?;
+    let index_size = git_object_size(work_dir, &entry.index_hash)?;
+    let head_size = git_object_size(work_dir, &entry.head_hash)?;
     // Formatting hooks may have appended a trailing newline or converted LF to
     // CRLF, so allow the staged file to grow by at most two bytes before doing
     // the more expensive content comparison.
@@ -180,37 +155,20 @@ async fn is_destroyed_symlink(work_dir: &Path, entry: &OrdinaryChangedEntry<'_>)
         return Ok(false);
     }
 
-    let head_content = git_object_content(work_dir, entry.head_hash).await?;
-    let index_content = git_object_content(work_dir, entry.index_hash).await?;
+    let head_content = git_object_content(work_dir, &entry.head_hash)?;
+    let index_content = git_object_content(work_dir, &entry.index_hash)?;
 
     // Match upstream behavior by ignoring trailing ASCII whitespace here. That
     // keeps "path", "path\n", and "path\r\n" in the destroyed-symlink bucket.
     Ok(head_content.trim_ascii_end() == index_content.trim_ascii_end())
 }
 
-async fn git_object_size(work_dir: &Path, object: &str) -> Result<u64> {
-    let output = git::git_cmd("git cat-file")?
-        .current_dir(work_dir)
-        .arg("cat-file")
-        .arg("-s")
-        .arg(object)
-        .check(true)
-        .output()
-        .await?;
-
-    Ok(str::from_utf8(&output.stdout)?.trim_ascii().parse()?)
+fn git_object_size(work_dir: &Path, object: &str) -> Result<u64> {
+    Ok(git::object_size(work_dir, object)?)
 }
 
-async fn git_object_content(work_dir: &Path, object: &str) -> Result<Vec<u8>> {
-    Ok(git::git_cmd("git cat-file")?
-        .current_dir(work_dir)
-        .arg("cat-file")
-        .arg("-p")
-        .arg(object)
-        .check(true)
-        .output()
-        .await?
-        .stdout)
+fn git_object_content(work_dir: &Path, object: &str) -> Result<Vec<u8>> {
+    Ok(git::object_content(work_dir, object)?)
 }
 
 #[cfg(test)]

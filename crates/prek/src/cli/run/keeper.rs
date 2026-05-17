@@ -1,25 +1,41 @@
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::Mutex;
 
 use anstream::eprintln;
 use anyhow::Result;
 use owo_colors::OwoColorize;
-use tracing::{debug, error, trace};
-
-use prek_consts::env_vars::EnvVars;
+use tracing::debug;
 
 use crate::cleanup::add_cleanup;
 use crate::fs::Simplified;
-use crate::git::{self, GIT, git_cmd};
+use crate::git;
 use crate::store::Store;
 
 static RESTORE_WORKTREE: Mutex<Option<WorkTreeKeeper>> = Mutex::new(None);
 
-struct IntentToAddKeeper(Vec<PathBuf>);
+struct IntentToAddKeeper {
+    root: PathBuf,
+    files: Vec<PathBuf>,
+}
 struct WorkingTreeKeeper {
     root: PathBuf,
     patch: Option<PathBuf>,
+    snapshots: Vec<WorktreeSnapshot>,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+struct WorktreeSnapshot {
+    path: PathBuf,
+    clean: SnapshotContent,
+    unstaged: SnapshotContent,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+enum SnapshotContent {
+    Missing,
+    File { content: Vec<u8>, executable: bool },
+    Symlink(PathBuf),
 }
 
 fn ensure_patches_dir(path: &Path) -> Result<()> {
@@ -37,41 +53,100 @@ fn ensure_patches_dir(path: &Path) -> Result<()> {
     Ok(())
 }
 
-impl IntentToAddKeeper {
-    async fn clean(root: &Path) -> Result<Self> {
-        let files = git::intent_to_add_files(root).await?;
-        if files.is_empty() {
-            return Ok(Self(vec![]));
+fn remove_path(path: &Path) -> Result<()> {
+    match fs_err::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
+            fs_err::remove_dir_all(path)?;
         }
+        Ok(_) => {
+            fs_err::remove_file(path)?;
+        }
+        Err(err) if err.kind() == ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
+    }
+    Ok(())
+}
 
-        // TODO: xargs
-        git_cmd("git rm")?
-            .arg("rm")
-            .arg("--cached")
-            .arg("--")
-            .args(&files)
-            .check(true)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .await?;
+#[cfg(unix)]
+fn is_executable(metadata: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt as _;
 
-        Ok(Self(files))
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(not(unix))]
+fn is_executable(_metadata: &std::fs::Metadata) -> bool {
+    false
+}
+
+fn read_snapshot(path: &Path) -> Result<SnapshotContent> {
+    match fs_err::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            Ok(SnapshotContent::Symlink(fs_err::read_link(path)?))
+        }
+        Ok(metadata) if metadata.is_file() => Ok(SnapshotContent::File {
+            content: fs_err::read(path)?,
+            executable: is_executable(&metadata),
+        }),
+        Ok(metadata) if metadata.is_dir() => Ok(SnapshotContent::Missing),
+        Ok(_) => Ok(SnapshotContent::Missing),
+        Err(err) if err.kind() == ErrorKind::NotFound => Ok(SnapshotContent::Missing),
+        Err(err) => Err(err.into()),
+    }
+}
+
+fn write_snapshot(path: &Path, content: &SnapshotContent) -> Result<()> {
+    remove_path(path)?;
+
+    let Some(parent) = path.parent() else {
+        return Ok(());
+    };
+
+    match content {
+        SnapshotContent::Missing => {}
+        SnapshotContent::File {
+            content,
+            executable,
+        } => {
+            fs_err::create_dir_all(parent)?;
+            fs_err::write(path, content)?;
+
+            #[cfg(unix)]
+            {
+                use std::fs::Permissions;
+                use std::os::unix::fs::PermissionsExt as _;
+
+                let mode = if *executable { 0o755 } else { 0o644 };
+                fs_err::set_permissions(path, Permissions::from_mode(mode))?;
+            }
+        }
+        SnapshotContent::Symlink(target) => {
+            fs_err::create_dir_all(parent)?;
+            #[cfg(unix)]
+            {
+                std::os::unix::fs::symlink(target, path)?;
+            }
+            #[cfg(not(unix))]
+            {
+                fs_err::write(path, target.as_os_str().as_encoded_bytes())?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+impl IntentToAddKeeper {
+    fn clean(root: &Path) -> Result<Self> {
+        let files = git::clear_intent_to_add_files(root)?;
+        Ok(Self {
+            root: root.to_path_buf(),
+            files,
+        })
     }
 
     fn restore(&self) -> Result<()> {
-        // Restore the intent-to-add changes.
-        if !self.0.is_empty() {
-            Command::new(GIT.as_ref()?)
-                .arg("add")
-                .arg("--intent-to-add")
-                .arg("--")
-                // TODO: xargs
-                .args(&self.0)
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()?;
-        }
+        git::restore_intent_to_add_files(&self.root, &self.files)?;
         Ok(())
     }
 }
@@ -88,106 +163,62 @@ impl Drop for IntentToAddKeeper {
 }
 
 impl WorkingTreeKeeper {
-    async fn clean(root: &Path, patch_dir: &Path) -> Result<Self> {
-        let tree = git::write_tree().await?;
-
-        let mut cmd = git_cmd("git diff-index")?;
-        let output = cmd
-            .arg("diff-index")
-            .arg("--ignore-submodules")
-            .arg("--binary")
-            .arg("--exit-code")
-            .arg("--no-color")
-            .arg("--no-ext-diff")
-            .arg(tree)
-            .arg("--")
-            .arg(root)
-            .check(false)
-            .output()
-            .await?;
-
-        if output.status.success() {
+    fn clean(root: &Path, patch_dir: &Path) -> Result<Self> {
+        let files = git::files_not_staged_under(root)?;
+        if files.is_empty() {
             debug!("Working tree is clean");
-            // No non-staged changes
-            Ok(Self {
+            return Ok(Self {
                 root: root.to_path_buf(),
                 patch: None,
+                snapshots: Vec::new(),
+            });
+        }
+
+        let now = std::time::SystemTime::now();
+        let pid = std::process::id();
+        let patch_name = format!(
+            "{}-{}.patch",
+            now.duration_since(std::time::UNIX_EPOCH)?.as_millis(),
+            pid
+        );
+        ensure_patches_dir(patch_dir)?;
+        let patch_path = patch_dir.join(&patch_name);
+
+        debug!("Unstaged changes detected");
+        eprintln!(
+            "{}",
+            format!(
+                "Unstaged changes detected, stashing unstaged changes to `{}`",
+                patch_path.user_display()
+            )
+            .yellow()
+            .bold()
+        );
+
+        let mut snapshots = files
+            .iter()
+            .map(|path| {
+                Ok(WorktreeSnapshot {
+                    path: path.clone(),
+                    clean: SnapshotContent::Missing,
+                    unstaged: read_snapshot(&root.join(path))?,
+                })
             })
-        } else if output.status.code() == Some(1) {
-            if output.stdout.trim_ascii().is_empty() {
-                trace!("diff-index status code 1 with empty stdout");
-                // probably git auto crlf behavior quirks
-                Ok(Self {
-                    root: root.to_path_buf(),
-                    patch: None,
-                })
-            } else {
-                let now = std::time::SystemTime::now();
-                let pid = std::process::id();
-                let patch_name = format!(
-                    "{}-{}.patch",
-                    now.duration_since(std::time::UNIX_EPOCH)?.as_millis(),
-                    pid
-                );
-                ensure_patches_dir(patch_dir)?;
-                let patch_path = patch_dir.join(&patch_name);
+            .collect::<Result<Vec<_>>>()?;
 
-                debug!("Unstaged changes detected");
-                eprintln!(
-                    "{}",
-                    format!(
-                        "Unstaged changes detected, stashing unstaged changes to `{}`",
-                        patch_path.user_display()
-                    )
-                    .yellow()
-                    .bold()
-                );
-                fs_err::write(&patch_path, output.stdout)?;
+        fs_err::write(&patch_path, git::worktree_diff(root, false)?)?;
 
-                // Clean the working tree
-                debug!("Cleaning working tree");
-                Self::checkout_working_tree(root)?;
-
-                Ok(Self {
-                    root: root.to_path_buf(),
-                    patch: Some(patch_path),
-                })
-            }
-        } else {
-            Err(cmd.check_status(output.status).unwrap_err().into())
+        debug!("Cleaning working tree");
+        git::restore_index_paths(root, &files)?;
+        for snapshot in &mut snapshots {
+            snapshot.clean = read_snapshot(&root.join(&snapshot.path))?;
         }
-    }
 
-    fn checkout_working_tree(root: &Path) -> Result<()> {
-        let output = Command::new(GIT.as_ref()?)
-            .arg("-c")
-            .arg("submodule.recurse=0")
-            .arg("checkout")
-            .arg("--")
-            .arg(root)
-            // prevent recursive post-checkout hooks
-            .env(EnvVars::PREK_INTERNAL__SKIP_POST_CHECKOUT, "1")
-            .output()?;
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!(
-                "Failed to checkout working tree: {output:?}"
-            ))
-        }
-    }
-
-    fn git_apply(patch: &Path) -> Result<()> {
-        let output = Command::new(GIT.as_ref()?)
-            .arg("apply")
-            .arg("--whitespace=nowarn")
-            .arg(patch)
-            .output()?;
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Failed to apply the patch: {output:?}"))
-        }
+        Ok(Self {
+            root: root.to_path_buf(),
+            patch: Some(patch_path),
+            snapshots,
+        })
     }
 
     fn restore(&self) -> Result<()> {
@@ -195,17 +226,23 @@ impl WorkingTreeKeeper {
             return Ok(());
         };
 
-        // Try to apply the patch
-        if let Err(e) = Self::git_apply(patch) {
-            error!("{e}");
+        let changed_by_hooks = self.snapshots.iter().filter_map(|snapshot| {
+            let path = self.root.join(&snapshot.path);
+            (read_snapshot(&path).ok()? != snapshot.clean).then(|| snapshot.path.clone())
+        });
+        let changed_by_hooks = changed_by_hooks.collect::<Vec<_>>();
+        if !changed_by_hooks.is_empty() {
             eprintln!(
                 "{}",
-                "Stashed changes conflicted with changes made by hook, rolling back the hook changes".red().bold()
+                "Stashed changes conflicted with changes made by hook, rolling back the hook changes"
+                    .red()
+                    .bold()
             );
+            git::restore_index_paths(&self.root, &changed_by_hooks)?;
+        }
 
-            // Discard any changes made by hooks, and try applying the patch again.
-            Self::checkout_working_tree(&self.root)?;
-            Self::git_apply(patch)?;
+        for snapshot in &self.snapshots {
+            write_snapshot(&self.root.join(&snapshot.path), &snapshot.unstaged)?;
         }
 
         eprintln!(
@@ -255,10 +292,10 @@ impl Drop for RestoreGuard {
 impl WorkTreeKeeper {
     /// Clear intent-to-add changes from the index and clear the non-staged changes from the working directory.
     /// Restore them when the instance is dropped.
-    pub async fn clean(store: &Store, root: &Path) -> Result<RestoreGuard> {
+    pub fn clean(store: &Store, root: &Path) -> Result<RestoreGuard> {
         let cleaner = Self {
-            intent_to_add: Some(IntentToAddKeeper::clean(root).await?),
-            working_tree: Some(WorkingTreeKeeper::clean(root, &store.patches_dir()).await?),
+            intent_to_add: Some(IntentToAddKeeper::clean(root)?),
+            working_tree: Some(WorkingTreeKeeper::clean(root, &store.patches_dir())?),
         };
 
         // Set to the global for the cleanup hook.

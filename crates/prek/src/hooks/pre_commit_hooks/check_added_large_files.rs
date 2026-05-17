@@ -42,8 +42,7 @@ pub(crate) async fn check_added_large_files(
     let filter = if args.enforce_all {
         FileFilter::NoFilter
     } else {
-        let add_files = get_added_files(hook.work_dir())
-            .await?
+        let add_files = get_added_files(hook.work_dir())?
             .into_iter()
             .collect::<FxHashSet<_>>();
         FileFilter::Files(add_files)
@@ -51,7 +50,7 @@ pub(crate) async fn check_added_large_files(
 
     // Builtin hooks receive project-relative filenames, so git attribute lookups need to run
     // from the project root for nested `.gitattributes` files to apply.
-    let lfs_files = get_lfs_files(hook.work_dir(), filenames).await?;
+    let lfs_files = get_lfs_files(hook.work_dir(), filenames)?;
 
     let filenames = filenames
         .iter()

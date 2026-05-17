@@ -16,15 +16,7 @@ pub(crate) async fn check_executables_have_shebangs(
     hook: &Hook,
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>), anyhow::Error> {
-    let stdout = git::git_cmd("get file file mode")?
-        .arg("config")
-        .arg("core.fileMode")
-        .check(true)
-        .output()
-        .await?
-        .stdout;
-
-    let tracks_executable_bit = std::str::from_utf8(&stdout)?.trim() != "false";
+    let tracks_executable_bit = git::tracks_file_mode()?;
     let file_base = hook.project().relative_path();
 
     let (code, output) = if tracks_executable_bit {

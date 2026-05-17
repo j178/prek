@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use bstr::ByteSlice;
 use clap::ValueEnum;
 use owo_colors::OwoColorize;
 use prek_consts::CONFIG_FILENAMES;
@@ -16,7 +15,7 @@ use crate::cli::run::{SelectorSource, Selectors};
 use crate::cli::{ExitStatus, HookType};
 use crate::config::load_config;
 use crate::fs::{CWD, Simplified};
-use crate::git::{GIT_ROOT, git_cmd};
+use crate::git::GIT_ROOT;
 use crate::printer::Printer;
 use crate::store::Store;
 use crate::workspace::{Error as WorkspaceError, Project, Workspace};
@@ -53,10 +52,7 @@ pub(crate) async fn install(
     // are part of the repository's own Git setup. Only hooksPath values that
     // resolve entirely from external config still require the explicit
     // `--git-dir` escape hatch.
-    if git_dir.is_none()
-        && git::has_hooks_path_set().await?
-        && !git::has_repo_hooks_path_set().await?
-    {
+    if git_dir.is_none() && git::has_hooks_path_set()? && !git::has_repo_hooks_path_set()? {
         anyhow::bail!(
             concat!(
                 "Refusing to install hooks because `core.hooksPath` is configured outside this repository.\n",
@@ -74,9 +70,7 @@ pub(crate) async fn install(
         );
     }
 
-    let hook_mode = git::get_shared_repository_file_mode(0o755)
-        .await
-        .unwrap_or(0o755);
+    let hook_mode = git::get_shared_repository_file_mode(0o755).unwrap_or(0o755);
 
     let project = match Project::discover(config.as_deref(), &CWD) {
         Ok(project) => Some(project),
@@ -92,7 +86,7 @@ pub(crate) async fn install(
     let hooks_path = if let Some(dir) = git_dir {
         dir.join("hooks")
     } else {
-        git::get_git_hooks_dir().await?
+        git::get_git_hooks_dir()?
     };
     fs_err::create_dir_all(&hooks_path)?;
 
@@ -383,10 +377,7 @@ pub(crate) async fn uninstall(
     printer: Printer,
     git_dir: Option<&Path>,
 ) -> Result<ExitStatus> {
-    if git_dir.is_none()
-        && git::has_hooks_path_set().await?
-        && !git::has_repo_hooks_path_set().await?
-    {
+    if git_dir.is_none() && git::has_hooks_path_set()? && !git::has_repo_hooks_path_set()? {
         anyhow::bail!(
             concat!(
                 "Refusing to uninstall hooks because `core.hooksPath` is configured outside this repository.\n",
@@ -408,7 +399,7 @@ pub(crate) async fn uninstall(
     let hooks_path = if let Some(dir) = git_dir {
         dir.join("hooks")
     } else {
-        git::get_git_hooks_dir().await?
+        git::get_git_hooks_dir()?
     };
 
     let types: Vec<HookType> = if all {
@@ -500,13 +491,7 @@ pub(crate) async fn init_template_dir(
     )
     .await?;
 
-    let output = git_cmd("git config")?
-        .arg("config")
-        .arg("init.templateDir")
-        .check(false)
-        .output()
-        .await?;
-    let template_dir = String::from_utf8_lossy(output.stdout.trim()).to_string();
+    let template_dir = git::global_config_string("init.templateDir")?.unwrap_or_default();
 
     if template_dir.is_empty() || !is_same_file(&directory, &template_dir)? {
         warn_user!(

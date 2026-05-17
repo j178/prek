@@ -1,8 +1,11 @@
 use std::borrow::Cow;
 use std::fmt::Write;
+use std::fs::Metadata;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 
 use anyhow::{Context, Result};
+use gix::bstr::{BStr, BString, ByteSlice as _};
 use owo_colors::OwoColorize;
 use prek_consts::PREK_TOML;
 use tempfile::TempDir;
@@ -17,80 +20,169 @@ use crate::printer::Printer;
 use crate::store::Store;
 use crate::warn_user;
 
-async fn get_head_rev(repo: &Path) -> Result<String> {
-    let head_rev = git::git_cmd("get head rev")?
-        .arg("rev-parse")
-        .arg("HEAD")
-        .current_dir(repo)
-        .output()
-        .await?
-        .stdout;
-    let head_rev = String::from_utf8_lossy(&head_rev).trim().to_string();
-    Ok(head_rev)
+fn repo_head_commit(repo: &Path) -> Result<String> {
+    Ok(git::head_commit(repo)?)
 }
 
-async fn clone_and_commit(repo_path: &Path, head_rev: &str, tmp_dir: &Path) -> Result<PathBuf> {
-    let shadow = tmp_dir.join("shadow-repo");
-    git::git_cmd("clone shadow repo")?
-        .arg("clone")
-        .arg(repo_path)
-        .arg(&shadow)
-        .output()
-        .await?;
-    git::git_cmd("checkout shadow repo")?
-        .arg("checkout")
-        .arg(head_rev)
-        .arg("-b")
-        .arg("_prek_tmp")
-        .current_dir(&shadow)
-        .output()
-        .await?;
+fn git_path(path: &Path) -> BString {
+    let path = gix::path::into_bstr(path);
+    gix::path::to_unix_separators_on_windows(path.as_ref()).into_owned()
+}
 
-    let index_path = shadow.join(".git/index");
-    let objects_path = shadow.join(".git/objects");
+#[cfg(unix)]
+fn is_executable(metadata: &Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt as _;
+    metadata.permissions().mode() & 0o111 != 0
+}
 
-    let staged_files = git::get_staged_files(repo_path).await?;
-    if !staged_files.is_empty() {
-        git::git_cmd("add staged files to shadow")?
-            .arg("add")
-            .arg("--")
-            .args(&staged_files)
-            .current_dir(repo_path)
-            .env("GIT_INDEX_FILE", &index_path)
-            .env("GIT_OBJECT_DIRECTORY", &objects_path)
-            .output()
-            .await?;
+#[cfg(not(unix))]
+fn is_executable(_metadata: &Metadata) -> bool {
+    false
+}
+
+fn worktree_blob(
+    path: &Path,
+    existing_mode: Option<gix::index::entry::Mode>,
+    tracks_file_mode: bool,
+) -> Result<Option<(Vec<u8>, gix::index::entry::Mode)>> {
+    let metadata = match fs_err::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err.into()),
+    };
+
+    if metadata.file_type().is_symlink() {
+        return Ok(Some((
+            git_path(&fs_err::read_link(path)?).into(),
+            gix::index::entry::Mode::SYMLINK,
+        )));
     }
 
-    let mut add_u_cmd = git::git_cmd("add unstaged to shadow")?;
-    add_u_cmd
-        .arg("add")
-        .arg("--update") // Update tracked files
-        .current_dir(repo_path)
-        .env("GIT_INDEX_FILE", &index_path)
-        .env("GIT_OBJECT_DIRECTORY", &objects_path)
-        .output()
-        .await?;
+    if !metadata.is_file() {
+        return Ok(None);
+    }
 
-    git::git_cmd("git commit")?
-        .arg("commit")
-        .arg("-m")
-        .arg("Temporary commit by prek try-repo")
-        .arg("--no-gpg-sign")
-        .arg("--no-edit")
-        .arg("--no-verify")
-        .current_dir(&shadow)
-        .env("GIT_AUTHOR_NAME", "prek test")
-        .env("GIT_AUTHOR_EMAIL", "test@example.com")
-        .env("GIT_COMMITTER_NAME", "prek test")
-        .env("GIT_COMMITTER_EMAIL", "test@example.com")
-        .output()
-        .await?;
+    let mode = if tracks_file_mode {
+        if is_executable(&metadata) {
+            gix::index::entry::Mode::FILE_EXECUTABLE
+        } else {
+            gix::index::entry::Mode::FILE
+        }
+    } else {
+        existing_mode.unwrap_or(gix::index::entry::Mode::FILE)
+    };
+
+    Ok(Some((fs_err::read(path)?, mode)))
+}
+
+fn sync_worktree_path_to_index(
+    repo: &gix::Repository,
+    index: &mut gix::index::File,
+    source_root: &Path,
+    path: &BStr,
+    tracks_file_mode: bool,
+) -> Result<()> {
+    let entry_index =
+        index.entry_index_by_path_and_stage(path, gix::index::entry::Stage::Unconflicted);
+    let existing_mode = entry_index.map(|idx| index.entries()[idx].mode);
+    let source_path = source_root.join(gix::path::from_bstr(path));
+
+    let Some((content, mode)) = worktree_blob(&source_path, existing_mode, tracks_file_mode)?
+    else {
+        if let Some(idx) = entry_index {
+            index.remove_entry_at_index(idx);
+            index.remove_tree();
+        }
+        return Ok(());
+    };
+
+    let id = repo.write_blob(content)?.detach();
+    if let Some(idx) = entry_index {
+        let entry = &mut index.entries_mut()[idx];
+        entry.stat = gix::index::entry::Stat::default();
+        entry.id = id;
+        entry.flags = gix::index::entry::Flags::empty();
+        entry.mode = mode;
+    } else {
+        index.dangerously_push_entry(
+            gix::index::entry::Stat::default(),
+            id,
+            gix::index::entry::Flags::empty(),
+            mode,
+            path,
+        );
+        index.sort_entries();
+    }
+    index.remove_tree();
+
+    Ok(())
+}
+
+fn clone_and_commit(repo_path: &Path, _head_rev: &str, tmp_dir: &Path) -> Result<PathBuf> {
+    let shadow = tmp_dir.join("shadow-repo");
+    let should_interrupt = AtomicBool::new(false);
+    let mut clone = gix::prepare_clone(repo_path.to_string_lossy().as_ref(), &shadow)?;
+    let (mut checkout, _) = clone.fetch_then_checkout(gix::progress::Discard, &should_interrupt)?;
+    checkout.main_worktree(gix::progress::Discard, &should_interrupt)?;
+
+    let shadow_repo = gix::open(&shadow)?;
+    let mut shadow_index = shadow_repo.open_index()?;
+    let tracks_file_mode = gix::open(repo_path)?
+        .config_snapshot()
+        .boolean("core.fileMode")
+        .unwrap_or(true);
+    let tracked_paths = shadow_index
+        .entries()
+        .iter()
+        .filter(|entry| entry.stage_raw() == 0)
+        .map(|entry| entry.path(&shadow_index).to_owned())
+        .collect::<Vec<_>>();
+    for path in &tracked_paths {
+        sync_worktree_path_to_index(
+            &shadow_repo,
+            &mut shadow_index,
+            repo_path,
+            path.as_bstr(),
+            tracks_file_mode,
+        )?;
+    }
+
+    let staged_files = git::get_staged_files(repo_path)?;
+    for path in &staged_files {
+        let path = git_path(path);
+        sync_worktree_path_to_index(
+            &shadow_repo,
+            &mut shadow_index,
+            repo_path,
+            path.as_bstr(),
+            tracks_file_mode,
+        )?;
+    }
+
+    shadow_index.sort_entries();
+    shadow_index.write(gix::index::write::Options::default())?;
+    let tree = git::write_index_tree(&shadow_repo, &shadow_index)?;
+    let parent = shadow_repo.head_id()?.detach();
+    let signature = gix::actor::Signature {
+        name: "prek test".into(),
+        email: "test@example.com".into(),
+        time: gix::date::Time::now_local_or_utc(),
+    };
+    let mut committer_time = gix::date::parse::TimeBuf::default();
+    let mut author_time = gix::date::parse::TimeBuf::default();
+    shadow_repo.commit_as(
+        signature.to_ref(&mut committer_time),
+        signature.to_ref(&mut author_time),
+        "HEAD",
+        "Temporary commit by prek try-repo",
+        tree,
+        [parent],
+    )?;
 
     Ok(shadow)
 }
 
-async fn prepare_repo_and_rev<'a>(
+fn prepare_repo_and_rev<'a>(
     repo: &'a str,
     rev: Option<&'a str>,
     tmp_dir: &'a Path,
@@ -105,29 +197,16 @@ async fn prepare_repo_and_rev<'a>(
 
     // Get HEAD revision
     let head_rev = if is_local {
-        get_head_rev(repo_path).await?
+        repo_head_commit(repo_path)?
     } else {
-        // For remote repositories, use ls-remote
-        let head_rev = git::git_cmd("get head rev")?
-            .arg("ls-remote")
-            .arg("--exit-code")
-            .arg(repo)
-            .arg("HEAD")
-            .output()
-            .await?
-            .stdout;
-        String::from_utf8_lossy(&head_rev)
-            .split_ascii_whitespace()
-            .next()
-            .context("Failed to parse HEAD revision from git ls-remote output")?
-            .to_string()
+        git::remote_head_commit(repo)?
     };
 
     // If repo is a local repo with uncommitted changes, create a shadow repo to commit the changes.
-    if is_local && git::has_diff("HEAD", repo_path).await? {
+    if is_local && git::has_diff("HEAD", repo_path)? {
         warn_user!("Creating temporary repo with uncommitted changes...");
-        let shadow = clone_and_commit(repo_path, &head_rev, tmp_dir).await?;
-        let head_rev = get_head_rev(&shadow).await?;
+        let shadow = clone_and_commit(repo_path, &head_rev, tmp_dir)?;
+        let head_rev = repo_head_commit(&shadow)?;
         Ok((Cow::Owned(shadow.to_string_lossy().to_string()), head_rev))
     } else {
         Ok((Cow::Borrowed(repo), head_rev))
@@ -176,12 +255,11 @@ pub(crate) async fn try_repo(
     let tmp_dir = TempDir::with_prefix_in("try-repo-", store.scratch_path())?;
 
     let (repo_path, rev) = prepare_repo_and_rev(&repo, rev.as_deref(), tmp_dir.path())
-        .await
         .context("Failed to determine repository and revision")?;
 
     let store = Store::from_path(tmp_dir.path()).init()?;
     let repo_config = config::RemoteRepo::new(repo_path.to_string(), rev.clone(), vec![]);
-    let repo_clone_path = store.clone_repo(&repo_config, None).await?;
+    let repo_clone_path = store.clone_remote_repo(&repo_config, None).await?;
 
     let selectors = Selectors::load(&run_args.includes, &run_args.skips, GIT_ROOT.as_ref()?)?;
 

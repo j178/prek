@@ -14,20 +14,7 @@ pub(super) async fn file_has_shebang(path: &Path) -> Result<bool, anyhow::Error>
 }
 
 pub(super) async fn git_index_stage_output(file_base: &Path) -> Result<Vec<u8>, anyhow::Error> {
-    Ok(git::git_cmd("git ls-files")?
-        .arg("ls-files")
-        .arg("--stage")
-        .arg("-z")
-        .arg("--")
-        .arg(if file_base.as_os_str().is_empty() {
-            Path::new(".")
-        } else {
-            file_base
-        })
-        .check(true)
-        .output()
-        .await?
-        .stdout)
+    Ok(git::index_stage_output(file_base)?)
 }
 
 pub(super) fn matching_git_index_paths_by_executable_bit<'a>(
