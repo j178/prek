@@ -208,34 +208,33 @@ impl Drop for LockedFile {
 
 /// Normalizes a path to use `/` as a separator everywhere, even on platforms
 /// that recognize other characters as separators.
-#[cfg(unix)]
+#[cfg(not(windows))]
 pub(crate) fn normalize_path(path: PathBuf) -> PathBuf {
-    // UNIX only uses /, so we're good.
     path
 }
 
 /// Normalizes a path to use `/` as a separator everywhere, even on platforms
 /// that recognize other characters as separators.
-#[cfg(not(unix))]
+#[cfg(windows)]
 pub(crate) fn normalize_path(path: PathBuf) -> PathBuf {
     use std::ffi::OsString;
-    use std::path::is_separator;
+
+    if !path.as_os_str().as_encoded_bytes().contains(&b'\\') {
+        return path;
+    }
 
     let mut path = path.into_os_string().into_encoded_bytes();
-    for c in &mut path {
-        if *c == b'/' || !is_separator(char::from(*c)) {
-            continue;
+    for byte in &mut path {
+        if *byte == b'\\' {
+            *byte = b'/';
         }
-        *c = b'/';
     }
 
-    match String::from_utf8(path) {
-        Ok(s) => PathBuf::from(s),
-        Err(e) => {
-            let path = e.into_bytes();
-            PathBuf::from(OsString::from(String::from_utf8_lossy(&path).as_ref()))
-        }
-    }
+    // SAFETY: `path` came from `OsString::into_encoded_bytes`, and we only
+    // replace ASCII `\` with ASCII `/`. ASCII bytes cannot appear inside a
+    // non-ASCII UTF-8/WTF-8 sequence, so this preserves the encoding invariant
+    // required by `from_encoded_bytes_unchecked`.
+    PathBuf::from(unsafe { OsString::from_encoded_bytes_unchecked(path) })
 }
 
 /// Compute a path describing `path` relative to `base`.
@@ -460,6 +459,51 @@ mod tests {
         for (input, expected) in cases {
             assert_eq!(Path::new(input).clean(), PathBuf::from(expected), "{input}");
         }
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn normalize_path_keeps_non_windows_paths_unchanged() {
+        let path = PathBuf::from(r"foo\bar/baz");
+
+        assert_eq!(super::normalize_path(path.clone()), path);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn normalize_path_replaces_windows_separators() {
+        let path = PathBuf::from(r"foo\bar/baz");
+        let normalized = super::normalize_path(path);
+
+        assert_eq!(normalized.as_os_str().as_encoded_bytes(), b"foo/bar/baz");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn normalize_path_preserves_non_utf8_windows_paths() {
+        use std::ffi::OsString;
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
+
+        let path = PathBuf::from(OsString::from_wide(&[
+            u16::from(b'a'),
+            u16::from(b'\\'),
+            0xD800,
+            u16::from(b'\\'),
+            u16::from(b'b'),
+        ]));
+        let normalized = super::normalize_path(path);
+        let normalized = normalized.as_os_str().encode_wide().collect::<Vec<_>>();
+
+        assert_eq!(
+            normalized,
+            vec![
+                u16::from(b'a'),
+                u16::from(b'/'),
+                0xD800,
+                u16::from(b'/'),
+                u16::from(b'b'),
+            ]
+        );
     }
 
     #[tokio::test]

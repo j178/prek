@@ -7,7 +7,7 @@ use itertools::Itertools;
 use prek_consts::CONFIG_FILENAMES;
 
 use crate::cli::reporter::HookRunReporter;
-use crate::cli::run::{CollectOptions, FileTagCache, ProjectFiles, collect_files};
+use crate::cli::run::{CollectOptions, FileTagCache, ProjectFiles, collect_run_input};
 use crate::config::{self, FilePattern, HookOptions, Language, MetaHook};
 use crate::hook::Hook;
 use crate::store::Store;
@@ -95,7 +95,9 @@ pub(crate) async fn check_hooks_apply(
 ) -> Result<(i32, Vec<u8>)> {
     let relative_path = hook.project().relative_path();
     // Collect all files in the project
-    let input = collect_files(hook.work_dir(), CollectOptions::all_files()).await?;
+    let input = collect_run_input(hook.work_dir(), CollectOptions::all_files())
+        .await?
+        .into_files();
     // Prepend the project relative path to each input file
     let input: Vec<_> = input.into_iter().map(|f| relative_path.join(f)).collect();
 
@@ -166,11 +168,13 @@ pub(crate) async fn check_useless_excludes(
     filenames: &[&Path],
 ) -> Result<(i32, Vec<u8>)> {
     let relative_path = hook.project().relative_path();
-    // `collect_files` returns paths relative to the hook's project root.
+    // `collect_run_input` returns paths relative to the hook's project root.
     // The meta hook itself runs from the workspace root, so we build both:
     // - `input_project`: for matching `files`/`exclude` patterns (project-relative)
     // - `input_workspace`: for `ProjectFiles` (workspace-relative)
-    let input_project = collect_files(hook.work_dir(), CollectOptions::all_files()).await?;
+    let input_project = collect_run_input(hook.work_dir(), CollectOptions::all_files())
+        .await?
+        .into_files();
     let input_workspace: Vec<_> = input_project
         .iter()
         .map(|f| relative_path.join(f))
