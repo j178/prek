@@ -288,6 +288,19 @@ pub(crate) enum RunInput {
     MessageFile(PathBuf),
 }
 
+impl RunInput {
+    /// Return workspace-relative file paths.
+    ///
+    /// `MessageFile` inputs are hook arguments, not workspace files, so this
+    /// compatibility helper discards them and returns an empty list.
+    pub(crate) fn into_files(self) -> Vec<PathBuf> {
+        match self {
+            Self::Files(files) => files,
+            Self::MessageFile(_) => vec![],
+        }
+    }
+}
+
 /// Get hook input for the selected stage.
 pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Result<RunInput> {
     let CollectOptions {
@@ -305,42 +318,6 @@ pub(crate) async fn collect_run_input(root: &Path, opts: CollectOptions) -> Resu
         return Ok(RunInput::MessageFile(GIT_ROOT.as_ref()?.join(path)));
     }
 
-    collect_workspace_files(
-        root,
-        hook_stage,
-        from_ref,
-        to_ref,
-        all_files,
-        files,
-        directories,
-    )
-    .await
-    .map(RunInput::Files)
-}
-
-/// Get workspace filenames to run hooks on.
-/// Returns a list of file paths relative to the workspace root.
-pub(crate) async fn collect_files(root: &Path, opts: CollectOptions) -> Result<Vec<PathBuf>> {
-    match collect_run_input(root, opts).await? {
-        RunInput::Files(files) => Ok(files),
-        // This compatibility API can only return workspace-relative files.
-        // Git message files are hook arguments, not workspace files, and are
-        // handled through `RunInput` by the main runner.
-        RunInput::MessageFile(_) => Ok(vec![]),
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-#[instrument(level = "trace", skip_all)]
-async fn collect_workspace_files(
-    root: &Path,
-    hook_stage: Stage,
-    from_ref: Option<String>,
-    to_ref: Option<String>,
-    all_files: bool,
-    files: Vec<String>,
-    directories: Vec<String>,
-) -> Result<Vec<PathBuf>> {
     let git_root = GIT_ROOT.as_ref()?;
 
     // The workspace root relative to the git root.
@@ -381,7 +358,7 @@ async fn collect_workspace_files(
         filenames.sort_unstable();
     }
 
-    Ok(filenames)
+    Ok(RunInput::Files(filenames))
 }
 
 fn adjust_relative_path(path: &str, new_cwd: &Path) -> Result<PathBuf, std::io::Error> {
