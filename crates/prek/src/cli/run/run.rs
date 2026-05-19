@@ -803,8 +803,9 @@ impl<'a> HookRunPipeline<'a> {
         for partition in InstallPartitions::new(hooks) {
             let mut partition_installer = installer.partition();
             let ready_tx = ready_tx.clone();
+            let store = self.store;
             futures.push(async move {
-                Self::install_partition(&mut partition_installer, partition, ready_tx).await
+                Self::install_partition(store, &mut partition_installer, partition, ready_tx).await
             });
         }
 
@@ -817,6 +818,7 @@ impl<'a> HookRunPipeline<'a> {
     }
 
     async fn install_partition<'input>(
+        store: &Store,
         installer: &mut PartitionInstaller<'a>,
         hooks: Vec<PlannedHookRun<'input>>,
         ready_tx: mpsc::UnboundedSender<ReadyHookRun<'input>>,
@@ -824,7 +826,7 @@ impl<'a> HookRunPipeline<'a> {
         let mut installed_hooks = Vec::with_capacity(hooks.len());
 
         for hook in hooks {
-            let (installed_hook, input) = installer.install_job(hook).await?;
+            let (installed_hook, input) = installer.install_job(store, hook).await?;
             installed_hooks.push(installed_hook.clone());
 
             if ready_tx.send((installed_hook, input)).is_err() {

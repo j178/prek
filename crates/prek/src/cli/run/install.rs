@@ -88,7 +88,7 @@ pub(crate) async fn install_hooks(
     let num_hooks = hooks.len();
     let mut cache = None;
     let installer = Installer::for_jobs(store, reporter, &mut cache, &hooks).await;
-    let result = installer.install_all(hooks).await?;
+    let result = installer.install_all(store, hooks).await?;
     reporter.on_complete();
 
     debug_assert_eq!(
@@ -102,8 +102,10 @@ pub(crate) async fn install_hooks(
 
 #[derive(Clone)]
 pub(super) struct Installer<'a> {
-    store: &'a Store,
-    installed_envs: InstalledEnvs,
+    /// Result of the run-level install cache at the time this batch starts.
+    store_hooks: Rc<[CachedInstallInfo]>,
+    /// Environments installed by earlier batches in this command.
+    created_hooks: Rc<[CachedInstallInfo]>,
     /// Shared by all install partitions for this batch.
     semaphore: Rc<Semaphore>,
     reporter: &'a HookInstallReporter,
@@ -117,34 +119,39 @@ impl<'a> Installer<'a> {
         hooks: &[InstallJob<T>],
     ) -> Self {
         let needs_environment = hooks.iter().any(InstallJob::needs_environment);
-        let installed_envs = if needs_environment {
+        let (store_hooks, created_hooks) = if needs_environment {
             if let Some(cache) = cache.as_ref() {
                 cache.snapshot()
             } else {
                 let loaded_cache = InstallCache::load(store).await;
-                let installed_envs = loaded_cache.snapshot();
+                let snapshot = loaded_cache.snapshot();
                 *cache = Some(loaded_cache);
-                installed_envs
+                snapshot
             }
         } else {
-            InstalledEnvs::empty()
+            let empty = Rc::<[CachedInstallInfo]>::from(Vec::new().into_boxed_slice());
+            (Rc::clone(&empty), empty)
         };
 
         Self {
-            store,
-            installed_envs,
+            store_hooks,
+            created_hooks,
             semaphore: Rc::new(Semaphore::new(*CONCURRENCY)),
             reporter,
         }
     }
 
-    async fn install_all(&self, hooks: Vec<InstallJob<()>>) -> Result<Vec<InstalledHook>> {
+    async fn install_all(
+        &self,
+        store: &Store,
+        hooks: Vec<InstallJob<()>>,
+    ) -> Result<Vec<InstalledHook>> {
         let mut result = Vec::with_capacity(hooks.len());
         let mut futures = FuturesUnordered::new();
 
         for partition in InstallPartitions::new(hooks) {
             let installer = self.partition();
-            futures.push(async move { installer.install_all(partition).await });
+            futures.push(async move { installer.install_all(store, partition).await });
         }
 
         while let Some(hooks) = futures.next().await {
@@ -161,17 +168,17 @@ impl<'a> Installer<'a> {
         }
     }
 
-    async fn install_new(&self, hook: Arc<Hook>) -> Result<InstalledHook> {
+    async fn install_new(&self, store: &Store, hook: Arc<Hook>) -> Result<InstalledHook> {
         let _permit = self.semaphore.acquire(1).await;
 
         let installed_hook = hook
             .language
-            .install(hook.clone(), self.store, self.reporter)
+            .install(hook.clone(), store, self.reporter)
             .await
             .with_context(|| format!("Failed to install hook `{hook}`"))?;
 
         installed_hook
-            .mark_as_installed(self.store)
+            .mark_as_installed(store)
             .await
             .with_context(|| format!("Failed to mark hook `{hook}` as installed"))?;
 
@@ -188,7 +195,7 @@ impl<'a> Installer<'a> {
     }
 
     async fn installed_info_for_hook(&self, hook: &Hook) -> Option<Arc<InstallInfo>> {
-        for env in self.installed_envs.iter() {
+        for env in self.created_hooks.iter().chain(self.store_hooks.iter()) {
             if env.matches(hook) && env.ensure_healthy().await {
                 return Some(env.info());
             }
@@ -208,11 +215,15 @@ pub(super) struct PartitionInstaller<'a> {
 }
 
 impl PartitionInstaller<'_> {
-    async fn install_all(mut self, hooks: Vec<InstallJob<()>>) -> Result<Vec<InstalledHook>> {
+    async fn install_all(
+        mut self,
+        store: &Store,
+        hooks: Vec<InstallJob<()>>,
+    ) -> Result<Vec<InstalledHook>> {
         let mut installed_hooks = Vec::with_capacity(hooks.len());
 
         for hook in hooks {
-            let (installed_hook, ()) = self.install_job(hook).await?;
+            let (installed_hook, ()) = self.install_job(store, hook).await?;
             installed_hooks.push(installed_hook);
         }
 
@@ -221,14 +232,20 @@ impl PartitionInstaller<'_> {
 
     pub(super) async fn install_job<T>(
         &mut self,
+        store: &Store,
         job: InstallJob<T>,
     ) -> Result<(InstalledHook, T)> {
         let (hook, install, payload) = job.into_parts();
-        let installed_hook = self.install(hook, install).await?;
+        let installed_hook = self.install(store, hook, install).await?;
         Ok((installed_hook, payload))
     }
 
-    async fn install(&mut self, hook: Arc<Hook>, install: InstallPlan) -> Result<InstalledHook> {
+    async fn install(
+        &mut self,
+        store: &Store,
+        hook: Arc<Hook>,
+        install: InstallPlan,
+    ) -> Result<InstalledHook> {
         if !install.needs_environment {
             debug!("Hook `{}` does not need an installed environment", &hook);
             return Ok(InstalledHook::NoNeedInstall(hook));
@@ -242,7 +259,7 @@ impl PartitionInstaller<'_> {
             return Ok(InstalledHook::Installed { hook, info });
         }
 
-        let installed_hook = self.installer.install_new(hook).await?;
+        let installed_hook = self.installer.install_new(store, hook).await?;
         self.newly_installed.push(installed_hook.clone());
 
         Ok(installed_hook)
@@ -423,8 +440,8 @@ impl InstallCache {
         Rc::from(store_installed_hooks.into_boxed_slice())
     }
 
-    fn snapshot(&self) -> InstalledEnvs {
-        InstalledEnvs::new(
+    fn snapshot(&self) -> (Rc<[CachedInstallInfo]>, Rc<[CachedInstallInfo]>) {
+        (
             Rc::clone(&self.store_hooks),
             Rc::from(self.created_hooks.clone().into_boxed_slice()),
         )
@@ -451,35 +468,5 @@ impl InstallCache {
                 .store_hooks
                 .iter()
                 .any(|existing| existing.info.env_path == info.env_path)
-    }
-}
-
-/// Installed environments visible to one installer batch.
-///
-/// This is intentionally a snapshot: installers can run concurrently without borrowing the mutable
-/// run-level cache. Newly installed environments are merged back into that cache after the batch.
-#[derive(Clone)]
-struct InstalledEnvs {
-    store_hooks: Rc<[CachedInstallInfo]>,
-    created_hooks: Rc<[CachedInstallInfo]>,
-}
-
-impl InstalledEnvs {
-    fn new(store_hooks: Rc<[CachedInstallInfo]>, created_hooks: Rc<[CachedInstallInfo]>) -> Self {
-        Self {
-            store_hooks,
-            created_hooks,
-        }
-    }
-
-    fn empty() -> Self {
-        Self {
-            store_hooks: Rc::from(Vec::new().into_boxed_slice()),
-            created_hooks: Rc::from(Vec::new().into_boxed_slice()),
-        }
-    }
-
-    fn iter(&self) -> impl Iterator<Item = &CachedInstallInfo> {
-        self.created_hooks.iter().chain(self.store_hooks.iter())
     }
 }
