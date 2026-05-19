@@ -113,7 +113,7 @@ pub(super) struct Installer<'a> {
 
 impl<'a> Installer<'a> {
     pub(super) async fn for_jobs<T>(
-        store: &'a Store,
+        store: &Store,
         reporter: &'a HookInstallReporter,
         cache: &mut Option<InstallCache>,
         hooks: &[InstallJob<T>],

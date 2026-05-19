@@ -497,7 +497,7 @@ async fn run_hooks(
     // Track files that have been consumed by orphan projects.
     let mut consumed_files = FxHashSet::default();
     let mut tag_cache = FileTagCache::default();
-    let mut executor = HookRunExecutor::new(store, dry_run, &reporter);
+    let mut executor = HookRunExecutor::new(dry_run, &reporter);
 
     'outer: for project in workspace.all_projects() {
         let project_input = ProjectHookInput::new(&input, project, Some(&mut consumed_files))?;
@@ -536,7 +536,7 @@ async fn run_hooks(
             } = plan_priority_group(group_hooks, &project_input, &mut tag_cache);
 
             if !runnable_hooks.is_empty() {
-                let mut run_results = executor.run(runnable_hooks).await?;
+                let mut run_results = executor.run(store, runnable_hooks).await?;
                 group_results.append(&mut run_results);
             }
 
@@ -718,47 +718,45 @@ where
 }
 
 struct HookRunExecutor<'a> {
-    store: &'a Store,
     install_cache: Option<InstallCache>,
     dry_run: bool,
     reporter: &'a HookRunReporter,
 }
 
 impl<'a> HookRunExecutor<'a> {
-    fn new(store: &'a Store, dry_run: bool, reporter: &'a HookRunReporter) -> Self {
+    fn new(dry_run: bool, reporter: &'a HookRunReporter) -> Self {
         Self {
-            store,
             install_cache: None,
             dry_run,
             reporter,
         }
     }
 
-    async fn run(&mut self, hooks: Vec<PlannedHookRun<'_>>) -> Result<Vec<RunResult>> {
+    async fn run(
+        &mut self,
+        store: &Store,
+        hooks: Vec<PlannedHookRun<'_>>,
+    ) -> Result<Vec<RunResult>> {
         if hooks.is_empty() {
             return Ok(Vec::new());
         }
 
         let install_reporter = HookInstallReporter::from_run(self.reporter);
-        let pipeline = HookRunPipeline::new(self.store, self.reporter, self.dry_run);
+        let pipeline = HookRunPipeline::new(self.reporter, self.dry_run);
         // Install holds the store lock. The ready queue must not block on run concurrency, or a
         // hook that recursively invokes prek could wait on the same lock while install is stalled.
         let (ready_tx, ready_rx) = mpsc::unbounded_channel();
 
         let install_future = async {
-            let _lock = self.store.lock_async().await?;
-            let installer = Installer::for_jobs(
-                self.store,
-                &install_reporter,
-                &mut self.install_cache,
-                &hooks,
-            )
-            .await;
+            let _lock = store.lock_async().await?;
+            let installer =
+                Installer::for_jobs(store, &install_reporter, &mut self.install_cache, &hooks)
+                    .await;
             pipeline
-                .install_ready_hooks(installer, hooks, ready_tx)
+                .install_ready_hooks(store, installer, hooks, ready_tx)
                 .await
         };
-        let run_future = pipeline.run_ready_hooks(ready_rx);
+        let run_future = pipeline.run_ready_hooks(store, ready_rx);
 
         let (install_result, run_result) = futures::future::join(install_future, run_future).await;
         let installed_hooks = install_result?;
@@ -774,7 +772,6 @@ impl<'a> HookRunExecutor<'a> {
 
 #[derive(Clone)]
 struct HookRunPipeline<'a> {
-    store: &'a Store,
     /// Run concurrency is independent from install concurrency.
     run_semaphore: Rc<Semaphore>,
     reporter: &'a HookRunReporter,
@@ -782,9 +779,8 @@ struct HookRunPipeline<'a> {
 }
 
 impl<'a> HookRunPipeline<'a> {
-    fn new(store: &'a Store, reporter: &'a HookRunReporter, dry_run: bool) -> Self {
+    fn new(reporter: &'a HookRunReporter, dry_run: bool) -> Self {
         Self {
-            store,
             run_semaphore: Rc::new(Semaphore::new(*CONCURRENCY)),
             reporter,
             dry_run,
@@ -793,6 +789,7 @@ impl<'a> HookRunPipeline<'a> {
 
     async fn install_ready_hooks<'input>(
         &self,
+        store: &Store,
         installer: Installer<'a>,
         hooks: Vec<PlannedHookRun<'input>>,
         ready_tx: mpsc::UnboundedSender<ReadyHookRun<'input>>,
@@ -803,7 +800,6 @@ impl<'a> HookRunPipeline<'a> {
         for partition in InstallPartitions::new(hooks) {
             let mut partition_installer = installer.partition();
             let ready_tx = ready_tx.clone();
-            let store = self.store;
             futures.push(async move {
                 Self::install_partition(store, &mut partition_installer, partition, ready_tx).await
             });
@@ -839,6 +835,7 @@ impl<'a> HookRunPipeline<'a> {
 
     async fn run_ready_hooks(
         &self,
+        store: &Store,
         mut ready_rx: mpsc::UnboundedReceiver<ReadyHookRun<'_>>,
     ) -> Result<Vec<RunResult>> {
         let mut results = Vec::new();
@@ -851,7 +848,6 @@ impl<'a> HookRunPipeline<'a> {
                     match ready {
                         Some((installed_hook, input)) => {
                             let run_semaphore = Rc::clone(&self.run_semaphore);
-                            let store = self.store;
                             let reporter = self.reporter;
                             let dry_run = self.dry_run;
 
