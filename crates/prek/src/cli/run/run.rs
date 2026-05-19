@@ -358,90 +358,70 @@ impl<'a> InstalledHookResolver<'a> {
         let mut consumed_files = FxHashSet::default();
 
         for project in workspace.all_projects() {
-            Self::push_hooks_to_install_for_project(
-                input,
-                project,
-                Some(&mut consumed_files),
-                project_to_hooks.remove(project).unwrap_or_default(),
-                tag_cache,
-                &mut hooks_to_install,
-            )?;
+            match input {
+                RunInput::Files(files) => {
+                    let Some(hooks) = project_to_hooks.remove(project) else {
+                        ProjectFiles::visit_project_files(
+                            files.iter(),
+                            project,
+                            Some(&mut consumed_files),
+                            |_| {},
+                        );
+                        continue;
+                    };
+
+                    let mut candidates = hooks
+                        .into_iter()
+                        .filter(|hook| Language::supported(hook.language))
+                        .map(|hook| {
+                            let matches = hook.always_run;
+                            (hook, matches)
+                        })
+                        .collect::<Vec<_>>();
+
+                    ProjectFiles::visit_project_files(
+                        files.iter(),
+                        project,
+                        Some(&mut consumed_files),
+                        |project_file| {
+                            for (hook, matches) in &mut candidates {
+                                if *matches {
+                                    continue;
+                                }
+
+                                let hook_filter = HookFileFilter::new(hook);
+                                if hook_filter.matches_project_file(&project_file, tag_cache) {
+                                    *matches = true;
+                                }
+                            }
+                        },
+                    );
+
+                    for (hook, matches) in candidates {
+                        if matches {
+                            hooks_to_install.push(hook);
+                        }
+                    }
+                }
+                RunInput::MessageFile(_) => {
+                    let Some(hooks) = project_to_hooks.remove(project) else {
+                        continue;
+                    };
+
+                    let project_input = ProjectHookInput::new(input, project, None)?;
+                    for hook in hooks
+                        .into_iter()
+                        .filter(|hook| Language::supported(hook.language))
+                    {
+                        if hook.always_run || project_input.has_match_for_hook(&hook, tag_cache) {
+                            hooks_to_install.push(hook);
+                        }
+                    }
+                }
+            }
         }
 
         Ok(hooks_to_install)
-    }
-
-    fn push_hooks_to_install_for_project<'paths>(
-        input: &'paths RunInput,
-        project: &Project,
-        consumed_files: Option<&mut FxHashSet<&'paths Path>>,
-        hooks: Vec<Arc<Hook>>,
-        tag_cache: &mut FileTagCache<'paths>,
-        hooks_to_install: &mut Vec<Arc<Hook>>,
-    ) -> Result<()> {
-        match input {
-            RunInput::Files(files) => {
-                let mut candidates = hooks
-                    .into_iter()
-                    .filter(|hook| Language::supported(hook.language))
-                    .map(|hook| {
-                        let matches = hook.always_run;
-                        (hook, matches)
-                    })
-                    .collect::<Vec<_>>();
-
-                ProjectFiles::visit_project_files(
-                    files.iter(),
-                    project,
-                    consumed_files,
-                    |project_file| {
-                        for (hook, matches) in &mut candidates {
-                            if *matches {
-                                continue;
-                            }
-
-                            let hook_filter = HookFileFilter::new(hook);
-                            if hook_filter.matches_project_file(&project_file, tag_cache) {
-                                *matches = true;
-                            }
-                        }
-                    },
-                );
-
-                for (hook, matches) in candidates {
-                    if matches {
-                        hooks_to_install.push(hook);
-                    }
-                }
-            }
-            RunInput::MessageFile(path) => {
-                let hook_arg = fs::normalize_path(fs::relative_to(path, project.path())?);
-                for hook in hooks {
-                    if !Language::supported(hook.language) {
-                        continue;
-                    }
-
-                    if hook.always_run
-                        || Self::message_file_matches_hook(path, &hook_arg, &hook, tag_cache)
-                    {
-                        hooks_to_install.push(hook);
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn message_file_matches_hook<'paths>(
-        absolute_path: &'paths Path,
-        hook_arg: &Path,
-        hook: &Hook,
-        tag_cache: &mut FileTagCache<'paths>,
-    ) -> bool {
-        let hook_filter = HookFileFilter::new(hook);
-        hook_filter.matches_filename(hook_arg)
-            && hook_filter.matches_tags(tag_cache.tags(absolute_path))
     }
 }
 
