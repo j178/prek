@@ -147,13 +147,25 @@ impl workspace::HookInitReporter for HookInitReporter {
 
 pub(crate) struct HookInstallReporter {
     reporter: Arc<ProgressReporter>,
+    root_message: &'static str,
 }
 
 impl HookInstallReporter {
     pub(crate) fn new(printer: Printer) -> Self {
         let reporter = Arc::new(ProgressReporter::from(printer));
         set_current_reporter(Some(&reporter));
-        Self { reporter }
+        Self {
+            reporter,
+            root_message: "Installing hooks...",
+        }
+    }
+
+    /// Reuse the run reporter so install and run progress can share one root message.
+    pub(crate) fn from_run(reporter: &HookRunReporter) -> Self {
+        Self {
+            reporter: Arc::clone(&reporter.reporter),
+            root_message: reporter.root_message,
+        }
     }
 }
 
@@ -161,7 +173,7 @@ impl HookInstallReporter {
     pub fn on_install_start(&self, hook: &Hook) -> usize {
         self.reporter
             .root
-            .set_message(format!("{}", "Installing hooks...".bold().cyan()));
+            .set_message(format!("{}", self.root_message.bold().cyan()));
 
         self.reporter.on_start(format!(
             "{} {}",
@@ -182,20 +194,33 @@ impl HookInstallReporter {
 pub(crate) struct HookRunReporter {
     reporter: Arc<ProgressReporter>,
     dots: usize,
+    root_message: &'static str,
 }
 
 impl HookRunReporter {
     pub fn new(printer: Printer, dots: usize) -> Self {
+        Self::with_root_message(printer, dots, "Running hooks...")
+    }
+
+    pub fn new_execution(printer: Printer, dots: usize) -> Self {
+        Self::with_root_message(printer, dots, "Installing and running hooks...")
+    }
+
+    fn with_root_message(printer: Printer, dots: usize, root_message: &'static str) -> Self {
         let reporter = Arc::new(ProgressReporter::from(printer));
         set_current_reporter(Some(&reporter));
 
-        Self { reporter, dots }
+        Self {
+            reporter,
+            dots,
+            root_message,
+        }
     }
 
     pub fn on_run_start(&self, hook: &Hook, len: usize) -> usize {
         self.reporter
             .root
-            .set_message(format!("{}", "Running hooks...".bold().cyan()));
+            .set_message(format!("{}", self.root_message.bold().cyan()));
 
         let mut state = self.reporter.state.lock().unwrap();
         let id = state.id();
