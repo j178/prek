@@ -247,7 +247,6 @@ impl PartitionInstaller<'_> {
         install: InstallPlan,
     ) -> Result<InstalledHook> {
         if !install.needs_environment {
-            debug!("Hook `{}` does not need an installed environment", &hook);
             return Ok(InstalledHook::NoNeedInstall(hook));
         }
 
