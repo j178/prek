@@ -102,6 +102,7 @@ impl<'a> HookFileFilter<'a> {
         tags.is_some_and(|tags| self.tags.matches(tags))
     }
 
+    /// Return whether a project-owned file passes this hook's file and tag filters.
     pub(crate) fn matches_project_file<'p>(
         &self,
         file: &ProjectFile<'p>,
@@ -111,6 +112,7 @@ impl<'a> HookFileFilter<'a> {
     }
 }
 
+/// A workspace file after project ownership and project-level filters have been applied.
 pub(crate) struct ProjectFile<'a> {
     workspace_path: &'a Path,
     hook_path: &'a Path,
@@ -124,6 +126,7 @@ impl<'a> ProjectFile<'a> {
         }
     }
 
+    /// Return cached tags for the workspace-relative path.
     pub(crate) fn tags<'cache>(
         &self,
         tag_cache: &'cache mut FileTagCache<'a>,
@@ -180,6 +183,11 @@ impl<'a> ProjectFiles<'a> {
         Self { files }
     }
 
+    /// Visit project-owned files without collecting them.
+    ///
+    /// This shares the same ownership, orphan-project, and project-level filtering rules as
+    /// `for_project`, but lets callers that only need a boolean result avoid allocating a
+    /// `Vec<ProjectFile>`.
     pub(crate) fn visit_project_files<I, F>(
         filenames: I,
         project: &Project,
