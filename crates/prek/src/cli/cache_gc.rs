@@ -165,7 +165,7 @@ pub(crate) async fn cache_gc(
     // Always keep Prek's own cache.
     used_cache.insert(CacheBucket::Prek);
 
-    let install_cache = InstallCache::load(store).await;
+    let install_cache = InstallCache::new();
 
     for config_path in &tracked_configs {
         let config = match load_config(config_path) {
@@ -214,7 +214,7 @@ pub(crate) async fn cache_gc(
     // Mark hook environments by matching already-installed env metadata.
     // While doing this, try to derive the specific tool *version* directories in use from
     // `InstallInfo.toolchain` (which is persisted in `.prek-hook.json`).
-    for installed in install_cache.installed_hooks() {
+    for installed in install_cache.installed_hooks(store).await {
         let info = installed.info_ref();
         if used_env_keys.iter().any(|k| k.matches_install_info(info)) {
             if let Some(dir) = info
