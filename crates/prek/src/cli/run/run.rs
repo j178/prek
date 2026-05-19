@@ -88,13 +88,15 @@ pub(crate) async fn run(
     }
 
     let reporter = HookInitReporter::new(printer);
-    let lock = store.lock_async().await?;
-    store.track_configs(workspace.projects().iter().map(|p| p.config_file()))?;
+    let hooks = {
+        let _lock = store.lock_async().await?;
+        store.track_configs(workspace.projects().iter().map(|p| p.config_file()))?;
 
-    let hooks = workspace
-        .init_hooks(store, Some(&reporter))
-        .await
-        .context("Failed to init hooks")?;
+        workspace
+            .init_hooks(store, Some(&reporter))
+            .await
+            .context("Failed to init hooks")?
+    };
     let selected_hooks: Vec<_> = hooks
         .into_iter()
         .filter(|h| selectors.matches_hook(h))
@@ -161,11 +163,6 @@ pub(crate) async fn run(
         "Hooks going to run: {:?}",
         filtered_hooks.iter().map(|h| &h.id).collect::<Vec<_>>()
     );
-    let reporter = HookInstallReporter::new(printer);
-    let installed_hooks = install_hooks(filtered_hooks, store, &reporter).await?;
-
-    // Release the store lock.
-    drop(lock);
 
     // Clear any unstaged changes from the git working directory.
     let mut _guard = None;
@@ -204,7 +201,7 @@ pub(crate) async fn run(
 
     run_hooks(
         &workspace,
-        &installed_hooks,
+        &filtered_hooks,
         input,
         store,
         show_diff_on_failure,
@@ -265,7 +262,7 @@ fn set_env_vars(from_ref: Option<&String>, to_ref: Option<&String>, args: &RunEx
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct LazyInstallInfo {
     info: Arc<InstallInfo>,
     health: mea::once::OnceCell<bool>,
@@ -276,6 +273,13 @@ impl LazyInstallInfo {
         Self {
             info,
             health: mea::once::OnceCell::new(),
+        }
+    }
+
+    fn healthy(info: Arc<InstallInfo>) -> Self {
+        Self {
+            info,
+            health: mea::once::OnceCell::from_value(true),
         }
     }
 
@@ -306,22 +310,98 @@ impl LazyInstallInfo {
     }
 }
 
+#[derive(Default)]
+struct HookInstallCache {
+    store_hooks: Option<Rc<[LazyInstallInfo]>>,
+    run_hooks: Vec<LazyInstallInfo>,
+}
+
+impl HookInstallCache {
+    async fn store_hooks(&mut self, store: &Store) -> Rc<[LazyInstallInfo]> {
+        if let Some(store_hooks) = &self.store_hooks {
+            return Rc::clone(store_hooks);
+        }
+
+        let store_hooks = load_store_hooks(store).await;
+        self.store_hooks = Some(Rc::clone(&store_hooks));
+        store_hooks
+    }
+
+    fn run_hooks(&self) -> Rc<[LazyInstallInfo]> {
+        Rc::from(self.run_hooks.clone().into_boxed_slice())
+    }
+
+    fn add_installed(&mut self, installed_hooks: &[InstalledHook]) {
+        for hook in installed_hooks {
+            let InstalledHook::Installed { info, .. } = hook else {
+                continue;
+            };
+            if self.has_info(info) {
+                continue;
+            }
+            self.run_hooks.push(LazyInstallInfo::healthy(info.clone()));
+        }
+    }
+
+    fn has_info(&self, info: &InstallInfo) -> bool {
+        self.run_hooks
+            .iter()
+            .any(|existing| existing.info.env_path == info.env_path)
+            || self.store_hooks.as_deref().is_some_and(|store_hooks| {
+                store_hooks
+                    .iter()
+                    .any(|existing| existing.info.env_path == info.env_path)
+            })
+    }
+}
+
+fn empty_install_infos() -> Rc<[LazyInstallInfo]> {
+    Rc::from(Vec::new().into_boxed_slice())
+}
+
+async fn load_store_hooks(store: &Store) -> Rc<[LazyInstallInfo]> {
+    let hooks = store
+        .installed_hooks()
+        .await
+        .into_iter()
+        .map(LazyInstallInfo::new)
+        .collect::<Vec<_>>();
+    Rc::from(hooks.into_boxed_slice())
+}
+
+fn hook_needs_environment(hook: &Hook) -> bool {
+    if matches!(hook.repo(), Repo::Meta { .. } | Repo::Builtin { .. }) {
+        return false;
+    }
+
+    !matches!(
+        hook.language,
+        Language::DockerImage | Language::Fail | Language::Script | Language::System
+    )
+}
+
 pub async fn install_hooks(
     hooks: Vec<Arc<Hook>>,
     store: &Store,
     reporter: &HookInstallReporter,
 ) -> Result<Vec<InstalledHook>> {
+    let store_hooks = if hooks.iter().any(|hook| hook_needs_environment(hook)) {
+        load_store_hooks(store).await
+    } else {
+        empty_install_infos()
+    };
+    install_hooks_with_store_hooks(hooks, store, reporter, store_hooks, empty_install_infos()).await
+}
+
+async fn install_hooks_with_store_hooks(
+    hooks: Vec<Arc<Hook>>,
+    store: &Store,
+    reporter: &HookInstallReporter,
+    store_hooks: Rc<[LazyInstallInfo]>,
+    run_hooks: Rc<[LazyInstallInfo]>,
+) -> Result<Vec<InstalledHook>> {
     let num_hooks = hooks.len();
     let mut result = Vec::with_capacity(hooks.len());
-
-    let store_hooks = Rc::new(
-        store
-            .installed_hooks()
-            .await
-            .into_iter()
-            .map(LazyInstallInfo::new)
-            .collect::<Vec<_>>(),
-    );
 
     // Group hooks by language to enable parallel installation across different languages.
     let mut hooks_by_language = FxHashMap::default();
@@ -347,17 +427,15 @@ pub async fn install_hooks(
         for hooks in partitions {
             let semaphore = Rc::clone(&semaphore);
             let store_hooks = Rc::clone(&store_hooks);
+            let run_hooks = Rc::clone(&run_hooks);
 
             futures.push(async move {
                 let mut hook_envs = Vec::with_capacity(hooks.len());
                 let mut newly_installed = Vec::new();
 
                 for hook in hooks {
-                    if matches!(hook.repo(), Repo::Meta { .. } | Repo::Builtin { .. }) {
-                        debug!(
-                            "Hook `{}` is a meta or builtin hook, no installation needed",
-                            &hook
-                        );
+                    if !hook_needs_environment(&hook) {
+                        debug!("Hook `{}` does not need an installed environment", &hook);
                         hook_envs.push(InstalledHook::NoNeedInstall(hook));
                         continue;
                     }
@@ -374,7 +452,7 @@ pub async fn install_hooks(
                     }
 
                     if matched_info.is_none() {
-                        for env in store_hooks.iter() {
+                        for env in run_hooks.iter().chain(store_hooks.iter()) {
                             if env.matches(&hook) {
                                 if env.ensure_healthy().await {
                                     matched_info = Some(env.info());
@@ -501,7 +579,10 @@ impl StatusPrinter {
     const NO_FILES: &'static str = "(no files to check)";
     const UNIMPLEMENTED: &'static str = "(unimplemented yet)";
 
-    fn for_hooks(hooks: &[InstalledHook], printer: Printer) -> Self {
+    fn for_hooks<T>(hooks: &[T], printer: Printer) -> Self
+    where
+        T: std::ops::Deref<Target = Hook>,
+    {
         let name_len = hooks
             .iter()
             .map(|hook| hook.name.width())
@@ -670,11 +751,21 @@ impl<'a> HookRunInput<'a> {
     }
 }
 
+struct PendingHookRun<'a> {
+    hook: Arc<Hook>,
+    input: HookRunInput<'a>,
+}
+
+struct PreparedHookRun<'a> {
+    hook: InstalledHook,
+    input: HookRunInput<'a>,
+}
+
 /// Run all hooks.
 #[allow(clippy::fn_params_excessive_bools)]
 async fn run_hooks(
     workspace: &Workspace,
-    hooks: &[InstalledHook],
+    hooks: &[Arc<Hook>],
     input: RunInput,
     store: &Store,
     show_diff_on_failure: bool,
@@ -692,7 +783,7 @@ async fn run_hooks(
 
     // Group hooks by project to run them in order of their depth in the workspace.
     #[allow(clippy::mutable_key_type)]
-    let mut project_to_hooks: FxHashMap<&Project, Vec<InstalledHook>> =
+    let mut project_to_hooks: FxHashMap<&Project, Vec<Arc<Hook>>> =
         FxHashMap::with_capacity_and_hasher(hooks.len(), FxBuildHasher);
     for hook in hooks {
         project_to_hooks
@@ -709,6 +800,7 @@ async fn run_hooks(
     // Track files that have been consumed by orphan projects.
     let mut consumed_files = FxHashSet::default();
     let mut tag_cache = FileTagCache::default();
+    let mut install_cache = HookInstallCache::default();
 
     'outer: for project in workspace.all_projects() {
         let project_input = ProjectHookInput::new(&input, project, Some(&mut consumed_files))?;
@@ -742,15 +834,26 @@ async fn run_hooks(
 
         for group_range in PriorityGroupRanges::new(&hooks) {
             let group_hooks = hooks[group_range].to_vec();
-            let mut group_results = run_priority_group(
+            let (mut group_results, prepared_hooks) = prepare_priority_group(
                 group_hooks,
                 &project_input,
                 &mut tag_cache,
                 store,
-                dry_run,
-                &reporter,
+                &mut install_cache,
+                printer,
             )
             .await?;
+
+            if !prepared_hooks.is_empty() {
+                // Installation may touch files in the hook project (for example build metadata
+                // from a local package). Match the old eager-install behavior by excluding those
+                // setup side effects from hook modification detection.
+                prev_diff = git::get_diff(project.path()).await?;
+
+                let mut run_results =
+                    run_priority_group(prepared_hooks, store, dry_run, &reporter).await?;
+                group_results.append(&mut run_results);
+            }
 
             // Print results in a stable order (same order as config within the project).
             group_results.sort_unstable_by_key(|a| a.hook.idx);
@@ -847,12 +950,12 @@ async fn run_hooks(
 }
 
 struct PriorityGroupRanges<'a> {
-    hooks: &'a [InstalledHook],
+    hooks: &'a [Arc<Hook>],
     idx: usize,
 }
 
 impl<'a> PriorityGroupRanges<'a> {
-    fn new(hooks: &'a [InstalledHook]) -> Self {
+    fn new(hooks: &'a [Arc<Hook>]) -> Self {
         Self { hooks, idx: 0 }
     }
 }
@@ -876,14 +979,14 @@ impl Iterator for PriorityGroupRanges<'_> {
     }
 }
 
-async fn run_priority_group<'input, 'paths>(
-    group_hooks: Vec<InstalledHook>,
+async fn prepare_priority_group<'input, 'paths>(
+    group_hooks: Vec<Arc<Hook>>,
     input: &'input ProjectHookInput<'paths>,
     tag_cache: &mut FileTagCache<'paths>,
     store: &Store,
-    dry_run: bool,
-    reporter: &HookRunReporter,
-) -> Result<Vec<RunResult>>
+    install_cache: &mut HookInstallCache,
+    printer: Printer,
+) -> Result<(Vec<RunResult>, Vec<PreparedHookRun<'input>>)>
 where
     'paths: 'input,
 {
@@ -894,17 +997,100 @@ where
         group_hooks.iter().map(|h| &h.id).collect::<Vec<_>>()
     );
 
+    let mut group_results = Vec::new();
+    let mut pending_hooks = Vec::new();
+
+    for hook in group_hooks {
+        let hook_input = input.for_hook(&hook, tag_cache);
+        trace!(
+            matched = hook_input.has_matching_files,
+            filenames = hook_input.filenames.len(),
+            "Files for hook `{}` after filtering",
+            hook.id,
+        );
+
+        if !hook_input.has_matching_files && !hook.always_run {
+            group_results.push(RunResult::from_status(
+                InstalledHook::NoNeedInstall(hook),
+                RunStatus::NoFiles,
+            ));
+            continue;
+        }
+
+        if !Language::supported(hook.language) {
+            group_results.push(RunResult::from_status(
+                InstalledHook::NoNeedInstall(hook),
+                RunStatus::Unimplemented,
+            ));
+            continue;
+        }
+
+        pending_hooks.push(PendingHookRun {
+            hook,
+            input: hook_input,
+        });
+    }
+
+    let prepared_hooks =
+        install_pending_hooks(pending_hooks, store, install_cache, printer).await?;
+
+    Ok((group_results, prepared_hooks))
+}
+
+async fn install_pending_hooks<'input>(
+    pending_hooks: Vec<PendingHookRun<'input>>,
+    store: &Store,
+    install_cache: &mut HookInstallCache,
+    printer: Printer,
+) -> Result<Vec<PreparedHookRun<'input>>> {
+    if pending_hooks.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let hooks = pending_hooks
+        .iter()
+        .map(|pending| pending.hook.clone())
+        .collect::<Vec<_>>();
+
+    let _lock = store.lock_async().await?;
+    let reporter = HookInstallReporter::new(printer);
+    let store_hooks = if hooks.iter().any(|hook| hook_needs_environment(hook)) {
+        install_cache.store_hooks(store).await
+    } else {
+        empty_install_infos()
+    };
+    let run_hooks = install_cache.run_hooks();
+    let installed_hooks =
+        install_hooks_with_store_hooks(hooks, store, &reporter, store_hooks, run_hooks).await?;
+    install_cache.add_installed(&installed_hooks);
+
+    let mut installed_by_idx = installed_hooks
+        .into_iter()
+        .map(|hook| (hook.idx, hook))
+        .collect::<FxHashMap<_, _>>();
+
+    let mut prepared_hooks = Vec::with_capacity(pending_hooks.len());
+    for pending in pending_hooks {
+        let Some(hook) = installed_by_idx.remove(&pending.hook.idx) else {
+            anyhow::bail!("Missing installed hook for `{}`", pending.hook);
+        };
+        prepared_hooks.push(PreparedHookRun {
+            hook,
+            input: pending.input,
+        });
+    }
+
+    Ok(prepared_hooks)
+}
+
+async fn run_priority_group(
+    group_hooks: Vec<PreparedHookRun<'_>>,
+    store: &Store,
+    dry_run: bool,
+    reporter: &HookRunReporter,
+) -> Result<Vec<RunResult>> {
     let mut results = futures::stream::iter(group_hooks)
-        .map(|hook| {
-            let hook_input = input.for_hook(&hook, tag_cache);
-            trace!(
-                matched = hook_input.has_matching_files,
-                filenames = hook_input.filenames.len(),
-                "Files for hook `{}` after filtering",
-                hook.id,
-            );
-            run_hook(hook, hook_input, store, dry_run, reporter)
-        })
+        .map(|hook| run_hook(hook.hook, hook.input, store, dry_run, reporter))
         .buffer_unordered(*CONCURRENCY);
 
     let mut group_results = Vec::new();
