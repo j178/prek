@@ -161,10 +161,6 @@ impl<'a> Installer<'a> {
         }
     }
 
-    pub(super) fn store(&self) -> &'a Store {
-        self.store
-    }
-
     async fn install_new(&self, hook: Arc<Hook>) -> Result<InstalledHook> {
         let _permit = self.semaphore.acquire(1).await;
 

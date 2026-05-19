@@ -13,6 +13,7 @@ use prek_consts::{PRE_COMMIT_CONFIG_YAML, PREK_TOML};
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, StdRng};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use tokio::sync::mpsc;
 use tracing::{debug, trace};
 use unicode_width::UnicodeWidthStr;
 
@@ -33,7 +34,7 @@ use crate::store::Store;
 use crate::workspace::{Project, Workspace};
 use crate::{fs, git, warn_user};
 
-use super::install::{InstallCache, InstallJob, InstallPartitions, Installer};
+use super::install::{InstallCache, InstallJob, InstallPartitions, Installer, PartitionInstaller};
 
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
@@ -450,6 +451,7 @@ impl<'a> HookRunInput<'a> {
 }
 
 type PlannedHookRun<'a> = InstallJob<HookRunInput<'a>>;
+type ReadyHookRun<'a> = (InstalledHook, HookRunInput<'a>);
 
 struct PriorityGroupPlan<'a> {
     skipped_results: Vec<RunResult>,
@@ -737,17 +739,30 @@ impl<'a> HookRunExecutor<'a> {
             return Ok(Vec::new());
         }
 
-        let _lock = self.store.lock_async().await?;
         let install_reporter = HookInstallReporter::from_run(self.reporter);
-        let installer = Installer::for_jobs(
-            self.store,
-            &install_reporter,
-            &mut self.install_cache,
-            &hooks,
-        )
-        .await;
-        let pipeline = HookRunPipeline::new(installer, self.reporter, self.dry_run);
-        let (results, installed_hooks) = pipeline.run_all(hooks).await?;
+        let pipeline = HookRunPipeline::new(self.store, self.reporter, self.dry_run);
+        // Install holds the store lock. The ready queue must not block on run concurrency, or a
+        // hook that recursively invokes prek could wait on the same lock while install is stalled.
+        let (ready_tx, ready_rx) = mpsc::unbounded_channel();
+
+        let install_future = async {
+            let _lock = self.store.lock_async().await?;
+            let installer = Installer::for_jobs(
+                self.store,
+                &install_reporter,
+                &mut self.install_cache,
+                &hooks,
+            )
+            .await;
+            pipeline
+                .install_ready_hooks(installer, hooks, ready_tx)
+                .await
+        };
+        let run_future = pipeline.run_ready_hooks(ready_rx);
+
+        let (install_result, run_result) = futures::future::join(install_future, run_future).await;
+        let installed_hooks = install_result?;
+        let results = run_result?;
 
         if let Some(cache) = &mut self.install_cache {
             cache.add_installed(&installed_hooks);
@@ -759,7 +774,7 @@ impl<'a> HookRunExecutor<'a> {
 
 #[derive(Clone)]
 struct HookRunPipeline<'a> {
-    installer: Installer<'a>,
+    store: &'a Store,
     /// Run concurrency is independent from install concurrency.
     run_semaphore: Rc<Semaphore>,
     reporter: &'a HookRunReporter,
@@ -767,67 +782,95 @@ struct HookRunPipeline<'a> {
 }
 
 impl<'a> HookRunPipeline<'a> {
-    fn new(installer: Installer<'a>, reporter: &'a HookRunReporter, dry_run: bool) -> Self {
+    fn new(store: &'a Store, reporter: &'a HookRunReporter, dry_run: bool) -> Self {
         Self {
-            installer,
+            store,
             run_semaphore: Rc::new(Semaphore::new(*CONCURRENCY)),
             reporter,
             dry_run,
         }
     }
 
-    async fn run_all(
+    async fn install_ready_hooks<'input>(
         &self,
-        hooks: Vec<PlannedHookRun<'_>>,
-    ) -> Result<(Vec<RunResult>, Vec<InstalledHook>)> {
-        let mut results = Vec::new();
+        installer: Installer<'a>,
+        hooks: Vec<PlannedHookRun<'input>>,
+        ready_tx: mpsc::UnboundedSender<ReadyHookRun<'input>>,
+    ) -> Result<Vec<InstalledHook>> {
         let mut installed_hooks = Vec::new();
         let mut futures = FuturesUnordered::new();
 
         for partition in InstallPartitions::new(hooks) {
-            let pipeline = self.clone();
-            futures.push(async move { pipeline.run_partition(partition).await });
-        }
-
-        while let Some(result) = futures.next().await {
-            let (mut partition_results, mut partition_installed_hooks) = result?;
-            results.append(&mut partition_results);
-            installed_hooks.append(&mut partition_installed_hooks);
-        }
-
-        Ok((results, installed_hooks))
-    }
-
-    async fn run_partition(
-        &self,
-        hooks: Vec<PlannedHookRun<'_>>,
-    ) -> Result<(Vec<RunResult>, Vec<InstalledHook>)> {
-        let mut results = Vec::new();
-        let mut installed_hooks = Vec::with_capacity(hooks.len());
-        let mut runs = FuturesUnordered::new();
-        let mut installer = self.installer.partition();
-
-        for hook in hooks {
-            // Installation is sequential within a partition to preserve environment reuse, but each
-            // hook starts running as soon as its own environment is ready.
-            let (installed_hook, input) = installer.install_job(hook).await?;
-            let run_semaphore = Rc::clone(&self.run_semaphore);
-            let store = self.installer.store();
-            let reporter = self.reporter;
-            let dry_run = self.dry_run;
-
-            installed_hooks.push(installed_hook.clone());
-            runs.push(async move {
-                let _permit = run_semaphore.acquire(1).await;
-                run_hook(installed_hook, input, store, dry_run, reporter).await
+            let mut partition_installer = installer.partition();
+            let ready_tx = ready_tx.clone();
+            futures.push(async move {
+                Self::install_partition(&mut partition_installer, partition, ready_tx).await
             });
         }
 
-        while let Some(result) = runs.next().await {
-            results.push(result?);
+        while let Some(result) = futures.next().await {
+            let mut partition_installed_hooks = result?;
+            installed_hooks.append(&mut partition_installed_hooks);
         }
 
-        Ok((results, installed_hooks))
+        Ok(installed_hooks)
+    }
+
+    async fn install_partition<'input>(
+        installer: &mut PartitionInstaller<'a>,
+        hooks: Vec<PlannedHookRun<'input>>,
+        ready_tx: mpsc::UnboundedSender<ReadyHookRun<'input>>,
+    ) -> Result<Vec<InstalledHook>> {
+        let mut installed_hooks = Vec::with_capacity(hooks.len());
+
+        for hook in hooks {
+            let (installed_hook, input) = installer.install_job(hook).await?;
+            installed_hooks.push(installed_hook.clone());
+
+            if ready_tx.send((installed_hook, input)).is_err() {
+                break;
+            }
+        }
+
+        Ok(installed_hooks)
+    }
+
+    async fn run_ready_hooks(
+        &self,
+        mut ready_rx: mpsc::UnboundedReceiver<ReadyHookRun<'_>>,
+    ) -> Result<Vec<RunResult>> {
+        let mut results = Vec::new();
+        let mut runs = FuturesUnordered::new();
+        let mut ready_open = true;
+
+        loop {
+            tokio::select! {
+                ready = ready_rx.recv(), if ready_open => {
+                    match ready {
+                        Some((installed_hook, input)) => {
+                            let run_semaphore = Rc::clone(&self.run_semaphore);
+                            let store = self.store;
+                            let reporter = self.reporter;
+                            let dry_run = self.dry_run;
+
+                            runs.push(async move {
+                                let _permit = run_semaphore.acquire(1).await;
+                                run_hook(installed_hook, input, store, dry_run, reporter).await
+                            });
+                        }
+                        None => ready_open = false,
+                    }
+                }
+                result = runs.next(), if !runs.is_empty() => {
+                    if let Some(result) = result {
+                        results.push(result?);
+                    }
+                }
+                else => break,
+            }
+        }
+
+        Ok(results)
     }
 }
 
