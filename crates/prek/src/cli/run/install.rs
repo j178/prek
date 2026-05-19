@@ -42,9 +42,7 @@ pub(crate) async fn install_hooks(
 
     for partition in partition_hooks(hooks_to_install) {
         let semaphore = Rc::clone(&semaphore);
-        let reporter = reporter.clone();
-        futures
-            .push(async move { install_partition(partition, store, &reporter, semaphore).await });
+        futures.push(async move { install_partition(partition, store, reporter, semaphore).await });
     }
 
     while let Some(partition_hooks) = futures.next().await {

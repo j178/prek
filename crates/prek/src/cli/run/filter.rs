@@ -102,7 +102,7 @@ impl<'a> HookFileFilter<'a> {
         tags.is_some_and(|tags| self.tags.matches(tags))
     }
 
-    fn matches_project_file<'p>(
+    pub(crate) fn matches_project_file<'p>(
         &self,
         file: &ProjectFile<'p>,
         tag_cache: &mut FileTagCache<'p>,
@@ -111,7 +111,7 @@ impl<'a> HookFileFilter<'a> {
     }
 }
 
-struct ProjectFile<'a> {
+pub(crate) struct ProjectFile<'a> {
     workspace_path: &'a Path,
     hook_path: &'a Path,
 }
@@ -124,7 +124,10 @@ impl<'a> ProjectFile<'a> {
         }
     }
 
-    fn tags<'cache>(&self, tag_cache: &'cache mut FileTagCache<'a>) -> Option<&'cache TagSet> {
+    pub(crate) fn tags<'cache>(
+        &self,
+        tag_cache: &'cache mut FileTagCache<'a>,
+    ) -> Option<&'cache TagSet> {
         tag_cache.tags(self.workspace_path)
     }
 }
@@ -160,10 +163,31 @@ impl<'a> ProjectFiles<'a> {
     pub(crate) fn for_project<I>(
         filenames: I,
         project: &Project,
-        mut consumed_files: Option<&mut FxHashSet<&'a Path>>,
+        consumed_files: Option<&mut FxHashSet<&'a Path>>,
     ) -> Self
     where
         I: Iterator<Item = &'a PathBuf> + Send,
+    {
+        let relative_path = project.relative_path();
+        let files_capacity = if relative_path.as_os_str().is_empty() {
+            filenames.size_hint().0
+        } else {
+            0
+        };
+        let mut files = Vec::with_capacity(files_capacity);
+        Self::visit_project_files(filenames, project, consumed_files, |file| files.push(file));
+
+        Self { files }
+    }
+
+    pub(crate) fn visit_project_files<I, F>(
+        filenames: I,
+        project: &Project,
+        mut consumed_files: Option<&mut FxHashSet<&'a Path>>,
+        mut visit: F,
+    ) where
+        I: Iterator<Item = &'a PathBuf> + Send,
+        F: FnMut(ProjectFile<'a>),
     {
         let filename_filter = FilenameFilter::new(
             project.config().files.as_ref(),
@@ -177,12 +201,6 @@ impl<'a> ProjectFiles<'a> {
         // *before* applying the project's include/exclude patterns. This ensures that even
         // files excluded by this project are still considered "owned" by it and hidden
         // from parent projects.
-        let files_capacity = if relative_path.as_os_str().is_empty() {
-            filenames.size_hint().0
-        } else {
-            0
-        };
-        let mut files = Vec::with_capacity(files_capacity);
         for filename in filenames {
             // Collect files that are inside the hook project directory.
             if !filename.starts_with(relative_path) {
@@ -205,11 +223,9 @@ impl<'a> ProjectFiles<'a> {
                 .strip_prefix(relative_path)
                 .expect("Filename should start with project relative path");
             if filename_filter.matches(relative) {
-                files.push(ProjectFile::new(filename, relative));
+                visit(ProjectFile::new(filename, relative));
             }
         }
-
-        Self { files }
     }
 
     pub(crate) fn len(&self) -> usize {

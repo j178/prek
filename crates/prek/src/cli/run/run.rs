@@ -358,31 +358,70 @@ impl<'a> InstalledHookResolver<'a> {
         let mut consumed_files = FxHashSet::default();
 
         for project in workspace.all_projects() {
-            let project_input = ProjectHookInput::new(input, project, Some(&mut consumed_files))?;
-            let Some(hooks) = project_to_hooks.remove(project) else {
-                continue;
-            };
+            match input {
+                RunInput::Files(files) => {
+                    let Some(hooks) = project_to_hooks.remove(project) else {
+                        ProjectFiles::visit_project_files(
+                            files.iter(),
+                            project,
+                            Some(&mut consumed_files),
+                            |_| {},
+                        );
+                        continue;
+                    };
 
-            for hook in hooks {
-                if Self::should_install_after_filter(&project_input, &hook, tag_cache) {
-                    hooks_to_install.push(hook);
+                    let mut candidates = hooks
+                        .into_iter()
+                        .filter(|hook| Language::supported(hook.language))
+                        .map(|hook| {
+                            let matches = hook.always_run;
+                            (hook, matches)
+                        })
+                        .collect::<Vec<_>>();
+
+                    ProjectFiles::visit_project_files(
+                        files.iter(),
+                        project,
+                        Some(&mut consumed_files),
+                        |project_file| {
+                            for (hook, matches) in &mut candidates {
+                                if *matches {
+                                    continue;
+                                }
+
+                                let hook_filter = HookFileFilter::new(hook);
+                                if hook_filter.matches_project_file(&project_file, tag_cache) {
+                                    *matches = true;
+                                }
+                            }
+                        },
+                    );
+
+                    for (hook, matches) in candidates {
+                        if matches {
+                            hooks_to_install.push(hook);
+                        }
+                    }
+                }
+                RunInput::MessageFile(_) => {
+                    let Some(hooks) = project_to_hooks.remove(project) else {
+                        continue;
+                    };
+
+                    let project_input = ProjectHookInput::new(input, project, None)?;
+                    for hook in hooks
+                        .into_iter()
+                        .filter(|hook| Language::supported(hook.language))
+                    {
+                        if hook.always_run || project_input.has_match_for_hook(&hook, tag_cache) {
+                            hooks_to_install.push(hook);
+                        }
+                    }
                 }
             }
         }
 
         Ok(hooks_to_install)
-    }
-
-    fn should_install_after_filter<'paths>(
-        project_input: &ProjectHookInput<'paths>,
-        hook: &Hook,
-        tag_cache: &mut FileTagCache<'paths>,
-    ) -> bool {
-        if !Language::supported(hook.language) {
-            return false;
-        }
-
-        hook.always_run || project_input.has_match_for_hook(hook, tag_cache)
     }
 }
 
